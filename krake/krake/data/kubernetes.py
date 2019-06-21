@@ -5,10 +5,11 @@ from .serializable import Serializable
 
 
 class ApplicationState(Enum):
-    CREATED = auto()
+    PENDING = auto()
     UPDATED = auto()
     SCHEDULED = auto()
     RUNNING = auto()
+    DELETING = auto()
     DELETED = auto()
     FAILED = auto()
 
@@ -33,8 +34,11 @@ class Application(Serializable):
 
 
 class ClusterState(Enum):
-    CREATING = auto()
+    PENDING = auto()
     RUNNING = auto()
+    UPDATED = auto()
+    DELETING = auto()
+    DELETED = auto()
     FAILED = auto()
 
 

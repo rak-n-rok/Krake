@@ -27,7 +27,7 @@ class ApplicationStatusFactory(Factory):
 
     @lazy_attribute
     def modified(self):
-        if self.state == ApplicationState.CREATED:
+        if self.state == ApplicationState.PENDING:
             return self.created
 
         delta = fake.time_delta()
@@ -41,7 +41,7 @@ class ApplicationStatusFactory(Factory):
 
     @lazy_attribute
     def cluster(self):
-        if self.state == ApplicationState.CREATED:
+        if self.state == ApplicationState.PENDING:
             return None
         return fake.uuid4()
 

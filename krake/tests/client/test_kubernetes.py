@@ -45,7 +45,7 @@ async def test_list_applications(k8s_app_factory, aresponses, loop):
 
 
 async def test_create_application(k8s_app_factory, aresponses, loop):
-    data = k8s_app_factory(status__state=ApplicationState.CREATED)
+    data = k8s_app_factory(status__state=ApplicationState.PENDING)
     aresponses.add(
         "api.krake.local",
         "/kubernetes/applications",

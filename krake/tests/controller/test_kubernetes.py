@@ -12,7 +12,7 @@ from krake.test_utils import stream
 
 
 async def test_app_reception(k8s_app_factory, aresponses, loop):
-    created = k8s_app_factory(status__state=ApplicationState.CREATED)
+    created = k8s_app_factory(status__state=ApplicationState.PENDING)
     updated = k8s_app_factory(status__state=ApplicationState.UPDATED)
     scheduled = k8s_app_factory(status__state=ApplicationState.SCHEDULED)
 

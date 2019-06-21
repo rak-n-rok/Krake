@@ -66,7 +66,7 @@ async def test_create_app(aiohttp_client, config, db):
 
     app, rev = await db.get(Application, data["id"])
     assert rev.version == 1
-    assert app.status.state == ApplicationState.CREATED
+    assert app.status.state == ApplicationState.PENDING
     assert app.manifest == manifest
 
 
@@ -111,7 +111,7 @@ spec:
 
 async def test_update_manifest(aiohttp_client, config, db, k8s_app_factory):
     client = await aiohttp_client(create_app(config=config))
-    app = k8s_app_factory(status__state=ApplicationState.CREATED)
+    app = k8s_app_factory(status__state=ApplicationState.PENDING)
 
     await db.put(app)
 
@@ -130,7 +130,7 @@ async def test_update_manifest(aiohttp_client, config, db, k8s_app_factory):
 
 async def test_update_status(aiohttp_client, config, db, k8s_app_factory):
     client = await aiohttp_client(create_app(config=config))
-    app = k8s_app_factory(status__state=ApplicationState.CREATED)
+    app = k8s_app_factory(status__state=ApplicationState.PENDING)
 
     await db.put(app)
 
@@ -187,9 +187,9 @@ async def test_watch(aiohttp_client, config, loop):
             assert uuid_re.match(data["id"])
 
             if i == 0:
-                assert data["status"]["state"] == "CREATED"
+                assert data["status"]["state"] == "PENDING"
             elif i == 1:
-                assert data["status"]["state"] == "CREATED"
+                assert data["status"]["state"] == "PENDING"
             elif i == 2:
                 assert data["status"]["state"] == "DELETED"
 

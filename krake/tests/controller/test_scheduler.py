@@ -19,7 +19,7 @@ from krake.test_utils import stream
 async def test_kubernetes_reception(k8s_app_factory, aresponses, loop):
     scheduled = k8s_app_factory(status__state=ApplicationState.SCHEDULED)
     updated = k8s_app_factory(status__state=ApplicationState.UPDATED)
-    created = k8s_app_factory(status__state=ApplicationState.CREATED)
+    created = k8s_app_factory(status__state=ApplicationState.PENDING)
 
     aresponses.add(
         "api.krake.local", "/kubernetes/applications", "GET", json_response([])

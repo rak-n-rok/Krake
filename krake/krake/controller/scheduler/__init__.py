@@ -7,7 +7,7 @@ from .. import Controller, Worker
 
 class Scheduler(Controller):
 
-    states = (ApplicationState.CREATED, ApplicationState.UPDATED)
+    states = (ApplicationState.PENDING, ApplicationState.UPDATED)
 
     async def list_and_watch(self):
         # List all Kubernetes applications

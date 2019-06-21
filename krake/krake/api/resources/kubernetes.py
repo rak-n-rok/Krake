@@ -37,7 +37,7 @@ async def create_application(request, manifest):
     now = datetime.now()
 
     status = ApplicationStatus(
-        state=ApplicationState.CREATED, created=now, modified=now
+        state=ApplicationState.PENDING, created=now, modified=now
     )
     app = Application(
         id=app_id, user_id=user_id, manifest=manifest, status=status
