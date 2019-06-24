@@ -48,6 +48,8 @@ def error_log(logger):
             return await handler(request)
         except asyncio.CancelledError:
             pass
+        except web.HTTPException:
+            raise
         except Exception as err:
             logger.exception(err)
             raise
