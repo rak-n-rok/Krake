@@ -24,9 +24,29 @@ routes = web.RouteTableDef()
 
 
 @routes.get("/kubernetes/applications")
-async def list_applications(request):
-    apps = [app async for app, _ in session(request).all(Application)]
-    return web.json_response([serialize(app) for app in apps])
+async def list_or_watch_applications(request):
+    if "watch" not in request.query:
+        apps = [app async for app, _ in session(request).all(Application)]
+
+        # Filter DELETED applications
+        if "all" not in request.query:
+            apps = (app for app in apps if app.status.state != ApplicationState.DELETED)
+
+        return web.json_response([serialize(app) for app in apps])
+
+    resp = web.StreamResponse(headers={"Content-Type": "application/json"})
+    resp.enable_chunked_encoding()
+
+    await resp.prepare(request)
+
+    async for event, app, rev in session(request).watch(Application):
+
+        # Key was deleted. Stop update stream
+        if event == EventType.DELETE:
+            return
+
+        await resp.write(json.dumps(serialize(app)).encode())
+        await resp.write(b"\n")
 
 
 @routes.post("/kubernetes/applications")
@@ -45,6 +65,12 @@ async def create_application(request, manifest):
     await session(request).put(app)
     logger.info("Created Application %r", app.id)
 
+    return web.json_response(serialize(app))
+
+
+@routes.get("/kubernetes/applications/{id}")
+@with_resource("app", Application)
+async def get_application(request, app):
     return web.json_response(serialize(app))
 
 
@@ -105,23 +131,6 @@ async def delete_application(request, app):
     logger.info("Deleted Application %r", app.id)
 
     return web.json_response(serialize(app))
-
-
-@routes.get("/kubernetes/applications/watch")
-async def watch_applications(request):
-    resp = web.StreamResponse(headers={"Content-Type": "application/json"})
-    resp.enable_chunked_encoding()
-
-    await resp.prepare(request)
-
-    async for event, app, rev in session(request).watch(Application):
-
-        # Key was deleted. Stop update stream
-        if event == EventType.DELETE:
-            return
-
-        await resp.write(json.dumps(serialize(app)).encode())
-        await resp.write(b"\n")
 
 
 @routes.get("/kubernetes/clusters")

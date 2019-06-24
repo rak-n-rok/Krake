@@ -82,6 +82,17 @@ async def test_create_invalid_app(aiohttp_client, config):
     assert data["manifest"]
 
 
+async def test_get_app(aiohttp_client, config, db, k8s_app_factory):
+    app = k8s_app_factory(status__state=ApplicationState.RUNNING)
+    await db.put(app)
+
+    client = await aiohttp_client(create_app(config=config))
+    resp = await client.get(f"/kubernetes/applications/{app.id}")
+    assert resp.status == 200
+    data = deserialize(Application, await resp.json())
+    assert app == data
+
+
 new_manifest = """
 apiVersion: v1
 kind: Pod
@@ -176,7 +187,7 @@ async def test_watch(aiohttp_client, config, loop):
     client = await aiohttp_client(create_app(config=config))
 
     async def watch(created):
-        resp = await client.get("/kubernetes/applications/watch")
+        resp = await client.get("/kubernetes/applications?watch")
         created.set_result(True)
 
         for i in count():

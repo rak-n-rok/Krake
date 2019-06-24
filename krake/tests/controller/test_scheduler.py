@@ -31,7 +31,7 @@ async def test_kubernetes_reception(k8s_app_factory, aresponses, loop):
     # data was streamed.
     aresponses.add(
         "api.krake.local",
-        "/kubernetes/applications/watch",
+        "/kubernetes/applications?watch",
         "GET",
         stream([scheduled, updated, created], infinite=True),
     )

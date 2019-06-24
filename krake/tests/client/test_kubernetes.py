@@ -135,7 +135,7 @@ async def test_watch_applications(k8s_app_factory, aresponses, loop):
     data = [k8s_app_factory(), k8s_app_factory(), k8s_app_factory()]
 
     aresponses.add(
-        "api.krake.local", f"/kubernetes/applications/watch", "GET", stream(data)
+        "api.krake.local", "/kubernetes/applications?watch", "GET", stream(data)
     )
     async with Client(url="http://api.krake.local", loop=loop) as client:
         async for i, app in aenumerate(client.kubernetes.application.watch()):
