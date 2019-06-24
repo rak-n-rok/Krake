@@ -25,7 +25,7 @@ def load_config(filepath=None):
     for path in filepaths:
         try:
             with open(path, "r") as fd:
-                return yaml.load(fd)
+                return yaml.safe_load(fd)
         except FileNotFoundError:
             pass
 
