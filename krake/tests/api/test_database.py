@@ -6,7 +6,7 @@ import factory
 from factory.fuzzy import FuzzyInteger
 
 from krake.data.serializable import Serializable, serialize, deserialize
-from krake.api.database import Event
+from krake.api.database import EventType
 
 
 class MyModel(Serializable):
@@ -178,7 +178,7 @@ async def test_watching_create(db, loop):
 
     async def watch():
         async for event, model, rev in db.watch(MyModel, created=created):
-            assert event == Event.PUT
+            assert event == EventType.PUT
             assert rev.version == 1
             watched.append(model)
 
@@ -228,28 +228,28 @@ async def test_watching_update(fake, db, loop):
 
         async for i, (event, model, rev) in aenumerate(watcher):
             if i == 0:
-                assert event == Event.PUT
+                assert event == EventType.PUT
                 assert model.id == data.id
                 assert model.kind == data.kind
                 assert model.name == names[0]
                 assert rev.version == 1
 
             elif i == 1:
-                assert event == Event.PUT
+                assert event == EventType.PUT
                 assert model.id == data.id
                 assert model.kind == data.kind
                 assert model.name == names[1]
                 assert rev.version == 2
 
             elif i == 2:
-                assert event == Event.PUT
+                assert event == EventType.PUT
                 assert model.id == data.id
                 assert model.kind == data.kind
                 assert model.name == names[2]
                 assert rev.version == 3
 
             elif i == 3:
-                assert event == Event.DELETE
+                assert event == EventType.DELETE
                 assert model is None
                 assert rev.version == 0
                 break

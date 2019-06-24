@@ -1,4 +1,4 @@
-from krake.controller.workqueue import WorkQueue
+from krake.controller import WorkQueue
 
 
 async def test_put_get_done():

@@ -1,3 +1,19 @@
+"""Entry point of Kubernetes controller.
+
+.. code:: bash
+
+    python -m krake.controller.kubernetes --help
+
+Configuration is loaded from the ``controllers.kubernetes`` section:
+
+.. code:: yaml
+
+    controllers:
+      kubernetes:
+        api_endpoint: http://localhost:8080
+        worker_count: 5
+
+"""
 from argparse import ArgumentParser
 from krake import load_config
 from krake.controller import run

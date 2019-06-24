@@ -1,11 +1,36 @@
+"""This module provides a simple Python client to the Krake HTTP API. It
+leverages the same data models as the API server from :mod:`krake.data`.
+"""
 from aiohttp import ClientSession
 from yarl import URL
-import json
 
 from .kubernetes import KubernetesResource
 
 
 class Client(object):
+    """Simple async Python client for the Krake HTTP API.
+
+    REST resources are structured with attributes. For example, all Kubernetes
+    related resources are accessible via the ``.kubernetes`` attribute.
+
+    The client implements the asynchronous context manager protocol used to
+    handle opening and closing the internal HTTP session.
+
+    Example:
+        .. code:: python
+
+            from krake.client import Client
+
+            async with Client("http://localhost:8080") as client:
+                id = "0520e107-519b-4aed-8ab0-8e6c03134ef8"
+                await client.kubernetes.application.get(id)
+
+    Attributes:
+        kubernetes (.kubernetes.KubernetesResource): API for all Kubernetes
+            resources
+
+    """
+
     def __init__(self, url, token=None, loop=None):
         self.loop = loop
         self.url = URL(url)
@@ -21,6 +46,9 @@ class Client(object):
         await self.close()
 
     async def open(self):
+        """Open the internal HTTP session and initializes all resource
+        attributes.
+        """
         if self.session is not None:
             return
         headers = {}
@@ -32,83 +60,9 @@ class Client(object):
         self.kubernetes = KubernetesResource(session=self.session, url=self.url)
 
     async def close(self):
+        """Close the internal HTTP session and remove all resource attributes."""
         if self.session is None:
             return
+        self.kubernetes = None
         await self.session.close()
         self.session = None
-        self.kubernetes = None
-
-
-# class Client(object):
-#     def __init__(self, url, token=None, loop=None):
-#         self.loop = loop
-#         self.url = URL(url)
-#         self.token = token
-#         self.session = None
-
-#     async def __aenter__(self):
-#         await self.open()
-#         return self
-
-#     async def __aexit__(self, *exc):
-#         await self.close()
-
-#     async def open(self):
-#         if self.session is not None:
-#             return
-#         headers = {}
-#         if self.token:
-#             headers["Authorization"] = self.token
-#         self.session = ClientSession(
-#             headers=headers, loop=self.loop, raise_for_status=True
-#         )
-
-#     async def close(self):
-#         if self.session is None:
-#             return
-#         await self.session.close()
-#         self.session = None
-#         self.kubernetes = None
-
-#     async def list(self, cls):
-#         url = self.url.with_path(cls.__url__)
-#         resp = await self.session.get(url)
-#         datas = await resp.json()
-#         return [deserialize(cls, data) for data in datas]
-
-#     async def get(self, cls, id):
-#         url = self.url.with_path(f"{cls.__url__}/{id}")
-#         resp = await self.session.get(url)
-#         data = await resp.json()
-#         app = deserialize(cls, data)
-#         return app
-
-#     async def create(self, resource):
-#         url = self.url.with_path(resource.__url__)
-#         resp = await self.session.post(url, json=serialize(resource))
-#         data = await resp.json()
-#         return deserialize(resource.__class__, data)
-
-#     async def update(self, resource):
-#         identity = getattr(resource, resource.__identity__)
-#         url = self.url.with_path(f"{resource.__url__}/{identity}")
-#         resp = await self.session.put(url, json=serialize(resource))
-#         data = await resp.json()
-#         return deserialize(resource.__class__, data)
-
-#     async def delete(self, resource):
-#         identity = getattr(resource, resource.__identity__)
-#         url = self.url.with_path(f"{resource.__url__}/{identity}")
-#         resp = await self.session.delete(url)
-#         data = await resp.json()
-#         return deserialize(resource.__class__, data)
-
-#     async def watch(self, cls):
-#         url = self.url.with_path(f"{cls.__url__}/watch")
-#         resp = await self.session.get(url)
-
-#         async with resp:
-#             async for line in resp.content:
-#                 if not line:  # EOF
-#                     break
-#                 yield deserialize(cls, line)

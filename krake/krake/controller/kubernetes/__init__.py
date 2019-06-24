@@ -1,3 +1,6 @@
+"""Module for Krake controller responsible for
+:class:`krake.data.kubernetes.Application` resources.
+"""
 import logging
 
 from krake.data.kubernetes import ApplicationState
@@ -8,7 +11,14 @@ logger = logging.getLogger(__name__)
 
 
 class KubernetesController(Controller):
+    """Controller responsible for :class:`krake.data.kubernetes.Application`
+    resources in ``SCHEDULED`` state.
+    """
+
     async def list_and_watch(self):
+        """List and watching Kubernetes applications in the ``SCHEDULED``
+        state.
+        """
         logger.debug("List Application")
         for app in await self.client.kubernetes.application.list():
             logger.debug("Received %r", app)

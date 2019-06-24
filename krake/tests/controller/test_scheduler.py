@@ -2,9 +2,9 @@ import json
 import asyncio
 from datetime import datetime
 import pytz
-from aiohttp.web import json_response, StreamResponse
+from aiohttp.web import json_response
 
-from krake.data import serialize, deserialize
+from krake.data import serialize
 from krake.data.kubernetes import (
     Application,
     ApplicationState,
@@ -74,9 +74,16 @@ async def test_kubernetes_scheduling(
     cluster = k8s_magnum_cluster_factory()
 
     async def echo(request):
-        status = deserialize(ApplicationStatus, await request.json())
-        status.state == ApplicationState.SCHEDULED
-        status.cluster == cluster.id
+        payload = await request.json()
+        assert payload["cluster"] == cluster.id
+        assert payload["state"] == "SCHEDULED"
+
+        status = ApplicationStatus(
+            created=app.status.created,
+            modified=datetime.now(),
+            state=ApplicationState.__members__[payload["state"]],
+            cluster=payload["cluster"]
+        )
         return json_response(serialize(status))
 
     aresponses.add(
@@ -91,5 +98,4 @@ async def test_kubernetes_scheduling(
 
     async with Client(url="http://api.krake.local", loop=loop) as client:
         worker = SchedulerWorker(client=client)
-
         await worker.resource_received(app)

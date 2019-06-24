@@ -1,3 +1,4 @@
+"""Data model definitions for Kubernetes-related resources"""
 from enum import Enum, auto
 from datetime import datetime
 

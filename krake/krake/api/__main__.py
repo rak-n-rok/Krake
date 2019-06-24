@@ -1,9 +1,16 @@
+"""Main module for starting the Krake API service as Python module:
+
+.. code:: bash
+
+    python -m krake.api
+
+"""
 from argparse import ArgumentParser
 import logging.config
 from aiohttp import web
 
 from .. import load_config
-from .app import create_app
+from . import create_app
 
 
 parser = ArgumentParser(description="Krake API server")

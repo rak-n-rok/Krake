@@ -1,3 +1,6 @@
+"""Module for Krake controller responsible for binding Krake
+applications to specific backends.
+"""
 from functools import total_ordering
 from typing import NamedTuple
 
@@ -6,6 +9,9 @@ from .. import Controller, Worker
 
 
 class Scheduler(Controller):
+    """The scheduler is a controller watching all pending and updated
+    applications and select the "best" backend.
+    """
 
     states = (ApplicationState.PENDING, ApplicationState.UPDATED)
 
@@ -24,6 +30,8 @@ class Scheduler(Controller):
 
 @total_ordering
 class ClusterRank(NamedTuple):
+    """Named tuple for ordering clusters based on a rank"""
+
     rank: float
     cluster: Cluster
 
@@ -39,23 +47,24 @@ class ClusterRank(NamedTuple):
 
 
 class SchedulerWorker(Worker):
-    def __init__(self, client):
-        self.client = client
+    """Worker for :class:`Scheduler` responsible for selecting the "best"
+    backend for each application based on metrics of the backends and
+    application specifications.
+    """
 
     async def resource_received(self, app):
+        # TODO: Global optimization instead of incremental
         # TODO: API for supporting different application types
         cluster = await self.select_kubernetes_cluster(app)
 
         if cluster is None:
-            app.status.state = ApplicationState.FAILED
-            app.status.reason = "No cluster available"
+            await self.client.kubernetes.application.update_status(
+                app.id, state=ApplicationState.FAILED, reason="No cluster available"
+            )
         else:
-            app.status.cluster = cluster.id
-            app.status.state = ApplicationState.SCHEDULED
-
-        await self.client.kubernetes.application.update_status(
-            app.id, status=app.status
-        )
+            await self.client.kubernetes.application.update_status(
+                app.id, state=ApplicationState.SCHEDULED, cluster=cluster.id
+            )
 
     async def select_kubernetes_cluster(self, app):
         # TODO: Evaluate spawning a new cluster
