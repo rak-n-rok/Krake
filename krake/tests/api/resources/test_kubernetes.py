@@ -38,7 +38,13 @@ spec:
 
 
 async def test_list_apps(aiohttp_client, config, k8s_app_factory, db):
-    apps = [k8s_app_factory(), k8s_app_factory(), k8s_app_factory()]
+    apps = [
+        k8s_app_factory(status__state=ApplicationState.PENDING),
+        k8s_app_factory(status__state=ApplicationState.SCHEDULED),
+        k8s_app_factory(status__state=ApplicationState.UPDATED),
+        k8s_app_factory(status__state=ApplicationState.DELETING),
+        k8s_app_factory(status__state=ApplicationState.DELETED),
+    ]
     for app in apps:
         await db.put(app)
 
@@ -48,6 +54,29 @@ async def test_list_apps(aiohttp_client, config, k8s_app_factory, db):
 
     data = await resp.json()
     received = [deserialize(Application, item) for item in data]
+
+    assert len(received) == len(apps) - 1
+
+    key = attrgetter("id")
+    assert sorted(received, key=key) == sorted(apps[:-1], key=key)
+
+
+async def test_list_all_apps(aiohttp_client, config, k8s_app_factory, db):
+    apps = [
+        k8s_app_factory(status__state=ApplicationState.PENDING),
+        k8s_app_factory(status__state=ApplicationState.DELETED),
+    ]
+    for app in apps:
+        await db.put(app)
+
+    client = await aiohttp_client(create_app(config=config))
+    resp = await client.get("/kubernetes/applications?all")
+    assert resp.status == 200
+
+    data = await resp.json()
+    received = [deserialize(Application, item) for item in data]
+
+    assert len(received) == len(apps)
 
     key = attrgetter("id")
     assert sorted(received, key=key) == sorted(apps, key=key)
@@ -145,21 +174,17 @@ async def test_update_status(aiohttp_client, config, db, k8s_app_factory):
 
     await db.put(app)
 
-    new_status = ApplicationStatus(
-        state=ApplicationState.FAILED,
-        created=app.status.created,
-        modified=app.status.modified,
-        reason="Stupid error",
-    )
     resp = await client.put(
-        f"/kubernetes/applications/{app.id}/status", json=serialize(new_status)
+        f"/kubernetes/applications/{app.id}/status",
+        json={"state": "FAILED", "reason": "Stupid error", "cluster": "1234"},
     )
     assert resp.status == 200
     status = deserialize(ApplicationStatus, await resp.json())
 
     assert status.state == ApplicationState.FAILED
     assert status.created == app.status.created
-    assert status.reason == new_status.reason
+    assert status.reason == "Stupid error"
+    assert status.cluster == "1234"
 
     stored, rev = await db.get(Application, app.id)
     assert stored.status == status
