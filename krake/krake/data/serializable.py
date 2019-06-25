@@ -179,7 +179,7 @@ def deserialize(cls, value, **kwargs):
             corresponding keyword arguments to the function
 
     Raises:
-        ValueError: If any error occured during loading of the schema
+        marshmallow.ValidationError: If the data is invalid
 
     """
     if isinstance(value, bytes):
@@ -199,9 +199,7 @@ def deserialize(cls, value, **kwargs):
         except KeyError:
             pass
 
-    instance, errors = cls.__schema__.load(value)
-    if errors:
-        raise ValueError(errors)
+    instance, _ = cls.__schema__.load(value)
     assert isinstance(instance, cls)
     return instance
 
@@ -415,13 +413,11 @@ def serializable(cls=None, resolvers=default_resolvers):
             schema_attrs[name] = serializer
 
         cls.Schema = type("Schema", (ModelizedSchema,), schema_attrs)
-        cls.__schema__ = cls.Schema()
+        cls.__schema__ = cls.Schema(strict=True)
 
         @serialize.register(cls)
         def _(value):
-            data, errors = cls.__schema__.dump(value)
-            if errors:
-                raise ValueError(errors)
+            data, _ = cls.__schema__.dump(value)
             return data
 
         if hasattr(cls, "__discriminator__"):
