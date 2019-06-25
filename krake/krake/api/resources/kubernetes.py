@@ -96,16 +96,12 @@ async def update_application(request, app, manifest):
 @use_kwargs(
     {
         "state": EnumField(ApplicationState, required=True),
-        "reason": fields.String(default=None, allow_none=True),
-        "cluster": fields.String(default=None, allow_none=True),
+        "reason": fields.String(required=True, allow_none=True),
+        "cluster": fields.String(required=True, allow_none=True),
     }
 )
 @with_resource("app", Application)
 async def update_application_status(request, app, state, reason, cluster):
-    if app.status.state == ApplicationState.DELETED:
-        raise json_error(web.HTTPBadRequest, {"reason": "Application is deleted"})
-
-    # Explicitly copy state changes
     app.status.state = state
     app.status.reason = reason
     app.status.cluster = cluster

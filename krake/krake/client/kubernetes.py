@@ -67,16 +67,12 @@ class ApplicationResource(Resource):
                 application.
             reason (str, optional): Explanation for the state. Normally only
                 used for FAILED state.
-            clustere (str, optional): ID of the assigned Kubernetes cluster
+            cluster (str, optional): ID of the assigned Kubernetes cluster
         """
-        payload = {"state": state.name}
-        if reason is not None:
-            payload["reason"] = reason
-        if cluster is not None:
-            payload["cluster"] = cluster
-
         url = self.url.with_path(f"{self.model.__url__}/{id}/status")
-        resp = await self.session.put(url, json=payload)
+        resp = await self.session.put(
+            url, json={"state": state.name, "reason": reason, "cluster": cluster}
+        )
         data = await resp.json()
         return deserialize(ApplicationStatus, data)
 
