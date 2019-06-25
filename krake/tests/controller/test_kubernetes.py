@@ -29,6 +29,7 @@ async def test_app_reception(k8s_app_factory, aresponses, loop):
         "/kubernetes/applications?watch",
         "GET",
         stream([created, updated, scheduled], infinite=True),
+        match_querystring=True,
     )
 
     class SimpleWorker(Worker):

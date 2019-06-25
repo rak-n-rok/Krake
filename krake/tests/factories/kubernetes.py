@@ -16,8 +16,6 @@ from krake.data.kubernetes import (
 )
 
 
-
-
 class ApplicationStatusFactory(Factory):
     class Meta:
         model = ApplicationStatus
@@ -81,9 +79,7 @@ class ClusterStatusFactory(Factory):
         model = ClusterStatus
 
     class Params:
-        cluster_kind = fuzzy.FuzzyChoice(
-            list(ClusterKind.__members__.values())
-        )
+        cluster_kind = fuzzy.FuzzyChoice(list(ClusterKind.__members__.values()))
 
     state = fuzzy.FuzzyChoice(list(ClusterState.__members__.values()))
     created = fuzzy.FuzzyDateTime(datetime.now(tz=pytz.utc))

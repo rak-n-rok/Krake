@@ -5,11 +5,7 @@ import pytz
 from aiohttp.web import json_response
 
 from krake.data import serialize
-from krake.data.kubernetes import (
-    Application,
-    ApplicationState,
-    ApplicationStatus,
-)
+from krake.data.kubernetes import Application, ApplicationState, ApplicationStatus
 from krake.controller import Worker
 from krake.controller.scheduler import Scheduler, SchedulerWorker
 from krake.client import Client
@@ -34,6 +30,7 @@ async def test_kubernetes_reception(k8s_app_factory, aresponses, loop):
         "/kubernetes/applications?watch",
         "GET",
         stream([scheduled, updated, created], infinite=True),
+        match_querystring=True,
     )
 
     class CountingWorker(Worker):
@@ -77,12 +74,13 @@ async def test_kubernetes_scheduling(
         payload = await request.json()
         assert payload["cluster"] == cluster.id
         assert payload["state"] == "SCHEDULED"
+        assert payload["reason"] is None
 
         status = ApplicationStatus(
             created=app.status.created,
             modified=datetime.now(),
             state=ApplicationState.__members__[payload["state"]],
-            cluster=payload["cluster"]
+            cluster=payload["cluster"],
         )
         return json_response(serialize(status))
 

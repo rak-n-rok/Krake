@@ -44,7 +44,7 @@ class Resource(object):
         return deserialize(self.model, data)
 
     async def watch(self):
-        url = self.url.with_path(f"{self.model.__url__}?watch")
+        url = self.url.with_path(self.model.__url__).with_query("watch")
         resp = await self.session.get(url)
 
         async with resp:
