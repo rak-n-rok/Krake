@@ -1,0 +1,33 @@
+# TODO Deployment of the minikube cluster is not a part Krake ansible playbooks yet.
+# Therefore if we want to apply this `keystone_auth_minikube` playbook
+# on the existing minikube cluster, the following `hosts` files need to be modified.
+# e.g.:
+#
+# hosts.yml:
+#
+#    minikube_clusters:
+#      hosts:
+#        minikube-demo:
+#          idp: krake-central-idp-demo
+#
+# hosts.json:
+#
+#    "minikube-demo": {
+#        "ansible_host": "192.168.0.20",
+#        "ansible_python_interpreter": "python3",
+#        "ansible_user": "ubuntu"
+#    },
+
+- name: Setup Kubernetes keystone auth
+  hosts: minikube_clusters
+  vars:
+    minikube: true
+    user_role: "_member_"
+    user_project: "demo"
+    k8s_path: "/etc/kubernetes"
+    k8s_auth_dir: "/home/ubuntu/k8s_auth"
+    k8s_config: "/home/ubuntu/.kube/config"
+    k8s_api_config: "{{ k8s_path }}/manifests/kube-apiserver.yaml"
+    k8s_path_minikube: "/var/lib/minikube/certs"
+  roles:
+    - k8s-keystone-auth
