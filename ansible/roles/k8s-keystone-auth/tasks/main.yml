@@ -80,7 +80,7 @@
       k8s:
         kubeconfig: "{{ k8s_config }}"
         state: present
-        definition: "{{ lookup('file', 'policy-config.yaml') }}"
+        definition: "{{ lookup('template', 'policy-config.yaml.j2') }}"
 
     - name: Prepare the service certificates
       vars:
@@ -115,11 +115,13 @@
         namespace: kube-system
       register: keystone_auth_service
 
-- name: Modify k8s apiserver config file to use the webhook service for authentication and authorization.
+- name: Modify Magnum cluster apiserver config file.
   become: yes
   become_user: root
   vars:
-    k8s_webhook_path: "{{ k8s_path_minikube if minikube|default('') else k8s_path }}"
+    k8s_webhook_path: "{{ k8s_path }}"
+  when:
+    - "magnum_cluster|default('')"
   block:
 
     - name: Copy webhook config file to the K8S master node
@@ -132,14 +134,14 @@
     - name: Searching for a webhook config file in k8s apiserver config file
       shell: "grep {{ k8s_webhook_path }}/webhookconfig.yaml {{ k8s_api_config }}"
       register: presence
-      failed_when: presence.rc != 1 and presence.rc != 0
+      failed_when: "presence.rc != 1 and presence.rc != 0"
 
     - name: Modify authorization mode
       replace:
         path: "{{ k8s_api_config }}"
         regexp: "authorization-mode=Node,"
         replace: "authorization-mode=Node,Webhook,"
-      when:  "presence.rc == 1"
+      when: "presence.rc == 1"
 
     - name: Add webhook config file
       replace:
@@ -147,9 +149,42 @@
         regexp: "KUBE_API_ARGS=\""
         replace: "KUBE_API_ARGS=\"--authentication-token-webhook-config-file={{ k8s_webhook_path }}/webhookconfig.yaml
                   --authorization-webhook-config-file={{ k8s_webhook_path }}/webhookconfig.yaml "
-      when:  "presence.rc == 1 and not(minikube|default(''))"
+      when: "presence.rc == 1"
 
-    - name: Add webhook config file minikube
+    - name: Restart kube-apiserver to pick up config changes
+      systemd:
+        name: kube-apiserver
+        state: restarted
+
+- name: Modify Minikube apiserver config file.
+  become: yes
+  become_user: root
+  vars:
+    k8s_webhook_path: "{{ k8s_path_minikube }}"
+  when:
+    - "minikube|default('')"
+  block:
+
+    - name: Copy webhook config file to the K8S master node
+      vars:
+        keystone_auth_service_addr: "{{ keystone_auth_service | json_query('resources[0].spec.clusterIP') }}"
+      template:
+        src: "webhookconfig.yaml.j2"
+        dest: "{{ k8s_webhook_path }}/webhookconfig.yaml"
+
+    - name: Searching for a webhook config file in k8s apiserver config file
+      shell: "grep {{ k8s_webhook_path }}/webhookconfig.yaml {{ k8s_api_config }}"
+      register: presence
+      failed_when: "presence.rc != 1 and presence.rc != 0"
+
+    - name: Modify authorization mode
+      replace:
+        path: "{{ k8s_api_config }}"
+        regexp: "authorization-mode=Node,"
+        replace: "authorization-mode=Node,Webhook,"
+      when: "presence.rc == 1"
+
+    - name: Add webhook config file to the apiserver config
       lineinfile:
         path: "{{ k8s_api_config }}"
         insertafter: ".*authorization-mode.*"
@@ -157,10 +192,4 @@
       with_items:
         - "    - --authorization-webhook-config-file={{ k8s_webhook_path }}/webhookconfig.yaml"
         - "    - --authentication-token-webhook-config-file={{ k8s_webhook_path }}/webhookconfig.yaml"
-      when:  "presence.rc == 1 and minikube|default('')"
-
-    - name: Restart kube-apiserver to pick up config changes
-      systemd:
-        name: kube-apiserver
-        state: restarted
-      when: "not(minikube|default(''))"
+      when: "presence.rc == 1"

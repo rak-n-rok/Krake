@@ -16,11 +16,11 @@ data:
         "match": [
           {
             "type": "role",
-            "values": ["_member_"]
+            "values": ["{{ user_role }}"]
           },
           {
             "type": "project",
-            "values": ["demo"]
+            "values": ["{{ user_project }}"]
           }
         ]
       }
