@@ -8,7 +8,7 @@ import dataclasses
 import json
 from enum import Enum
 from datetime import datetime, date
-from typing import get_type_hints, List
+from typing import get_type_hints, List, NamedTuple
 from functools import singledispatch
 from webargs import fields
 from marshmallow import Schema, post_load
@@ -338,6 +338,7 @@ default_resolvers = [
     SimpleFieldResolver(bool, fields.Boolean),
     SimpleFieldResolver(str, fields.String),
     SimpleFieldResolver(float, fields.Float),
+    SimpleFieldResolver(dict, fields.Dict),
     SimpleFieldResolver(datetime, fields.DateTime),
     SimpleFieldResolver(date, fields.Date),
     resolve_enum,
@@ -402,6 +403,11 @@ def serializable(cls=None, resolvers=default_resolvers):
         # Generator expression for attributes (name, type, default)
         if dataclasses.is_dataclass(cls):
             fields = ((f.name, f.type, f.default) for f in dataclasses.fields(cls))
+        elif issubclass(cls, NamedTuple):
+            fields = (
+                (name, type_, cls._field_defaults.get(name, dataclasses.MISSING))
+                for name, type_ in cls._field_types.items()
+            )
         else:
             fields = (
                 (name, type_, getattr(cls, name, dataclasses.MISSING))

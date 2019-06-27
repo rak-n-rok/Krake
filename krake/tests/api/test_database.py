@@ -15,7 +15,7 @@ class MyModel(Serializable):
     kind: str = "my-model"
 
     __namespace__ = "/model"
-    __identity__ = "id"
+    __identity__ = ("id",)
     __discriminator__ = "kind"
 
 
@@ -81,32 +81,31 @@ async def test_put(db, etcd_client, loop):
     assert model.name == data.name
 
 
-async def test_put_without_identity(db):
-    class MyModel(Serializable):
-        id: int
+async def test_put_with_multikey_identity(db, etcd_client, loop):
+    class App(Serializable):
+        name: str
+        user: str
+        kind: str = "app"
+        __namespace__ = "/apps"
+        __identity__ = ("user", "name")
 
-    with pytest.raises(AttributeError) as excinfo:
-        await db.put(MyModel(id=42))
+    app = App(name="my-app", user="me")
+    resp = await db.put(app)
 
-    assert "no attribute '__identity__'" in str(excinfo.value)
+    resp = await etcd_client.range(f"/apps/me/my-app")
 
+    assert resp.kvs is not None
+    assert len(resp.kvs) == 1
 
-async def test_put_without_namespace(db):
-    class MyModel(Serializable):
-        id: int
-        __identity__ = "id"
-
-    with pytest.raises(AttributeError) as excinfo:
-        await db.put(MyModel(id=42))
-
-    assert "no attribute '__namespace__'" in str(excinfo.value)
+    value = json.loads(resp.kvs[0].value.decode())
+    assert App(**value) == app
 
 
 async def test_get(db, etcd_client):
     data = MyModelFactory()
     await etcd_client.put(f"/model/{data.id}", json.dumps(serialize(data)))
 
-    model, rev = await db.get(MyModel, data.id)
+    model, rev = await db.get(MyModel, id=data.id)
 
     assert rev.version == 1
     assert rev.key == f"/model/{data.id}"
@@ -115,14 +114,15 @@ async def test_get(db, etcd_client):
     assert model.name == data.name
 
 
-async def test_get_without_namespace(db):
-    class MyModel(Serializable):
-        id: int
+async def test_all(db, etcd_client):
+    data = [MyModelFactory() for _ in range(10)]
 
-    with pytest.raises(AttributeError) as excinfo:
-        model, rev = await db.get(MyModel, 42)
+    for instance in data:
+        await db.put(instance)
 
-    assert "no attribute '__namespace__'" in str(excinfo.value)
+    models = [model async for model in db.all(MyModel)]
+
+    assert len(models) == 10
 
 
 async def test_delete(db, etcd_client):
@@ -142,7 +142,7 @@ async def test_get_polymorphic(fake, db, etcd_client):
         name: str
         kind: str = "app"
         __namespace__ = "/apps"
-        __identity__ = "id"
+        __identity__ = ("id",)
         __discriminator__ = "kind"
 
     class SpecificApp(App):
@@ -152,7 +152,7 @@ async def test_get_polymorphic(fake, db, etcd_client):
     app = App(id=42, name=fake.name())
     await db.put(app)
 
-    instance, rev = await db.get(App, 42)
+    instance, rev = await db.get(App, id=42)
     assert isinstance(instance, App)
     assert rev.version == 1
 
@@ -160,7 +160,7 @@ async def test_get_polymorphic(fake, db, etcd_client):
     await db.put(app)
     assert rev.version == 1
 
-    instance, rev = await db.get(App, 43)
+    instance, rev = await db.get(App, id=43)
     assert isinstance(instance, SpecificApp)
 
 

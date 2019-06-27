@@ -3,8 +3,6 @@ import json
 from functools import wraps
 from aiohttp import web
 
-from krake.data import deserialize
-
 
 def json_error(exc, content):
     """Create an aiohttp exception with JSON body.
@@ -34,52 +32,36 @@ def session(request):
     return request["db"]
 
 
-def with_resource(name, cls, identity="id"):
-    """Decorator function returning a decorator that can be used to load a
-    database model from a dynamic aiohttp resource.
+def protected(handler):
+    """Decorator for aiohttp request handlers checking if an authenticated
+    user exists for a given request.
+
+    It is the responsibility of authentication middlewares to load and set the
+    ``user`` key of the request object.
 
     Example:
         .. code:: python
 
-            from krake.data.serialzable import Serializable
+            from krake.api.helpers import protected
 
-            class Book(Serializable):
-                isbn: int
-                title: str
-
-                __namespace__ = "/books"
-                __identity__ = "isbn"
-
-            @routes.put("/books/{id}")
-            @with_resource("book", Book)
-            async def get_model(request, book):
-                # Do what every you want with your book ...
-                pass
+            @routes.get("/resource/{name}")
+            @protected
+            async def get_resource(request):
+                assert "user" in request
 
     Args:
-        name (str): Name of the keyword argument that should be passed to the
-            wrapped handler.
-        cls (type): Serializable type that should be loaded from database
-        identity (str, optional): Name of the dynamic URL parameter that
-            should be used as identity
+        handler (coroutine): aiohttp request handler
 
     Returns:
-        callable: Returns a function that can be used as decorator for aiohttp
-        handlers.
+        Wrapped aiohttp request handler raising an HTTP 401 Unauthorized error
+        of no ``user`` key exists in the request object.
 
     """
 
-    def decorator(handler):
-        @wraps(handler)
-        async def wrapper(request, *args, **kwargs):
-            instance, rev = await session(request).get(
-                cls, request.match_info[identity]
-            )
-            if instance is None:
-                raise web.HTTPNotFound()
-            kwargs[name] = instance
-            return await handler(request, *args, **kwargs)
+    @wraps(handler)
+    async def wrapper(request, *args, **kwargs):
+        if "user" not in request:
+            raise web.HTTPUnauthorized()
+        return await handler(request, *args, **kwargs)
 
-        return wrapper
-
-    return decorator
+    return wrapper

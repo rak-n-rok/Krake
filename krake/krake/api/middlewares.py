@@ -1,5 +1,6 @@
 """This modules defines aiohttp middlewares for the Krake HTTP API"""
 import asyncio
+from dataclasses import dataclass
 from aiohttp import web
 from etcd3.aio_client import AioClient
 
@@ -55,3 +56,36 @@ def error_log(logger):
             raise
 
     return logging_middleware
+
+
+@dataclass
+class User(object):
+    """Data container for the authenticated user
+
+    Attributes:
+        name (str): Username of the authenticated user
+
+    """
+
+    name: str
+
+
+def anonymous_auth(anonymous):
+    """Middleware factory for anonymous authentication.
+
+    Args:
+        anonymous (User): User instance that should be used as authenticated
+            user for every request.
+
+    Returns:
+        aiohttp middleware authenticating every request with the passed the
+        anonymous user.
+
+    """
+
+    @web.middleware
+    async def auth_middleware(request, handler):
+        request["user"] = anonymous
+        return await handler(request)
+
+    return auth_middleware

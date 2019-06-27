@@ -1,8 +1,9 @@
 """Data model definitions for Kubernetes-related resources"""
 from enum import Enum, auto
 from datetime import datetime
+from typing import NamedTuple
 
-from .serializable import Serializable
+from .serializable import Serializable, serializable
 
 
 class ApplicationState(Enum):
@@ -15,21 +16,39 @@ class ApplicationState(Enum):
     FAILED = auto()
 
 
+@serializable
+class ClusterRef(NamedTuple):
+    """Reference to a cluster
+
+    Attributes:
+        user (str): Username of the cluster owner
+        name (str): Cluster name
+    """
+
+    user: str
+    name: str
+
+    @classmethod
+    def from_cluster(cls, cluster):
+        return cls(user=cluster.user, name=cluster.name)
+
+
 class ApplicationStatus(Serializable):
     state: ApplicationState
     created: datetime
     modified: datetime
     reason: str = None
-    cluster: str = None  # ID of associated Cluster
+    cluster: ClusterRef = None
 
 
 class Application(Serializable):
-    id: str
-    status: ApplicationStatus
-    user_id: str
+    name: str
+    user: str
+    uid: str
     manifest: str
+    status: ApplicationStatus
 
-    __identity__ = "id"
+    __identity__ = ("user", "name")
     __namespace__ = "/k8s/apps"
     __url__ = "/kubernetes/applications"
 
@@ -54,11 +73,14 @@ class ClusterKind(Enum):
 
 
 class Cluster(Serializable):
-    id: str
-    status: ClusterStatus
+    name: str
+    user: str
     kind: ClusterKind
+    kubeconfig: dict = None
+    uid: str
+    status: ClusterStatus
 
-    __identity__ = "id"
+    __identity__ = ("user", "name")
     __discriminator__ = "kind"
     __namespace__ = "/k8s/clusters"
     __url__ = "/kubernetes/clusters"

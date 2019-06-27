@@ -1,6 +1,7 @@
 from datetime import datetime
 import pytest
 import pytz
+import yaml
 from factory import Factory, SubFactory, lazy_attribute, fuzzy
 
 from .fake import fake
@@ -12,8 +13,13 @@ from krake.data.kubernetes import (
     ClusterStatus,
     ClusterKind,
     Cluster,
+    ClusterRef,
     MagnumCluster,
 )
+
+
+def fuzzy_name():
+    return "-".join(fake.name().split()).lower()
 
 
 class ApplicationStatusFactory(Factory):
@@ -41,7 +47,11 @@ class ApplicationStatusFactory(Factory):
     def cluster(self):
         if self.state == ApplicationState.PENDING:
             return None
-        return fake.uuid4()
+        if self.factory_parent:
+            user = self.factory_parent.user
+        else:
+            user = fuzzy_name()
+        return ClusterRef(name=fuzzy_name(), user=user)
 
 
 kubernetes_manifest = """---
@@ -65,9 +75,10 @@ class ApplicationFactory(Factory):
     class Meta:
         model = Application
 
-    id = fuzzy.FuzzyAttribute(fake.uuid4)
+    name = fuzzy.FuzzyAttribute(fuzzy_name)
+    user = fuzzy.FuzzyAttribute(fuzzy_name)
+    uid = fuzzy.FuzzyAttribute(fake.uuid4)
     status = SubFactory(ApplicationStatusFactory)
-    user_id = fuzzy.FuzzyAttribute(fake.uuid4)
 
     @lazy_attribute
     def manifest(self):
@@ -91,10 +102,41 @@ class ClusterStatusFactory(Factory):
         return fake.sentence()
 
 
+local_kubeconfig = yaml.safe_load(
+    """---
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority-data: REMOVED
+    server: https://127.0.0.1:8080
+  name: minikube
+contexts:
+- context:
+    cluster: minikube
+    user: minikube
+  name: minikube
+current-context: minikube
+kind: Config
+preferences: {}
+users:
+- name: minikube
+  user:
+    client-certificate-data: REMOVED
+    client-key-data: REMOVED
+"""
+)
+
+
 class ClusterFactory(Factory):
-    id = fuzzy.FuzzyAttribute(fake.uuid4)
-    status = SubFactory(ClusterStatusFactory)
+    name = fuzzy.FuzzyAttribute(fuzzy_name)
+    user = fuzzy.FuzzyAttribute(fuzzy_name)
     kind = fuzzy.FuzzyChoice(list(ClusterKind.__members__.values()))
+    uid = fuzzy.FuzzyAttribute(fake.uuid4)
+    status = SubFactory(ClusterStatusFactory)
+
+    @lazy_attribute
+    def kubeconfig(self):
+        return local_kubeconfig
 
 
 class MagnumClusterFactory(ClusterFactory):

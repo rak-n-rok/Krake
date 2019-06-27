@@ -5,6 +5,10 @@ etcd:
 log:
   level: INFO
 
+auth:
+  kind: anonymous
+  name: system
+
 controllers:
 
   scheduler:

@@ -19,7 +19,7 @@ Example:
             title: str
 
             __namespace__ = "/books"
-            __identity__ = "isbn"
+            __identity__ = ("isbn",)
 
 
         async with Session(host="localhost") as session:
@@ -108,11 +108,13 @@ class Session(object):
     __namespace__:
         Defines the etcd key prefix
     __identity__:
-        Defines the name of the attribute that should used as identifier for
-        an object.
+        Is a tuple defining the name of the attributes that should used as
+        identifier for an object.
 
     Namespace and identity are combined to a single etcd key:
-    ``{__namespace__}/{identity}``.
+    ``{__namespace__}/{identity}`` where ``identity`` is the joined string
+    of all identity attributes defined in ``__identity__`` with ``/`` as
+    concatenator.
 
     The session is an asynchronous context manager. It takes of care of
     opening and closing an HTTP session to the gRPC JSON gateway of the etcd
@@ -151,19 +153,31 @@ class Session(object):
         await self.client.close()
         self.client = None
 
-    async def get(self, cls, identity):
+    async def get(self, cls, **identitiy):
         """Fetch an serializable object from the etcd server specified by its
         identity attribute.
 
         Attributes:
             cls (type): Serializable class that should be loaded
-            identity: Identity of the object that should be fetched
+            **identitiy: Identity of the object that should be fetched as
+                keyword arguments
 
         Returns:
             (object, Revision): Tuple of deserialized model and revision. If
             the key was not found in etcd (None, None) is returned.
         """
-        key = f"{cls.__namespace__}/{identity}"
+        suffix = []
+        for attr in cls.__identity__:
+            try:
+                suffix.append(identitiy.pop(attr))
+            except KeyError:
+                raise TypeError(f"Missing keyword argument {attr!r}")
+        if identitiy:
+            attr, _ = identitiy.popitem()
+            raise TypeError(f"Got unexpected keyword argument {attr!r}")
+
+        suffix = "/".join(map(str, suffix))
+        key = f"{cls.__namespace__}/{suffix}"
         resp = await self.client.range(key)
 
         if resp.kvs is None:
@@ -171,23 +185,74 @@ class Session(object):
 
         return self.load_instance(cls, resp.kvs[0])
 
-    async def all(self, cls):
+    async def all(self, cls, **filters):
         """Fetch all instances of a given type
+
+        The instances can be filtered by partial identites. Every identity can
+        be specified as keyword argument and only instances with this
+        idenenity attribute are returned. The only requirement for a filtered
+        identity attribute is that all preceeding identity attributes must
+        also be given.
+
+        Example:
+            .. code:: python
+
+                class Book(Serializable):
+                    isbn: int
+                    title: str
+                    author: str
+
+                    __identity__ = ("author", "isbn")
+                    __namespace__ = "/books"
+
+                await db.all(Book)
+
+                # Get all books by Adam Douglas
+                await db.all(Book, author="Adam Douglas")
+
+                # This will raise a TypeError because the preceding "name"
+                # attribute is not given.
+                await db.all(Book, isbn=42)
 
         Args:
             cls (type): Serializable class that should be loaded
+            **filters: Identity attributes that should be filtered
 
         Yields:
             (object, Revision): Tuple of deserialized model and revision
 
+        Raises:
+            TypeError: If an identity attribute is given without all preceeding
+                identity attributes.
+
         """
+        if filters:
+            identities = []
+
+            for attr in cls.__identity__:
+                try:
+                    identities.append(filters.pop())
+                except KeyError:
+                    break
+
+            if filters:
+                key, _ = filters.popitem()
+                raise TypeError(
+                    f"Got identity attribute {key!r} without preceding identity attribute {attr!r}"
+                )
+
+            suffix = "/".join(map(str, identities))
+            key = f"{cls.__namespace__}/{suffix}"
+        else:
+            key = f"{cls.__namespace__}/"
+
         # TODO: Support pagination
-        resp = await self.client.range(cls.__namespace__, prefix=True)
+        resp = await self.client.range(key, prefix=True)
         if not resp.kvs:
             return
 
         for kv in resp.kvs:
-            if in_namespace(cls.__namespace__, kv.key.decode()):
+            if in_namespace(cls, kv.key.decode()):
                 yield self.load_instance(cls, kv)
 
     async def put(self, instance):
@@ -200,9 +265,11 @@ class Session(object):
             int: key-value revision version when the request was applied
 
         """
-        identity = getattr(instance, instance.__identity__)
+        suffix = "/".join(
+            str(getattr(instance, attr)) for attr in instance.__identity__
+        )
+        key = f"{instance.__namespace__}/{suffix}"
         data = serialize(instance)
-        key = f"{instance.__namespace__}/{identity}"
         resp = await self.client.put(key, json.dumps(data))
         return resp.header.revision
         # TODO: Should be we fetch the previous revision here with "prev_kv"?
@@ -217,8 +284,10 @@ class Session(object):
             int: Number of keys that where deleted
 
         """
-        identity = getattr(instance, instance.__identity__)
-        key = f"{instance.__namespace__}/{identity}"
+        suffix = "/".join(
+            str(getattr(instance, attr)) for attr in instance.__identity__
+        )
+        key = f"{instance.__namespace__}/{suffix}"
 
         resp = await self.client.delete_range(key=key)
         return resp.deleted
@@ -252,7 +321,7 @@ class Session(object):
                         created.set_result(None)
                 else:
                     for event in resp.events:
-                        if in_namespace(cls.__namespace__, event.kv.key.decode()):
+                        if in_namespace(cls, event.kv.key.decode()):
                             # Resolve event type. Empty string means "PUT"
                             # event.
                             if event.type == "":
@@ -283,6 +352,6 @@ class Session(object):
         return model, rev
 
 
-def in_namespace(namespace, key):
-    prefix, _ = key.rsplit("/", 1)
-    return prefix == namespace
+def in_namespace(cls, key):
+    prefix = key.rsplit("/", len(cls.__identity__))[0]
+    return prefix == cls.__namespace__

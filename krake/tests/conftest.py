@@ -95,10 +95,18 @@ async def db(etcd_server, etcd_client, loop):
 
 
 @pytest.fixture
-def config(etcd_server):
+def user():
+    return "testuser"
+
+
+@pytest.fixture
+def config(etcd_server, user):
     etcd_host, etcd_port = etcd_server
 
-    return {"etcd": {"host": etcd_host, "port": etcd_port}}
+    return {
+        "auth": {"kind": "anonymous", "name": user},
+        "etcd": {"host": etcd_host, "port": etcd_port},
+    }
 
 
 @pytest.fixture

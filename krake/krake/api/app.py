@@ -37,10 +37,16 @@ def create_app(config):
     """
     logger = logging.getLogger("krake.api.error")
 
+    # Authentication middlewares
+    if config["auth"]["kind"] == "anonymous":
+        anonymous = middlewares.User(name=config["auth"]["name"])
+        auth_middleware = middlewares.anonymous_auth(anonymous)
+
     app = web.Application(
         middlewares=[
             middlewares.error_log(logger),
             middlewares.database(config["etcd"]["host"], config["etcd"]["port"]),
+            auth_middleware,
         ]
     )
     app["config"] = config

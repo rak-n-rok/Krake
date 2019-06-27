@@ -80,27 +80,27 @@ spec:
 async def test_update_application(k8s_app_factory, aresponses, loop):
     running = k8s_app_factory(status__state=ApplicationState.RUNNING)
     updated = k8s_app_factory(
-        id=running.id,
+        uid=running.uid,
         status__state=ApplicationState.UPDATED,
-        user_id=running.user_id,
+        user=running.user,
         manifest=updated_manifest,
     )
 
     aresponses.add(
         "api.krake.local",
-        f"/kubernetes/applications/{running.id}",
+        f"/kubernetes/applications/{running.name}",
         "GET",
         json_response(serialize(running)),
     )
     aresponses.add(
         "api.krake.local",
-        f"/kubernetes/applications/{running.id}",
+        f"/kubernetes/applications/{running.name}",
         "PUT",
         json_response(serialize(updated)),
     )
     async with Client(url="http://api.krake.local", loop=loop) as client:
         app = await client.kubernetes.application.update(
-            running.id, manifest=updated_manifest
+            running.name, manifest=updated_manifest
         )
 
     assert app == updated
@@ -110,12 +110,12 @@ async def test_get_application(k8s_app_factory, aresponses, loop):
     data = k8s_app_factory()
     aresponses.add(
         "api.krake.local",
-        f"/kubernetes/applications/{data.id}",
+        f"/kubernetes/applications/{data.name}",
         "GET",
         json_response(serialize(data)),
     )
     async with Client(url="http://api.krake.local", loop=loop) as client:
-        app = await client.kubernetes.application.get(data.id)
+        app = await client.kubernetes.application.get(data.name)
 
     assert app == data
 

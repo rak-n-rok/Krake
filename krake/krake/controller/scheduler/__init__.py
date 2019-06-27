@@ -4,7 +4,7 @@ applications to specific backends.
 from functools import total_ordering
 from typing import NamedTuple
 
-from krake.data.kubernetes import ApplicationState, Cluster
+from krake.data.kubernetes import ApplicationState, Cluster, ClusterRef
 from .. import Controller, Worker
 
 
@@ -19,13 +19,13 @@ class Scheduler(Controller):
         # List all Kubernetes applications
         for app in await self.client.kubernetes.application.list():
             if app.status.state in self.states:
-                await self.queue.put(app.id, app)
+                await self.queue.put(app.uid, app)
 
         # Indefinitly watch Kubernetes application resources
         while True:
             async for app in self.client.kubernetes.application.watch():
                 if app.status.state in self.states:
-                    await self.queue.put(app.id, app)
+                    await self.queue.put(app.uid, app)
 
 
 @total_ordering
@@ -59,11 +59,13 @@ class SchedulerWorker(Worker):
 
         if cluster is None:
             await self.client.kubernetes.application.update_status(
-                app.id, state=ApplicationState.FAILED, reason="No cluster available"
+                app.name, state=ApplicationState.FAILED, reason="No cluster available"
             )
         else:
             await self.client.kubernetes.application.update_status(
-                app.id, state=ApplicationState.SCHEDULED, cluster=cluster.id
+                app.name,
+                state=ApplicationState.SCHEDULED,
+                cluster=ClusterRef.from_cluster(cluster),
             )
 
     async def select_kubernetes_cluster(self, app):

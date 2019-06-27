@@ -5,7 +5,12 @@ import pytz
 from aiohttp.web import json_response
 
 from krake.data import serialize
-from krake.data.kubernetes import Application, ApplicationState, ApplicationStatus
+from krake.data.kubernetes import (
+    Application,
+    ApplicationState,
+    ApplicationStatus,
+    ClusterRef,
+)
 from krake.controller import Worker
 from krake.controller.scheduler import Scheduler, SchedulerWorker
 from krake.client import Client
@@ -68,11 +73,12 @@ async def test_kubernetes_scheduling(
     k8s_app_factory, k8s_magnum_cluster_factory, aresponses, loop
 ):
     app = k8s_app_factory(status__state=ApplicationState.UPDATED)
-    cluster = k8s_magnum_cluster_factory()
+    cluster = k8s_magnum_cluster_factory(user=app.user)
 
     async def echo(request):
         payload = await request.json()
-        assert payload["cluster"] == cluster.id
+        assert payload["cluster"]["user"] == cluster.user
+        assert payload["cluster"]["name"] == cluster.name
         assert payload["state"] == "SCHEDULED"
         assert payload["reason"] is None
 
@@ -80,7 +86,9 @@ async def test_kubernetes_scheduling(
             created=app.status.created,
             modified=datetime.now(),
             state=ApplicationState.__members__[payload["state"]],
-            cluster=payload["cluster"],
+            cluster=ClusterRef(
+                name=payload["cluster"]["name"], user=payload["cluster"]["user"]
+            ),
         )
         return json_response(serialize(status))
 
@@ -91,7 +99,7 @@ async def test_kubernetes_scheduling(
         json_response([serialize(cluster)]),
     )
     aresponses.add(
-        "api.krake.local", f"/kubernetes/applications/{app.id}/status", "PUT", echo
+        "api.krake.local", f"/kubernetes/applications/{app.name}/status", "PUT", echo
     )
 
     async with Client(url="http://api.krake.local", loop=loop) as client:
