@@ -27,12 +27,12 @@ parser.add_argument("-c", "--config", help="Path to configuration YAML file")
 def main():
     args = parser.parse_args()
     config = load_config(args.config)["controllers"]["kubernetes"]
-    scheduler = KubernetesController(
+    controller = KubernetesController(
         api_endpoint=config["api_endpoint"],
         worker_factory=KubernetesWorker,
         worker_count=config["worker_count"],
     )
-    run(scheduler)
+    run(controller)
 
 
 if __name__ == "__main__":

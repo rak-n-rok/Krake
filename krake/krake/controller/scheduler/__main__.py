@@ -1,4 +1,4 @@
-"""Entry point of Kubernetes controller.
+"""Entry point of Krake scheduler.
 
 .. code:: bash
 
