@@ -86,6 +86,15 @@ async def list_or_watch_applications(request):
     {"name": fields.String(required=True), "manifest": fields.String(required=True)}
 )
 async def create_application(request, name, manifest):
+    # Ensure that an application with the same name does not already exists
+    app, _ = await session(request).get(
+        Application, user=request["user"].name, name=name
+    )
+    if app is not None:
+        raise json_error(
+            web.HTTPBadRequest, {"reason": f"Application {name!r} already exists"}
+        )
+
     uid = str(uuid4())
     now = datetime.now()
 

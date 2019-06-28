@@ -14,6 +14,8 @@ from krake.data.kubernetes import (
 from krake.data import serialize, deserialize
 from krake.api.app import create_app
 
+from factories.kubernetes import ApplicationFactory
+
 
 uuid_re = re.compile(
     r"^[0-9A-F]{8}-[0-9A-F]{4}-[4][0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$",
@@ -37,13 +39,13 @@ spec:
 """
 
 
-async def test_list_apps(aiohttp_client, config, user, k8s_app_factory, db):
+async def test_list_apps(aiohttp_client, config, user, db):
     apps = [
-        k8s_app_factory(user=user, status__state=ApplicationState.PENDING),
-        k8s_app_factory(user=user, status__state=ApplicationState.SCHEDULED),
-        k8s_app_factory(user=user, status__state=ApplicationState.UPDATED),
-        k8s_app_factory(user=user, status__state=ApplicationState.DELETING),
-        k8s_app_factory(user=user, status__state=ApplicationState.DELETED),
+        ApplicationFactory(user=user, status__state=ApplicationState.PENDING),
+        ApplicationFactory(user=user, status__state=ApplicationState.SCHEDULED),
+        ApplicationFactory(user=user, status__state=ApplicationState.UPDATED),
+        ApplicationFactory(user=user, status__state=ApplicationState.DELETING),
+        ApplicationFactory(user=user, status__state=ApplicationState.DELETED),
     ]
     for app in apps:
         await db.put(app)
@@ -61,10 +63,10 @@ async def test_list_apps(aiohttp_client, config, user, k8s_app_factory, db):
     assert sorted(received, key=key) == sorted(apps[:-1], key=key)
 
 
-async def test_list_all_apps(aiohttp_client, config, user, k8s_app_factory, db):
+async def test_list_all_apps(aiohttp_client, config, user, db):
     apps = [
-        k8s_app_factory(user=user, status__state=ApplicationState.PENDING),
-        k8s_app_factory(user=user, status__state=ApplicationState.DELETED),
+        ApplicationFactory(user=user, status__state=ApplicationState.PENDING),
+        ApplicationFactory(user=user, status__state=ApplicationState.DELETED),
     ]
     for app in apps:
         await db.put(app)
@@ -85,9 +87,9 @@ async def test_list_all_apps(aiohttp_client, config, user, k8s_app_factory, db):
 async def test_create_app(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
-    payload = {"manifest": manifest, "name": "test-app"}
-
-    resp = await client.post("/kubernetes/applications", json=payload)
+    resp = await client.post(
+        "/kubernetes/applications", json={"manifest": manifest, "name": "test-app"}
+    )
     assert resp.status == 200
     data = await resp.json()
 
@@ -102,17 +104,27 @@ async def test_create_app(aiohttp_client, config, db):
 async def test_create_invalid_app(aiohttp_client, config):
     client = await aiohttp_client(create_app(config=config))
 
-    payload = {"manifest": None}
-
-    resp = await client.post("/kubernetes/applications", json=payload)
+    resp = await client.post("/kubernetes/applications", json={"manifest": None})
     assert resp.status == 422
     data = await resp.json()
 
     assert data["manifest"]
 
 
-async def test_get_app(aiohttp_client, user, config, db, k8s_app_factory):
-    app = k8s_app_factory(user=user, status__state=ApplicationState.RUNNING)
+async def test_create_app_with_existing_name(aiohttp_client, config, db, user):
+    existing = ApplicationFactory(user=user, name="existing")
+    await db.put(existing)
+
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.post(
+        "/kubernetes/applications", json={"manifest": manifest, "name": "existing"}
+    )
+    assert resp.status == 400
+
+
+async def test_get_app(aiohttp_client, user, config, db):
+    app = ApplicationFactory(user=user, status__state=ApplicationState.RUNNING)
     await db.put(app)
     client = await aiohttp_client(create_app(config=config))
     resp = await client.get(f"/kubernetes/applications/{app.name}")
@@ -148,9 +160,9 @@ spec:
 """
 
 
-async def test_update_manifest(aiohttp_client, config, db, user, k8s_app_factory):
+async def test_update_manifest(aiohttp_client, config, db, user):
     client = await aiohttp_client(create_app(config=config))
-    app = k8s_app_factory(user=user, status__state=ApplicationState.PENDING)
+    app = ApplicationFactory(user=user, status__state=ApplicationState.PENDING)
 
     await db.put(app)
 
@@ -167,14 +179,12 @@ async def test_update_manifest(aiohttp_client, config, db, user, k8s_app_factory
     assert rev.version == 2
 
 
-async def test_update_manifest_already_deleted(
-    aiohttp_client, config, db, user, k8s_app_factory
-):
+async def test_update_manifest_already_deleted(aiohttp_client, config, db, user):
     client = await aiohttp_client(create_app(config=config))
 
     # Create applications
-    deleting = k8s_app_factory(user=user, status__state=ApplicationState.DELETING)
-    deleted = k8s_app_factory(user=user, status__state=ApplicationState.DELETED)
+    deleting = ApplicationFactory(user=user, status__state=ApplicationState.DELETING)
+    deleted = ApplicationFactory(user=user, status__state=ApplicationState.DELETED)
     await db.put(deleting)
     await db.put(deleted)
 
@@ -191,9 +201,9 @@ async def test_update_manifest_already_deleted(
     assert resp.status == 400
 
 
-async def test_update_status(aiohttp_client, config, db, user, k8s_app_factory):
+async def test_update_status(aiohttp_client, config, db, user):
     client = await aiohttp_client(create_app(config=config))
-    app = k8s_app_factory(user=user, status__state=ApplicationState.PENDING)
+    app = ApplicationFactory(user=user, status__state=ApplicationState.PENDING)
 
     await db.put(app)
 
@@ -218,12 +228,12 @@ async def test_update_status(aiohttp_client, config, db, user, k8s_app_factory):
     assert rev.version == 2
 
 
-async def test_delete(aiohttp_client, config, db, user, k8s_app_factory):
+async def test_delete(aiohttp_client, config, db, user):
     client = await aiohttp_client(create_app(config=config))
 
     # Create application
     client = await aiohttp_client(create_app(config=config))
-    app = k8s_app_factory(user=user, status__state=ApplicationState.PENDING)
+    app = ApplicationFactory(user=user, status__state=ApplicationState.PENDING)
     await db.put(app)
 
     # Delete application
@@ -235,14 +245,12 @@ async def test_delete(aiohttp_client, config, db, user, k8s_app_factory):
     assert deleted.manifest == manifest
 
 
-async def test_delete_already_deleted(
-    aiohttp_client, config, db, user, k8s_app_factory
-):
+async def test_delete_already_deleted(aiohttp_client, config, db, user):
     client = await aiohttp_client(create_app(config=config))
 
     # Create applications
-    deleting = k8s_app_factory(user=user, status__state=ApplicationState.DELETING)
-    deleted = k8s_app_factory(user=user, status__state=ApplicationState.DELETED)
+    deleting = ApplicationFactory(user=user, status__state=ApplicationState.DELETING)
+    deleted = ApplicationFactory(user=user, status__state=ApplicationState.DELETED)
     await db.put(deleting)
     await db.put(deleted)
 
