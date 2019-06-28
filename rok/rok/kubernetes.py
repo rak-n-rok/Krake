@@ -35,10 +35,10 @@ def create(session, file):
 
 
 @use("session")
-def get(session, id):
-    resp = session.get(f"/kubernetes/applications/{id}", raise_for_status=False)
+def get(session, name):
+    resp = session.get(f"/kubernetes/applications/{name}", raise_for_status=False)
     if resp.status_code == 404:
-        print(f"Error: Kubernetes application {id!r} not found")
+        print(f"Error: Kubernetes application {name!r} not found")
         return 1
 
     resp.raise_for_status()
@@ -47,14 +47,14 @@ def get(session, id):
 
 
 @use("session")
-def update(session, id, file):
+def update(session, name, file):
     manifest = file.read()
-    session.put(f"/kubernetes/applications/{id}", json={"manifest"})
+    session.put(f"/kubernetes/applications/{name}", json={"manifest"})
 
 
 @use("session")
-def delete(session, id):
-    session.delete(f"/kubernetes/applications/{id}")
+def delete(session, name):
+    session.delete(f"/kubernetes/applications/{name}")
 
 
 kubernetes = subparsers.add_parser(
@@ -77,15 +77,15 @@ create_parser.add_argument(
 
 get_parser = commands.add_parser("get", help="Get Kubernetes application")
 get_parser.set_defaults(command=get)
-get_parser.add_argument("id", help="Application ID")
+get_parser.add_argument("name", help="Kubernetes application name")
 
 update_parser = commands.add_parser("update", help="Update Kubernetes application")
 update_parser.set_defaults(command=update)
-update_parser.add_argument("id", help="Application ID")
+update_parser.add_argument("name", help="Kubernetes application name")
 update_parser.add_argument(
     "-f", "--file", type=FileType(), required=True, help="Kubernetes manifest file"
 )
 
 delete_parser = commands.add_parser("delete", help="Delete Kubernetes application")
 delete_parser.set_defaults(command=delete)
-delete_parser.add_argument("id", help="Kubernetes application ID")
+delete_parser.add_argument("name", help="Kubernetes application name")
