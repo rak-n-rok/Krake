@@ -7,7 +7,8 @@ from aiohttp import web
 from webargs import fields
 from webargs.aiohttpparser import use_kwargs
 from marshmallow_enum import EnumField
-
+from kubernetes_asyncio.config.kube_config import KubeConfigLoader
+from kubernetes_asyncio.config import ConfigException
 
 from krake.data.serializable import serialize, deserialize
 from krake.data.kubernetes import (
@@ -15,6 +16,9 @@ from krake.data.kubernetes import (
     ApplicationStatus,
     ApplicationState,
     Cluster,
+    ClusterKind,
+    ClusterStatus,
+    ClusterState,
     ClusterRef,
 )
 from ..helpers import session, json_error, protected
@@ -49,6 +53,34 @@ def with_app(handler):
         if app is None:
             raise web.HTTPNotFound()
         return await handler(request, *args, app=app, **kwargs)
+
+    return wrapper
+
+
+def with_cluster(handler):
+    """Decorator loading Kubernetes cluster by dynamic URL and
+    authenticated user.
+
+    If the cluster could not be found the wrapped handler raises an HTTP
+    404 error.
+
+    Args:
+        handler (coroutine): aiohttp request handler
+
+    Returns:
+        Returns a wrapped handler injecting the loaded Kubernetes cluster
+        as ``cluster`` keyword.
+
+    """
+
+    @wraps(handler)
+    async def wrapper(request, *args, **kwargs):
+        cluster, rev = await session(request).get(
+            Application, user=request["user"].name, name=request.match_info["name"]
+        )
+        if cluster is None:
+            raise web.HTTPNotFound()
+        return await handler(request, *args, cluster=cluster, **kwargs)
 
     return wrapper
 
@@ -184,8 +216,73 @@ async def list_clusters(request):
 
 @routes.post("/kubernetes/clusters")
 @protected
-@use_kwargs(
-    {"name": fields.String(required=True), "kubeconfig": fields.Dict(required=True)}
-)
-async def create_cluster(request, kubeconfig):
-    pass
+async def create_cluster(request):
+    try:
+        kubeconfig = await request.json()
+    except JSONDecodeError:
+        raise web.UnsupportedMedia()
+
+    if not isinstance(kubeconfig, dict):
+        raise json_error(
+            web.HTTPBadRequest, {"reason": "kube-config must be a JSON object"}
+        )
+
+    try:
+        KubeConfigLoader(kubeconfig)
+    except ConfigException as err:
+        raise json_error(web.HTTPBadRequest, {"reason": str(err)})
+
+    if len(kubeconfig["contexts"]) != 1:
+        raise json_error(web.HTTPBadRequest, {"reason": f"Only one context is allowed"})
+
+    if len(kubeconfig["users"]) != 1:
+        raise json_error(web.HTTPBadRequest, {"reason": f"Only one user is allowed"})
+
+    if len(kubeconfig["clusters"]) != 1:
+        raise json_error(web.HTTPBadRequest, {"reason": f"Only one cluster is allowed"})
+
+    now = datetime.now()
+    status = ClusterStatus(state=ClusterState.RUNNING, created=now, modified=now)
+    cluster = Cluster(
+        name=kubeconfig["clusters"][0]["name"],
+        user=request["user"].name,
+        kind=ClusterKind.EXTERNAL,
+        kubeconfig=kubeconfig,
+        uid=uuid4(),
+        status=status,
+    )
+
+    # Ensure that a cluster with the same name does not already exists
+    existing, _ = await session(request).get(
+        Cluster, user=request["user"].name, name=cluster.name
+    )
+    if existing is not None:
+        raise json_error(
+            web.HTTPBadRequest, {"reason": f"Cluster {cluster.name!r} already exists"}
+        )
+
+    await session(request).put(cluster)
+    logger.info("Create Kubernetes cluster %r (%s)", cluster.name, cluster.uid)
+
+    return web.json_response(serialize(cluster))
+
+
+@routes.get("/kubernetes/clusters/{name}")
+@protected
+@with_cluster
+async def get_cluster(request, cluster):
+    return web.json_response(serialize(cluster))
+
+
+@routes.delete("/kubernetes/clusters/{name}")
+@protected
+@with_cluster
+async def delete_cluster(request, cluster):
+    cluster.status.state = ClusterState.DELETING
+    cluster.status.reason = None
+    cluster.status.modified = datetime.now()
+
+    await session(request).put(cluster)
+    logger.info("Delete Kubernetes cluster %r (%s)", cluster.name, cluster.uid)
+
+    return web.json_response(serialize(cluster))

@@ -96,6 +96,14 @@ class ClusterStatusFactory(Factory):
     created = fuzzy.FuzzyDateTime(datetime.now(tz=pytz.utc))
 
     @lazy_attribute
+    def modified(self):
+        if self.state == ApplicationState.PENDING:
+            return self.created
+
+        delta = fake.time_delta()
+        return self.created + delta
+
+    @lazy_attribute
     def reason(self):
         if self.state != ApplicationState.FAILED:
             return None

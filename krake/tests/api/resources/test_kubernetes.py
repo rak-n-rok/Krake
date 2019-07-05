@@ -4,12 +4,14 @@ import re
 import json
 from itertools import count
 from operator import attrgetter
+import yaml
 
 from krake.data.kubernetes import (
     Application,
     ApplicationState,
     ApplicationStatus,
     Cluster,
+    ClusterState,
 )
 from krake.data import serialize, deserialize
 from krake.api.app import create_app
@@ -36,6 +38,29 @@ spec:
     app: wordpress
     tier: mysql
   clusterIP: None
+"""
+
+
+kubeconfig = """
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority-data: REMOVED
+    server: https://127.0.0.1:8443
+  name: test-cluster
+contexts:
+- context:
+    cluster: test-cluster
+    user: test-user
+  name: test-context
+current-context: "test-context"
+kind: Config
+preferences: {}
+users:
+- name: test-user
+  user:
+    client-certificate-data: REMOVED
+    client-key-data: REMOVED
 """
 
 
@@ -330,3 +355,24 @@ async def test_list_clusters(aiohttp_client, config, k8s_magnum_cluster_factory,
 
     key = attrgetter("uid")
     assert sorted(received, key=key) == sorted(clusters, key=key)
+
+
+async def test_create_cluster(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.post("/kubernetes/clusters", json=yaml.safe_load(kubeconfig))
+    assert resp.status == 200
+    data = await resp.json()
+
+    assert uuid_re.match(data["uid"]) is not None
+
+    cluster, rev = await db.get(Cluster, name=data["name"], user=data["user"])
+    assert rev.version == 1
+    assert cluster.status.state == ClusterState.RUNNING
+
+
+async def test_create_invalid_cluster(aiohttp_client, config):
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.post("/kubernetes/clusters", json={"invalid": "kubeconfig"})
+    assert resp.status == 400

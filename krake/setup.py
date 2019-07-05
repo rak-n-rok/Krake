@@ -12,6 +12,7 @@ install_requires = [
     "PyYAML",
     "webargs",
     "marshmallow_enum",
+    "kubernetes_asyncio",
 ]
 
 # dataclasses backport

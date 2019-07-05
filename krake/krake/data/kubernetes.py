@@ -65,10 +65,12 @@ class ClusterState(Enum):
 class ClusterStatus(Serializable):
     state: ClusterState
     created: datetime
+    modified: datetime
     reason: str = None
 
 
 class ClusterKind(Enum):
+    EXTERNAL = auto()
     MAGNUM = auto()
 
 
