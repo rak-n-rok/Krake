@@ -131,7 +131,7 @@ async def update_application(request, app, manifest):
     app.status.modified = datetime.now()
 
     await session(request).put(app)
-    logger.info("Updated Application %r", app.uid)
+    logger.info("Updated Kubernetes application %r (%s)", app.name, app.uid)
 
     return web.json_response(serialize(app))
 
@@ -153,7 +153,7 @@ async def update_application_status(request, app, state, reason, cluster):
     app.status.modified = datetime.now()
 
     await session(request).put(app)
-    logger.info("Updated Application status %r", app.uid)
+    logger.info("Updated Kubernetes application status %r (%s)", app.name, app.uid)
 
     return web.json_response(serialize(app.status))
 
@@ -170,7 +170,7 @@ async def delete_application(request, app):
     app.status.modified = datetime.now()
 
     await session(request).put(app)
-    logger.info("Deleted Application %r", app.uid)
+    logger.info("Deleted Kubernetes application %r (%s)", app.name, app.uid)
 
     return web.json_response(serialize(app))
 

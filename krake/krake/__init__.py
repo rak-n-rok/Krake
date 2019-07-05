@@ -1,4 +1,5 @@
 import yaml
+import logging.config
 
 
 def load_config(filepath=None):
@@ -30,3 +31,13 @@ def load_config(filepath=None):
             pass
 
     raise FileNotFoundError(f"No config file found: {filepaths}")
+
+
+def setup_logging(level):
+    logging.config.dictConfig(
+        {
+            "version": 1,
+            "handlers": {"console": {"class": "logging.StreamHandler", "level": level}},
+            "loggers": {"krake": {"handlers": ["console"], "level": level}},
+        }
+    )

@@ -15,7 +15,7 @@ Configuration is loaded from the ``controllers.kubernetes`` section:
 
 """
 from argparse import ArgumentParser
-from krake import load_config
+from krake import load_config, setup_logging
 from krake.controller import run
 from . import KubernetesController, KubernetesWorker
 
@@ -26,12 +26,13 @@ parser.add_argument("-c", "--config", help="Path to configuration YAML file")
 
 def main():
     args = parser.parse_args()
-    config = load_config(args.config)["controllers"]["kubernetes"]
+    config = load_config(args.config)
     controller = KubernetesController(
-        api_endpoint=config["api_endpoint"],
+        api_endpoint=config["controllers"]["kubernetes"]["api_endpoint"],
         worker_factory=KubernetesWorker,
-        worker_count=config["worker_count"],
+        worker_count=config["controllers"]["kubernetes"]["worker_count"],
     )
+    setup_logging(config["log"]["level"])
     run(controller)
 
 

@@ -1,11 +1,15 @@
 """Module for Krake controller responsible for binding Krake
 applications to specific backends.
 """
+import logging
 from functools import total_ordering
 from typing import NamedTuple
 
 from krake.data.kubernetes import ApplicationState, Cluster, ClusterRef
 from .. import Controller, Worker
+
+
+logger = logging.getLogger(__name__)
 
 
 class Scheduler(Controller):
@@ -16,16 +20,16 @@ class Scheduler(Controller):
     states = (ApplicationState.PENDING, ApplicationState.UPDATED)
 
     async def list_and_watch(self):
+        logger.info("List and watch Kubernetes applications")
+
         # List all Kubernetes applications
         for app in await self.client.kubernetes.application.list():
             if app.status.state in self.states:
                 await self.queue.put(app.uid, app)
 
-        # Indefinitly watch Kubernetes application resources
-        while True:
-            async for app in self.client.kubernetes.application.watch():
-                if app.status.state in self.states:
-                    await self.queue.put(app.uid, app)
+        async for app in self.client.kubernetes.application.watch():
+            if app.status.state in self.states:
+                await self.queue.put(app.uid, app)
 
 
 @total_ordering
