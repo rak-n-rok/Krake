@@ -267,7 +267,7 @@ async def reconnect(handler):
     while True:
         try:
             await handler()
-        except asyncio.TimeoutError as err:
+        except asyncio.TimeoutError:
             logger.warn("Timeout")
         except ClientConnectorError as err:
             logger.error(err)

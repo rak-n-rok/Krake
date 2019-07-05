@@ -52,6 +52,8 @@ class Resource(object):
                 async for line in resp.content:
                     if not line:  # EOF
                         return
+                    if line == b"\n":  # Heartbeat
+                        continue
                     yield deserialize(self.model, line)
             except ClientPayloadError:
                 return

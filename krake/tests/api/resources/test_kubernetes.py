@@ -292,7 +292,7 @@ async def test_watch(aiohttp_client, config, loop):
     client = await aiohttp_client(create_app(config=config))
 
     async def watch(created):
-        resp = await client.get("/kubernetes/applications?watch")
+        resp = await client.get("/kubernetes/applications?watch&heartbeat=0")
         created.set_result(True)
 
         for i in count():

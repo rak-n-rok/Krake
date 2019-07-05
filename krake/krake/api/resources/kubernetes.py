@@ -1,4 +1,5 @@
 import json
+import asyncio
 from uuid import uuid4
 from datetime import datetime
 import logging
@@ -21,7 +22,7 @@ from krake.data.kubernetes import (
     ClusterState,
     ClusterRef,
 )
-from ..helpers import session, json_error, protected
+from ..helpers import session, json_error, protected, Heartbeat
 from ..database import EventType
 
 
@@ -86,8 +87,9 @@ def with_cluster(handler):
 
 
 @routes.get("/kubernetes/applications")
+@use_kwargs({"heartbeat": fields.Integer(missing=None, locations=["query"])})
 @protected
-async def list_or_watch_applications(request):
+async def list_or_watch_applications(request, heartbeat):
     if "watch" not in request.query:
         apps = [app async for app, _ in session(request).all(Application)]
 
@@ -102,14 +104,15 @@ async def list_or_watch_applications(request):
 
     await resp.prepare(request)
 
-    async for event, app, rev in session(request).watch(Application):
+    async with Heartbeat(resp, interval=heartbeat):
+        async for event, app, rev in session(request).watch(Application):
 
-        # Key was deleted. Stop update stream
-        if event == EventType.DELETE:
-            return
+            # Key was deleted. Stop update stream
+            if event == EventType.DELETE:
+                return
 
-        await resp.write(json.dumps(serialize(app)).encode())
-        await resp.write(b"\n")
+            await resp.write(json.dumps(serialize(app)).encode())
+            await resp.write(b"\n")
 
 
 @routes.post("/kubernetes/applications")

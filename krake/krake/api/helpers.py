@@ -1,4 +1,5 @@
 """Simple helper functions that are used by the HTTP endpoints."""
+import asyncio
 import json
 from functools import wraps
 from aiohttp import web
@@ -65,3 +66,80 @@ def protected(handler):
         return await handler(request, *args, **kwargs)
 
     return wrapper
+
+
+class Heartbeat(object):
+    """Asyncronous context manager for heatbeating long running HTTP responses.
+
+    Writes newlines to the response body in a given heartbeat interval. If
+    ``interval`` is set to 0, no heartbeat will be sent.
+
+    Args:
+        response (aiohttp.web.StreamResponse): Prepared HTTP response with
+            chunked encoding
+        interval (int, float, optional): Heartbeat interval in seconds
+        loop (asyncio.AbstractEventLoop, optional): Event loop
+
+    Raises:
+        ValueError: If the response is not prepared or not chunk encoded
+
+    Example:
+        .. code:: python
+
+            import asyncio
+            from aiohttp import web
+
+            from krake.helpers import Heartbeat
+
+
+            async def handler(request):
+                # Prepare streaming response
+                resp = web.StreamResponse()
+                resp.enable_chunked_encoding()
+                await resp.prepare(request)
+
+                async with Heartbeat(resp):
+                    while True:
+                        await resp.write(b"spam\\n")
+                        await asyncio.sleep(120)
+
+    """
+
+    def __init__(self, response, interval=10, loop=None):
+        if loop is None:
+            loop = asyncio.get_event_loop()
+
+        if not response.prepared:
+            raise ValueError("Response must be prepared")
+
+        if not response.chunked:
+            raise ValueError("Response must be chunk encoded")
+
+        self.loop = loop
+        self.interval = interval
+        self.response = response
+        self.task = None
+
+    async def __aenter__(self):
+        assert self.task is None
+        if self.interval:
+            self.task = self.loop.create_task(self.heartbeat())
+        return self
+
+    async def __aexit__(self, *exc):
+        if self.task is not None:
+            self.task.cancel()
+            try:
+                await self.task
+            except asyncio.CancelledError:
+                pass
+
+            self.task = None
+
+    async def heartbeat(self):
+        """Indefinitly write a new line to the response body and sleep for
+        :attr:`interval`.
+        """
+        while True:
+            await self.response.write(b"\n")
+            await asyncio.sleep(self.interval, loop=self.loop)
