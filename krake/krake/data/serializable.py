@@ -83,18 +83,18 @@ def serialize(value):
 def deserialize(cls, value, **kwargs):
     """Loading an object of specific type from JSON-encoded data.
 
-    Internally, a ``__schema__`` attribute is loaded from the type parameter.
-    This attribute should be an object implementing the
+    Internally, a ``__metadata__["schema"]`` attribute is loaded from the type
+    parameter. This attribute should be an object implementing the
     mod:`marshmallow.Schema` interface.
 
     The function supports polymorphism. The passed class needs to have an
-    ``__discriminator__`` attribute specifying the name of the attribute that
-    should be used as discriminator between different classes. During
-    deserialization, the key specified by ``__discriminator__`` is loaded from
-    the value dictionary. Then, the fetched value is looked up in the
-    ``__discriminator_map__`` attribute if the passed class.
-    ``__discriminator_map__`` is a mapping of discriminator values to
-    corresponding subclasses.
+    ``__metadata__["discriminator"]`` attribute specifying the name of the
+    attribute that should be used as discriminator between different classes.
+    During deserialization, the key specified by ``discriminator`` is loaded
+    from the value dictionary. Then, the fetched value is looked up in the
+    ``__metadata__["discriminator_map"]`` attribute of the passed class.
+    ``__metadata__["discriminator_map"]`` is a mapping of discriminator values
+    to corresponding subclasses.
 
     Example:
         .. code:: python
@@ -108,13 +108,15 @@ def deserialize(cls, value, **kwargs):
                 author: str
                 title: str
 
-            class BookSchema(deserialize):
+            class BookSchema(ModelizedSchema):
                 __model__ = Book
 
                 author = fields.String(required=True)
                 title = fields.String(required=True)
 
-            Book.__schema__ = BookSchema()
+            Book.__metadata__ = {
+                "schema": BookSchema()
+            }
 
 
             book = deserialize(Book, {
@@ -137,8 +139,10 @@ def deserialize(cls, value, **kwargs):
                 title: str
                 kind: str
 
-                __discriminator__ = "kind"
-                __disciminator_map__ = {}
+                __metadata__ = {
+                    "discriminator": "kind",
+                    "disciminator_map": {},
+                }
 
             class Paperback(Book):
                 kind: str = "paperback"
@@ -146,8 +150,8 @@ def deserialize(cls, value, **kwargs):
             class Hardcover(Book):
                 kind: str = "hardcover"
 
-            Book.__disciminator_map__["paperback"] = Paperback
-            Book.__disciminator_map__["hardcover"] = Hardcover
+            Book.__metadata__["disciminator_map"]["paperback"] = Paperback
+            Book.__metadata__["disciminator_map"]["hardcover"] = Hardcover
 
 
             class BookSchema(deserialize):
@@ -160,8 +164,8 @@ def deserialize(cls, value, **kwargs):
             class HardcoverSchema(deserialize):
                 __model__ = Hardcover
 
-            Paperback.__schema__ = PaperbackSchema()
-            Hardcover.__schema__ = HardcoverSchema()
+            Paperback.__metadata__["schema"] = PaperbackSchema()
+            Hardcover.__metadata__["schema"] = HardcoverSchema()
 
 
             book = deserialize(Book, {
@@ -192,14 +196,13 @@ def deserialize(cls, value, **kwargs):
     if kwargs:
         value = dict(value, **kwargs)
 
-    if hasattr(cls, "__discriminator__"):
+    if "discriminator" in cls.__metadata__:
         try:
-            discriminator = value[cls.__discriminator__]
-            cls = cls.__discriminator_map__[discriminator]
+            discriminator = value[cls.__metadata__["discriminator"]]
+            cls = cls.__metadata__["discriminator_map"][discriminator]
         except KeyError:
             pass
-
-    instance, _ = cls.__schema__.load(value)
+    instance, _ = cls.__metadata__["schema"].load(value)
     assert isinstance(instance, cls)
     return instance
 
@@ -355,15 +358,20 @@ def serializable(cls=None, resolvers=default_resolvers):
     (:mod:`dataclasses`). The generated schema class is accessible as
     ``Schema`` attribute on the decorated class. The
 
-    Furthermore, an instance of this schema is assigned to the ``__schema__``
-    attribute of the class. The class gets automatically registered to the
-    :func:`serialize` function using the ``__schema__`` attribute.
+    Furthermore, an instance of this schema is assigned to the ``schema`` key
+    of the ``__metadata__`` attribute of the class. The class gets
+    automatically registered to the :func:`serialize` function using the
+    ``__metadata__["schema"]`` attribute.
 
-    Besides this, if the class specifies an ``__discriminator__`` attribute
-    (see :func:`deserialize`) an dictionary is assigned to the
-    ``__discriminator_map__`` attribute of the class (if not already present).
+    Besides this, if the ``__metadata__`` dictionary specifies an
+    ``discriminator`` key (see :func:`deserialize`) a dictionary is assigned
+    to the ``discriminator_map`` key of the ``__metadata__``attribute of the
+    class. The ``discriminator_map`` is looked up in the ``__metadata__``
+    attribute of all base classes. If not found, a new ``discriminator_map``
+    is created.
+
     The discriminator value is loaded from the class and this value is used as
-    key in the ``__discriminator_map__`` with the passed class as value. This
+    key in ``discriminator_map`` with the passed class as value. This
     automatically registers the polymorphic type of the class.
 
     The corresponding fields for every attribute are resolved by resolver
@@ -418,22 +426,36 @@ def serializable(cls=None, resolvers=default_resolvers):
             serializer = make_field(type_, resolvers, default)
             schema_attrs[name] = serializer
 
+        if not hasattr(cls, "__metadata__"):
+            cls.__metadata__ = {}
+        # Copy metadata dictionary of defined in a super class
+        elif "__metadata__" not in cls.__dict__:
+            cls.__metadata__ = cls.__metadata__.copy()
+
         cls.Schema = type("Schema", (ModelizedSchema,), schema_attrs)
-        cls.__schema__ = cls.Schema(strict=True)
+        cls.__metadata__["schema"] = cls.Schema(strict=True)
 
         @serialize.register(cls)
         def _(value):
-            data, _ = cls.__schema__.dump(value)
+            data, _ = cls.__metadata__["schema"].dump(value)
             return data
 
-        if hasattr(cls, "__discriminator__"):
-            # This initializes the discriminator map at the top most
-            # inheritance level.
-            if not hasattr(cls, "__discriminator_map__"):
-                cls.__discriminator_map__ = {}
+        if "discriminator" in cls.__metadata__:
+            # If no discrimniator map is found in the base classes, use this
+            # one.
+            discriminator_map = {}
 
-            if hasattr(cls, cls.__discriminator__):
-                discriminator = getattr(cls, cls.__discriminator__)
+            # Try discriminator map from base classes. This way, all derived
+            # classes use the discrimniator map dictionary.
+            for base in cls.mro():
+                if hasattr(base, "__metadata__"):
+                    if "discriminator_map" in base.__metadata__:
+                        discriminator_map = base.__metadata__["discriminator_map"]
+
+            cls.__metadata__["discriminator_map"] = discriminator_map
+
+            if hasattr(cls, cls.__metadata__["discriminator"]):
+                discriminator = getattr(cls, cls.__metadata__["discriminator"])
 
                 # Special case:
                 #     Use the name of enumeration fields
@@ -441,14 +463,14 @@ def serializable(cls=None, resolvers=default_resolvers):
                     discriminator = discriminator.name
 
                 # Ensure that the discrimniator value is not already used
-                if discriminator in cls.__discriminator_map__:
-                    mapped = cls.__discriminator_map__[discriminator]
+                if discriminator in discriminator_map:
+                    mapped = discriminator_map[discriminator]
                     raise ValueError(
                         f"Discriminator {discriminator!r} is "
                         f"already mapped to {mapped!r}"
                     )
 
-                cls.__discriminator_map__[discriminator] = cls
+                discriminator_map[discriminator] = cls
 
         return cls
 
@@ -495,9 +517,9 @@ class SerializableMeta(type):
     passes the resulting dataclass to :func:`serializable`.
 
     A class can specify attribute resolver functions (see
-    :func:`serializable`) in the ``__resolvers__`` attribute. The list of
-    resolvers from all bases classes will be concatenated in method resolution
-    order.
+    :func:`serializable`) in the ``__metadata__["resolvers"]`` attribute. The
+    list of resolvers from all bases classes will be concatenated in method
+    resolution order.
 
     """
 
@@ -510,7 +532,8 @@ class SerializableMeta(type):
 
     @classmethod
     def gather_resolvers(mcls, cls):
-        """Concatenate ``__resolver__`` attributes from all base classes.
+        """Concatenate ``__metadata__["resolver"]`` attributes from all base
+        classes.
 
         Args:
             cls (type): Class from which resolvers should be loaded
@@ -519,10 +542,11 @@ class SerializableMeta(type):
             List[callable]: Concatenated list of resolvers
 
         """
-        resolvers = getattr(cls, "__resolvers__", [])
+        resolvers = []
 
-        for base in cls.__bases__:
-            resolvers.extend(getattr(base, "__resolvers__", []))
+        for base in cls.mro():
+            if hasattr(base, "__metadata__"):
+                resolvers.extend(base.__metadata__.get("resolvers", []))
 
         return resolvers
 
@@ -534,10 +558,6 @@ class Serializable(metaclass=SerializableMeta):
     attribute as keyword argument in arbitrary order in contrast to the
     standard init method of dataclasses.
 
-    Attributes:
-        __resolvers__ (List[callable]): List of resolvers that are used to
-            infer the marshmallow fields for attributes.
-
     Example:
         .. code:: python
 
@@ -548,11 +568,11 @@ class Serializable(metaclass=SerializableMeta):
                 title: str
 
             assert hasattr(Book, "Schema")
-            assert hasattr(Book, "__schema__")
+            assert "schema" in Book.__metadata__
 
     """
 
-    __resolvers__ = default_resolvers
+    __metadata__ = {"resolvers": default_resolvers}
 
     def __init__(self, **kwargs):
         for field in dataclasses.fields(self):

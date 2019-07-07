@@ -18,8 +18,10 @@ Example:
             isbn: int
             title: str
 
-            __namespace__ = "/books"
-            __identity__ = ("isbn",)
+            __metadata__ = {
+                "namespace" = "/books",
+                "identity" = ("isbn",),
+            }
 
 
         async with Session(host="localhost") as session:
@@ -103,18 +105,14 @@ class Session(object):
 
     The term "serializable object" refers to objects supporting the
     :func:`krake.data.serialize` and :func:`krake.data.deserialize` functions.
-    In additional to that, two special attributes are required:
+    In additional to that, two keys are required in the special
+    ``__metadata__`` attribute of models:
 
-    __namespace__:
+    namespace:
         Defines the etcd key prefix
-    __identity__:
+    identity:
         Is a tuple defining the name of the attributes that should used as
         identifier for an object.
-
-    Namespace and identity are combined to a single etcd key:
-    ``{__namespace__}/{identity}`` where ``identity`` is the joined string
-    of all identity attributes defined in ``__identity__`` with ``/`` as
-    concatenator.
 
     The session is an asynchronous context manager. It takes of care of
     opening and closing an HTTP session to the gRPC JSON gateway of the etcd
@@ -167,7 +165,7 @@ class Session(object):
             the key was not found in etcd (None, None) is returned.
         """
         suffix = []
-        for attr in cls.__identity__:
+        for attr in cls.__metadata__["identity"]:
             try:
                 suffix.append(identitiy.pop(attr))
             except KeyError:
@@ -177,7 +175,8 @@ class Session(object):
             raise TypeError(f"Got unexpected keyword argument {attr!r}")
 
         suffix = "/".join(map(str, suffix))
-        key = f"{cls.__namespace__}/{suffix}"
+        namespace = cls.__metadata__["namespace"]
+        key = f"{namespace}/{suffix}"
         resp = await self.client.range(key)
 
         if resp.kvs is None:
@@ -226,10 +225,12 @@ class Session(object):
                 identity attributes.
 
         """
+        namespace = cls.__metadata__["namespace"]
+
         if filters:
             identities = []
 
-            for attr in cls.__identity__:
+            for attr in cls.__metadata__["identity"]:
                 try:
                     identities.append(filters.pop())
                 except KeyError:
@@ -242,9 +243,9 @@ class Session(object):
                 )
 
             suffix = "/".join(map(str, identities))
-            key = f"{cls.__namespace__}/{suffix}"
+            key = f"{namespace}/{suffix}"
         else:
-            key = f"{cls.__namespace__}/"
+            key = f"{namespace}/"
 
         # TODO: Support pagination
         resp = await self.client.range(key, prefix=True)
@@ -266,9 +267,10 @@ class Session(object):
 
         """
         suffix = "/".join(
-            str(getattr(instance, attr)) for attr in instance.__identity__
+            str(getattr(instance, attr)) for attr in instance.__metadata__["identity"]
         )
-        key = f"{instance.__namespace__}/{suffix}"
+        namespace = instance.__metadata__["namespace"]
+        key = f"{namespace}/{suffix}"
         data = serialize(instance)
         resp = await self.client.put(key, json.dumps(data))
         return resp.header.revision
@@ -285,9 +287,10 @@ class Session(object):
 
         """
         suffix = "/".join(
-            str(getattr(instance, attr)) for attr in instance.__identity__
+            str(getattr(instance, attr)) for attr in instance.__metadata__["identity"]
         )
-        key = f"{instance.__namespace__}/{suffix}"
+        namespace = instance.__metadata__["namespace"]
+        key = f"{namespace}/{suffix}"
 
         resp = await self.client.delete_range(key=key)
         return resp.deleted
@@ -309,7 +312,9 @@ class Session(object):
             Event: Every change in the namespace will generate an event
 
         """
-        watcher = self.client.watch_create(key=cls.__namespace__, prefix=True)
+        watcher = self.client.watch_create(
+            key=cls.__metadata__["namespace"], prefix=True
+        )
         async with watcher:
             async for resp in watcher:
                 if resp.events is None:
@@ -353,5 +358,5 @@ class Session(object):
 
 
 def in_namespace(cls, key):
-    prefix = key.rsplit("/", len(cls.__identity__))[0]
-    return prefix == cls.__namespace__
+    prefix = key.rsplit("/", len(cls.__metadata__["identity"]))[0]
+    return prefix == cls.__metadata__["namespace"]

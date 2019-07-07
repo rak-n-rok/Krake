@@ -25,26 +25,26 @@ class Resource(object):
         self.url = url
 
     async def list(self):
-        url = self.url.with_path(self.model.__url__)
+        url = self.url.with_path(self.model.__metadata__["url"])
         resp = await self.session.get(url)
         datas = await resp.json()
         return [deserialize(self.model, data) for data in datas]
 
     async def get(self, id):
-        url = self.url.with_path(f"{self.model.__url__}/{id}")
+        url = self.url.with_path(f"{self.model.__metadata__['url']}/{id}")
         resp = await self.session.get(url)
         data = await resp.json()
         app = deserialize(self.model, data)
         return app
 
     async def delete(self, id):
-        url = self.url.with_path(f"{self.model.__url__}/{id}")
+        url = self.url.with_path(f"{self.model.__metadata__['url']}/{id}")
         resp = await self.session.delete(url)
         data = await resp.json()
         return deserialize(self.model, data)
 
     async def watch(self):
-        url = self.url.with_path(self.model.__url__).with_query("watch")
+        url = self.url.with_path(self.model.__metadata__["url"]).with_query("watch")
         resp = await self.session.get(url)
 
         async with resp:

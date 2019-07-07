@@ -13,7 +13,7 @@ def test_functional_api():
         kind: str = "app"
         optional: str = "optional"
 
-        __discriminator__ = "kind"
+        __metadata__ = {"discriminator": "kind"}
 
         def __init__(self, id, name, kind=None, optional=None):
             if kind:
@@ -24,8 +24,8 @@ def test_functional_api():
                 self.optional = optional
 
     assert Application.Schema is not None
-    assert Application.__schema__ is not None
-    assert Application.__discriminator_map__["app"] == Application
+    assert Application.__metadata__["schema"] is not None
+    assert Application.__metadata__["discriminator_map"]["app"] == Application
 
     app = Application(id=42, name="Arthur Dent")
     data = serialize(app)
@@ -52,8 +52,11 @@ def test_functional_api():
             self.number = number
 
     assert FancyApplication.Schema is not None
-    assert FancyApplication.__schema__ is not None
-    assert FancyApplication.__discriminator_map__["fancy-app"] == FancyApplication
+    assert "schema" in FancyApplication.__metadata__
+    assert (
+        FancyApplication.__metadata__["discriminator_map"]["fancy-app"]
+        == FancyApplication
+    )
 
     app = FancyApplication(id=72, name="Fancy name", number=42)
     data = serialize(app)
@@ -86,7 +89,7 @@ def test_functional_api_with_dataclasses():
         optional: str = "optional"
 
     assert Application.Schema is not None
-    assert Application.__schema__ is not None
+    assert "schema" in Application.__metadata__
 
     app = Application(id=42, name="Arthur Dent")
     data = serialize(app)
@@ -102,11 +105,12 @@ def test_inheritance():
         name: str
         optional: str = "optional"
         kind: str = "app"
-        __discriminator__ = "kind"
+
+        __metadata__ = {"discriminator": "kind"}
 
     assert Application.Schema is not None
-    assert Application.__schema__ is not None
-    assert Application.__discriminator_map__["app"] == Application
+    assert "schema" in Application.__metadata__
+    assert Application.__metadata__["discriminator_map"]["app"] == Application
 
     app = Application(id=42, name="Arthur Dent")
     assert app.id == 42
@@ -141,8 +145,11 @@ def test_inheritance():
         kind: str = "fancy-app"
 
     assert FancyApplication.Schema is not None
-    assert FancyApplication.__schema__ is not None
-    assert FancyApplication.__discriminator_map__["fancy-app"] == FancyApplication
+    assert "schema" in FancyApplication.__metadata__
+    assert (
+        FancyApplication.__metadata__["discriminator_map"]["fancy-app"]
+        == FancyApplication
+    )
 
     app = FancyApplication(id=72, name="Arthur Dent", number=42)
     assert app.id == 72

@@ -48,9 +48,11 @@ class Application(Serializable):
     manifest: str
     status: ApplicationStatus
 
-    __identity__ = ("user", "name")
-    __namespace__ = "/k8s/apps"
-    __url__ = "/kubernetes/applications"
+    __metadata__ = {
+        "identity": ("user", "name"),
+        "namespace": "/k8s/apps",
+        "url": "/kubernetes/applications",
+    }
 
 
 class ClusterState(Enum):
@@ -82,10 +84,12 @@ class Cluster(Serializable):
     uid: str
     status: ClusterStatus
 
-    __identity__ = ("user", "name")
-    __discriminator__ = "kind"
-    __namespace__ = "/k8s/clusters"
-    __url__ = "/kubernetes/clusters"
+    __metadata__ = {
+        "identity": ("user", "name"),
+        "discriminator": "kind",
+        "namespace": "/k8s/clusters",
+        "url": "/kubernetes/clusters",
+    }
 
 
 class MagnumCluster(Cluster):

@@ -14,9 +14,7 @@ class MyModel(Serializable):
     name: str
     kind: str = "my-model"
 
-    __namespace__ = "/model"
-    __identity__ = ("id",)
-    __discriminator__ = "kind"
+    __metadata__ = {"namespace": "/model", "identity": ("id",), "discriminator": "kind"}
 
 
 class AnotherModel(MyModel):
@@ -86,8 +84,8 @@ async def test_put_with_multikey_identity(db, etcd_client, loop):
         name: str
         user: str
         kind: str = "app"
-        __namespace__ = "/apps"
-        __identity__ = ("user", "name")
+
+        __metadata__ = {"namespace": "/apps", "identity": ("user", "name")}
 
     app = App(name="my-app", user="me")
     resp = await db.put(app)
@@ -141,9 +139,12 @@ async def test_get_polymorphic(fake, db, etcd_client):
         id: int
         name: str
         kind: str = "app"
-        __namespace__ = "/apps"
-        __identity__ = ("id",)
-        __discriminator__ = "kind"
+
+        __metadata__ = {
+            "namespace": "/apps",
+            "identity": ("id",),
+            "discriminator": "kind",
+        }
 
     class SpecificApp(App):
         kind: str = "specific-app"
