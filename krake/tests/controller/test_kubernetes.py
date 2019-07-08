@@ -10,14 +10,19 @@ from krake.controller import Worker
 from krake.controller.kubernetes import KubernetesController
 from krake.test_utils import stream
 
+from factories.kubernetes import ApplicationFactory
 
-async def test_app_reception(k8s_app_factory, aresponses, loop):
-    created = k8s_app_factory(status__state=ApplicationState.PENDING)
-    updated = k8s_app_factory(status__state=ApplicationState.UPDATED)
-    scheduled = k8s_app_factory(status__state=ApplicationState.SCHEDULED)
+
+async def test_app_reception(aresponses, loop):
+    created = ApplicationFactory(status__state=ApplicationState.PENDING)
+    updated = ApplicationFactory(status__state=ApplicationState.UPDATED)
+    scheduled = ApplicationFactory(status__state=ApplicationState.SCHEDULED)
 
     aresponses.add(
-        "api.krake.local", "/kubernetes/applications", "GET", json_response([])
+        "api.krake.local",
+        "/namespaces/all/kubernetes/applications",
+        "GET",
+        json_response([]),
     )
     # aresponses remove an HTTP endpoint if it was called. If the watch stream
     # would terminate, the controller would restart the watcher. At this time,
@@ -26,7 +31,7 @@ async def test_app_reception(k8s_app_factory, aresponses, loop):
     # data was streamed.
     aresponses.add(
         "api.krake.local",
-        "/kubernetes/applications?watch",
+        "/namespaces/all/kubernetes/applications?watch",
         "GET",
         stream([created, updated, scheduled], infinite=True),
         match_querystring=True,

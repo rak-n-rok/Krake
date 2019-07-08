@@ -418,9 +418,10 @@ def serializable(cls=None, resolvers=default_resolvers):
     """
 
     def wrap(cls):
+        cls_name = f"{cls.__name__}Schema"
         schema_attrs = {
             "__module__": cls.__module__,
-            "__qualname__": f"{cls.__qualname__}.Schema",
+            "__qualname__": f"{cls.__qualname__}.{cls_name}",
             "__model__": cls,
         }
 
@@ -442,7 +443,7 @@ def serializable(cls=None, resolvers=default_resolvers):
             serializer = make_field(type_, resolvers, default)
             schema_attrs[name] = serializer
 
-        cls.Schema = type("GeneratedSchema", (ModelizedSchema,), schema_attrs)
+        cls.Schema = type(cls_name, (ModelizedSchema,), schema_attrs)
 
         if not hasattr(cls, "__metadata__"):
             cls.__metadata__ = {}

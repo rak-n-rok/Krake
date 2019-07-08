@@ -8,6 +8,8 @@ from factory.fuzzy import FuzzyInteger
 from krake.data.serializable import Serializable, serialize, deserialize
 from krake.api.database import EventType, Key
 
+from factories import fake
+
 
 class MyModel(Serializable):
     id: str
@@ -79,36 +81,6 @@ async def test_put(db, etcd_client, loop):
     assert model.name == data.name
 
 
-async def test_put_with_external_key(db, etcd_client, loop):
-    class App(Serializable):
-        name: str
-        kind: str = "app"
-
-        __metadata__ = {"key": Key("/apps/{user}/{name}")}
-
-    app = App(name="my-app")
-
-    # Call with missing key parameter
-    with pytest.raises(TypeError) as err:
-        await db.put(app)
-    assert "Missing key parameter 'user'" in str(err.value)
-
-    # Call with extra key parameter
-    with pytest.raises(TypeError) as err:
-        await db.put(app, user="me", extra=42)
-    assert "Got unexpected key parameter 'extra'" in str(err.value)
-
-    resp = await db.put(app, user="me")
-
-    resp = await etcd_client.range(f"/apps/me/my-app")
-
-    assert resp.kvs is not None
-    assert len(resp.kvs) == 1
-
-    value = json.loads(resp.kvs[0].value.decode())
-    assert App(**value) == app
-
-
 async def test_get(db, etcd_client):
     data = MyModelFactory()
     await etcd_client.put(f"/model/{data.id}", json.dumps(serialize(data)))
@@ -144,7 +116,7 @@ async def test_delete(db, etcd_client):
     assert resp.kvs is None
 
 
-async def test_get_polymorphic(fake, db, etcd_client):
+async def test_get_polymorphic(db, etcd_client):
     class App(Serializable):
         id: int
         name: str
@@ -213,7 +185,7 @@ async def aenumerate(iterable):
         i += 1
 
 
-async def test_watching_update(fake, db, loop):
+async def test_watching_update(db, loop):
     names = [fake.pystr(), fake.pystr(), fake.pystr()]
     data = MyModelFactory(name=names[0])
     created = loop.create_future()

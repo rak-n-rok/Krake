@@ -5,6 +5,12 @@ from typing import NamedTuple
 
 from krake.api.database import Key
 from .serializable import Serializable, serializable
+from .metadata import Metadata
+
+
+class ApplicationSpec(Serializable):
+    manifest: str
+    cluster: str = None  # API endpoint of the Kubernetes cluster resource
 
 
 class ApplicationState(Enum):
@@ -17,42 +23,43 @@ class ApplicationState(Enum):
     FAILED = auto()
 
 
-@serializable
-class ClusterRef(NamedTuple):
-    """Reference to a cluster
-
-    Attributes:
-        user (str): Username of the cluster owner
-        name (str): Cluster name
-    """
-
-    user: str
-    name: str
-
-    @classmethod
-    def from_cluster(cls, cluster):
-        return cls(user=cluster.user, name=cluster.name)
-
-
 class ApplicationStatus(Serializable):
     state: ApplicationState
     created: datetime
     modified: datetime
     reason: str = None
-    cluster: ClusterRef = None
+    cluster: str = None  # API endpoint of the Kubernetes cluster resource
 
 
 class Application(Serializable):
-    name: str
-    user: str
-    uid: str
-    manifest: str
+    metadata: Metadata
+    spec: ApplicationSpec
     status: ApplicationStatus
 
     __metadata__ = {
-        "key": Key("/kubernetes/applications/{user}/{name}"),
-        "url": "/kubernetes/applications",
+        "key": Key("/kubernetes/applications/{namespace}/{name}", attribute="metadata")
     }
+
+
+class ClusterBinding(Serializable):
+    cluster: str  # API endpoint of the Kubernetes cluster resource
+
+
+class ClusterKind(Enum):
+    EXTERNAL = auto()
+    MAGNUM = auto()
+
+
+class ClusterSpec(Serializable):
+    kind: ClusterKind = ClusterKind.EXTERNAL
+    kubeconfig: dict = None
+
+    __metadata__ = {"discriminator": "kind"}
+
+
+class MagnumClusterSpec(ClusterSpec):
+    kind: ClusterKind = ClusterKind.MAGNUM
+    master_ip: str
 
 
 class ClusterState(Enum):
@@ -71,26 +78,11 @@ class ClusterStatus(Serializable):
     reason: str = None
 
 
-class ClusterKind(Enum):
-    EXTERNAL = auto()
-    MAGNUM = auto()
-
-
 class Cluster(Serializable):
-    name: str
-    user: str
-    kind: ClusterKind
-    kubeconfig: dict = None
-    uid: str
+    metadata: Metadata
+    spec: ClusterSpec
     status: ClusterStatus
 
     __metadata__ = {
-        "key": Key("/kubernetes/clusters/{user}/{name}"),
-        "url": "/kubernetes/clusters",
-        "discriminator": "kind",
+        "key": Key("/kubernetes/clusters/{namespace}/{name}", attribute="metadata")
     }
-
-
-class MagnumCluster(Cluster):
-    kind: ClusterKind = ClusterKind.MAGNUM
-    master_ip: str

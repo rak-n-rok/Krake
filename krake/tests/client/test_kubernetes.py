@@ -8,6 +8,8 @@ from krake.data.kubernetes import Application, ApplicationStatus, ApplicationSta
 from krake.data import serialize
 from krake.test_utils import stream
 
+from factories.kubernetes import ApplicationFactory
+
 
 manifest = """---
 apiVersion: v1
@@ -26,30 +28,32 @@ spec:
 """
 
 
-async def test_list_applications(k8s_app_factory, aresponses, loop):
-    data = [k8s_app_factory()]
+async def test_list_applications(aresponses, loop):
+    data = [ApplicationFactory()]
     aresponses.add(
         "api.krake.local",
-        "/kubernetes/applications",
+        "/namespaces/testing/kubernetes/applications",
         "GET",
         json_response([serialize(i) for i in data]),
     )
     async with Client(url="http://api.krake.local", loop=loop) as client:
-        apps = await client.kubernetes.application.list()
+        apps = await client.kubernetes.application.list(namespace="testing")
 
     assert apps == data
 
 
-async def test_create_application(k8s_app_factory, aresponses, loop):
-    data = k8s_app_factory(status__state=ApplicationState.PENDING)
+async def test_create_application(aresponses, loop):
+    data = ApplicationFactory(status__state=ApplicationState.PENDING)
     aresponses.add(
         "api.krake.local",
-        "/kubernetes/applications",
+        "/namespaces/testing/kubernetes/applications",
         "POST",
         json_response(serialize(data)),
     )
     async with Client(url="http://api.krake.local", loop=loop) as client:
-        app = await client.kubernetes.application.create(manifest=data.manifest)
+        app = await client.kubernetes.application.create(
+            namespace="testing", manifest=data.spec.manifest
+        )
 
     assert app == data
 
@@ -77,45 +81,47 @@ spec:
 """
 
 
-async def test_update_application(k8s_app_factory, aresponses, loop):
-    running = k8s_app_factory(status__state=ApplicationState.RUNNING)
-    updated = k8s_app_factory(
-        uid=running.uid,
+async def test_update_application(aresponses, loop):
+    running = ApplicationFactory(status__state=ApplicationState.RUNNING)
+    updated = ApplicationFactory(
+        metadata__uid=running.metadata.uid,
+        metadata__user=running.metadata.user,
         status__state=ApplicationState.UPDATED,
-        user=running.user,
-        manifest=updated_manifest,
+        spec__manifest=updated_manifest,
     )
 
     aresponses.add(
         "api.krake.local",
-        f"/kubernetes/applications/{running.name}",
+        f"/namespaces/testing/kubernetes/applications/{running.metadata.name}",
         "GET",
         json_response(serialize(running)),
     )
     aresponses.add(
         "api.krake.local",
-        f"/kubernetes/applications/{running.name}",
+        f"/namespaces/testing/kubernetes/applications/{running.metadata.name}",
         "PUT",
         json_response(serialize(updated)),
     )
     async with Client(url="http://api.krake.local", loop=loop) as client:
         app = await client.kubernetes.application.update(
-            running.name, manifest=updated_manifest
+            namespace="testing", name=running.metadata.name, manifest=updated_manifest
         )
 
     assert app == updated
 
 
-async def test_get_application(k8s_app_factory, aresponses, loop):
-    data = k8s_app_factory()
+async def test_get_application(aresponses, loop):
+    data = ApplicationFactory()
     aresponses.add(
         "api.krake.local",
-        f"/kubernetes/applications/{data.name}",
+        f"/namespaces/testing/kubernetes/applications/{data.metadata.name}",
         "GET",
         json_response(serialize(data)),
     )
     async with Client(url="http://api.krake.local", loop=loop) as client:
-        app = await client.kubernetes.application.get(data.name)
+        app = await client.kubernetes.application.get(
+            namespace="testing", name=data.metadata.name
+        )
 
     assert app == data
 
@@ -127,18 +133,20 @@ async def aenumerate(iterable):
         i += 1
 
 
-async def test_watch_applications(k8s_app_factory, aresponses, loop):
-    data = [k8s_app_factory(), k8s_app_factory(), k8s_app_factory()]
+async def test_watch_applications(aresponses, loop):
+    data = [ApplicationFactory(), ApplicationFactory(), ApplicationFactory()]
 
     aresponses.add(
         "api.krake.local",
-        "/kubernetes/applications?watch",
+        "/namespaces/testing/kubernetes/applications?watch",
         "GET",
         stream(data),
         match_querystring=True,
     )
     async with Client(url="http://api.krake.local", loop=loop) as client:
-        async for i, app in aenumerate(client.kubernetes.application.watch()):
+        async for i, app in aenumerate(
+            client.kubernetes.application.watch(namespace="testing")
+        ):
             expected = data[i]
             assert app == expected
 

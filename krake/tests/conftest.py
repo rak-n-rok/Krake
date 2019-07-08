@@ -16,8 +16,6 @@ from aresponses import ResponsesMockServer
 package_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, package_dir)
 
-import factories
-
 
 logging.config.dictConfig(
     {
@@ -113,23 +111,3 @@ def config(etcd_server, user):
 async def aresponses(loop):
     async with ResponsesMockServer(loop=loop) as server:
         yield server
-
-
-# -----------------------------------------------------------------------------
-# Factories
-# -----------------------------------------------------------------------------
-
-
-@pytest.fixture
-def fake():
-    return factories.fake
-
-
-@pytest.fixture
-def k8s_app_factory():
-    return factories.kubernetes.ApplicationFactory
-
-
-@pytest.fixture
-def k8s_magnum_cluster_factory():
-    return factories.kubernetes.MagnumClusterFactory

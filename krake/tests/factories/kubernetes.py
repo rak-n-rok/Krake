@@ -2,24 +2,37 @@ from datetime import datetime
 import pytest
 import pytz
 import yaml
-from factory import Factory, SubFactory, lazy_attribute, fuzzy
+from factory import Factory, SubFactory, Trait, lazy_attribute, fuzzy
 
 from .fake import fake
+from krake.data.metadata import Metadata
 from krake.data.kubernetes import (
+    ApplicationSpec,
     ApplicationStatus,
     ApplicationState,
     Application,
+    ClusterSpec,
     ClusterState,
     ClusterStatus,
     ClusterKind,
     Cluster,
-    ClusterRef,
-    MagnumCluster,
+    MagnumClusterSpec,
 )
 
 
 def fuzzy_name():
     return "-".join(fake.name().split()).lower()
+
+
+class MetadataFactory(Factory):
+    class Meta:
+        model = Metadata
+
+    name = fuzzy.FuzzyAttribute(fuzzy_name)
+    # namespace = fuzzy.FuzzyAttribute(fuzzy_name)
+    namespace = "testing"
+    uid = fuzzy.FuzzyAttribute(fake.uuid4)
+    user = fuzzy.FuzzyAttribute(fuzzy_name)
 
 
 class ApplicationStatusFactory(Factory):
@@ -48,10 +61,12 @@ class ApplicationStatusFactory(Factory):
         if self.state == ApplicationState.PENDING:
             return None
         if self.factory_parent:
-            user = self.factory_parent.user
+            namespace = self.factory_parent.metadata.user
         else:
-            user = fuzzy_name()
-        return ClusterRef(name=fuzzy_name(), user=user)
+            namespace = fuzzy_name()
+        name = fuzzy_name()
+        return f"/namespaces/{namespace}/kubernetes/clusters/{name}"
+        # return create_key(Cluster, namespace=user, name=fuzzy_name())
 
 
 kubernetes_manifest = """---
@@ -71,18 +86,40 @@ spec:
 """
 
 
-class ApplicationFactory(Factory):
+class ApplicationSpecFactory(Factory):
     class Meta:
-        model = Application
-
-    name = fuzzy.FuzzyAttribute(fuzzy_name)
-    user = fuzzy.FuzzyAttribute(fuzzy_name)
-    uid = fuzzy.FuzzyAttribute(fake.uuid4)
-    status = SubFactory(ApplicationStatusFactory)
+        model = ApplicationSpec
 
     @lazy_attribute
     def manifest(self):
         return kubernetes_manifest
+
+    @lazy_attribute
+    def cluster(self):
+        if self.factory_parent:
+            if self.factory_parent.status.state == ApplicationState.PENDING:
+                return None
+            namespace = self.factory_parent.metadata.user
+        else:
+            if not fake.pybool():
+                return None
+            namespace = fuzzy_name()
+        name = fuzzy_name()
+        return f"/namespaces/{namespace}/kubernetes/clusters/{name}"
+
+
+class ApplicationFactory(Factory):
+    class Meta:
+        model = Application
+
+    metadata = SubFactory(MetadataFactory)
+    spec = SubFactory(ApplicationSpecFactory)
+    status = SubFactory(ApplicationStatusFactory)
+
+
+class ClusterSpecFactory(Factory):
+    class Meta:
+        model = ClusterSpec
 
 
 class ClusterStatusFactory(Factory):
@@ -135,21 +172,30 @@ users:
 )
 
 
-class ClusterFactory(Factory):
-    name = fuzzy.FuzzyAttribute(fuzzy_name)
-    user = fuzzy.FuzzyAttribute(fuzzy_name)
-    kind = fuzzy.FuzzyChoice(list(ClusterKind.__members__.values()))
-    uid = fuzzy.FuzzyAttribute(fake.uuid4)
-    status = SubFactory(ClusterStatusFactory)
+class ClusterSpecFactory(ClusterSpecFactory):
+    class Meta:
+        model = ClusterSpec
 
     @lazy_attribute
     def kubeconfig(self):
         return local_kubeconfig
 
 
-class MagnumClusterFactory(ClusterFactory):
+class MagnumClusterSpecFactory(ClusterSpecFactory):
     class Meta:
-        model = MagnumCluster
+        model = MagnumClusterSpec
 
     kind = ClusterKind.MAGNUM
     master_ip = fuzzy.FuzzyAttribute(fake.ipv4)
+
+
+class ClusterFactory(Factory):
+    class Params:
+        magnum = Trait(spec=SubFactory(MagnumClusterSpecFactory))
+
+    class Meta:
+        model = Cluster
+
+    metadata = SubFactory(MetadataFactory)
+    status = SubFactory(ClusterStatusFactory)
+    spec = SubFactory(ClusterSpecFactory)

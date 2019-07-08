@@ -164,7 +164,7 @@ class Session(object):
             (object, Revision): Tuple of deserialized model and revision. If
             the key was not found in etcd (None, None) is returned.
         """
-        key = create_key(cls, **kwargs)
+        key = cls.__metadata__["key"].format_kwargs(**kwargs)
         resp = await self.client.range(key)
 
         if resp.kvs is None:
@@ -214,45 +214,43 @@ class Session(object):
                 identity attributes.
 
         """
-        key = create_prefix(cls, **kwargs)
+        key = cls.__metadata__["key"].prefix(**kwargs)
         # TODO: Support pagination
         resp = await self.client.range(key, prefix=True)
         if not resp.kvs:
             return
 
         for kv in resp.kvs:
-            if matches_key(cls, kv.key.decode()):
+            if cls.__metadata__["key"].matches(kv.key.decode()):
                 yield self.load_instance(cls, kv)
 
-    async def put(self, instance, **kwargs):
+    async def put(self, instance):
         """Store new revision of a serializable object on etcd server.
 
         Args:
             instance (object): Serializable object that should be stored
-            **kwargs: Additional parameters for the etcd key
 
         Returns:
             int: key-value revision version when the request was applied
 
         """
-        key = create_key(instance, **kwargs)
+        key = instance.__metadata__["key"].format_object(instance)
         data = serialize(instance)
         resp = await self.client.put(key, json.dumps(data))
         return resp.header.revision
         # TODO: Should be we fetch the previous revision here with "prev_kv"?
 
-    async def delete(self, instance, **kwargs):
+    async def delete(self, instance):
         """Delete a given instance from etcd
 
         Args:
             instance (object): Serializable object that should be deleted
-            **kwargs: Additional parameters for the etcd key
 
         Returns:
             int: Number of keys that where deleted
 
         """
-        key = create_key(instance, **kwargs)
+        key = instance.__metadata__["key"].format_object(instance)
         resp = await self.client.delete_range(key=key)
         return resp.deleted
 
@@ -274,7 +272,7 @@ class Session(object):
             Event: Every change in the namespace will generate an event
 
         """
-        prefix = create_prefix(cls, **kwargs)
+        prefix = cls.__metadata__["key"].prefix(**kwargs)
         watcher = self.client.watch_create(key=prefix, prefix=True)
         async with watcher:
             async for resp in watcher:
@@ -287,7 +285,7 @@ class Session(object):
                         created.set_result(None)
                 else:
                     for event in resp.events:
-                        if matches_key(cls, event.kv.key.decode()):
+                        if cls.__metadata__["key"].matches(event.kv.key.decode()):
                             # Resolve event type. Empty string means "PUT"
                             # event.
                             if event.type == "":
@@ -319,26 +317,29 @@ class Session(object):
 
 
 class Key(object):
-    """Etcd key template that
+    """Etcd key template using the same syntax as Python's standard format
+    strings for parameters.
 
-    The string template uses the same syntax as Python's standard format
-    strings for parameters:
+    Example:
+        .. code:: python
 
-    .. code:: python
-
-        key = Key("/books/{namespaces}/{isbn}")
+            key = Key("/books/{namespaces}/{isbn}")
 
     The parameters are substituted by in the corresponding methods by either
     attributes of the passed object or additional keyword arguments.
 
     Args:
         template (str): Key template with format string-like parameters
+        attribute (str, optional): Load attributes in :meth:`format_object`
+            from this attribute of the passed object.
 
     """
+
     _params_re = re.compile(r"\{(.+?)\}")
 
-    def __init__(self, template):
+    def __init__(self, template, attribute=None):
         self.template = template
+        self.attribute = attribute
         self.parameters = list(self._params_re.finditer(template))
 
         template_re = self._params_re.sub(".+?", template)
@@ -355,50 +356,63 @@ class Key(object):
         """
         return self.pattern.match(key) is not None
 
-    def create(self, obj, **kwargs):
-        """Create a key for an object
+    def format_object(self, obj):
+        """Create a key from a given object
+
+        If ``attribute`` is given, attributes are loaded from this attribute
+        of the object rather than the object itself.
 
         Args:
-            obj: Object from which attributes are looked up
-            **kwargs: Additional parameters that will be used if a parameter
-                cannot loaded as attribute from the given object.
+            obj (object): Object from which attributes are looked up
 
         Returns:
             str: Key from the key template with all parameters substituted by
-            either attributes or keyword arguments.
+            attributes loaded from the given object.
 
         Raises:
-            TypeError: If a required parameter is missing or an unexpected
-                keyword is passed.
+            AttributeError: If a required parameter is missing
         """
         params = {}
 
-        for param in map(itemgetter(1), self.parameters):
-            try:
-                params[param] = getattr(obj, param)
-            except AttributeError:
-                try:
-                    params[param] = kwargs.pop(param)
-                except KeyError:
-                    raise TypeError(f"Missing key parameter {param!r}")
+        if self.attribute:
+            obj = getattr(obj, self.attribute)
 
-        if kwargs:
-            key, _ = kwargs.popitem()
-            raise TypeError(f"Got unexpected key parameter {key!r}")
+        for param in map(itemgetter(1), self.parameters):
+            params[param] = getattr(obj, param)
 
         return self.template.format(**params)
 
-    def prefix(self, obj, **kwargs):
+    def format_kwargs(self, **kwargs):
+        """Create a key from keyword arguments
+
+        Args:
+            **kwargs: Keyword arguments for parameter substitution
+
+        Returns:
+            str: Key from the key template with all parameters substituted by
+            the given keyword arguments.
+        """
+        template = self.template
+        params = {}
+
+        for match in self.parameters:
+            params[match[1]] = kwargs.pop(match[1])
+
+        if kwargs:
+            key, _ = filters.popitem()
+            raise TypeError(f"Got unexpected keyword argument parameter {key!r}")
+
+        return template.format(**params)
+
+    def prefix(self, **kwargs):
         """Create a partial key (prefix) for a given object.
 
         Args:
-            obj: Object from which attributes are looked up
-            **kwargs: Additional parameters that will be used if a parameter
-                cannot loaded as attribute from the given object.
+            **kwargs: Parameters that will be used for substitution
 
         Returns:
             str: Partial key from the key template with some parameters
-            substituted by either attributes or keyword arguments.
+            substituted
 
         Raises:
             TypeError: If a parameter is passed as keyword argument but a
@@ -410,13 +424,10 @@ class Key(object):
 
         for match in self.parameters:
             try:
-                params[match[1]] = getattr(obj, match[1])
-            except AttributeError:
-                try:
-                    params[match[1]] = kwargs.pop(match[1])
-                except KeyError:
-                    template = match.string[:match.start()]
-                    break
+                params[match[1]] = kwargs.pop(match[1])
+            except KeyError:
+                template = match.string[: match.start()]
+                break
 
         if kwargs:
             key, _ = filters.popitem()
@@ -425,46 +436,3 @@ class Key(object):
             )
 
         return template.format(**params)
-
-
-def matches_key(cls, key):
-    """Check if a given string matches they key of a class
-
-    Args:
-        cls (type): Class with ``__metadata__["key"]`` attribute
-        key (str): String that should be matched
-
-    Returns:
-        bool: True if the key matches the key of the class
-    """
-    return cls.__metadata__["key"].matches(key)
-
-
-def create_key(obj, **kwargs):
-    """Create a key from a key template of an object
-
-    Args:
-        obj: Object providing a key template in ``__metadata__["key"]``
-        **kwargs: Keyword arguments that will be used for parameter
-            substitution in the key template
-
-    Returns:
-        str: Key generated from the key template of the object with all
-        parameters replaced by keyword arguments.
-    """
-    return obj.__metadata__["key"].create(obj, **kwargs)
-
-
-def create_prefix(obj, **kwargs):
-    """Create a prefix key from a key template of an object
-
-    Args:
-        obj: Object providing a key template in ``__metadata__["key"]``
-        **kwargs: Keyword arguments that will be used for parameter
-            substitution in the key template
-
-    Returns:
-        str: Prefix key generated from the key template of the object with some
-        parameters replaced by keyword arguments.
-    """
-    return obj.__metadata__["key"].prefix(obj, **kwargs)

@@ -24,27 +24,33 @@ class Resource(object):
         self.session = session
         self.url = url
 
-    async def list(self):
-        url = self.url.with_path(self.model.__metadata__["url"])
+    @classmethod
+    def ref(cls, **kwargs):
+        return cls.endpoints["list"].format(**kwargs)
+
+    async def list(self, **kwargs):
+        url = self.url.with_path(self.endpoints["list"].format(**kwargs))
         resp = await self.session.get(url)
         datas = await resp.json()
         return [deserialize(self.model, data) for data in datas]
 
-    async def get(self, id):
-        url = self.url.with_path(f"{self.model.__metadata__['url']}/{id}")
+    async def get(self, **kwargs):
+        url = self.url.with_path(self.endpoints["get"].format(**kwargs))
         resp = await self.session.get(url)
         data = await resp.json()
         app = deserialize(self.model, data)
         return app
 
-    async def delete(self, id):
-        url = self.url.with_path(f"{self.model.__metadata__['url']}/{id}")
+    async def delete(self, **kwargs):
+        url = self.url.with_path(self.endpoints["get"].format(**kwargs))
         resp = await self.session.delete(url)
         data = await resp.json()
         return deserialize(self.model, data)
 
-    async def watch(self):
-        url = self.url.with_path(self.model.__metadata__["url"]).with_query("watch")
+    async def watch(self, **kwargs):
+        url = self.url.with_path(self.endpoints["list"].format(**kwargs)).with_query(
+            "watch"
+        )
         resp = await self.session.get(url)
 
         async with resp:

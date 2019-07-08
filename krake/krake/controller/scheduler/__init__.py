@@ -5,7 +5,7 @@ import logging
 from functools import total_ordering
 from typing import NamedTuple
 
-from krake.data.kubernetes import ApplicationState, Cluster, ClusterRef
+from krake.data.kubernetes import ApplicationState, Cluster
 from .. import Controller, Worker
 
 
@@ -23,13 +23,13 @@ class Scheduler(Controller):
         logger.info("List and watch Kubernetes applications")
 
         # List all Kubernetes applications
-        for app in await self.client.kubernetes.application.list():
+        for app in await self.client.kubernetes.application.list(namespace="all"):
             if app.status.state in self.states:
-                await self.queue.put(app.uid, app)
+                await self.queue.put(app.metadata.uid, app)
 
-        async for app in self.client.kubernetes.application.watch():
+        async for app in self.client.kubernetes.application.watch(namespace="all"):
             if app.status.state in self.states:
-                await self.queue.put(app.uid, app)
+                await self.queue.put(app.metadata.uid, app)
 
 
 @total_ordering
@@ -63,18 +63,21 @@ class SchedulerWorker(Worker):
 
         if cluster is None:
             await self.client.kubernetes.application.update_status(
-                app.name, state=ApplicationState.FAILED, reason="No cluster available"
+                namespace=app.metadata.namespace,
+                name=app.metadata.name,
+                state=ApplicationState.FAILED,
+                reason="No cluster available",
             )
         else:
-            await self.client.kubernetes.application.update_status(
-                app.name,
-                state=ApplicationState.SCHEDULED,
-                cluster=ClusterRef.from_cluster(cluster),
+            await self.client.kubernetes.application.update_binding(
+                namespace=app.metadata.namespace,
+                name=app.metadata.name,
+                cluster=cluster,
             )
 
     async def select_kubernetes_cluster(self, app):
         # TODO: Evaluate spawning a new cluster
-        clusters = await self.client.kubernetes.cluster.list()
+        clusters = await self.client.kubernetes.cluster.list(namespace="all")
 
         if not clusters:
             return None
