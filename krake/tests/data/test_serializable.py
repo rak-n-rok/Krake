@@ -2,7 +2,13 @@ from dataclasses import dataclass
 from typing import List
 import pytest
 
-from krake.data.serializable import serialize, deserialize, Serializable, serializable
+from krake.data.serializable import (
+    serialize,
+    deserialize,
+    Serializable,
+    serializable,
+    PolymorphicSchema,
+)
 
 
 def test_functional_api():
@@ -24,8 +30,10 @@ def test_functional_api():
                 self.optional = optional
 
     assert Application.Schema is not None
-    assert Application.__metadata__["schema"] is not None
-    assert Application.__metadata__["discriminator_map"]["app"] == Application
+    assert isinstance(Application.__metadata__["schema"], PolymorphicSchema)
+    assert (
+        Application.__metadata__["schema"].type_schemas["app"].__model__ == Application
+    )
 
     app = Application(id=42, name="Arthur Dent")
     data = serialize(app)
@@ -52,9 +60,9 @@ def test_functional_api():
             self.number = number
 
     assert FancyApplication.Schema is not None
-    assert "schema" in FancyApplication.__metadata__
+    assert FancyApplication.__metadata__["schema"] == Application.__metadata__["schema"]
     assert (
-        FancyApplication.__metadata__["discriminator_map"]["fancy-app"]
+        FancyApplication.__metadata__["schema"].type_schemas["fancy-app"].__model__
         == FancyApplication
     )
 
@@ -109,8 +117,10 @@ def test_inheritance():
         __metadata__ = {"discriminator": "kind"}
 
     assert Application.Schema is not None
-    assert "schema" in Application.__metadata__
-    assert Application.__metadata__["discriminator_map"]["app"] == Application
+    assert isinstance(Application.__metadata__["schema"], PolymorphicSchema)
+    assert (
+        Application.__metadata__["schema"].type_schemas["app"].__model__ == Application
+    )
 
     app = Application(id=42, name="Arthur Dent")
     assert app.id == 42
@@ -145,9 +155,9 @@ def test_inheritance():
         kind: str = "fancy-app"
 
     assert FancyApplication.Schema is not None
-    assert "schema" in FancyApplication.__metadata__
+    assert FancyApplication.__metadata__["schema"] == Application.__metadata__["schema"]
     assert (
-        FancyApplication.__metadata__["discriminator_map"]["fancy-app"]
+        FancyApplication.__metadata__["schema"].type_schemas["fancy-app"].__model__
         == FancyApplication
     )
 

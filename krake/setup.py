@@ -12,6 +12,7 @@ install_requires = [
     "PyYAML",
     "webargs",
     "marshmallow_enum",
+    "marshmallow_oneofschema < 2.0.0"
     "kubernetes_asyncio",
 ]
 

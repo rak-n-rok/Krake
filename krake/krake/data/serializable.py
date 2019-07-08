@@ -13,6 +13,7 @@ from functools import singledispatch
 from webargs import fields
 from marshmallow import Schema, post_load
 from marshmallow_enum import EnumField
+from marshmallow_oneofschema import OneOfSchema
 
 
 @singledispatch
@@ -87,14 +88,8 @@ def deserialize(cls, value, **kwargs):
     parameter. This attribute should be an object implementing the
     mod:`marshmallow.Schema` interface.
 
-    The function supports polymorphism. The passed class needs to have an
-    ``__metadata__["discriminator"]`` attribute specifying the name of the
-    attribute that should be used as discriminator between different classes.
-    During deserialization, the key specified by ``discriminator`` is loaded
-    from the value dictionary. Then, the fetched value is looked up in the
-    ``__metadata__["discriminator_map"]`` attribute of the passed class.
-    ``__metadata__["discriminator_map"]`` is a mapping of discriminator values
-    to corresponding subclasses.
+    If there are multiple subclasses of an object, :class:`PolymorphicSchema`
+    can be used.
 
     Example:
         .. code:: python
@@ -115,7 +110,7 @@ def deserialize(cls, value, **kwargs):
                 title = fields.String(required=True)
 
             Book.__metadata__ = {
-                "schema": BookSchema()
+                "schema": BookSchema(strict=True)
             }
 
 
@@ -123,57 +118,6 @@ def deserialize(cls, value, **kwargs):
                 "author": "Douglas Adams",
                 "title": "The Hitchhiker's Guide to the Galaxy",
             })
-
-        If there are multiple subclasses of an object, polymorphic
-        deserialization can be used:
-
-        .. code:: python
-
-            from dataclasses import dataclass
-            from marshmallow import fields
-            from krake.data.serializable import ModelizedSchema, deserialize
-
-            @dataclass
-            class Book(object):
-                author: str
-                title: str
-                kind: str
-
-                __metadata__ = {
-                    "discriminator": "kind",
-                    "disciminator_map": {},
-                }
-
-            class Paperback(Book):
-                kind: str = "paperback"
-
-            class Hardcover(Book):
-                kind: str = "hardcover"
-
-            Book.__metadata__["disciminator_map"]["paperback"] = Paperback
-            Book.__metadata__["disciminator_map"]["hardcover"] = Hardcover
-
-
-            class BookSchema(deserialize):
-                author = fields.String(required=True)
-                title = fields.String(required=True)
-
-            class PaperbackSchema(deserialize):
-                __model__ = Paperback
-
-            class HardcoverSchema(deserialize):
-                __model__ = Hardcover
-
-            Paperback.__metadata__["schema"] = PaperbackSchema()
-            Hardcover.__metadata__["schema"] = HardcoverSchema()
-
-
-            book = deserialize(Book, {
-                "author": "Douglas Adams",
-                "title": "The Hitchhiker's Guide to the Galaxy",
-                "kind": "paperback"
-            })
-            assert isinstance(book, Paperback)
 
     Args:
         cls (type): Type that should be loaded from the passed value
@@ -196,12 +140,6 @@ def deserialize(cls, value, **kwargs):
     if kwargs:
         value = dict(value, **kwargs)
 
-    if "discriminator" in cls.__metadata__:
-        try:
-            discriminator = value[cls.__metadata__["discriminator"]]
-            cls = cls.__metadata__["discriminator_map"][discriminator]
-        except KeyError:
-            pass
     instance, _ = cls.__metadata__["schema"].load(value)
     assert isinstance(instance, cls)
     return instance
@@ -227,6 +165,85 @@ class ModelizedSchema(Schema):
         if self.__model__:
             return self.__model__(**data)
         return data
+
+
+class PolymorphicSchema(OneOfSchema):
+    """Special schema allowing loading of polymorphic classes.
+
+    Example:
+        .. code:: python
+
+            from dataclasses import dataclass
+            from marshmallow import fields
+            from krake.data.serializable import (
+                ModelizedSchema,
+                PolymorphicSchema,
+                deserialize,
+            )
+
+            @dataclass
+            class Book(object):
+                author: str
+                title: str
+                kind: str
+
+            class Paperback(Book):
+                kind: str = "paperback"
+
+            class Hardcover(Book):
+                kind: str = "hardcover"
+
+            class BookSchema(ModelizedSchema):
+                author = fields.String(required=True)
+                title = fields.String(required=True)
+                __model__ = Book
+
+            class PaperbackSchema(ModelizedSchema):
+                __model__ = Paperback
+
+            class HardcoverSchema(ModelizedSchema):
+                __model__ = Hardcover
+
+            schema = PolymorphicSchema("kind")
+            schema.type_schemas["book"] = BookSchema(strict=True)
+            schema.type_schemas["paperback"] = PaperbackSchema(strict=True)
+            schema.type_schemas["hardcover"] = HardcoverSchema(strict=True)
+
+            # Configure metadata in order to used "deserialize()"
+            Book.__metadata__ = {
+                "schema": schema
+            }
+
+            book = deserialize(Book, {
+                "author": "Douglas Adams",
+                "title": "The Hitchhiker's Guide to the Galaxy",
+                "kind": "paperback"
+            })
+            assert isinstance(book, Paperback)
+
+    Attributes:
+        type_field (str): Name of the attribute (see ``discriminator`` in
+            :func:`serializable`) that is used to identify different classes.
+        type_schemas (dict): Mapping of discriminator values
+            (see :func:`serializable`) to schema instances.
+    """
+
+    type_field_remove = False
+
+    def __init__(self, type_field, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.type_field = type_field
+        self.type_schemas = {}
+
+    def get_obj_type(self, obj):
+        data_type = getattr(obj, self.type_field)
+
+        # Special case:
+        #     Use the name of enumeration fields
+        if isinstance(data_type, Enum):
+            return data_type.name
+
+        return data_type
 
 
 class SimpleFieldResolver(object):
@@ -287,7 +304,7 @@ def resolve_enum(type_, required, allow_none, resolvers):
 
 
 def resolve_schema(type_, required, allow_none, resolvers):
-    """Resolver for type with a ``Schema`` attribute.
+    """Resolver for types with a ``__metadata__["schema"]`` attribute.
 
     Args:
         type_ (type): Type of an attribute
@@ -296,19 +313,22 @@ def resolve_schema(type_, required, allow_none, resolvers):
         resolvers (List[callable]): List of resolvers
 
     Returns:
-        marshmallow.fields.Nested: A nested field with the using the ``Schema``
-        attribute of the passed type.
+        marshmallow.fields.Nested: A nested field with the using the
+        ``__metadata__["schema"]`` attribute of the passed type.
 
     Raises:
-        ValueError: If the passed type does not define a ``Schema`` attribute
+        ValueError: If the passed type does not define a
+        ``__metadata__["schema"]`` attribute.
 
     """
     try:
-        schema = type_.Schema
-    except AttributeError:
-        raise ValueError(f'{type_} as no "Schema" attribute')
+        schema = type_.__metadata__["schema"]
+    except AttributeError as err:
+        raise ValueError(f"{type_} as no '{err}' attribute")
+    except KeyError as err:
+        raise ValueError(f"'__metadata__' of {type_} as no '{err}' key")
 
-    return fields.Nested(type_.Schema, allow_none=allow_none, required=required)
+    return fields.Nested(schema, allow_none=allow_none, required=required)
 
 
 def resolve_list(type_, required, allow_none, resolvers):
@@ -363,16 +383,12 @@ def serializable(cls=None, resolvers=default_resolvers):
     automatically registered to the :func:`serialize` function using the
     ``__metadata__["schema"]`` attribute.
 
-    Besides this, if the ``__metadata__`` dictionary specifies an
-    ``discriminator`` key (see :func:`deserialize`) a dictionary is assigned
-    to the ``discriminator_map`` key of the ``__metadata__``attribute of the
-    class. The ``discriminator_map`` is looked up in the ``__metadata__``
-    attribute of all base classes. If not found, a new ``discriminator_map``
-    is created.
-
-    The discriminator value is loaded from the class and this value is used as
-    key in ``discriminator_map`` with the passed class as value. This
-    automatically registers the polymorphic type of the class.
+    If the ``__metadata__`` dictionary specifies a ``discriminator`` key, an
+    instance of :class:`PolymorphicSchema` is used for
+    ``__metadata__["schema"]``. The same polymorphic schema is used for all
+    subclasses. The discriminator value is loaded from the class and its value
+    is used as key in the :attr:`PolymorphicSchema.type_schemas` dictionary.
+    An instance of the generated ``Schema`` attribute is used as value.
 
     The corresponding fields for every attribute are resolved by resolver
     functions. A resolver is a function with the following signature:
@@ -426,33 +442,37 @@ def serializable(cls=None, resolvers=default_resolvers):
             serializer = make_field(type_, resolvers, default)
             schema_attrs[name] = serializer
 
+        cls.Schema = type("GeneratedSchema", (ModelizedSchema,), schema_attrs)
+
         if not hasattr(cls, "__metadata__"):
             cls.__metadata__ = {}
         # Copy metadata dictionary of defined in a super class
         elif "__metadata__" not in cls.__dict__:
             cls.__metadata__ = cls.__metadata__.copy()
 
-        cls.Schema = type("Schema", (ModelizedSchema,), schema_attrs)
-        cls.__metadata__["schema"] = cls.Schema(strict=True)
-
-        @serialize.register(cls)
-        def _(value):
-            data, _ = cls.__metadata__["schema"].dump(value)
-            return data
-
         if "discriminator" in cls.__metadata__:
             # If no discrimniator map is found in the base classes, use this
             # one.
-            discriminator_map = {}
+            polymorphic_schema = None
 
-            # Try discriminator map from base classes. This way, all derived
-            # classes use the discrimniator map dictionary.
+            # Try to load polymorphic schema from base classes
             for base in cls.mro():
-                if hasattr(base, "__metadata__"):
-                    if "discriminator_map" in base.__metadata__:
-                        discriminator_map = base.__metadata__["discriminator_map"]
+                try:
+                    schema = base.__metadata__["schema"]
+                except (AttributeError, KeyError):
+                    pass
+                else:
+                    if isinstance(base.__metadata__["schema"], PolymorphicSchema):
+                        polymorphic_schema = schema
 
-            cls.__metadata__["discriminator_map"] = discriminator_map
+            if polymorphic_schema is None:
+                polymorphic_schema = PolymorphicSchema(
+                    cls.__metadata__["discriminator"], strict=True
+                )
+            else:
+                assert (
+                    polymorphic_schema.type_field == cls.__metadata__["discriminator"]
+                )
 
             if hasattr(cls, cls.__metadata__["discriminator"]):
                 discriminator = getattr(cls, cls.__metadata__["discriminator"])
@@ -463,14 +483,23 @@ def serializable(cls=None, resolvers=default_resolvers):
                     discriminator = discriminator.name
 
                 # Ensure that the discrimniator value is not already used
-                if discriminator in discriminator_map:
-                    mapped = discriminator_map[discriminator]
+                if discriminator in polymorphic_schema.type_schemas:
+                    mapped = polymorphic_schema.type_schemas[discriminator]
                     raise ValueError(
                         f"Discriminator {discriminator!r} is "
                         f"already mapped to {mapped!r}"
                     )
 
-                discriminator_map[discriminator] = cls
+                polymorphic_schema.type_schemas[discriminator] = cls.Schema(strict=True)
+
+            cls.__metadata__["schema"] = polymorphic_schema
+        else:
+            cls.__metadata__["schema"] = cls.Schema(strict=True)
+
+        @serialize.register(cls)
+        def _(value):
+            data, _ = cls.__metadata__["schema"].dump(value)
+            return data
 
         return cls
 
