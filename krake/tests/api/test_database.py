@@ -6,7 +6,7 @@ import factory
 from factory.fuzzy import FuzzyInteger
 
 from krake.data.serializable import Serializable, serialize, deserialize
-from krake.api.database import EventType
+from krake.api.database import EventType, Key
 
 
 class MyModel(Serializable):
@@ -14,7 +14,7 @@ class MyModel(Serializable):
     name: str
     kind: str = "my-model"
 
-    __metadata__ = {"namespace": "/model", "identity": ("id",), "discriminator": "kind"}
+    __metadata__ = {"key": Key("/model/{id}"), "discriminator": "kind"}
 
 
 class AnotherModel(MyModel):
@@ -79,16 +79,26 @@ async def test_put(db, etcd_client, loop):
     assert model.name == data.name
 
 
-async def test_put_with_multikey_identity(db, etcd_client, loop):
+async def test_put_with_external_key(db, etcd_client, loop):
     class App(Serializable):
         name: str
-        user: str
         kind: str = "app"
 
-        __metadata__ = {"namespace": "/apps", "identity": ("user", "name")}
+        __metadata__ = {"key": Key("/apps/{user}/{name}")}
 
-    app = App(name="my-app", user="me")
-    resp = await db.put(app)
+    app = App(name="my-app")
+
+    # Call with missing key parameter
+    with pytest.raises(TypeError) as err:
+        await db.put(app)
+    assert "Missing key parameter 'user'" in str(err.value)
+
+    # Call with extra key parameter
+    with pytest.raises(TypeError) as err:
+        await db.put(app, user="me", extra=42)
+    assert "Got unexpected key parameter 'extra'" in str(err.value)
+
+    resp = await db.put(app, user="me")
 
     resp = await etcd_client.range(f"/apps/me/my-app")
 
@@ -141,7 +151,7 @@ async def test_get_polymorphic(fake, db, etcd_client):
         kind: str = "app"
 
         __metadata__ = {
-            "namespace": "/apps",
+            "key": Key("/apps/{id}"),
             "identity": ("id",),
             "discriminator": "kind",
         }

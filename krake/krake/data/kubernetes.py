@@ -3,6 +3,7 @@ from enum import Enum, auto
 from datetime import datetime
 from typing import NamedTuple
 
+from krake.api.database import Key
 from .serializable import Serializable, serializable
 
 
@@ -49,8 +50,7 @@ class Application(Serializable):
     status: ApplicationStatus
 
     __metadata__ = {
-        "identity": ("user", "name"),
-        "namespace": "/k8s/apps",
+        "key": Key("/kubernetes/applications/{user}/{name}"),
         "url": "/kubernetes/applications",
     }
 
@@ -85,10 +85,9 @@ class Cluster(Serializable):
     status: ClusterStatus
 
     __metadata__ = {
-        "identity": ("user", "name"),
-        "discriminator": "kind",
-        "namespace": "/k8s/clusters",
+        "key": Key("/kubernetes/clusters/{user}/{name}"),
         "url": "/kubernetes/clusters",
+        "discriminator": "kind",
     }
 
 

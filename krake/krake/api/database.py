@@ -10,7 +10,7 @@ session.
 Example:
     .. code:: python
 
-        from krake.api.database import Session
+        from krake.api.database import Session, Key
         from krake.data.serialzable import Serializable
 
 
@@ -19,13 +19,12 @@ Example:
             title: str
 
             __metadata__ = {
-                "namespace" = "/books",
-                "identity" = ("isbn",),
+                "key": Key("/books/{isbn}")
             }
 
 
         async with Session(host="localhost") as session:
-            book, revision = await session.get(Book, 9783453146976)
+            book, revision = await session.get(Book, isbn=9783453146976)
 
 .. _ etcd: https://etcd.io/
 
@@ -34,6 +33,8 @@ import json
 from collections import deque
 from typing import NamedTuple
 from enum import Enum, auto
+import re
+from operator import itemgetter
 from etcd3.aio_client import AioClient
 
 from krake.data.serializable import serialize, deserialize
@@ -151,32 +152,19 @@ class Session(object):
         await self.client.close()
         self.client = None
 
-    async def get(self, cls, **identitiy):
+    async def get(self, cls, **kwargs):
         """Fetch an serializable object from the etcd server specified by its
         identity attribute.
 
         Attributes:
             cls (type): Serializable class that should be loaded
-            **identitiy: Identity of the object that should be fetched as
-                keyword arguments
+            **kwargs: Parameters for the etcd key
 
         Returns:
             (object, Revision): Tuple of deserialized model and revision. If
             the key was not found in etcd (None, None) is returned.
         """
-        suffix = []
-        for attr in cls.__metadata__["identity"]:
-            try:
-                suffix.append(identitiy.pop(attr))
-            except KeyError:
-                raise TypeError(f"Missing keyword argument {attr!r}")
-        if identitiy:
-            attr, _ = identitiy.popitem()
-            raise TypeError(f"Got unexpected keyword argument {attr!r}")
-
-        suffix = "/".join(map(str, suffix))
-        namespace = cls.__metadata__["namespace"]
-        key = f"{namespace}/{suffix}"
+        key = create_key(cls, **kwargs)
         resp = await self.client.range(key)
 
         if resp.kvs is None:
@@ -184,7 +172,7 @@ class Session(object):
 
         return self.load_instance(cls, resp.kvs[0])
 
-    async def all(self, cls, **filters):
+    async def all(self, cls, **kwargs):
         """Fetch all instances of a given type
 
         The instances can be filtered by partial identites. Every identity can
@@ -201,8 +189,9 @@ class Session(object):
                     title: str
                     author: str
 
-                    __identity__ = ("author", "isbn")
-                    __namespace__ = "/books"
+                    __metadata__ = {
+                        "key": Key("/books/{author}/{isbn}")
+                    }
 
                 await db.all(Book)
 
@@ -215,7 +204,7 @@ class Session(object):
 
         Args:
             cls (type): Serializable class that should be loaded
-            **filters: Identity attributes that should be filtered
+            **kwargs: Parameters for the etcd key
 
         Yields:
             (object, Revision): Tuple of deserialized model and revision
@@ -225,77 +214,49 @@ class Session(object):
                 identity attributes.
 
         """
-        namespace = cls.__metadata__["namespace"]
-
-        if filters:
-            identities = []
-
-            for attr in cls.__metadata__["identity"]:
-                try:
-                    identities.append(filters.pop())
-                except KeyError:
-                    break
-
-            if filters:
-                key, _ = filters.popitem()
-                raise TypeError(
-                    f"Got identity attribute {key!r} without preceding identity attribute {attr!r}"
-                )
-
-            suffix = "/".join(map(str, identities))
-            key = f"{namespace}/{suffix}"
-        else:
-            key = f"{namespace}/"
-
+        key = create_prefix(cls, **kwargs)
         # TODO: Support pagination
         resp = await self.client.range(key, prefix=True)
         if not resp.kvs:
             return
 
         for kv in resp.kvs:
-            if in_namespace(cls, kv.key.decode()):
+            if matches_key(cls, kv.key.decode()):
                 yield self.load_instance(cls, kv)
 
-    async def put(self, instance):
+    async def put(self, instance, **kwargs):
         """Store new revision of a serializable object on etcd server.
 
         Args:
             instance (object): Serializable object that should be stored
+            **kwargs: Additional parameters for the etcd key
 
         Returns:
             int: key-value revision version when the request was applied
 
         """
-        suffix = "/".join(
-            str(getattr(instance, attr)) for attr in instance.__metadata__["identity"]
-        )
-        namespace = instance.__metadata__["namespace"]
-        key = f"{namespace}/{suffix}"
+        key = create_key(instance, **kwargs)
         data = serialize(instance)
         resp = await self.client.put(key, json.dumps(data))
         return resp.header.revision
         # TODO: Should be we fetch the previous revision here with "prev_kv"?
 
-    async def delete(self, instance):
+    async def delete(self, instance, **kwargs):
         """Delete a given instance from etcd
 
         Args:
             instance (object): Serializable object that should be deleted
+            **kwargs: Additional parameters for the etcd key
 
         Returns:
             int: Number of keys that where deleted
 
         """
-        suffix = "/".join(
-            str(getattr(instance, attr)) for attr in instance.__metadata__["identity"]
-        )
-        namespace = instance.__metadata__["namespace"]
-        key = f"{namespace}/{suffix}"
-
+        key = create_key(instance, **kwargs)
         resp = await self.client.delete_range(key=key)
         return resp.deleted
 
-    async def watch(self, cls, created=None):
+    async def watch(self, cls, created=None, **kwargs):
         """Watch the namespace of a given serializable type and yield
         every change in this namespace.
 
@@ -307,14 +268,14 @@ class Session(object):
                 watched
             created (asyncio.Future, optional): Future that will be set
                 if the watcher was succesfully created.
+            **kwargs: Parameters for the etcd key
 
         Yields:
             Event: Every change in the namespace will generate an event
 
         """
-        watcher = self.client.watch_create(
-            key=cls.__metadata__["namespace"], prefix=True
-        )
+        prefix = create_prefix(cls, **kwargs)
+        watcher = self.client.watch_create(key=prefix, prefix=True)
         async with watcher:
             async for resp in watcher:
                 if resp.events is None:
@@ -326,7 +287,7 @@ class Session(object):
                         created.set_result(None)
                 else:
                     for event in resp.events:
-                        if in_namespace(cls, event.kv.key.decode()):
+                        if matches_key(cls, event.kv.key.decode()):
                             # Resolve event type. Empty string means "PUT"
                             # event.
                             if event.type == "":
@@ -357,6 +318,153 @@ class Session(object):
         return model, rev
 
 
-def in_namespace(cls, key):
-    prefix = key.rsplit("/", len(cls.__metadata__["identity"]))[0]
-    return prefix == cls.__metadata__["namespace"]
+class Key(object):
+    """Etcd key template that
+
+    The string template uses the same syntax as Python's standard format
+    strings for parameters:
+
+    .. code:: python
+
+        key = Key("/books/{namespaces}/{isbn}")
+
+    The parameters are substituted by in the corresponding methods by either
+    attributes of the passed object or additional keyword arguments.
+
+    Args:
+        template (str): Key template with format string-like parameters
+
+    """
+    _params_re = re.compile(r"\{(.+?)\}")
+
+    def __init__(self, template):
+        self.template = template
+        self.parameters = list(self._params_re.finditer(template))
+
+        template_re = self._params_re.sub(".+?", template)
+        self.pattern = re.compile(fr"^{template_re}$")
+
+    def matches(self, key):
+        """Check if a given key matches the template
+
+        Args:
+            key (str): Key that should be checked
+
+        Returns:
+            bool: True of the given key matches the key template
+        """
+        return self.pattern.match(key) is not None
+
+    def create(self, obj, **kwargs):
+        """Create a key for an object
+
+        Args:
+            obj: Object from which attributes are looked up
+            **kwargs: Additional parameters that will be used if a parameter
+                cannot loaded as attribute from the given object.
+
+        Returns:
+            str: Key from the key template with all parameters substituted by
+            either attributes or keyword arguments.
+
+        Raises:
+            TypeError: If a required parameter is missing or an unexpected
+                keyword is passed.
+        """
+        params = {}
+
+        for param in map(itemgetter(1), self.parameters):
+            try:
+                params[param] = getattr(obj, param)
+            except AttributeError:
+                try:
+                    params[param] = kwargs.pop(param)
+                except KeyError:
+                    raise TypeError(f"Missing key parameter {param!r}")
+
+        if kwargs:
+            key, _ = kwargs.popitem()
+            raise TypeError(f"Got unexpected key parameter {key!r}")
+
+        return self.template.format(**params)
+
+    def prefix(self, obj, **kwargs):
+        """Create a partial key (prefix) for a given object.
+
+        Args:
+            obj: Object from which attributes are looked up
+            **kwargs: Additional parameters that will be used if a parameter
+                cannot loaded as attribute from the given object.
+
+        Returns:
+            str: Partial key from the key template with some parameters
+            substituted by either attributes or keyword arguments.
+
+        Raises:
+            TypeError: If a parameter is passed as keyword argument but a
+                preceding parameter is not given.
+
+        """
+        template = self.template
+        params = {}
+
+        for match in self.parameters:
+            try:
+                params[match[1]] = getattr(obj, match[1])
+            except AttributeError:
+                try:
+                    params[match[1]] = kwargs.pop(match[1])
+                except KeyError:
+                    template = match.string[:match.start()]
+                    break
+
+        if kwargs:
+            key, _ = filters.popitem()
+            raise TypeError(
+                f"Got parameter {key!r} without preceding parameter {match[1]!r}"
+            )
+
+        return template.format(**params)
+
+
+def matches_key(cls, key):
+    """Check if a given string matches they key of a class
+
+    Args:
+        cls (type): Class with ``__metadata__["key"]`` attribute
+        key (str): String that should be matched
+
+    Returns:
+        bool: True if the key matches the key of the class
+    """
+    return cls.__metadata__["key"].matches(key)
+
+
+def create_key(obj, **kwargs):
+    """Create a key from a key template of an object
+
+    Args:
+        obj: Object providing a key template in ``__metadata__["key"]``
+        **kwargs: Keyword arguments that will be used for parameter
+            substitution in the key template
+
+    Returns:
+        str: Key generated from the key template of the object with all
+        parameters replaced by keyword arguments.
+    """
+    return obj.__metadata__["key"].create(obj, **kwargs)
+
+
+def create_prefix(obj, **kwargs):
+    """Create a prefix key from a key template of an object
+
+    Args:
+        obj: Object providing a key template in ``__metadata__["key"]``
+        **kwargs: Keyword arguments that will be used for parameter
+            substitution in the key template
+
+    Returns:
+        str: Prefix key generated from the key template of the object with some
+        parameters replaced by keyword arguments.
+    """
+    return obj.__metadata__["key"].prefix(obj, **kwargs)

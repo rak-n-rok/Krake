@@ -16,7 +16,7 @@ class Resource(object):
     Args:
         session (aiohttp.ClientSession): HTTP session used for all HTTP
             communication.
-        url (str): HTTP URL of the Krake API
+        url (yarl.URL): HTTP URL of the Krake API
 
     """
 
