@@ -77,7 +77,8 @@ class Heartbeat(object):
     Args:
         response (aiohttp.web.StreamResponse): Prepared HTTP response with
             chunked encoding
-        interval (int, float, optional): Heartbeat interval in seconds
+        interval (int, float, optional): Heartbeat interval in seconds.
+            Default: 10 seconds.
         loop (asyncio.AbstractEventLoop, optional): Event loop
 
     Raises:
@@ -105,9 +106,12 @@ class Heartbeat(object):
 
     """
 
-    def __init__(self, response, interval=10, loop=None):
+    def __init__(self, response, interval=None, loop=None):
         if loop is None:
             loop = asyncio.get_event_loop()
+
+        if interval is None:
+            interval = 10
 
         if not response.prepared:
             raise ValueError("Response must be prepared")
@@ -141,5 +145,5 @@ class Heartbeat(object):
         :attr:`interval`.
         """
         while True:
-            await self.response.write(b"\n")
             await asyncio.sleep(self.interval, loop=self.loop)
+            await self.response.write(b"\n")
