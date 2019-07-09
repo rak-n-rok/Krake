@@ -1,4 +1,5 @@
 from aiohttp.client_exceptions import ClientPayloadError
+from aiohttp.client import ClientTimeout
 
 from krake.data.serializable import deserialize
 
@@ -34,8 +35,11 @@ class Resource(object):
         datas = await resp.json()
         return [deserialize(self.model, data) for data in datas]
 
-    async def get(self, **kwargs):
-        url = self.url.with_path(self.endpoints["get"].format(**kwargs))
+    async def get(self, ref=None, **kwargs):
+        if ref:
+            url = self.url.with_path(ref)
+        else:
+            url = self.url.with_path(self.endpoints["get"].format(**kwargs))
         resp = await self.session.get(url)
         data = await resp.json()
         app = deserialize(self.model, data)
@@ -48,10 +52,11 @@ class Resource(object):
         return deserialize(self.model, data)
 
     async def watch(self, **kwargs):
+        timeout = ClientTimeout(sock_read=float("inf"))
         url = self.url.with_path(self.endpoints["list"].format(**kwargs)).with_query(
             "watch"
         )
-        resp = await self.session.get(url)
+        resp = await self.session.get(url, timeout=timeout)
 
         async with resp:
             try:
