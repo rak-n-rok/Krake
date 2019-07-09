@@ -1,7 +1,13 @@
 import sys
-from .parser import parser
 from .fixtures import Resolver
-from . import kubernetes
+from .parser import ParserSpec
+from .kubernetes import kubernetes
+
+
+spec = ParserSpec(prog="rok", description="Command line interface for Krake")
+spec.add_spec(kubernetes)
+
+parser = spec.create_parser()
 
 
 def main():
@@ -10,8 +16,6 @@ def main():
 
     with Resolver() as resolver:
         exit_code = resolver(command, **args)
-        # dependencies = resolver.resolve(command)
-        # exit_code = command(**args, **dependencies)
 
     sys.exit(exit_code)
 

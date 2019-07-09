@@ -50,38 +50,6 @@ def fixture(func):
 fixture.mapping = {}
 
 
-def use(argname):
-    """Decorator function for declaring fixture dependencies on functions
-
-    Example:
-        .. python:: code
-
-            from rok.fixtures import use
-
-            @use("config")
-            def my_func(config):
-                # do something with the configuration ...
-
-    Args:
-        argname (str): Name of the fixture that should be passed as keyword
-            argument.
-
-    Returns:
-        Function that can be used as decorator for declaring the dependency
-        of a decoratored function on the fixtures with name ``argname``.
-
-    """
-
-    def decorator(func):
-        if not hasattr(func, "depends"):
-            func.depends = [argname]
-        else:
-            func.depends.append(argname)
-        return func
-
-    return decorator
-
-
 class Resolver(object):
     """Dependency resolver for functions marked via :func:`use` and fixtures.
 
@@ -98,7 +66,6 @@ class Resolver(object):
             def engine():
                 yield create_engine("postgresql://user:passwd@localhost:5432/database")
 
-            @use("engine")
             def fetch(engine, min_uid):
                 with engine.begin() as connection:
                     result = connection.execute(
@@ -141,9 +108,7 @@ class Resolver(object):
                 raise RuntimeError(f"Fixture {name} yielded multiple values")
 
     def __call__(self, func, **kwargs):
-        depends = getattr(func, "depends", [])
-
-        for name in depends:
+        for name, parameter in signature(func).parameters.items():
             # Dependency overwritten
             if name in kwargs:
                 pass
@@ -171,6 +136,10 @@ class Resolver(object):
 
                 self.resolved[name] = value
                 kwargs[name] = value
+
+            # Use default parameter
+            elif parameter.default != parameter.empty:
+                pass
 
             else:
                 raise RuntimeError(
@@ -207,7 +176,7 @@ def config():
             pass
 
     # No config file was found. Use defaults
-    return {"api_url": "http://localhost:8080"}
+    return {"api_url": "http://localhost:8080", "user": "system"}
 
 
 class BaseUrlSession(requests.Session):
@@ -242,7 +211,6 @@ class BaseUrlSession(requests.Session):
 
 
 @fixture
-@use("config")
 def session(config):
     with BaseUrlSession(base_url=config["api_url"]) as session:
         yield session
