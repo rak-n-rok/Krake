@@ -20,13 +20,14 @@ class Scheduler(Controller):
     states = (ApplicationState.PENDING, ApplicationState.UPDATED)
 
     async def list_and_watch(self):
-        logger.info("List and watch Kubernetes applications")
+        logger.info("List Kubernetes application")
 
         # List all Kubernetes applications
         for app in await self.client.kubernetes.application.list(namespace="all"):
             if app.status.state in self.states:
                 await self.queue.put(app.metadata.uid, app)
 
+        logger.info("Watching Kubernetes application")
         async for app in self.client.kubernetes.application.watch(namespace="all"):
             if app.status.state in self.states:
                 await self.queue.put(app.metadata.uid, app)
@@ -57,11 +58,15 @@ class SchedulerWorker(Worker):
     """
 
     async def resource_received(self, app):
+
         # TODO: Global optimization instead of incremental
         # TODO: API for supporting different application types
         cluster = await self.select_kubernetes_cluster(app)
 
         if cluster is None:
+            logger.info(
+                "Unable to schedule Kubernetes application %r", app.metadata.name
+            )
             await self.client.kubernetes.application.update_status(
                 namespace=app.metadata.namespace,
                 name=app.metadata.name,
@@ -69,6 +74,11 @@ class SchedulerWorker(Worker):
                 reason="No cluster available",
             )
         else:
+            logger.info(
+                "Schedule Kubernetes application %r to cluster %r",
+                app.metadata.name,
+                cluster.metadata.name,
+            )
             await self.client.kubernetes.application.update_binding(
                 namespace=app.metadata.namespace,
                 name=app.metadata.name,

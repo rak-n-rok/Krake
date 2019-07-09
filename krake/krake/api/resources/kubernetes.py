@@ -192,7 +192,9 @@ async def update_application(request, app, manifest):
 
     await session(request).put(app)
     logger.info(
-        "Updated Kubernetes application %r (%s)", app.metadata.name, app.metadata.uid
+        "Update Kubernetes application spec %r (%s)",
+        app.metadata.name,
+        app.metadata.uid,
     )
 
     return web.json_response(serialize(app))
@@ -214,12 +216,21 @@ async def update_application_status(request, app, state, reason, cluster):
     app.status.cluster = cluster
     app.status.modified = datetime.now()
 
-    await session(request).put(app)
-    logger.info(
-        "Updated Kubernetes application status %r (%s)",
-        app.metadata.name,
-        app.metadata.uid,
-    )
+    if app.status.state == ApplicationState.DELETED:
+        await session(request).delete(app)
+        logger.info(
+            "Deleted Kubernetes application status %r (%s)",
+            app.metadata.name,
+            app.metadata.uid,
+        )
+    else:
+        await session(request).put(app)
+        logger.info(
+            "Update Kubernetes application status %r to %s (%s)",
+            app.metadata.name,
+            app.status.state.name,
+            app.metadata.uid,
+        )
 
     return web.json_response(serialize(app.status))
 
@@ -238,7 +249,7 @@ async def update_application_binding(request, app, cluster):
 
     await session(request).put(app)
     logger.info(
-        "Updated Kubernetes application bind %r (%s)",
+        "Update Kubernetes application bind %r (%s)",
         app.metadata.name,
         app.metadata.uid,
     )
@@ -260,7 +271,7 @@ async def delete_application(request, app):
 
     await session(request).put(app)
     logger.info(
-        "Deleted Kubernetes application %r (%s)", app.metadata.name, app.metadata.uid
+        "Deleting Kubernetes application %r (%s)", app.metadata.name, app.metadata.uid
     )
 
     return web.json_response(serialize(app))
@@ -350,6 +361,6 @@ async def delete_cluster(request, cluster):
     cluster.status.modified = datetime.now()
 
     await session(request).put(cluster)
-    logger.info("Delete Kubernetes cluster %r (%s)", cluster.name, cluster.uid)
+    logger.info("Deleting Kubernetes cluster %r (%s)", cluster.name, cluster.uid)
 
     return web.json_response(serialize(cluster))

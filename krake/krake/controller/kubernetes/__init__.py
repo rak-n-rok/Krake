@@ -2,6 +2,11 @@
 :class:`krake.data.kubernetes.Application` resources.
 """
 import logging
+import re
+import yaml
+from kubernetes_asyncio.config.kube_config import KubeConfigLoader
+from kubernetes_asyncio.client import ApiClient, CoreV1Api, AppsV1Api, Configuration
+from kubernetes_asyncio.client.rest import ApiException
 
 from krake.data.kubernetes import ApplicationState
 from .. import Controller, Worker
@@ -12,26 +17,176 @@ logger = logging.getLogger(__name__)
 
 class KubernetesController(Controller):
     """Controller responsible for :class:`krake.data.kubernetes.Application`
-    resources in ``SCHEDULED`` state.
+    resources in "SCHEDULED" and "DELETING" state.
     """
+
+    states = (ApplicationState.SCHEDULED, ApplicationState.DELETING)
 
     async def list_and_watch(self):
         """List and watching Kubernetes applications in the ``SCHEDULED``
         state.
         """
-        logger.debug("List Application")
-        for app in await self.client.kubernetes.application.list():
+        logger.info("List Application")
+        for app in await self.client.kubernetes.application.list(namespace="all"):
             logger.debug("Received %r", app)
-            if app.status.state == ApplicationState.SCHEDULED:
-                await self.queue.put(app.id, app)
+            if app.status.state in self.states:
+                await self.queue.put(app.metadata.uid, app)
 
-        while True:
-            logger.debug("Watching Application")
-            async for app in self.client.kubernetes.application.watch():
-                logger.debug("Received %r", app)
-                if app.status.state == ApplicationState.SCHEDULED:
-                    await self.queue.put(app.id, app)
+        logger.info("Watching Application")
+        async for app in self.client.kubernetes.application.watch(namespace="all"):
+            logger.debug("Received %r", app)
+            if app.status.state in self.states:
+                await self.queue.put(app.metadata.uid, app)
 
 
 class KubernetesWorker(Worker):
+    async def resource_received(self, app):
+        cluster = await self.client.kubernetes.cluster.get(ref=app.spec.cluster)
+
+        async with KubernetesClient(cluster.spec.kubeconfig) as kube:
+            for resource in yaml.safe_load_all(app.spec.manifest):
+                if app.status.state == ApplicationState.SCHEDULED:
+                    await kube.apply(resource)
+                else:
+                    await kube.delete(resource)
+
+        if app.status.state == ApplicationState.SCHEDULED:
+            transition = ApplicationState.RUNNING
+        else:
+            transition = ApplicationState.DELETED
+
+        await self.client.kubernetes.application.update_status(
+            cluster=app.spec.cluster,
+            namespace=app.metadata.namespace,
+            name=app.metadata.name,
+            state=transition,
+        )
+
+
+class InvalidResourceError(ValueError):
     pass
+
+
+class KubernetesClient(object):
+    def __init__(self, kubeconfig):
+        self.kubeconfig = kubeconfig
+        self.resource_apis = None
+
+    async def __aenter__(self):
+        # Load Kubernetes configuration
+        loader = KubeConfigLoader(self.kubeconfig)
+        config = Configuration()
+        await loader.load_and_set(config)
+
+        api_client = ApiClient(config)
+        core_v1_api = CoreV1Api(api_client)
+        apps_v1_api = AppsV1Api(api_client)
+
+        self.resource_apis = {
+            "ConfigMap": core_v1_api,
+            "Deployment": apps_v1_api,
+            "Endpoints": core_v1_api,
+            "Event": core_v1_api,
+            "LimitRange": core_v1_api,
+            "PersistentVolumeClaim": core_v1_api,
+            "PersistentVolumeClaimStatus": core_v1_api,
+            "Pod": core_v1_api,
+            "PodLog": core_v1_api,
+            "PodStatus": core_v1_api,
+            "PodTemplate": core_v1_api,
+            "ReplicationController": core_v1_api,
+            "ReplicationControllerScale": core_v1_api,
+            "ReplicationControllerStatus": core_v1_api,
+            "ResourceQuota": core_v1_api,
+            "ResourceQuotaStatus": core_v1_api,
+            "Secret": core_v1_api,
+            "Service": core_v1_api,
+            "ServiceAccount": core_v1_api,
+            "ServiceStatus": core_v1_api,
+        }
+        return self
+
+    async def __aexit__(self, *exec):
+        self.resource_apis = None
+
+    async def _read(self, kind, name, namespace):
+        api = self.resource_apis[kind]
+        fn = getattr(api, f"read_namespaced_{camel_to_snake_case(kind)}")
+        return await fn(name=name, namespace=namespace)
+
+    async def _create(self, kind, body, namespace):
+        api = self.resource_apis[kind]
+        fn = getattr(api, f"create_namespaced_{camel_to_snake_case(kind)}")
+        return await fn(body=body, namespace=namespace)
+
+    async def _replace(self, kind, name, body, namespace):
+        api = self.resource_apis[kind]
+        fn = getattr(api, f"replace_namespaced_{camel_to_snake_case(kind)}")
+        return await fn(name=name, body=body, namespace=namespace)
+
+    async def _delete(self, kind, name, namespace):
+        api = self.resource_apis[kind]
+        fn = getattr(api, f"delete_namespaced_{camel_to_snake_case(kind)}")
+        return await fn(name=name, namespace=namespace)
+
+    async def apply(self, resource, namespace="default"):
+        try:
+            kind = resource["kind"]
+        except KeyError:
+            raise ValueError('Resource must define "kind"')
+
+        if kind not in self.resource_apis:
+            raise InvalidResourceError(f"{kind} resources are not supported")
+
+        try:
+            name = resource["metadata"]["name"]
+        except KeyError:
+            raise InvalidResourceError('Resource must define "metadata.name"')
+
+        try:
+            resp = await self._read(kind, name=name, namespace=namespace)
+        except ApiException as err:
+            if err.status == 404:
+                resp = None
+            else:
+                raise
+
+        if resp is None:
+            resp = await self._create(kind, body=resource, namespace=namespace)
+            logger.info("%s created. status=%r", kind, resp.status)
+        else:
+            resp = await self._replace(
+                kind, name=name, body=resource, namespace=namespace
+            )
+            logger.info("%s replaced. status=%r", kind, resp.status)
+
+    async def delete(self, resource, namespace="default"):
+        try:
+            kind = resource["kind"]
+        except KeyError:
+            raise ValueError('Resource must define "kind"')
+
+        if kind not in self.resource_apis:
+            raise InvalidResourceError(f"{kind} resources are not supported")
+
+        try:
+            name = resource["metadata"]["name"]
+        except KeyError:
+            raise InvalidResourceError('Resource must define "metadata.name"')
+
+        try:
+            resp = await self._delete(kind, name=name, namespace=namespace)
+        except ApiException as err:
+            if err.status == 404:
+                logger.info("%s already deleted", kind)
+                return
+            raise
+
+        logger.info("%s deleted. status=%r", kind, resp.status)
+
+
+_camel_case_re = re.compile(r"([a-z])([A-Z])")
+
+
+def camel_to_snake_case(name):
+    return _camel_case_re.sub(r"\1_\2", name).lower()

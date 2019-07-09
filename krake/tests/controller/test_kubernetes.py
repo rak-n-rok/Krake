@@ -2,15 +2,16 @@ import json
 import asyncio
 from datetime import datetime
 import pytz
-from aiohttp.web import json_response, StreamResponse
+from aiohttp.web import json_response, Response
 
 from krake.data import serialize
-from krake.data.kubernetes import ApplicationState
+from krake.data.kubernetes import ApplicationState, ApplicationStatus
 from krake.controller import Worker
-from krake.controller.kubernetes import KubernetesController
+from krake.controller.kubernetes import KubernetesController, KubernetesWorker
+from krake.client import Client
 from krake.test_utils import stream
 
-from factories.kubernetes import ApplicationFactory
+from factories.kubernetes import ApplicationFactory, ClusterFactory
 
 
 async def test_app_reception(aresponses, loop):
@@ -24,11 +25,6 @@ async def test_app_reception(aresponses, loop):
         "GET",
         json_response([]),
     )
-    # aresponses remove an HTTP endpoint if it was called. If the watch stream
-    # would terminate, the controller would restart the watcher. At this time,
-    # aresponses does not have the /watch endpoint anymore which would lead to
-    # an exception. Hence, the watch stream just blocks infinitly after all
-    # data was streamed.
     aresponses.add(
         "api.krake.local",
         "/namespaces/all/kubernetes/applications?watch",
@@ -57,3 +53,100 @@ async def test_app_reception(aresponses, loop):
             [controller, worker.done], timeout=0.5, return_when=asyncio.FIRST_COMPLETED
         )
     assert worker.done.done()
+
+
+nginx_manifest = """---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-demo
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.7.9
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-demo
+spec:
+  type: NodePort
+  selector:
+    app: nginx
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+"""
+
+
+async def test_pod_creation(aresponses, loop):
+    cluster = ClusterFactory(magnum=False)
+    cluster_ref = f"/namespaces/{cluster.metadata.namespace}/kubernetes/clusters/{cluster.metadata.name}"
+    app = ApplicationFactory(
+        status__state=ApplicationState.SCHEDULED,
+        spec__cluster=cluster_ref,
+        spec__manifest=nginx_manifest,
+    )
+
+    async def update_status(request):
+        payload = await request.json()
+        assert payload["state"] == "RUNNING"
+        assert payload["cluster"] == cluster_ref
+
+        status = ApplicationStatus(
+            state=ApplicationState.RUNNING,
+            reason=None,
+            cluster=payload["cluster_ref"],
+            created=app.status.created,
+            modified=datetime.now(),
+        )
+        return json_response(serialize(status))
+
+    aresponses.add(
+        "api.krake.local", cluster_ref, "GET", json_response(serialize(cluster))
+    )
+    aresponses.add(
+        "127.0.0.1:8080",
+        "/apis/apps/v1beta2/namespaces/default/deployments/nginx-demo",
+        "GET",
+        Response(status=404),
+    )
+    aresponses.add(
+        "127.0.0.1:8080",
+        "/apis/apps/v1beta2/namespaces/default/deployments",
+        "POST",
+        Response(status=200),
+    )
+    aresponses.add(
+        "127.0.0.1:8080",
+        "/api/v1/namespaces/default/services/nginx-demo",
+        "GET",
+        Response(status=404),
+    )
+    aresponses.add(
+        "127.0.0.1:8080",
+        "/api/v1/namespaces/default/services",
+        "POST",
+        Response(status=200),
+    )
+    aresponses.add(
+        "api.krake.local",
+        f"/namespaces/testing/kubernetes/applications/{app.metadata.name}/status",
+        "PUT",
+        update_status,
+    )
+
+    async with Client(url="http://api.krake.local", loop=loop) as client:
+        worker = KubernetesWorker(client=client)
+        await worker.resource_received(app)
