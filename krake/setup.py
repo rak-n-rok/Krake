@@ -12,7 +12,7 @@ install_requires = [
     "PyYAML",
     "webargs",
     "marshmallow_enum",
-    "marshmallow_oneofschema < 2.0.0"
+    "marshmallow_oneofschema < 2.0.0",
     "kubernetes_asyncio",
 ]
 
@@ -25,7 +25,5 @@ setup(
     version="1.0.0",
     packages=find_packages(),
     install_requires=install_requires,
-    extras_require={
-        "dev": {"pytest", "pytest-aiohttp", "aresponses", "factory-boy", "black"}
-    },
+    extras_require={"dev": {"pytest", "pytest-aiohttp", "aresponses", "factory-boy"}},
 )

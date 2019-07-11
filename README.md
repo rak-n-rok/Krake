@@ -10,6 +10,7 @@ The current Krake v2 prototype comprises two Python packages:
 
  - [etcdv3](https://github.com/etcd-io/etcd/releases/)
  - [Python](https://www.python.org/downloads/) >= 3.6
+ - [pre-commit](https://pre-commit.com/)
 
 
 ### Installation
@@ -17,6 +18,9 @@ The current Krake v2 prototype comprises two Python packages:
 All dependencies can be installed via the corresponding `setup.py` scripts.
 
 ```bash
+# Install git pre-commit hooks
+pre-commit install
+
 # Install "krake" and "rok" with dev dependencies
 pip install --editable krake/[dev]
 
@@ -42,6 +46,9 @@ etcd --name krake
 
 # Run the scheduler
 py -m krake.controller.scheduler
+
+# Run the Kubernetes controller
+py -m krake.controller.kubernetes
 ```
 
 
