@@ -13,11 +13,15 @@ from .parser import ParserSpec, argument
 
 
 kubernetes = ParserSpec(
-    "kubernetes", aliases=["kube"], help="Manage Kubernetes applications"
+    "kubernetes", aliases=["kube"], help="Manage Kubernetes resources"
+)
+
+application = kubernetes.subparser(
+    "application", aliases=["app"], help="Manage Kubernetes applications"
 )
 
 
-@kubernetes.command("list", help="List Kubernetes application")
+@application.command("list", help="List Kubernetes application")
 @argument("-a", "--all", action="store_true", help="Show deleted applications")
 @argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
 def list_applications(config, session, namespace, all):
@@ -34,7 +38,7 @@ def list_applications(config, session, namespace, all):
         yaml.dump(app, default_flow_style=False, stream=sys.stdout)
 
 
-@kubernetes.command("create", help="Create Kubernetes application")
+@application.command("create", help="Create Kubernetes application")
 @argument(
     "-f", "--file", type=FileType(), required=True, help="Kubernetes manifest file"
 )
@@ -54,7 +58,7 @@ def create_application(config, session, file, namespace, name):
     yaml.dump(data, default_flow_style=False, stream=sys.stdout)
 
 
-@kubernetes.command("get", help="Get Kubernetes application")
+@application.command("get", help="Get Kubernetes application")
 @argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
 @argument("name", help="Kubernetes application name")
 def get_application(config, session, namespace, name):
@@ -74,7 +78,7 @@ def get_application(config, session, namespace, name):
     yaml.dump(data, default_flow_style=False, stream=sys.stdout)
 
 
-@kubernetes.command("update", help="Update Kubernetes application")
+@application.command("update", help="Update Kubernetes application")
 @argument("name", help="Kubernetes application name")
 @argument(
     "-f", "--file", type=FileType(), required=True, help="Kubernetes manifest file"
@@ -91,7 +95,7 @@ def update_application(config, session, namespace, name, file):
     )
 
 
-@kubernetes.command("delete", help="Delete Kubernetes application")
+@application.command("delete", help="Delete Kubernetes application")
 @argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
 @argument("name", help="Kubernetes application name")
 def delete_application(config, session, namespace, name):
@@ -101,7 +105,7 @@ def delete_application(config, session, namespace, name):
     session.delete(f"/namespaces/{namespace}/kubernetes/applications/{name}")
 
 
-cluster = kubernetes.subparser("cluster", help="Manage Kubernetes cluster")
+cluster = kubernetes.subparser("cluster", help="Manage Kubernetes clusters")
 
 
 @cluster.command("create", help="Register an existing Kubernetes cluster")
