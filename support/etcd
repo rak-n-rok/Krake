@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+"""Simple helper script for starting an etcd server for development puropose"""
+from argparse import ArgumentParser
+from pathlib import Path
+import os
+
+
+root_dir = Path(__file__).parent.parent.resolve()
+temp_dir = root_dir / "tmp/etcd"
+
+
+def main(name):
+    os.execvp("etcd", ["etcd", "--data-dir", str(temp_dir / name)])
+
+
+parser = ArgumentParser(
+    description=(
+        "etcd server for development listening on http://localhost:2379 "
+        "for clients and on http://localhost:2380 for peers"
+    )
+)
+parser.add_argument(
+    "--name",
+    default="default",
+    help="human-readable name for this etcd cluster member. Default: default",
+)
+
+
+if __name__ == "__main__":
+    args = vars(parser.parse_args())
+    main(**args)

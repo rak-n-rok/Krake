@@ -1,6 +1,9 @@
 # etcdv3 data directories
 *.etcd/
 
+# Temporary files
+/tmp
+
 # Dynamic Ansible inventory
 /ansible/.etc/
 

@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+"""Simple helper script for starting a Keystone server for development puropose"""
+from argparse import ArgumentParser
+from pathlib import Path
+import os
+from subprocess import check_call
+from shutil import rmtree
+from contextlib import contextmanager
+
+
+root_dir = Path(__file__).parent.parent.resolve()
+
+temp_dir = root_dir / "tmp/keystone"
+fernet_dir = temp_dir / "fernet-keys"
+credential_dir = temp_dir / "credential-keys"
+logs_dir = temp_dir / "logs"
+db_file = temp_dir / "keystone.db"
+config_file = temp_dir / "keystone.conf"
+
+
+config = """[fernet_tokens]
+key_repository = {fernet_dir}
+
+[fernet_receipts]
+key_repository = {fernet_dir}
+
+[DEFAULT]
+log_dir = {logs_dir}
+
+[assignment]
+driver = sql
+
+[cache]
+enabled = false
+
+[catalog]
+driver = sql
+
+[policy]
+driver = rules
+
+[credential]
+key_repository = {credential_dir}
+
+[token]
+provider = fernet
+caching = true
+expiration = 21600
+
+[database]
+connection = sqlite:///{db_file}
+"""
+
+
+@contextmanager
+def message(msg):
+    print(msg, "... ", end="", flush=True)
+    try:
+        yield
+    except Exception:
+        print("Fail")
+        raise
+    else:
+        print("OK")
+
+
+@contextmanager
+def remove_on_fail(directory):
+    try:
+        yield
+    except Exception:
+        print(f"Delete {directory}")
+        rmtree(directory)
+        raise
+
+
+def setup():
+    print("Keystone database not found. Setup Keystone.")
+
+    with message("Populate identity service database"):
+        check_call(["keystone-manage", "--config-file", str(config_file), "db_sync"])
+
+    with message("Initialize Fernet key repositories"):
+        check_call(
+            ["keystone-manage", "--config-file", str(config_file), "fernet_setup"]
+        )
+        check_call(
+            ["keystone-manage", "--config-file", str(config_file), "credential_setup"]
+        )
+
+    with message("Bootstrap identity service"):
+        check_call(
+            [
+                "keystone-manage",
+                "--config-file",
+                str(config_file),
+                "bootstrap",
+                "--bootstrap-password",
+                "admin",
+            ]
+        )
+
+
+def main(host, port):
+    # Create directories
+    temp_dir.mkdir(exist_ok=True)
+    fernet_dir.mkdir(exist_ok=True, mode=0o700)
+    credential_dir.mkdir(exist_ok=True, mode=0o700)
+    logs_dir.mkdir(exist_ok=True)
+
+    # Generate keystone config file
+    with config_file.open("w") as fd:
+        fd.write(
+            config.format(
+                fernet_dir=fernet_dir,
+                credential_dir=credential_dir,
+                logs_dir=logs_dir,
+                db_file=db_file,
+            )
+        )
+
+    # Bootstrap keystone
+    if not db_file.exists():
+        with remove_on_fail(temp_dir):
+            setup()
+
+    os.execvp(
+        "keystone-wsgi-public",
+        [
+            "keystone-wsgi-public",
+            "--host",
+            host,
+            "--port",
+            str(port),
+            "--",
+            "--config-file",
+            str(config_file),
+        ],
+    )
+
+
+parser = ArgumentParser(description="Keystone server for development")
+parser.add_argument(
+    "--host", default="127.0.0.1", help="IP to bind the server to. Default: 127.0.0.1"
+)
+parser.add_argument(
+    "--port", type=int, default=8000, help="TCP port to listen on. Default: 5000)"
+)
+
+
+if __name__ == "__main__":
+    args = vars(parser.parse_args())
+    main(**args)
