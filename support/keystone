@@ -2,11 +2,17 @@
 """Simple helper script for starting a Keystone server for development puropose"""
 from argparse import ArgumentParser
 from pathlib import Path
+import logging
+import logging.config
 import os
 from subprocess import check_call
 from shutil import rmtree
 from contextlib import contextmanager
+import sqlite3
+import json
 
+
+logger = logging.getLogger("keystone")
 
 root_dir = Path(__file__).parent.parent.resolve()
 
@@ -74,7 +80,7 @@ def remove_on_fail(directory):
         raise
 
 
-def setup():
+def setup(host, port):
     print("Keystone database not found. Setup Keystone.")
 
     with message("Populate identity service database"):
@@ -95,15 +101,62 @@ def setup():
                 "--config-file",
                 str(config_file),
                 "bootstrap",
+                "--bootstrap-username",
+                "system:admin",
                 "--bootstrap-password",
                 "admin",
+                "--bootstrap-project-name",
+                "system:admin",
+                "--bootstrap-admin-url",
+                f"http://{host}:{port}/v3/",
+                "--bootstrap-internal-url",
+                f"http://{host}:{port}/v3/",
+                "--bootstrap-public-url",
+                f"http://{host}:{port}/v3/",
+                "--bootstrap-region-id",
+                "RegionOne",
             ]
         )
 
 
+def update_keystone_endpoints(host, port):
+    keystone_services = []
+
+    conn = sqlite3.connect(str(db_file))
+
+    # Find identity services with name "keystone"
+    cursor = conn.cursor()
+    cursor.execute(
+        """SELECT id, extra FROM service WHERE type = 'identity' AND enabled = 1"""
+    )
+    for service_id, extra in cursor:
+        if json.loads(extra)["name"] == "keystone":
+            keystone_services.append(service_id)
+
+    # Update endpoints of the identity services
+    for service_id in keystone_services:
+        url = f"http://{host}:{port}/v3/"
+        cursor.execute(
+            """UPDATE endpoint SET url = ? WHERE service_id = ?""", (url, service_id)
+        )
+
+    conn.commit()
+    cursor.close()
+
+
 def main(host, port):
+    logging.config.dictConfig(
+        {
+            "version": 1,
+            "handlers": {
+                "console": {"class": "logging.StreamHandler", "level": "DEBUG"}
+            },
+            "loggers": {"keystone": {"handlers": ["console"], "level": "DEBUG"}},
+        }
+    )
+
     # Create directories
-    temp_dir.mkdir(exist_ok=True)
+    temp_dir.mkdir(parents=True, exist_ok=True)
     fernet_dir.mkdir(exist_ok=True, mode=0o700)
     credential_dir.mkdir(exist_ok=True, mode=0o700)
     logs_dir.mkdir(exist_ok=True)
@@ -122,7 +175,9 @@ def main(host, port):
     # Bootstrap keystone
     if not db_file.exists():
         with remove_on_fail(temp_dir):
-            setup()
+            setup(host, port)
+    else:
+        update_keystone_endpoints(host, port)
 
     os.execvp(
         "keystone-wsgi-public",
@@ -144,7 +199,7 @@ parser.add_argument(
     "--host", default="127.0.0.1", help="IP to bind the server to. Default: 127.0.0.1"
 )
 parser.add_argument(
-    "--port", type=int, default=8000, help="TCP port to listen on. Default: 5000)"
+    "--port", type=int, default=5000, help="TCP port to listen on. Default: 5000)"
 )
 
 
