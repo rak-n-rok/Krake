@@ -118,13 +118,13 @@ async def test_pod_creation(aresponses, loop):
     )
     aresponses.add(
         "127.0.0.1:8080",
-        "/apis/apps/v1beta2/namespaces/default/deployments/nginx-demo",
+        "/apis/apps/v1/namespaces/default/deployments/nginx-demo",
         "GET",
         Response(status=404),
     )
     aresponses.add(
         "127.0.0.1:8080",
-        "/apis/apps/v1beta2/namespaces/default/deployments",
+        "/apis/apps/v1/namespaces/default/deployments",
         "POST",
         Response(status=200),
     )
