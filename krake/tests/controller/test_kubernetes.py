@@ -107,7 +107,7 @@ async def test_pod_creation(aresponses, loop):
         status = ApplicationStatus(
             state=ApplicationState.RUNNING,
             reason=None,
-            cluster=payload["cluster_ref"],
+            cluster=payload["cluster"],
             created=app.status.created,
             modified=datetime.now(),
         )
