@@ -148,7 +148,7 @@ def keystone_authentication(endpoint):
 class AuthorizationRequest(NamedTuple):
     """Authorization request handled by authorizers.
 
-    Attibutes:
+    Attributes:
         namespace (str, optional): If the resource is namespaced, the requested
             namespace
         resource (str): Name of the resource
