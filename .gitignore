@@ -24,3 +24,6 @@ __pycache__/
 
 # pip egg installation files
 *.egg-info/
+
+# Sphinx build directory
+/docs/_build

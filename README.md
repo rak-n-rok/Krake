@@ -67,6 +67,18 @@ cd rok/tests
 ```
 
 
+### Documentation
+
+```bash
+# Install Sphinx
+pip install sphinx
+
+# Build HTML documentation
+cd docs/
+make html
+```
+
+
 ### Access to local Keystone
 
 The local Keystone service ``support/keystone`` can be accessed as admin with
