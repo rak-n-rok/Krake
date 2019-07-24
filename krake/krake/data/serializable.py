@@ -81,6 +81,11 @@ def serialize(value):
     )
 
 
+@serialize.register(list)
+def _(mylist):
+    return [serialize(element) for element in mylist]
+
+
 def deserialize(cls, value, **kwargs):
     """Loading an object of specific type from JSON-encoded data.
 

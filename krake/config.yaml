@@ -5,15 +5,38 @@ etcd:
 log:
   level: INFO
 
-# Anonymous authentication
-auth:
-  kind: anonymous
-  name: system
+# # Anonymous authentication
+# authentication:
+#   kind: static
+#   name: system
 
-# # Keystone authentication
-# auth:
-#   kind: keystone
-#   endpoint: http://localhost:5000/v3
+# Keystone authentication
+authentication:
+  kind: keystone
+  endpoint: http://localhost:5000/v3
+
+# Authorization mode
+#
+#  - RBAC (Role-based access control)
+#  - always-allow (Allow all requests. No authorization is performed.)
+#  - always-deny (Deny all requests. Only for testing purposes.)
+#
+authorization: always-allow
+
+default-roles:
+- metadata:
+    name: system:admin
+  rules:
+  - namespaces: ["all"]
+    resources: ["all"]
+    verbs: ["create", "list", "get", "update", "delete"]
+
+default-role-bindings:
+- metadata:
+    name: system:admin
+  users: ["system:admin"]
+  roles: ["system:admin"]
+
 
 controllers:
 

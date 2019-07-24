@@ -1,9 +1,8 @@
 import json
-import asyncio
 from uuid import uuid4
 from datetime import datetime
 import logging
-from functools import wraps
+from json import JSONDecodeError
 from aiohttp import web
 from webargs import fields
 from webargs.aiohttpparser import use_kwargs
@@ -11,8 +10,8 @@ from marshmallow_enum import EnumField
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 from kubernetes_asyncio.config import ConfigException
 
-from krake.data.serializable import serialize, deserialize
-from krake.data.metadata import Metadata
+from krake.data.serializable import serialize
+from krake.data.system import NamespacedMetadata
 from krake.data.kubernetes import (
     Application,
     ApplicationStatus,
@@ -24,7 +23,8 @@ from krake.data.kubernetes import (
     ClusterState,
     ClusterSpec,
 )
-from ..helpers import session, json_error, protected, Heartbeat
+from ..helpers import session, json_error, Heartbeat, load
+from ..auth import protected
 from ..database import EventType
 
 
@@ -32,69 +32,9 @@ logger = logging.getLogger(__name__)
 routes = web.RouteTableDef()
 
 
-def with_app(handler):
-    """Decorator loading Kubernetes applications by dynamic URL and
-    authenticated user.
-
-    If the application could not be found the wrapped handler raises an HTTP
-    404 error.
-
-    Args:
-        handler (coroutine): aiohttp request handler
-
-    Returns:
-        Returns a wrapped handler injecting the loaded Kubernetes application
-        as ``app`` keyword.
-
-    """
-
-    @wraps(handler)
-    async def wrapper(request, *args, **kwargs):
-        app, rev = await session(request).get(
-            Application,
-            namespace=request.match_info["namespace"],
-            name=request.match_info["name"],
-        )
-        if app is None:
-            raise web.HTTPNotFound()
-        return await handler(request, *args, app=app, **kwargs)
-
-    return wrapper
-
-
-def with_cluster(handler):
-    """Decorator loading Kubernetes cluster by dynamic URL and
-    authenticated user.
-
-    If the cluster could not be found the wrapped handler raises an HTTP
-    404 error.
-
-    Args:
-        handler (coroutine): aiohttp request handler
-
-    Returns:
-        Returns a wrapped handler injecting the loaded Kubernetes cluster
-        as ``cluster`` keyword.
-
-    """
-
-    @wraps(handler)
-    async def wrapper(request, *args, **kwargs):
-        cluster, rev = await session(request).get(
-            Cluster,
-            namespace=request.match_info["namespace"],
-            name=request.match_info["name"],
-        )
-        if cluster is None:
-            raise web.HTTPNotFound()
-        return await handler(request, *args, cluster=cluster, **kwargs)
-
-    return wrapper
-
-
 @routes.get("/namespaces/{namespace}/kubernetes/applications")
+@protected(resource="kubernetes/applications", verb="list")
 @use_kwargs({"heartbeat": fields.Integer(missing=None, locations=["query"])})
-@protected
 async def list_or_watch_applications(request, heartbeat):
     namespace = request.match_info["namespace"]
 
@@ -137,7 +77,7 @@ async def list_or_watch_applications(request, heartbeat):
 
 
 @routes.post("/namespaces/{namespace}/kubernetes/applications")
-@protected
+@protected(resource="kubernetes/applications", verb="create")
 @use_kwargs(
     {"name": fields.String(required=True), "manifest": fields.String(required=True)}
 )
@@ -156,8 +96,8 @@ async def create_application(request, name, manifest):
     now = datetime.now()
 
     app = Application(
-        metadata=Metadata(
-            name=name, namespace=namespace, user=request["user"].name, uid=str(uuid4())
+        metadata=NamespacedMetadata(
+            name=name, namespace=namespace, user=request["user"], uid=str(uuid4())
         ),
         spec=ApplicationSpec(manifest=manifest),
         status=ApplicationStatus(
@@ -171,16 +111,16 @@ async def create_application(request, name, manifest):
 
 
 @routes.get("/namespaces/{namespace}/kubernetes/applications/{name}")
-@protected
-@with_app
+@protected(resource="kubernetes/applications", verb="get")
+@load("app", Application)
 async def get_application(request, app):
     return web.json_response(serialize(app))
 
 
 @routes.put("/namespaces/{namespace}/kubernetes/applications/{name}")
-@protected
+@protected(resource="kubernetes/applications", verb="update")
 @use_kwargs({"manifest": fields.String(required=True)})
-@with_app
+@load("app", Application)
 async def update_application(request, app, manifest):
     if app.status.state in (ApplicationState.DELETING, ApplicationState.DELETED):
         raise json_error(web.HTTPBadRequest, {"reason": "Application is deleted"})
@@ -201,7 +141,7 @@ async def update_application(request, app, manifest):
 
 
 @routes.put("/namespaces/{namespace}/kubernetes/applications/{name}/status")
-@protected
+@protected(resource="kubernetes/applications/status", verb="update")
 @use_kwargs(
     {
         "state": EnumField(ApplicationState, required=True),
@@ -209,7 +149,7 @@ async def update_application(request, app, manifest):
         "cluster": fields.String(required=True, allow_none=True),
     }
 )
-@with_app
+@load("app", Application)
 async def update_application_status(request, app, state, reason, cluster):
     app.status.state = state
     app.status.reason = reason
@@ -236,9 +176,9 @@ async def update_application_status(request, app, state, reason, cluster):
 
 
 @routes.put("/namespaces/{namespace}/kubernetes/applications/{name}/binding")
-@protected
+@protected(resource="kubernetes/applications/binding", verb="update")
 @use_kwargs({"cluster": fields.String(required=True)})
-@with_app
+@load("app", Application)
 async def update_application_binding(request, app, cluster):
     app.spec.cluster = cluster
 
@@ -259,8 +199,8 @@ async def update_application_binding(request, app, cluster):
 
 
 @routes.delete("/namespaces/{namespace}/kubernetes/applications/{name}")
-@protected
-@with_app
+@protected(resource="kubernetes/applications", verb="delete")
+@load("app", Application)
 async def delete_application(request, app):
     if app.status.state in (ApplicationState.DELETING, ApplicationState.DELETED):
         raise web.HTTPNotModified()
@@ -278,14 +218,14 @@ async def delete_application(request, app):
 
 
 @routes.get("/namespaces/{namespace}/kubernetes/clusters")
-@protected
+@protected(resource="kubernetes/clusters", verb="list")
 async def list_clusters(request):
     apps = [cluster async for cluster, _ in session(request).all(Cluster)]
     return web.json_response([serialize(app) for app in apps])
 
 
 @routes.post("/namespaces/{namespace}/kubernetes/clusters")
-@protected
+@protected(resource="kubernetes/clusters", verb="create")
 async def create_cluster(request):
     namespace = request.match_info["namespace"]
     if namespace == "all":
@@ -294,7 +234,9 @@ async def create_cluster(request):
     try:
         kubeconfig = await request.json()
     except JSONDecodeError:
-        raise web.UnsupportedMedia()
+        raise json_error(
+            web.HTTPUnprocessableEntity, {"reason": "Content is not valid JSON"}
+        )
 
     if not isinstance(kubeconfig, dict):
         raise json_error(
@@ -317,10 +259,10 @@ async def create_cluster(request):
 
     now = datetime.now()
     cluster = Cluster(
-        metadata=Metadata(
+        metadata=NamespacedMetadata(
             name=kubeconfig["clusters"][0]["name"],
             namespace=namespace,
-            user=request["user"].name,
+            user=request["user"],
             uid=uuid4(),
         ),
         spec=ClusterSpec(kubeconfig=kubeconfig),
@@ -346,15 +288,15 @@ async def create_cluster(request):
 
 
 @routes.get("/namespaces/{namespace}/kubernetes/clusters/{name}")
-@protected
-@with_cluster
+@protected(resource="kubernetes/clusters", verb="get")
+@load("cluster", Cluster)
 async def get_cluster(request, cluster):
     return web.json_response(serialize(cluster))
 
 
 @routes.delete("/namespaces/{namespace}/kubernetes/clusters/{name}")
-@protected
-@with_cluster
+@protected(resource="kubernetes/clusters", verb="delete")
+@load("cluster", Cluster)
 async def delete_cluster(request, cluster):
     cluster.status.state = ClusterState.DELETING
     cluster.status.reason = None

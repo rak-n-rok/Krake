@@ -54,7 +54,7 @@ def etcd_server():
             "--data-dir",
             tmpdir,
             "--name",
-            "rok_api_test",
+            "krake-testing",
             "--listen-client-urls",
             f"http://{etcd_host}:{etcd_port}",
             "--advertise-client-urls",
@@ -102,8 +102,28 @@ def config(etcd_server, user):
     etcd_host, etcd_port = etcd_server
 
     return {
-        "auth": {"kind": "anonymous", "name": user},
+        "authentication": {"kind": "static", "name": user},
+        "authorization": "always-allow",
         "etcd": {"host": etcd_host, "port": etcd_port},
+        "default-roles": [
+            {
+                "metadata": {"name": "system:admin"},
+                "rules": [
+                    {
+                        "namespaces": ["all"],
+                        "resources": ["all"],
+                        "verbs": ["create", "list", "get", "update", "delete"],
+                    }
+                ],
+            }
+        ],
+        "default-role-bindings": [
+            {
+                "metadata": {"name": "system:admin"},
+                "users": ["system:admin"],
+                "roles": ["system:admin"],
+            }
+        ],
     }
 
 
@@ -235,3 +255,41 @@ def keystone():
             finally:
                 time.sleep(1)
                 proc.terminate()
+
+
+class RecordsContext(object):
+    def __init__(self, db, records):
+        self.db = db
+        self.records = records
+
+    async def __aenter__(self):
+        for record in self.records:
+            await self.db.put(record)
+        return self.records
+
+    async def __aexit__(self, *exc):
+        for record in reversed(self.records):
+            await self.db.delete(record)
+
+
+@pytest.fixture
+def rbac_allow(db, user):
+    from factories.system import RoleFactory, RoleBindingFactory
+    from krake.data.system import Verb, RoleRule
+
+    def rbac_creator(resource, verb, namespace="testing"):
+        if isinstance(verb, str):
+            verb = Verb.__members__[verb]
+
+        namespaces = []
+        if namespace:
+            namespaces.append(namespace)
+
+        role = RoleFactory(
+            rules=[RoleRule(namespaces=namespaces, resources=[resource], verbs=[verb])]
+        )
+        binding = RoleBindingFactory(users=[user], roles=[role.metadata.name])
+
+        return RecordsContext(db, [role, binding])
+
+    return rbac_creator

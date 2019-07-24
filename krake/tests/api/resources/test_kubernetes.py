@@ -14,7 +14,7 @@ from krake.data.kubernetes import (
     Cluster,
     ClusterState,
 )
-from krake.data import serialize, deserialize
+from krake.data import deserialize
 from krake.api.app import create_app
 
 from factories.kubernetes import ApplicationFactory, ClusterFactory
@@ -138,6 +138,17 @@ async def test_list_deleted_apps(aiohttp_client, config, db):
     assert sorted(received, key=key) == sorted(apps, key=key)
 
 
+async def test_list_apps_rbac(rbac_allow, config, aiohttp_client):
+    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+
+    resp = await client.get("/namespaces/testing/kubernetes/applications")
+    assert resp.status == 403
+
+    async with rbac_allow("kubernetes/applications", "list"):
+        resp = await client.get("/namespaces/testing/kubernetes/applications")
+        assert resp.status == 200
+
+
 async def test_create_app(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
@@ -156,6 +167,17 @@ async def test_create_app(aiohttp_client, config, db):
     assert rev.version == 1
     assert app.status.state == ApplicationState.PENDING
     assert app.spec.manifest == manifest
+
+
+async def test_create_app_rbac(rbac_allow, config, aiohttp_client):
+    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+
+    resp = await client.post("/namespaces/testing/kubernetes/applications")
+    assert resp.status == 403
+
+    async with rbac_allow("kubernetes/applications", "create"):
+        resp = await client.post("/namespaces/testing/kubernetes/applications")
+        assert resp.status == 422
 
 
 async def test_create_app_in_all_namespace(aiohttp_client, config):
@@ -205,6 +227,17 @@ async def test_get_app(aiohttp_client, config, db):
     assert app == data
 
 
+async def test_get_app_rbac(rbac_allow, config, aiohttp_client):
+    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+
+    resp = await client.get("/namespaces/testing/kubernetes/applications/myapp")
+    assert resp.status == 403
+
+    async with rbac_allow("kubernetes/applications", "get"):
+        resp = await client.get("/namespaces/testing/kubernetes/applications/myapp")
+        assert resp.status == 404
+
+
 new_manifest = """
 apiVersion: v1
 kind: Pod
@@ -232,7 +265,7 @@ spec:
 """
 
 
-async def test_update_manifest(aiohttp_client, config, db):
+async def test_update_app(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
     app = ApplicationFactory(status__state=ApplicationState.PENDING)
 
@@ -252,7 +285,18 @@ async def test_update_manifest(aiohttp_client, config, db):
     assert rev.version == 2
 
 
-async def test_update_manifest_already_deleted(aiohttp_client, config, db):
+async def test_update_app_rbac(rbac_allow, config, aiohttp_client):
+    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+
+    resp = await client.put("/namespaces/testing/kubernetes/applications/myapp")
+    assert resp.status == 403
+
+    async with rbac_allow("kubernetes/applications", "update"):
+        resp = await client.put("/namespaces/testing/kubernetes/applications/myapp")
+        assert resp.status == 422
+
+
+async def test_update_app_already_deleted(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     # Create applications
@@ -276,7 +320,7 @@ async def test_update_manifest_already_deleted(aiohttp_client, config, db):
     assert resp.status == 400
 
 
-async def test_update_status(aiohttp_client, config, db):
+async def test_update_app_status(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
     app = ApplicationFactory(status__state=ApplicationState.PENDING)
 
@@ -303,7 +347,18 @@ async def test_update_status(aiohttp_client, config, db):
     assert rev.version == 2
 
 
-async def test_update_binding(aiohttp_client, config, db):
+async def test_update_app_status_rbac(rbac_allow, config, aiohttp_client):
+    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+
+    resp = await client.put("/namespaces/testing/kubernetes/applications/myapp")
+    assert resp.status == 403
+
+    async with rbac_allow("kubernetes/applications", "update"):
+        resp = await client.put("/namespaces/testing/kubernetes/applications/myapp")
+        assert resp.status == 422
+
+
+async def test_update_app_binding(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
     app = ApplicationFactory(status__state=ApplicationState.PENDING)
     cluster = ClusterFactory()
@@ -328,7 +383,7 @@ async def test_update_binding(aiohttp_client, config, db):
     assert updated.status.state == ApplicationState.SCHEDULED
 
 
-async def test_delete(aiohttp_client, config, db):
+async def test_delete_app(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     # Create application
@@ -345,6 +400,17 @@ async def test_delete(aiohttp_client, config, db):
     deleted, _ = await db.get(Application, namespace="testing", name=app.metadata.name)
     assert deleted.status.state == ApplicationState.DELETING
     assert deleted.spec.manifest == manifest
+
+
+async def test_delete_app_rbac(rbac_allow, config, aiohttp_client):
+    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+
+    resp = await client.delete("/namespaces/testing/kubernetes/applications/myapp")
+    assert resp.status == 403
+
+    async with rbac_allow("kubernetes/applications", "delete"):
+        resp = await client.delete("/namespaces/testing/kubernetes/applications/myapp")
+        assert resp.status == 404
 
 
 async def test_delete_already_deleted(aiohttp_client, config, db):
@@ -369,7 +435,7 @@ async def test_delete_already_deleted(aiohttp_client, config, db):
     assert resp.status == 304
 
 
-async def test_watch(aiohttp_client, config, db, loop):
+async def test_watch_app(aiohttp_client, config, db, loop):
     client = await aiohttp_client(create_app(config=config))
 
     async def watch(created, received):
@@ -425,7 +491,7 @@ async def test_watch(aiohttp_client, config, db, loop):
         await watching
 
 
-async def test_watch_all_namespaces(aiohttp_client, config, db, loop):
+async def test_watch_app_from_all_namespaces(aiohttp_client, config, db, loop):
     client = await aiohttp_client(create_app(config=config))
 
     async def watch(created, received):
@@ -489,6 +555,17 @@ async def test_list_clusters(aiohttp_client, config, db):
     assert sorted(received, key=key) == sorted(clusters, key=key)
 
 
+async def test_list_clusters_rbac(rbac_allow, config, aiohttp_client):
+    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+
+    resp = await client.get("/namespaces/testing/kubernetes/clusters")
+    assert resp.status == 403
+
+    async with rbac_allow("kubernetes/clusters", "list"):
+        resp = await client.get("/namespaces/testing/kubernetes/clusters")
+        assert resp.status == 200
+
+
 async def test_create_cluster(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
@@ -505,6 +582,17 @@ async def test_create_cluster(aiohttp_client, config, db):
     )
     assert rev.version == 1
     assert cluster.status.state == ClusterState.RUNNING
+
+
+async def test_create_clusters_rbac(rbac_allow, config, aiohttp_client):
+    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+
+    resp = await client.post("/namespaces/testing/kubernetes/clusters")
+    assert resp.status == 403
+
+    async with rbac_allow("kubernetes/clusters", "create"):
+        resp = await client.post("/namespaces/testing/kubernetes/clusters")
+        assert resp.status == 422
 
 
 async def test_create_cluster_in_all_namespace(aiohttp_client, config):

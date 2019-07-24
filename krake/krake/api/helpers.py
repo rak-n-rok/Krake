@@ -33,41 +33,6 @@ def session(request):
     return request["db"]
 
 
-def protected(handler):
-    """Decorator for aiohttp request handlers checking if an authenticated
-    user exists for a given request.
-
-    It is the responsibility of authentication middlewares to load and set the
-    ``user`` key of the request object.
-
-    Example:
-        .. code:: python
-
-            from krake.api.helpers import protected
-
-            @routes.get("/resource/{name}")
-            @protected
-            async def get_resource(request):
-                assert "user" in request
-
-    Args:
-        handler (coroutine): aiohttp request handler
-
-    Returns:
-        Wrapped aiohttp request handler raising an HTTP 401 Unauthorized error
-        of no ``user`` key exists in the request object.
-
-    """
-
-    @wraps(handler)
-    async def wrapper(request, *args, **kwargs):
-        if "user" not in request:
-            raise web.HTTPUnauthorized()
-        return await handler(request, *args, **kwargs)
-
-    return wrapper
-
-
 class Heartbeat(object):
     """Asyncronous context manager for heatbeating long running HTTP responses.
 
@@ -147,3 +112,56 @@ class Heartbeat(object):
         while True:
             await asyncio.sleep(self.interval, loop=self.loop)
             await self.response.write(b"\n")
+
+
+def load(argname, cls, namespaced=True):
+    """Decorator function for loading database models from URL parameters.
+
+    The wrapper loads the ``name`` parameter from the requests ``match_info``
+    attribute. If ``namespaced`` is True, ``namespace`` is loaded from the
+    match info as well.
+
+    Example:
+        .. code:: python
+
+            from aiohttp import web
+
+            from krake.data import serialize
+            from krake.data.system import Role
+
+            @load("role", Role)
+            def get_role(request, role):
+                return json_response(serialize(role))
+
+    Args:
+        argname (str): Name of the keyword argument that will be passed to the
+            wrapped function.
+        cls (type): Database model class that should be loaded
+        namespaced (bool, optional): If True, the ``namespace`` URL parameter
+            will be used in the database key.
+
+    Returns:
+        callable: Decorator for aiohttp request handlers
+    """
+
+    def decorator(handler):
+        @wraps(handler)
+        async def wrapper(request, *args, **kwargs):
+            if namespaced:
+                instance, _ = await session(request).get(
+                    cls,
+                    namespace=request.match_info["namespace"],
+                    name=request.match_info["name"],
+                )
+            else:
+                instance, _ = await session(request).get(
+                    cls, name=request.match_info["name"]
+                )
+            if instance is None:
+                raise web.HTTPNotFound()
+            kwargs[argname] = instance
+            return await handler(request, *args, **kwargs)
+
+        return wrapper
+
+    return decorator

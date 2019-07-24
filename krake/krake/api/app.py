@@ -21,8 +21,11 @@ Example:
 import logging
 from aiohttp import web, ClientSession
 
+from krake.data.system import SystemMetadata, Verb, RoleRule, Role, RoleBinding
 from . import middlewares
+from . import auth
 from .resources import routes
+from .resources.roles import routes as roles
 from .resources.kubernetes import routes as kubernetes
 
 
@@ -37,29 +40,55 @@ def create_app(config):
     """
     logger = logging.getLogger("krake.api.error")
 
-    # Authentication middlewares
-    if config["auth"]["kind"] == "anonymous":
-        anonymous = middlewares.User(name=config["auth"]["name"])
-        auth_middleware = middlewares.anonymous_auth(anonymous)
-    elif config["auth"]["kind"] == "keystone":
-        auth_middleware = middlewares.keystone_auth(config["auth"]["endpoint"])
+    # Authenticators
+    if config["authentication"]["kind"] == "static":
+        authenticator = auth.static_authentication(
+            name=config["authentication"]["name"]
+        )
+    elif config["authentication"]["kind"] == "keystone":
+        authenticator = auth.keystone_authentication(
+            endpoint=config["authentication"]["endpoint"]
+        )
     else:
         raise ValueError(f"Unknown authentication method {config['auth']['kind']!r}")
+
+    # Authorizers
+    if config["authorization"] == "always-allow":
+        authorizer = auth.always_allow
+    elif config["authorization"] == "RBAC":
+        authorizer = auth.rbac
 
     app = web.Application(
         middlewares=[
             middlewares.error_log(logger),
             middlewares.database(config["etcd"]["host"], config["etcd"]["port"]),
-            auth_middleware,
+            middlewares.authentication(authenticator),
         ]
     )
     app["config"] = config
+    app["authorizer"] = authorizer
+
+    # TODO: Default roles and role bindings should reside in the database as
+    #   well. This means the database needs to be populated with these roles and
+    #   bindings during the bootstrap process of Krake (with "rag" tool).
+    app["default_roles"] = {
+        role.metadata.name: role
+        for role in (load_default_role(role) for role in config["default-roles"])
+    }
+    app["default_role_bindings"] = [
+        binding
+        for binding in (
+            load_default_role_binding(binding)
+            for binding in config["default-role-bindings"]
+        )
+    ]
 
     # Cleanup contexts
     app.cleanup_ctx.append(http_session)
 
     # Routes
     app.add_routes(routes)
+    app.add_routes(roles)
     app.add_routes(kubernetes)
 
     return app
@@ -80,3 +109,67 @@ async def http_session(app):
     async with ClientSession() as session:
         app["http"] = session
         yield
+
+
+def load_default_role(role):
+    """Create :class:`krake.data.system.Role` from configuration.
+
+    This is an example configuration for default roles:
+
+    .. code:: yaml
+
+        default-roles:
+        - metadata:
+            name: system:admin
+          rules:
+          - namespaces: ["all"]
+            resources: ["all"]
+            verbs: ["create", "list", "get", "update", "delete"]
+
+    Args:
+        role (dict): Configuration dictionary for a single role
+
+    Returns:
+        krake.data.system.Role: Role created from configuration
+
+    """
+    return Role(
+        metadata=SystemMetadata(name=role["metadata"]["name"], uid=None),
+        status=None,
+        rules=[
+            RoleRule(
+                namespaces=rule["namespaces"],
+                resources=rule["resources"],
+                verbs=[Verb.__members__[verb] for verb in rule["verbs"]],
+            )
+            for rule in role["rules"]
+        ],
+    )
+
+
+def load_default_role_binding(binding):
+    """Create :class:`krake.data.system.RoleBinding` from configuration.
+
+    This is an example configuration for default role bindings:
+
+    .. code:: yaml
+
+        default-role-bindings:
+        - metadata:
+            name: system:admin
+          users: ["system:admin"]
+          roles: ["system:admin"]
+
+    Args:
+        role (dict): Configuration dictionary for a single role binding
+
+    Returns:
+        krake.data.system.RoleBinding: Role binding created from configuration
+
+    """
+    return RoleBinding(
+        metadata=SystemMetadata(name=binding["metadata"]["name"], uid=None),
+        status=None,
+        users=binding["users"],
+        roles=binding["roles"],
+    )

@@ -2,6 +2,19 @@ from aiohttp import ClientSession
 from krake.api.app import create_app
 
 
+async def test_static_auth(aiohttp_client, config):
+    client = await aiohttp_client(
+        create_app(
+            config=dict(config, authentication={"kind": "static", "name": "test-user"})
+        )
+    )
+    resp = await client.get("/me")
+    assert resp.status == 200
+
+    data = await resp.json()
+    assert data["user"] == "test-user"
+
+
 async def test_keystone(keystone):
     async with ClientSession() as session:
         # Create a new authentication token
@@ -82,9 +95,13 @@ async def test_keystone_auth(keystone, aiohttp_client, config):
     client = await aiohttp_client(
         create_app(
             config=dict(
-                config, auth={"kind": "keystone", "endpoint": keystone.auth_url}
+                config,
+                authentication={"kind": "keystone", "endpoint": keystone.auth_url},
             )
         )
     )
-    resp = await client.get("/", headers={"Authorization": token})
+    resp = await client.get("/me", headers={"Authorization": token})
     assert resp.status == 200
+
+    data = await resp.json()
+    assert data["user"] == keystone.username

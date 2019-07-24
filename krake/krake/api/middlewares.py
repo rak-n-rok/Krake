@@ -1,10 +1,8 @@
 """This modules defines aiohttp middlewares for the Krake HTTP API"""
 import asyncio
-from dataclasses import dataclass
 from aiohttp import web
 
 from .database import Session
-from .helpers import json_error
 
 
 def database(host, port):
@@ -58,79 +56,31 @@ def error_log(logger):
     return logging_middleware
 
 
-@dataclass
-class User(object):
-    """Data container for the authenticated user
+def authentication(authenticator):
+    """Middleware factory authenticating every request.
 
-    Attributes:
-        name (str): Username of the authenticated user
+    The concret implementation is delegated to the passed asynchronous
+    authenticator function (see :mod:`krake.api.auth` for details). This
+    function returns the username for an incoming request. If the request is
+    unauthenticated -- meaning the authenticator returns None --
+    ``system:anonymous`` is used as username.
 
-    """
-
-    name: str
-
-
-def anonymous_auth(anonymous):
-    """Middleware factory for anonymous authentication.
+    The username is registed under the ``user`` key of the incoming request.
 
     Args:
-        anonymous (User): User instance that should be used as authenticated
-            user for every request.
+        authenticator (callable): Asynchronous function returning the username
+            for a given request.
 
     Returns:
-        aiohttp middleware authenticating every request with the passed the
-        anonymous user.
+        aiohttp middleware loading a username for every incoming HTTP request.
 
     """
 
     @web.middleware
     async def auth_middleware(request, handler):
-        request["user"] = anonymous
-        return await handler(request)
-
-    return auth_middleware
-
-
-def keystone_auth(endpoint):
-    """Middleware factory for OpenStack Keystone authentication.
-
-    The token in the ``Authorization`` header of request will be used as
-    ``X-Auth-Token`` header for a request to the Keystone token endpoint.
-    The returned user information from Keystone is published under key
-    ``user`` in the current request.
-
-    The middleware requires an HTTP client session that is loaded from the
-    ``http`` key of the application.
-
-    Args:
-        endpoint (str): Keystone HTTP endpoint
-
-    Returns:
-        aiohttp middleware authenticating requests against a Keystone service.
-    """
-
-    @web.middleware
-    async def auth_middleware(request, handler):
-        token = request.headers.get("Authorization")
-        if not token:
-            raise json_error(
-                web.HTTPUnauthorized, {"reason": "Authorization header is missing"}
-            )
-
-        resp = await request.app["http"].get(
-            f"{endpoint}/auth/tokens",
-            headers={"X-Auth-Token": token, "X-Subject-Token": token},
-        )
-        if resp.status != 200:
-            raise json_error(
-                web.HTTPUnauthorized,
-                {
-                    "reason": f"Invalid Keystone token (HTTP {resp.status} {resp.reason})"
-                },
-            )
-        data = await resp.json()
-
-        user = User(name=data["token"]["user"]["name"])
+        user = await authenticator(request)
+        if user is None:
+            user = "system:anonymous"
         request["user"] = user
 
         return await handler(request)

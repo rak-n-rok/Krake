@@ -1,11 +1,10 @@
 """Data model definitions for Kubernetes-related resources"""
 from enum import Enum, auto
 from datetime import datetime
-from typing import NamedTuple
 
 from krake.api.database import Key
-from .serializable import Serializable, serializable
-from .metadata import Metadata
+from .serializable import Serializable
+from .system import NamespacedMetadata
 
 
 class ApplicationSpec(Serializable):
@@ -32,7 +31,7 @@ class ApplicationStatus(Serializable):
 
 
 class Application(Serializable):
-    metadata: Metadata
+    metadata: NamespacedMetadata
     spec: ApplicationSpec
     status: ApplicationStatus
 
@@ -79,7 +78,7 @@ class ClusterStatus(Serializable):
 
 
 class Cluster(Serializable):
-    metadata: Metadata
+    metadata: NamespacedMetadata
     spec: ClusterSpec
     status: ClusterStatus
 

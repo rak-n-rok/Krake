@@ -1,12 +1,11 @@
 from datetime import datetime
 from base64 import b64encode
-import pytest
 import pytz
 import yaml
 from factory import Factory, SubFactory, Trait, lazy_attribute, fuzzy
 
 from .fake import fake
-from krake.data.metadata import Metadata
+from .system import NamespacedMetadataFactory
 from krake.data.kubernetes import (
     ApplicationSpec,
     ApplicationStatus,
@@ -23,17 +22,6 @@ from krake.data.kubernetes import (
 
 def fuzzy_name():
     return "-".join(fake.name().split()).lower()
-
-
-class MetadataFactory(Factory):
-    class Meta:
-        model = Metadata
-
-    name = fuzzy.FuzzyAttribute(fuzzy_name)
-    # namespace = fuzzy.FuzzyAttribute(fuzzy_name)
-    namespace = "testing"
-    uid = fuzzy.FuzzyAttribute(fake.uuid4)
-    user = fuzzy.FuzzyAttribute(fuzzy_name)
 
 
 class ApplicationStatusFactory(Factory):
@@ -113,7 +101,7 @@ class ApplicationFactory(Factory):
     class Meta:
         model = Application
 
-    metadata = SubFactory(MetadataFactory)
+    metadata = SubFactory(NamespacedMetadataFactory)
     spec = SubFactory(ApplicationSpecFactory)
     status = SubFactory(ApplicationStatusFactory)
 
@@ -268,6 +256,6 @@ class ClusterFactory(Factory):
     class Meta:
         model = Cluster
 
-    metadata = SubFactory(MetadataFactory)
+    metadata = SubFactory(NamespacedMetadataFactory)
     status = SubFactory(ClusterStatusFactory)
     spec = SubFactory(ClusterSpecFactory)
