@@ -23,8 +23,6 @@ pre-commit install
 
 # Install "krake" and "rok" with dev dependencies
 pip install --editable krake/[dev]
-
-# This will also install
 pip install --editable rok/[dev]
 ```
 
@@ -37,12 +35,14 @@ interpreter:
 ```bash
 cd krake/
 
+# Run etcd server. This will store the data in "tmp/etcd".
+support/etcd
+
+# Run local Keystone server. Related data is stored in "tmp/keystone".
+support/keystone
+
 # Run the API server
 py -m krake.api
-
-# Run etcd server. This will store the data in "etcd.krake/" in the current
-# working directory.
-etcd --name krake
 
 # Run the scheduler
 py -m krake.controller.scheduler
@@ -64,4 +64,23 @@ pytest krake/tests
 
 # Run tests of the "rok" package
 cd rok/tests
+```
+
+
+### Access to local Keystone
+
+The local Keystone service ``support/keystone`` can be accessed as admin with
+the following OpenStack ``clouds.yaml`` settings:
+
+```yaml
+clouds:
+  keystone:
+    auth:
+      auth_url: http://127.0.0.1:5000/v3
+      username: system:admin
+      password: admin
+      project_name: system:admin
+      user_domain_name: Default
+      project_domain_name: Default
+    region_name: RegionOne
 ```
