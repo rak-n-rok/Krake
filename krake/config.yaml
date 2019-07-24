@@ -5,9 +5,15 @@ etcd:
 log:
   level: INFO
 
+# Anonymous authentication
 auth:
   kind: anonymous
   name: system
+
+# # Keystone authentication
+# auth:
+#   kind: keystone
+#   endpoint: http://localhost:5000/v3
 
 controllers:
 

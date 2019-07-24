@@ -1,13 +1,13 @@
 import os
 import sys
-import asyncio
 import subprocess
 from tempfile import TemporaryDirectory
+from pathlib import Path
+from typing import NamedTuple
 import time
 import logging.config
 import requests
 import pytest
-import aiohttp
 from etcd3.aio_client import AioClient
 from aresponses import ResponsesMockServer
 
@@ -111,3 +111,127 @@ def config(etcd_server, user):
 async def aresponses(loop):
     async with ResponsesMockServer(loop=loop) as server:
         yield server
+
+
+keystone_config = """
+[fernet_tokens]
+key_repository = {tempdir}/fernet-keys
+
+[fernet_receipts]
+key_repository = {tempdir}/fernet-keys
+
+[DEFAULT]
+log_dir = {tempdir}/logs
+
+[assignment]
+driver = sql
+
+[cache]
+enabled = false
+
+[catalog]
+driver = sql
+
+[policy]
+driver = rules
+
+[credential]
+key_repository = {tempdir}/credential-keys
+
+[token]
+provider = fernet
+expiration = 21600
+
+[database]
+connection = sqlite:///{tempdir}/keystone.db
+"""
+
+
+class KeystoneInfo(NamedTuple):
+    host: str
+    port: int
+
+    username: str
+    user_domain_name: str
+    password: str
+    project_name: str
+    project_domain_name: str
+
+    @property
+    def auth_url(self):
+        return f"http://{self.host}:{self.port}/v3"
+
+
+@pytest.fixture("session")
+def keystone():
+    host = "localhost"
+    port = 5050
+
+    with TemporaryDirectory() as tempdir:
+        config = Path(tempdir) / "keystone.conf"
+
+        # Create keystone configuration
+        with config.open("w") as fd:
+            fd.write(keystone_config.format(tempdir=tempdir))
+
+        (Path(tempdir) / "fernet-keys").mkdir(mode=0o700)
+        (Path(tempdir) / "credential-keys").mkdir(mode=0o700)
+        (Path(tempdir) / "logs").mkdir()
+
+        # Populate identity service database
+        subprocess.check_call(
+            ["keystone-manage", "--config-file", str(config), "db_sync"]
+        )
+        # Initialize Fernet key repositories
+        subprocess.check_call(
+            ["keystone-manage", "--config-file", str(config), "fernet_setup"]
+        )
+        subprocess.check_call(
+            ["keystone-manage", "--config-file", str(config), "credential_setup"]
+        )
+        # Bootstrap identity service
+        subprocess.check_call(
+            [
+                "keystone-manage",
+                "--config-file",
+                str(config),
+                "bootstrap",
+                "--bootstrap-password",
+                "admin",
+                "--bootstrap-admin-url",
+                f"http://{host}:{port}/v3/",
+                "--bootstrap-internal-url",
+                f"http://{host}:{port}/v3/",
+                "--bootstrap-public-url",
+                f"http://{host}:{port}/v3/",
+                "--bootstrap-region-id",
+                "DefaultRegion",
+            ]
+        )
+
+        command = [
+            "keystone-wsgi-public",
+            "--host",
+            host,
+            "--port",
+            str(port),
+            "--",
+            "--config-file",
+            str(config),
+        ]
+        with subprocess.Popen(command) as proc:
+            try:
+                wait_for_url(f"http://{host}:{port}/v3")
+                info = KeystoneInfo(
+                    host=host,
+                    port=port,
+                    username="admin",
+                    password="admin",
+                    user_domain_name="Default",
+                    project_name="admin",
+                    project_domain_name="Default",
+                )
+                yield info
+            finally:
+                time.sleep(1)
+                proc.terminate()

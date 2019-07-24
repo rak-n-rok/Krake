@@ -2,9 +2,9 @@
 import asyncio
 from dataclasses import dataclass
 from aiohttp import web
-from etcd3.aio_client import AioClient
 
 from .database import Session
+from .helpers import json_error
 
 
 def database(host, port):
@@ -86,6 +86,53 @@ def anonymous_auth(anonymous):
     @web.middleware
     async def auth_middleware(request, handler):
         request["user"] = anonymous
+        return await handler(request)
+
+    return auth_middleware
+
+
+def keystone_auth(endpoint):
+    """Middleware factory for OpenStack Keystone authentication.
+
+    The token in the ``Authorization`` header of request will be used as
+    ``X-Auth-Token`` header for a request to the Keystone token endpoint.
+    The returned user information from Keystone is published under key
+    ``user`` in the current request.
+
+    The middleware requires an HTTP client session that is loaded from the
+    ``http`` key of the application.
+
+    Args:
+        endpoint (str): Keystone HTTP endpoint
+
+    Returns:
+        aiohttp middleware authenticating requests against a Keystone service.
+    """
+
+    @web.middleware
+    async def auth_middleware(request, handler):
+        token = request.headers.get("Authorization")
+        if not token:
+            raise json_error(
+                web.HTTPUnauthorized, {"reason": "Authorization header is missing"}
+            )
+
+        resp = await request.app["http"].get(
+            f"{endpoint}/auth/tokens",
+            headers={"X-Auth-Token": token, "X-Subject-Token": token},
+        )
+        if resp.status != 200:
+            raise json_error(
+                web.HTTPUnauthorized,
+                {
+                    "reason": f"Invalid Keystone token (HTTP {resp.status} {resp.reason})"
+                },
+            )
+        data = await resp.json()
+
+        user = User(name=data["token"]["user"]["name"])
+        request["user"] = user
+
         return await handler(request)
 
     return auth_middleware
