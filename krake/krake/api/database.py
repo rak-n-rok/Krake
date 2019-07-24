@@ -26,11 +26,10 @@ Example:
         async with Session(host="localhost") as session:
             book, revision = await session.get(Book, isbn=9783453146976)
 
-.. _ etcd: https://etcd.io/
+.. _etcd: https://etcd.io/
 
 """
 import json
-from collections import deque
 from typing import NamedTuple
 from enum import Enum, auto
 import re
@@ -277,7 +276,7 @@ class Session(object):
         async with watcher:
             async for resp in watcher:
                 if resp.events is None:
-                    assert resp.created == True
+                    assert resp.created
 
                     # If a created future is passed, notify waiters that the
                     # watcher was created.
@@ -399,7 +398,7 @@ class Key(object):
             params[match[1]] = kwargs.pop(match[1])
 
         if kwargs:
-            key, _ = filters.popitem()
+            key, _ = kwargs.popitem()
             raise TypeError(f"Got unexpected keyword argument parameter {key!r}")
 
         return template.format(**params)
@@ -430,7 +429,7 @@ class Key(object):
                 break
 
         if kwargs:
-            key, _ = filters.popitem()
+            key, _ = kwargs.popitem()
             raise TypeError(
                 f"Got parameter {key!r} without preceding parameter {match[1]!r}"
             )
