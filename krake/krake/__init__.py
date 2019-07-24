@@ -8,8 +8,8 @@ def load_config(filepath=None):
     If no filepath is specified, the configuration is searched in the
     following locations by this order:
 
-    1. ``config.yaml`` (current working directory)
-    2. ``/etc/krake/config.yaml``
+    1. ``krake.yaml`` (current working directory)
+    2. ``/etc/krake/krake.yaml``
 
     Args:
         filepath (os.PathLike, optional): Path to configuration file
@@ -21,7 +21,7 @@ def load_config(filepath=None):
     if filepath is not None:
         filepaths = [filepath]
     else:
-        filepaths = ["config.yaml", "/etc/krake/config.yaml"]
+        filepaths = ["krake.yaml", "/etc/krake/krake.yaml"]
 
     for path in filepaths:
         try:
