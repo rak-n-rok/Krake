@@ -90,7 +90,7 @@ spec:
 """
 
 
-async def test_pod_creation(aresponses, loop):
+async def test_app_creation(aresponses, loop):
     cluster = ClusterFactory(magnum=False)
     cluster_ref = f"/namespaces/{cluster.metadata.namespace}/kubernetes/clusters/{cluster.metadata.name}"
     app = ApplicationFactory(
@@ -140,6 +140,97 @@ async def test_pod_creation(aresponses, loop):
         "POST",
         Response(status=200),
     )
+    aresponses.add(
+        "api.krake.local",
+        f"/namespaces/testing/kubernetes/applications/{app.metadata.name}/status",
+        "PUT",
+        update_status,
+    )
+
+    async with Client(url="http://api.krake.local", loop=loop) as client:
+        worker = KubernetesWorker(client=client)
+        await worker.resource_received(app)
+
+
+async def test_app_deletion(aresponses, loop):
+    cluster = ClusterFactory(magnum=False)
+    cluster_ref = f"/namespaces/{cluster.metadata.namespace}/kubernetes/clusters/{cluster.metadata.name}"
+    app = ApplicationFactory(
+        status__state=ApplicationState.DELETING,
+        spec__cluster=cluster_ref,
+        spec__manifest=nginx_manifest,
+    )
+    app_ref = f"/namespaces/{app.metadata.namespace}/kubernetes/applications/{app.metadata.name}"
+
+    async def update_status(request):
+        payload = await request.json()
+        assert payload["state"] == "DELETED"
+
+        status = ApplicationStatus(
+            state=ApplicationState.DELETED,
+            reason=None,
+            cluster=None,
+            created=app.status.created,
+            modified=datetime.now(),
+        )
+        return json_response(serialize(status))
+
+    aresponses.add("api.krake.local", app_ref, "GET", json_response(serialize(app)))
+    aresponses.add(
+        "api.krake.local", cluster_ref, "GET", json_response(serialize(cluster))
+    )
+    aresponses.add(
+        "127.0.0.1:8080",
+        "/apis/apps/v1/namespaces/default/deployments/nginx-demo",
+        "GET",
+        Response(status=200),
+    )
+    aresponses.add(
+        "127.0.0.1:8080",
+        "/apis/apps/v1/namespaces/default/deployments/nginx-demo",
+        "DELETE",
+        Response(status=200),
+    )
+    aresponses.add(
+        "127.0.0.1:8080",
+        "/api/v1/namespaces/default/services/nginx-demo",
+        "DELETE",
+        Response(status=200),
+    )
+    aresponses.add(
+        "api.krake.local",
+        f"/namespaces/testing/kubernetes/applications/{app.metadata.name}/status",
+        "PUT",
+        update_status,
+    )
+
+    async with Client(url="http://api.krake.local", loop=loop) as client:
+        worker = KubernetesWorker(client=client)
+        await worker.resource_received(app)
+
+
+async def test_app_deletion_without_binding(aresponses, loop):
+    app = ApplicationFactory(
+        status__state=ApplicationState.DELETING,
+        spec__cluster=None,
+        spec__manifest=nginx_manifest,
+    )
+    app_ref = f"/namespaces/{app.metadata.namespace}/kubernetes/applications/{app.metadata.name}"
+
+    async def update_status(request):
+        payload = await request.json()
+        assert payload["state"] == "DELETED"
+
+        status = ApplicationStatus(
+            state=ApplicationState.DELETED,
+            reason=None,
+            cluster=None,
+            created=app.status.created,
+            modified=datetime.now(),
+        )
+        return json_response(serialize(status))
+
+    aresponses.add("api.krake.local", app_ref, "GET", json_response(serialize(app)))
     aresponses.add(
         "api.krake.local",
         f"/namespaces/testing/kubernetes/applications/{app.metadata.name}/status",

@@ -36,14 +36,18 @@ class Resource(object):
         return [deserialize(self.model, data) for data in datas]
 
     async def get(self, ref=None, **kwargs):
-        if ref:
-            url = self.url.with_path(ref)
-        else:
-            url = self.url.with_path(self.endpoints["get"].format(**kwargs))
+        url = self.url.with_path(self.endpoints["get"].format(**kwargs))
         resp = await self.session.get(url)
         data = await resp.json()
-        app = deserialize(self.model, data)
-        return app
+        instance = deserialize(self.model, data)
+        return instance
+
+    async def get_by_url(self, path):
+        url = self.url.with_path(path)
+        resp = await self.session.get(url)
+        data = await resp.json()
+        instance = deserialize(self.model, data)
+        return instance
 
     async def delete(self, **kwargs):
         url = self.url.with_path(self.endpoints["get"].format(**kwargs))

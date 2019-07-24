@@ -41,14 +41,17 @@ class KubernetesController(Controller):
 
 class KubernetesWorker(Worker):
     async def resource_received(self, app):
-        cluster = await self.client.kubernetes.cluster.get(ref=app.spec.cluster)
+        # Delete Kubernetes resources if the application was bound to a
+        # cluster.
+        if app.spec.cluster:
+            cluster = await self.client.kubernetes.cluster.get_by_url(app.spec.cluster)
 
-        async with KubernetesClient(cluster.spec.kubeconfig) as kube:
-            for resource in yaml.safe_load_all(app.spec.manifest):
-                if app.status.state == ApplicationState.SCHEDULED:
-                    await kube.apply(resource)
-                else:
-                    await kube.delete(resource)
+            async with KubernetesClient(cluster.spec.kubeconfig) as kube:
+                for resource in yaml.safe_load_all(app.spec.manifest):
+                    if app.status.state == ApplicationState.SCHEDULED:
+                        await kube.apply(resource)
+                    else:
+                        await kube.delete(resource)
 
         if app.status.state == ApplicationState.SCHEDULED:
             transition = ApplicationState.RUNNING
