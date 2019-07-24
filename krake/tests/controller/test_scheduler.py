@@ -101,3 +101,39 @@ async def test_kubernetes_scheduling(aresponses, loop):
     async with Client(url="http://api.krake.local", loop=loop) as client:
         worker = SchedulerWorker(client=client)
         await worker.resource_received(app)
+
+
+async def test_kubernetes_scheduling_no_cluster_found(aresponses, loop):
+    app = ApplicationFactory(status__state=ApplicationState.UPDATED)
+
+    async def update_status(request):
+        payload = await request.json()
+
+        assert payload["state"] == "FAILED"
+        assert payload["cluster"] == None
+        assert payload["reason"] == "No cluster available"
+
+        status = ApplicationStatus(
+            reason=payload["reason"],
+            state=ApplicationState.FAILED,
+            created=app.status.created,
+            modified=datetime.now(),
+        )
+        return json_response(serialize(status))
+
+    aresponses.add(
+        "api.krake.local",
+        "/namespaces/all/kubernetes/clusters",
+        "GET",
+        json_response([]),
+    )
+    aresponses.add(
+        "api.krake.local",
+        f"/namespaces/testing/kubernetes/applications/{app.metadata.name}/status",
+        "PUT",
+        update_status,
+    )
+
+    async with Client(url="http://api.krake.local", loop=loop) as client:
+        worker = SchedulerWorker(client=client)
+        await worker.resource_received(app)

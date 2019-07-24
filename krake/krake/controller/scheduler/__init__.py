@@ -70,6 +70,7 @@ class SchedulerWorker(Worker):
             await self.client.kubernetes.application.update_status(
                 namespace=app.metadata.namespace,
                 name=app.metadata.name,
+                cluster=None,
                 state=ApplicationState.FAILED,
                 reason="No cluster available",
             )
