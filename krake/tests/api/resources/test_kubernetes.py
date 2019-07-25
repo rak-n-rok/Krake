@@ -438,7 +438,7 @@ async def test_delete_already_deleted(aiohttp_client, config, db):
 async def test_watch_app(aiohttp_client, config, db, loop):
     client = await aiohttp_client(create_app(config=config))
 
-    async def watch(created, received):
+    async def watch(created):
         resp = await client.get(
             "/namespaces/testing/kubernetes/applications?watch&heartbeat=0"
         )
@@ -457,7 +457,7 @@ async def test_watch_app(aiohttp_client, config, db, loop):
                 assert data["status"]["state"] == "PENDING"
             elif i == 2:
                 assert data["status"]["state"] == "DELETING"
-                received.set_result(None)
+                return
 
     async def modify(created):
         # Wait for watcher to be established
@@ -478,23 +478,16 @@ async def test_watch_app(aiohttp_client, config, db, loop):
         assert resp.status == 200
 
     created = loop.create_future()
-    received = loop.create_future()
-    watching = loop.create_task(watch(created, received))
+    watching = loop.create_task(watch(created))
     modifying = loop.create_task(modify(created))
 
-    await modifying
-    assert received.done(), "Not all changes were propagated"
-
-    # Stop watcher
-    watching.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await watching
+    await asyncio.wait_for(asyncio.gather(modifying, watching), timeout=3)
 
 
 async def test_watch_app_from_all_namespaces(aiohttp_client, config, db, loop):
     client = await aiohttp_client(create_app(config=config))
 
-    async def watch(created, received):
+    async def watch(created):
         resp = await client.get(
             "/namespaces/all/kubernetes/applications?watch&heartbeat=0"
         )
@@ -511,7 +504,7 @@ async def test_watch_app_from_all_namespaces(aiohttp_client, config, db, loop):
                 assert data["status"]["state"] == "PENDING"
             elif i == 1:
                 assert data["status"]["state"] == "PENDING"
-                received.set_result(None)
+                return
 
     async def modify(created):
         # Wait for watcher to be established
@@ -526,17 +519,10 @@ async def test_watch_app_from_all_namespaces(aiohttp_client, config, db, loop):
             assert resp.status == 200
 
     created = loop.create_future()
-    received = loop.create_future()
-    watching = loop.create_task(watch(created, received))
+    watching = loop.create_task(watch(created))
     modifying = loop.create_task(modify(created))
 
-    await modifying
-    assert received.done(), "Not all changes were propagated"
-
-    # Stop watcher
-    watching.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await watching
+    await asyncio.wait_for(asyncio.gather(modifying, watching), timeout=3)
 
 
 async def test_list_clusters(aiohttp_client, config, db):
