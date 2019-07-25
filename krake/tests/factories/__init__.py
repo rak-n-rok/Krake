@@ -1,2 +1,2 @@
-from .fake import fake
-from . import kubernetes
+from .fake import fake  # noqa
+from . import kubernetes  # noqa

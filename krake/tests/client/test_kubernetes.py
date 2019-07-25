@@ -1,10 +1,7 @@
-from datetime import datetime
-import json
-import pytz
-from aiohttp.web import json_response, StreamResponse
+from aiohttp.web import json_response
 
 from krake.client import Client
-from krake.data.kubernetes import Application, ApplicationStatus, ApplicationState
+from krake.data.kubernetes import ApplicationState
 from krake.data import serialize
 from krake.test_utils import stream
 

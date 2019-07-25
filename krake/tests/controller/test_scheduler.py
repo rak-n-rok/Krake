@@ -1,16 +1,9 @@
-import json
 import asyncio
 from datetime import datetime
-import pytz
 from aiohttp.web import json_response
 
 from krake.data import serialize
-from krake.data.kubernetes import (
-    Application,
-    ApplicationState,
-    ApplicationStatus,
-    ClusterBinding,
-)
+from krake.data.kubernetes import ApplicationState, ApplicationStatus, ClusterBinding
 from krake.controller import Worker
 from krake.controller.scheduler import Scheduler, SchedulerWorker
 from krake.client import Client
@@ -80,7 +73,10 @@ async def test_kubernetes_scheduling(aresponses, loop):
 
     async def echo_binding(request):
         payload = await request.json()
-        ref = f"/namespaces/{app.metadata.namespace}/kubernetes/clusters/{cluster.metadata.name}"
+        ref = (
+            f"/namespaces/{app.metadata.namespace}"
+            f"/kubernetes/clusters/{cluster.metadata.name}"
+        )
         assert payload["cluster"] == ref
         binding = ClusterBinding(cluster=payload["cluster"])
         return json_response(serialize(binding))
@@ -110,7 +106,7 @@ async def test_kubernetes_scheduling_no_cluster_found(aresponses, loop):
         payload = await request.json()
 
         assert payload["state"] == "FAILED"
-        assert payload["cluster"] == None
+        assert payload["cluster"] is None
         assert payload["reason"] == "No cluster available"
 
         status = ApplicationStatus(

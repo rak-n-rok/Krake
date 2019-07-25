@@ -1,7 +1,5 @@
-import json
 import asyncio
 from datetime import datetime
-import pytz
 from aiohttp.web import json_response, Response
 
 from krake.data import serialize
@@ -92,7 +90,10 @@ spec:
 
 async def test_app_creation(aresponses, loop):
     cluster = ClusterFactory(magnum=False)
-    cluster_ref = f"/namespaces/{cluster.metadata.namespace}/kubernetes/clusters/{cluster.metadata.name}"
+    cluster_ref = (
+        f"/namespaces/{cluster.metadata.namespace}"
+        f"/kubernetes/clusters/{cluster.metadata.name}"
+    )
     app = ApplicationFactory(
         status__state=ApplicationState.SCHEDULED,
         spec__cluster=cluster_ref,
@@ -154,13 +155,19 @@ async def test_app_creation(aresponses, loop):
 
 async def test_app_deletion(aresponses, loop):
     cluster = ClusterFactory(magnum=False)
-    cluster_ref = f"/namespaces/{cluster.metadata.namespace}/kubernetes/clusters/{cluster.metadata.name}"
+    cluster_ref = (
+        f"/namespaces/{cluster.metadata.namespace}"
+        f"/kubernetes/clusters/{cluster.metadata.name}"
+    )
     app = ApplicationFactory(
         status__state=ApplicationState.DELETING,
         spec__cluster=cluster_ref,
         spec__manifest=nginx_manifest,
     )
-    app_ref = f"/namespaces/{app.metadata.namespace}/kubernetes/applications/{app.metadata.name}"
+    app_ref = (
+        f"/namespaces/{app.metadata.namespace}"
+        f"/kubernetes/applications/{app.metadata.name}"
+    )
 
     async def update_status(request):
         payload = await request.json()
@@ -215,7 +222,10 @@ async def test_app_deletion_without_binding(aresponses, loop):
         spec__cluster=None,
         spec__manifest=nginx_manifest,
     )
-    app_ref = f"/namespaces/{app.metadata.namespace}/kubernetes/applications/{app.metadata.name}"
+    app_ref = (
+        f"/namespaces/{app.metadata.namespace}"
+        f"/kubernetes/applications/{app.metadata.name}"
+    )
 
     async def update_status(request):
         payload = await request.json()

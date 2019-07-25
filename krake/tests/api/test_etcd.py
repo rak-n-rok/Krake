@@ -1,4 +1,3 @@
-import asyncio
 from etcd3.models import EventEventType
 
 
@@ -29,7 +28,7 @@ async def test_watch(etcd_client, loop):
     # Gather all events
     async for resp in etcd_client.watch_create("/foo"):
         if not created.done():
-            assert resp.created == True
+            assert resp.created
             created.set_result(True)
             if resp.events:
                 events.extend(resp.events)

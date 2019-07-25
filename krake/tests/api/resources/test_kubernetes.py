@@ -1,4 +1,3 @@
-import pytest
 import asyncio
 import re
 import json
@@ -368,7 +367,10 @@ async def test_update_app_binding(aiohttp_client, config, db):
     await db.put(app)
     await db.put(cluster)
 
-    cluster_ref = f"/namespaces/{cluster.metadata.namespace}/kubernetes/clusters/{cluster.metadata.name}"
+    cluster_ref = (
+        f"/namespaces/{cluster.metadata.namespace}"
+        f"/kubernetes/clusters/{cluster.metadata.name}"
+    )
     resp = await client.put(
         f"/namespaces/testing/kubernetes/applications/{app.metadata.name}/binding",
         json={"cluster": cluster_ref},

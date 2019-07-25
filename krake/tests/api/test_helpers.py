@@ -21,7 +21,7 @@ async def test_heartbeat(loop):
 
     resp = Response()
 
-    async with Heartbeat(resp, interval=0.01) as heartbeat:
+    async with Heartbeat(resp, interval=0.01):
         await asyncio.wait([resp.done], timeout=0.3)
 
     assert resp.beats == 25

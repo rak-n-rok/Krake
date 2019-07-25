@@ -1,7 +1,5 @@
 import uuid
 import json
-import asyncio
-import pytest
 import factory
 from factory.fuzzy import FuzzyInteger
 
