@@ -86,12 +86,33 @@ def setup(host, port):
     with message("Populate identity service database"):
         check_call(["keystone-manage", "--config-file", str(config_file), "db_sync"])
 
+    user = os.getuid()
+    group = os.getgid()
+
     with message("Initialize Fernet key repositories"):
         check_call(
-            ["keystone-manage", "--config-file", str(config_file), "fernet_setup"]
+            [
+                "keystone-manage",
+                "--config-file",
+                str(config_file),
+                "fernet_setup",
+                "--keystone-user",
+                str(user),
+                "--keystone-group",
+                str(group),
+            ]
         )
         check_call(
-            ["keystone-manage", "--config-file", str(config_file), "credential_setup"]
+            [
+                "keystone-manage",
+                "--config-file",
+                str(config_file),
+                "credential_setup",
+                "--keystone-user",
+                str(user),
+                "--keystone-group",
+                str(group),
+            ]
         )
 
     with message("Bootstrap identity service"):

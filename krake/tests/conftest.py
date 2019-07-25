@@ -198,16 +198,37 @@ def keystone():
         (Path(tempdir) / "credential-keys").mkdir(mode=0o700)
         (Path(tempdir) / "logs").mkdir()
 
+        user = os.getuid()
+        group = os.getgid()
+
         # Populate identity service database
         subprocess.check_call(
             ["keystone-manage", "--config-file", str(config), "db_sync"]
         )
         # Initialize Fernet key repositories
         subprocess.check_call(
-            ["keystone-manage", "--config-file", str(config), "fernet_setup"]
+            [
+                "keystone-manage",
+                "--config-file",
+                str(config),
+                "fernet_setup",
+                "--keystone-user",
+                str(user),
+                "--keystone-group",
+                str(group),
+            ]
         )
         subprocess.check_call(
-            ["keystone-manage", "--config-file", str(config), "credential_setup"]
+            [
+                "keystone-manage",
+                "--config-file",
+                str(config),
+                "credential_setup",
+                "--keystone-user",
+                str(user),
+                "--keystone-group",
+                str(group),
+            ]
         )
         # Bootstrap identity service
         subprocess.check_call(
