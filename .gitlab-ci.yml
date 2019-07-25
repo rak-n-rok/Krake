@@ -32,15 +32,15 @@ unittests-krake:
   tags:
     - docker
 
-unittests-rok:
-  stage: test
-  image: python:3.6
-  script:
-    - pip install krake/
-    - pip install rok/[dev]
-    - pytest rok/tests
-  tags:
-    - docker
+# unittests-rok:
+#   stage: test
+#   image: python:3.6
+#   script:
+#     - pip install krake/
+#     - pip install rok/[dev]
+#     - pytest rok/tests
+#   tags:
+#     - docker
 
 flake8-krake:
   stage: test
