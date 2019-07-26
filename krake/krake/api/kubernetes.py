@@ -1,3 +1,6 @@
+"""This module comprises request handlers forming the HTTP REST API for
+Kubernetes resources.
+"""
 import json
 from uuid import uuid4
 from datetime import datetime
@@ -11,7 +14,7 @@ from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 from kubernetes_asyncio.config import ConfigException
 
 from krake.data.serializable import serialize
-from krake.data.system import NamespacedMetadata
+from krake.data.core import NamespacedMetadata
 from krake.data.kubernetes import (
     Application,
     ApplicationStatus,
@@ -23,17 +26,17 @@ from krake.data.kubernetes import (
     ClusterState,
     ClusterSpec,
 )
-from ..helpers import session, json_error, Heartbeat, load
-from ..auth import protected
-from ..database import EventType
+from .helpers import session, json_error, Heartbeat, load
+from .auth import protected
+from .database import EventType
 
 
 logger = logging.getLogger(__name__)
 routes = web.RouteTableDef()
 
 
-@routes.get("/namespaces/{namespace}/kubernetes/applications")
-@protected(resource="kubernetes/applications", verb="list")
+@routes.get("/kubernetes/namespaces/{namespace}/applications")
+@protected(api="kubernetes", resource="applications", verb="list")
 @use_kwargs({"heartbeat": fields.Integer(missing=None, locations=["query"])})
 async def list_or_watch_applications(request, heartbeat):
     namespace = request.match_info["namespace"]
@@ -76,8 +79,8 @@ async def list_or_watch_applications(request, heartbeat):
                 await resp.write(b"\n")
 
 
-@routes.post("/namespaces/{namespace}/kubernetes/applications")
-@protected(resource="kubernetes/applications", verb="create")
+@routes.post("/kubernetes/namespaces/{namespace}/applications")
+@protected(api="kubernetes", resource="applications", verb="create")
 @use_kwargs(
     {"name": fields.String(required=True), "manifest": fields.String(required=True)}
 )
@@ -110,15 +113,15 @@ async def create_application(request, name, manifest):
     return web.json_response(serialize(app))
 
 
-@routes.get("/namespaces/{namespace}/kubernetes/applications/{name}")
-@protected(resource="kubernetes/applications", verb="get")
+@routes.get("/kubernetes/namespaces/{namespace}/applications/{name}")
+@protected(api="kubernetes", resource="applications", verb="get")
 @load("app", Application)
 async def get_application(request, app):
     return web.json_response(serialize(app))
 
 
-@routes.put("/namespaces/{namespace}/kubernetes/applications/{name}")
-@protected(resource="kubernetes/applications", verb="update")
+@routes.put("/kubernetes/namespaces/{namespace}/applications/{name}")
+@protected(api="kubernetes", resource="applications", verb="update")
 @use_kwargs({"manifest": fields.String(required=True)})
 @load("app", Application)
 async def update_application(request, app, manifest):
@@ -140,8 +143,8 @@ async def update_application(request, app, manifest):
     return web.json_response(serialize(app))
 
 
-@routes.put("/namespaces/{namespace}/kubernetes/applications/{name}/status")
-@protected(resource="kubernetes/applications/status", verb="update")
+@routes.put("/kubernetes/namespaces/{namespace}/applications/{name}/status")
+@protected(api="kubernetes", resource="applications/status", verb="update")
 @use_kwargs(
     {
         "state": EnumField(ApplicationState, required=True),
@@ -175,8 +178,8 @@ async def update_application_status(request, app, state, reason, cluster):
     return web.json_response(serialize(app.status))
 
 
-@routes.put("/namespaces/{namespace}/kubernetes/applications/{name}/binding")
-@protected(resource="kubernetes/applications/binding", verb="update")
+@routes.put("/kubernetes/namespaces/{namespace}/applications/{name}/binding")
+@protected(api="kubernetes", resource="applications/binding", verb="update")
 @use_kwargs({"cluster": fields.String(required=True)})
 @load("app", Application)
 async def update_application_binding(request, app, cluster):
@@ -198,8 +201,8 @@ async def update_application_binding(request, app, cluster):
     return web.json_response(serialize(binding))
 
 
-@routes.delete("/namespaces/{namespace}/kubernetes/applications/{name}")
-@protected(resource="kubernetes/applications", verb="delete")
+@routes.delete("/kubernetes/namespaces/{namespace}/applications/{name}")
+@protected(api="kubernetes", resource="applications", verb="delete")
 @load("app", Application)
 async def delete_application(request, app):
     if app.status.state in (ApplicationState.DELETING, ApplicationState.DELETED):
@@ -217,15 +220,15 @@ async def delete_application(request, app):
     return web.json_response(serialize(app))
 
 
-@routes.get("/namespaces/{namespace}/kubernetes/clusters")
-@protected(resource="kubernetes/clusters", verb="list")
+@routes.get("/kubernetes/namespaces/{namespace}/clusters")
+@protected(api="kubernetes", resource="clusters", verb="list")
 async def list_clusters(request):
     apps = [cluster async for cluster, _ in session(request).all(Cluster)]
     return web.json_response([serialize(app) for app in apps])
 
 
-@routes.post("/namespaces/{namespace}/kubernetes/clusters")
-@protected(resource="kubernetes/clusters", verb="create")
+@routes.post("/kubernetes/namespaces/{namespace}/clusters")
+@protected(api="kubernetes", resource="clusters", verb="create")
 async def create_cluster(request):
     namespace = request.match_info["namespace"]
     if namespace == "all":
@@ -287,15 +290,15 @@ async def create_cluster(request):
     return web.json_response(serialize(cluster))
 
 
-@routes.get("/namespaces/{namespace}/kubernetes/clusters/{name}")
-@protected(resource="kubernetes/clusters", verb="get")
+@routes.get("/kubernetes/namespaces/{namespace}/clusters/{name}")
+@protected(api="kubernetes", resource="clusters", verb="get")
 @load("cluster", Cluster)
 async def get_cluster(request, cluster):
     return web.json_response(serialize(cluster))
 
 
-@routes.delete("/namespaces/{namespace}/kubernetes/clusters/{name}")
-@protected(resource="kubernetes/clusters", verb="delete")
+@routes.delete("/kubernetes/namespaces/{namespace}/clusters/{name}")
+@protected(api="kubernetes", resource="clusters", verb="delete")
 @load("cluster", Cluster)
 async def delete_cluster(request, cluster):
     cluster.status.state = ClusterState.DELETING

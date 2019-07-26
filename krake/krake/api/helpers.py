@@ -127,7 +127,7 @@ def load(argname, cls, namespaced=True):
             from aiohttp import web
 
             from krake.data import serialize
-            from krake.data.system import Role
+            from krake.data.core import Role
 
             @load("role", Role)
             def get_role(request, role):

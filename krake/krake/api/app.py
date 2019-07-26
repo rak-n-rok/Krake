@@ -1,9 +1,10 @@
 """This module defines the bootstrap function for creating the aiohttp server
 instance serving Krake's HTTP API.
 
-The specific HTTP endpoints are specified in submodules in in
-:mod:`.resources`. For example, all Kubernetes related HTTP endpoints are
-specified in :mod:`.resources.kubernetes`.
+Krake serves multiple APIs for different technologies, e.g. the core
+functionality like roles and role bindings are served by the
+:mod:`krake.api.core` API where as the Kubernetes API is provided by
+:mod:`krake.api.kubernetes`.
 
 Example:
     The API server can be run as follows:
@@ -21,12 +22,11 @@ Example:
 import logging
 from aiohttp import web, ClientSession
 
-from krake.data.system import SystemMetadata, Verb, RoleRule, Role, RoleBinding
+from krake.data.core import CoreMetadata, Verb, RoleRule, Role, RoleBinding
 from . import middlewares
 from . import auth
-from .resources import routes
-from .resources.roles import routes as roles
-from .resources.kubernetes import routes as kubernetes
+from .core import routes as core_api
+from .kubernetes import routes as kubernetes_api
 
 
 def create_app(config):
@@ -87,9 +87,8 @@ def create_app(config):
     app.cleanup_ctx.append(http_session)
 
     # Routes
-    app.add_routes(routes)
-    app.add_routes(roles)
-    app.add_routes(kubernetes)
+    app.add_routes(core_api)
+    app.add_routes(kubernetes_api)
 
     return app
 
@@ -112,7 +111,7 @@ async def http_session(app):
 
 
 def load_default_role(role):
-    """Create :class:`krake.data.system.Role` from configuration.
+    """Create :class:`krake.data.core.Role` from configuration.
 
     This is an example configuration for default roles:
 
@@ -122,7 +121,8 @@ def load_default_role(role):
         - metadata:
             name: system:admin
           rules:
-          - namespaces: ["all"]
+          - api: all
+            namespaces: ["all"]
             resources: ["all"]
             verbs: ["create", "list", "get", "update", "delete"]
 
@@ -130,14 +130,15 @@ def load_default_role(role):
         role (dict): Configuration dictionary for a single role
 
     Returns:
-        krake.data.system.Role: Role created from configuration
+        krake.data.core.Role: Role created from configuration
 
     """
     return Role(
-        metadata=SystemMetadata(name=role["metadata"]["name"], uid=None),
+        metadata=CoreMetadata(name=role["metadata"]["name"], uid=None),
         status=None,
         rules=[
             RoleRule(
+                api=rule["api"],
                 namespaces=rule["namespaces"],
                 resources=rule["resources"],
                 verbs=[Verb.__members__[verb] for verb in rule["verbs"]],
@@ -148,7 +149,7 @@ def load_default_role(role):
 
 
 def load_default_role_binding(binding):
-    """Create :class:`krake.data.system.RoleBinding` from configuration.
+    """Create :class:`krake.data.core.RoleBinding` from configuration.
 
     This is an example configuration for default role bindings:
 
@@ -164,11 +165,11 @@ def load_default_role_binding(binding):
         role (dict): Configuration dictionary for a single role binding
 
     Returns:
-        krake.data.system.RoleBinding: Role binding created from configuration
+        krake.data.core.RoleBinding: Role binding created from configuration
 
     """
     return RoleBinding(
-        metadata=SystemMetadata(name=binding["metadata"]["name"], uid=None),
+        metadata=CoreMetadata(name=binding["metadata"]["name"], uid=None),
         status=None,
         users=binding["users"],
         roles=binding["roles"],

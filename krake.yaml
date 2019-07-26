@@ -27,7 +27,8 @@ default-roles:
 - metadata:
     name: system:admin
   rules:
-  - namespaces: ["all"]
+  - api: all
+    namespaces: ["all"]
     resources: ["all"]
     verbs: ["create", "list", "get", "update", "delete"]
 

@@ -51,15 +51,6 @@ Middlewares
     :undoc-members:
     :show-inheritance:
 
-REST Resources
-~~~~~~~~~~~~~~
-
-.. automodule:: krake.api.resources
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
 Client
 ------
 
@@ -85,12 +76,13 @@ Data Abstration
     :undoc-members:
     :show-inheritance:
 
+.. automodule:: krake.data.core
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 .. automodule:: krake.data.kubernetes
     :members:
     :undoc-members:
     :show-inheritance:
 
-.. automodule:: krake.data.system
-    :members:
-    :undoc-members:
-    :show-inheritance:

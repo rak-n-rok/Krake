@@ -13,7 +13,7 @@ class NamespacedMetadata(Serializable):
     uid: str
 
 
-class SystemMetadata(Serializable):
+class CoreMetadata(Serializable):
     name: str
     uid: str
 
@@ -27,6 +27,7 @@ class Verb(Enum):
 
 
 class RoleRule(Serializable):
+    api: str
     resources: List[str]
     namespaces: List[str]
     verbs: List[Verb]
@@ -38,7 +39,7 @@ class RoleStatus(Serializable):
 
 
 class Role(Serializable):
-    metadata: SystemMetadata
+    metadata: CoreMetadata
     status: RoleStatus
     rules: List[RoleRule]
 
@@ -51,7 +52,7 @@ class RoleBindingStatus(Serializable):
 
 
 class RoleBinding(Serializable):
-    metadata: SystemMetadata
+    metadata: CoreMetadata
     status: RoleBindingStatus
     users: List[str]
     roles: List[str]

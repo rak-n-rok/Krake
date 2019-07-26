@@ -4,7 +4,7 @@ from datetime import datetime
 
 from krake.api.database import Key
 from .serializable import Serializable
-from .system import NamespacedMetadata
+from .core import NamespacedMetadata
 
 
 class ApplicationSpec(Serializable):

@@ -87,7 +87,7 @@ from typing import NamedTuple, Optional
 from inspect import isasyncgen
 from aiohttp import web
 
-from krake.data.system import Verb, Role, RoleBinding
+from krake.data.core import Verb, Role, RoleBinding
 from .helpers import session, json_error
 
 
@@ -149,14 +149,16 @@ class AuthorizationRequest(NamedTuple):
     """Authorization request handled by authorizers.
 
     Attributes:
+        api (str): Name of the API group
         namespace (str, optional): If the resource is namespaced, the requested
             namespace
         resource (str): Name of the resource
-        verb (krake.data.system.Verb): Verb that should be performed on the
+        verb (krake.data.core.Verb): Verb that should be performed on the
             resource.
 
     """
 
+    api: str
     namespace: Optional[str]
     resource: str
     verb: Verb
@@ -219,24 +221,33 @@ async def rbac(request, auth_request):
         user,
     )
 
-    # Check if any role allows access
+    # Check if any role grants access
     async for role in roles:
         for rule in role.rules:
-            if auth_request.verb in rule.verbs:
-                if auth_request.resource in rule.resources or "all" in rule.resources:
-                    if auth_request.namespace is None:
-                        return role
-
+            # Check if the API group matches
+            if rule.api == auth_request.api or rule.api == "all":
+                # Check if the requested verb is allowed
+                if auth_request.verb in rule.verbs:
+                    # Check if the requested resource is allowed
                     if (
-                        auth_request.namespace in rule.namespaces
-                        or "all" in rule.namespaces
+                        auth_request.resource in rule.resources
+                        or "all" in rule.resources
                     ):
-                        return role
+                        # If the resource is not namespaced, grant access
+                        if auth_request.namespace is None:
+                            return role
+
+                        # Check if the requested namespace is allowed
+                        if (
+                            auth_request.namespace in rule.namespaces
+                            or "all" in rule.namespaces
+                        ):
+                            return role
 
     raise web.HTTPForbidden()
 
 
-def protected(resource, verb, namespaced=True):
+def protected(api, resource, verb, namespaced=True):
     """Decorator function for aiohttp request handlers performing authorization.
 
     The returned decorator can be used to wrap a given aiohttp handler and
@@ -251,13 +262,14 @@ def protected(resource, verb, namespaced=True):
             from krake.api.auth import protected
 
             @routes.get("/book/{name}")
-            @protected(resource="book", verb="get", namespaced=False)
+            @protected(api="v1", resource="book", verb="get", namespaced=False)
             async def get_resource(request):
                 assert "user" in request
 
     Args:
+        api (str): Name if the API group
         resource (str): Name of the resource
-        verb (str, krake.data.system.Verb): Verb that should be performed
+        verb (str, krake.data.core.Verb): Verb that should be performed
         namespaced (bool, optional): True if the resource is namespaced.
             Default: True.
 
@@ -278,7 +290,7 @@ def protected(resource, verb, namespaced=True):
             else:
                 namespace = None
             auth_request = AuthorizationRequest(
-                namespace=namespace, resource=resource, verb=verb
+                api=api, namespace=namespace, resource=resource, verb=verb
             )
             await request.app["authorizer"](request, auth_request)
             return await handler(request, *args, **kwargs)
@@ -293,13 +305,13 @@ async def _fetch_roles(db, default_roles, default_role_bindings, username):
 
     Args:
         db (krake.api.database.Session): Database session
-        default_roles (Dict[str, krake.data.system.Role]): Statically
+        default_roles (Dict[str, krake.data.core.Role]): Statically
             configured system roles.
-        default_role_bindings (Dict[str, krake.data.system.RoleBinding]):
+        default_role_bindings (Dict[str, krake.data.core.RoleBinding]):
             Statically configured system role bindings.
 
     Yields:
-        krake.data.system.Role: Role associated with the user.
+        krake.data.core.Role: Role associated with the user.
 
     """
     roles = set()

@@ -1,25 +1,47 @@
+"""This module comprises request handlers forming the HTTP REST API for
+the core functionality of Krake.
+"""
 import logging
-from uuid import uuid4
 from datetime import datetime
+from uuid import uuid4
 from aiohttp import web
 from webargs import fields
 from webargs.aiohttpparser import use_kwargs
 
 from krake.data.serializable import serialize
-from krake.data.system import (
+from krake.data.core import (
     Role,
     RoleRule,
     RoleStatus,
     RoleBinding,
     RoleBindingStatus,
-    SystemMetadata,
+    CoreMetadata,
 )
-from ..helpers import session, json_error, load
-from ..auth import protected
+from . import __version__ as version
+from .auth import protected
+from .helpers import session, json_error, load
 
 
 logger = logging.getLogger(__name__)
 routes = web.RouteTableDef()
+
+
+@routes.get("/")
+@use_kwargs({"all": fields.Bool(location="query")})
+async def index(request, all=False):
+    return web.json_response({"version": version})
+
+
+@routes.get("/me")
+async def me(request):
+    roles = set()
+    user = request["user"]
+
+    async for binding in session(request).all(RoleBinding):
+        if user in binding.users:
+            roles.update(binding.roles)
+
+    return web.json_response({"user": user, "roles": sorted(roles)})
 
 
 # -----------------------------------------------------------------------------
@@ -27,15 +49,15 @@ routes = web.RouteTableDef()
 # -----------------------------------------------------------------------------
 
 
-@routes.get("/roles")
-@protected(resource="roles", verb="list", namespaced=False)
+@routes.get("/core/roles")
+@protected(api="core", resource="roles", verb="list", namespaced=False)
 async def list_roles(request):
     roles = [role async for role, _ in session(request).all(Role)]
     return web.json_response([serialize(role) for role in roles])
 
 
-@routes.post("/roles")
-@protected(resource="roles", verb="create", namespaced=False)
+@routes.post("/core/roles")
+@protected(api="core", resource="roles", verb="create", namespaced=False)
 @use_kwargs(
     {
         "name": fields.String(required=True),
@@ -52,7 +74,7 @@ async def create_role(request, name, rules):
 
     now = datetime.now()
     role = Role(
-        metadata=SystemMetadata(name=name, uid=str(uuid4())),
+        metadata=CoreMetadata(name=name, uid=str(uuid4())),
         rules=rules,
         status=RoleStatus(created=now, modified=now),
     )
@@ -62,15 +84,15 @@ async def create_role(request, name, rules):
     return web.json_response(serialize(role))
 
 
-@routes.get("/roles/{name}")
-@protected(resource="roles", verb="get", namespaced=False)
+@routes.get("/core/roles/{name}")
+@protected(api="core", resource="roles", verb="get", namespaced=False)
 @load("role", Role, namespaced=False)
 async def get_role(request, role):
     return web.json_response(serialize(role))
 
 
-@routes.delete("/roles/{name}")
-@protected(resource="roles", verb="delete", namespaced=False)
+@routes.delete("/core/roles/{name}")
+@protected(api="core", resource="roles", verb="delete", namespaced=False)
 @load("role", Role, namespaced=False)
 async def delete_role(request, role):
     await session(request).delete(role)
@@ -82,15 +104,15 @@ async def delete_role(request, role):
 # -----------------------------------------------------------------------------
 
 
-@routes.get("/rolebindings")
-@protected(resource="rolebindings", verb="list", namespaced=False)
+@routes.get("/core/rolebindings")
+@protected(api="core", resource="rolebindings", verb="list", namespaced=False)
 async def list_role_bindings(request):
     bindings = [binding async for binding, _ in session(request).all(RoleBinding)]
     return web.json_response([serialize(binding) for binding in bindings])
 
 
-@routes.post("/rolebindings")
-@protected(resource="rolebindings", verb="create", namespaced=False)
+@routes.post("/core/rolebindings")
+@protected(api="core", resource="rolebindings", verb="create", namespaced=False)
 @use_kwargs(
     {
         "name": fields.String(required=True),
@@ -108,7 +130,7 @@ async def create_role_binding(request, name, users, roles):
 
     now = datetime.now()
     binding = RoleBinding(
-        metadata=SystemMetadata(name=name, uid=str(uuid4())),
+        metadata=CoreMetadata(name=name, uid=str(uuid4())),
         users=users,
         roles=roles,
         status=RoleBindingStatus(created=now, modified=now),
@@ -119,15 +141,15 @@ async def create_role_binding(request, name, users, roles):
     return web.json_response(serialize(binding))
 
 
-@routes.get("/rolebindings/{name}")
-@protected(resource="rolebindings", verb="get", namespaced=False)
+@routes.get("/core/rolebindings/{name}")
+@protected(api="core", resource="rolebindings", verb="get", namespaced=False)
 @load("binding", RoleBinding, namespaced=False)
 async def get_role_binding(request, binding):
     return web.json_response(serialize(binding))
 
 
-@routes.delete("/rolebindings/{name}")
-@protected(resource="rolebindings", verb="delete", namespaced=False)
+@routes.delete("/core/rolebindings/{name}")
+@protected(api="core", resource="rolebindings", verb="delete", namespaced=False)
 @load("binding", RoleBinding, namespaced=False)
 async def delete_role_binding(request, binding):
     await session(request).delete(binding)

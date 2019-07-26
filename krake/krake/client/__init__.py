@@ -4,7 +4,7 @@ leverages the same data models as the API server from :mod:`krake.data`.
 from aiohttp import ClientSession
 from yarl import URL
 
-from .kubernetes import KubernetesResource
+from .kubernetes import KubernetesAPI
 
 
 class Client(object):
@@ -26,7 +26,7 @@ class Client(object):
                 await client.kubernetes.application.get(id)
 
     Attributes:
-        kubernetes (.kubernetes.KubernetesResource): API for all Kubernetes
+        kubernetes (.kubernetes.KubernetesAPI): API for all Kubernetes
             resources
 
     """
@@ -57,7 +57,7 @@ class Client(object):
         self.session = ClientSession(
             headers=headers, loop=self.loop, raise_for_status=True
         )
-        self.kubernetes = KubernetesResource(session=self.session, url=self.url)
+        self.kubernetes = KubernetesAPI(session=self.session, url=self.url)
 
     async def close(self):
         """Close the internal HTTP session and remove all resource attributes."""

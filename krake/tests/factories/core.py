@@ -3,9 +3,9 @@ from factory import Factory, SubFactory, List, lazy_attribute, fuzzy
 from datetime import datetime
 
 from .fake import fake
-from krake.data.system import (
+from krake.data.core import (
     NamespacedMetadata,
-    SystemMetadata,
+    CoreMetadata,
     Verb,
     RoleRule,
     RoleStatus,
@@ -38,7 +38,7 @@ class NamespacedMetadataFactory(Factory):
 
 class SystemMetadataFactory(Factory):
     class Meta:
-        model = SystemMetadata
+        model = CoreMetadata
 
     name = fuzzy.FuzzyAttribute(fuzzy_name)
     uid = fuzzy.FuzzyAttribute(fake.uuid4)
@@ -49,17 +49,24 @@ class RoleRuleFactory(Factory):
         model = RoleRule
 
     class Params:
-        resource_list = [
-            "kubernetes/applications",
-            "kubernetes/applications/complete",
-            "kubernetes/clusters",
-            "kubernetes/applications/status",
-            "kubernetes/clusters/status",
-        ]
+        api_resources = {
+            "core": ["role", "rolebinding"],
+            "kubernetes": [
+                "applications",
+                "applications/complete",
+                "applications/status",
+                "clusters",
+                "clusters/status",
+            ],
+        }
+
+    @lazy_attribute
+    def api(self):
+        return fake.random.choice(list(self.api_resources.keys()))
 
     @lazy_attribute
     def resources(self):
-        return fuzzy_sample(self.resource_list)
+        return fuzzy_sample(self.api_resources[self.api])
 
     @lazy_attribute
     def namespaces(self):

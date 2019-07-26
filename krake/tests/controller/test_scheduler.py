@@ -19,7 +19,7 @@ async def test_kubernetes_reception(aresponses, loop):
 
     aresponses.add(
         "api.krake.local",
-        "/namespaces/all/kubernetes/applications",
+        "/kubernetes/namespaces/all/applications",
         "GET",
         json_response([]),
     )
@@ -30,7 +30,7 @@ async def test_kubernetes_reception(aresponses, loop):
     # data was streamed.
     aresponses.add(
         "api.krake.local",
-        "/namespaces/all/kubernetes/applications?watch",
+        "/kubernetes/namespaces/all/applications?watch",
         "GET",
         stream([scheduled, updated, created], infinite=True),
         match_querystring=True,
@@ -74,8 +74,8 @@ async def test_kubernetes_scheduling(aresponses, loop):
     async def echo_binding(request):
         payload = await request.json()
         ref = (
-            f"/namespaces/{app.metadata.namespace}"
-            f"/kubernetes/clusters/{cluster.metadata.name}"
+            f"/kubernetes/namespaces/{app.metadata.namespace}"
+            f"/clusters/{cluster.metadata.name}"
         )
         assert payload["cluster"] == ref
         binding = ClusterBinding(cluster=payload["cluster"])
@@ -83,13 +83,13 @@ async def test_kubernetes_scheduling(aresponses, loop):
 
     aresponses.add(
         "api.krake.local",
-        "/namespaces/all/kubernetes/clusters",
+        "/kubernetes/namespaces/all/clusters",
         "GET",
         json_response([serialize(cluster)]),
     )
     aresponses.add(
         "api.krake.local",
-        f"/namespaces/testing/kubernetes/applications/{app.metadata.name}/binding",
+        f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/binding",
         "PUT",
         echo_binding,
     )
@@ -119,13 +119,13 @@ async def test_kubernetes_scheduling_no_cluster_found(aresponses, loop):
 
     aresponses.add(
         "api.krake.local",
-        "/namespaces/all/kubernetes/clusters",
+        "/kubernetes/namespaces/all/clusters",
         "GET",
         json_response([]),
     )
     aresponses.add(
         "api.krake.local",
-        f"/namespaces/testing/kubernetes/applications/{app.metadata.name}/status",
+        f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/status",
         "PUT",
         update_status,
     )

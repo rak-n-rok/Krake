@@ -19,13 +19,13 @@ async def test_app_reception(aresponses, loop):
 
     aresponses.add(
         "api.krake.local",
-        "/namespaces/all/kubernetes/applications",
+        "/kubernetes/namespaces/all/applications",
         "GET",
         json_response([]),
     )
     aresponses.add(
         "api.krake.local",
-        "/namespaces/all/kubernetes/applications?watch",
+        "/kubernetes/namespaces/all/applications?watch",
         "GET",
         stream([created, updated, scheduled], infinite=True),
         match_querystring=True,
@@ -91,8 +91,8 @@ spec:
 async def test_app_creation(aresponses, loop):
     cluster = ClusterFactory(magnum=False)
     cluster_ref = (
-        f"/namespaces/{cluster.metadata.namespace}"
-        f"/kubernetes/clusters/{cluster.metadata.name}"
+        f"/kubernetes/namespaces/{cluster.metadata.namespace}"
+        f"/clusters/{cluster.metadata.name}"
     )
     app = ApplicationFactory(
         status__state=ApplicationState.SCHEDULED,
@@ -143,7 +143,7 @@ async def test_app_creation(aresponses, loop):
     )
     aresponses.add(
         "api.krake.local",
-        f"/namespaces/testing/kubernetes/applications/{app.metadata.name}/status",
+        f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/status",
         "PUT",
         update_status,
     )
@@ -156,8 +156,8 @@ async def test_app_creation(aresponses, loop):
 async def test_app_deletion(aresponses, loop):
     cluster = ClusterFactory(magnum=False)
     cluster_ref = (
-        f"/namespaces/{cluster.metadata.namespace}"
-        f"/kubernetes/clusters/{cluster.metadata.name}"
+        f"/kubernetes/namespaces/{cluster.metadata.namespace}"
+        f"/clusters/{cluster.metadata.name}"
     )
     app = ApplicationFactory(
         status__state=ApplicationState.DELETING,
@@ -165,8 +165,8 @@ async def test_app_deletion(aresponses, loop):
         spec__manifest=nginx_manifest,
     )
     app_ref = (
-        f"/namespaces/{app.metadata.namespace}"
-        f"/kubernetes/applications/{app.metadata.name}"
+        f"/kubernetes/namespaces/{cluster.metadata.namespace}"
+        f"/applications/{app.metadata.name}"
     )
 
     async def update_status(request):
@@ -206,7 +206,7 @@ async def test_app_deletion(aresponses, loop):
     )
     aresponses.add(
         "api.krake.local",
-        f"/namespaces/testing/kubernetes/applications/{app.metadata.name}/status",
+        f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/status",
         "PUT",
         update_status,
     )
@@ -223,8 +223,8 @@ async def test_app_deletion_without_binding(aresponses, loop):
         spec__manifest=nginx_manifest,
     )
     app_ref = (
-        f"/namespaces/{app.metadata.namespace}"
-        f"/kubernetes/applications/{app.metadata.name}"
+        f"/kubernetes/namespaces/{app.metadata.namespace}"
+        f"/applications/{app.metadata.name}"
     )
 
     async def update_status(request):
@@ -243,7 +243,7 @@ async def test_app_deletion_without_binding(aresponses, loop):
     aresponses.add("api.krake.local", app_ref, "GET", json_response(serialize(app)))
     aresponses.add(
         "api.krake.local",
-        f"/namespaces/testing/kubernetes/applications/{app.metadata.name}/status",
+        f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/status",
         "PUT",
         update_status,
     )

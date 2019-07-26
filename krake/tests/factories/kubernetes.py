@@ -5,7 +5,7 @@ import yaml
 from factory import Factory, SubFactory, Trait, lazy_attribute, fuzzy
 
 from .fake import fake
-from .system import NamespacedMetadataFactory
+from .core import NamespacedMetadataFactory
 from krake.data.kubernetes import (
     ApplicationSpec,
     ApplicationStatus,

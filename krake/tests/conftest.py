@@ -110,6 +110,7 @@ def config(etcd_server, user):
                 "metadata": {"name": "system:admin"},
                 "rules": [
                     {
+                        "api": "all",
                         "namespaces": ["all"],
                         "resources": ["all"],
                         "verbs": ["create", "list", "get", "update", "delete"],
@@ -295,10 +296,10 @@ class RecordsContext(object):
 
 @pytest.fixture
 def rbac_allow(db, user):
-    from factories.system import RoleFactory, RoleBindingFactory
-    from krake.data.system import Verb, RoleRule
+    from factories.core import RoleFactory, RoleBindingFactory
+    from krake.data.core import Verb, RoleRule
 
-    def rbac_creator(resource, verb, namespace="testing"):
+    def rbac_creator(api, resource, verb, namespace="testing"):
         if isinstance(verb, str):
             verb = Verb.__members__[verb]
 
@@ -307,7 +308,11 @@ def rbac_allow(db, user):
             namespaces.append(namespace)
 
         role = RoleFactory(
-            rules=[RoleRule(namespaces=namespaces, resources=[resource], verbs=[verb])]
+            rules=[
+                RoleRule(
+                    api=api, namespaces=namespaces, resources=[resource], verbs=[verb]
+                )
+            ]
         )
         binding = RoleBindingFactory(users=[user], roles=[role.metadata.name])
 

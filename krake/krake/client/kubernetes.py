@@ -11,8 +11,8 @@ from krake.data.kubernetes import (
 from .resource import Resource
 
 
-class KubernetesResource(object):
-    """Mediator object for all Kubernetes applications.
+class KubernetesAPI(object):
+    """API summarizing all Kubernetes resources.
 
     Attributes:
         application (ApplicationResource): Resource for managing
@@ -33,11 +33,11 @@ class ApplicationResource(Resource):
 
     model = Application
     endpoints = {
-        "list": "/namespaces/{namespace}/kubernetes/applications",
-        "create": "/namespaces/{namespace}/kubernetes/applications",
-        "get": "/namespaces/{namespace}/kubernetes/applications/{name}",
-        "status": "/namespaces/{namespace}/kubernetes/applications/{name}/status",
-        "binding": "/namespaces/{namespace}/kubernetes/applications/{name}/binding",
+        "list": "/kubernetes/namespaces/{namespace}/applications",
+        "create": "/kubernetes/namespaces/{namespace}/applications",
+        "get": "/kubernetes/namespaces/{namespace}/applications/{name}",
+        "status": "/kubernetes/namespaces/{namespace}/applications/{name}/status",
+        "binding": "/kubernetes/namespaces/{namespace}/applications/{name}/binding",
     }
 
     async def create(self, namespace, manifest):
@@ -123,7 +123,7 @@ class ClusterResource(Resource):
 
     model = Cluster
     endpoints = {
-        "list": "/namespaces/{namespace}/kubernetes/clusters",
-        "create": "/namespaces/{namespace}/kubernetes/clusters",
-        "get": "/namespaces/{namespace}/kubernetes/clusters/{name}",
+        "list": "/kubernetes/namespaces/{namespace}/clusters",
+        "create": "/kubernetes/namespaces/{namespace}/clusters",
+        "get": "/kubernetes/namespaces/{namespace}/clusters/{name}",
     }

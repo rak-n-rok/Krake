@@ -3,9 +3,9 @@ from operator import attrgetter
 
 from krake.data import serialize, deserialize
 from krake.api.app import create_app
-from krake.data.system import Role, RoleBinding
+from krake.data.core import Role, RoleBinding
 
-from factories.system import RoleFactory, RoleRuleFactory, RoleBindingFactory
+from factories.core import RoleFactory, RoleRuleFactory, RoleBindingFactory
 
 
 uuid_re = re.compile(
@@ -25,7 +25,7 @@ async def test_list_roles(aiohttp_client, config, db):
         await db.put(role)
 
     client = await aiohttp_client(create_app(config=config))
-    resp = await client.get("/roles")
+    resp = await client.get("/core/roles")
     assert resp.status == 200
 
     data = await resp.json()
@@ -38,11 +38,11 @@ async def test_list_roles(aiohttp_client, config, db):
 async def test_list_roles_rbac(rbac_allow, config, aiohttp_client):
     client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
 
-    resp = await client.get("/roles")
+    resp = await client.get("/core/roles")
     assert resp.status == 403
 
-    async with rbac_allow("roles", "list", namespace=None):
-        resp = await client.get("/roles")
+    async with rbac_allow("core", "roles", "list", namespace=None):
+        resp = await client.get("/core/roles")
         assert resp.status == 200
 
 
@@ -51,7 +51,7 @@ async def test_create_role(aiohttp_client, config, db):
     rules = [RoleRuleFactory() for _ in range(2)]
 
     resp = await client.post(
-        "/roles", json={"rules": serialize(rules), "name": "test-role"}
+        "/core/roles", json={"rules": serialize(rules), "name": "test-role"}
     )
     assert resp.status == 200
     data = await resp.json()
@@ -67,11 +67,11 @@ async def test_create_role(aiohttp_client, config, db):
 async def test_create_role_rbac(rbac_allow, config, aiohttp_client):
     client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
 
-    resp = await client.post("/roles")
+    resp = await client.post("/core/roles")
     assert resp.status == 403
 
-    async with rbac_allow("roles", "create", namespace=None):
-        resp = await client.post("/roles")
+    async with rbac_allow("core", "roles", "create", namespace=None):
+        resp = await client.post("/core/roles")
         assert resp.status == 422
 
 
@@ -81,7 +81,7 @@ async def test_create_role_with_existing_name(aiohttp_client, config, db):
 
     client = await aiohttp_client(create_app(config=config))
 
-    resp = await client.post("/roles", json={"rules": [], "name": "existing"})
+    resp = await client.post("/core/roles", json={"rules": [], "name": "existing"})
     assert resp.status == 400
 
 
@@ -89,7 +89,7 @@ async def test_get_role(aiohttp_client, config, db):
     role = RoleFactory()
     await db.put(role)
     client = await aiohttp_client(create_app(config=config))
-    resp = await client.get(f"/roles/{role.metadata.name}")
+    resp = await client.get(f"/core/roles/{role.metadata.name}")
     assert resp.status == 200
     data = deserialize(Role, await resp.json())
     assert role == data
@@ -98,11 +98,11 @@ async def test_get_role(aiohttp_client, config, db):
 async def test_get_role_rbac(rbac_allow, config, aiohttp_client):
     client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
 
-    resp = await client.get("/roles/myrole")
+    resp = await client.get("/core/roles/myrole")
     assert resp.status == 403
 
-    async with rbac_allow("roles", "get", namespace=None):
-        resp = await client.get("/roles/myrole")
+    async with rbac_allow("core", "roles", "get", namespace=None):
+        resp = await client.get("/core/roles/myrole")
         assert resp.status == 404
 
 
@@ -114,7 +114,7 @@ async def test_delete_role(aiohttp_client, config, db):
     await db.put(role)
 
     # Delete role
-    resp = await client.delete(f"/roles/{role.metadata.name}")
+    resp = await client.delete(f"/core/roles/{role.metadata.name}")
     assert resp.status == 200
 
     deleted, _ = await db.get(Role, name=role.metadata.name)
@@ -124,11 +124,11 @@ async def test_delete_role(aiohttp_client, config, db):
 async def test_delete_role_rbac(rbac_allow, aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
 
-    resp = await client.delete("/roles/myrole")
+    resp = await client.delete("/core/roles/myrole")
     assert resp.status == 403
 
-    async with rbac_allow("roles", "delete", namespace=None):
-        resp = await client.delete("/roles/myrole")
+    async with rbac_allow("core", "roles", "delete", namespace=None):
+        resp = await client.delete("/core/roles/myrole")
         assert resp.status == 404
 
 
@@ -143,7 +143,7 @@ async def test_list_role_bindings(aiohttp_client, config, db):
         await db.put(binding)
 
     client = await aiohttp_client(create_app(config=config))
-    resp = await client.get("/rolebindings")
+    resp = await client.get("/core/rolebindings")
     assert resp.status == 200
 
     data = await resp.json()
@@ -156,11 +156,11 @@ async def test_list_role_bindings(aiohttp_client, config, db):
 async def test_list_role_bindings_rbac(rbac_allow, config, aiohttp_client):
     client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
 
-    resp = await client.get("/rolebindings")
+    resp = await client.get("/core/rolebindings")
     assert resp.status == 403
 
-    async with rbac_allow("rolebindings", "list", namespace=None):
-        resp = await client.get("/rolebindings")
+    async with rbac_allow("core", "rolebindings", "list", namespace=None):
+        resp = await client.get("/core/rolebindings")
         assert resp.status == 200
 
 
@@ -170,7 +170,8 @@ async def test_create_role_binding(aiohttp_client, config, db):
     roles = RoleBindingFactory().roles
 
     resp = await client.post(
-        "/rolebindings", json={"users": users, "roles": roles, "name": "test-binding"}
+        "/core/rolebindings",
+        json={"users": users, "roles": roles, "name": "test-binding"},
     )
     assert resp.status == 200
     data = await resp.json()
@@ -187,11 +188,11 @@ async def test_create_role_binding(aiohttp_client, config, db):
 async def test_create_role_binding_rbac(rbac_allow, config, aiohttp_client):
     client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
 
-    resp = await client.post("/rolebindings")
+    resp = await client.post("/core/rolebindings")
     assert resp.status == 403
 
-    async with rbac_allow("rolebindings", "create", namespace=None):
-        resp = await client.post("/rolebindings")
+    async with rbac_allow("core", "rolebindings", "create", namespace=None):
+        resp = await client.post("/core/rolebindings")
         assert resp.status == 422
 
 
@@ -202,7 +203,7 @@ async def test_create_role_binding_with_existing_name(aiohttp_client, config, db
     client = await aiohttp_client(create_app(config=config))
 
     resp = await client.post(
-        "/rolebindings", json={"users": [], "roles": [], "name": "existing"}
+        "/core/rolebindings", json={"users": [], "roles": [], "name": "existing"}
     )
     assert resp.status == 400
 
@@ -211,7 +212,7 @@ async def test_get_role_binding(aiohttp_client, config, db):
     binding = RoleBindingFactory()
     await db.put(binding)
     client = await aiohttp_client(create_app(config=config))
-    resp = await client.get(f"/rolebindings/{binding.metadata.name}")
+    resp = await client.get(f"/core/rolebindings/{binding.metadata.name}")
     assert resp.status == 200
     data = deserialize(RoleBinding, await resp.json())
     assert binding == data
@@ -220,11 +221,11 @@ async def test_get_role_binding(aiohttp_client, config, db):
 async def test_get_role_binding_rbac(rbac_allow, config, aiohttp_client):
     client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
 
-    resp = await client.get("/rolebindings/mybinding")
+    resp = await client.get("/core/rolebindings/mybinding")
     assert resp.status == 403
 
-    async with rbac_allow("rolebindings", "get", namespace=None):
-        resp = await client.get("/rolebindings/mybinding")
+    async with rbac_allow("core", "rolebindings", "get", namespace=None):
+        resp = await client.get("/core/rolebindings/mybinding")
         assert resp.status == 404
 
 
@@ -236,7 +237,7 @@ async def test_delete_role_binding(aiohttp_client, config, db):
     await db.put(binding)
 
     # Delete binding
-    resp = await client.delete(f"/rolebindings/{binding.metadata.name}")
+    resp = await client.delete(f"/core/rolebindings/{binding.metadata.name}")
     assert resp.status == 200
 
     deleted, _ = await db.get(Role, name=binding.metadata.name)
@@ -246,9 +247,9 @@ async def test_delete_role_binding(aiohttp_client, config, db):
 async def test_delete_role_binding_rbac(rbac_allow, aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
 
-    resp = await client.delete("/rolebindings/mybinding")
+    resp = await client.delete("/core/rolebindings/mybinding")
     assert resp.status == 403
 
-    async with rbac_allow("rolebindings", "delete", namespace=None):
-        resp = await client.delete("/rolebindings/mybinding")
+    async with rbac_allow("core", "rolebindings", "delete", namespace=None):
+        resp = await client.delete("/core/rolebindings/mybinding")
         assert resp.status == 404

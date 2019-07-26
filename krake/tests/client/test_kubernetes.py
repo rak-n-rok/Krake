@@ -29,7 +29,7 @@ async def test_list_applications(aresponses, loop):
     data = [ApplicationFactory()]
     aresponses.add(
         "api.krake.local",
-        "/namespaces/testing/kubernetes/applications",
+        "/kubernetes/namespaces/testing/applications",
         "GET",
         json_response([serialize(i) for i in data]),
     )
@@ -43,7 +43,7 @@ async def test_create_application(aresponses, loop):
     data = ApplicationFactory(status__state=ApplicationState.PENDING)
     aresponses.add(
         "api.krake.local",
-        "/namespaces/testing/kubernetes/applications",
+        "/kubernetes/namespaces/testing/applications",
         "POST",
         json_response(serialize(data)),
     )
@@ -89,13 +89,13 @@ async def test_update_application(aresponses, loop):
 
     aresponses.add(
         "api.krake.local",
-        f"/namespaces/testing/kubernetes/applications/{running.metadata.name}",
+        f"/kubernetes/namespaces/testing/applications/{running.metadata.name}",
         "GET",
         json_response(serialize(running)),
     )
     aresponses.add(
         "api.krake.local",
-        f"/namespaces/testing/kubernetes/applications/{running.metadata.name}",
+        f"/kubernetes/namespaces/testing/applications/{running.metadata.name}",
         "PUT",
         json_response(serialize(updated)),
     )
@@ -111,7 +111,7 @@ async def test_get_application(aresponses, loop):
     data = ApplicationFactory()
     aresponses.add(
         "api.krake.local",
-        f"/namespaces/testing/kubernetes/applications/{data.metadata.name}",
+        f"/kubernetes/namespaces/testing/applications/{data.metadata.name}",
         "GET",
         json_response(serialize(data)),
     )
@@ -135,7 +135,7 @@ async def test_watch_applications(aresponses, loop):
 
     aresponses.add(
         "api.krake.local",
-        "/namespaces/testing/kubernetes/applications?watch",
+        "/kubernetes/namespaces/testing/applications?watch",
         "GET",
         stream(data),
         match_querystring=True,

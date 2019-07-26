@@ -29,9 +29,9 @@ def list_applications(config, session, namespace, all):
         namespace = config["user"]
 
     if all:
-        url = f"/namespaces/{namespace}/kubernetes/applications?all"
+        url = f"/kubernetes/namespaces/{namespace}/applications?all"
     else:
-        url = f"/namespaces/{namespace}/kubernetes/applications"
+        url = f"/kubernetes/namespaces/{namespace}/applications"
     resp = session.get(url)
     for app in resp.json():
         print("---")
@@ -51,7 +51,7 @@ def create_application(config, session, file, namespace, name):
     manifest = file.read()
 
     resp = session.post(
-        f"/namespaces/{namespace}/kubernetes/applications",
+        f"/kubernetes/namespaces/{namespace}/applications",
         json={"manifest": manifest, "name": name},
     )
     data = resp.json()
@@ -66,7 +66,7 @@ def get_application(config, session, namespace, name):
         namespace = config["user"]
 
     resp = session.get(
-        f"/namespaces/{namespace}/kubernetes/applications/{name}",
+        f"/kubernetes/namespaces/{namespace}/applications/{name}",
         raise_for_status=False,
     )
     if resp.status_code == 404:
@@ -90,7 +90,7 @@ def update_application(config, session, namespace, name, file):
 
     manifest = file.read()
     session.put(
-        f"/namespaces/{namespace}/kubernetes/applications/{name}",
+        f"/kubernetes/namespaces/{namespace}/applications/{name}",
         json={"manifest": manifest},
     )
 
@@ -102,7 +102,7 @@ def delete_application(config, session, namespace, name):
     if namespace is None:
         namespace = config["user"]
 
-    session.delete(f"/namespaces/{namespace}/kubernetes/applications/{name}")
+    session.delete(f"/kubernetes/namespaces/{namespace}/applications/{name}")
 
 
 cluster = kubernetes.subparser("cluster", help="Manage Kubernetes clusters")
@@ -171,7 +171,7 @@ def create_cluster(config, session, namespace, kubeconfig, contexts):
         cluster_config["current-context"] = context["name"]
 
         resp = session.post(
-            f"/namespaces/{namespace}/kubernetes/clusters", json=cluster_config
+            f"/kubernetes/namespaces/{namespace}/clusters", json=cluster_config
         )
 
         print("---")
@@ -187,7 +187,7 @@ def list_clusters(config, session, namespace):
     if namespace is None:
         namespace = config["user"]
 
-    resp = session.get(f"/namespaces/{namespace}/kubernetes/clusters")
+    resp = session.get(f"/kubernetes/namespaces/{namespace}/clusters")
     for cluster in resp.json():
         print("---")
         yaml.dump(cluster, default_flow_style=False, stream=sys.stdout)
