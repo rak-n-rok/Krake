@@ -1,9 +1,9 @@
-from aiohttp.web import json_response
+from operator import attrgetter
 
+from krake.api.app import create_app
 from krake.client import Client
-from krake.data.kubernetes import ApplicationState
-from krake.data import serialize
-from krake.test_utils import stream
+from krake.data.kubernetes import Application, ApplicationState
+from krake.test_utils import with_timeout
 
 from factories.kubernetes import ApplicationFactory
 
@@ -25,34 +25,37 @@ spec:
 """
 
 
-async def test_list_applications(aresponses, loop):
-    data = [ApplicationFactory()]
-    aresponses.add(
-        "api.krake.local",
-        "/kubernetes/namespaces/testing/applications",
-        "GET",
-        json_response([serialize(i) for i in data]),
-    )
-    async with Client(url="http://api.krake.local", loop=loop) as client:
+async def test_list_applications(aiohttp_server, config, db, loop):
+    # Populate database
+    data = [ApplicationFactory(), ApplicationFactory()]
+    for app in data:
+        await db.put(app)
+
+    # Start API server
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         apps = await client.kubernetes.application.list(namespace="testing")
 
-    assert apps == data
+    key = attrgetter("metadata.name")
+    assert sorted(apps, key=key) == sorted(data, key=key)
 
 
-async def test_create_application(aresponses, loop):
+async def test_create_application(aiohttp_server, config, db, loop):
     data = ApplicationFactory(status__state=ApplicationState.PENDING)
-    aresponses.add(
-        "api.krake.local",
-        "/kubernetes/namespaces/testing/applications",
-        "POST",
-        json_response(serialize(data)),
-    )
-    async with Client(url="http://api.krake.local", loop=loop) as client:
-        app = await client.kubernetes.application.create(
-            namespace="testing", manifest=data.spec.manifest
-        )
 
-    assert app == data
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        received = await client.kubernetes.application.create(data)
+
+    assert received.spec == data.spec
+    assert received.status.state == ApplicationState.PENDING
+
+    stored, _ = await db.get(
+        Application, namespace=data.metadata.namespace, name=data.metadata.name
+    )
+    assert stored == received
 
 
 updated_manifest = """
@@ -78,49 +81,37 @@ spec:
 """
 
 
-async def test_update_application(aresponses, loop):
-    running = ApplicationFactory(status__state=ApplicationState.RUNNING)
-    updated = ApplicationFactory(
-        metadata__uid=running.metadata.uid,
-        metadata__user=running.metadata.user,
-        status__state=ApplicationState.UPDATED,
-        spec__manifest=updated_manifest,
+async def test_update_application(aiohttp_server, config, db, loop):
+    app = ApplicationFactory(status__state=ApplicationState.RUNNING)
+    await db.put(app)
+    app.spec.manifest = updated_manifest
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        received = await client.kubernetes.application.update(app)
+
+    assert received.spec.manifest == updated_manifest
+    assert received.status.state == ApplicationState.UPDATED
+
+    stored, _ = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-
-    aresponses.add(
-        "api.krake.local",
-        f"/kubernetes/namespaces/testing/applications/{running.metadata.name}",
-        "GET",
-        json_response(serialize(running)),
-    )
-    aresponses.add(
-        "api.krake.local",
-        f"/kubernetes/namespaces/testing/applications/{running.metadata.name}",
-        "PUT",
-        json_response(serialize(updated)),
-    )
-    async with Client(url="http://api.krake.local", loop=loop) as client:
-        app = await client.kubernetes.application.update(
-            namespace="testing", name=running.metadata.name, manifest=updated_manifest
-        )
-
-    assert app == updated
+    assert stored.spec.manifest == updated_manifest
+    assert stored.status.state == ApplicationState.UPDATED
 
 
-async def test_get_application(aresponses, loop):
+async def test_get_application(aiohttp_server, config, db, loop):
     data = ApplicationFactory()
-    aresponses.add(
-        "api.krake.local",
-        f"/kubernetes/namespaces/testing/applications/{data.metadata.name}",
-        "GET",
-        json_response(serialize(data)),
-    )
-    async with Client(url="http://api.krake.local", loop=loop) as client:
-        app = await client.kubernetes.application.get(
-            namespace="testing", name=data.metadata.name
-        )
+    await db.put(data)
 
-    assert app == data
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        received = await client.kubernetes.application.get(
+            namespace=data.metadata.namespace, name=data.metadata.name
+        )
+        assert received == data
 
 
 async def aenumerate(iterable):
@@ -130,21 +121,55 @@ async def aenumerate(iterable):
         i += 1
 
 
-async def test_watch_applications(aresponses, loop):
+@with_timeout(3)
+async def test_watch_applications_in_namespace(aiohttp_server, config, db, loop):
     data = [ApplicationFactory(), ApplicationFactory(), ApplicationFactory()]
 
-    aresponses.add(
-        "api.krake.local",
-        "/kubernetes/namespaces/testing/applications?watch",
-        "GET",
-        stream(data),
-        match_querystring=True,
-    )
-    async with Client(url="http://api.krake.local", loop=loop) as client:
-        async for i, app in aenumerate(
-            client.kubernetes.application.watch(namespace="testing")
-        ):
-            expected = data[i]
-            assert app == expected
+    async def modify():
+        for app in data:
+            await db.put(app)
 
-    assert i == len(data) - 1
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        async with client.kubernetes.application.watch(namespace="testing") as watcher:
+            modifying = loop.create_task(modify())
+
+            async for i, received in aenumerate(watcher):
+                expected = data[i]
+                assert received == expected
+
+                if i == len(data) - 1:
+                    break
+
+            await modifying
+
+
+@with_timeout(3)
+async def test_watch_applications_all_namespaces(aiohttp_server, config, db, loop):
+    data = [
+        ApplicationFactory(metadata__namespace="testing"),
+        ApplicationFactory(metadata__namespace="default"),
+    ]
+
+    async def modify():
+        for app in data:
+            await db.put(app)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        async with client.kubernetes.application.watch(namespace="all") as watcher:
+            modifying = loop.create_task(modify())
+
+            async for i, received in aenumerate(watcher):
+                expected = data[i]
+                assert received == expected
+
+                if i == len(data) - 1:
+                    break
+
+            await modifying
+
+
+# TODO: Test Kubernetes clusters

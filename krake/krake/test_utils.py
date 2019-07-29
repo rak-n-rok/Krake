@@ -1,5 +1,7 @@
 """Some utilities for testing Krake components"""
+import asyncio
 import json
+from functools import wraps
 from aiohttp.web import StreamResponse
 from krake.data import serialize
 
@@ -51,3 +53,33 @@ def stream(data, done=None, infinite=False):
         return resp
 
     return handler
+
+
+def with_timeout(timeout):
+    """Decorator function for coroutines
+
+    Example:
+        .. code:: python
+
+            from krake.test_utils import with_timeout
+
+            @with_timeout(3)
+            async def test_my_coroutine():
+                await infinite_coroutine()
+
+    Args:
+        timeout (int, float): Timeout interval in seconds
+
+    Returns:
+        callable: Decorator that can be used for decorating coroutines.
+
+    """
+
+    def decorator(fn):
+        @wraps(fn)
+        async def wrapper(*args, **kwargs):
+            return await asyncio.wait_for(fn(*args, **kwargs), timeout=timeout)
+
+        return wrapper
+
+    return decorator
