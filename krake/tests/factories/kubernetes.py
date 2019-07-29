@@ -24,11 +24,15 @@ def fuzzy_name():
     return "-".join(fake.name().split()).lower()
 
 
+states = list(ApplicationState.__members__.values())
+states.remove(ApplicationState.DELETED)
+
+
 class ApplicationStatusFactory(Factory):
     class Meta:
         model = ApplicationStatus
 
-    state = fuzzy.FuzzyChoice(list(ApplicationState.__members__.values()))
+    state = fuzzy.FuzzyChoice(states)
     created = fuzzy.FuzzyDateTime(datetime.now(tz=pytz.utc))
 
     @lazy_attribute
