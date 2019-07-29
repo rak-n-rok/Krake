@@ -11,6 +11,7 @@ from base64 import b64encode
 import yaml
 
 from .parser import ParserSpec, argument
+from .fixtures import depends
 
 
 kubernetes = ParserSpec(
@@ -25,6 +26,7 @@ application = kubernetes.subparser(
 @application.command("list", help="List Kubernetes application")
 @argument("-a", "--all", action="store_true", help="Show deleted applications")
 @argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
+@depends("config", "session")
 def list_applications(config, session, namespace, all):
     if namespace is None:
         namespace = config["user"]
@@ -45,6 +47,7 @@ def list_applications(config, session, namespace, all):
 )
 @argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
 @argument("name", help="Name of the application")
+@depends("config", "session")
 def create_application(config, session, file, namespace, name):
     if namespace is None:
         namespace = config["user"]
@@ -58,6 +61,7 @@ def create_application(config, session, file, namespace, name):
 @application.command("get", help="Get Kubernetes application")
 @argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
 @argument("name", help="Kubernetes application name")
+@depends("config", "session")
 def get_application(config, session, namespace, name):
     if namespace is None:
         namespace = config["user"]
@@ -81,6 +85,7 @@ def get_application(config, session, namespace, name):
     "-f", "--file", type=FileType(), required=True, help="Kubernetes manifest file"
 )
 @argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
+@depends("config", "session")
 def update_application(config, session, namespace, name, file):
     if namespace is None:
         namespace = config["user"]
@@ -92,6 +97,7 @@ def update_application(config, session, namespace, name, file):
 @application.command("delete", help="Delete Kubernetes application")
 @argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
 @argument("name", help="Kubernetes application name")
+@depends("config", "session")
 def delete_application(config, session, namespace, name):
     if namespace is None:
         namespace = config["user"]
@@ -112,6 +118,7 @@ cluster = kubernetes.subparser("cluster", help="Manage Kubernetes clusters")
     type=FileType(),
     help="Kubeconfig file that should be used to control this cluster",
 )
+@depends("config", "session")
 def create_cluster(config, session, namespace, kubeconfig, contexts):
     if namespace is None:
         namespace = config["user"]
@@ -181,6 +188,7 @@ def create_cluster(config, session, namespace, kubeconfig, contexts):
 @argument(
     "-n", "--namespace", help="Namespace of the Kubernetes cluster. Defaults to user"
 )
+@depends("config", "session")
 def list_clusters(config, session, namespace):
     if namespace is None:
         namespace = config["user"]

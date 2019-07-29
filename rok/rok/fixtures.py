@@ -1,4 +1,4 @@
-"""Simple dependency injection module for rok inspired by pytest's fixtures.
+r"""Simple dependency injection module for rok inspired by pytest's fixtures.
 
 There is a simple registration decorator :func:`fixture` that can be used to
 mark functions as fixtures. Functions using these fixtures can declare their
@@ -50,8 +50,52 @@ def fixture(func):
 fixture.mapping = {}
 
 
+def depends(*dependencies):
+    """Decorator function for marking fixture dependencies of a function.
+
+    Example:
+        from rok.fixtures import fixture, depends
+
+        @depends("engine")
+        def fetch_records(engine):
+            # Do something with the engine ...
+
+        # Fixtures themself can also depend on other fixtures
+        @fixture
+        @depends("config")
+        def engine(config):
+            return create_engine(config=config)
+
+        @fixture
+        def config:
+            return load_config()
+
+    Args:
+        *dependencies: Fixtures the decorated function depends on
+
+    Returns:
+        callable: Decorator for explicitly marking function dependencies.
+    """
+
+    def decorator(func):
+        if not hasattr(func, "depends"):
+            func.depends = []
+        func.depends.extend(dependencies)
+        return func
+
+    return decorator
+
+
 class Resolver(object):
-    """Dependency resolver for functions marked via :func:`use` and fixtures.
+    """Dependency resolver for function arguments annotated with
+    :func:`depends`.
+
+    Dependencies of a function are loaded from the ``depends`` attribute of
+    the function. If a fixture is not available, the resolver checks if there
+    is a default argument. Otherwise a :class:`RuntimeError` is raised.
+
+    All fixtures can be overwritten by passing a corresponding keyword
+    argument to the resolver call.
 
     Resolver uses the context manager protocol to manage the lifecycle of
     generator-based fixtures.
@@ -60,12 +104,13 @@ class Resolver(object):
         .. code:: python
 
             from sqlalchemy import create_engine
-            from krake.fixtures import fixture, use, Resolver
+            from krake.fixtures import fixture, depends, Resolver
 
             @fixture
             def engine():
                 yield create_engine("postgresql://user:passwd@localhost:5432/database")
 
+            @depends("engine")
             def fetch(engine, min_uid):
                 with engine.begin() as connection:
                     result = connection.execute(
@@ -89,8 +134,11 @@ class Resolver(object):
     def __init__(self, fixtures=None):
         if fixtures is None:
             fixtures = fixture.mapping
-        self.resolved = None
         self.fixtures = fixtures
+
+        self.resolved = None
+        self.generators = None
+        self.resolving = None
 
     def __enter__(self):
         self.resolved = {}
@@ -107,8 +155,16 @@ class Resolver(object):
             else:
                 raise RuntimeError(f"Fixture {name} yielded multiple values")
 
+        self.resolved = None
+        self.generators = None
+        self.resolving = None
+
     def __call__(self, func, **kwargs):
-        for name, parameter in signature(func).parameters.items():
+        sig = signature(func)
+
+        for name in getattr(func, "depends", []):
+            parameter = sig.parameters.get(name, None)
+
             # Dependency overwritten
             if name in kwargs:
                 pass
@@ -137,8 +193,8 @@ class Resolver(object):
                 self.resolved[name] = value
                 kwargs[name] = value
 
-            # Use default parameter
-            elif parameter.default != parameter.empty:
+            # There is a default parameter
+            elif parameter and parameter.default != parameter.empty:
                 pass
 
             else:
@@ -211,6 +267,7 @@ class BaseUrlSession(requests.Session):
 
 
 @fixture
+@depends("config")
 def session(config):
     with BaseUrlSession(base_url=config["api_url"]) as session:
         yield session
