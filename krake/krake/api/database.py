@@ -253,7 +253,7 @@ class Session(object):
         resp = await self.client.delete_range(key=key)
         return resp.deleted
 
-    async def watch(self, cls, created=None, **kwargs):
+    def watch(self, cls, **kwargs):
         """Watch the namespace of a given serializable type and yield
         every change in this namespace.
 
@@ -263,40 +263,13 @@ class Session(object):
         Args:
             cls (type): Serializable type of which the namespace should be
                 watched
-            created (asyncio.Future, optional): Future that will be set
-                if the watcher was succesfully created.
             **kwargs: Parameters for the etcd key
 
         Yields:
             Event: Every change in the namespace will generate an event
 
         """
-        prefix = cls.__metadata__["key"].prefix(**kwargs)
-        watcher = self.client.watch_create(key=prefix, prefix=True)
-        async with watcher:
-            async for resp in watcher:
-                if resp.events is None:
-                    assert resp.created
-
-                    # If a created future is passed, notify waiters that the
-                    # watcher was created.
-                    if created is not None:
-                        created.set_result(None)
-                else:
-                    for event in resp.events:
-                        if cls.__metadata__["key"].matches(event.kv.key.decode()):
-                            # Resolve event type. Empty string means "PUT"
-                            # event.
-                            if event.type == "":
-                                type_ = EventType.PUT
-                                value, rev = self.load_instance(cls, event.kv)
-                            else:
-                                assert event.type.name == "DELETE"
-                                type_ = EventType.DELETE
-                                value = None
-                                rev = Revision.from_kv(event.kv)
-
-                            yield Event(type_, value, rev)
+        return Watcher(self, cls, **kwargs)
 
     def load_instance(self, cls, kv):
         """Load an instance and its revision by an etcd key-value pair
@@ -313,6 +286,72 @@ class Session(object):
         rev = Revision.from_kv(kv)
 
         return model, rev
+
+
+class Watcher(object):
+    """Async context manager for database watching requests.
+
+    This context manager is used internally by :meth:`Session.watch`. It
+    returns a async generator on entering. It is ensured that the watch is
+    created on entering. This means inside the context, it can be assumed that
+    the watch exists.
+
+    Args:
+        session (Session): Database session doing the watch request
+        model (type): Class that is loaded from database
+        **kwargs (dict): Keyword arguments that are used to generate the
+            etcd key prefix (:meth:`Key.prefix`)
+
+    """
+
+    def __init__(self, session, model, **kwargs):
+        self.session = session
+        self.model = model
+        self.prefix = model.__metadata__["key"].prefix(**kwargs)
+        self.response = None
+        self.watch_id = None
+
+    async def __aenter__(self):
+        self.response = self.session.client.watch_create(key=self.prefix, prefix=True)
+
+        # Receiving "created" response
+        async for resp in self.response:
+            assert resp.created
+            assert resp.events is None
+            self.watch_id = resp.watch_id
+            break
+
+        return self.watch()
+
+    async def __aexit__(self, *exc):
+        self.response.close()
+        self.response = None
+        self.watch_id = None
+
+    async def watch(self):
+        """Async generator for watching database prefix.
+
+        Yields:
+            Event: Databse event holding the loaded model (see ``model``
+                argument) and database revision.
+
+        """
+        async for resp in self.response:
+            assert resp.watch_id == self.watch_id
+
+            for event in resp.events:
+                if self.model.__metadata__["key"].matches(event.kv.key.decode()):
+                    # Resolve event type. Empty string means "PUT" event.
+                    if event.type == "":
+                        type_ = EventType.PUT
+                        value, rev = self.session.load_instance(self.model, event.kv)
+                    else:
+                        assert event.type.name == "DELETE"
+                        type_ = EventType.DELETE
+                        value = None
+                        rev = Revision.from_kv(event.kv)
+
+                    yield Event(type_, value, rev)
 
 
 class Key(object):

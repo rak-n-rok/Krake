@@ -33,10 +33,11 @@ class KubernetesController(Controller):
                 await self.queue.put(app.metadata.uid, app)
 
         logger.info("Watching Application")
-        async for app in self.client.kubernetes.application.watch(namespace="all"):
-            logger.debug("Received %r", app)
-            if app.status.state in self.states:
-                await self.queue.put(app.metadata.uid, app)
+        async with self.client.kubernetes.application.watch(namespace="all") as watcher:
+            async for app in watcher:
+                logger.debug("Received %r", app)
+                if app.status.state in self.states:
+                    await self.queue.put(app.metadata.uid, app)
 
 
 class KubernetesWorker(Worker):

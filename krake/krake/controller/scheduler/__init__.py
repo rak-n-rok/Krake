@@ -28,9 +28,10 @@ class Scheduler(Controller):
                 await self.queue.put(app.metadata.uid, app)
 
         logger.info("Watching Kubernetes application")
-        async for app in self.client.kubernetes.application.watch(namespace="all"):
-            if app.status.state in self.states:
-                await self.queue.put(app.metadata.uid, app)
+        async with self.client.kubernetes.application.watch(namespace="all") as watcher:
+            async for app in watcher:
+                if app.status.state in self.states:
+                    await self.queue.put(app.metadata.uid, app)
 
 
 @total_ordering

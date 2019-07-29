@@ -148,17 +148,15 @@ async def test_get_polymorphic(db, etcd_client):
 async def test_watching_create(db, loop):
     data = [MyModelFactory() for _ in range(10)]
     watched = []
-    created = loop.create_future()
 
     async def create():
-        # Wait for the watcher to be created
-        await created
-
         for model in data:
             await db.put(model)
 
-    async def watch():
-        async for event, model, rev in db.watch(MyModel, created=created):
+    async with db.watch(MyModel) as watcher:
+        creating = loop.create_task(create())
+
+        async for event, model, rev in watcher:
             assert event == EventType.PUT
             assert rev.version == 1
             watched.append(model)
@@ -166,11 +164,7 @@ async def test_watching_create(db, loop):
             if len(watched) == len(data):
                 break
 
-    creating = loop.create_task(create())
-    watching = loop.create_task(watch())
-
-    await creating
-    await watching
+        await creating
 
     assert data == watched
 
@@ -186,12 +180,8 @@ async def aenumerate(iterable):
 async def test_watching_update(db, loop):
     names = [fake.pystr(), fake.pystr(), fake.pystr()]
     data = MyModelFactory(name=names[0])
-    created = loop.create_future()
 
     async def modify():
-        # Wait for the watcher to be created
-        await created
-
         # Insert model into database
         await db.put(data)
 
@@ -204,8 +194,8 @@ async def test_watching_update(db, loop):
 
         await db.delete(data)
 
-    async def watch():
-        watcher = db.watch(MyModel, created=created)
+    async with db.watch(MyModel) as watcher:
+        modifying = loop.create_task(modify())
 
         async for i, (event, model, rev) in aenumerate(watcher):
             if i == 0:
@@ -235,8 +225,4 @@ async def test_watching_update(db, loop):
                 assert rev.version == 0
                 break
 
-    modifying = loop.create_task(modify())
-    watching = loop.create_task(watch())
-
-    await modifying
-    await watching
+        await modifying

@@ -57,18 +57,18 @@ async def list_or_watch_applications(request, heartbeat):
             apps = (app for app in apps if app.status.state != ApplicationState.DELETED)
 
         return web.json_response([serialize(app) for app in apps])
-    else:
-        resp = web.StreamResponse(headers={"Content-Type": "application/json"})
+
+    kwargs = {}
+    if namespace != "all":
+        kwargs["namespace"] = namespace
+
+    async with session(request).watch(Application, **kwargs) as watcher:
+        resp = web.StreamResponse(headers={"Content-Type": "application/x-ndjson"})
         resp.enable_chunked_encoding()
 
         await resp.prepare(request)
 
         async with Heartbeat(resp, interval=heartbeat):
-            if namespace == "all":
-                watcher = session(request).watch(Application)
-            else:
-                watcher = session(request).watch(Application, namespace=namespace)
-
             async for event, app, rev in watcher:
 
                 # Key was deleted. Stop update stream

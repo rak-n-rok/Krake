@@ -13,6 +13,8 @@ class Resource(object):
         model (type): Serializable type from :mod:`krake.data` that is managed
             by this resource. This attribute is used by :meth:`list`,
             :meth:`get`, :meth:`delete` and :meth:`watch`.
+        endpoints (dict): Dictionary of verbs to HTTP endpoints. The URLs
+            might use standard Python string format templating.
 
     Args:
         session (aiohttp.ClientSession): HTTP session used for all HTTP
@@ -55,20 +57,55 @@ class Resource(object):
         data = await resp.json()
         return deserialize(self.model, data)
 
-    async def watch(self, **kwargs):
-        timeout = ClientTimeout(sock_read=float("inf"))
-        url = self.url.with_path(self.endpoints["list"].format(**kwargs)).with_query(
-            "watch"
-        )
-        resp = await self.session.get(url, timeout=timeout)
+    def watch(self, **kwargs):
+        return Watcher(self, **kwargs)
 
-        async with resp:
-            try:
-                async for line in resp.content:
-                    if not line:  # EOF
-                        return
-                    if line == b"\n":  # Heartbeat
-                        continue
-                    yield deserialize(self.model, line)
-            except ClientPayloadError:
-                return
+
+class Watcher(object):
+    """Async context manager used by :meth:`Resource.watch`.
+
+    The context manager returns the async generator of resources. On entering
+    it is ensured that the watch is created. This means inside the context a
+    watch is already established.
+
+    Args:
+        resource (Resource): Resource requesting a watch
+        **kwargs (dict): Keyword arguments that are used to format the
+            ``list`` endpoint.
+
+    """
+
+    def __init__(self, resource, **kwargs):
+        self.resource = resource
+        self.response = None
+        self.timeout = ClientTimeout(sock_read=float("inf"))
+        self.url = self.resource.url.with_path(
+            self.resource.endpoints["list"].format(**kwargs)
+        ).with_query("watch")
+
+    async def __aenter__(self):
+        self.response = await self.resource.session.get(self.url, timeout=self.timeout)
+        return self.watch()
+
+    async def __aexit__(self, *exc):
+        await self.response.release()
+        self.response = None
+
+    async def watch(self):
+        """Async generator yielding instances of the watched resource model
+
+        Yields:
+            Deserialized resource model (see :attr:`Resource.model`)
+
+        """
+        try:
+            async for line in self.response.content:
+                if not line:  # EOF
+                    return
+                if line == b"\n":  # Heartbeat
+                    continue
+
+                yield deserialize(self.resource.model, line)
+
+        except ClientPayloadError:
+            return
