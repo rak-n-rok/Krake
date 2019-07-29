@@ -9,6 +9,7 @@ import sys
 from argparse import FileType
 from base64 import b64encode
 import yaml
+
 from .parser import ParserSpec, argument
 
 
@@ -48,12 +49,8 @@ def create_application(config, session, file, namespace, name):
     if namespace is None:
         namespace = config["user"]
 
-    manifest = file.read()
-
-    resp = session.post(
-        f"/kubernetes/namespaces/{namespace}/applications",
-        json={"manifest": manifest, "name": name},
-    )
+    app = {"metadata": {"name": name}, "spec": {"manifest": file.read()}}
+    resp = session.post(f"/kubernetes/namespaces/{namespace}/applications", json=app)
     data = resp.json()
     yaml.dump(data, default_flow_style=False, stream=sys.stdout)
 
@@ -88,11 +85,8 @@ def update_application(config, session, namespace, name, file):
     if namespace is None:
         namespace = config["user"]
 
-    manifest = file.read()
-    session.put(
-        f"/kubernetes/namespaces/{namespace}/applications/{name}",
-        json={"manifest": manifest},
-    )
+    app = {"metadata": {"name": name}, "spec": {"manifest": file.read()}}
+    session.put(f"/kubernetes/namespaces/{namespace}/applications/{name}", json=app)
 
 
 @application.command("delete", help="Delete Kubernetes application")
@@ -170,8 +164,12 @@ def create_cluster(config, session, namespace, kubeconfig, contexts):
         cluster_config["users"] = [user]
         cluster_config["current-context"] = context["name"]
 
+        cluster = {
+            "metadata": {"name": cluster["name"]},
+            "spec": {"kubeconfig": cluster_config},
+        }
         resp = session.post(
-            f"/kubernetes/namespaces/{namespace}/clusters", json=cluster_config
+            f"/kubernetes/namespaces/{namespace}/clusters", json=cluster
         )
 
         print("---")
@@ -191,3 +189,14 @@ def list_clusters(config, session, namespace):
     for cluster in resp.json():
         print("---")
         yaml.dump(cluster, default_flow_style=False, stream=sys.stdout)
+
+
+@cluster.command("delete", help="Delete Kubernetes cluster")
+@argument("-n", "--namespace", help="Namespace of the cluster. Defaults to user")
+@argument("name", help="Kubernetes cluster name")
+@depends("config", "session")
+def delete_cluster(config, session, namespace, name):
+    if namespace is None:
+        namespace = config["user"]
+
+    session.delete(f"/kubernetes/namespaces/{namespace}/clusters/{name}")

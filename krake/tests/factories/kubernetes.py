@@ -90,6 +90,8 @@ class ApplicationSpecFactory(Factory):
     @lazy_attribute
     def cluster(self):
         if self.factory_parent:
+            if self.factory_parent.status is None:
+                return None
             if self.factory_parent.status.state == ApplicationState.PENDING:
                 return None
             namespace = self.factory_parent.metadata.user

@@ -5,7 +5,7 @@ from krake.data import serialize, deserialize
 from krake.api.app import create_app
 from krake.data.core import Role, RoleBinding
 
-from factories.core import RoleFactory, RoleRuleFactory, RoleBindingFactory
+from factories.core import RoleFactory, RoleBindingFactory
 
 
 uuid_re = re.compile(
@@ -48,20 +48,18 @@ async def test_list_roles_rbac(rbac_allow, config, aiohttp_client):
 
 async def test_create_role(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
-    rules = [RoleRuleFactory() for _ in range(2)]
+    data = RoleFactory(status=None)
 
-    resp = await client.post(
-        "/core/roles", json={"rules": serialize(rules), "name": "test-role"}
-    )
+    resp = await client.post("/core/roles", json=serialize(data))
     assert resp.status == 200
-    data = await resp.json()
+    role = deserialize(Role, await resp.json())
 
-    assert uuid_re.match(data["metadata"]["uid"]) is not None
+    assert role.status.created
+    assert role.status.modified
+    assert role.rules == data.rules
 
-    role, rev = await db.get(Role, name=data["metadata"]["name"])
-    assert rev is not None
-    assert rev.version == 1
-    assert role.rules == rules
+    stored, _ = await db.get(Role, name=data.metadata.name)
+    assert stored == role
 
 
 async def test_create_role_rbac(rbac_allow, config, aiohttp_client):
@@ -81,7 +79,7 @@ async def test_create_role_with_existing_name(aiohttp_client, config, db):
 
     client = await aiohttp_client(create_app(config=config))
 
-    resp = await client.post("/core/roles", json={"rules": [], "name": "existing"})
+    resp = await client.post("/core/roles", json=serialize(existing))
     assert resp.status == 400
 
 
@@ -165,24 +163,20 @@ async def test_list_role_bindings_rbac(rbac_allow, config, aiohttp_client):
 
 
 async def test_create_role_binding(aiohttp_client, config, db):
+    data = RoleBindingFactory(status=None)
     client = await aiohttp_client(create_app(config=config))
-    users = RoleBindingFactory().users
-    roles = RoleBindingFactory().roles
 
-    resp = await client.post(
-        "/core/rolebindings",
-        json={"users": users, "roles": roles, "name": "test-binding"},
-    )
+    resp = await client.post("/core/rolebindings", json=serialize(data))
     assert resp.status == 200
-    data = await resp.json()
+    binding = deserialize(RoleBinding, await resp.json())
 
-    assert uuid_re.match(data["metadata"]["uid"]) is not None
+    assert binding.status.created
+    assert binding.status.modified
+    assert set(binding.users) == set(data.users)
+    assert set(binding.roles) == set(data.roles)
 
-    binding, rev = await db.get(RoleBinding, name=data["metadata"]["name"])
-    assert rev is not None
-    assert rev.version == 1
-    assert set(binding.users) == set(users)
-    assert set(binding.roles) == set(roles)
+    stored, _ = await db.get(RoleBinding, name=data.metadata.name)
+    assert binding == stored
 
 
 async def test_create_role_binding_rbac(rbac_allow, config, aiohttp_client):
@@ -202,9 +196,7 @@ async def test_create_role_binding_with_existing_name(aiohttp_client, config, db
 
     client = await aiohttp_client(create_app(config=config))
 
-    resp = await client.post(
-        "/core/rolebindings", json={"users": [], "roles": [], "name": "existing"}
-    )
+    resp = await client.post("/core/rolebindings", json=serialize(existing))
     assert resp.status == 400
 
 

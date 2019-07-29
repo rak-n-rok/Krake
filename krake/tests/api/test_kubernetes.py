@@ -3,7 +3,6 @@ import re
 import json
 from itertools import count
 from operator import attrgetter
-import yaml
 
 from krake.data.kubernetes import (
     Application,
@@ -13,7 +12,7 @@ from krake.data.kubernetes import (
     Cluster,
     ClusterState,
 )
-from krake.data import deserialize
+from krake.data import serialize, deserialize
 from krake.api.app import create_app
 
 from factories.kubernetes import ApplicationFactory, ClusterFactory
@@ -23,45 +22,6 @@ uuid_re = re.compile(
     r"^[0-9A-F]{8}-[0-9A-F]{4}-[4][0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$",
     re.IGNORECASE,
 )
-
-manifest = """---
-apiVersion: v1
-kind: Service
-metadata:
-  name: wordpress-mysql
-  labels:
-    app: wordpress
-spec:
-  ports:
-    - port: 3306
-  selector:
-    app: wordpress
-    tier: mysql
-  clusterIP: None
-"""
-
-
-kubeconfig = """
-apiVersion: v1
-clusters:
-- cluster:
-    certificate-authority-data: REMOVED
-    server: https://127.0.0.1:8443
-  name: test-cluster
-contexts:
-- context:
-    cluster: test-cluster
-    user: test-user
-  name: test-context
-current-context: "test-context"
-kind: Config
-preferences: {}
-users:
-- name: test-user
-  user:
-    client-certificate-data: REMOVED
-    client-key-data: REMOVED
-"""
 
 
 async def test_list_apps(aiohttp_client, config, db):
@@ -150,22 +110,21 @@ async def test_list_apps_rbac(rbac_allow, config, aiohttp_client):
 
 async def test_create_app(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
+    data = ApplicationFactory(status=None)
 
     resp = await client.post(
-        "/kubernetes/namespaces/testing/applications",
-        json={"manifest": manifest, "name": "test-app"},
+        "/kubernetes/namespaces/testing/applications", json=serialize(data)
     )
     assert resp.status == 200
-    data = await resp.json()
+    app = deserialize(Application, await resp.json())
 
-    assert uuid_re.match(data["metadata"]["uid"]) is not None
-
-    app, rev = await db.get(
-        Application, namespace="testing", name=data["metadata"]["name"]
-    )
-    assert rev.version == 1
     assert app.status.state == ApplicationState.PENDING
-    assert app.spec.manifest == manifest
+    assert app.status.created
+    assert app.status.modified
+    assert app.spec == data.spec
+
+    stored, _ = await db.get(Application, namespace="testing", name=data.metadata.name)
+    assert stored == app
 
 
 async def test_create_app_rbac(rbac_allow, config, aiohttp_client):
@@ -181,24 +140,12 @@ async def test_create_app_rbac(rbac_allow, config, aiohttp_client):
 
 async def test_create_app_in_all_namespace(aiohttp_client, config):
     client = await aiohttp_client(create_app(config=config))
+    data = ApplicationFactory(metadata__name="all")
 
     resp = await client.post(
-        "/kubernetes/namespaces/all/applications",
-        json={"manifest": manifest, "name": "test-app"},
+        "/kubernetes/namespaces/all/applications", json=serialize(data)
     )
     assert resp.status == 400
-
-
-async def test_create_invalid_app(aiohttp_client, config):
-    client = await aiohttp_client(create_app(config=config))
-
-    resp = await client.post(
-        "/kubernetes/namespaces/testing/applications", json={"manifest": None}
-    )
-    assert resp.status == 422
-    data = await resp.json()
-
-    assert data["manifest"]
 
 
 async def test_create_app_with_existing_name(aiohttp_client, config, db):
@@ -208,8 +155,7 @@ async def test_create_app_with_existing_name(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     resp = await client.post(
-        "/kubernetes/namespaces/testing/applications",
-        json={"manifest": manifest, "name": "existing"},
+        "/kubernetes/namespaces/testing/applications", json=serialize(existing)
     )
     assert resp.status == 400
 
@@ -266,22 +212,26 @@ spec:
 
 async def test_update_app(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
-    app = ApplicationFactory(status__state=ApplicationState.PENDING)
 
-    await db.put(app)
+    data = ApplicationFactory(status__state=ApplicationState.PENDING)
+    await db.put(data)
+    data.spec.manifest = new_manifest
 
     resp = await client.put(
-        f"/kubernetes/namespaces/testing/applications/{app.metadata.name}",
-        json={"manifest": new_manifest},
+        f"/kubernetes/namespaces/{data.metadata.namespace}"
+        f"/applications/{data.metadata.name}",
+        json=serialize(data),
     )
     assert resp.status == 200
-    data = await resp.json()
+    app = deserialize(Application, await resp.json())
 
-    assert data["spec"]["manifest"] == new_manifest
+    assert app.status.state == ApplicationState.UPDATED
+    assert app.spec.manifest == new_manifest
 
-    stored, rev = await db.get(Application, namespace="testing", name=app.metadata.name)
-    assert stored.spec.manifest == new_manifest
-    assert rev.version == 2
+    stored, _ = await db.get(
+        Application, namespace=data.metadata.namespace, name=app.metadata.name
+    )
+    assert stored == app
 
 
 async def test_update_app_rbac(rbac_allow, config, aiohttp_client):
@@ -304,17 +254,22 @@ async def test_update_app_already_deleted(aiohttp_client, config, db):
     await db.put(deleting)
     await db.put(deleted)
 
+    deleting.spec.manifest = new_manifest
+    deleted.spec.manifest = new_manifest
+
     # Update already deleting application
     resp = await client.put(
-        f"/kubernetes/namespaces/testing/applications/{deleting.metadata.name}",
-        json={"manifest": new_manifest},
+        f"/kubernetes/namespaces/{deleting.metadata.namespace}"
+        f"/applications/{deleting.metadata.name}",
+        json=serialize(deleting),
     )
     assert resp.status == 400
 
     # Update already deleted application
     resp = await client.put(
-        f"/kubernetes/namespaces/testing/applications/{deleted.metadata.name}",
-        json={"manifest": new_manifest},
+        f"/kubernetes/namespaces/{deleted.metadata.namespace}"
+        f"/applications/{deleted.metadata.name}",
+        json=serialize(deleted),
     )
     assert resp.status == 400
 
@@ -401,7 +356,6 @@ async def test_delete_app(aiohttp_client, config, db):
 
     deleted, _ = await db.get(Application, namespace="testing", name=app.metadata.name)
     assert deleted.status.state == ApplicationState.DELETING
-    assert deleted.spec.manifest == manifest
 
 
 async def test_delete_app_rbac(rbac_allow, config, aiohttp_client):
@@ -467,15 +421,14 @@ async def test_watch_app(aiohttp_client, config, db, loop):
 
         # Create two applications
         for i in range(2):
+            app = ApplicationFactory(status=None, metadata__name=f"test-app-{i}")
             resp = await client.post(
-                "/kubernetes/namespaces/testing/applications",
-                json={"manifest": manifest, "name": f"test-app-{i}"},
+                "/kubernetes/namespaces/testing/applications", json=serialize(app)
             )
             assert resp.status == 200
 
-        data = await resp.json()
         resp = await client.delete(
-            f'/kubernetes/namespaces/testing/applications/{data["metadata"]["name"]}'
+            f"/kubernetes/namespaces/testing/applications/{app.metadata.name}"
         )
         assert resp.status == 200
 
@@ -514,9 +467,13 @@ async def test_watch_app_from_all_namespaces(aiohttp_client, config, db, loop):
 
         # Create two applications in different namespaces
         for i, namespace in enumerate(["testing", "system"]):
+            app = ApplicationFactory(
+                status=None,
+                metadata__name=f"test-app-{i}",
+                metadata__namespace=namespace,
+            )
             resp = await client.post(
-                f"/kubernetes/namespaces/{namespace}/applications",
-                json={"manifest": manifest, "name": f"test-app-{i}"},
+                f"/kubernetes/namespaces/{namespace}/applications", json=serialize(app)
             )
             assert resp.status == 200
 
@@ -556,20 +513,22 @@ async def test_list_clusters_rbac(rbac_allow, config, aiohttp_client):
 
 async def test_create_cluster(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
+    data = ClusterFactory(status=None)
 
     resp = await client.post(
-        "/kubernetes/namespaces/testing/clusters", json=yaml.safe_load(kubeconfig)
+        f"/kubernetes/namespaces/{data.metadata.namespace}/clusters",
+        json=serialize(data),
     )
     assert resp.status == 200
-    data = await resp.json()
+    cluster = deserialize(Cluster, await resp.json())
 
-    assert uuid_re.match(data["metadata"]["uid"]) is not None
-
-    cluster, rev = await db.get(
-        Cluster, namespace="testing", name=data["metadata"]["name"]
-    )
-    assert rev.version == 1
+    assert cluster.status.created
+    assert cluster.status.modified
     assert cluster.status.state == ClusterState.RUNNING
+    assert cluster.spec == data.spec
+
+    stored, _ = await db.get(Cluster, namespace="testing", name=data.metadata.name)
+    assert stored == cluster
 
 
 async def test_create_clusters_rbac(rbac_allow, config, aiohttp_client):
@@ -585,17 +544,19 @@ async def test_create_clusters_rbac(rbac_allow, config, aiohttp_client):
 
 async def test_create_cluster_in_all_namespace(aiohttp_client, config):
     client = await aiohttp_client(create_app(config=config))
+    data = ClusterFactory(metadata__namespace="all")
 
     resp = await client.post(
-        "/kubernetes/namespaces/all/clusters", json=yaml.safe_load(kubeconfig)
+        "/kubernetes/namespaces/all/clusters", json=serialize(data)
     )
     assert resp.status == 400
 
 
 async def test_create_invalid_cluster(aiohttp_client, config):
     client = await aiohttp_client(create_app(config=config))
+    data = ClusterFactory(spec__kubeconfig={"invalid": "kubeconfig"})
 
     resp = await client.post(
-        "/kubernetes/namespaces/testing/clusters", json={"invalid": "kubeconfig"}
+        "/kubernetes/namespaces/testing/clusters", json=serialize(data)
     )
     assert resp.status == 400

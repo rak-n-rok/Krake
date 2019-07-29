@@ -5,7 +5,6 @@ import json
 from uuid import uuid4
 from datetime import datetime
 import logging
-from json import JSONDecodeError
 from aiohttp import web
 from webargs import fields
 from webargs.aiohttpparser import use_kwargs
@@ -238,46 +237,37 @@ async def list_clusters(request):
 
 @routes.post("/kubernetes/namespaces/{namespace}/clusters")
 @protected(api="kubernetes", resource="clusters", verb="create")
-async def create_cluster(request):
+@use_kwargs(
+    {
+        "metadata": fields.Nested(ClientMetadata.Schema, required=True),
+        "spec": fields.Nested(ClusterSpec.Schema, request=True),
+    }
+)
+async def create_cluster(request, metadata, spec):
     namespace = request.match_info["namespace"]
     if namespace == "all":
         raise json_error(web.HTTPBadRequest, {"reason": "'all' namespace is read-only"})
 
     try:
-        kubeconfig = await request.json()
-    except JSONDecodeError:
-        raise json_error(
-            web.HTTPUnprocessableEntity, {"reason": "Content is not valid JSON"}
-        )
-
-    if not isinstance(kubeconfig, dict):
-        raise json_error(
-            web.HTTPBadRequest, {"reason": "kube-config must be a JSON object"}
-        )
-
-    try:
-        KubeConfigLoader(kubeconfig)
+        KubeConfigLoader(spec.kubeconfig)
     except ConfigException as err:
         raise json_error(web.HTTPBadRequest, {"reason": str(err)})
 
-    if len(kubeconfig["contexts"]) != 1:
+    if len(spec.kubeconfig["contexts"]) != 1:
         raise json_error(web.HTTPBadRequest, {"reason": f"Only one context is allowed"})
 
-    if len(kubeconfig["users"]) != 1:
+    if len(spec.kubeconfig["users"]) != 1:
         raise json_error(web.HTTPBadRequest, {"reason": f"Only one user is allowed"})
 
-    if len(kubeconfig["clusters"]) != 1:
+    if len(spec.kubeconfig["clusters"]) != 1:
         raise json_error(web.HTTPBadRequest, {"reason": f"Only one cluster is allowed"})
 
     now = datetime.now()
     cluster = Cluster(
         metadata=NamespacedMetadata(
-            name=kubeconfig["clusters"][0]["name"],
-            namespace=namespace,
-            user=request["user"],
-            uid=uuid4(),
+            name=metadata.name, namespace=namespace, user=request["user"], uid=uuid4()
         ),
-        spec=ClusterSpec(kubeconfig=kubeconfig),
+        spec=spec,
         status=ClusterStatus(state=ClusterState.RUNNING, created=now, modified=now),
     )
 
@@ -310,11 +300,16 @@ async def get_cluster(request, cluster):
 @protected(api="kubernetes", resource="clusters", verb="delete")
 @load("cluster", Cluster)
 async def delete_cluster(request, cluster):
+    # TODO: Ensure that cluster is not already in "DELETING" state
     cluster.status.state = ClusterState.DELETING
     cluster.status.reason = None
     cluster.status.modified = datetime.now()
 
     await session(request).put(cluster)
-    logger.info("Deleting Kubernetes cluster %r (%s)", cluster.name, cluster.uid)
+    logger.info(
+        "Deleting Kubernetes cluster %r (%s)",
+        cluster.metadata.name,
+        cluster.metadata.uid,
+    )
 
     return web.json_response(serialize(cluster))

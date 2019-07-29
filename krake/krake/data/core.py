@@ -2,7 +2,7 @@ from enum import Enum, auto
 from datetime import datetime
 from typing import List
 
-from krake.api.database import Key
+from . import Key
 from .serializable import Serializable
 
 

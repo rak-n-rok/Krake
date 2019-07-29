@@ -3,8 +3,9 @@ import json
 import factory
 from factory.fuzzy import FuzzyInteger
 
+from krake.data import Key
 from krake.data.serializable import Serializable, serialize, deserialize
-from krake.api.database import EventType, Key
+from krake.api.database import EventType
 
 from factories import fake
 

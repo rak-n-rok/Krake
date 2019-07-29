@@ -1,7 +1,7 @@
 from aiohttp.client_exceptions import ClientPayloadError
 from aiohttp.client import ClientTimeout
 
-from krake.data.serializable import deserialize
+from krake.data.serializable import deserialize, serialize
 
 
 class Resource(object):
@@ -13,8 +13,8 @@ class Resource(object):
         model (type): Serializable type from :mod:`krake.data` that is managed
             by this resource. This attribute is used by :meth:`list`,
             :meth:`get`, :meth:`delete` and :meth:`watch`.
-        endpoints (dict): Dictionary of verbs to HTTP endpoints. The URLs
-            might use standard Python string format templating.
+        endpoints (Dict[str, krake.data.Key]): Dictionary of verbs to HTTP
+            endpoints.
 
     Args:
         session (aiohttp.ClientSession): HTTP session used for all HTTP
@@ -29,16 +29,16 @@ class Resource(object):
 
     @classmethod
     def ref(cls, **kwargs):
-        return cls.endpoints["list"].format(**kwargs)
+        return cls.endpoints["list"].format_kwargs(**kwargs)
 
     async def list(self, **kwargs):
-        url = self.url.with_path(self.endpoints["list"].format(**kwargs))
+        url = self.url.with_path(self.endpoints["list"].format_kwargs(**kwargs))
         resp = await self.session.get(url)
         datas = await resp.json()
         return [deserialize(self.model, data) for data in datas]
 
     async def get(self, ref=None, **kwargs):
-        url = self.url.with_path(self.endpoints["get"].format(**kwargs))
+        url = self.url.with_path(self.endpoints["get"].format_kwargs(**kwargs))
         resp = await self.session.get(url)
         data = await resp.json()
         instance = deserialize(self.model, data)
@@ -51,8 +51,22 @@ class Resource(object):
         instance = deserialize(self.model, data)
         return instance
 
+    async def create(self, resource):
+        url = self.url.with_path(
+            self.endpoints["create"].format_object(resource.metadata)
+        )
+        resp = await self.session.post(url, json=serialize(resource))
+        data = await resp.json()
+        return deserialize(self.model, data)
+
+    async def update(self, resource):
+        url = self.url.with_path(self.endpoints["get"].format_object(resource.metadata))
+        resp = await self.session.put(url, json=serialize(resource))
+        data = await resp.json()
+        return deserialize(self.model, data)
+
     async def delete(self, **kwargs):
-        url = self.url.with_path(self.endpoints["get"].format(**kwargs))
+        url = self.url.with_path(self.endpoints["get"].format_kwargs(**kwargs))
         resp = await self.session.delete(url)
         data = await resp.json()
         return deserialize(self.model, data)
@@ -80,7 +94,7 @@ class Watcher(object):
         self.response = None
         self.timeout = ClientTimeout(sock_read=float("inf"))
         self.url = self.resource.url.with_path(
-            self.resource.endpoints["list"].format(**kwargs)
+            self.resource.endpoints["list"].format_kwargs(**kwargs)
         ).with_query("watch")
 
     async def __aenter__(self):
