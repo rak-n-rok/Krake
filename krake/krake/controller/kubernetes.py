@@ -1,15 +1,32 @@
 """Module for Krake controller responsible for
-:class:`krake.data.kubernetes.Application` resources.
+:class:`krake.data.kubernetes.Application` resources and entry point of
+Kubernetes controller.
+
+.. code:: bash
+
+    python -m krake.controller.kubernetes --help
+
+Configuration is loaded from the ``controllers.kubernetes`` section:
+
+.. code:: yaml
+
+    controllers:
+      kubernetes:
+        api_endpoint: http://localhost:8080
+        worker_count: 5
+
 """
 import logging
 import re
 import yaml
+from argparse import ArgumentParser
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 from kubernetes_asyncio.client import ApiClient, CoreV1Api, AppsV1Api, Configuration
 from kubernetes_asyncio.client.rest import ApiException
 
+from krake import load_config, setup_logging
 from krake.data.kubernetes import ApplicationState
-from .. import Controller, Worker
+from . import Controller, Worker, run
 
 
 logger = logging.getLogger(__name__)
@@ -194,3 +211,23 @@ _camel_case_re = re.compile(r"([a-z])([A-Z])")
 
 def camel_to_snake_case(name):
     return _camel_case_re.sub(r"\1_\2", name).lower()
+
+
+parser = ArgumentParser(description="Kubernetes application controller")
+parser.add_argument("-c", "--config", help="Path to configuration YAML file")
+
+
+def main():
+    args = parser.parse_args()
+    config = load_config(args.config)
+    controller = KubernetesController(
+        api_endpoint=config["controllers"]["kubernetes"]["api_endpoint"],
+        worker_factory=KubernetesWorker,
+        worker_count=config["controllers"]["kubernetes"]["worker_count"],
+    )
+    setup_logging(config["log"]["level"])
+    run(controller)
+
+
+if __name__ == "__main__":
+    main()
