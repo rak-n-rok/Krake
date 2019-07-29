@@ -1,7 +1,7 @@
 """This module implements all Kubernetes resources for the Krake Python API
 client.
 """
-from krake.data.serializable import deserialize
+from krake.data.serializable import serialize, deserialize
 from krake.data.kubernetes import (
     Application,
     Cluster,
@@ -40,7 +40,7 @@ class ApplicationResource(Resource):
         "binding": "/kubernetes/namespaces/{namespace}/applications/{name}/binding",
     }
 
-    async def create(self, namespace, manifest):
+    async def create(self, app):
         """Create a new Kubernetes application.
 
         Args:
@@ -52,12 +52,14 @@ class ApplicationResource(Resource):
             application.
 
         """
-        url = self.url.with_path(self.endpoints["create"].format(namespace=namespace))
-        resp = await self.session.post(url, json={"manifest": manifest})
+        url = self.url.with_path(
+            self.endpoints["create"].format(namespace=app.metadata.namespace)
+        )
+        resp = await self.session.post(url, json=serialize(app))
         data = await resp.json()
         return deserialize(self.model, data)
 
-    async def update(self, namespace, name, manifest):
+    async def update(self, app):
         """Update an existing Kubernetes application.
 
         Args:
@@ -70,9 +72,11 @@ class ApplicationResource(Resource):
 
         """
         url = self.url.with_path(
-            self.endpoints["get"].format(namespace=namespace, name=name)
+            self.endpoints["get"].format(
+                namespace=app.metadata.namespace, name=app.metadata.name
+            )
         )
-        resp = await self.session.put(url, json={"manifest": manifest})
+        resp = await self.session.put(url, json=serialize(app))
         data = await resp.json()
         return deserialize(self.model, data)
 

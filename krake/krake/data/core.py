@@ -18,6 +18,10 @@ class CoreMetadata(Serializable):
     uid: str
 
 
+class ClientMetadata(Serializable):
+    name: str
+
+
 class Verb(Enum):
     create = auto()
     list = auto()

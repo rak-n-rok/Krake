@@ -16,6 +16,7 @@ from krake.data.core import (
     RoleBinding,
     RoleBindingStatus,
     CoreMetadata,
+    ClientMetadata,
 )
 from . import __version__ as version
 from .auth import protected
@@ -60,21 +61,21 @@ async def list_roles(request):
 @protected(api="core", resource="roles", verb="create", namespaced=False)
 @use_kwargs(
     {
-        "name": fields.String(required=True),
+        "metadata": fields.Nested(ClientMetadata.Schema, required=True),
         "rules": fields.List(fields.Nested(RoleRule.Schema), required=True),
     }
 )
-async def create_role(request, name, rules):
+async def create_role(request, metadata, rules):
     # Ensure that a role with the same name does not already exists
-    role, _ = await session(request).get(Role, name=name)
+    role, _ = await session(request).get(Role, name=metadata.name)
     if role is not None:
         raise json_error(
-            web.HTTPBadRequest, {"reason": f"Role {name!r} already exists"}
+            web.HTTPBadRequest, {"reason": f"Role {metadata.name!r} already exists"}
         )
 
     now = datetime.now()
     role = Role(
-        metadata=CoreMetadata(name=name, uid=str(uuid4())),
+        metadata=CoreMetadata(name=metadata.name, uid=str(uuid4())),
         rules=rules,
         status=RoleStatus(created=now, modified=now),
     )
@@ -88,6 +89,19 @@ async def create_role(request, name, rules):
 @protected(api="core", resource="roles", verb="get", namespaced=False)
 @load("role", Role, namespaced=False)
 async def get_role(request, role):
+    return web.json_response(serialize(role))
+
+
+@routes.put("/core/roles/{name}")
+@protected(api="core", resource="roles", verb="update", namespaced=False)
+@use_kwargs({"rules": fields.List(fields.Nested(RoleRule.Schema), required=True)})
+@load("role", Role, namespaced=False)
+async def update_role(request, role, rules):
+    role.status.modified = datetime.now()
+    role.rules = rules
+    await session(request).put(role)
+    logger.info("Updated role %r", role.metadata.uid)
+
     return web.json_response(serialize(role))
 
 
@@ -115,28 +129,48 @@ async def list_role_bindings(request):
 @protected(api="core", resource="rolebindings", verb="create", namespaced=False)
 @use_kwargs(
     {
-        "name": fields.String(required=True),
+        "metadata": fields.Nested(ClientMetadata.Schema, required=True),
         "users": fields.List(fields.String, required=True),
         "roles": fields.List(fields.String, required=True),
     }
 )
-async def create_role_binding(request, name, users, roles):
+async def create_role_binding(request, metadata, users, roles):
     # Ensure that a binding with the same name does not already exists
-    binding, _ = await session(request).get(RoleBinding, name=name)
+    binding, _ = await session(request).get(RoleBinding, name=metadata.name)
     if binding is not None:
         raise json_error(
-            web.HTTPBadRequest, {"reason": f"RoleBinding {name!r} already exists"}
+            web.HTTPBadRequest,
+            {"reason": f"RoleBinding {metadata.name!r} already exists"},
         )
 
     now = datetime.now()
     binding = RoleBinding(
-        metadata=CoreMetadata(name=name, uid=str(uuid4())),
+        metadata=CoreMetadata(name=metadata.name, uid=str(uuid4())),
         users=users,
         roles=roles,
         status=RoleBindingStatus(created=now, modified=now),
     )
     await session(request).put(binding)
     logger.info("Created binding %r", binding.metadata.uid)
+
+    return web.json_response(serialize(binding))
+
+
+@routes.put("/core/rolebindings/{name}")
+@protected(api="core", resource="rolebindings", verb="update", namespaced=False)
+@use_kwargs(
+    {
+        "users": fields.List(fields.String, required=True),
+        "roles": fields.List(fields.String, required=True),
+    }
+)
+@load("binding", RoleBinding, namespaced=False)
+async def update_role_binding(request, binding, users, roles):
+    binding.users = users
+    binding.roles = roles
+
+    await session(request).put(binding)
+    logger.info("Updated binding %r", binding.metadata.uid)
 
     return web.json_response(serialize(binding))
 

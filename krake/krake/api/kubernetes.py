@@ -14,7 +14,7 @@ from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 from kubernetes_asyncio.config import ConfigException
 
 from krake.data.serializable import serialize
-from krake.data.core import NamespacedMetadata
+from krake.data.core import NamespacedMetadata, ClientMetadata
 from krake.data.kubernetes import (
     Application,
     ApplicationStatus,
@@ -82,27 +82,36 @@ async def list_or_watch_applications(request, heartbeat):
 @routes.post("/kubernetes/namespaces/{namespace}/applications")
 @protected(api="kubernetes", resource="applications", verb="create")
 @use_kwargs(
-    {"name": fields.String(required=True), "manifest": fields.String(required=True)}
+    {
+        "metadata": fields.Nested(ClientMetadata.Schema, required=True),
+        "spec": fields.Nested(ApplicationSpec.Schema, required=True),
+    }
 )
-async def create_application(request, name, manifest):
+async def create_application(request, metadata, spec):
     namespace = request.match_info["namespace"]
     if namespace == "all":
         raise json_error(web.HTTPBadRequest, {"reason": "'all' namespace is read-only"})
 
     # Ensure that an application with the same name does not already exists
-    app, _ = await session(request).get(Application, namespace=namespace, name=name)
+    app, _ = await session(request).get(
+        Application, namespace=namespace, name=metadata.name
+    )
     if app is not None:
         raise json_error(
-            web.HTTPBadRequest, {"reason": f"Application {name!r} already exists"}
+            web.HTTPBadRequest,
+            {"reason": f"Application {metadata.name!r} already exists"},
         )
 
     now = datetime.now()
 
     app = Application(
         metadata=NamespacedMetadata(
-            name=name, namespace=namespace, user=request["user"], uid=str(uuid4())
+            name=metadata.name,
+            namespace=namespace,
+            user=request["user"],
+            uid=str(uuid4()),
         ),
-        spec=ApplicationSpec(manifest=manifest),
+        spec=spec,
         status=ApplicationStatus(
             state=ApplicationState.PENDING, created=now, modified=now
         ),
@@ -122,13 +131,13 @@ async def get_application(request, app):
 
 @routes.put("/kubernetes/namespaces/{namespace}/applications/{name}")
 @protected(api="kubernetes", resource="applications", verb="update")
-@use_kwargs({"manifest": fields.String(required=True)})
+@use_kwargs({"spec": fields.Nested(ApplicationSpec.Schema, required=True)})
 @load("app", Application)
-async def update_application(request, app, manifest):
+async def update_application(request, app, spec):
     if app.status.state in (ApplicationState.DELETING, ApplicationState.DELETED):
         raise json_error(web.HTTPBadRequest, {"reason": "Application is deleted"})
 
-    app.spec.manifest = manifest
+    app.spec = spec
     app.status.state = ApplicationState.UPDATED
     app.status.reason = None
     app.status.modified = datetime.now()
