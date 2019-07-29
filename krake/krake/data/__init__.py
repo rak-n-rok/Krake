@@ -95,8 +95,11 @@ class Key(object):
         params = {}
 
         for match in self.parameters:
-            params[match[1]] = kwargs.pop(match[1])
-
+            key = match[1]
+            try:
+                params[key] = kwargs.pop(key)
+            except KeyError:
+                raise TypeError(f"Missing required keyword argument {key!r}")
         if kwargs:
             key, _ = kwargs.popitem()
             raise TypeError(f"Got unexpected keyword argument parameter {key!r}")
