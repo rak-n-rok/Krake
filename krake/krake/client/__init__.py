@@ -4,6 +4,7 @@ leverages the same data models as the API server from :mod:`krake.data`.
 from aiohttp import ClientSession
 from yarl import URL
 
+from .core import CoreAPI
 from .kubernetes import KubernetesAPI
 
 
@@ -26,6 +27,7 @@ class Client(object):
                 await client.kubernetes.application.get(id)
 
     Attributes:
+        core (.core.CoreAPI): API or all core resources
         kubernetes (.kubernetes.KubernetesAPI): API for all Kubernetes
             resources
 
@@ -57,6 +59,7 @@ class Client(object):
         self.session = ClientSession(
             headers=headers, loop=self.loop, raise_for_status=True
         )
+        self.core = CoreAPI(session=self.session, url=self.url)
         self.kubernetes = KubernetesAPI(session=self.session, url=self.url)
 
     async def close(self):
