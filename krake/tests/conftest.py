@@ -26,6 +26,50 @@ logging.config.dictConfig(
 )
 
 
+def pytest_addoption(parser):
+    """Register :mod:`argparse`-style options and ini-style config values for pytest.
+
+    Called once at the beginning of a test run.
+
+    Args:
+        parser (pytest.config.Parser): pytest parser
+
+    """
+    parser.addoption(
+        "--runslow", action="store_true", default=False, help="run slow tests"
+    )
+
+
+def pytest_configure(config):
+    """Allows plugins and conftest files to perform initial configuration.
+
+    Args:
+        config (pytest.config.Config): config object
+
+    """
+    config.addinivalue_line("markers", "slow: mark test as slow to run")
+    config.addinivalue_line(
+        "markers", "timeout(time): mark async test with maximal duration"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Called after pytest collection has been performed, may filter or
+    re-order the items in-place.
+
+    Args:
+        session (pytest.main.Session): pytest session
+        config (pytest.config.Config): config object
+        items (List[pytest.nodes.Item]): list of test item objects
+
+    """
+    if not config.getoption("--runslow"):
+        skip_slow = pytest.mark.skip(reason="need --runslow option to run")
+        for item in items:
+            if "slow" in item.keywords:
+                item.add_marker(skip_slow)
+
+
 def wait_for_url(url, timeout=5):
     """Wait until an URL endpoint is reachable"""
     start = time.time()

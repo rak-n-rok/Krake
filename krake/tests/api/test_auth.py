@@ -1,3 +1,4 @@
+import pytest
 from aiohttp import ClientSession
 from krake.api.app import create_app
 
@@ -15,6 +16,7 @@ async def test_static_auth(aiohttp_client, config):
     assert data["user"] == "test-user"
 
 
+@pytest.mark.slow
 async def test_keystone(keystone):
     async with ClientSession() as session:
         # Create a new authentication token
@@ -62,6 +64,7 @@ async def test_keystone(keystone):
         assert resp.status == 204
 
 
+@pytest.mark.slow
 async def test_keystone_auth(keystone, aiohttp_client, config):
     async with ClientSession() as session:
         # Issue Keystone token

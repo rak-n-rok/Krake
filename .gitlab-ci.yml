@@ -28,7 +28,7 @@ unittests-krake:
 
     - pip install krake/[dev]
     - pip install keystone
-    - pytest krake/tests
+    - pytest --runslow krake/tests
   tags:
     - docker
 
