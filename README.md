@@ -11,6 +11,7 @@ The current Krake v2 prototype comprises two Python packages:
  - [etcdv3](https://github.com/etcd-io/etcd/releases/)
  - [Python](https://www.python.org/downloads/) >= 3.6
  - [pre-commit](https://pre-commit.com/)
+ - [keystone](https://pypi.org/project/keystone/) (optional) – for testing keystone server authentication
 
 
 ### Installation
@@ -38,7 +39,8 @@ cd krake/
 # Run etcd server. This will store the data in "tmp/etcd".
 support/etcd
 
-# Run local Keystone server. Related data is stored in "tmp/keystone".
+# Run local Keystone server. Related data is stored in "tmp/keystone". This
+# requires keystone to be installed (pip install keystone)
 support/keystone
 
 # Run the API server
