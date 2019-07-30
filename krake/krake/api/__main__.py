@@ -19,7 +19,7 @@ parser.add_argument("--config", "-c", help="Path to configuration file")
 def main():
     args = parser.parse_args()
     config = load_config(args.config)
-    setup_logging(config["log"]["level"])
+    setup_logging(config["log"])
     app = create_app(config)
     web.run_app(app)
 

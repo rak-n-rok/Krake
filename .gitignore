@@ -4,6 +4,9 @@
 # Temporary files
 /tmp
 
+# Log files
+*.log
+
 # Dynamic Ansible inventory
 /ansible/.etc/
 

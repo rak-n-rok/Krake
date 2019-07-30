@@ -2,9 +2,6 @@ etcd:
   host: 127.0.0.1
   port: 2379
 
-log:
-  level: INFO
-
 # # Anonymous authentication
 # authentication:
 #   kind: static
@@ -48,3 +45,23 @@ controllers:
   kubernetes:
     api_endpoint: http://localhost:8080
     worker_count: 5
+
+
+log:
+  version: 1
+  formatters:
+    krake:
+      format: "%(asctime)s - [%(name)s] - [%(levelname)-5s] - %(message)s"
+  handlers:
+    console:
+      class: logging.StreamHandler
+      formatter: krake
+      stream: ext://sys.stdout
+    file:
+      class: logging.handlers.WatchedFileHandler
+      formatter: krake
+      filename: krake.log
+  loggers:
+    krake:
+      level: INFO
+      handlers: [console]

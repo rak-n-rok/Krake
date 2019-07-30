@@ -29,7 +29,7 @@ from krake.data.kubernetes import ApplicationState
 from . import Controller, Worker, run
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("krake.controller.kubernetes")
 
 
 class KubernetesController(Controller):
@@ -225,7 +225,7 @@ def main():
         worker_factory=KubernetesWorker,
         worker_count=config["controllers"]["kubernetes"]["worker_count"],
     )
-    setup_logging(config["log"]["level"])
+    setup_logging(config["log"])
     run(controller)
 
 

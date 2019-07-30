@@ -33,11 +33,12 @@ def load_config(filepath=None):
     raise FileNotFoundError(f"No config file found: {filepaths}")
 
 
-def setup_logging(level):
-    logging.config.dictConfig(
-        {
-            "version": 1,
-            "handlers": {"console": {"class": "logging.StreamHandler", "level": level}},
-            "loggers": {"krake": {"handlers": ["console"], "level": level}},
-        }
-    )
+def setup_logging(config_log):
+    """Setups Krake logging based on logging configuration
+
+    Args:
+        config_log (dict): dictschema logging configuration
+            (see :func:`logging.config.dictConfig`)
+
+    """
+    logging.config.dictConfig(config_log)

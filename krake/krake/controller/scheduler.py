@@ -25,7 +25,7 @@ from krake.data.kubernetes import ApplicationState, Cluster
 from . import Controller, Worker, run
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("krake.controller.scheduler")
 
 
 class Scheduler(Controller):
@@ -130,7 +130,7 @@ def main():
         worker_factory=SchedulerWorker,
         worker_count=config["controllers"]["scheduler"]["worker_count"],
     )
-    setup_logging(config["log"]["level"])
+    setup_logging(config["log"])
     run(scheduler)
 
 
