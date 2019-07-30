@@ -206,11 +206,17 @@ class KubernetesClient(object):
         logger.info("%s deleted. status=%r", kind, resp.status)
 
 
-_camel_case_re = re.compile(r"([a-z])([A-Z])")
-
-
 def camel_to_snake_case(name):
-    return _camel_case_re.sub(r"\1_\2", name).lower()
+    """Converts camelCase to the snake_case
+
+    Args:
+        name (str): Camel case name
+
+    Returns:
+        str: Name in stake case
+    """
+    cunder = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
+    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", cunder).lower()
 
 
 parser = ArgumentParser(description="Kubernetes application controller")
