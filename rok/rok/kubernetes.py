@@ -12,6 +12,7 @@ import yaml
 
 from .parser import ParserSpec, argument
 from .fixtures import depends
+from .formatters import print_list, print_detail
 
 
 kubernetes = ParserSpec(
@@ -26,6 +27,14 @@ application = kubernetes.subparser(
 @application.command("list", help="List Kubernetes application")
 @argument("-a", "--all", action="store_true", help="Show deleted applications")
 @argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
+@argument(
+    "-f",
+    "--format",
+    choices=["table", "json", "yaml"],
+    default="table",
+    help="Format of the output, table by default",
+)
+@print_list
 @depends("config", "session")
 def list_applications(config, session, namespace, all):
     if namespace is None:
@@ -36,9 +45,7 @@ def list_applications(config, session, namespace, all):
     else:
         url = f"/kubernetes/namespaces/{namespace}/applications"
     resp = session.get(url)
-    for app in resp.json():
-        print("---")
-        yaml.dump(app, default_flow_style=False, stream=sys.stdout)
+    return resp.json()
 
 
 @application.command("create", help="Create Kubernetes application")
@@ -61,6 +68,14 @@ def create_application(config, session, file, namespace, name):
 @application.command("get", help="Get Kubernetes application")
 @argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
 @argument("name", help="Kubernetes application name")
+@argument(
+    "-f",
+    "--format",
+    choices=["table", "json", "yaml"],
+    default="table",
+    help="Format of the output, table by default",
+)
+@print_detail
 @depends("config", "session")
 def get_application(config, session, namespace, name):
     if namespace is None:
@@ -75,8 +90,7 @@ def get_application(config, session, namespace, name):
         return 1
 
     resp.raise_for_status()
-    data = resp.json()
-    yaml.dump(data, default_flow_style=False, stream=sys.stdout)
+    return resp.json()
 
 
 @application.command("update", help="Update Kubernetes application")
@@ -188,15 +202,21 @@ def create_cluster(config, session, namespace, kubeconfig, contexts):
 @argument(
     "-n", "--namespace", help="Namespace of the Kubernetes cluster. Defaults to user"
 )
+@argument(
+    "-f",
+    "--format",
+    choices=["table", "json", "yaml"],
+    default="table",
+    help="Format of the output, table by default",
+)
+@print_list
 @depends("config", "session")
 def list_clusters(config, session, namespace):
     if namespace is None:
         namespace = config["user"]
 
     resp = session.get(f"/kubernetes/namespaces/{namespace}/clusters")
-    for cluster in resp.json():
-        print("---")
-        yaml.dump(cluster, default_flow_style=False, stream=sys.stdout)
+    return resp.json()
 
 
 @cluster.command("delete", help="Delete Kubernetes cluster")
