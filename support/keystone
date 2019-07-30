@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Simple helper script for starting a Keystone server for development puropose"""
+"""Simple helper script for starting a Keystone server for development purpose"""
 from argparse import ArgumentParser
 from pathlib import Path
 import logging

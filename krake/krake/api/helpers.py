@@ -34,7 +34,7 @@ def session(request):
 
 
 class Heartbeat(object):
-    """Asyncronous context manager for heatbeating long running HTTP responses.
+    """Asyncronous context manager for heartbeating long running HTTP responses.
 
     Writes newlines to the response body in a given heartbeat interval. If
     ``interval`` is set to 0, no heartbeat will be sent.
