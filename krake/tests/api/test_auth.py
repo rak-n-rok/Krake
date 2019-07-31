@@ -16,6 +16,7 @@ async def test_static_auth(aiohttp_client, config):
     assert data["user"] == "test-user"
 
 
+@pytest.mark.require_module("keystone")
 @pytest.mark.slow
 async def test_keystone(keystone):
     async with ClientSession() as session:
@@ -64,6 +65,7 @@ async def test_keystone(keystone):
         assert resp.status == 204
 
 
+@pytest.mark.require_module("keystone")
 @pytest.mark.slow
 async def test_keystone_auth(keystone, aiohttp_client, config):
     async with ClientSession() as session:

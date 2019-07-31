@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import NamedTuple
 import time
 import logging.config
+from importlib import import_module
 import requests
 import pytest
 from etcd3.aio_client import AioClient
@@ -49,6 +50,9 @@ def pytest_configure(config):
     """
     config.addinivalue_line("markers", "slow: mark test as slow to run")
     config.addinivalue_line(
+        "markers", "require_module(name): skip test if module is not installed"
+    )
+    config.addinivalue_line(
         "markers", "timeout(time): mark async test with maximal duration"
     )
 
@@ -68,6 +72,19 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "slow" in item.keywords:
                 item.add_marker(skip_slow)
+
+    for item in items:
+        if "require_module" in item.keywords:
+            marker = item.get_closest_marker("require_module")
+            module = marker.args[0]
+            try:
+                import_module(module)
+            except ImportError:
+                item.add_marker(
+                    pytest.mark.skip(
+                        reason=f"Required module {module!r} is not installed"
+                    )
+                )
 
 
 def wait_for_url(url, timeout=5):
