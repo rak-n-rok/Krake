@@ -61,7 +61,11 @@ log:
       class: logging.handlers.WatchedFileHandler
       formatter: krake
       filename: krake.log
+  root: # Configuring the default (root) logger is highly recommended
+    level: INFO
+    handlers: [console]
   loggers:
     krake:
       level: INFO
       handlers: [console]
+      propagate: no
