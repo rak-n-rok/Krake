@@ -192,32 +192,7 @@ class Cell(object):
         return self.formatter(attr)
 
 
-class TableMeta(type):
-    """Metaclass of :class:`Table`. Used to collect all :class:`Cell`
-    instances and put them into the :attr:`Table.cells` dictionary.
-
-    Additionally, the name of unnamed cells are loaded from the Python
-    attribute name.
-    """
-
-    def __new__(mcls, name, bases, attrs):
-        cells = {key: value for key, value in attrs.items() if isinstance(value, Cell)}
-
-        for name, cell in cells.items():
-            if cell.name is None:
-                cell.name = name
-
-        inherited = {}
-        for base in bases:
-            if hasattr(base, "cells"):
-                inherited = base.cells
-                break
-
-        attrs["cells"] = dict(inherited, **cells)
-        return super().__new__(mcls, name, bases, attrs)
-
-
-class Table(object, metaclass=TableMeta):
+class Table(object):
     """Declarative base class for table printers.
 
     It implements the Python :meth:`__call__` protocol. This means instances
@@ -256,6 +231,10 @@ class Table(object, metaclass=TableMeta):
         The left column contains the attribute names and the right column
         the corresponding values (see :meth:`draw`).
 
+    Attributes:
+        cells (Dict[str, Cell]): Mapping of all cell attributes of
+            the class.
+
     Args:
         many (bool, optional): Controls the horizontal or vertical layout.
 
@@ -263,6 +242,34 @@ class Table(object, metaclass=TableMeta):
 
     def __init__(self, many=False):
         self.many = many
+
+    def __init_subclass__(cls):
+        """Collect :class:`Cell` attributes and assignes it to the
+        :attr:`cells` attribute.
+
+        Args:
+            cls (type): Class that is being initialized
+
+        """
+        super().__init_subclass__()
+
+        cells = {}
+
+        # Fetch all we do not use "inspect.getmembers" because it orders the
+        # attributes by name.
+        for c in cls.__mro__:
+            # We use "__dict__" here instead of dir() because we want to
+            # preserve the declaration order of attributes
+            for name, attr in c.__dict__.items():
+                if isinstance(attr, Cell):
+                    cells[name] = attr
+
+        # Set name of unnamed cells to their Python attribute name
+        for name, cell in cells.items():
+            if cell.name is None:
+                cell.name = name
+
+        cls.cells = cells
 
     def __call__(self, data, file):
         """Print a table from the passed data
@@ -314,8 +321,9 @@ class Table(object, metaclass=TableMeta):
         table.set_cols_valign(len(self.cells) * "c")
         table.set_deco(Texttable.BORDER | Texttable.HEADER | Texttable.VLINES)
 
-        for item in data:
-            table.add_row([cell.render(item) for cell in self.cells.values()])
+        if self.cells:
+            for item in data:
+                table.add_row([cell.render(item) for cell in self.cells.values()])
 
         print(table.draw(), file=file)
 
