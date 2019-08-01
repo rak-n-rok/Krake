@@ -144,33 +144,22 @@ class Cell(object):
         self.formatter = formatter
 
     def load_attribute(self, obj):
-        """Load an attribute from an object. Both attribute and item access
-        tried. :attr:`attribute` allows nested attributes. Hence, the
-        attribute access is recursed.
+        """Load an attribute from a dictionary. :attr:`attribute` allows
+        nested attributes. Hence, item access is recursed.
 
         Args:
-            obj (object): Data object from witch the cell attribute should be
-                loaded
+            obj (dict): Data dictionary from witch the cell attribute should
+                be loaded.
 
         Returns:
-            Attribute from the data object
+            Item from the data object
 
         Raises:
-            ValueError: If attribute or key can not be found.
+            KeyError: If a key can not be found.
 
         """
-        original = obj
-        for name in self.attribute.split("."):
-            try:
-                obj = getattr(obj, name)
-            except AttributeError:
-                try:
-                    obj = obj[name]
-                except (TypeError, KeyError):
-                    raise ValueError(
-                        f"Cannot load field {self.attribute!r} from {original!r}"
-                    )
-
+        for key in self.attribute.split("."):
+            obj = obj[key]
         return obj
 
     def render(self, data):
