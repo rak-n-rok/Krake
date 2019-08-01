@@ -61,8 +61,10 @@ class KubernetesWorker(Worker):
     async def resource_received(self, app):
         # Delete Kubernetes resources if the application was bound to a
         # cluster.
-        if app.spec.cluster:
-            cluster = await self.client.kubernetes.cluster.get_by_url(app.spec.cluster)
+        if app.status.cluster:
+            cluster = await self.client.kubernetes.cluster.get_by_url(
+                app.status.cluster
+            )
 
             async with KubernetesClient(cluster.spec.kubeconfig) as kube:
                 for resource in yaml.safe_load_all(app.spec.manifest):
@@ -77,7 +79,7 @@ class KubernetesWorker(Worker):
             transition = ApplicationState.DELETED
 
         await self.client.kubernetes.application.update_status(
-            cluster=app.spec.cluster,
+            cluster=app.status.cluster,
             namespace=app.metadata.namespace,
             name=app.metadata.name,
             state=transition,

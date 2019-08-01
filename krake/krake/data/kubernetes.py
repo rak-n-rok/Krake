@@ -9,7 +9,6 @@ from .core import NamespacedMetadata
 
 class ApplicationSpec(Serializable):
     manifest: str
-    cluster: str = None  # API endpoint of the Kubernetes cluster resource
 
 
 class ApplicationState(Enum):

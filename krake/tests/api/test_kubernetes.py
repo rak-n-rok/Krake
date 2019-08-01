@@ -317,7 +317,7 @@ async def test_update_app_binding(aiohttp_client, config, db):
     app = ApplicationFactory(status__state=ApplicationState.PENDING)
     cluster = ClusterFactory()
 
-    assert app.spec.cluster is None, "Application is not scheduled"
+    assert app.status.cluster is None, "Application is not scheduled"
 
     await db.put(app)
     await db.put(cluster)
@@ -336,7 +336,7 @@ async def test_update_app_binding(aiohttp_client, config, db):
     assert binding.cluster == cluster_ref
 
     updated, _ = await db.get(Application, namespace="testing", name=app.metadata.name)
-    assert updated.spec.cluster == cluster_ref
+    assert updated.status.cluster == cluster_ref
     assert updated.status.state == ApplicationState.SCHEDULED
 
 

@@ -191,7 +191,7 @@ async def update_application_status(request, app, state, reason, cluster):
 @use_kwargs({"cluster": fields.String(required=True)})
 @load("app", Application)
 async def update_application_binding(request, app, cluster):
-    app.spec.cluster = cluster
+    app.status.cluster = cluster
 
     # Transition into "scheduled" state
     app.status.state = ApplicationState.SCHEDULED

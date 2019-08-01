@@ -96,7 +96,7 @@ async def test_app_creation(aresponses, loop):
     )
     app = ApplicationFactory(
         status__state=ApplicationState.SCHEDULED,
-        spec__cluster=cluster_ref,
+        status__cluster=cluster_ref,
         spec__manifest=nginx_manifest,
     )
 
@@ -161,7 +161,7 @@ async def test_app_deletion(aresponses, loop):
     )
     app = ApplicationFactory(
         status__state=ApplicationState.DELETING,
-        spec__cluster=cluster_ref,
+        status__cluster=cluster_ref,
         spec__manifest=nginx_manifest,
     )
     app_ref = (
@@ -219,7 +219,7 @@ async def test_app_deletion(aresponses, loop):
 async def test_app_deletion_without_binding(aresponses, loop):
     app = ApplicationFactory(
         status__state=ApplicationState.DELETING,
-        spec__cluster=None,
+        status__cluster=None,
         spec__manifest=nginx_manifest,
     )
     app_ref = (
