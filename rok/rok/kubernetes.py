@@ -32,7 +32,7 @@ formatting = argument(
 )
 
 
-class ApplicationTable(BaseTable):
+class ApplicationListTable(BaseTable):
     pass
 
 
@@ -41,7 +41,7 @@ class ApplicationTable(BaseTable):
 @argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
 @formatting
 @depends("config", "session")
-@printer(table=ApplicationTable(many=True))
+@printer(table=ApplicationListTable(many=True))
 def list_applications(config, session, namespace, all):
     if namespace is None:
         namespace = config["user"]
@@ -69,6 +69,10 @@ def create_application(config, session, file, namespace, name):
     resp = session.post(f"/kubernetes/namespaces/{namespace}/applications", json=app)
     data = resp.json()
     yaml.dump(data, default_flow_style=False, stream=sys.stdout)
+
+
+class ApplicationTable(BaseTable):
+    reason = Cell("status.reason")
 
 
 @application.command("get", help="Get Kubernetes application")

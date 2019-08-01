@@ -340,4 +340,3 @@ class BaseTable(Table):
     created = Cell("status.created", formatter=format_datetime)
     modified = Cell("status.modified", formatter=format_datetime)
     state = Cell("status.state")
-    reason = Cell("status.reason")
