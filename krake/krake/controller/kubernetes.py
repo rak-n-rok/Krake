@@ -74,15 +74,12 @@ class KubernetesWorker(Worker):
                         await kube.delete(resource)
 
         if app.status.state == ApplicationState.SCHEDULED:
-            transition = ApplicationState.RUNNING
+            app.status.state = ApplicationState.RUNNING
         else:
-            transition = ApplicationState.DELETED
+            app.status.state = ApplicationState.DELETED
 
         await self.client.kubernetes.application.update_status(
-            cluster=app.status.cluster,
-            namespace=app.metadata.namespace,
-            name=app.metadata.name,
-            state=transition,
+            namespace=app.metadata.namespace, name=app.metadata.name, status=app.status
         )
 
 
