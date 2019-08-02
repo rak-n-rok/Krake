@@ -7,8 +7,8 @@ specific way.
 import sys
 import json
 import yaml
+import os
 from datetime import datetime
-from itertools import chain
 
 from dateutil.parser import parse
 from functools import wraps
@@ -24,13 +24,11 @@ def printer(file=sys.stdout, **formatters):
     look up the formatter function in the additional keyword arguments. The
     signature of formatters is:
 
-    .. function:: my_formatter(value, file, is_cluster)
+    .. function:: my_formatter(value, file)
 
         :param value: Return value of the wrapped function
         :param file: File-like object where the output should be
             written
-        :param is_cluster: True if the payload contains clusters.
-            Default: False.
 
     :func:`print_generic_json` is used as default formatter for the ``json``
     format key.
@@ -81,7 +79,6 @@ def printer(file=sys.stdout, **formatters):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            is_cluster = func.__name__.endswith("clusters")
             format_type = kwargs.pop("format", "yaml")
             value = func(*args, **kwargs)
 
@@ -90,7 +87,7 @@ def printer(file=sys.stdout, **formatters):
             except KeyError:
                 raise KeyError(f"Unknown format {format_type!r}")
 
-            formatter(value, file, is_cluster=is_cluster)
+            formatter(value, file)
 
         return wrapper
 
@@ -125,87 +122,210 @@ def format_datetime(time_str):
     return datetime.strftime(parse(time_str), "%Y-%m-%d %H:%M:%S")
 
 
-def print_list_table(payload, file, is_cluster=False):
-    """Print list of items from payload as ASCII table
+class Cell(object):
+    """Declaration of a single text table cell.
 
     Args:
-        payload (dict): Payload to be processed to the ASCII table
-        file (file-like object): a file-like object (stream). Default: sys.stdout
-        is_cluster (bool, optional): True if the payload contains clusters.
-            Default: False.
+        attribute (str): Attribute that should displayed in this cell. Nested
+            attributes are supported with dot notation.
+        width (int, optional): Width of the cell. Used when the table displays
+            the cell horizontally.
+        name (str, optional): Name that is used in the header of as field
+            name. Defaults to the Python attribute name of the cell.
+        formatter (callable, optional): Formatting function that is used to
+            transform the mapped attribute.
 
     """
-    if is_cluster:
-        spec_key = spec_header = "kind"
-    else:
-        spec_header = "deployment"
-        spec_key = "cluster"
 
-    table = Texttable()
-    cols_wide = ["40", "15", "13", "29", "29", "29"]
-    headers = ["uuid", "name", spec_header, "created", "modified", "status"]
+    def __init__(self, attribute, width=None, name=None, formatter=None):
+        self.attribute = attribute
+        self.width = width
+        self.name = name
+        self.formatter = formatter
 
-    for item in payload:
-        metadata = item["metadata"]
-        spec = item["spec"][spec_key]
-        status = item["status"]
-        table.add_row(
-            [
-                metadata["uid"],
-                metadata["name"],
-                spec.split("/")[-1] if spec else None,
-                format_datetime(status["created"]),
-                format_datetime(status["modified"]),
-                status["state"],
-            ]
-        )
+    def load_attribute(self, obj):
+        """Load an attribute from a dictionary. :attr:`attribute` allows
+        nested attributes. Hence, item access is recursed.
 
-    table.header(headers)
-    table.set_cols_width(cols_wide)
-    table.set_cols_align(len(cols_wide) * "l")
-    table.set_cols_valign(len(cols_wide) * "c")
-    table.set_deco(Texttable.BORDER | Texttable.HEADER | Texttable.VLINES)
+        Args:
+            obj (dict): Data dictionary from witch the cell attribute should
+                be loaded.
 
-    print(table.draw(), file=file)
-    print(file=file)  # New line
+        Returns:
+            Item from the data object
+
+        Raises:
+            KeyError: If a key can not be found.
+
+        """
+        for key in self.attribute.split("."):
+            obj = obj[key]
+        return obj
+
+    def render(self, data):
+        """Return the string content of the cell. The corresponding attribute
+        is loaded from the data object.
+
+        Args:
+            data (object): Data object from which the corresponding cell
+                attribute is loaded
+
+        Returns:
+            str: Content of the cell
+
+        """
+        attr = self.load_attribute(data)
+
+        if self.formatter is None:
+            return attr
+        return self.formatter(attr)
 
 
-def print_detail_table(payload, file, **kwargs):
-    """Print an item detail as ASCII table
+class Table(object):
+    """Declarative base class for table printers.
+
+    It implements the Python :meth:`__call__` protocol. This means instances
+    can be used as functions. This allows their usage as formatters in
+    :func:`printer.`
+
+    Examples:
+        .. code:: python
+
+            from rok,formatters import Table, Cell
+
+            class BookTable(Table):
+                isbn = Cell("isbn")
+                title = Cell("title")
+                author = Cell("author")
+
+
+            book = {
+                "isbn": 42,
+                "title": "The Hitchhiker's Guide to the Galaxy",
+                "author": "Douglas Adams",
+            }
+
+            table = BookTable()
+            table(book)
+
+    Two different layouts are supported depending if the table is used to
+    format a list of objects or a single object.
+
+    Horizontal layout
+        is used to print a list of object. A header is printed with all cell
+        names and every proceeding row contains the formatted attributes of
+        a single item of the list (see :meth:`draw_many`).
+    Vertical layout
+        is used to print a single element. The table contains to columns.
+        The left column contains the attribute names and the right column
+        the corresponding values (see :meth:`draw`).
+
+    Attributes:
+        cells (Dict[str, Cell]): Mapping of all cell attributes of
+            the class.
 
     Args:
-        payload (dict): Payload to be processed to the ASCII table
-        file (file-like object): a file-like object (stream). Default: sys.stdout
-        **kwargs: Arbitrary keyword arguments
+        many (bool, optional): Controls the horizontal or vertical layout.
 
     """
-    field_skip = ["manifest"]
-    table = Texttable()
-    cols_wide = ["40", "50"]
-    table.header(["field", "value"])
 
-    table.set_cols_width(cols_wide)
-    table.set_cols_align(len(cols_wide) * "l")
-    table.set_cols_valign(len(cols_wide) * "c")
+    def __init__(self, many=False):
+        self.many = many
 
-    table.set_deco(Texttable.BORDER | Texttable.HEADER | Texttable.VLINES)
+    def __init_subclass__(cls):
+        """Collect :class:`Cell` attributes and assignes it to the
+        :attr:`cells` attribute.
 
-    rows = []
-    for field, value in chain(
-        payload["metadata"].items(), payload["spec"].items(), payload["status"].items()
-    ):
-        if field in field_skip or field in [field for field, _ in rows]:
-            continue
+        Args:
+            cls (type): Class that is being initialized
 
-        rows.append([field, value])
+        """
+        super().__init_subclass__()
 
-    table.add_rows(sorted(rows, key=lambda row: row[0], reverse=True), header=False)
-    print(table.draw(), file=file)
-    print(file=file)  # New line
+        cells = {}
+
+        # Fetch all we do not use "inspect.getmembers" because it orders the
+        # attributes by name.
+        for c in cls.__mro__:
+            # We use "__dict__" here instead of dir() because we want to
+            # preserve the declaration order of attributes
+            for name, attr in c.__dict__.items():
+                if isinstance(attr, Cell):
+                    cells[name] = attr
+
+        # Set name of unnamed cells to their Python attribute name
+        for name, cell in cells.items():
+            if cell.name is None:
+                cell.name = name
+
+        cls.cells = cells
+
+    def __call__(self, data, file):
+        """Print a table from the passed data
+
+        Args:
+            data (object): Data that should be formatted
+            file: File-like object where the output should be written
+
+        """
+        # @see https://stackoverflow.com/a/41864359/2467158
+        width, height = os.get_terminal_size(0)
+        table = Texttable(max_width=width)
+
+        if self.many:
+            self.draw_many(table, data, file)
+        else:
+            self.draw(table, data, file)
+
+    def draw(self, table, data, file):
+        """Print a data item.
+
+        Args:
+            table (texttable.Texttable): Table that is used for formatting
+            data (object): Data object that will be used to populate the table
+            file: File-like object where the output should be written
+
+        """
+        table.set_cols_align("ll")
+        table.set_cols_valign("cc")
+        table.set_deco(Texttable.BORDER | Texttable.VLINES)
+
+        for cell in self.cells.values():
+            table.add_row([cell.name, cell.render(data)])
+
+        print(table.draw(), file=file)
+
+    def draw_many(self, table, data, file):
+        """Print a list of data item.
+
+        Args:
+            table (texttable.Texttable): Table that is used for formatting
+            data (object): List of items used to populate the table
+            file: File-like object where the output should be written
+
+        """
+        table.header([name for name in self.cells.keys()])
+        # table.set_cols_width([cell.width for cell in self.cells.values()])
+        table.set_cols_align(len(self.cells) * "l")
+        table.set_cols_valign(len(self.cells) * "c")
+        table.set_deco(Texttable.BORDER | Texttable.HEADER | Texttable.VLINES)
+
+        if self.cells:
+            for item in data:
+                table.add_row([cell.render(item) for cell in self.cells.values()])
+
+        print(table.draw(), file=file)
 
 
-# FIXME: The table implementation should be decoupled for every resource.
-#   There should not be and if-then-else logic inside the table formatting
-#   function.
-print_detail = printer(table=print_detail_table)
-print_list = printer(table=print_list_table)
+class BaseTable(Table):
+    """Standard base class for declarative table formatters.
+    Defines a couple of default resource attributes.
+
+    """
+
+    name = Cell("metadata.name")
+    namespace = Cell("metadata.namespace")
+    user = Cell("metadata.user")
+    created = Cell("status.created", formatter=format_datetime)
+    modified = Cell("status.modified", formatter=format_datetime)
+    state = Cell("status.state")

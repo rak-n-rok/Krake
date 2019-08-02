@@ -12,7 +12,7 @@ import yaml
 
 from .parser import ParserSpec, argument
 from .fixtures import depends
-from .formatters import print_list, print_detail
+from .formatters import BaseTable, Cell, printer
 
 
 kubernetes = ParserSpec(
@@ -23,19 +23,25 @@ application = kubernetes.subparser(
     "application", aliases=["app"], help="Manage Kubernetes applications"
 )
 
-
-@application.command("list", help="List Kubernetes application")
-@argument("-a", "--all", action="store_true", help="Show deleted applications")
-@argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
-@argument(
+formatting = argument(
     "-f",
     "--format",
     choices=["table", "json", "yaml"],
     default="table",
     help="Format of the output, table by default",
 )
-@print_list
+
+
+class ApplicationListTable(BaseTable):
+    pass
+
+
+@application.command("list", help="List Kubernetes application")
+@argument("-a", "--all", action="store_true", help="Show deleted applications")
+@argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
+@formatting
 @depends("config", "session")
+@printer(table=ApplicationListTable(many=True))
 def list_applications(config, session, namespace, all):
     if namespace is None:
         namespace = config["user"]
@@ -65,18 +71,16 @@ def create_application(config, session, file, namespace, name):
     yaml.dump(data, default_flow_style=False, stream=sys.stdout)
 
 
+class ApplicationTable(BaseTable):
+    reason = Cell("status.reason")
+
+
 @application.command("get", help="Get Kubernetes application")
 @argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
 @argument("name", help="Kubernetes application name")
-@argument(
-    "-f",
-    "--format",
-    choices=["table", "json", "yaml"],
-    default="table",
-    help="Format of the output, table by default",
-)
-@print_detail
+@formatting
 @depends("config", "session")
+@printer(table=ApplicationTable())
 def get_application(config, session, namespace, name):
     if namespace is None:
         namespace = config["user"]
@@ -87,7 +91,7 @@ def get_application(config, session, namespace, name):
     )
     if resp.status_code == 404:
         print(f"Error: Kubernetes application {name!r} not found")
-        return 1
+        raise SystemExit(1)
 
     resp.raise_for_status()
     return resp.json()
@@ -120,6 +124,10 @@ def delete_application(config, session, namespace, name):
 
 
 cluster = kubernetes.subparser("cluster", help="Manage Kubernetes clusters")
+
+
+class ClusterTable(BaseTable):
+    kind = Cell("spec.kind")
 
 
 @cluster.command("create", help="Register an existing Kubernetes cluster")
@@ -202,15 +210,9 @@ def create_cluster(config, session, namespace, kubeconfig, contexts):
 @argument(
     "-n", "--namespace", help="Namespace of the Kubernetes cluster. Defaults to user"
 )
-@argument(
-    "-f",
-    "--format",
-    choices=["table", "json", "yaml"],
-    default="table",
-    help="Format of the output, table by default",
-)
-@print_list
+@formatting
 @depends("config", "session")
+@printer(table=ClusterTable(many=True))
 def list_clusters(config, session, namespace):
     if namespace is None:
         namespace = config["user"]
