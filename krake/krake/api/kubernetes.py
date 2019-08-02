@@ -158,13 +158,15 @@ async def update_application(request, app, spec):
         "state": EnumField(ApplicationState, required=True),
         "reason": fields.String(required=True, allow_none=True),
         "cluster": fields.String(required=True, allow_none=True),
+        "services": fields.Dict(required=True, allow_none=True),
     }
 )
 @load("app", Application)
-async def update_application_status(request, app, state, reason, cluster):
+async def update_application_status(request, app, state, reason, cluster, services):
     app.status.state = state
     app.status.reason = reason
     app.status.cluster = cluster
+    app.status.services = services
     app.status.modified = datetime.now()
 
     if app.status.state == ApplicationState.DELETED:

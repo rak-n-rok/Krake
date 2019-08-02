@@ -27,6 +27,7 @@ class ApplicationStatus(Serializable):
     modified: datetime
     reason: str = None
     cluster: str = None  # API endpoint of the Kubernetes cluster resource
+    services: dict = None
 
 
 class Application(Serializable):

@@ -286,6 +286,7 @@ async def test_update_app_status(aiohttp_client, config, db):
             "state": "FAILED",
             "reason": "Stupid error",
             "cluster": "/kubernetes/namespaces/testing/clusters/test-cluster",
+            "services": {"service1": "127.0.0.1:38531"},
         },
     )
     assert resp.status == 200
@@ -295,6 +296,7 @@ async def test_update_app_status(aiohttp_client, config, db):
     assert status.created == app.status.created
     assert status.reason == "Stupid error"
     assert status.cluster == "/kubernetes/namespaces/testing/clusters/test-cluster"
+    assert status.services == {"service1": "127.0.0.1:38531"}
 
     stored, rev = await db.get(Application, namespace="testing", name=app.metadata.name)
     assert stored.status == status
