@@ -22,10 +22,18 @@ from argparse import ArgumentParser
 
 from krake import load_config, setup_logging
 from krake.data.kubernetes import ApplicationState, Cluster
+
+from .exceptions import on_error, ControllerError
 from . import Controller, Worker, run
 
 
 logger = logging.getLogger("krake.controller.scheduler")
+
+
+class UnsuitableDeploymentError(ControllerError):
+    """Raised in case when there is not enough resources for spawning an application
+        on any of the deployments.
+    """
 
 
 class Scheduler(Controller):
@@ -74,6 +82,7 @@ class SchedulerWorker(Worker):
     application specifications.
     """
 
+    @on_error(ControllerError)
     async def resource_received(self, app):
 
         # TODO: Global optimization instead of incremental
@@ -84,15 +93,8 @@ class SchedulerWorker(Worker):
             logger.info(
                 "Unable to schedule Kubernetes application %r", app.metadata.name
             )
-            app.status.cluster = None
-            app.status.state = ApplicationState.FAILED
-            app.status.reason = "No cluster available"
+            raise UnsuitableDeploymentError("No cluster available")
 
-            await self.client.kubernetes.application.update_status(
-                namespace=app.metadata.namespace,
-                name=app.metadata.name,
-                status=app.status,
-            )
         else:
             logger.info(
                 "Schedule Kubernetes application %r to cluster %r",
@@ -118,6 +120,26 @@ class SchedulerWorker(Worker):
     async def rank_kubernetes_cluster(self, cluster):
         # TODO: Implement ranking function
         return ClusterRank(rank=0.5, cluster=cluster)
+
+    async def error_occured(self, app, reason=None):
+        """Asynchronous callback executed whenever an error occurs during
+        :meth:`resource_received`.
+
+        Callback updates kubernetes application status to the failed state and
+        describes the reason of the failure.
+
+        Args:
+            app (krake.data.kubernetes.Application): Application object processed
+                when the error occurred
+            reason (str, optional): The reason of the exception which will be propagate
+                to the end-user. Defaults to None.
+        """
+        app.status.state = ApplicationState.FAILED
+        app.status.reason = reason
+
+        await self.client.kubernetes.application.update_status(
+            namespace=app.metadata.namespace, name=app.metadata.name, status=app.status
+        )
 
 
 parser = ArgumentParser(description="Krake scheduler")
