@@ -174,7 +174,7 @@ def create_cluster(config, session, namespace, kubeconfig, contexts):
         """
         if attr in spec:
             with open(spec[attr], "rb") as fd:
-                data = b64encode(fd.read())
+                data = b64encode(fd.read()).decode()
             del spec[attr]
             spec[f"{attr}-data"] = data
 
