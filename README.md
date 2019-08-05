@@ -11,6 +11,7 @@ The current Krake v2 prototype comprises two Python packages:
  - [etcdv3](https://github.com/etcd-io/etcd/releases/)
  - [Python](https://www.python.org/downloads/) >= 3.6
  - [pre-commit](https://pre-commit.com/)
+ - [cfssl](https://cfssl.org/) (optional) – for setting up a development PKI
  - [keystone](https://pypi.org/project/keystone/) (optional) – for testing keystone server authentication
 
 
@@ -42,6 +43,11 @@ support/etcd
 # Run local Keystone server. Related data is stored in "tmp/keystone". This
 # requires keystone to be installed (pip install keystone)
 support/keystone
+
+# Optional: If the API server should be encrypted with TLS and support client
+#   certificate authentication, create a certificate for the API server.
+#	This required "cfssl" to be installed.
+support/pki "system:api-server"
 
 # Run the API server
 py -m krake.api

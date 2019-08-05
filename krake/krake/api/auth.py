@@ -109,6 +109,41 @@ def static_authentication(name):
     return authenticator
 
 
+def client_certificate_authentication():
+    """Authenticator factory for authenticaing requests with client
+    certificates.
+
+    The client certificate is loaded from the ``peercert`` attribute of the
+    underlying TCP transport. The common name of the client certificate is
+    used as username
+
+
+    Returns:
+        callable: Authenticator using client certificate information for
+        authentication.
+
+    """
+
+    async def authenticator(request):
+        peercert = request.transport.get_extra_info("peercert")
+        if not peercert:
+            return None
+        try:
+            return _get_common_name(peercert["subject"])
+        except ValueError:
+            return None
+
+    return authenticator
+
+
+def _get_common_name(subject):
+    for rdn in subject:
+        for name, value in rdn:
+            if name == "commonName":
+                return value
+    raise ValueError("'commonName' not found")
+
+
 def keystone_authentication(endpoint):
     """Authenticator factory for OpenStack Keystone authentication.
 

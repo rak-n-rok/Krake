@@ -1,12 +1,17 @@
+import ssl
 import pytest
 from aiohttp import ClientSession
+from aiohttp.test_utils import TestServer as Server
 from krake.api.app import create_app
 
 
 async def test_static_auth(aiohttp_client, config):
     client = await aiohttp_client(
         create_app(
-            config=dict(config, authentication={"kind": "static", "name": "test-user"})
+            config=dict(
+                config,
+                authentication={"strategy": {"kind": "static", "name": "test-user"}},
+            )
         )
     )
     resp = await client.get("/me")
@@ -101,7 +106,9 @@ async def test_keystone_auth(keystone, aiohttp_client, config):
         create_app(
             config=dict(
                 config,
-                authentication={"kind": "keystone", "endpoint": keystone.auth_url},
+                authentication={
+                    "strategy": {"kind": "keystone", "endpoint": keystone.auth_url}
+                },
             )
         )
     )
@@ -110,3 +117,44 @@ async def test_keystone_auth(keystone, aiohttp_client, config):
 
     data = await resp.json()
     assert data["user"] == keystone.username
+
+
+@pytest.mark.require_executable("cfssl")
+async def test_client_cert_auth(aiohttp_client, config, pki):
+    server_cert = pki.gencert("api-server")
+    client_cert = pki.gencert("test-user")
+
+    app = create_app(
+        config=dict(
+            config,
+            authentication={"strategy": None},
+            tls={
+                "client_ca": pki.ca.cert,
+                "cert": server_cert.cert,
+                "key": server_cert.key,
+            },
+        )
+    )
+    server = Server(app)
+    try:
+        await server.start_server(ssl=app["ssl_context"])
+        assert server.scheme == "https"
+
+        client = await aiohttp_client(server)
+
+        # No client certificate
+        context = ssl.create_default_context(cafile=pki.ca.cert)
+        resp = await client.get("/me", ssl=context)
+        data = await resp.json()
+        assert data["user"] == "system:anonymous"
+
+        # Authenticate with client certificate
+        context = ssl.create_default_context(
+            purpose=ssl.Purpose.CLIENT_AUTH, cafile=pki.ca.cert
+        )
+        context.load_cert_chain(*client_cert)
+        resp = await client.get("/me", ssl=context)
+        data = await resp.json()
+        assert data["user"] == "test-user"
+    finally:
+        await server.close()

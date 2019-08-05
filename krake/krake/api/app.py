@@ -20,6 +20,7 @@ Example:
 
 """
 import logging
+import ssl
 from aiohttp import web, ClientSession
 
 from krake.data.core import CoreMetadata, Verb, RoleRule, Role, RoleBinding
@@ -40,33 +41,34 @@ def create_app(config):
     """
     logger = logging.getLogger("krake.api.error")
 
-    # Authenticators
-    if config["authentication"]["kind"] == "static":
-        authenticator = auth.static_authentication(
-            name=config["authentication"]["name"]
-        )
-    elif config["authentication"]["kind"] == "keystone":
-        authenticator = auth.keystone_authentication(
-            endpoint=config["authentication"]["endpoint"]
-        )
+    if "tls" not in config:
+        ssl_context = None
     else:
-        raise ValueError(f"Unknown authentication method {config['auth']['kind']!r}")
+        ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        ssl_context.verify_mode = ssl.CERT_OPTIONAL
 
-    # Authorizers
-    if config["authorization"] == "always-allow":
-        authorizer = auth.always_allow
-    elif config["authorization"] == "RBAC":
-        authorizer = auth.rbac
+        ssl_context.load_cert_chain(
+            certfile=config["tls"]["cert"], keyfile=config["tls"]["key"]
+        )
+
+        # Load authorities for client certificates.
+        client_ca = config["tls"].get("client_ca")
+        if client_ca:
+            ssl_context.load_verify_locations(cafile=client_ca)
+
+    authentication = load_authentication(config, ssl_context)
+    authorizer = load_authorizer(config)
 
     app = web.Application(
         middlewares=[
             middlewares.error_log(logger),
+            authentication,
             middlewares.database(config["etcd"]["host"], config["etcd"]["port"]),
-            middlewares.authentication(authenticator),
         ]
     )
     app["config"] = config
     app["authorizer"] = authorizer
+    app["ssl_context"] = ssl_context
 
     # TODO: Default roles and role bindings should reside in the database as
     #   well. This means the database needs to be populated with these roles and
@@ -174,3 +176,71 @@ def load_default_role_binding(binding):
         users=binding["users"],
         roles=binding["roles"],
     )
+
+
+def load_authentication(config, ssl_context):
+    """Create the authentication middleware :func:`.middlewares.authentication`.
+
+    The authenticators are loaded from the "authentication" configuration key.
+    If the server is configured with TLS, client certificates are also added
+    as authentication (:func:`.auth.client_certificate_authentication`)
+    strategy.
+
+    Args:
+        config (dict): Application configuration
+        ssl_context (ssl.SSLContext, None): SSL context used by the
+            application. None if no TLS is configured.
+
+    Raises:
+        ValueError: If an unknown authentication strategy is configured
+
+    Returns:
+        aiohttp middleware handling request authentication
+
+    """
+    authenticators = []
+
+    strategy = config["authentication"].get("strategy", None)
+
+    if strategy is None:
+        pass
+    elif strategy["kind"] == "static":
+        authenticators.append(auth.static_authentication(name=strategy["name"]))
+    elif strategy["kind"] == "keystone":
+        authenticators.append(
+            auth.keystone_authentication(endpoint=strategy["endpoint"])
+        )
+    else:
+        raise ValueError(f"Unknown authentication strategy {strategy['kind']!r}")
+
+    # If the "client_ca" TLS configuration parameter is given, enable client
+    # certificate authentication.
+    if "tls" in config and config["tls"].get("client_ca"):
+        authenticators.append(auth.client_certificate_authentication())
+
+    return middlewares.authentication(authenticators)
+
+
+def load_authorizer(config):
+    """Load authorization function from configuration.
+
+    Args:
+        config (dict): Application configuration
+
+    Raises:
+        ValueError: If an unknown authorization strategy is configured
+
+    Returns:
+        Coroutine function for authorizing resource requests
+
+    """
+    if config["authorization"] == "always-allow":
+        return auth.always_allow
+
+    if config["authorization"] == "always-deny":
+        return auth.always_deny
+
+    if config["authorization"] == "RBAC":
+        return auth.rbac
+
+    raise ValueError(f"Unknown authorization strategy {config['authorization']!r}")
