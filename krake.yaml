@@ -13,6 +13,10 @@ tls:
   client_ca: tmp/pki/ca.pem
 
 authentication:
+  # If enabled, every request not rejected and not authenticated by any
+  # authentication method is treatet as anonymous request.
+  allow_anonymous: true
+
   # Keystone authentication
   strategy:
     kind: keystone

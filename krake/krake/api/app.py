@@ -200,6 +200,7 @@ def load_authentication(config, ssl_context):
     """
     authenticators = []
 
+    allow_anonymous = config["authentication"].get("allow_anonymous", True)
     strategy = config["authentication"].get("strategy", None)
 
     if strategy is None:
@@ -218,7 +219,7 @@ def load_authentication(config, ssl_context):
     if "tls" in config and config["tls"].get("client_ca"):
         authenticators.append(auth.client_certificate_authentication())
 
-    return middlewares.authentication(authenticators)
+    return middlewares.authentication(authenticators, allow_anonymous)
 
 
 def load_authorizer(config):

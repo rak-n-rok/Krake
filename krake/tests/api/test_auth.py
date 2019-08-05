@@ -119,6 +119,14 @@ async def test_keystone_auth(keystone, aiohttp_client, config):
     assert data["user"] == keystone.username
 
 
+async def test_deny_anonymous_requests(aiohttp_client, config):
+    client = await aiohttp_client(
+        create_app(dict(config, authentication={"allow_anonymous": False}))
+    )
+    resp = await client.get("/me")
+    assert resp.status == 401
+
+
 @pytest.mark.require_executable("cfssl")
 async def test_client_cert_auth(aiohttp_client, config, pki):
     server_cert = pki.gencert("api-server")
