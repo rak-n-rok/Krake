@@ -59,13 +59,13 @@ def error_log(logger):
 def authentication(authenticators, allow_anonymous):
     """Middleware factory authenticating every request.
 
-    The concret implementation is delegated to the passed asynchronous
+    The concrete implementation is delegated to the passed asynchronous
     authenticator function (see :mod:`krake.api.auth` for details). This
     function returns the username for an incoming request. If the request is
     unauthenticated -- meaning the authenticator returns None --
     ``system:anonymous`` is used as username.
 
-    The username is registed under the ``user`` key of the incoming request.
+    The username is registered under the ``user`` key of the incoming request.
 
     Anonymous requests can be allowed. If no authenticator authenticates the
     incoming request, "system:anonymous" is assigned as user for the request.

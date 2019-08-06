@@ -377,11 +377,11 @@ default_resolvers = [
 
 def serializable(cls=None, resolvers=default_resolvers):
     """Decorator function for automatically defining a marshmallow schema for
-    the the decorated class.
+    the decorated class.
 
     It supports either class type annotations or dataclasses
     (:mod:`dataclasses`). The generated schema class is accessible as
-    ``Schema`` attribute on the decorated class. The
+    ``Schema`` attribute on the decorated class.
 
     Furthermore, an instance of this schema is assigned to the ``schema`` key
     of the ``__metadata__`` attribute of the class. The class gets

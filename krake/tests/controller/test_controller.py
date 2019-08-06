@@ -44,7 +44,7 @@ async def test_consume_error_handling(loop):
 
     worker = Mock()
     worker.resource_received = Mock(side_effect=IOError)
-    worker.error_occured = Mock()
+    worker.error_occurred = Mock()
 
     queue = WorkQueue(loop=loop)
     await queue.put(app.metadata.uid, app)
@@ -52,4 +52,4 @@ async def test_consume_error_handling(loop):
     await asyncio.wait(
         [consume(queue, worker)], timeout=0.5, return_when=asyncio.FIRST_EXCEPTION
     )
-    worker.error_occured.assert_called_once_with(app, reason="Internal error")
+    worker.error_occurred.assert_called_once_with(app, reason="Internal error")
