@@ -52,8 +52,7 @@ async def list_or_watch_applications(request, heartbeat):
             ]
 
         # Filter DELETED applications
-        if "deleted" not in request.query:
-            apps = (app for app in apps if app.status.state != ApplicationState.DELETED)
+        apps = (app for app in apps if app.status.state != ApplicationState.DELETED)
 
         return web.json_response([serialize(app) for app in apps])
 

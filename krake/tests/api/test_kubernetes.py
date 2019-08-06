@@ -76,27 +76,6 @@ async def test_list_apps_from_all_namespaces(aiohttp_client, config, db):
     assert sorted(received, key=key) == sorted(apps, key=key)
 
 
-async def test_list_deleted_apps(aiohttp_client, config, db):
-    apps = [
-        ApplicationFactory(status__state=ApplicationState.PENDING),
-        ApplicationFactory(status__state=ApplicationState.DELETED),
-    ]
-    for app in apps:
-        await db.put(app)
-
-    client = await aiohttp_client(create_app(config=config))
-    resp = await client.get("/kubernetes/namespaces/testing/applications?deleted")
-    assert resp.status == 200
-
-    data = await resp.json()
-    received = [deserialize(Application, item) for item in data]
-
-    assert len(received) == len(apps)
-
-    key = attrgetter("metadata.uid")
-    assert sorted(received, key=key) == sorted(apps, key=key)
-
-
 async def test_list_apps_rbac(rbac_allow, config, aiohttp_client):
     client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
 
