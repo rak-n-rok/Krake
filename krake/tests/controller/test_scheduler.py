@@ -70,7 +70,7 @@ async def test_kubernetes_reception(aresponses, loop):
 
 async def test_kubernetes_scheduling(aresponses, loop):
     app = ApplicationFactory(status__state=ApplicationState.UPDATED)
-    cluster = ClusterFactory(magnum=True, metadata__user=app.metadata.user)
+    cluster = ClusterFactory(metadata__user=app.metadata.user)
 
     async def echo_binding(request):
         payload = await request.json()

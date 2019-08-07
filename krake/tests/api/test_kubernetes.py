@@ -487,7 +487,7 @@ async def test_watch_app_from_all_namespaces(aiohttp_client, config, db, loop):
 
 
 async def test_list_clusters(aiohttp_client, config, db):
-    clusters = [ClusterFactory(), ClusterFactory(), ClusterFactory(magnum=True)]
+    clusters = [ClusterFactory(), ClusterFactory(), ClusterFactory()]
     for cluster in clusters:
         await db.put(cluster)
 

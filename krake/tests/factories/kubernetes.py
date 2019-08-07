@@ -2,7 +2,7 @@ from datetime import datetime
 from base64 import b64encode
 import pytz
 import yaml
-from factory import Factory, SubFactory, Trait, lazy_attribute, fuzzy
+from factory import Factory, SubFactory, lazy_attribute, fuzzy
 
 from .fake import fake
 from .core import NamespacedMetadataFactory
@@ -14,9 +14,8 @@ from krake.data.kubernetes import (
     ClusterSpec,
     ClusterState,
     ClusterStatus,
-    ClusterKind,
     Cluster,
-    MagnumClusterSpec,
+    MagnumPlatform,
 )
 
 
@@ -97,17 +96,9 @@ class ApplicationFactory(Factory):
     status = SubFactory(ApplicationStatusFactory)
 
 
-class ClusterSpecFactory(Factory):
-    class Meta:
-        model = ClusterSpec
-
-
 class ClusterStatusFactory(Factory):
     class Meta:
         model = ClusterStatus
-
-    class Params:
-        cluster_kind = fuzzy.FuzzyChoice(list(ClusterKind.__members__.values()))
 
     state = fuzzy.FuzzyChoice(list(ClusterState.__members__.values()))
     created = fuzzy.FuzzyDateTime(datetime.now(tz=pytz.utc))
@@ -223,7 +214,7 @@ users:
 )
 
 
-class ClusterSpecFactory(ClusterSpecFactory):
+class ClusterSpecFactory(Factory):
     class Meta:
         model = ClusterSpec
 
@@ -232,18 +223,14 @@ class ClusterSpecFactory(ClusterSpecFactory):
         return local_kubeconfig
 
 
-class MagnumClusterSpecFactory(ClusterSpecFactory):
+class MagnumPlatformFactory(ClusterSpecFactory):
     class Meta:
-        model = MagnumClusterSpec
+        model = MagnumPlatform
 
-    kind = ClusterKind.MAGNUM
     master_ip = fuzzy.FuzzyAttribute(fake.ipv4)
 
 
 class ClusterFactory(Factory):
-    class Params:
-        magnum = Trait(spec=SubFactory(MagnumClusterSpecFactory))
-
     class Meta:
         model = Cluster
 
