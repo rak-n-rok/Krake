@@ -10,4 +10,4 @@ minikube_cpus: 2
 minikube_memory: 2048
 minikube_disk_size: 20g
 
-kubectl_version: v1.15.0
+kubectl_version: latest

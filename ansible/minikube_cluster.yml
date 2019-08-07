@@ -144,12 +144,21 @@
         dest: /home/ubuntu/.hushlogin
         force: no
 
+    - name: Get kubectl latest version
+      uri:
+        url: https://storage.googleapis.com/kubernetes-release/release/stable.txt
+        return_content: yes
+      register: kubectl_latest_version
+      when: kubectl_version == 'latest'
+
     - name: Get minikube and kubectl installation binaries
+      vars:
+        kubectl: "{{ kubectl_version if (kubectl_version != 'latest') else kubectl_latest_version.content | replace('\n', '') }}"
       get_url: url="{{ item.url }}" dest="{{ item.dest }}"
       with_items:
         - url: "https://storage.googleapis.com/minikube/releases/{{ minikube_version }}/minikube-linux-amd64"
           dest: "{{ minikube_install_dir }}/minikube"
-        - url: "https://storage.googleapis.com/kubernetes-release/release/{{ kubectl_version }}/bin/linux/amd64/kubectl"
+        - url: "https://storage.googleapis.com/kubernetes-release/release/{{ kubectl }}/bin/linux/amd64/kubectl"
           dest: "{{ minikube_install_dir }}/kubectl"
 
     - name: Change binaries ownership, group and permissions
@@ -171,15 +180,13 @@
     home_dir: "/home/ubuntu"
   tasks:
 
-    - name: Creates kube directory
+    - name: Creates minikube and kube directories
       file:
-        path: "{{ home_dir }}/.kube"
+        path: "{{ home_dir }}/{{ item }}"
         state: directory
-
-    - name: Creates minikube directory
-      file:
-        path: "{{ home_dir }}/.minikube"
-        state: directory
+      with_items:
+        - ".minikube"
+        - ".kube"
 
     - name: Touch a kube config file
       file:
@@ -192,17 +199,16 @@
       failed_when: "minikube_status.rc != 1 and minikube_status.rc != 0"
 
     - name: Start Minikube {{ name }}
-      become_user: ubuntu
+      become: yes
+      become_user: root
       command: >
-        sudo -E minikube start
+        minikube start
           --vm-driver=none
           --profile "{{ name }}"
           --apiserver-port "{{ api_port }}"
           --cpus "{{ minikube_cpus }}"
           --memory "{{ minikube_memory }}"
           --disk-size "{{ minikube_disk_size }}"
-      args:
-        warn: false
       environment:
         MINIKUBE_WANTUPDATENOTIFICATION: false
         MINIKUBE_WANTREPORTERRORPROMPT: false
@@ -210,6 +216,19 @@
         CHANGE_MINIKUBE_NONE_USER: true
         KUBECONFIG: "{{ home_dir }}/.kube/config"
       when: "minikube_status.rc == 1"
+
+    - name: Change ownership of a minikube and kube directories
+      become: yes
+      become_user: root
+      file:
+        path: "{{ home_dir }}/{{ item }}"
+        state: directory
+        recurse: yes
+        owner: ubuntu
+        group: ubuntu
+      with_items:
+        - ".minikube"
+        - ".kube"
 
     - name: Get Minikube {{ name }} status
       command: minikube status -p {{ name }}
