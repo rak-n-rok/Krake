@@ -56,7 +56,7 @@ def create_app(config):
         if client_ca:
             ssl_context.load_verify_locations(cafile=client_ca)
 
-    authentication = load_authentication(config, ssl_context)
+    authentication = load_authentication(config)
     authorizer = load_authorizer(config)
 
     app = web.Application(
@@ -178,7 +178,7 @@ def load_default_role_binding(binding):
     )
 
 
-def load_authentication(config, ssl_context):
+def load_authentication(config):
     """Create the authentication middleware :func:`.middlewares.authentication`.
 
     The authenticators are loaded from the "authentication" configuration key.
@@ -188,8 +188,6 @@ def load_authentication(config, ssl_context):
 
     Args:
         config (dict): Application configuration
-        ssl_context (ssl.SSLContext, None): SSL context used by the
-            application. None if no TLS is configured.
 
     Raises:
         ValueError: If an unknown authentication strategy is configured
