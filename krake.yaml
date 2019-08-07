@@ -2,15 +2,30 @@ etcd:
   host: 127.0.0.1
   port: 2379
 
-# # Anonymous authentication
-# authentication:
-#   kind: static
-#   name: system
+# TLS configuration of API server
+tls:
+  cert: tmp/pki/system:api-server.pem
+  key: tmp/pki/system:api-server-key.pem
 
-# Keystone authentication
+  # Enable client certificate authentication by setting this option to a file
+  # containing one or more certificate authorities that should be used to
+  # validate client certificates.
+  client_ca: tmp/pki/ca.pem
+
 authentication:
-  kind: keystone
-  endpoint: http://localhost:5000/v3
+  # If enabled, every request not rejected and not authenticated by any
+  # authentication method is treatet as anonymous request.
+  allow_anonymous: true
+
+  # Keystone authentication
+  strategy:
+    kind: keystone
+    endpoint: http://localhost:5000/v3
+
+  # Static authentication (every request is authenticated as this user)
+  # strategy:
+  #   kind: static
+  #   user: system
 
 # Authorization mode
 #

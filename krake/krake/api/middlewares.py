@@ -56,7 +56,7 @@ def error_log(logger):
     return logging_middleware
 
 
-def authentication(authenticator):
+def authentication(authenticators, allow_anonymous):
     """Middleware factory authenticating every request.
 
     The concret implementation is delegated to the passed asynchronous
@@ -67,9 +67,16 @@ def authentication(authenticator):
 
     The username is registed under the ``user`` key of the incoming request.
 
+    Anonymous requests can be allowed. If no authenticator authenticates the
+    incoming request, "system:anonymous" is assigned as user for the request.
+    This behavior can be disabled. In that case "401 Unauthorized" is raised
+    if an request is not authenticated by any authenticator.
+
     Args:
-        authenticator (callable): Asynchronous function returning the username
-            for a given request.
+        authenticators (List[callable]): List if asynchronous function
+            returning the username for a given request.
+        allow_anonymous (bool): If True, anonymous (unauthenticated) requests
+            are allowed.
 
     Returns:
         aiohttp middleware loading a username for every incoming HTTP request.
@@ -78,9 +85,18 @@ def authentication(authenticator):
 
     @web.middleware
     async def auth_middleware(request, handler):
-        user = await authenticator(request)
+        user = None
+
+        for authenticator in authenticators:
+            user = await authenticator(request)
+            if user is not None:
+                break
+
         if user is None:
+            if not allow_anonymous:
+                raise web.HTTPUnauthorized()
             user = "system:anonymous"
+
         request["user"] = user
 
         return await handler(request)

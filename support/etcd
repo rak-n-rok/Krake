@@ -10,6 +10,10 @@ temp_dir = root_dir / "tmp/etcd"
 
 
 def main(name):
+    # Unfortunatly, we cannot use TLS client certificates for authentication
+    # because Krake API server is using the gRPC JSON gateway of etcd. This
+    # gateway does not transparently forward the common name of the TLS client
+    # certificate to the underlying gRPC server.
     os.execvp("etcd", ["etcd", "--data-dir", str(temp_dir / name)])
 
 

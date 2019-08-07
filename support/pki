@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+"""Simple helpers script for generating a Private Key Infrastructure for
+development purpose with ``cfssl``.
+"""
+from argparse import ArgumentParser
+from pathlib import Path
+from subprocess import Popen, PIPE, CalledProcessError
+import json
+import sys
+import shutil
+
+
+ca_csr = {
+    "CN": "Krake CA",
+    "key": {"algo": "ecdsa", "size": 256},
+    "names": [{"O": "Acme Corporation"}],
+}
+
+ca_config = {
+    "signing": {
+        "profiles": {
+            "krake-ca": {
+                "usages": ["signing", "key encipherment", "server auth", "client auth"],
+                "expiry": "8760h",
+            }
+        }
+    }
+}
+
+client_csr_template = {
+    "CN": None,
+    "hosts": ["127.0.0.1"],
+    "key": {"algo": "ecdsa", "size": 256},
+    "names": [{"O": "Acme Corporation"}],
+}
+
+
+root_dir = Path(__file__).parent.parent.resolve()
+temp_dir = root_dir / "tmp/pki"
+
+ca_key_file = temp_dir / "ca-key.pem"
+ca_cert_file = temp_dir / "ca.pem"
+ca_config_file = temp_dir / "ca-config.json"
+ca_csr_file = temp_dir / "ca-csr.json"
+
+
+def jsoncall(*command):
+    with Popen(command, stdout=PIPE) as proc:
+        try:
+            data = json.load(proc.stdout)
+        except json.JSONDecodeError:
+            returncode = proc.poll()
+            if returncode is not None and returncode != 0:
+                raise CalledProcessError(returncode, command)
+            raise
+
+    if proc.returncode != 0:
+        raise CalledProcessError(proc.returncode, command)
+
+    return data
+
+
+def init_ca():
+    with ca_csr_file.open("w") as fd:
+        json.dump(ca_csr, fd, indent=4)
+
+    certs = jsoncall("cfssl", "gencert", "-initca", str(ca_csr_file))
+
+    with ca_key_file.open("w") as fd:
+        fd.write(certs["key"])
+    ca_key_file.chmod(0o600)
+
+    with ca_cert_file.open("w") as fd:
+        fd.write(certs["cert"])
+
+    with ca_config_file.open("w") as fd:
+        json.dump(ca_config, fd, indent=4)
+
+
+def main(name):
+    if shutil.which("cfssl") is None:
+        print(
+            "Error: Could not found 'cfssl'. Please install "
+            "(https://github.com/cloudflare/cfssl)",
+            file=sys.stderr,
+        )
+        return 1
+
+    client_csr = dict(client_csr_template, CN=name)
+    client_csr_file = temp_dir / f"{name}-csr.json"
+
+    client_cert_file = temp_dir / f"{name}.pem"
+    client_key_file = temp_dir / f"{name}-key.pem"
+
+    temp_dir.mkdir(exist_ok=True, mode=0o700)
+
+    if client_key_file.exists():
+        print(f"Error: client key {client_key_file} already exists", file=sys.stderr)
+        return 1
+
+    if not ca_config_file.exists():
+        init_ca()
+
+    with client_csr_file.open("w") as fd:
+        json.dump(client_csr, fd, indent=4)
+
+    certs = jsoncall(
+        "cfssl",
+        "gencert",
+        "-profile",
+        "krake",
+        "-config",
+        str(ca_config_file),
+        "-ca",
+        str(ca_cert_file),
+        "-ca-key",
+        str(ca_key_file),
+        str(client_csr_file),
+    )
+
+    with client_key_file.open("w") as fd:
+        fd.write(certs["key"])
+    client_key_file.chmod(0o600)
+
+    with client_cert_file.open("w") as fd:
+        fd.write(certs["cert"])
+
+    return 0
+
+
+parser = ArgumentParser(description="PKI tool for development purpose on top of cfssl")
+parser.add_argument("name", help="Common name of the client")
+
+
+if __name__ == "__main__":
+    args = vars(parser.parse_args())
+    sys.exit(main(**args))
