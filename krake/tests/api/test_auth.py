@@ -128,6 +128,35 @@ async def test_deny_anonymous_requests(aiohttp_client, config):
 
 
 @pytest.mark.require_executable("cfssl")
+async def test_client_anonymous_cert_auth(aiohttp_client, config, pki):
+    server_cert = pki.gencert("api-server")
+
+    app = create_app(
+        config=dict(
+            config,
+            authentication={"strategy": None},
+            tls={
+                "client_ca": pki.ca.cert,
+                "cert": server_cert.cert,
+                "key": server_cert.key,
+            },
+        )
+    )
+    server = Server(app)
+    try:
+        await server.start_server(ssl=app["ssl_context"])
+        assert server.scheme == "https"
+
+        client = await aiohttp_client(server)
+        context = ssl.create_default_context(cafile=pki.ca.cert)
+        resp = await client.get("/me", ssl=context)
+        data = await resp.json()
+        assert data["user"] == "system:anonymous"
+    finally:
+        await server.close()
+
+
+@pytest.mark.require_executable("cfssl")
 async def test_client_cert_auth(aiohttp_client, config, pki):
     server_cert = pki.gencert("api-server")
     client_cert = pki.gencert("test-user")
@@ -149,14 +178,6 @@ async def test_client_cert_auth(aiohttp_client, config, pki):
         assert server.scheme == "https"
 
         client = await aiohttp_client(server)
-
-        # No client certificate
-        context = ssl.create_default_context(cafile=pki.ca.cert)
-        resp = await client.get("/me", ssl=context)
-        data = await resp.json()
-        assert data["user"] == "system:anonymous"
-
-        # Authenticate with client certificate
         context = ssl.create_default_context(
             purpose=ssl.Purpose.CLIENT_AUTH, cafile=pki.ca.cert
         )
