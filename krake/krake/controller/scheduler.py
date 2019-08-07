@@ -84,12 +84,14 @@ class SchedulerWorker(Worker):
             logger.info(
                 "Unable to schedule Kubernetes application %r", app.metadata.name
             )
+            app.status.cluster = None
+            app.status.state = ApplicationState.FAILED
+            app.status.reason = "No cluster available"
+
             await self.client.kubernetes.application.update_status(
                 namespace=app.metadata.namespace,
                 name=app.metadata.name,
-                cluster=None,
-                state=ApplicationState.FAILED,
-                reason="No cluster available",
+                status=app.status,
             )
         else:
             logger.info(

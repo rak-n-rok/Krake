@@ -87,21 +87,6 @@ class ApplicationSpecFactory(Factory):
     def manifest(self):
         return kubernetes_manifest
 
-    @lazy_attribute
-    def cluster(self):
-        if self.factory_parent:
-            if self.factory_parent.status is None:
-                return None
-            if self.factory_parent.status.state == ApplicationState.PENDING:
-                return None
-            namespace = self.factory_parent.metadata.user
-        else:
-            if not fake.pybool():
-                return None
-            namespace = fuzzy_name()
-        name = fuzzy_name()
-        return f"/namespaces/{namespace}/kubernetes/clusters/{name}"
-
 
 class ApplicationFactory(Factory):
     class Meta:

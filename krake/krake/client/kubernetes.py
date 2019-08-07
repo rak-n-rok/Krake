@@ -2,7 +2,7 @@
 client.
 """
 from krake.data import Key
-from krake.data.serializable import deserialize
+from krake.data.serializable import deserialize, serialize
 from krake.data.kubernetes import (
     Application,
     Cluster,
@@ -62,25 +62,19 @@ class ApplicationResource(Resource):
         data = await resp.json()
         return deserialize(ClusterBinding, data)
 
-    async def update_status(self, namespace, name, cluster, state, reason=None):
+    async def update_status(self, namespace, name, status):
         """Update the status of the Application
 
         Args:
             namespace (str): Namespace of the Kubernetes application
             name (str): Name of the Kubernetes application
-            cluster (str, None): API link to the Kubernetes cluster the
-                application is currently running on.
-            state (krake.data.kubernetes.ApplicationState): New state of the
+            state (krake.data.kubernetes.ApplicationStatus): New status of the
                 application.
-            reason (str, optional): Explanation for the state. Normally only
-                used for FAILED state.
         """
         url = self.url.with_path(
             self.endpoints["status"].format_kwargs(namespace=namespace, name=name)
         )
-        resp = await self.session.put(
-            url, json={"state": state.name, "reason": reason, "cluster": cluster}
-        )
+        resp = await self.session.put(url, json=serialize(status))
         data = await resp.json()
         return deserialize(ApplicationStatus, data)
 

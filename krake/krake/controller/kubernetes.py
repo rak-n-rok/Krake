@@ -19,10 +19,13 @@ Configuration is loaded from the ``controllers.kubernetes`` section:
 import logging
 import re
 import yaml
+import yarl
 from argparse import ArgumentParser
+from inspect import iscoroutinefunction
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 from kubernetes_asyncio.client import ApiClient, CoreV1Api, AppsV1Api, Configuration
 from kubernetes_asyncio.client.rest import ApiException
+from typing import NamedTuple
 
 from krake import load_config, setup_logging
 from krake.data.kubernetes import ApplicationState
@@ -57,31 +60,142 @@ class KubernetesController(Controller):
                     await self.queue.put(app.metadata.uid, app)
 
 
+class Event(NamedTuple):
+    kind: str
+    action: str
+
+
+class EventDispatcher(object):
+    """Simple wrapper around a registry of handlers associated to Events
+
+    Events are characterized by a "kind" and an "action" (see :class:`Event`).
+    Listeners for cetain events can be registered via :meth:`on`. Registered
+    listeners are executed if an event gets emitted via :meth:`emit`.
+
+    Example:
+        .. code:: python
+
+        listen = EventDispatcher()
+
+        @listen.on(Event("Deployment","delete"))
+        def to_perform_on_deployment_delete(app, cluster, resp):
+            # Do Stuff
+
+        @listen.on(Event("Deployment","delete"))
+        def another_to_perform_on_deployment_delete(app, cluster, resp):
+            # Do Stuff
+
+        @listen.on(Event("Service","apply"))
+        def to_perform_on_service_apply(app, cluster, resp):
+            # Do Stuff
+
+    """
+
+    def __init__(self):
+        self.registry = {}
+
+    def on(self, event):
+        """Decorator function to add a new handler to the registry.
+
+        Args:
+            event (Event): Event for which to register the handler.
+
+        Returns:
+            callable: Decorator for registering listeners for the specified
+            events.
+
+        """
+
+        def decorator(handler):
+            if not (event.kind, event.action) in self.registry:
+                self.registry[(event.kind, event.action)] = [handler]
+            else:
+                self.registry[(event.kind, event.action)].append(handler)
+
+        return decorator
+
+    async def emit(self, event, **kwargs):
+        """ Execute the list of handlers associated to the provided Event.
+
+        Args:
+            event (Event): Event for which to execute handlers.
+
+        """
+        try:
+            handlers = self.registry[(event.kind, event.action)]
+        except KeyError:
+            pass
+        else:
+            for handler in handlers:
+                if iscoroutinefunction(handler):
+                    await handler(**kwargs)
+                else:
+                    handler(**kwargs)
+
+
+listen = EventDispatcher()
+
+
 class KubernetesWorker(Worker):
     async def resource_received(self, app):
         # Delete Kubernetes resources if the application was bound to a
         # cluster.
-        if app.spec.cluster:
-            cluster = await self.client.kubernetes.cluster.get_by_url(app.spec.cluster)
+        if app.status.cluster:
+            cluster = await self.client.kubernetes.cluster.get_by_url(
+                app.status.cluster
+            )
+
+            # Initialize empty services dictionary: The services dictionary is
+            # initialized with "None" in the Kubernetes data model indicating
+            # that the application was not yet processed by the controller.
+            # Here we reset the services dictionary to an empty dict to
+            # signify that the application has been at least once processed.
+            # Previously created Services, if any, are overwritten because
+            # they will be updated or deleted by the Worker anyway.
+            app.status.services = {}
 
             async with KubernetesClient(cluster.spec.kubeconfig) as kube:
                 for resource in yaml.safe_load_all(app.spec.manifest):
                     if app.status.state == ApplicationState.SCHEDULED:
-                        await kube.apply(resource)
+                        resp = await kube.apply(resource)
+                        await listen.emit(
+                            Event(resource["kind"], "apply"),
+                            app=app,
+                            cluster=cluster,
+                            resp=resp,
+                        )
                     else:
-                        await kube.delete(resource)
+                        resp = await kube.delete(resource)
+                        await listen.emit(
+                            Event(resource["kind"], "delete"),
+                            app=app,
+                            cluster=cluster,
+                            resp=resp,
+                        )
 
         if app.status.state == ApplicationState.SCHEDULED:
-            transition = ApplicationState.RUNNING
+            app.status.state = ApplicationState.RUNNING
         else:
-            transition = ApplicationState.DELETED
+            app.status.state = ApplicationState.DELETED
 
         await self.client.kubernetes.application.update_status(
-            cluster=app.spec.cluster,
-            namespace=app.metadata.namespace,
-            name=app.metadata.name,
-            state=transition,
+            namespace=app.metadata.namespace, name=app.metadata.name, status=app.status
         )
+
+
+@listen.on(event=Event("Service", "apply"))
+async def register_service(app, cluster, resp):
+    service_name = resp.metadata.name
+
+    node_port = resp.spec.ports[0].node_port
+
+    # Load Kubernetes configuration and get host
+    loader = KubeConfigLoader(cluster.spec.kubeconfig)
+    config = Configuration()
+    await loader.load_and_set(config)
+    url = yarl.URL(config.host)
+
+    app.status.services[service_name] = url.host + ":" + str(node_port)
 
 
 class InvalidResourceError(ValueError):
@@ -181,6 +295,8 @@ class KubernetesClient(object):
             )
             logger.info("%s replaced. status=%r", kind, resp.status)
 
+        return resp
+
     async def delete(self, resource, namespace="default"):
         try:
             kind = resource["kind"]
@@ -205,6 +321,8 @@ class KubernetesClient(object):
 
         logger.info("%s deleted. status=%r", kind, resp.status)
 
+        return resp
+
 
 def camel_to_snake_case(name):
     """Converts camelCase to the snake_case
@@ -214,6 +332,7 @@ def camel_to_snake_case(name):
 
     Returns:
         str: Name in stake case
+
     """
     cunder = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
     return re.sub("([a-z0-9])([A-Z])", r"\1_\2", cunder).lower()
