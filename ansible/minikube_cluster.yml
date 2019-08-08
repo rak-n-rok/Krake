@@ -193,22 +193,18 @@
         path: "{{ home_dir }}/.kube/config"
         state: touch
 
-    - name: Get Minikube {{ name }} status
-      command: minikube status -p {{ name }}
+    - name: Get Minikube status
+      command: minikube status
       register: minikube_status
       failed_when: "minikube_status.rc != 1 and minikube_status.rc != 0"
 
-    - name: Start Minikube {{ name }}
+    - name: Start Minikube
       become: yes
       become_user: root
       command: >
         minikube start
           --vm-driver=none
-          --profile "{{ name }}"
           --apiserver-port "{{ api_port }}"
-          --cpus "{{ minikube_cpus }}"
-          --memory "{{ minikube_memory }}"
-          --disk-size "{{ minikube_disk_size }}"
       environment:
         MINIKUBE_WANTUPDATENOTIFICATION: false
         MINIKUBE_WANTREPORTERRORPROMPT: false
@@ -230,11 +226,11 @@
         - ".minikube"
         - ".kube"
 
-    - name: Get Minikube {{ name }} status
-      command: minikube status -p {{ name }}
+    - name: Get Minikube status
+      command: minikube status
       register: minikube_status
 
-    - name: Ensure Minikube {{ name }} cluster is running
+    - name: Ensure Minikube cluster is running
       assert:
         that: "'{{ item }}: Running' in minikube_status.stdout_lines"
       with_items:
