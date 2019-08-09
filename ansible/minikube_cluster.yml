@@ -200,7 +200,6 @@
 
     - name: Start Minikube
       become: yes
-      become_user: root
       command: >
         minikube start
           --vm-driver=none
@@ -215,7 +214,6 @@
 
     - name: Change ownership of a minikube and kube directories
       become: yes
-      become_user: root
       file:
         path: "{{ home_dir }}/{{ item }}"
         state: directory
