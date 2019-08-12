@@ -64,8 +64,11 @@ python -m krake.api
 # Run the scheduler
 python -m krake.controller.scheduler
 
-# Run the Kubernetes controller
-python -m krake.controller.kubernetes
+# Run the Kubernetes application controller
+python -m krake.controller.kubernetes.application
+
+# Run the Kubernetes cluster controller
+python -m krake.controller.kubernetes.cluster
 ```
 
 
