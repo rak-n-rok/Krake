@@ -1,42 +1,38 @@
-# Krake v2 Prototype
+# Krake
 
-The current Krake v2 prototype comprises two Python packages:
+Welcome to the Krake project! :octopus:
+
+## Introduction
+
+Krake aims
+
+
+Krake comprises two Python packages:
 
  - krake -- Krake microservices as Python submodules
  - rok -- command line interface for the Krake API
 
 
-## Development Setup
+## Quick Start
 
-This section describes a quickstart for developers to get started with a Krake
-development setup.
-
+This section describes how to run Krake locally.
 
 ### Requirements
 
  - [etcdv3](https://github.com/etcd-io/etcd/releases/)
  - [Python](https://www.python.org/downloads/) >= 3.6
- - [pre-commit](https://pre-commit.com/)
- - [cfssl](https://cfssl.org/) (optional) – for setting up a development PKI
- - [keystone](https://pypi.org/project/keystone/) (optional) – for testing keystone server authentication
-
+ - Deploy a [Minikube](https://kubernetes.io/docs/setup/learning-environment/minikube/)
+ VM to act as backend for Krake
 
 ### Installation
 
 All dependencies can be installed via the corresponding `setup.py` scripts.
 
 ```bash
-# Install git pre-commit hooks
-pre-commit install
-
-# Optional: libyaml development package if you want to use the PyYAML C extension.
-sudo apt-get install libyaml-dev
-
 # Install "krake" and "rok" with dev dependencies
 pip install --editable krake/[dev]
 pip install --editable rok/[dev]
 ```
-
 
 ### Running
 
@@ -81,63 +77,95 @@ python -m krake.controller.kubernetes.application
 python -m krake.controller.kubernetes.cluster
 ```
 
+### Usage
 
-### Testing
-
-Tests are placed in the `tests/` directory inside the Python packages and can
-be run via `pytest`.
-
+Download the kubeconfig file, as well as the certificate and key file
+necessary to connect to your Minikube instance.
 
 ```bash
-# Run tests of the "krake" package
-pytest krake/tests
+$ MINIKUBE_IP="" # Fill in with the Minikube IP address
 
-# Run tests of the "rok" package
-pytest rok/tests
+$ mkdir -p my_minikube/certs
+
+$ scp ubuntu@my_minikube:~/.kubectl/config my_minikube
+$ scp  ubuntu@$MINIKUBE_IP:~/.minikube/\{ca.crt,client.crt,client.key\} my_minikube/certs
+
+$ sed -i "/certificate-authority/c\    certificate-authority: `pwd`/my_minikube/certs/ca.crt" my_minikube/config
+$ sed -i "/server:/c\    server: https://$MINIKUBE_IP:8443" my_minikube/config
+$ sed -i "/client-certificate/c\    client-certificate: `pwd`/my_minikube/certs/client.crt" my_minikube/config
+$ sed -i "/client-key/c\    client-key: `pwd`/my_minikube/certs/client.key" my_minikube/config
 ```
 
-
-### Documentation
+Use the `rok` CLI to register your Minikube instance as a Krake backend:
 
 ```bash
-# Install Sphinx and the Read The Docs theme for sphinx
-pip install sphinx sphinx_rtd_theme
-
-# Build HTML documentation
-cd docs/
-make html
+$ rok kube cluster create my_minikube/config
 ```
 
-
-### Access to local Keystone
-
-The local Keystone service ``support/keystone`` can be accessed as admin with
-the following OpenStack ``clouds.yaml`` settings (see
-[OpenStack documentation](https://docs.openstack.org/python-openstackclient/latest/configuration/index.html#clouds-yaml))
-
-```yaml
-clouds:
-  keystone:
-    auth:
-      auth_url: http://127.0.0.1:5000/v3
-      username: system:admin
-      password: admin
-      project_name: system:admin
-      user_domain_name: Default
-      project_domain_name: Default
-    region_name: RegionOne
-```
-
-Put the configuration abobe in a file `clouds.yaml` in the local working
-directory and call the OpenStack command line tool as follows.
-
-> **Note**: Make sure that no `OS_*` environmental variable is set. Otherwise
-> these environmental variables overwrite settings in the `clouds.yaml`.
+Run an application on Krake:
 
 ```bash
-# Run local keystone service
-support/keystone
-
-# List all users
-openstack --os-cloud keystone user list
+$ cd rok/
+$ rok kube app create -f nginx_demo.yaml nginx_demo
 ```
+
+Check the status of the application:
+
+```bash
+$ rok kube app get nginx_demo
++-----------+---------------------+
+| reason    | None                |
+| name      | nginx_demo          |
+| namespace | system              |
+| user      | system:anonymous    |
+| created   | 2019-08-14 13:42:16 |
+| modified  | 2019-08-14 13:42:17 |
+| state     | RUNNING             |
++-----------+---------------------+
+```
+
+Access the application:
+
+```bash
+$ curl 185.128.118.244:32212
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+    body {
+        width: 35em;
+        margin: 0 auto;
+        font-family: Tahoma, Verdana, Arial, sans-serif;
+    }
+</style>
+</head>
+<body>
+<h1>Welcome to nginx!</h1>
+<p>If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.</p>
+
+<p>For online documentation and support please refer to
+<a href="http://nginx.org/">nginx.org</a>.<br/>
+Commercial support is available at
+<a href="http://nginx.com/">nginx.com</a>.</p>
+
+<p><em>Thank you for using nginx.</em></p>
+</body>
+</html>
+```
+
+Delete the application:
+
+```bash
+$ rok kube app delete nginx_demo
+```
+
+## Get in touch!
+
+If you need help to setup things, have a question, or simply want to chat with
+us, find us on our [the Krake Matrix
+room](https://riot.im/app/#/room/#krake:matrix.org)
+
+If you wish to contribute, you can also check the
+[Contributing](CONTRIBUTING.md) guide.
