@@ -136,3 +136,40 @@ class Key(object):
             )
 
         return template.format(**params)
+
+
+def persistent(key):
+    """Decorator factory for marking a class with a template that should be
+    used as etcd key.
+
+    The passed template will be converted into a :class:`Key` instance using
+    the ``metadata`` attribute and will be assigned to the ``__etcd_key__``
+    attribute of the decorated class.
+
+    Example:
+        .. code:: python
+
+            from krake.data import persistent
+            from krake.data.serializable import Serializable, persistent
+            from krake.data.core import Metadata
+
+            @persistent("/books/{name}")
+            class Book(Serializable):
+                metadata: Metadata
+
+    Args:
+        key (str): Etcd key template. Parameters will be loaded from the
+            ``metadata`` attribute of the decorated class.
+
+    Returns:
+        callable: Decorator that can be used to assign an ``__etcd_key__``
+        attribute to the decorated object based on the passed key template.
+
+    """
+
+    def decorator(cls):
+        assert not hasattr(cls, "__etcd_key__")
+        cls.__etcd_key__ = Key(key, attribute="metadata")
+        return cls
+
+    return decorator
