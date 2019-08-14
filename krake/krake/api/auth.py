@@ -260,22 +260,18 @@ async def rbac(request, auth_request):
     async for role in roles:
         for rule in role.rules:
             # Check if the API group matches
-            if rule.api == auth_request.api or rule.api == "all":
+            if rule.api == auth_request.api or rule.api == "":
                 # Check if the requested verb is allowed
                 if auth_request.verb in rule.verbs:
                     # Check if the requested resource is allowed
-                    if (
-                        auth_request.resource in rule.resources
-                        or "all" in rule.resources
-                    ):
+                    if auth_request.resource in rule.resources or "" in rule.resources:
                         # If the resource is not namespaced, grant access
                         if auth_request.namespace is None:
                             return role
 
-                        # Check if the requested namespace is allowed
                         if (
                             auth_request.namespace in rule.namespaces
-                            or "all" in rule.namespaces
+                            or "" in rule.namespaces
                         ):
                             return role
 
