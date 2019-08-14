@@ -3,7 +3,6 @@ import asyncio
 import json
 from functools import wraps
 from aiohttp.web import StreamResponse
-from krake.data import serialize
 
 
 def stream(data, done=None, infinite=False):
@@ -41,7 +40,7 @@ def stream(data, done=None, infinite=False):
         await resp.prepare(request)
 
         for item in data:
-            await resp.write(json.dumps(serialize(item)).encode())
+            await resp.write(json.dumps(item.serialize()).encode())
             await resp.write(b"\n")
 
         if done:

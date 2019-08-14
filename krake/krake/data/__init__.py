@@ -12,8 +12,6 @@ Kubernetes-related data models are defined in :mod:`.kubernetes`.
 import re
 from operator import itemgetter
 
-from .serializable import serialize, deserialize  # noqa
-
 
 class Key(object):
     """Etcd key template using the same syntax as Python's standard format

@@ -1,113 +1,11 @@
-from dataclasses import dataclass
 from typing import List
 import pytest
+from marshmallow import ValidationError
 
-from krake.data.serializable import (
-    serialize,
-    deserialize,
-    Serializable,
-    serializable,
-    PolymorphicSchema,
-)
+from krake.data.serializable import Serializable, ApiObject
 
 
-def test_functional_api():
-    @serializable
-    class Application(object):
-        id: int
-        name: str
-        kind: str = "app"
-        optional: str = "optional"
-
-        __metadata__ = {"discriminator": "kind"}
-
-        def __init__(self, id, name, kind=None, optional=None):
-            if kind:
-                assert kind == self.kind
-            self.id = id
-            self.name = name
-            if optional is not None:
-                self.optional = optional
-
-    assert Application.Schema is not None
-    assert isinstance(Application.__metadata__["schema"], PolymorphicSchema)
-    assert (
-        Application.__metadata__["schema"].type_schemas["app"].__model__ == Application
-    )
-
-    app = Application(id=42, name="Arthur Dent")
-    data = serialize(app)
-
-    assert data["id"] == 42
-    assert data["kind"] == "app"
-    assert data["name"] == "Arthur Dent"
-    assert data["optional"] == "optional"
-
-    instance = deserialize(Application, data)
-    assert isinstance(instance, Application)
-    assert instance.id == app.id
-    assert instance.name == app.name
-    assert instance.kind == app.kind
-    assert instance.optional == app.optional
-
-    @serializable
-    class FancyApplication(Application):
-        number: int
-        kind: str = "fancy-app"
-
-        def __init__(self, id, name, number, kind=None, optional=None):
-            super().__init__(id, name, kind, optional)
-            self.number = number
-
-    assert FancyApplication.Schema is not None
-    assert FancyApplication.__metadata__["schema"] == Application.__metadata__["schema"]
-    assert (
-        FancyApplication.__metadata__["schema"].type_schemas["fancy-app"].__model__
-        == FancyApplication
-    )
-
-    app = FancyApplication(id=72, name="Fancy name", number=42)
-    data = serialize(app)
-
-    assert data["id"] == 72
-    assert data["kind"] == "fancy-app"
-    assert data["name"] == "Fancy name"
-    assert data["optional"] == "optional"
-    assert data["number"] == 42
-
-    instance = deserialize(FancyApplication, data)
-    assert isinstance(instance, FancyApplication)
-
-    # Test polymorphic deserialization
-    instance = deserialize(Application, data)
-    assert isinstance(instance, FancyApplication)
-
-    assert instance.id == app.id
-    assert instance.name == app.name
-    assert instance.number == app.number
-    assert instance.kind == app.kind
-
-
-def test_functional_api_with_dataclasses():
-    @serializable
-    @dataclass
-    class Application(object):
-        id: int
-        name: str
-        optional: str = "optional"
-
-    assert Application.Schema is not None
-    assert "schema" in Application.__metadata__
-
-    app = Application(id=42, name="Arthur Dent")
-    data = serialize(app)
-
-    assert data["id"] == 42
-    assert data["name"] == "Arthur Dent"
-    assert data["optional"] == "optional"
-
-
-def test_inheritance():
+def test_serializable():
     class Application(Serializable):
         id: int
         name: str
@@ -117,10 +15,6 @@ def test_inheritance():
         __metadata__ = {"discriminator": "kind"}
 
     assert Application.Schema is not None
-    assert isinstance(Application.__metadata__["schema"], PolymorphicSchema)
-    assert (
-        Application.__metadata__["schema"].type_schemas["app"].__model__ == Application
-    )
 
     app = Application(id=42, name="Arthur Dent")
     assert app.id == 42
@@ -128,7 +22,7 @@ def test_inheritance():
     assert app.kind == "app"
     assert app.optional == "optional"
 
-    data = serialize(app)
+    data = app.serialize()
 
     assert data["id"] == 42
     assert data["name"] == "Arthur Dent"
@@ -143,51 +37,12 @@ def test_inheritance():
     with pytest.raises(TypeError):
         Application(id=42, name="My fancy model", value=72)
 
-    instance = deserialize(Application, data)
+    instance = Application.deserialize(data)
     assert isinstance(instance, Application)
     assert instance.id == app.id
     assert instance.name == app.name
     assert instance.kind == app.kind
     assert instance.optional == app.optional
-
-    class FancyApplication(Application):
-        number: int
-        kind: str = "fancy-app"
-
-    assert FancyApplication.Schema is not None
-    assert FancyApplication.__metadata__["schema"] == Application.__metadata__["schema"]
-    assert (
-        FancyApplication.__metadata__["schema"].type_schemas["fancy-app"].__model__
-        == FancyApplication
-    )
-
-    app = FancyApplication(id=72, name="Arthur Dent", number=42)
-    assert app.id == 72
-    assert app.name == "Arthur Dent"
-    assert app.kind == "fancy-app"
-    assert app.optional == "optional"
-    assert app.number == 42
-
-    data = serialize(app)
-
-    assert data["id"] == 72
-    assert data["name"] == "Arthur Dent"
-    assert data["kind"] == "fancy-app"
-    assert data["optional"] == "optional"
-    assert data["number"] == 42
-
-    instance = deserialize(FancyApplication, data)
-    assert isinstance(instance, FancyApplication)
-
-    # Test polymorphic deserialization
-    instance = deserialize(Application, data)
-    assert isinstance(instance, FancyApplication)
-
-    assert instance.id == app.id
-    assert instance.name == app.name
-    assert instance.kind == app.kind
-    assert instance.optional == app.optional
-    assert instance.number == app.number
 
 
 def test_nested_attrs():
@@ -209,7 +64,7 @@ def test_nested_attrs():
         name="The Hitchhiker's Guide to the Galaxy",
         author=Person(given_name="Douglas", surname="Adams"),
     )
-    data = serialize(book)
+    data = book.serialize()
 
     assert data["id"] == 42
     assert data["name"] == "The Hitchhiker's Guide to the Galaxy"
@@ -219,7 +74,7 @@ def test_nested_attrs():
     assert data["author"]["surname"] == "Adams"
 
 
-def test_list():
+def test_list_attr():
     class Character(Serializable):
         given_name: str
         surname: str
@@ -241,7 +96,7 @@ def test_list():
             Character(given_name="Ford", surname="Perfect"),
         ],
     )
-    data = serialize(book)
+    data = book.serialize()
 
     assert data["id"] == 42
     assert data["name"] == "The Hitchhiker's Guide to the Galaxy"
@@ -253,3 +108,23 @@ def test_list():
 
     assert data["characters"][1]["given_name"] == "Ford"
     assert data["characters"][1]["surname"] == "Perfect"
+
+
+def test_api_object():
+    class Book(ApiObject):
+        api: str = "shelf"
+        kind: str = "Book"
+
+    book = Book()
+    assert book.api == "shelf"
+    assert book.kind == "Book"
+
+    book = Book.deserialize({})
+    assert book.api == "shelf"
+    assert book.kind == "Book"
+
+    with pytest.raises(ValidationError):
+        Book.deserialize({"api": "wrong-api"})
+
+    with pytest.raises(ValidationError):
+        Book.deserialize({"kind": "Letter"})

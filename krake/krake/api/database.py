@@ -34,8 +34,6 @@ from typing import NamedTuple
 from enum import Enum, auto
 from etcd3.aio_client import AioClient
 
-from krake.data.serializable import serialize, deserialize
-
 
 class Revision(NamedTuple):
     """Etcd revision of a loaded key-value pair.
@@ -161,8 +159,11 @@ class Session(object):
             (object, Revision): Tuple of deserialized model and revision. If
             the key was not found in etcd (None, None) is returned.
         """
-        key = cls.__metadata__["key"].format_kwargs(**kwargs)
-        resp = await self.client.range(key)
+        key = cls.__etcd_key__.format_kwargs(**kwargs)
+        return await self.get_by_key(cls, key)
+
+    async def get_by_key(self, cls, key, revision=None):
+        resp = await self.client.range(key, revision=revision)
 
         if resp.kvs is None:
             return (None, None)
@@ -211,14 +212,14 @@ class Session(object):
                 identity attributes.
 
         """
-        key = cls.__metadata__["key"].prefix(**kwargs)
+        key = cls.__etcd_key__.prefix(**kwargs)
         # TODO: Support pagination
         resp = await self.client.range(key, prefix=True)
         if not resp.kvs:
             return
 
         for kv in resp.kvs:
-            if cls.__metadata__["key"].matches(kv.key.decode()):
+            if cls.__etcd_key__.matches(kv.key.decode()):
                 yield self.load_instance(cls, kv)
 
     async def put(self, instance):
@@ -231,8 +232,8 @@ class Session(object):
             int: key-value revision version when the request was applied
 
         """
-        key = instance.__metadata__["key"].format_object(instance)
-        data = serialize(instance)
+        key = instance.__etcd_key__.format_object(instance)
+        data = instance.serialize()
         resp = await self.client.put(key, json.dumps(data))
         return resp.header.revision
         # TODO: Should be we fetch the previous revision here with "prev_kv"?
@@ -247,7 +248,7 @@ class Session(object):
             int: Number of keys that where deleted
 
         """
-        key = instance.__metadata__["key"].format_object(instance)
+        key = instance.__etcd_key__.format_object(instance)
         resp = await self.client.delete_range(key=key)
         return resp.deleted
 
@@ -280,7 +281,7 @@ class Session(object):
             (object, Revision): Tuple of deserialized model and revision
         """
         value = json.loads(kv.value.decode())
-        model = deserialize(cls, value)
+        model = cls.deserialize(value)
         rev = Revision.from_kv(kv)
 
         return model, rev
@@ -305,7 +306,7 @@ class Watcher(object):
     def __init__(self, session, model, **kwargs):
         self.session = session
         self.model = model
-        self.prefix = model.__metadata__["key"].prefix(**kwargs)
+        self.prefix = model.__etcd_key__.prefix(**kwargs)
         self.response = None
         self.watch_id = None
 
@@ -338,7 +339,7 @@ class Watcher(object):
             assert resp.watch_id == self.watch_id
 
             for event in resp.events:
-                if self.model.__metadata__["key"].matches(event.kv.key.decode()):
+                if self.model.__etcd_key__.matches(event.kv.key.decode()):
                     # Resolve event type. Empty string means "PUT" event.
                     if event.type == "":
                         type_ = EventType.PUT
