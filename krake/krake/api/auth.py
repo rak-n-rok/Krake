@@ -278,7 +278,7 @@ async def rbac(request, auth_request):
     raise web.HTTPForbidden()
 
 
-def protected(api, resource, verb, namespaced=True):
+def protected(api, resource, verb):
     """Decorator function for aiohttp request handlers performing authorization.
 
     The returned decorator can be used to wrap a given aiohttp handler and
@@ -301,8 +301,6 @@ def protected(api, resource, verb, namespaced=True):
         api (str): Name of the API group
         resource (str): Name of the resource
         verb (str, krake.data.core.Verb): Verb that should be performed
-        namespaced (bool, optional): True if the resource is namespaced.
-            Default: True.
 
     Returns:
         callable: Decorator that can be used to wrap a given aiohttp request
@@ -316,10 +314,7 @@ def protected(api, resource, verb, namespaced=True):
     def decorator(handler):
         @wraps(handler)
         async def wrapper(request, *args, **kwargs):
-            if namespaced:
-                namespace = request.match_info["namespace"]
-            else:
-                namespace = None
+            namespace = request.match_info.get("namespace")
             auth_request = AuthorizationRequest(
                 api=api, namespace=namespace, resource=resource, verb=verb
             )

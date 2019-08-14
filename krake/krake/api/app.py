@@ -23,7 +23,7 @@ import logging
 import ssl
 from aiohttp import web, ClientSession
 
-from krake.data.core import CoreMetadata, Verb, RoleRule, Role, RoleBinding
+from krake.data.core import Metadata, Verb, RoleRule, Role, RoleBinding
 from . import middlewares
 from . import auth
 from .core import routes as core_api
@@ -136,8 +136,9 @@ def load_default_role(role):
 
     """
     return Role(
-        metadata=CoreMetadata(name=role["metadata"]["name"], uid=None),
-        status=None,
+        metadata=Metadata(
+            name=role["metadata"]["name"], uid=None, created=None, modified=None
+        ),
         rules=[
             RoleRule(
                 api=rule["api"],
@@ -171,8 +172,9 @@ def load_default_role_binding(binding):
 
     """
     return RoleBinding(
-        metadata=CoreMetadata(name=binding["metadata"]["name"], uid=None),
-        status=None,
+        metadata=Metadata(
+            name=binding["metadata"]["name"], uid=None, created=None, modified=None
+        ),
         users=binding["users"],
         roles=binding["roles"],
     )

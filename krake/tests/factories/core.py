@@ -4,15 +4,13 @@ from datetime import datetime
 
 from .fake import fake
 from krake.data.core import (
-    NamespacedMetadata,
-    CoreMetadata,
+    Metadata,
     Verb,
     RoleRule,
-    RoleStatus,
     Role,
     RoleBinding,
-    RoleBindingStatus,
-    Reason, ReasonCode
+    Reason,
+    ReasonCode,
 )
 
 
@@ -27,22 +25,20 @@ def fuzzy_sample(population, k=None):
     return fake.random.sample(population, k)
 
 
-class NamespacedMetadataFactory(Factory):
+class MetadataFactory(Factory):
     class Meta:
-        model = NamespacedMetadata
+        model = Metadata
 
     name = fuzzy.FuzzyAttribute(fuzzy_name)
     namespace = "testing"
     uid = fuzzy.FuzzyAttribute(fake.uuid4)
-    user = fuzzy.FuzzyAttribute(fuzzy_name)
+    annotations = fuzzy.FuzzyAttribute(dict)
+    created = fuzzy.FuzzyDateTime(datetime.now(tz=pytz.utc))
 
-
-class SystemMetadataFactory(Factory):
-    class Meta:
-        model = CoreMetadata
-
-    name = fuzzy.FuzzyAttribute(fuzzy_name)
-    uid = fuzzy.FuzzyAttribute(fake.uuid4)
+    @lazy_attribute
+    def modified(self):
+        delta = fake.time_delta()
+        return self.created + delta
 
 
 class RoleRuleFactory(Factory):
@@ -78,37 +74,12 @@ class RoleRuleFactory(Factory):
         return fuzzy_sample(list(Verb.__members__.values()))
 
 
-class RoleStatusFactory(Factory):
-    class Meta:
-        model = RoleStatus
-
-    created = fuzzy.FuzzyDateTime(datetime.now(tz=pytz.utc))
-
-    @lazy_attribute
-    def modified(self):
-        delta = fake.time_delta()
-        return self.created + delta
-
-
 class RoleFactory(Factory):
     class Meta:
         model = Role
 
-    metadata = SubFactory(SystemMetadataFactory)
+    metadata = SubFactory(MetadataFactory)
     rules = List([SubFactory(RoleRuleFactory) for _ in range(2)])
-    status = SubFactory(RoleStatusFactory)
-
-
-class RoleBindingStatusFactory(Factory):
-    class Meta:
-        model = RoleBindingStatus
-
-    created = fuzzy.FuzzyDateTime(datetime.now(tz=pytz.utc))
-
-    @lazy_attribute
-    def modified(self):
-        delta = fake.time_delta()
-        return self.created + delta
 
 
 class RoleBindingFactory(Factory):
@@ -119,8 +90,7 @@ class RoleBindingFactory(Factory):
         user_count = 5
         role_count = 2
 
-    metadata = SubFactory(SystemMetadataFactory)
-    status = SubFactory(RoleBindingStatusFactory)
+    metadata = SubFactory(MetadataFactory)
 
     @lazy_attribute
     def users(self):

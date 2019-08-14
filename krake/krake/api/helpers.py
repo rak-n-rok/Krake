@@ -3,6 +3,7 @@ import asyncio
 import json
 from functools import wraps
 from aiohttp import web
+from marshmallow import ValidationError
 
 
 def json_error(exc, content):
@@ -114,12 +115,12 @@ class Heartbeat(object):
             await self.response.write(b"\n")
 
 
-def load(argname, cls, namespaced=True):
+def load(argname, cls):
     """Decorator function for loading database models from URL parameters.
 
     The wrapper loads the ``name`` parameter from the requests ``match_info``
-    attribute. If ``namespaced`` is True, ``namespace`` is loaded from the
-    match info as well.
+    attribute. If the ``match_info`` contains a ``namespace`` parameter, it
+    is used as etcd key parameter as well.
 
     Example:
         .. code:: python
@@ -137,8 +138,6 @@ def load(argname, cls, namespaced=True):
         argname (str): Name of the keyword argument that will be passed to the
             wrapped function.
         cls (type): Database model class that should be loaded
-        namespaced (bool, optional): If True, the ``namespace`` URL parameter
-            will be used in the database key.
 
     Returns:
         callable: Decorator for aiohttp request handlers
@@ -147,19 +146,63 @@ def load(argname, cls, namespaced=True):
     def decorator(handler):
         @wraps(handler)
         async def wrapper(request, *args, **kwargs):
-            if namespaced:
-                instance, _ = await session(request).get(
-                    cls,
-                    namespace=request.match_info["namespace"],
-                    name=request.match_info["name"],
-                )
-            else:
-                instance, _ = await session(request).get(
-                    cls, name=request.match_info["name"]
-                )
+            key_params = {"name": request.match_info["name"]}
+
+            # Try to load namespace from path
+            namespace = request.match_info.get("namespace")
+            if namespace:
+                key_params["namespace"] = namespace
+
+            instance, _ = await session(request).get(cls, **key_params)
             if instance is None:
                 raise web.HTTPNotFound()
             kwargs[argname] = instance
+            return await handler(request, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def use_schema(argname, schema):
+    """Decorator function for loading a :class:`marshmallow.Schema` from the
+    request body.
+
+    If the request body is not valid JSON
+    :class:`aiohttp.web.HTTPUnsupportedMediaType` will be raised in the
+    wrapper.
+
+    Args:
+        argname (str): Name of the keyword argument that will be passed to the
+            wrapped function.
+        schema (marshmallow.Schema): Schema that should used to deserialize
+            the request body
+
+    Returns:
+        callable: Decoratpr for aiohttp request handlers
+
+    """
+    if isinstance(schema, type):
+        schema = schema()
+
+    def decorator(handler):
+        @wraps(handler)
+        async def wrapper(request, *args, **kwargs):
+            try:
+                body = await request.json()
+            except json.JSONDecodeError:
+                raise web.HTTPUnsupportedMediaType()
+
+            try:
+                payload = schema.load(body)
+            except ValidationError as err:
+                raise web.HTTPUnprocessableEntity(
+                    body=json.dumps(err.messages).encode("utf-8"),
+                    content_type="application/json",
+                )
+
+            kwargs[argname] = payload
+
             return await handler(request, *args, **kwargs)
 
         return wrapper

@@ -1,11 +1,10 @@
-from datetime import datetime
 from base64 import b64encode
-import pytz
 import yaml
 from factory import Factory, SubFactory, lazy_attribute, fuzzy
 
 from .fake import fake
-from .core import NamespacedMetadataFactory, ReasonFactory
+from .core import MetadataFactory, ReasonFactory
+from krake.data.core import ResourceRef
 from krake.data.kubernetes import (
     ApplicationSpec,
     ApplicationStatus,
@@ -15,7 +14,6 @@ from krake.data.kubernetes import (
     ClusterState,
     ClusterStatus,
     Cluster,
-    MagnumPlatform,
 )
 
 
@@ -32,15 +30,6 @@ class ApplicationStatusFactory(Factory):
         model = ApplicationStatus
 
     state = fuzzy.FuzzyChoice(states)
-    created = fuzzy.FuzzyDateTime(datetime.now(tz=pytz.utc))
-
-    @lazy_attribute
-    def modified(self):
-        if self.state == ApplicationState.PENDING:
-            return self.created
-
-        delta = fake.time_delta()
-        return self.created + delta
 
     @lazy_attribute
     def reason(self):
@@ -53,12 +42,13 @@ class ApplicationStatusFactory(Factory):
         if self.state == ApplicationState.PENDING:
             return None
         if self.factory_parent:
-            namespace = self.factory_parent.metadata.user
+            namespace = self.factory_parent.metadata.namespace
         else:
             namespace = fuzzy_name()
         name = fuzzy_name()
-        return f"/namespaces/{namespace}/kubernetes/clusters/{name}"
-        # return create_key(Cluster, namespace=user, name=fuzzy_name())
+        return ResourceRef(
+            api="kubernetes", kind="Cluster", name=name, namespace=namespace
+        )
 
 
 kubernetes_manifest = """---
@@ -91,7 +81,7 @@ class ApplicationFactory(Factory):
     class Meta:
         model = Application
 
-    metadata = SubFactory(NamespacedMetadataFactory)
+    metadata = SubFactory(MetadataFactory)
     spec = SubFactory(ApplicationSpecFactory)
     status = SubFactory(ApplicationStatusFactory)
 
@@ -101,15 +91,6 @@ class ClusterStatusFactory(Factory):
         model = ClusterStatus
 
     state = fuzzy.FuzzyChoice(list(ClusterState.__members__.values()))
-    created = fuzzy.FuzzyDateTime(datetime.now(tz=pytz.utc))
-
-    @lazy_attribute
-    def modified(self):
-        if self.state == ApplicationState.PENDING:
-            return self.created
-
-        delta = fake.time_delta()
-        return self.created + delta
 
     @lazy_attribute
     def reason(self):
@@ -223,17 +204,10 @@ class ClusterSpecFactory(Factory):
         return local_kubeconfig
 
 
-class MagnumPlatformFactory(ClusterSpecFactory):
-    class Meta:
-        model = MagnumPlatform
-
-    master_ip = fuzzy.FuzzyAttribute(fake.ipv4)
-
-
 class ClusterFactory(Factory):
     class Meta:
         model = Cluster
 
-    metadata = SubFactory(NamespacedMetadataFactory)
+    metadata = SubFactory(MetadataFactory)
     status = SubFactory(ClusterStatusFactory)
     spec = SubFactory(ClusterSpecFactory)

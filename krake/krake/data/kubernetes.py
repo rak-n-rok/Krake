@@ -8,7 +8,7 @@ from kubernetes_asyncio.config import ConfigException
 
 from . import persistent
 from .serializable import Serializable, ApiObject
-from .core import Metadata, ListMetadata, Status
+from .core import Metadata, ListMetadata, Status, ResourceRef
 
 
 class ApplicationSpec(Serializable):
@@ -27,7 +27,7 @@ class ApplicationState(Enum):
 
 class ApplicationStatus(Status):
     state: ApplicationState = ApplicationState.PENDING
-    cluster: str = None  # API endpoint of the Kubernetes cluster resource
+    cluster: ResourceRef = None
     services: dict = None
 
 
