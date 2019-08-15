@@ -6,7 +6,10 @@ from aiohttp.web import json_response, Response
 from krake.data import serialize
 from krake.data.kubernetes import ApplicationState, ApplicationStatus
 from krake.controller import Worker
-from krake.controller.kubernetes import KubernetesController, KubernetesWorker
+from krake.controller.kubernetes.application import (
+    ApplicationController,
+    ApplicationWorker,
+)
 
 from krake.client import Client
 from krake.test_utils import stream
@@ -43,7 +46,7 @@ async def test_app_reception(aresponses, loop):
 
     worker = SimpleWorker()
 
-    async with KubernetesController(
+    async with ApplicationController(
         api_endpoint="http://api.krake.local",
         worker_factory=lambda client: worker,
         worker_count=1,
@@ -161,7 +164,7 @@ async def test_app_creation(aresponses, loop):
     )
 
     async with Client(url="http://api.krake.local", loop=loop) as client:
-        worker = KubernetesWorker(client=client)
+        worker = ApplicationWorker(client=client)
         await worker.resource_received(app)
 
 
@@ -224,7 +227,7 @@ async def test_app_deletion(aresponses, loop):
     )
 
     async with Client(url="http://api.krake.local", loop=loop) as client:
-        worker = KubernetesWorker(client=client)
+        worker = ApplicationWorker(client=client)
         await worker.resource_received(app)
 
 
@@ -261,7 +264,7 @@ async def test_app_deletion_without_binding(aresponses, loop):
     )
 
     async with Client(url="http://api.krake.local", loop=loop) as client:
-        worker = KubernetesWorker(client=client)
+        worker = ApplicationWorker(client=client)
         await worker.resource_received(app)
 
 
@@ -355,7 +358,7 @@ async def test_service_registration(aresponses, loop):
     )
 
     async with Client(url="http://api.krake.local", loop=loop) as client:
-        worker = KubernetesWorker(client=client)
+        worker = ApplicationWorker(client=client)
         await worker.resource_received(app)
 
 
@@ -399,5 +402,5 @@ async def test_kubernetes_error_handling(aresponses, loop):
     )
 
     async with Client(url="http://api.krake.local", loop=loop) as client:
-        worker = KubernetesWorker(client=client)
+        worker = ApplicationWorker(client=client)
         await worker.resource_received(app)

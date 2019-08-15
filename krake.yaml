@@ -58,8 +58,13 @@ controllers:
     worker_count: 5
 
   kubernetes:
-    api_endpoint: http://localhost:8080
-    worker_count: 5
+    cluster:
+      api_endpoint: http://localhost:8080
+      worker_count: 5
+    application:
+      api_endpoint: http://localhost:8080
+      worker_count: 5
+
 
 
 log:

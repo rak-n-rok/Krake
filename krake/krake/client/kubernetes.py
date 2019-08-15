@@ -8,6 +8,7 @@ from krake.data.kubernetes import (
     Cluster,
     ApplicationStatus,
     ClusterBinding,
+    ClusterStatus,
 )
 from .resource import Resource
 
@@ -87,4 +88,23 @@ class ClusterResource(Resource):
         "list": Key("/kubernetes/namespaces/{namespace}/clusters"),
         "create": Key("/kubernetes/namespaces/{namespace}/clusters"),
         "get": Key("/kubernetes/namespaces/{namespace}/clusters/{name}"),
+        "status": Key("/kubernetes/namespaces/{namespace}/clusters/{name}/status"),
     }
+
+    async def update_status(self, namespace, name, state, reason=None):
+        """Update the status of the Cluster
+
+        Args:
+            namespace (str): Namespace of the Kubernetes cluster
+            name (str): Name of the Kubernetes cluster
+            state (krake.data.kubernetes.ClusterState): New state of the
+                cluster.
+            reason (str, optional): Explanation for the state. Normally only
+                used for FAILED state.
+        """
+        url = self.url.with_path(
+            self.endpoints["status"].format_kwargs(namespace=namespace, name=name)
+        )
+        resp = await self.session.put(url, json={"state": state.name, "reason": reason})
+        data = await resp.json()
+        return deserialize(ClusterStatus, data)

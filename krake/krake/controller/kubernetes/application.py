@@ -4,16 +4,17 @@ Kubernetes controller.
 
 .. code:: bash
 
-    python -m krake.controller.kubernetes --help
+    python -m krake.controller.kubernetes.application --help
 
-Configuration is loaded from the ``controllers.kubernetes`` section:
+Configuration is loaded from the ``controllers.kubernetes.application`` section:
 
 .. code:: yaml
 
     controllers:
       kubernetes:
-        api_endpoint: http://localhost:8080
-        worker_count: 5
+        application:
+          api_endpoint: http://localhost:8080
+          worker_count: 5
 
 """
 import logging
@@ -28,10 +29,10 @@ from kubernetes_asyncio.client.rest import ApiException
 from typing import NamedTuple
 
 from krake import load_config, setup_logging
+from krake.controller.kubernetes import KubernetesController
 from krake.data.kubernetes import ApplicationState
-
-from .exceptions import on_error, ControllerError
-from . import Controller, Worker, run
+from ..exceptions import on_error, ControllerError
+from .. import Worker, run
 
 
 logger = logging.getLogger("krake.controller.kubernetes")
@@ -41,29 +42,13 @@ class InvalidResourceError(ControllerError):
     """Raised in case of invalid kubernetes resource definition."""
 
 
-class KubernetesController(Controller):
+class ApplicationController(KubernetesController):
     """Controller responsible for :class:`krake.data.kubernetes.Application`
     resources in "SCHEDULED" and "DELETING" state.
     """
 
     states = (ApplicationState.SCHEDULED, ApplicationState.DELETING)
-
-    async def list_and_watch(self):
-        """List and watching Kubernetes applications in the ``SCHEDULED``
-        state.
-        """
-        logger.info("List Application")
-        for app in await self.client.kubernetes.application.list(namespace="all"):
-            logger.debug("Received %r", app)
-            if app.status.state in self.states:
-                await self.queue.put(app.metadata.uid, app)
-
-        logger.info("Watching Application")
-        async with self.client.kubernetes.application.watch(namespace="all") as watcher:
-            async for app in watcher:
-                logger.debug("Received %r", app)
-                if app.status.state in self.states:
-                    await self.queue.put(app.metadata.uid, app)
+    resource_name = "application"
 
 
 class Event(NamedTuple):
@@ -142,7 +127,7 @@ class EventDispatcher(object):
 listen = EventDispatcher()
 
 
-class KubernetesWorker(Worker):
+class ApplicationWorker(Worker):
     @on_error(ControllerError)
     async def resource_received(self, app):
         # Delete Kubernetes resources if the application was bound to a
@@ -369,10 +354,10 @@ parser.add_argument("-c", "--config", help="Path to configuration YAML file")
 def main():
     args = parser.parse_args()
     config = load_config(args.config)
-    controller = KubernetesController(
-        api_endpoint=config["controllers"]["kubernetes"]["api_endpoint"],
-        worker_factory=KubernetesWorker,
-        worker_count=config["controllers"]["kubernetes"]["worker_count"],
+    controller = ApplicationController(
+        api_endpoint=config["controllers"]["kubernetes"]["application"]["api_endpoint"],
+        worker_factory=ApplicationWorker,
+        worker_count=config["controllers"]["kubernetes"]["application"]["worker_count"],
     )
     setup_logging(config["log"])
     run(controller)
