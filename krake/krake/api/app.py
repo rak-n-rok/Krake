@@ -24,10 +24,32 @@ import ssl
 from aiohttp import web, ClientSession
 
 from krake.data.core import Metadata, Verb, RoleRule, Role, RoleBinding
+from . import __version__ as version
 from . import middlewares
 from . import auth
-from .core import routes as core_api
+from .helpers import session
+from .core import api as core
 from .kubernetes import routes as kubernetes_api
+
+
+routes = web.RouteTableDef()
+
+
+@routes.get("/")
+async def index(request):
+    return web.json_response({"version": version})
+
+
+@routes.get("/me")
+async def me(request):
+    roles = set()
+    user = request["user"]
+
+    async for binding in session(request).all(RoleBinding):
+        if user in binding.users:
+            roles.update(binding.roles)
+
+    return web.json_response({"user": user, "roles": sorted(roles)})
 
 
 def create_app(config):
@@ -89,7 +111,8 @@ def create_app(config):
     app.cleanup_ctx.append(http_session)
 
     # Routes
-    app.add_routes(core_api)
+    app.add_routes(routes)
+    app.add_routes(core.routes)
     app.add_routes(kubernetes_api)
 
     return app
