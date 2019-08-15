@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class ControllerError(Exception):
     """Base class for exceptions in this module."""
 
-    code = 0
+    code = None
 
     def __init__(self, message=None, err_resp=None):
         super().__init__(message)
@@ -25,7 +25,7 @@ class ControllerError(Exception):
     def __str__(self):
         """Custom error message for exception"""
         message = self.message or ""
-        code = f"[{str(self.code)}]" if self.code > 0 else ""
+        code = f"[{str(self.code)}]" if self.code is not None else ""
 
         return f"{type(self).__name__}{code}: {message}"
 
