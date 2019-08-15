@@ -29,7 +29,7 @@ from . import middlewares
 from . import auth
 from .helpers import session
 from .core import api as core
-from .kubernetes import routes as kubernetes_api
+from .kubernetes import api as kubernetes
 
 
 routes = web.RouteTableDef()
@@ -113,7 +113,7 @@ def create_app(config):
     # Routes
     app.add_routes(routes)
     app.add_routes(core.routes)
-    app.add_routes(kubernetes_api)
+    app.add_routes(kubernetes.routes)
 
     return app
 

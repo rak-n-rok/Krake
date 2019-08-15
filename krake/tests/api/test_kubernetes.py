@@ -4,21 +4,28 @@ import json
 from itertools import count
 from operator import attrgetter
 
-from krake.data.core import ReasonCode
+from krake.data.core import (
+    WatchEvent,
+    WatchEventType,
+    ResourceRef,
+    resource_ref,
+    Conflict,
+)
 from krake.data.kubernetes import (
     Application,
+    ApplicationList,
     ApplicationState,
-    ApplicationStatus,
     ClusterBinding,
     Cluster,
+    ClusterList,
     ClusterState,
 )
-from krake.data import serialize, deserialize
-from krake.data.core import Conflict, resource_ref
 from krake.api.app import create_app
 
 from factories.kubernetes import ApplicationFactory, ClusterFactory
 from tests.factories.core import ReasonFactory
+from factories.fake import fake
+
 
 uuid_re = re.compile(
     r"^[0-9A-F]{8}-[0-9A-F]{4}-[4][0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$",
@@ -32,7 +39,6 @@ async def test_list_apps(aiohttp_client, config, db):
         ApplicationFactory(status__state=ApplicationState.SCHEDULED),
         ApplicationFactory(status__state=ApplicationState.UPDATED),
         ApplicationFactory(status__state=ApplicationState.DELETING),
-        ApplicationFactory(status__state=ApplicationState.DELETED),
         ApplicationFactory(
             metadata__namespace="system", status__state=ApplicationState.RUNNING
         ),
@@ -44,13 +50,13 @@ async def test_list_apps(aiohttp_client, config, db):
     resp = await client.get("/kubernetes/namespaces/testing/applications")
     assert resp.status == 200
 
-    data = await resp.json()
-    received = [deserialize(Application, item) for item in data]
+    body = await resp.json()
+    received = ApplicationList.deserialize(body)
 
-    assert len(received) == len(apps) - 2
+    assert len(received.items) == len(apps) - 1
 
-    key = attrgetter("metadata.uid")
-    assert sorted(received, key=key) == sorted(apps[:-2], key=key)
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(apps[:-1], key=key)
 
 
 async def test_list_apps_from_all_namespaces(aiohttp_client, config, db):
@@ -66,16 +72,16 @@ async def test_list_apps_from_all_namespaces(aiohttp_client, config, db):
         await db.put(app)
 
     client = await aiohttp_client(create_app(config=config))
-    resp = await client.get("/kubernetes/namespaces/all/applications")
+    resp = await client.get("/kubernetes/applications")
     assert resp.status == 200
 
-    data = await resp.json()
-    received = [deserialize(Application, item) for item in data]
+    body = await resp.json()
+    received = ApplicationList.deserialize(body)
 
-    assert len(received) == len(apps)
+    assert len(received.items) == len(apps)
 
-    key = attrgetter("metadata.uid")
-    assert sorted(received, key=key) == sorted(apps, key=key)
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(apps, key=key)
 
 
 async def test_list_apps_rbac(rbac_allow, config, aiohttp_client):
@@ -94,15 +100,16 @@ async def test_create_app(aiohttp_client, config, db):
     data = ApplicationFactory(status=None)
 
     resp = await client.post(
-        "/kubernetes/namespaces/testing/applications", json=serialize(data)
+        "/kubernetes/namespaces/testing/applications",
+        json=data.serialize(subresources=set()),
     )
     assert resp.status == 200
-    app = deserialize(Application, await resp.json())
+    app = Application.deserialize(await resp.json())
 
-    assert app.status.state == ApplicationState.PENDING
-    assert app.status.created
-    assert app.status.modified
+    assert app.metadata.created
+    assert app.metadata.modified
     assert app.spec == data.spec
+    assert app.status.state == ApplicationState.PENDING
 
     stored, _ = await db.get(Application, namespace="testing", name=data.metadata.name)
     assert stored == app
@@ -116,17 +123,7 @@ async def test_create_app_rbac(rbac_allow, config, aiohttp_client):
 
     async with rbac_allow("kubernetes", "applications", "create"):
         resp = await client.post("/kubernetes/namespaces/testing/applications")
-        assert resp.status == 422
-
-
-async def test_create_app_in_all_namespace(aiohttp_client, config):
-    client = await aiohttp_client(create_app(config=config))
-    data = ApplicationFactory(metadata__name="all")
-
-    resp = await client.post(
-        "/kubernetes/namespaces/all/applications", json=serialize(data)
-    )
-    assert resp.status == 400
+        assert resp.status == 415
 
 
 async def test_create_app_with_existing_name(aiohttp_client, config, db):
@@ -136,9 +133,9 @@ async def test_create_app_with_existing_name(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     resp = await client.post(
-        "/kubernetes/namespaces/testing/applications", json=serialize(existing)
+        "/kubernetes/namespaces/testing/applications", json=existing.serialize()
     )
-    assert resp.status == 400
+    assert resp.status == 409
 
 
 async def test_get_app(aiohttp_client, config, db):
@@ -149,7 +146,7 @@ async def test_get_app(aiohttp_client, config, db):
         f"/kubernetes/namespaces/testing/applications/{app.metadata.name}"
     )
     assert resp.status == 200
-    data = deserialize(Application, await resp.json())
+    data = Application.deserialize(await resp.json())
     assert app == data
 
 
@@ -201,12 +198,12 @@ async def test_update_app(aiohttp_client, config, db):
     resp = await client.put(
         f"/kubernetes/namespaces/{data.metadata.namespace}"
         f"/applications/{data.metadata.name}",
-        json=serialize(data),
+        json=data.serialize(subresources=set(), readonly=False),
     )
     assert resp.status == 200
-    app = deserialize(Application, await resp.json())
+    app = Application.deserialize(await resp.json())
 
-    assert app.status.state == ApplicationState.UPDATED
+    assert app.status.state == data.status.state
     assert app.spec.manifest == new_manifest
 
     stored, _ = await db.get(
@@ -223,36 +220,7 @@ async def test_update_app_rbac(rbac_allow, config, aiohttp_client):
 
     async with rbac_allow("kubernetes", "applications", "update"):
         resp = await client.put("/kubernetes/namespaces/testing/applications/myapp")
-        assert resp.status == 422
-
-
-async def test_update_app_already_deleted(aiohttp_client, config, db):
-    client = await aiohttp_client(create_app(config=config))
-
-    # Create applications
-    deleting = ApplicationFactory(status__state=ApplicationState.DELETING)
-    deleted = ApplicationFactory(status__state=ApplicationState.DELETED)
-    await db.put(deleting)
-    await db.put(deleted)
-
-    deleting.spec.manifest = new_manifest
-    deleted.spec.manifest = new_manifest
-
-    # Update already deleting application
-    resp = await client.put(
-        f"/kubernetes/namespaces/{deleting.metadata.namespace}"
-        f"/applications/{deleting.metadata.name}",
-        json=serialize(deleting),
-    )
-    assert resp.status == 400
-
-    # Update already deleted application
-    resp = await client.put(
-        f"/kubernetes/namespaces/{deleted.metadata.namespace}"
-        f"/applications/{deleted.metadata.name}",
-        json=serialize(deleted),
-    )
-    assert resp.status == 400
+        assert resp.status == 415
 
 
 async def test_update_app_status(aiohttp_client, config, db):
@@ -261,40 +229,38 @@ async def test_update_app_status(aiohttp_client, config, db):
 
     await db.put(app)
 
-    reason = ReasonFactory()
+    app.status.state = ApplicationState.FAILED
+    app.status.reason = ReasonFactory()
+    app.status.cluster = ResourceRef(
+        api="kubernetes", kind="Cluster", namespace="testing", name="test-cluster"
+    )
+    app.status.services = {"service1": "127.0.0.1:38531"}
 
     resp = await client.put(
         f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/status",
-        json={
-            "state": "FAILED",
-            "reason": serialize(reason),
-            "cluster": "/kubernetes/namespaces/testing/clusters/test-cluster",
-            "services": {"service1": "127.0.0.1:38531"},
-        },
+        json=app.serialize(subresources={"status"}, readonly=False),
     )
     assert resp.status == 200
-    status = deserialize(ApplicationStatus, await resp.json())
-
-    assert status.state == ApplicationState.FAILED
-    assert status.created == app.status.created
-    assert status.reason == reason
-    assert status.cluster == "/kubernetes/namespaces/testing/clusters/test-cluster"
-    assert status.services == {"service1": "127.0.0.1:38531"}
+    received = Application.deserialize(await resp.json())
+    assert received.metadata == app.metadata
+    assert received.status == app.status
 
     stored, rev = await db.get(Application, namespace="testing", name=app.metadata.name)
-    assert stored.status == status
+    assert stored.status == received.status
     assert rev.version == 2
 
 
 async def test_update_app_status_rbac(rbac_allow, config, aiohttp_client):
     client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
 
-    resp = await client.put("/kubernetes/namespaces/testing/applications/myapp")
+    resp = await client.put("/kubernetes/namespaces/testing/applications/myapp/status")
     assert resp.status == 403
 
-    async with rbac_allow("kubernetes", "applications", "update"):
-        resp = await client.put("/kubernetes/namespaces/testing/applications/myapp")
-        assert resp.status == 422
+    async with rbac_allow("kubernetes", "applications/status", "update"):
+        resp = await client.put(
+            "/kubernetes/namespaces/testing/applications/myapp/status"
+        )
+        assert resp.status == 415
 
 
 async def test_update_app_binding(aiohttp_client, config, db):
@@ -307,22 +273,20 @@ async def test_update_app_binding(aiohttp_client, config, db):
     await db.put(app)
     await db.put(cluster)
 
-    cluster_ref = (
-        f"/kubernetes/namespaces/{cluster.metadata.namespace}"
-        f"/clusters/{cluster.metadata.name}"
-    )
+    cluster_ref = resource_ref(cluster)
     resp = await client.put(
         f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/binding",
-        json={"cluster": cluster_ref},
+        json=ClusterBinding(cluster=cluster_ref).serialize(),
     )
     assert resp.status == 200
-    binding = deserialize(ClusterBinding, await resp.json())
+    body = await resp.json()
+    received = Application.deserialize(body)
+    received.status.cluster == cluster_ref
+    received.status.state == ApplicationState.SCHEDULED
 
-    assert binding.cluster == cluster_ref
-
-    updated, _ = await db.get(Application, namespace="testing", name=app.metadata.name)
-    assert updated.status.cluster == cluster_ref
-    assert updated.status.state == ApplicationState.SCHEDULED
+    stored, _ = await db.get(Application, namespace="testing", name=app.metadata.name)
+    assert stored.status.cluster == cluster_ref
+    assert stored.status.state == ApplicationState.SCHEDULED
 
 
 async def test_delete_app(aiohttp_client, config, db):
@@ -337,10 +301,33 @@ async def test_delete_app(aiohttp_client, config, db):
     resp = await client.delete(
         f"/kubernetes/namespaces/testing/applications/{app.metadata.name}"
     )
-    assert resp.status == 200
+    assert resp.status == 204
 
     deleted, _ = await db.get(Application, namespace="testing", name=app.metadata.name)
-    assert deleted.status.state == ApplicationState.DELETING
+    assert deleted is None
+
+
+async def test_delete_app_with_finalizers(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    # Create application
+    client = await aiohttp_client(create_app(config=config))
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING, metadata__finalizers=["test-finializer"]
+    )
+    await db.put(app)
+
+    # Delete application
+    resp = await client.delete(
+        f"/kubernetes/namespaces/testing/applications/{app.metadata.name}"
+    )
+    assert resp.status == 200
+
+    received = Application.deserialize(await resp.json())
+    assert received.metadata.deleted
+
+    stored, _ = await db.get(Application, namespace="testing", name=app.metadata.name)
+    assert stored.metadata.deleted
 
 
 async def test_delete_app_rbac(rbac_allow, config, aiohttp_client):
@@ -354,30 +341,23 @@ async def test_delete_app_rbac(rbac_allow, config, aiohttp_client):
         assert resp.status == 404
 
 
-async def test_delete_already_deleted(aiohttp_client, config, db):
+async def test_delete_already_deleting(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     # Create applications
-    deleting = ApplicationFactory(status__state=ApplicationState.DELETING)
-    deleted = ApplicationFactory(status__state=ApplicationState.DELETED)
+    deleting = ApplicationFactory(metadata__deleted=fake.date_time())
     await db.put(deleting)
-    await db.put(deleted)
 
     # Delete already deleting application
     resp = await client.delete(
         f"/kubernetes/namespaces/testing/applications/{deleting.metadata.name}"
     )
-    assert resp.status == 304
-
-    # Delete already deleted application
-    resp = await client.delete(
-        f"/kubernetes/namespaces/testing/applications/{deleted.metadata.name}"
-    )
-    assert resp.status == 304
+    assert resp.status == 409
 
 
 async def test_watch_app(aiohttp_client, config, db, loop):
     client = await aiohttp_client(create_app(config=config))
+    apps = [ApplicationFactory(status=None), ApplicationFactory(status=None)]
 
     async def watch(created):
         resp = await client.get(
@@ -389,15 +369,24 @@ async def test_watch_app(aiohttp_client, config, db, loop):
             line = await resp.content.readline()
             assert line, "Unexecpted EOF"
 
-            data = json.loads(line.decode())
-            assert uuid_re.match(data["metadata"]["uid"])
+            event = WatchEvent.deserialize(json.loads(line.decode()))
+            app = Application.deserialize(event.object)
 
             if i == 0:
-                assert data["status"]["state"] == "PENDING"
+                assert event.type == WatchEventType.ADDED
+                assert app.metadata.name == apps[0].metadata.name
+                assert app.spec == apps[0].spec
+                assert app.status.state == ApplicationState.PENDING
             elif i == 1:
-                assert data["status"]["state"] == "PENDING"
+                assert event.type == WatchEventType.ADDED
+                assert app.metadata.name == apps[1].metadata.name
+                assert app.spec == apps[1].spec
+                assert app.status.state == ApplicationState.PENDING
             elif i == 2:
-                assert data["status"]["state"] == "DELETING"
+                assert event.type == WatchEventType.DELETED
+                assert app.metadata.name == apps[0].metadata.name
+                assert app.spec == apps[0].spec
+                assert app.status.state == ApplicationState.PENDING
                 return
 
     async def modify(created):
@@ -405,17 +394,17 @@ async def test_watch_app(aiohttp_client, config, db, loop):
         await created
 
         # Create two applications
-        for i in range(2):
-            app = ApplicationFactory(status=None, metadata__name=f"test-app-{i}")
+        for app in apps:
             resp = await client.post(
-                "/kubernetes/namespaces/testing/applications", json=serialize(app)
+                "/kubernetes/namespaces/testing/applications",
+                json=app.serialize(subresources=set(), readonly=False),
             )
             assert resp.status == 200
 
         resp = await client.delete(
-            f"/kubernetes/namespaces/testing/applications/{app.metadata.name}"
+            f"/kubernetes/namespaces/testing/applications/{apps[0].metadata.name}"
         )
-        assert resp.status == 200
+        assert resp.status == 204
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -427,23 +416,27 @@ async def test_watch_app(aiohttp_client, config, db, loop):
 async def test_watch_app_from_all_namespaces(aiohttp_client, config, db, loop):
     client = await aiohttp_client(create_app(config=config))
 
+    apps = [
+        ApplicationFactory(status=None, metadata__namespace="testing"),
+        ApplicationFactory(status=None, metadata__namespace="system"),
+    ]
+
     async def watch(created):
-        resp = await client.get(
-            "/kubernetes/namespaces/all/applications?watch&heartbeat=0"
-        )
+        resp = await client.get("/kubernetes/applications?watch&heartbeat=0")
         created.set_result(None)
 
         for i in count():
             line = await resp.content.readline()
             assert line, "Unexecpted EOF"
 
-            data = json.loads(line.decode())
-            assert uuid_re.match(data["metadata"]["uid"])
+            event = WatchEvent.deserialize(json.loads(line.decode()))
+            app = Application.deserialize(event.object)
 
-            if i == 0:
-                assert data["status"]["state"] == "PENDING"
-            elif i == 1:
-                assert data["status"]["state"] == "PENDING"
+            assert event.type == WatchEventType.ADDED
+            assert app.metadata.name == apps[i].metadata.name
+            assert app.spec == apps[i].spec
+
+            if i == 1:
                 return
 
     async def modify(created):
@@ -451,14 +444,10 @@ async def test_watch_app_from_all_namespaces(aiohttp_client, config, db, loop):
         await created
 
         # Create two applications in different namespaces
-        for i, namespace in enumerate(["testing", "system"]):
-            app = ApplicationFactory(
-                status=None,
-                metadata__name=f"test-app-{i}",
-                metadata__namespace=namespace,
-            )
+        for app in apps:
             resp = await client.post(
-                f"/kubernetes/namespaces/{namespace}/applications", json=serialize(app)
+                f"/kubernetes/namespaces/{app.metadata.namespace}/applications",
+                json=app.serialize(subresources=set(), readonly=False),
             )
             assert resp.status == 200
 
@@ -470,11 +459,7 @@ async def test_watch_app_from_all_namespaces(aiohttp_client, config, db, loop):
 
 
 async def test_list_clusters(aiohttp_client, config, db):
-    clusters = [
-        ClusterFactory(status__state=ClusterState.RUNNING),
-        ClusterFactory(status__state=ClusterState.RUNNING),
-        ClusterFactory(status__state=ClusterState.PENDING),
-    ]
+    clusters = [ClusterFactory(), ClusterFactory(), ClusterFactory()]
     for cluster in clusters:
         await db.put(cluster)
 
@@ -482,36 +467,11 @@ async def test_list_clusters(aiohttp_client, config, db):
     resp = await client.get("/kubernetes/namespaces/testing/clusters")
     assert resp.status == 200
 
-    data = await resp.json()
-    received = [deserialize(Cluster, item) for item in data]
+    body = await resp.json()
+    received = ClusterList.deserialize(body)
 
-    key = attrgetter("metadata.uid")
-    assert sorted(received, key=key) == sorted(clusters, key=key)
-
-
-async def test_list_clusters_from_all_namespaces(aiohttp_client, config, db):
-    clusters = [
-        ClusterFactory(status__state=ClusterState.RUNNING),
-        ClusterFactory(status__state=ClusterState.RUNNING),
-        ClusterFactory(status__state=ClusterState.PENDING),
-        ClusterFactory(
-            metadata__namespace="system", status__state=ClusterState.RUNNING
-        ),
-    ]
-    for cluster in clusters:
-        await db.put(cluster)
-
-    client = await aiohttp_client(create_app(config=config))
-    resp = await client.get("/kubernetes/namespaces/all/clusters")
-    assert resp.status == 200
-
-    data = await resp.json()
-    received = [deserialize(Cluster, item) for item in data]
-
-    assert len(received) == len(clusters)
-
-    key = attrgetter("metadata.uid")
-    assert sorted(received, key=key) == sorted(clusters, key=key)
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(clusters, key=key)
 
 
 async def test_list_clusters_rbac(rbac_allow, config, aiohttp_client):
@@ -531,14 +491,13 @@ async def test_create_cluster(aiohttp_client, config, db):
 
     resp = await client.post(
         f"/kubernetes/namespaces/{data.metadata.namespace}/clusters",
-        json=serialize(data),
+        json=data.serialize(subresources=set(), readonly=False),
     )
     assert resp.status == 200
-    cluster = deserialize(Cluster, await resp.json())
+    cluster = Cluster.deserialize(await resp.json())
 
-    assert cluster.status.created
-    assert cluster.status.modified
-    assert cluster.status.state == ClusterState.RUNNING
+    assert cluster.metadata.created
+    assert cluster.metadata.modified
     assert cluster.spec == data.spec
 
     stored, _ = await db.get(Cluster, namespace="testing", name=data.metadata.name)
@@ -553,17 +512,7 @@ async def test_create_clusters_rbac(rbac_allow, config, aiohttp_client):
 
     async with rbac_allow("kubernetes", "clusters", "create"):
         resp = await client.post("/kubernetes/namespaces/testing/clusters")
-        assert resp.status == 422
-
-
-async def test_create_cluster_in_all_namespace(aiohttp_client, config):
-    client = await aiohttp_client(create_app(config=config))
-    data = ClusterFactory(metadata__namespace="all")
-
-    resp = await client.post(
-        "/kubernetes/namespaces/all/clusters", json=serialize(data)
-    )
-    assert resp.status == 400
+        assert resp.status == 415
 
 
 async def test_create_invalid_cluster(aiohttp_client, config):
@@ -571,49 +520,47 @@ async def test_create_invalid_cluster(aiohttp_client, config):
     data = ClusterFactory(spec__kubeconfig={"invalid": "kubeconfig"})
 
     resp = await client.post(
-        "/kubernetes/namespaces/testing/clusters", json=serialize(data)
+        "/kubernetes/namespaces/testing/clusters",
+        json=data.serialize(subresources=set(), readonly=False),
     )
-    assert resp.status == 400
+    assert resp.status == 422
 
 
 async def test_update_cluster_status(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
-    running = ClusterFactory(status__state=ClusterState.RUNNING)
-    deleted = ClusterFactory(status__state=ClusterState.DELETING)
+    cluster = ClusterFactory(status__state=ClusterState.RUNNING)
 
-    await db.put(running)
-    await db.put(deleted)
+    await db.put(cluster)
 
-    resp = await client.put(
-        f"/kubernetes/namespaces/testing/clusters/{running.metadata.name}/status",
-        json={
-            "state": "FAILED",
-            "reason": "Stupid error",
-            "cluster": "/kubernetes/namespaces/testing/clusters/test-cluster",
-        },
+    cluster.status.state = ClusterState.FAILED
+    cluster.status.reason = ReasonFactory()
+    cluster.status.cluster = ResourceRef(
+        api="kubernetes", kind="Cluster", namespace="testing", name="test-cluster"
     )
-    assert resp.status == 304
-
     resp = await client.put(
-        f"/kubernetes/namespaces/testing/clusters/{deleted.metadata.name}/status",
-        json={
-            "state": "DELETED",
-            "reason": "App has been deleted",
-            "cluster": "/kubernetes/namespaces/testing/clusters/test-cluster",
-        },
+        f"/kubernetes/namespaces/testing/clusters/{cluster.metadata.name}/status",
+        json=cluster.serialize(subresources={"status"}),
     )
     assert resp.status == 200
 
-    stored, rev = await db.get(Cluster, namespace="testing", name=running.metadata.name)
-    assert stored.status.created == running.status.created
-    assert stored.status.reason is None
-    assert rev.version == 1
-
-    stored, _ = await db.get(Cluster, namespace="testing", name=deleted.metadata.name)
-    assert stored is None
+    stored, rev = await db.get(Cluster, namespace="testing", name=cluster.metadata.name)
+    assert stored.status == cluster.status
 
 
-async def test_update_delete_cluster(aiohttp_client, config, db):
+async def test_update_cluster_status_rbac(rbac_allow, config, aiohttp_client):
+    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+
+    resp = await client.put("/kubernetes/namespaces/testing/clusters/mycluster/status")
+    assert resp.status == 403
+
+    async with rbac_allow("kubernetes", "clusters/status", "update"):
+        resp = await client.put(
+            "/kubernetes/namespaces/testing/clusters/mycluster/status"
+        )
+        assert resp.status == 415
+
+
+async def test_delete_cluster(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
     cluster = ClusterFactory(status__state=ClusterState.RUNNING)
     await db.put(cluster)
@@ -622,7 +569,7 @@ async def test_update_delete_cluster(aiohttp_client, config, db):
     resp = await client.delete(
         f"/kubernetes/namespaces/testing/clusters/{cluster.metadata.name}"
     )
-    assert resp.status == 200
+    assert resp.status == 204
 
     deleted, rev = await db.get(
         Application, namespace="testing", name=cluster.metadata.name
@@ -631,22 +578,44 @@ async def test_update_delete_cluster(aiohttp_client, config, db):
     assert rev is None
 
 
+async def test_delete_cluster_with_finalizers(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    # Create application
+    client = await aiohttp_client(create_app(config=config))
+    cluster = ClusterFactory(metadata__finalizers=["test-finializer"])
+    await db.put(cluster)
+
+    # Delete application
+    resp = await client.delete(
+        f"/kubernetes/namespaces/{cluster.metadata.namespace}"
+        f"/clusters/{cluster.metadata.name}"
+    )
+    assert resp.status == 200
+
+    received = Cluster.deserialize(await resp.json())
+    assert received.metadata.deleted
+
+    stored, _ = await db.get(
+        Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+    )
+    assert stored.metadata.deleted
+
+
 async def test_delete_cluster_with_apps(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     cluster = ClusterFactory(status__state=ClusterState.RUNNING)
-    cluster_ref = (
-        f"/kubernetes/namespaces/{cluster.metadata.namespace}"
-        f"/clusters/{cluster.metadata.name}"
-    )
-    cluster_resource_ref = resource_ref(cluster)
+    cluster_ref = resource_ref(cluster)
 
     running = ApplicationFactory(
         status__state=ApplicationState.RUNNING, status__cluster=cluster_ref
     )
     running_res_ref = resource_ref(running)
     deleting = ApplicationFactory(
-        status__state=ApplicationState.DELETING, status__cluster=cluster_ref
+        metadata__deleted=fake.date_time(),
+        status__state=ApplicationState.DELETING,
+        status__cluster=cluster_ref,
     )
 
     await db.put(cluster)
@@ -658,9 +627,10 @@ async def test_delete_cluster_with_apps(aiohttp_client, config, db):
         f"/kubernetes/namespaces/testing/clusters/{cluster.metadata.name}"
     )
     assert resp.status == 409
-    conflict = deserialize(Conflict, await resp.json())
+    body = await resp.json()
+    conflict = Conflict.deserialize(body)
 
-    assert conflict.source == cluster_resource_ref
+    assert conflict.source == cluster_ref
     assert len(conflict.conflicting) == 1
     assert conflict.conflicting[0] == running_res_ref
 
@@ -680,10 +650,22 @@ async def test_delete_cluster_with_apps(aiohttp_client, config, db):
     )
     assert resp.status == 200
 
-    deleting, rev = await db.get(
-        Cluster, namespace="testing", name=cluster.metadata.name
+    cluster, _ = await db.get(Cluster, namespace="testing", name=cluster.metadata.name)
+    assert cluster.metadata.deleted is not None
+
+
+async def test_delete_cluster_already_deleted(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    deleting = ClusterFactory(
+        metadata__deleted=fake.date_time(), metadata__finalizers=["sticky"]
     )
-    assert deleting.status.state == ClusterState.DELETING
+    await db.put(deleting)
+
+    resp = await client.delete(
+        f"/kubernetes/namespaces/testing/clusters/{deleting.metadata.name}"
+    )
+    assert resp.status == 200
 
 
 async def test_delete_cluster_rbac(rbac_allow, config, aiohttp_client):
@@ -695,25 +677,3 @@ async def test_delete_cluster_rbac(rbac_allow, config, aiohttp_client):
     async with rbac_allow("kubernetes", "clusters", "delete"):
         resp = await client.delete("/kubernetes/namespaces/testing/clusters/my-cluster")
         assert resp.status == 404
-
-
-async def test_delete_cluster_already_deleted(aiohttp_client, config, db):
-    client = await aiohttp_client(create_app(config=config))
-
-    # Create applications
-    deleting = ClusterFactory(status__state=ClusterState.DELETING)
-    deleted = ClusterFactory(status__state=ClusterState.DELETED)
-    await db.put(deleting)
-    await db.put(deleted)
-
-    # Delete already deleting application
-    resp = await client.delete(
-        f"/kubernetes/namespaces/testing/clusters/{deleting.metadata.name}"
-    )
-    assert resp.status == 304
-
-    # Delete already deleted application
-    resp = await client.delete(
-        f"/kubernetes/namespaces/testing/clusters/{deleted.metadata.name}"
-    )
-    assert resp.status == 304
