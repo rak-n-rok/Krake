@@ -30,3 +30,6 @@ __pycache__/
 
 # Sphinx build directory
 /docs/_build
+
+# Configuration file template
+krake.yaml
