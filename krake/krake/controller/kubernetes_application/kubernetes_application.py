@@ -297,7 +297,6 @@ class KubernetesController(Controller):
         while True:
             key, app = await self.queue.get()
             try:
-                logger.debug("Handling application %r", app)
                 await self.resource_received(app)
             except ApiException as error:
                 app.status.reason = Reason(

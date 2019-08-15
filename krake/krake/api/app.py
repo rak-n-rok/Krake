@@ -29,6 +29,7 @@ from . import middlewares
 from . import auth
 from .helpers import session
 from .core import CoreApi
+from .openstack import OpenStackApi
 from .kubernetes import KubernetesApi
 
 
@@ -106,6 +107,7 @@ def create_app(config):
     # Routes
     app.add_routes(routes)
     app.add_routes(CoreApi.routes)
+    app.add_routes(OpenStackApi.routes)
     app.add_routes(KubernetesApi.routes)
 
     return app

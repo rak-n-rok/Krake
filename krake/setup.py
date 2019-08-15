@@ -17,6 +17,8 @@ install_requires = [
     "makefun",
     "lark-parser",
     "cached-property",
+    "keystoneauth1",
+    "python-magnumclient",
 ]
 
 # dataclasses backport
