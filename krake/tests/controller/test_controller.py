@@ -1,4 +1,8 @@
-from krake.controller import WorkQueue
+import asyncio
+from unittest.mock import Mock
+
+from factories.kubernetes import ApplicationFactory
+from krake.controller import WorkQueue, consume
 
 
 async def test_put_get_done():
@@ -33,3 +37,19 @@ async def test_put_get_done():
     await queue.done("key2")
 
     assert queue.empty()
+
+
+async def test_consume_error_handling(loop):
+    app = ApplicationFactory()
+
+    worker = Mock()
+    worker.resource_received = Mock(side_effect=IOError)
+    worker.error_occured = Mock()
+
+    queue = WorkQueue(loop=loop)
+    await queue.put(app.metadata.uid, app)
+
+    await asyncio.wait(
+        [consume(queue, worker)], timeout=0.5, return_when=asyncio.FIRST_EXCEPTION
+    )
+    worker.error_occured.assert_called_once_with(app, reason="Internal error")

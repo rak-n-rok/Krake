@@ -251,14 +251,15 @@ class Worker(object):
         """
         raise NotImplementedError()
 
-    async def error_occured(self, resource, err):
+    async def error_occured(self, resource, reason):
         """Asynchronous callback executed whenever an error occurs during
         :meth:`resource_received`.
 
         Args:
             resource (object): API object (see :mod:`krake.data`) processed
                 when the error occurred
-            err (Exception): Error occurred during processing of the resource
+            reason (str): The reason of the exception which will be propagate
+                to the end-user
         """
         raise NotImplementedError()
 
@@ -281,14 +282,13 @@ async def consume(queue, worker):
         # version of the resource. This ensures strict sequential processing
         # of resources.
         key, item = await queue.get()
-
         try:
             await worker.resource_received(item)
         except asyncio.CancelledError:
             raise
         except Exception as err:
             logger.exception(err)
-            await worker.error_occured(item, err)
+            await worker.error_occured(item, reason="Internal error")
         finally:
             # Mark key as done allowing workers to consume the resource
             # again.

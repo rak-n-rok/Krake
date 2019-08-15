@@ -29,10 +29,16 @@ from typing import NamedTuple
 
 from krake import load_config, setup_logging
 from krake.data.kubernetes import ApplicationState
+
+from .exceptions import on_error, ControllerError
 from . import Controller, Worker, run
 
 
 logger = logging.getLogger("krake.controller.kubernetes")
+
+
+class InvalidResourceError(ControllerError):
+    """Raised in case of invalid kubernetes resource definition."""
 
 
 class KubernetesController(Controller):
@@ -137,10 +143,12 @@ listen = EventDispatcher()
 
 
 class KubernetesWorker(Worker):
+    @on_error(ControllerError)
     async def resource_received(self, app):
         # Delete Kubernetes resources if the application was bound to a
         # cluster.
         if app.status.cluster:
+
             cluster = await self.client.kubernetes.cluster.get_by_url(
                 app.status.cluster
             )
@@ -182,6 +190,26 @@ class KubernetesWorker(Worker):
             namespace=app.metadata.namespace, name=app.metadata.name, status=app.status
         )
 
+    async def error_occured(self, app, reason=None):
+        """Asynchronous callback executed whenever an error occurs during
+        :meth:`resource_received`.
+
+        Callback updates kubernetes application status to the failed state and
+        describes the reason of the failure.
+
+        Args:
+            app (krake.data.kubernetes.Application): Application object processed
+                when the error occurred
+            reason (str, optional): The reason of the exception which will be propagate
+                to the end-user. Defaults to None.
+        """
+        app.status.state = ApplicationState.FAILED
+        app.status.reason = reason
+
+        await self.client.kubernetes.application.update_status(
+            namespace=app.metadata.namespace, name=app.metadata.name, status=app.status
+        )
+
 
 @listen.on(event=Event("Service", "apply"))
 async def register_service(app, cluster, resp):
@@ -196,10 +224,6 @@ async def register_service(app, cluster, resp):
     url = yarl.URL(config.host)
 
     app.status.services[service_name] = url.host + ":" + str(node_port)
-
-
-class InvalidResourceError(ValueError):
-    pass
 
 
 class KubernetesClient(object):
@@ -268,7 +292,7 @@ class KubernetesClient(object):
         try:
             kind = resource["kind"]
         except KeyError:
-            raise ValueError('Resource must define "kind"')
+            raise InvalidResourceError('Resource must define "kind"')
 
         if kind not in self.resource_apis:
             raise InvalidResourceError(f"{kind} resources are not supported")
@@ -284,7 +308,7 @@ class KubernetesClient(object):
             if err.status == 404:
                 resp = None
             else:
-                raise
+                raise InvalidResourceError(err_resp=err)
 
         if resp is None:
             resp = await self._create(kind, body=resource, namespace=namespace)
@@ -301,7 +325,7 @@ class KubernetesClient(object):
         try:
             kind = resource["kind"]
         except KeyError:
-            raise ValueError('Resource must define "kind"')
+            raise InvalidResourceError('Resource must define "kind"')
 
         if kind not in self.resource_apis:
             raise InvalidResourceError(f"{kind} resources are not supported")
@@ -317,7 +341,7 @@ class KubernetesClient(object):
             if err.status == 404:
                 logger.info("%s already deleted", kind)
                 return
-            raise
+            raise InvalidResourceError(err_resp=err)
 
         logger.info("%s deleted. status=%r", kind, resp.status)
 

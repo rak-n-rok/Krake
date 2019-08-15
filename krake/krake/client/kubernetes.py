@@ -68,7 +68,7 @@ class ApplicationResource(Resource):
         Args:
             namespace (str): Namespace of the Kubernetes application
             name (str): Name of the Kubernetes application
-            state (krake.data.kubernetes.ApplicationStatus): New status of the
+            status (krake.data.kubernetes.ApplicationStatus): New status of the
                 application.
         """
         url = self.url.with_path(

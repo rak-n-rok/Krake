@@ -1,11 +1,13 @@
 import asyncio
 from datetime import datetime
+
 from aiohttp.web import json_response, Response
 
 from krake.data import serialize
 from krake.data.kubernetes import ApplicationState, ApplicationStatus
 from krake.controller import Worker
 from krake.controller.kubernetes import KubernetesController, KubernetesWorker
+
 from krake.client import Client
 from krake.test_utils import stream
 
@@ -348,6 +350,50 @@ async def test_service_registration(aresponses, loop):
     aresponses.add(
         "api.krake.local",
         f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/status",
+        "PUT",
+        update_status,
+    )
+
+    async with Client(url="http://api.krake.local", loop=loop) as client:
+        worker = KubernetesWorker(client=client)
+        await worker.resource_received(app)
+
+
+async def test_kubernetes_error_handling(aresponses, loop):
+    failed_manifest = nginx_manifest.replace("kind: Deployment", "kind: Unsupported")
+
+    cluster = ClusterFactory(magnum=False)
+    cluster_ref = (
+        f"/kubernetes/namespaces/{cluster.metadata.namespace}"
+        f"/clusters/{cluster.metadata.name}"
+    )
+    app = ApplicationFactory(
+        status__state=ApplicationState.SCHEDULED,
+        status__cluster=cluster_ref,
+        spec__manifest=failed_manifest,
+    )
+
+    async def update_status(request):
+        payload = await request.json()
+        assert payload["state"] == "FAILED"
+        assert payload["reason"] == "Unsupported resources are not supported"
+
+        status = ApplicationStatus(
+            state=ApplicationState.FAILED,
+            reason=payload["reason"],
+            cluster=cluster.metadata.name,
+            created=app.status.created,
+            modified=datetime.now(),
+        )
+        return json_response(serialize(status))
+
+    aresponses.add(
+        "api.krake.local", cluster_ref, "GET", json_response(serialize(cluster))
+    )
+    aresponses.add(
+        "api.krake.local",
+        f"/kubernetes/namespaces/{cluster.metadata.namespace}/applications/"
+        f"{app.metadata.name}/status",
         "PUT",
         update_status,
     )
