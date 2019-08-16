@@ -239,3 +239,18 @@
     - name: Ensure kubectl is configured correctly
       assert:
         that: "'kubectl: Correctly Configured' in minikube_status.stdout"
+
+- name: Setup Minikube clusters
+  hosts: minikube_clusters
+  tags:
+    - setup-cluster
+  tasks:
+
+    - name: Add keystone authentication
+      vars:
+        minikube: true
+        k8s_auth_dir: "/home/{{ ansible_user }}/k8s_auth"
+        k8s_config: "/home/{{ ansible_user }}/.kube/config"
+      include_role:
+        name: k8s-keystone-auth
+      when: "use_keystone|default('')"
