@@ -134,8 +134,34 @@
         delete: yes
         use_ssh_args: true
 
-    - name: Create TLS certificate
-      command: bash k8s-infra/generate-cert.sh
+    - name: Create certificate for k8s ingress controller
+      block:
+
+        - name: Generate OpenSSL private key
+          openssl_privatekey:
+            path: /tmp/infra-ingress-tls.key
+
+        - name: Generate OpenSSL certificate signing request (CSR)
+          openssl_csr:
+            path: /tmp/infra-ingress-tls.csr
+            privatekey_path: /tmp/infra-ingress-tls.key
+            common_name: "{{ ansible_host }}"
+            subject:
+              C: DE
+              ST: Saxony
+              L: Dresden
+              O: CLOUD&HEAT Technology GmbH
+              CN: "{{ ansible_host }}"
+            basic_constraints:
+              - CA:false
+
+        # TODO For development purposes only. For production purposes need to be re-visited.
+        - name: Generate a Self Signed OpenSSL certificate
+          openssl_certificate:
+            path: /tmp/infra-ingress-tls.crt
+            privatekey_path: /tmp/infra-ingress-tls.key
+            csr_path: /tmp/infra-ingress-tls.csr
+            provider: selfsigned
 
     - name: Delete k8s namespace
       command: kubectl delete namespace --ignore-not-found infra

@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: keystone-auth
+  namespace: kube-system
+  labels:
+    k8s-app: keystone-auth
+spec:
+  serviceName: keystone-auth
+  replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: keystone-auth
+  template:
+    metadata:
+      labels:
+        k8s-app: keystone-auth
+    spec:
+      serviceAccountName: keystone-auth
+      tolerations:
+        - effect: NoSchedule # Make sure the pod can be scheduled on master kubelet.
+          operator: Exists
+        - key: CriticalAddonsOnly # Mark the pod as a critical add-on for rescheduling.
+          operator: Exists
+        - effect: NoExecute
+          operator: Exists
+      nodeSelector:
+        node-role.kubernetes.io/master: ""
+      hostAliases:
+        - ip: {{ cidp_ip  }}
+          hostnames:
+          - central-idp
+      containers:
+        - name: keystone-auth
+          image: "k8scloudprovider/k8s-keystone-auth:latest"
+          imagePullPolicy: IfNotPresent
+          args:
+            - ./bin/k8s-keystone-auth
+            - --tls-cert-file
+            - /etc/kubernetes/pki/cert-file
+            - --tls-private-key-file
+            - /etc/kubernetes/pki/key-file
+            - --policy-configmap-name
+            - keystone-auth-policy
+            - --keystone-url
+            - {{ keystone_auth_url }}
+            - --keystone-ca-file
+            - /etc/kubernetes/cidp/cidp.crt
+            - --v
+            - "2"
+          volumeMounts:
+            - mountPath: /etc/kubernetes/pki
+              name: k8s-certs
+              readOnly: false
+            - mountPath: /etc/kubernetes/cidp
+              name: cidp-certs
+              readOnly: false
+          ports:
+            - containerPort: 8443
+      volumes:
+      - name: k8s-certs
+        secret:
+          secretName: keystone-auth-certs
+      - name: cidp-certs
+        hostPath:
+          path: {{ k8s_auth_dir }}/certs
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: keystone-auth
+  namespace: kube-system
+spec:
+  selector:
+    k8s-app: keystone-auth
+  ports:
+    - protocol: TCP
+      port: 8443
+      targetPort: 8443
