@@ -127,6 +127,23 @@ def format_datetime(time_str):
     return datetime.strftime(parse(time_str), "%Y-%m-%d %H:%M:%S")
 
 
+def dict_formatter(attr):
+    """
+    Format a dictionary into a more readable format
+    Args:
+        attr (dict): an attribute with key:value elements
+
+    Returns:
+        str: Formatted dict with the format ``<key>: <value>`` with one line per
+        element.
+
+    """
+    if not attr:
+        return str(None)
+    formatted_attr = [f"{k}: {v}\n" for k, v in attr.items()]
+    return "".join(formatted_attr)[:-1]  # Remove the last end of line character
+
+
 class Cell(object):
     """Declaration of a single text table cell.
 
@@ -251,7 +268,7 @@ class Table(object):
 
         # Fetch all we do not use "inspect.getmembers" because it orders the
         # attributes by name.
-        for c in cls.__mro__:
+        for c in reversed(cls.__mro__):  # Reverse to get base table cells first
             # We use "__dict__" here instead of dir() because we want to
             # preserve the declaration order of attributes
             for name, attr in c.__dict__.items():

@@ -12,8 +12,7 @@ import yaml
 
 from .parser import ParserSpec, argument
 from .fixtures import depends
-from .formatters import BaseTable, Cell, printer
-
+from .formatters import BaseTable, Cell, printer, dict_formatter
 
 kubernetes = ParserSpec(
     "kubernetes", aliases=["kube"], help="Manage Kubernetes resources"
@@ -73,6 +72,7 @@ def create_application(config, session, file, namespace, name):
 
 class ApplicationTable(BaseTable):
     reason = Cell("status.reason")
+    services = Cell("status.services", formatter=dict_formatter)
 
 
 @application.command("get", help="Get Kubernetes application")
