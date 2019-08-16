@@ -115,7 +115,7 @@
 - name: Setup Kubernetes master nodes
   hosts: magnum_clusters
   tags:
-    - setup
+    - setup-cluster
   vars:
     k8s_namespace: infra
     repo_dir: "{{ playbook_dir }}/.."
@@ -179,3 +179,12 @@
       command: bash k8s-deploy.sh
       args:
         chdir: /home/fedora/k8s-infra
+
+    - name: Add keystone authentication
+      vars:
+        magnum_cluster: true
+        k8s_auth_dir: "/home/{{ ansible_user }}/k8s_auth"
+        k8s_config: "{{ magnum_path }}/kubelet-config.yaml"
+      include_role:
+        name: k8s-keystone-auth
+      when: "use_keystone|default('')"

@@ -1,1 +1,7 @@
 prometheus_port: 31000
+
+# Keystone configuration parameters
+magnum_path: /etc/kubernetes
+kube_api_config: "{{ magnum_path }}/apiserver"
+user_role: _member_
+user_project: demo

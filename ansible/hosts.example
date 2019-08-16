@@ -73,6 +73,8 @@ all:
     #       name: kubernetes1
     #       devstack: krake-devstack-1
     #       prometheus: krake-prometheus
+    #       # Enable keystone deployment on the cluster
+    #       use_keystone: true
 
     minikube_clusters:
       hosts:
@@ -83,6 +85,8 @@ all:
           # TODO Should be removed if trusted CA certificate takes place
           # This will be done in: https://publicgitlab.cloudandheat.com/ragnarok/krake/issues/168
           idp: krake-central-idp
+          # Enable keystone deployment on the cluster
+          use_keystone: true
 
     prometheus:
       hosts:
