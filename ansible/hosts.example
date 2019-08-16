@@ -74,6 +74,16 @@ all:
     #       devstack: krake-devstack-1
     #       prometheus: krake-prometheus
 
+    minikube_clusters:
+      hosts:
+        minikube-cluster-1:
+          name: minikube1
+          network: krake-network
+          # Inventory name of the IdP that should be used for getting the certificate
+          # TODO Should be removed if trusted CA certificate takes place
+          # This will be done in: https://publicgitlab.cloudandheat.com/ragnarok/krake/issues/168
+          idp: krake-central-idp
+
     prometheus:
       hosts:
         krake-prometheus:

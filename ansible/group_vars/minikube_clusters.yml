@@ -1,0 +1,10 @@
+# OpenStack Heat template parameters
+api_port: 9443
+floating_ip: false
+flavor: M.mem+
+
+# Configuration parameters
+minikube_install_dir: /usr/local/bin
+minikube_version: latest
+
+kubectl_version: latest
