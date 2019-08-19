@@ -51,6 +51,14 @@ Middlewares
     :undoc-members:
     :show-inheritance:
 
+API Generator
+~~~~~~~~~~~~~
+
+.. automodule:: krake.api.generator
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 Client
 ------
 
@@ -59,6 +67,26 @@ Client
     :undoc-members:
     :show-inheritance:
 
+Client Generator
+~~~~~~~~~~~~~~~~
+
+.. automodule:: krake.client.generator
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+Client APIs
+~~~~~~~~~~~
+
+.. automodule:: krake.client.core
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+.. automodule:: krake.client.kubernetes
+    :members:
+    :undoc-members:
+    :show-inheritance:
 
 Controllers
 -----------
