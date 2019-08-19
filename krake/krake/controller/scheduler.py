@@ -15,6 +15,7 @@ Configuration is loaded from the ``controllers.scheduler`` section:
         worker_count: 5
 
 """
+import asyncio
 import logging
 import pprint
 from functools import total_ordering
@@ -22,11 +23,13 @@ from typing import NamedTuple
 from argparse import ArgumentParser
 
 from krake import load_config, setup_logging
-from krake.data.core import ReasonCode
-from krake.data.kubernetes import ApplicationState, Cluster
+from krake.data.core import resource_ref
+from krake.data.kubernetes import ApplicationState, Cluster, ClusterBinding
+from krake.client.kubernetes import KubernetesApi
 
-from .exceptions import on_error, ControllerError
+from .exceptions import on_error, ControllerError, application_error_mapping
 from . import Controller, Worker, run, create_ssl_context
+
 
 logger = logging.getLogger("krake.controller.scheduler")
 
@@ -35,8 +38,6 @@ class UnsuitableDeploymentError(ControllerError):
     """Raised in case when there is not enough resources for spawning an application
         on any of the deployments.
     """
-
-    code = ReasonCode.NO_SUITABLE_RESOURCE
 
 
 class Scheduler(Controller):
@@ -47,18 +48,26 @@ class Scheduler(Controller):
     states = (ApplicationState.PENDING, ApplicationState.UPDATED)
 
     async def list_and_watch(self):
-        logger.info("List Kubernetes application")
+        kubernetes_api = KubernetesApi(self.client)
 
-        # List all Kubernetes applications
-        for app in await self.client.kubernetes.application.list(namespace="all"):
-            if app.status.state in self.states:
-                await self.queue.put(app.metadata.uid, app)
-
-        logger.info("Watching Kubernetes application")
-        async with self.client.kubernetes.application.watch(namespace="all") as watcher:
-            async for app in watcher:
+        async def list_apps():
+            logger.info("List Kubernetes applications")
+            app_list = await kubernetes_api.list_all_applications()
+            for app in app_list.items:
+                logger.debug("Received %r", app)
                 if app.status.state in self.states:
                     await self.queue.put(app.metadata.uid, app)
+
+        async def watch_apps(watcher):
+            logger.info("Watching Kubernetes applications")
+            async for event in watcher:
+                app = event.object
+                logger.debug("Received %r", app)
+                if app.status.state in self.states:
+                    await self.queue.put(app.metadata.uid, app)
+
+        async with kubernetes_api.watch_all_applications() as watcher:
+            await asyncio.gather(list_apps(), watch_apps(watcher))
 
 
 @total_ordering
@@ -85,6 +94,10 @@ class SchedulerWorker(Worker):
     application specifications.
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.kubernetes_api = KubernetesApi(self.client)
+
     @on_error(ControllerError)
     async def resource_received(self, app):
 
@@ -104,20 +117,22 @@ class SchedulerWorker(Worker):
                 app.metadata.name,
                 cluster.metadata.name,
             )
-            await self.client.kubernetes.application.update_binding(
+            await self.kubernetes_api.update_application_binding(
                 namespace=app.metadata.namespace,
                 name=app.metadata.name,
-                cluster=cluster,
+                body=ClusterBinding(cluster=resource_ref(cluster)),
             )
 
     async def select_kubernetes_cluster(self, app):
-        # TODO: Evaluate  a new cluster
-        clusters = await self.client.kubernetes.cluster.list(namespace="all")
+        # TODO: Evaluate spawning a new cluster
+        clusters = await self.kubernetes_api.list_all_clusters()
 
-        if not clusters:
+        if not clusters.items:
             return None
 
-        ranked = [await self.rank_kubernetes_cluster(cluster) for cluster in clusters]
+        ranked = [
+            await self.rank_kubernetes_cluster(cluster) for cluster in clusters.items
+        ]
         return min(ranked).cluster
 
     async def rank_kubernetes_cluster(self, cluster):
@@ -134,14 +149,21 @@ class SchedulerWorker(Worker):
         Args:
             app (krake.data.kubernetes.Application): Application object processed
                 when the error occurred
-            error (Exception, optional): The exception whose reason will be propagated
+            reason (str, optional): The reason of the exception which will be propagate
                 to the end-user. Defaults to None.
         """
-        app.status.state = ApplicationState.FAILED
-        app.status.reason = error
+        reason = application_error_mapping(app.status.state, app.status.reason, error)
+        app.status.reason = reason
 
-        await self.client.kubernetes.application.update_status(
-            namespace=app.metadata.namespace, name=app.metadata.name, status=app.status
+        # If an important error occurred, simply delete the Application
+        if reason.code.value >= 100:
+            app.status.state = ApplicationState.DELETED
+        else:
+            app.status.state = ApplicationState.FAILED
+
+        kubernetes_api = KubernetesApi(self.client)
+        await kubernetes_api.update_application_status(
+            namespace=app.metadata.namespace, name=app.metadata.name, body=app
         )
 
 

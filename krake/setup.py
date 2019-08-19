@@ -14,6 +14,7 @@ install_requires = [
     "marshmallow_enum",
     "marshmallow_oneofschema",
     "kubernetes_asyncio",
+    "makefun",
 ]
 
 # dataclasses backport

@@ -17,6 +17,7 @@ Configuration is loaded from the ``controllers.kubernetes.application`` section:
           worker_count: 5
 
 """
+import asyncio
 import logging
 import pprint
 import re
@@ -25,17 +26,18 @@ import yarl
 from argparse import ArgumentParser
 from inspect import iscoroutinefunction
 
-from krake.data.core import ReasonCode
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 from kubernetes_asyncio.client import ApiClient, CoreV1Api, AppsV1Api, Configuration
 from kubernetes_asyncio.client.rest import ApiException
 from typing import NamedTuple
 
 from krake import load_config, setup_logging
-from krake.controller.kubernetes import KubernetesController
+from krake.data.core import ReasonCode
 from krake.data.kubernetes import ApplicationState
+from krake.client.kubernetes import KubernetesApi
+
 from ..exceptions import on_error, ControllerError, application_error_mapping
-from .. import Worker, run, create_ssl_context
+from .. import Controller, Worker, run, create_ssl_context
 
 
 logger = logging.getLogger("krake.controller.kubernetes")
@@ -47,13 +49,37 @@ class InvalidResourceError(ControllerError):
     code = ReasonCode.INVALID_RESOURCE
 
 
-class ApplicationController(KubernetesController):
+class ApplicationController(Controller):
     """Controller responsible for :class:`krake.data.kubernetes.Application`
     resources in "SCHEDULED" and "DELETING" state.
     """
 
     states = (ApplicationState.SCHEDULED, ApplicationState.DELETING)
-    resource_name = "application"
+
+    async def list_and_watch(self):
+        """List and watching Kubernetes applications in the ``SCHEDULED``
+        state.
+        """
+        kubernetes_api = KubernetesApi(self.client)
+
+        async def list_apps():
+            logger.info("List application")
+            app_list = await kubernetes_api.list_all_applications()
+            for app in app_list.items:
+                logger.debug("Received %r", app)
+                if app.status.state in self.states:
+                    await self.queue.put(app.metadata.uid, app)
+
+        async def watch_apps(watcher):
+            logger.info("Watching application")
+            async for event in watcher:
+                app = event.object
+                logger.debug("Received %r", app)
+                if app.status.state in self.states:
+                    await self.queue.put(app.metadata.uid, app)
+
+        async with kubernetes_api.watch_all_applications() as watcher:
+            await asyncio.gather(list_apps(), watch_apps(watcher))
 
 
 class Event(NamedTuple):
@@ -135,12 +161,13 @@ listen = EventDispatcher()
 class ApplicationWorker(Worker):
     @on_error(ControllerError)
     async def resource_received(self, app):
+        kubernetes_api = KubernetesApi(self.client)
+
         # Delete Kubernetes resources if the application was bound to a
         # cluster.
         if app.status.cluster:
-
-            cluster = await self.client.kubernetes.cluster.get_by_url(
-                app.status.cluster
+            cluster = await kubernetes_api.read_cluster(
+                namespace=app.status.cluster.namespace, name=app.status.cluster.name
             )
 
             # Initialize empty services dictionary: The services dictionary is
@@ -176,8 +203,8 @@ class ApplicationWorker(Worker):
         else:
             app.status.state = ApplicationState.DELETED
 
-        await self.client.kubernetes.application.update_status(
-            namespace=app.metadata.namespace, name=app.metadata.name, status=app.status
+        await kubernetes_api.update_application_status(
+            namespace=app.metadata.namespace, name=app.metadata.name, body=app
         )
 
     async def error_occurred(self, app, error=None):
@@ -202,8 +229,9 @@ class ApplicationWorker(Worker):
         else:
             app.status.state = ApplicationState.FAILED
 
-        await self.client.kubernetes.application.update_status(
-            namespace=app.metadata.namespace, name=app.metadata.name, status=app.status
+        kubernetes_api = KubernetesApi(self.client)
+        await kubernetes_api.update_application_status(
+            namespace=app.metadata.namespace, name=app.metadata.name, body=app
         )
 
 
@@ -383,6 +411,7 @@ def main():
         worker_count=controller_config["worker_count"],
         ssl_context=ssl_context,
     )
+    setup_logging(config["log"])
     run(controller)
 
 

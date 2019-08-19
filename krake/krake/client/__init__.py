@@ -4,15 +4,12 @@ leverages the same data models as the API server from :mod:`krake.data`.
 from aiohttp import ClientSession, TCPConnector
 from yarl import URL
 
-from .core import CoreAPI
-from .kubernetes import KubernetesAPI
-
 
 class Client(object):
     """Simple async Python client for the Krake HTTP API.
 
-    REST resources are structured with attributes. For example, all Kubernetes
-    related resources are accessible via the ``.kubernetes`` attribute.
+    The specific APIs are implemented in separate classes. Each API object
+    requires an :class:`Client` instance to interface the HTTP REST API.
 
     The client implements the asynchronous context manager protocol used to
     handle opening and closing the internal HTTP session.
@@ -21,15 +18,11 @@ class Client(object):
         .. code:: python
 
             from krake.client import Client
+            from krake.client.core import CoreApi
 
             async with Client("http://localhost:8080") as client:
-                id = "0520e107-519b-4aed-8ab0-8e6c03134ef8"
-                await client.kubernetes.application.get(id)
-
-    Attributes:
-        core (.core.CoreAPI): API or all core resources
-        kubernetes (.kubernetes.KubernetesAPI): API for all Kubernetes
-            resources
+                core_api = CoreApi(client)
+                role = await core_api.read_role(name="reader")
 
     """
 
@@ -37,8 +30,6 @@ class Client(object):
         self.loop = loop
         self.url = URL(url)
         self.session = None
-        self.kubernetes = None
-        self.core = None
         self.ssl_context = ssl_context
 
     async def __aenter__(self):
@@ -59,18 +50,13 @@ class Client(object):
         if self.ssl_context:
             connector = TCPConnector(ssl_context=self.ssl_context)
 
-        headers = {}
         self.session = ClientSession(
-            headers=headers, loop=self.loop, raise_for_status=True, connector=connector
+            loop=self.loop, raise_for_status=True, connector=connector
         )
-
-        self.core = CoreAPI(session=self.session, url=self.url)
-        self.kubernetes = KubernetesAPI(session=self.session, url=self.url)
 
     async def close(self):
         """Close the internal HTTP session and remove all resource attributes."""
         if self.session is None:
             return
-        self.kubernetes = None
         await self.session.close()
         self.session = None
