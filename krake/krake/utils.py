@@ -22,3 +22,10 @@ def get_field(cls, name):
             return f
 
     raise AttributeError(f"{cls} does not have field {name!r}")
+
+
+async def aenumerate(iterable):
+    i = 0
+    async for item in iterable:
+        yield i, item
+        i += 1
