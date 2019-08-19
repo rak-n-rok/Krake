@@ -677,3 +677,4 @@ async def test_delete_cluster_rbac(rbac_allow, config, aiohttp_client):
     async with rbac_allow("kubernetes", "clusters", "delete"):
         resp = await client.delete("/kubernetes/namespaces/testing/clusters/my-cluster")
         assert resp.status == 404
+

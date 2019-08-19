@@ -1,87 +1,81 @@
+import logging
 from datetime import datetime
 from aiohttp import web
 
 from krake.apidefs.kubernetes import kubernetes
-from krake.data.kubernetes import (
-    Application,
-    ClusterBinding,
-    ApplicationState,
-    Cluster,
-    ClusterState,
-)
+from krake.data.core import Conflict, resource_ref
+from krake.data.kubernetes import Application, ClusterBinding, ApplicationState, Cluster
+from .auth import protected
 from .helpers import use_schema, load, session
-from .manager import ApiManager
+from .generator import generate_api
 
 
-api = ApiManager(kubernetes)
+logger = logging.getLogger("krake.api.kubernetes")
 
 
-@api.applications.binding.update
-@load("app", Application)
-@use_schema("body", ClusterBinding.Schema)
-async def update_binding(request, body, app):
-    app.status.cluster = body.cluster
+@generate_api(kubernetes)
+class KubernetesApi:
+    @protected(api="kubernetes", resource="applications/binding", verb="update")
+    @load("app", Application)
+    @use_schema("body", ClusterBinding.Schema)
+    async def update_application_binding(request, body, app):
+        app.status.cluster = body.cluster
 
-    # Transition into "scheduled" state
-    app.status.state = ApplicationState.SCHEDULED
-    app.status.reason = None
+        # Transition into "scheduled" state
+        app.status.state = ApplicationState.SCHEDULED
+        app.status.reason = None
 
-    # TODO: Should be update modified here?
-    # app.metadata.modified = datetime.now()
+        # TODO: Should be update modified here?
+        # app.metadata.modified = datetime.now()
 
-    await session(request).put(app)
-    api.logger.info(
-        "Update Kubernetes application binding %r (%s)",
-        app.metadata.name,
-        app.metadata.uid,
-    )
-    return web.json_response(app.serialize())
+        await session(request).put(app)
+        logger.info(
+            "Update binding of application %r (%s)", app.metadata.name, app.metadata.uid
+        )
+        return web.json_response(app.serialize())
 
-
-@api.clusters.delete
-@load("cluster", Cluster)
-async def delete_cluster(request, cluster):
-    if cluster.status.state in (ClusterState.DELETING, ClusterState.DELETED):
-        raise web.HTTPNotModified()
-
-    if "cascade" not in request.query:
+    @protected(api="kubernetes", resource="clusters", verb="delete")
+    @load("cluster", Cluster)
+    async def delete_cluster(request, cluster):
         apps = [
             app
             async for app, _ in session(request).all(
                 Application, namespace=cluster.metadata.namespace
             )
         ]
-        cluster_ref = (
-            f"/kubernetes/namespaces/{cluster.metadata.namespace}"
-            f"/clusters/{cluster.metadata.name}"
-        )
-        accepted_states = (
-            ApplicationState.RUNNING,
-            ApplicationState.UPDATED,
-            ApplicationState.SCHEDULED,
-        )
-
+        cluster_ref = resource_ref(cluster)
         apps = [
             resource_ref(app)
             for app in apps
-            if app.status.cluster == cluster_ref and app.status.state in accepted_states
+            if app.status.cluster == cluster_ref and not app.metadata.deleted
         ]
-        # Do not delete if Applications are running on the cluster
-        if len(apps) > 0:
+
+        # No depending applications and no finalizers, delete application from database
+        if not apps and not cluster.metadata.finalizers:
+            # TODO: The deletion from database should be done via garbage
+            #   collection (see #235)
+            await session(request).delete(cluster)
+            return web.Response(status=204)
+
+        if apps and "cascade" not in request.query:
+            # Do not delete if Applications are running on the cluster
             conflict = Conflict(source=resource_ref(cluster), conflicting=apps)
-            return web.json_response(status=409, data=serialize(conflict))
+            return web.json_response(status=409, data=conflict.serialize())
 
-    cluster.metadata.deleted = datetime.now()
-    cluster.status.state = ClusterState.DELETING
+        # Cluster is already in "deleting" state
+        if cluster.metadata.deleted:
+            return web.json_response(cluster.serialize())
 
-    # TODO: Should be update modified here?
-    # cluster.metadata.modified = datetime.now()
+        cluster.metadata.deleted = datetime.now()
 
-    await session(request).put(cluster)
-    logger.info(
-        "Deleting Kubernetes cluster %r (%s)",
-        cluster.metadata.name,
-        cluster.metadata.uid,
-    )
+        # TODO: Should be update modified here?
+        # cluster.metadata.modified = datetime.now()
 
-    return web.json_response(serialize(cluster))
+        await session(request).put(cluster)
+        logger.info(
+            "Deleting Kubernetes cluster %r (%s)",
+            cluster.metadata.name,
+            cluster.metadata.uid,
+        )
+
+        return web.json_response(cluster.serialize())

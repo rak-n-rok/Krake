@@ -1,5 +1,7 @@
 from krake.apidefs.core import core
-from .manager import ApiManager
+from .generator import generate_api
 
 
-api = ApiManager(core)
+@generate_api(core)
+class CoreApi:
+    pass

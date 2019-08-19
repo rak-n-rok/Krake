@@ -1,7 +1,7 @@
 from operator import attrgetter
 
 from krake.api.app import create_app
-from krake.data.core import Role, RoleBinding
+from krake.data.core import Role, RoleBinding, RoleList, RoleBindingList
 
 from factories.core import RoleFactory, RoleBindingFactory
 
@@ -12,19 +12,19 @@ from factories.core import RoleFactory, RoleBindingFactory
 
 
 async def test_list_roles(aiohttp_client, config, db):
-    roles = [RoleFactory() for _ in range(10)]
-    for role in roles:
+    data = [RoleFactory() for _ in range(10)]
+    for role in data:
         await db.put(role)
 
     client = await aiohttp_client(create_app(config=config))
     resp = await client.get("/core/roles")
     assert resp.status == 200
 
-    data = await resp.json()
-    received = [Role.deserialize(item) for item in data]
+    body = await resp.json()
+    roles = RoleList.deserialize(body)
 
     key = attrgetter("metadata.uid")
-    assert sorted(received, key=key) == sorted(roles, key=key)
+    assert sorted(roles.items, key=key) == sorted(data, key=key)
 
 
 async def test_list_roles_rbac(rbac_allow, config, aiohttp_client):
@@ -136,11 +136,11 @@ async def test_list_role_bindings(aiohttp_client, config, db):
     resp = await client.get("/core/rolebindings")
     assert resp.status == 200
 
-    data = await resp.json()
-    received = [RoleBinding.deserialize(item) for item in data]
+    body = await resp.json()
+    received = RoleBindingList.deserialize(body)
 
-    key = attrgetter("metadata.uid")
-    assert sorted(received, key=key) == sorted(bindings, key=key)
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(bindings, key=key)
 
 
 async def test_list_role_bindings_rbac(rbac_allow, config, aiohttp_client):
