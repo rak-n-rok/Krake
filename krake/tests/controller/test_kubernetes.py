@@ -113,7 +113,7 @@ async def test_app_creation(aresponses, loop):
             - containerPort: 80
     """
 
-    cluster = ClusterFactory(magnum=False)
+    cluster = ClusterFactory()
     cluster_ref = (
         f"/kubernetes/namespaces/{cluster.metadata.namespace}"
         f"/clusters/{cluster.metadata.name}"
@@ -166,7 +166,7 @@ async def test_app_creation(aresponses, loop):
 
 
 async def test_app_deletion(aresponses, loop):
-    cluster = ClusterFactory(magnum=False)
+    cluster = ClusterFactory()
     cluster_ref = (
         f"/kubernetes/namespaces/{cluster.metadata.namespace}"
         f"/clusters/{cluster.metadata.name}"
@@ -282,7 +282,7 @@ spec:
 
 
 async def test_service_registration(aresponses, loop):
-    cluster = ClusterFactory(magnum=False)
+    cluster = ClusterFactory()
     cluster_ref = (
         f"/kubernetes/namespaces/{cluster.metadata.namespace}"
         f"/clusters/{cluster.metadata.name}"
@@ -362,7 +362,7 @@ async def test_service_registration(aresponses, loop):
 async def test_kubernetes_error_handling(aresponses, loop):
     failed_manifest = nginx_manifest.replace("kind: Deployment", "kind: Unsupported")
 
-    cluster = ClusterFactory(magnum=False)
+    cluster = ClusterFactory()
     cluster_ref = (
         f"/kubernetes/namespaces/{cluster.metadata.namespace}"
         f"/clusters/{cluster.metadata.name}"

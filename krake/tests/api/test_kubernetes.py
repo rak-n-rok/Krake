@@ -13,10 +13,10 @@ from krake.data.kubernetes import (
     ClusterState,
 )
 from krake.data import serialize, deserialize
+from krake.data.core import Conflict, resource_ref
 from krake.api.app import create_app
 
 from factories.kubernetes import ApplicationFactory, ClusterFactory
-
 
 uuid_re = re.compile(
     r"^[0-9A-F]{8}-[0-9A-F]{4}-[4][0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$",
@@ -487,7 +487,11 @@ async def test_watch_app_from_all_namespaces(aiohttp_client, config, db, loop):
 
 
 async def test_list_clusters(aiohttp_client, config, db):
-    clusters = [ClusterFactory(), ClusterFactory(), ClusterFactory(magnum=True)]
+    clusters = [
+        ClusterFactory(status__state=ClusterState.RUNNING),
+        ClusterFactory(status__state=ClusterState.RUNNING),
+        ClusterFactory(status__state=ClusterState.PENDING),
+    ]
     for cluster in clusters:
         await db.put(cluster)
 
@@ -497,6 +501,31 @@ async def test_list_clusters(aiohttp_client, config, db):
 
     data = await resp.json()
     received = [deserialize(Cluster, item) for item in data]
+
+    key = attrgetter("metadata.uid")
+    assert sorted(received, key=key) == sorted(clusters, key=key)
+
+
+async def test_list_clusters_from_all_namespaces(aiohttp_client, config, db):
+    clusters = [
+        ClusterFactory(status__state=ClusterState.RUNNING),
+        ClusterFactory(status__state=ClusterState.RUNNING),
+        ClusterFactory(status__state=ClusterState.PENDING),
+        ClusterFactory(
+            metadata__namespace="system", status__state=ClusterState.RUNNING
+        ),
+    ]
+    for cluster in clusters:
+        await db.put(cluster)
+
+    client = await aiohttp_client(create_app(config=config))
+    resp = await client.get("/kubernetes/namespaces/all/clusters")
+    assert resp.status == 200
+
+    data = await resp.json()
+    received = [deserialize(Cluster, item) for item in data]
+
+    assert len(received) == len(clusters)
 
     key = attrgetter("metadata.uid")
     assert sorted(received, key=key) == sorted(clusters, key=key)
@@ -562,3 +591,146 @@ async def test_create_invalid_cluster(aiohttp_client, config):
         "/kubernetes/namespaces/testing/clusters", json=serialize(data)
     )
     assert resp.status == 400
+
+
+async def test_update_cluster_status(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+    running = ClusterFactory(status__state=ClusterState.RUNNING)
+    deleted = ClusterFactory(status__state=ClusterState.DELETING)
+
+    await db.put(running)
+    await db.put(deleted)
+
+    resp = await client.put(
+        f"/kubernetes/namespaces/testing/clusters/{running.metadata.name}/status",
+        json={
+            "state": "FAILED",
+            "reason": "Stupid error",
+            "cluster": "/kubernetes/namespaces/testing/clusters/test-cluster",
+        },
+    )
+    assert resp.status == 304
+
+    resp = await client.put(
+        f"/kubernetes/namespaces/testing/clusters/{deleted.metadata.name}/status",
+        json={
+            "state": "DELETED",
+            "reason": "App has been deleted",
+            "cluster": "/kubernetes/namespaces/testing/clusters/test-cluster",
+        },
+    )
+    assert resp.status == 200
+
+    stored, rev = await db.get(Cluster, namespace="testing", name=running.metadata.name)
+    assert stored.status.created == running.status.created
+    assert stored.status.reason is None
+    assert rev.version == 1
+
+    stored, _ = await db.get(Cluster, namespace="testing", name=deleted.metadata.name)
+    assert stored is None
+
+
+async def test_delete_cluster(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+    cluster = ClusterFactory(status__state=ClusterState.RUNNING)
+    await db.put(cluster)
+
+    # Delete application
+    resp = await client.delete(
+        f"/kubernetes/namespaces/testing/clusters/{cluster.metadata.name}"
+    )
+    assert resp.status == 200
+
+    deleted, rev = await db.get(
+        Application, namespace="testing", name=cluster.metadata.name
+    )
+    assert deleted is None
+    assert rev is None
+
+
+async def test_delete_cluster_with_apps(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    cluster = ClusterFactory(status__state=ClusterState.RUNNING)
+    cluster_ref = (
+        f"/kubernetes/namespaces/{cluster.metadata.namespace}"
+        f"/clusters/{cluster.metadata.name}"
+    )
+    cluster_resource_ref = resource_ref(cluster)
+
+    running = ApplicationFactory(
+        status__state=ApplicationState.RUNNING, status__cluster=cluster_ref
+    )
+    running_res_ref = resource_ref(running)
+    deleting = ApplicationFactory(
+        status__state=ApplicationState.DELETING, status__cluster=cluster_ref
+    )
+
+    await db.put(cluster)
+    await db.put(running)
+    await db.put(deleting)
+
+    # Try to delete application, conflict
+    resp = await client.delete(
+        f"/kubernetes/namespaces/testing/clusters/{cluster.metadata.name}"
+    )
+    assert resp.status == 409
+    conflict = deserialize(Conflict, await resp.json())
+
+    assert conflict.source == cluster_resource_ref
+    assert len(conflict.conflicting) == 1
+    assert conflict.conflicting[0] == running_res_ref
+
+    stored_cluster, rev = await db.get(
+        Cluster, namespace="testing", name=cluster.metadata.name
+    )
+    assert stored_cluster == cluster
+
+    stored_app, rev = await db.get(
+        Application, namespace="testing", name=running.metadata.name
+    )
+    assert stored_app == running
+
+    # Force deletion
+    resp = await client.delete(
+        f"/kubernetes/namespaces/testing/clusters/{cluster.metadata.name}?cascade"
+    )
+    assert resp.status == 200
+
+    deleting, rev = await db.get(
+        Cluster, namespace="testing", name=cluster.metadata.name
+    )
+    assert deleting.status.state == ClusterState.DELETING
+
+
+async def test_delete_cluster_rbac(rbac_allow, config, aiohttp_client):
+    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+
+    resp = await client.delete("/kubernetes/namespaces/testing/clusters/my-cluster")
+    assert resp.status == 403
+
+    async with rbac_allow("kubernetes", "clusters", "delete"):
+        resp = await client.delete("/kubernetes/namespaces/testing/clusters/my-cluster")
+        assert resp.status == 404
+
+
+async def test_delete_cluster_already_deleted(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    # Create applications
+    deleting = ClusterFactory(status__state=ClusterState.DELETING)
+    deleted = ClusterFactory(status__state=ClusterState.DELETED)
+    await db.put(deleting)
+    await db.put(deleted)
+
+    # Delete already deleting application
+    resp = await client.delete(
+        f"/kubernetes/namespaces/testing/clusters/{deleting.metadata.name}"
+    )
+    assert resp.status == 304
+
+    # Delete already deleted application
+    resp = await client.delete(
+        f"/kubernetes/namespaces/testing/clusters/{deleted.metadata.name}"
+    )
+    assert resp.status == 304

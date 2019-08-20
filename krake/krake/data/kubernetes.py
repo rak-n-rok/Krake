@@ -44,20 +44,12 @@ class ClusterBinding(Serializable):
     cluster: str  # API endpoint of the Kubernetes cluster resource
 
 
-class ClusterKind(Enum):
-    EXTERNAL = auto()
-    MAGNUM = auto()
-
-
 class ClusterSpec(Serializable):
-    kind: ClusterKind = ClusterKind.EXTERNAL
     kubeconfig: dict = None
+    provider: dict = None  # Provider-specific metadata, IF needed
 
-    __metadata__ = {"discriminator": "kind"}
 
-
-class MagnumClusterSpec(ClusterSpec):
-    kind: ClusterKind = ClusterKind.MAGNUM
+class MagnumPlatform(Serializable):
     master_ip: str
 
 

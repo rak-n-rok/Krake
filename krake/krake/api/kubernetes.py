@@ -13,7 +13,7 @@ from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 from kubernetes_asyncio.config import ConfigException
 
 from krake.data.serializable import serialize
-from krake.data.core import NamespacedMetadata, ClientMetadata
+from krake.data.core import NamespacedMetadata, ClientMetadata, Conflict, resource_ref
 from krake.data.kubernetes import (
     Application,
     ApplicationStatus,
@@ -232,9 +232,49 @@ async def delete_application(request, app):
 
 @routes.get("/kubernetes/namespaces/{namespace}/clusters")
 @protected(api="kubernetes", resource="clusters", verb="list")
-async def list_clusters(request):
-    apps = [cluster async for cluster, _ in session(request).all(Cluster)]
-    return web.json_response([serialize(app) for app in apps])
+@use_kwargs({"heartbeat": fields.Integer(missing=None, locations=["query"])})
+async def list_or_watch_clusters(request, heartbeat):
+    namespace = request.match_info["namespace"]
+
+    if "watch" not in request.query:
+        if namespace == "all":
+            clusters = [cluster async for cluster, _ in session(request).all(Cluster)]
+        else:
+            clusters = [
+                cluster
+                async for cluster, _ in session(request).all(
+                    Cluster, namespace=namespace
+                )
+            ]
+
+        # Filter DELETED clusters
+        clusters = (
+            cluster
+            for cluster in clusters
+            if cluster.status.state != ClusterState.DELETED
+        )
+
+        return web.json_response([serialize(cluster) for cluster in clusters])
+
+    kwargs = {}
+    if namespace != "all":
+        kwargs["namespace"] = namespace
+
+    async with session(request).watch(Cluster, **kwargs) as watcher:
+        resp = web.StreamResponse(headers={"Content-Type": "cluster/x-ndjson"})
+        resp.enable_chunked_encoding()
+
+        await resp.prepare(request)
+
+        async with Heartbeat(resp, interval=heartbeat):
+            async for event, cluster, rev in watcher:
+
+                # Key was deleted. Stop update stream
+                if event == EventType.DELETE:
+                    return
+
+                await resp.write(json.dumps(serialize(cluster)).encode())
+                await resp.write(b"\n")
 
 
 @routes.post("/kubernetes/namespaces/{namespace}/clusters")
@@ -298,11 +338,67 @@ async def get_cluster(request, cluster):
     return web.json_response(serialize(cluster))
 
 
+@routes.put("/kubernetes/namespaces/{namespace}/clusters/{name}/status")
+@protected(api="kubernetes", resource="cluster/status", verb="update")
+@use_kwargs(
+    {
+        "state": EnumField(ClusterState, required=True),
+        "reason": fields.String(required=True, allow_none=True),
+    }
+)
+@load("cluster", Cluster)
+async def update_cluster_status(request, cluster, state, reason):
+    cluster.status.state = state
+    cluster.status.reason = reason
+    cluster.status.modified = datetime.now()
+
+    if cluster.status.state == ClusterState.DELETED:
+        await session(request).delete(cluster)
+        logger.info(
+            "Deleted Kubernetes cluster status %r (%s)",
+            cluster.metadata.name,
+            cluster.metadata.uid,
+        )
+    else:
+        raise web.HTTPNotModified()
+
+    return web.json_response(serialize(cluster.status))
+
+
 @routes.delete("/kubernetes/namespaces/{namespace}/clusters/{name}")
 @protected(api="kubernetes", resource="clusters", verb="delete")
 @load("cluster", Cluster)
 async def delete_cluster(request, cluster):
-    # TODO: Ensure that cluster is not already in "DELETING" state
+    if cluster.status.state in (ClusterState.DELETING, ClusterState.DELETED):
+        raise web.HTTPNotModified()
+
+    if "cascade" not in request.query:
+        apps = [
+            app
+            async for app, _ in session(request).all(
+                Application, namespace=cluster.metadata.namespace
+            )
+        ]
+        cluster_ref = (
+            f"/kubernetes/namespaces/{cluster.metadata.namespace}"
+            f"/clusters/{cluster.metadata.name}"
+        )
+        accepted_states = (
+            ApplicationState.RUNNING,
+            ApplicationState.UPDATED,
+            ApplicationState.SCHEDULED,
+        )
+
+        apps = [
+            resource_ref(app)
+            for app in apps
+            if app.status.cluster == cluster_ref and app.status.state in accepted_states
+        ]
+        # Do not delete if Applications are running on the cluster
+        if len(apps) > 0:
+            conflict = Conflict(source=resource_ref(cluster), conflicting=apps)
+            return web.json_response(status=409, data=serialize(conflict))
+
     cluster.status.state = ClusterState.DELETING
     cluster.status.reason = None
     cluster.status.modified = datetime.now()
