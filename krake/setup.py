@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 install_requires = [
     "aiohttp",
-    "marshmallow",
+    "marshmallow < 3.0.0",
     "dataclasses",
     "etcd3-py",
     "requests",
