@@ -13,6 +13,7 @@ from datetime import datetime
 from dateutil.parser import parse
 from functools import wraps
 
+from requests import HTTPError
 from texttable import Texttable
 
 
@@ -80,7 +81,11 @@ def printer(file=sys.stdout, **formatters):
         @wraps(func)
         def wrapper(*args, **kwargs):
             format_type = kwargs.pop("format", "yaml")
-            value = func(*args, **kwargs)
+
+            try:
+                value = func(*args, **kwargs)
+            except HTTPError as he:
+                sys.exit(str(he))
 
             try:
                 formatter = formatters[format_type]

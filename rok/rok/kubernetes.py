@@ -127,7 +127,7 @@ cluster = kubernetes.subparser("cluster", help="Manage Kubernetes clusters")
 
 
 class ClusterTable(BaseTable):
-    kind = Cell("spec.kind")
+    pass
 
 
 @cluster.command("create", help="Register an existing Kubernetes cluster")
@@ -223,10 +223,22 @@ def list_clusters(config, session, namespace):
 
 @cluster.command("delete", help="Delete Kubernetes cluster")
 @argument("-n", "--namespace", help="Namespace of the cluster. Defaults to user")
+@argument(
+    "--cascade",
+    help="Delete the cluster and all dependent resources",
+    action="store_true",
+)
 @argument("name", help="Kubernetes cluster name")
+@formatting
 @depends("config", "session")
-def delete_cluster(config, session, namespace, name):
+@printer(table=ClusterTable())
+def delete_cluster(config, session, namespace, name, cascade):
     if namespace is None:
         namespace = config["user"]
 
-    session.delete(f"/kubernetes/namespaces/{namespace}/clusters/{name}")
+    url = f"/kubernetes/namespaces/{namespace}/clusters/{name}"
+    if cascade:
+        url = f"{url}?cascade"
+
+    resp = session.delete(url)
+    return resp.json()

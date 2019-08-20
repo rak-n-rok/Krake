@@ -62,3 +62,38 @@ class RoleBinding(Serializable):
     roles: List[str]
 
     __metadata__ = {"key": Key("/rolebindings/{name}", attribute="metadata")}
+
+
+class ResourceRef(Serializable):
+    api: str
+    namespace: str
+    kind: str
+    name: str
+
+
+class Conflict(Serializable):
+    source: ResourceRef
+    conflicting: List[ResourceRef]
+
+
+def resource_ref(resource):
+    """Create a ResourceRef from a Serializable
+
+    Args:
+        resource (Serializable): a Serializable with a "metadata" attribute
+
+    Returns:
+        ResourceRef: The corresponding reference to the Serializable
+
+    Raises:
+        ValueError: if the Serializable has no "metadata" attribute
+    """
+    if not getattr(resource, "metadata"):
+        raise ValueError(f"The Resource {resource!r} cannot be referenced.")
+
+    return ResourceRef(
+        api=resource.__module__.split(".")[-1],
+        namespace=resource.metadata.namespace,
+        kind=resource.__class__.__name__.lower(),
+        name=resource.metadata.name,
+    )
