@@ -630,7 +630,7 @@ async def test_update_cluster_status(aiohttp_client, config, db):
     assert stored is None
 
 
-async def test_delete_cluster(aiohttp_client, config, db):
+async def test_update_delete_cluster(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
     cluster = ClusterFactory(status__state=ClusterState.RUNNING)
     await db.put(cluster)
