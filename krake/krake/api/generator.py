@@ -130,7 +130,9 @@ def copy_fields(source, destination):
     """Copy data class fields that are not marked as _subresource_, _readonly_
     or _immutable_ from the source object to the destination object.
 
-    The function works recursive for nested data class attributes.
+    The function works recursive for nested data class attributes. If the
+    nested target attribute is None, the attribute will be directly copied
+    from the source object.
 
     Args:
         source: Data class instance from which attributes will be copied
@@ -146,7 +148,16 @@ def copy_fields(source, destination):
             value = getattr(source, field.name)
 
             if dataclasses.is_dataclass(value):
-                copy_fields(value, getattr(destination, field.name))
+                # Source value is None, just set it directly
+                if value is None:
+                    setattr(destination, field.name, None)
+                # Destination attribute is None, copy the whole attribute
+                # FIXME: What about subresource/readonly/immutable
+                elif getattr(destination, field.name) is None:
+                    setattr(destination, field.name, value)
+                # Update field by field
+                else:
+                    copy_fields(value, getattr(destination, field.name))
             else:
                 setattr(destination, field.name, value)
 
