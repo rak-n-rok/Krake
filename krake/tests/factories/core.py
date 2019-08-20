@@ -12,6 +12,7 @@ from krake.data.core import (
     Role,
     RoleBinding,
     RoleBindingStatus,
+    Reason, ReasonCode
 )
 
 
@@ -128,3 +129,11 @@ class RoleBindingFactory(Factory):
     @lazy_attribute
     def roles(self):
         return [fuzzy_name() for _ in range(self.role_count)]
+
+
+class ReasonFactory(Factory):
+    class Meta:
+        model = Reason
+
+    message = fake.sentence()
+    code = fuzzy.FuzzyChoice(list(ReasonCode.__members__.values()))

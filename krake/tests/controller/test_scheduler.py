@@ -3,7 +3,8 @@ from datetime import datetime
 
 from aiohttp.web import json_response
 
-from krake.data import serialize
+from krake.data import serialize, deserialize
+from krake.data.core import ReasonCode, Reason
 from krake.data.kubernetes import ApplicationState, ApplicationStatus, ClusterBinding
 from krake.controller import Worker
 from krake.controller.scheduler import Scheduler, SchedulerWorker
@@ -106,13 +107,15 @@ async def test_kubernetes_scheduling_error_handling(aresponses, loop):
     async def update_status(request):
         payload = await request.json()
 
+        reason = deserialize(Reason, payload["reason"])
+
         assert payload["state"] == "FAILED"
         assert payload["cluster"] is None
-        assert payload["reason"] == "No cluster available"
+        assert reason.code == ReasonCode.NO_SUITABLE_RESOURCE
 
         status = ApplicationStatus(
             state=ApplicationState.FAILED,
-            reason=payload["reason"],
+            reason=reason,
             created=app.status.created,
             modified=datetime.now(),
         )

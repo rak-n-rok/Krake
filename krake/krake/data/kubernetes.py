@@ -4,7 +4,7 @@ from datetime import datetime
 
 from . import Key
 from .serializable import Serializable
-from .core import NamespacedMetadata
+from .core import NamespacedMetadata, Reason
 
 
 class ApplicationSpec(Serializable):
@@ -25,7 +25,7 @@ class ApplicationStatus(Serializable):
     state: ApplicationState
     created: datetime
     modified: datetime
-    reason: str = None
+    reason: Reason = None
     cluster: str = None  # API endpoint of the Kubernetes cluster resource
     services: dict = None
 
@@ -66,7 +66,7 @@ class ClusterStatus(Serializable):
     state: ClusterState
     created: datetime
     modified: datetime
-    reason: str = None
+    reason: Reason = None
 
 
 class Cluster(Serializable):

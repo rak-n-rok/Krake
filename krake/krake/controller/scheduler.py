@@ -22,6 +22,7 @@ from typing import NamedTuple
 from argparse import ArgumentParser
 
 from krake import load_config, setup_logging
+from krake.data.core import ReasonCode
 from krake.data.kubernetes import ApplicationState, Cluster
 
 from .exceptions import on_error, ControllerError
@@ -35,6 +36,8 @@ class UnsuitableDeploymentError(ControllerError):
     """Raised in case when there is not enough resources for spawning an application
         on any of the deployments.
     """
+
+    code = ReasonCode.NO_SUITABLE_RESOURCE
 
 
 class Scheduler(Controller):
@@ -122,7 +125,7 @@ class SchedulerWorker(Worker):
         # TODO: Implement ranking function
         return ClusterRank(rank=0.5, cluster=cluster)
 
-    async def error_occured(self, app, reason=None):
+    async def error_occurred(self, app, error=None):
         """Asynchronous callback executed whenever an error occurs during
         :meth:`resource_received`.
 
@@ -132,11 +135,11 @@ class SchedulerWorker(Worker):
         Args:
             app (krake.data.kubernetes.Application): Application object processed
                 when the error occurred
-            reason (str, optional): The reason of the exception which will be propagate
+            error (Exception, optional): The exception whose reason will be propagated
                 to the end-user. Defaults to None.
         """
         app.status.state = ApplicationState.FAILED
-        app.status.reason = reason
+        app.status.reason = error
 
         await self.client.kubernetes.application.update_status(
             namespace=app.metadata.namespace, name=app.metadata.name, status=app.status
