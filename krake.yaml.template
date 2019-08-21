@@ -4,6 +4,7 @@ etcd:
 
 # TLS configuration of API server
 tls:
+  enabled: false
   cert: tmp/pki/system:api-server.pem
   key: tmp/pki/system:api-server-key.pem
 
@@ -19,13 +20,13 @@ authentication:
 
   # Keystone authentication
   strategy:
-    kind: keystone
-    endpoint: http://localhost:5000/v3
-
-  # Static authentication (every request is authenticated as this user)
-  # strategy:
-  #   kind: static
-  #   user: system
+    keystone:
+      enabled: false
+      endpoint: http://localhost:5000/v3
+  # Static authentication (every request is authenticated as this user-name)
+    static:
+      enabled: true
+      name: system
 
 # Authorization mode
 #
@@ -50,7 +51,6 @@ default-role-bindings:
   users: ["system:admin"]
   roles: ["system:admin"]
 
-
 controllers:
 
   scheduler:
@@ -65,10 +65,10 @@ controllers:
       api_endpoint: http://localhost:8080
       worker_count: 5
 
-
-
 log:
   version: 1
+  level: INFO
+  disable_existing_loggers: false
   formatters:
     krake:
       format: "%(asctime)s - [%(name)s] - [%(levelname)-5s] - %(message)s"
@@ -82,10 +82,8 @@ log:
       formatter: krake
       filename: krake.log
   root: # Configuring the default (root) logger is highly recommended
-    level: INFO
     handlers: [console]
   loggers:
     krake:
-      level: INFO
       handlers: [console]
       propagate: no

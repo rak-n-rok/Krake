@@ -18,6 +18,7 @@ Configuration is loaded from the ``controllers.kubernetes.application`` section:
 
 """
 import logging
+import pprint
 import re
 import yaml
 import yarl
@@ -357,12 +358,14 @@ parser.add_argument("-c", "--config", help="Path to configuration YAML file")
 def main():
     args = parser.parse_args()
     config = load_config(args.config)
+    setup_logging(config["log"])
+    logger.debug("Krake configuration settings:\n %s" % pprint.pformat(config))
+
     controller = ApplicationController(
         api_endpoint=config["controllers"]["kubernetes"]["application"]["api_endpoint"],
         worker_factory=ApplicationWorker,
         worker_count=config["controllers"]["kubernetes"]["application"]["worker_count"],
     )
-    setup_logging(config["log"])
     run(controller)
 
 

@@ -1,0 +1,91 @@
+# Compose file defines and runs docker containers for provisioning of the Krake Api,
+# Krake Controllers and Krake DB infrastructure.
+# Pre-built krake image is a prerequisite for this compose file.
+#
+# .. code:: bash
+#
+#     cd docker/krake
+#     docker-compose up --detach
+
+version: "3"
+
+services:
+
+  krake-etcd:
+    container_name: ${ETCD_HOST}
+    image: quay.io/coreos/etcd:${etcd_version:-v3.3.13}
+    restart: always
+    tty: true
+    volumes:
+      - ./certs/:/srv/
+      - /srv/docker/etcd:/etcd-data
+    environment:
+      ETCD_NAME: ${ETCD_HOST}
+      ETCD_DATA_DIR: /etcd-data/${ETCD_HOST}
+      ETCDCTL_API: 3
+      ETCD_ADVERTISE_CLIENT_URLS: http://${ETCD_HOST}:${ETCD_PORT}
+      ETCD_INITIAL_ADVERTISE_PEER_URLS: http://${ETCD_HOST}:${ETCD_PEER_PORT}
+      ETCD_INITIAL_CLUSTER: ${ETCD_HOST}=http://${ETCD_HOST}:${ETCD_PEER_PORT}
+      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:${ETCD_PORT}
+      ETCD_LISTEN_PEER_URLS: http://0.0.0.0:${ETCD_PEER_PORT}
+
+  krake-api:
+    container_name: ${API_HOST}
+    image: krake:latest
+    restart: always
+    tty: true
+    ports:
+      - ${API_PORT}:${API_PORT}
+    depends_on:
+      - krake-etcd
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL}
+      ETCD_HOST: ${ETCD_HOST}
+      ETCD_PORT: ${ETCD_PORT}
+      TLS_ENABLED: ${TLS_ENABLED}
+      TLS_CERT: ${TLS_CERT}
+      TLS_KEY: ${TLS_KEY}
+      TLS_CLIENT_CA: ${TLS_CLIENT_CA}
+      AUTHENTICATION_ALLOW_ANONYMOUS: ${AUTHENTICATION_ALLOW_ANONYMOUS}
+      AUTHENTICATION_STRATEGY_KEYSTONE_ENABLED: ${AUTHENTICATION_STRATEGY_KEYSTONE_ENABLED}
+      AUTHENTICATION_STRATEGY_KEYSTONE_ENDPOINT: ${AUTHENTICATION_STRATEGY_KEYSTONE_ENDPOINT}
+      AUTHENTICATION_STRATEGY_STATIC_ENABLED: ${AUTHENTICATION_STRATEGY_STATIC_ENABLED}
+      AUTHENTICATION_STRATEGY_STATIC_NAME: ${AUTHENTICATION_STRATEGY_STATIC_NAME}
+      AUTHORIZATION: ${AUTHORIZATION}
+    command: python3 -m krake.api
+
+  krake-ctrl-kubernetes-cluster:
+    image: krake:latest
+    restart: always
+    tty: true
+    depends_on:
+      - krake-api
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL}
+      CONTROLLERS_KUBERNETES_API_ENDPOINT: ${CONTROLLERS_KUBERNETES_CLUSTER_API_ENDPOINT}
+      CONTROLLERS_KUBERNETES_WORKER_COUNT: ${CONTROLLERS_KUBERNETES_CLUSTER_WORKER_COUNT}
+    command: python3 -m krake.controller.kubernetes.cluster
+
+  krake-ctrl-kubernetes-application:
+    image: krake:latest
+    restart: always
+    tty: true
+    depends_on:
+      - krake-api
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL}
+      CONTROLLERS_KUBERNETES_API_ENDPOINT: ${CONTROLLERS_KUBERNETES_APPLICATION_API_ENDPOINT}
+      CONTROLLERS_KUBERNETES_WORKER_COUNT: ${CONTROLLERS_KUBERNETES_APPLICATION_WORKER_COUNT}
+    command: python3 -m krake.controller.kubernetes.application
+
+  krake-ctrl-scheduler:
+    image: krake:latest
+    restart: always
+    tty: true
+    depends_on:
+      - krake-api
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL}
+      CONTROLLERS_SCHEDULER_API_ENDPOINT: ${CONTROLLERS_SCHEDULER_API_ENDPOINT}
+      CONTROLLERS_SCHEDULER_WORKER_COUNT: ${CONTROLLERS_SCHEDULER_WORKER_COUNT}
+    command: python3 -m krake.controller.scheduler

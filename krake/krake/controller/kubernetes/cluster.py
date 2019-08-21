@@ -18,6 +18,7 @@ Configuration is loaded from the ``controllers.kubernetes.cluster`` section:
 
 """
 import logging
+import pprint
 from argparse import ArgumentParser
 
 from krake import load_config, setup_logging
@@ -69,12 +70,14 @@ parser.add_argument("-c", "--config", help="Path to configuration YAML file")
 def main():
     args = parser.parse_args()
     config = load_config(args.config)
+    setup_logging(config["log"])
+    logger.debug("Krake configuration settings:\n %s" % pprint.pformat(config))
+
     controller = ClusterController(
         api_endpoint=config["controllers"]["kubernetes"]["cluster"]["api_endpoint"],
         worker_factory=ClusterWorker,
         worker_count=config["controllers"]["kubernetes"]["cluster"]["worker_count"],
     )
-    setup_logging(config["log"])
     run(controller)
 
 

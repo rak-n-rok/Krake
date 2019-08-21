@@ -3,13 +3,6 @@
   gather_facts: false
   tasks:
 
-    # Check if Krake app and Central IdP are in the same network
-    - debug:
-        msg: >
-          Krake app is in a different network ({{ network }}) than the
-          IdP ({{ hostvars[idp].network }})
-      when: "hostvars[idp].network != network"
-
     - name: Create Heat stack for Krake VM
       delegate_to: localhost
       os_stack:
@@ -27,7 +20,7 @@
           flavor: "{{ flavor }}"
       register: stack
 
-    - name: Update host variables of Central IdP
+    - name: Update host variables
       vars:
         outputs: "{{ stack | stack_outputs }}"
         jump_host: "{{ hostvars[gateway].ansible_user }}@{{ hostvars[gateway].ansible_host }}"
@@ -79,9 +72,7 @@
         packages:
           - jq
           - python3-pip
-          - joe
           - haveged
-          - prometheus-node-exporter
 
           # Docker dependencies
           - apt-transport-https
@@ -104,37 +95,6 @@
     - name: Install Docker-Compose
       pip:
         name: docker-compose
-
-    - name: Install kubectl
-      command: snap install kubectl --classic
-
-    - name: Install python packages
-      tags:
-        - python-deps
-      pip:
-        name: "{{ packages }}"
-      vars:
-        packages:
-          - attrs~=18.2.0
-          - flake8
-          - flask~=1.0.2
-          - jsonschema~=2.6.0
-          - keystoneauth1~=3.11.0
-          - kubernetes~=10.0.0a1
-          - mock
-          - mysql-connector-python~=8.0.15
-          - pika~=0.12.0
-          - pyOpenSSL~=18.0.0
-          - pytest
-          - pytest-cov
-          - python-magnumclient~=2.10.0
-          - urllib3~=1.24.3
-          - responses~=0.10.4
-          - requests~=2.20.1
-          - retrying~=1.3.3
-          - texttable~=1.5.0
-          - docker
-          - sqlalchemy
 
     # Inspired from https://stackoverflow.com/questions/37333305/ansible-create-a-user-with-sudo-privileges
     - name: Create 'wheel' group
@@ -208,23 +168,6 @@
         owner: krake
         mode: 0600
 
-    - name: Register Krake VM on Prometheus
-      tags:
-        - prometheus
-      uri:
-        url: https://{{ hostvars[prometheus].ansible_host }}/edit_target/krake_vm
-        validate_certs: no
-        user: admin
-        password: "{{ hostvars[prometheus].prometheus_admin_pass }}"
-        method: POST
-        body:
-          target: "{{ ansible_host }}"
-          node: "Krake"
-          node_name: "{{ inventory_hostname }}"
-        force_basic_auth: yes
-        status_code: 200
-        body_format: json
-
 - name: Manage Krake VM
   become: yes
   become_user: krake
@@ -237,21 +180,6 @@
     git_dir: /home/krake/git/krake
     repo_dir: "{{ playbook_dir }}/.."
     authorized_user: krake
-
-    # FIXME: The following variables are copied from
-    #   "infra/krake_app/cloud_init/krake_vm-template_settings.py". There should
-    #   be only one place for this configuration.
-    uwsgi_processes: 1
-
-    idp_host: "{{ hostvars[idp].private_ip }}:{{ hostvars[idp].keystone_port }}"
-    idp_auth_provider_url: "https://{{ hostvars[idp].private_ip }}:{{ hostvars[idp].keystone_port }}/v3"
-    idp_auth_url: "https://{{ hostvars[idp].private_ip }}:{{ hostvars[idp].keystone_port }}/identity/v3"
-    idp_user: admin
-    idp_pass: tmp
-
-    krake_url: "https://{{ ansible_host }}/applications"
-    monitor_target_url: "https://{{ hostvars[prometheus].ansible_host }}/edit_target/app"
-    monitor_target_pass: "{{ hostvars[prometheus].prometheus_admin_pass }}"
 
   tasks:
 
@@ -267,12 +195,7 @@
       tags:
         - synchronize
         - code
-      vars:
-        src: "{{ repo_dir }}"
-        exclude_file: "{{ playbook_dir }}/files/krake/rsync.exclude"
-        dest: "{{ git_dir }}"
       block:
-
         # rsync is executed on the localhost
         - name: Copy files with rsync
           synchronize:
@@ -281,9 +204,12 @@
             perms: true
             rsync_opts:
               - --itemize-changes
-              - "--exclude-from={{ exclude_file }}"
-            src: "{{ src }}"
-            dest: "{{ dest }}"
+              - "--exclude=.git/"
+              - "--exclude=.gitlab/"
+              - "--exclude=.idea"
+              - "--exclude-from={{ repo_dir }}/.gitignore"
+            src: "{{ repo_dir }}"
+            dest: "{{ git_dir }}"
             delete: yes
             use_ssh_args: true
 
@@ -292,112 +218,60 @@
           become_user: root
           file:
             recurse: true
-            path: "{{ dest }}"
+            path: "{{ git_dir }}"
             state: directory
             owner: krake
             group: krake
 
-    - name: Add PYTHONPATH and aliases to .bashrc
-      blockinfile:
-        path: /home/krake/.bashrc
-        block: |
-          # Appended by Ansible
-          source "{{ git_dir }}/krake_cli/sample_openrc.sh"
-          export PYTHONPATH="{{ git_dir }}"
-          alias rok="python3 -m krake_cli"
-          alias recreate_env="{{ git_dir }}/dev_utils/recreate_env.sh"
-
-    # FIXME: These templates have to be kept in sync with the corresponding
-    #   configuration files in the krake_* modules. In the future, there
-    #   should be only one place for configuration handling.
-    - name: Instantiate Central-IdP configuration templates
-      block:
-        - name: Set Central-IdP parameters in krake_common/config.py
-          template:
-            dest: "{{ git_dir }}/krake_common/config.py"
-            src: "{{ playbook_dir }}/files/krake/config_krake_common.py.j2"
-
-        - name: Set Central-IdP parameters in krake_api/config_dev.py
-          template:
-            dest: "{{ git_dir }}/krake_api/config_dev.py"
-            src: "{{ playbook_dir }}/files/krake/config_krake_api.py.j2"
-
-    - name: Copy sample_openrc.sh
-      copy:
-        src: "{{ repo_dir }}/krake_cli/sample_openrc.sh"
-        dest: "{{ git_dir }}/krake_cli/sample_openrc.sh"
-        owner: krake
-        group: krake
-
-    - name: Instantiate sample_openrc.sh template
-      template:
-        src: "{{ playbook_dir }}/files/krake/krake_sample_openrc.sh.j2"
-        dest: "{{ git_dir }}/krake_cli/sample_openrc.sh"
-      vars:
-        os_auth_url: "https://{{ idp_host }}/v3"
-
-    - name: Generate nginx configuration
-      template:
-        src: "{{ repo_dir }}/infra/krake_app/docker-compose/krake_nginx/nginx.conf.j2"
-        dest: "{{ git_dir }}/infra/krake_app/docker-compose/krake_nginx/nginx.conf"
-        owner: krake
-        group: krake
-
-    - name: Generate uwsgi configuration
-      template:
-        src: "{{ repo_dir }}/infra/krake_app/docker-compose/krake_api_ctrl/uwsgi.ini.j2"
-        dest: "{{ git_dir }}/infra/krake_app/docker-compose/krake_api_ctrl/uwsgi.ini"
-        owner: krake
-        group: krake
-
-    - name: Generate Krake Scheduler configuration
-      krake_scheduler_config:
-        devstacks: "{{ devstacks }}"
-        magnum_clusters: "{{ magnum_clusters }}"
-      register: scheduler_config
+    - name: Krake infrastructure deployment
       tags:
-        - krake-scheduler-config
-
-    - name: Copy scheduler configuration
-      copy:
-        content: "{{ scheduler_config['config'] }}"
-        dest: "{{ git_dir }}/krake_scheduler/config.py"
-        mode: 0644
-        owner: krake
-        group: krake
-      tags:
-        - krake-scheduler-config
-
-    - name: Start Krake containers
-      tags:
-        - docker
-        - synchronize
-
-      # FIXME: The "docker_service" Ansible module crashes when the Krake
-      #   Docker images are built for the first time. We think this might be a
-      #   timeout issue or too much stdout output for the Ansible module to
-      #   handle.
-      #
-      #   The current workaround is running docker-compose via the "command"
-      #   Ansible plugin.
-      #
-      # docker_service:
-      #   restarted: true
-      #   build: yes
-      #   project_src: "{{ git_dir }}/infra/krake_app/docker-compose/"
+        - krake-deployment
       block:
 
-        - name: Stop Docker service
+        - name: Generate dot env configuration file
+          template:
+            src: "{{ repo_dir }}/docker/krake/.env.j2"
+            dest: "{{ git_dir }}/docker/krake/.env"
+            owner: krake
+            group: krake
+
+        - name: Remove Krake infrastructure
           docker_service:
+            project_src: "{{ git_dir }}/docker/krake"
             state: absent
-            project_src: "{{ git_dir }}/infra/krake_app/docker-compose/"
 
-        - name: Build Docker images
-          command: docker-compose -f {{ git_dir }}/infra/krake_app/docker-compose/docker-compose.yml build
+        - name: Build Krake image
+          docker_image:
+            name: krake:latest
+            dockerfile: "{{ git_dir }}/docker/krake/Dockerfile"
+            path: "{{ git_dir }}"
+            nocache: yes
+            force: yes
 
-        - name: Start Docker service
+        - name: Start Krake infrastructure
           docker_service:
+            project_src: "{{ git_dir }}/docker/krake"
             state: present
-            project_src: "{{ git_dir }}/infra/krake_app/docker-compose/"
-          environment:
-            MYSQL_DEFAULT_PASS: "{{ db_password }}"
+            build: no
+
+    - name: Krake rok deployment
+      tags:
+        - krake-rok-deployment
+      vars:
+        api_host: localhost
+      environment:
+        XDG_CONFIG_HOME: "{{ git_dir }}"
+      block:
+
+        - name: Create Krake rok configuration file
+          copy:
+            dest: "{{ git_dir }}/rok.yaml"
+            content: |
+              {"api_url": {{ api_host }}:{{ api_port }}, "user": "system"}
+
+        - name: Install Krake rok
+          tags:
+            - pip
+          pip:
+            name: "{{ git_dir }}/rok"
+

@@ -41,7 +41,7 @@ def create_app(config):
     """
     logger = logging.getLogger("krake.api.error")
 
-    if "tls" not in config:
+    if not config["tls"]["enabled"]:
         ssl_context = None
     else:
         ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
@@ -52,7 +52,7 @@ def create_app(config):
         )
 
         # Load authorities for client certificates.
-        client_ca = config["tls"].get("client_ca")
+        client_ca = config["tls"]["client_ca"]
         if client_ca:
             ssl_context.load_verify_locations(cafile=client_ca)
 
@@ -189,32 +189,28 @@ def load_authentication(config):
     Args:
         config (dict): Application configuration
 
-    Raises:
-        ValueError: If an unknown authentication strategy is configured
-
     Returns:
         aiohttp middleware handling request authentication
 
     """
     authenticators = []
 
-    allow_anonymous = config["authentication"].get("allow_anonymous", True)
-    strategy = config["authentication"].get("strategy", None)
+    allow_anonymous = config["authentication"]["allow_anonymous"]
+    strategy = config["authentication"]["strategy"]
 
-    if strategy is None:
-        pass
-    elif strategy["kind"] == "static":
-        authenticators.append(auth.static_authentication(name=strategy["name"]))
-    elif strategy["kind"] == "keystone":
+    if strategy["static"]["enabled"]:
         authenticators.append(
-            auth.keystone_authentication(endpoint=strategy["endpoint"])
+            auth.static_authentication(name=strategy["static"]["name"])
         )
-    else:
-        raise ValueError(f"Unknown authentication strategy {strategy['kind']!r}")
+
+    elif strategy["keystone"]["enabled"]:
+        authenticators.append(
+            auth.keystone_authentication(endpoint=strategy["keystone"]["endpoint"])
+        )
 
     # If the "client_ca" TLS configuration parameter is given, enable client
     # certificate authentication.
-    if "tls" in config and config["tls"].get("client_ca"):
+    if config["tls"]["enabled"] and config["tls"]["client_ca"]:
         authenticators.append(auth.client_certificate_authentication())
 
     return middlewares.authentication(authenticators, allow_anonymous)

@@ -33,3 +33,6 @@ __pycache__/
 
 # Configuration file template
 krake.yaml
+
+# Krake dot env configuration variables file
+.env

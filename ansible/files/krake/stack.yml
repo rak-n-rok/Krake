@@ -47,7 +47,7 @@ parameters:
 
   api_port:
     type: number
-    default: 443
+    default: 8080
     description: >
       TCP port of the API. A security group will be added allowing public
       communication over this port.
