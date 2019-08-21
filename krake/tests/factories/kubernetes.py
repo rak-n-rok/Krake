@@ -195,6 +195,33 @@ users:
 )
 
 
+def make_kubeconfig(server):
+    return {
+        "apiVersion": "v1",
+        "clusters": [
+            {
+                "cluster": {"server": f"{server.scheme}://{server.host}:{server.port}"},
+                "name": "test-cluster",
+            }
+        ],
+        "contexts": [
+            {
+                "context": {"cluster": "test-cluster", "user": "test-user"},
+                "name": "test-context",
+            }
+        ],
+        "current-context": "test-context",
+        "kind": "Config",
+        "preferences": None,
+        "users": [
+            {
+                "name": "test-user",
+                "user": {"client-certificate-data": None, "client-key-data": None},
+            }
+        ],
+    }
+
+
 class ClusterSpecFactory(Factory):
     class Meta:
         model = ClusterSpec

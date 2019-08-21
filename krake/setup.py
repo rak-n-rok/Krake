@@ -26,5 +26,5 @@ setup(
     version="1.0.0",
     packages=find_packages(),
     install_requires=install_requires,
-    extras_require={"dev": {"pytest", "pytest-aiohttp", "aresponses", "factory-boy"}},
+    extras_require={"dev": {"pytest", "pytest-aiohttp", "factory-boy"}},
 )

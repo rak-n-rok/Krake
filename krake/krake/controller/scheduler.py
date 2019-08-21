@@ -23,7 +23,7 @@ from typing import NamedTuple
 from argparse import ArgumentParser
 
 from krake import load_config, setup_logging
-from krake.data.core import resource_ref
+from krake.data.core import resource_ref, ReasonCode
 from krake.data.kubernetes import ApplicationState, Cluster, ClusterBinding
 from krake.client.kubernetes import KubernetesApi
 
@@ -38,6 +38,8 @@ class UnsuitableDeploymentError(ControllerError):
     """Raised in case when there is not enough resources for spawning an application
         on any of the deployments.
     """
+
+    code = ReasonCode.NO_SUITABLE_RESOURCE
 
 
 class Scheduler(Controller):
