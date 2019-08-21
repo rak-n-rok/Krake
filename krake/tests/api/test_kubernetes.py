@@ -371,7 +371,7 @@ async def test_delete_already_deleting(aiohttp_client, config, db):
     resp = await client.delete(
         f"/kubernetes/namespaces/testing/applications/{deleting.metadata.name}"
     )
-    assert resp.status == 409
+    assert resp.status == 200
 
 
 async def test_watch_app(aiohttp_client, config, db, loop):
@@ -678,7 +678,7 @@ async def test_delete_cluster_with_apps(aiohttp_client, config, db):
     assert stored == received
 
 
-async def test_delete_cluster_already_deleted(aiohttp_client, config, db):
+async def test_delete_cluster_already_deleting(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     deleting = ClusterFactory(

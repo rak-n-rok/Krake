@@ -415,12 +415,9 @@ def _make_delete_handler(apiname, resource, operation, logger):
     @protected(api=apiname, resource=resource.plural.lower(), verb="delete")
     @load("entity", operation.response)
     async def delete(request, entity):
+        # Resource is already deleting
         if entity.metadata.deleted:
-            # TODO: Make request idempotent (return 200)
-            raise web.HTTPConflict(
-                text=json.dumps({"reason": "Resource already deleting"}),
-                content_type="application/json",
-            )
+            return web.json_response(entity.serialize())
 
         # No finalizers registered. Delete resource immediately
         # TODO: Let the garbage collector delete the resource (see #235)

@@ -37,6 +37,10 @@ class KubernetesApi:
     @protected(api="kubernetes", resource="clusters", verb="delete")
     @load("cluster", Cluster)
     async def delete_cluster(request, cluster):
+        # Cluster is already deleting
+        if cluster.metadata.deleted:
+            return web.json_response(cluster.serialize())
+
         apps = [
             app
             async for app, _ in session(request).all(
