@@ -1,6 +1,7 @@
 import asyncio
 from textwrap import dedent
 from aiohttp import web
+import pytz
 
 from krake.api.app import create_app
 from krake.data.core import resource_ref, ReasonCode
@@ -13,6 +14,7 @@ from krake.controller.kubernetes.application import (
 from krake.client import Client
 from krake.test_utils import server_endpoint
 
+from factories.fake import fake
 from factories.kubernetes import ApplicationFactory, ClusterFactory, make_kubeconfig
 
 
@@ -144,6 +146,7 @@ async def test_app_creation(aiohttp_server, config, db, loop):
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
     assert stored.status.state == ApplicationState.RUNNING
+    assert stored.metadata.finalizers[-1] == "cleanup"
 
 
 async def test_app_deletion(aiohttp_server, config, db, loop):
@@ -166,7 +169,8 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
 
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
     app = ApplicationFactory(
-        status__state=ApplicationState.DELETING,
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        status__state=ApplicationState.RUNNING,
         status__cluster=resource_ref(cluster),
         spec__manifest=nginx_manifest,
     )
@@ -182,7 +186,8 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
 
 async def test_app_deletion_without_binding(aiohttp_server, config, db, loop):
     app = ApplicationFactory(
-        status__state=ApplicationState.DELETING,
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        status__state=ApplicationState.RUNNING,
         status__cluster=None,
         spec__manifest=nginx_manifest,
     )
@@ -194,10 +199,11 @@ async def test_app_deletion_without_binding(aiohttp_server, config, db, loop):
         worker = ApplicationWorker(client=client)
         await worker.resource_received(app)
 
+    # Ensure the application is completly removed from database
     stored, _ = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.state == ApplicationState.DELETED
+    assert stored is None
 
 
 async def test_service_registration(aiohttp_server, config, db, loop):

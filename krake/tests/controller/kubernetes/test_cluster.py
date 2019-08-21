@@ -13,23 +13,33 @@ from factories.fake import fake
 from factories.kubernetes import ApplicationFactory, ClusterFactory
 
 
-async def test_cluster_reception(aiohttp_server, config, db, loop):
+async def test_cluster_reception(aiohttp_server, aiohttp_client, config, db, loop):
     """
     Verify that the ClusterController hands over the Cluster being deleted to the
     Workers.
     """
     creating = ClusterFactory(status__state=ClusterState.PENDING)
     running = ClusterFactory(status__state=ClusterState.RUNNING)
-    deleting = ClusterFactory(metadata__deleted=fake.date_time(tzinfo=pytz.utc))
+    app = ApplicationFactory(
+        status__state=ApplicationState.RUNNING, status__cluster=resource_ref(running)
+    )
+
+    await db.put(running)
+    await db.put(app)
 
     server = await aiohttp_server(create_app(config))
+    client = await aiohttp_client(server)
 
     class SimpleWorker(Worker):
         def __init__(self):
             self.done = loop.create_future()
 
         async def resource_received(self, cluster):
-            assert cluster == deleting
+            assert resource_ref(cluster) == resource_ref(running)
+
+            # The received cluster is no in "deleting"
+            assert cluster.metadata.deleted
+            assert cluster.metadata.finalizers[0] == "cascading_deletion"
 
             if not self.done.done():
                 self.done.set_result(None)
@@ -42,10 +52,16 @@ async def test_cluster_reception(aiohttp_server, config, db, loop):
         worker_count=1,
         loop=loop,
     ) as controller:
-
         await db.put(creating)
-        await db.put(running)
-        await db.put(deleting)
+
+        # Delete running cluster with depending applications via API. This
+        # creates an event on the controller which should be forwarded to the
+        # worker.
+        resp = await client.delete(
+            f"/kubernetes/namespaces/{running.metadata.namespace}"
+            f"/clusters/{running.metadata.name}?cascade"
+        )
+        resp.raise_for_status()
 
         await asyncio.wait(
             [controller, worker.done], timeout=0.5, return_when=asyncio.FIRST_COMPLETED
@@ -55,7 +71,7 @@ async def test_cluster_reception(aiohttp_server, config, db, loop):
 
 async def test_cluster_deletion(aiohttp_server, config, db, loop):
     cluster = ClusterFactory(
-        metadata__finalizers=["cleanup.clusters.kubernetes"],
+        metadata__finalizers=["cleanup"],
         metadata__deleted=fake.date_time(tzinfo=pytz.utc),
     )
     app = ApplicationFactory(

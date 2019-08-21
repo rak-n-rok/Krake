@@ -311,7 +311,6 @@ async def test_delete_app_with_finalizers(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     # Create application
-    client = await aiohttp_client(create_app(config=config))
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING, metadata__finalizers=["test-finializer"]
     )
@@ -328,6 +327,26 @@ async def test_delete_app_with_finalizers(aiohttp_client, config, db):
 
     stored, _ = await db.get(Application, namespace="testing", name=app.metadata.name)
     assert stored.metadata.deleted
+
+
+async def test_add_finializer_in_deleted_app(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    # Create application
+    app = ApplicationFactory(
+        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+    )
+    await db.put(app)
+
+    app.metadata.finalizers = ["a-different-finalizer"]
+    resp = await client.put(
+        f"/kubernetes/namespaces/{app.metadata.namespace}"
+        f"/applications/{app.metadata.name}",
+        json=app.serialize(subresources=set(), readonly=False),
+    )
+    assert resp.status == 422
+    body = await resp.json()
+    assert len(body["metadata"]["finalizers"]) == 1
 
 
 async def test_delete_app_rbac(rbac_allow, config, aiohttp_client):
@@ -644,14 +663,19 @@ async def test_delete_cluster_with_apps(aiohttp_client, config, db):
     )
     assert stored_app == running
 
-    # Force deletion
+    # Cascade deletion
     resp = await client.delete(
         f"/kubernetes/namespaces/testing/clusters/{cluster.metadata.name}?cascade"
     )
     assert resp.status == 200
 
-    cluster, _ = await db.get(Cluster, namespace="testing", name=cluster.metadata.name)
-    assert cluster.metadata.deleted is not None
+    body = await resp.json()
+    received = Cluster.deserialize(body)
+    assert received.metadata.deleted
+    assert received.metadata.finalizers[0] == "cascading_deletion"
+
+    stored, _ = await db.get(Cluster, namespace="testing", name=cluster.metadata.name)
+    assert stored == received
 
 
 async def test_delete_cluster_already_deleted(aiohttp_client, config, db):
@@ -677,4 +701,3 @@ async def test_delete_cluster_rbac(rbac_allow, config, aiohttp_client):
     async with rbac_allow("kubernetes", "clusters", "delete"):
         resp = await client.delete("/kubernetes/namespaces/testing/clusters/my-cluster")
         assert resp.status == 404
-

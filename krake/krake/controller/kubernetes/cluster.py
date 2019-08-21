@@ -20,6 +20,7 @@ Configuration is loaded from the ``controllers.kubernetes.cluster`` section:
 import asyncio
 import logging
 import pprint
+from copy import deepcopy
 from argparse import ArgumentParser
 from aiohttp import ClientResponseError
 
@@ -41,20 +42,26 @@ class ClusterController(Controller):
         """List and watching Kubernetes clusters."""
         kubernetes_api = KubernetesApi(self.client)
 
+        def marked_for_cleanup(cluster):
+            return (
+                cluster.metadata.deleted
+                and cluster.metadata.finalizers
+                and cluster.metadata.finalizers[-1] == "cascading_deletion"
+            )
+
         async def list_apps():
             logger.info("List cluster")
             cluster_list = await kubernetes_api.list_all_clusters()
-            for cluster in cluster_list.items:
+            for cluster in filter(marked_for_cleanup, cluster_list.items):
                 logger.debug("Received %r", cluster)
-                if cluster.metadata.deleted:
-                    await self.queue.put(cluster.metadata.uid, cluster)
+                await self.queue.put(cluster.metadata.uid, cluster)
 
         async def watch_apps(watcher):
             logger.info("Watching cluster")
             async for event in watcher:
                 cluster = event.object
                 logger.debug("Received %r", cluster)
-                if cluster.metadata.deleted:
+                if marked_for_cleanup(cluster):
                     await self.queue.put(cluster.metadata.uid, cluster)
 
         async with kubernetes_api.watch_all_clusters() as watcher:
@@ -73,10 +80,10 @@ async def wait_for_app_deletion(api, namespace, name):
 
 class ClusterWorker(Worker):
     async def resource_received(self, cluster):
-        # Delete all applications bound to the cluster before updating it
         kubernetes_api = KubernetesApi(self.client)
 
-        logger.debug("Starting deletion of %r", cluster)
+        # Delete all applications bound to the cluster before updating it
+        logger.debug("Starting cleanup of %r", cluster)
         cluster_ref = resource_ref(cluster)
 
         waiters = []
@@ -97,10 +104,16 @@ class ClusterWorker(Worker):
                     )
                 )
 
-        await asyncio.wait_for(asyncio.gather(*waiters), 60 * 5)
+        # Wait for all applications to be deleted within 5 mins
+        timeout = 60 * 5
+        await asyncio.wait_for(asyncio.gather(*waiters), timeout)
 
-        await kubernetes_api.delete_cluster(
-            namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        # Remove finalizer
+        copy = deepcopy(cluster)
+        copy.metadata.finalizers.pop()
+
+        await kubernetes_api.update_cluster(
+            namespace=cluster.metadata.namespace, name=cluster.metadata.name, body=copy
         )
 
 

@@ -360,17 +360,49 @@ def _make_update_handler(apiname, resource, operation, logger):
     @use_schema("body", make_request_schema(operation.body))
     @load("entity", operation.response)
     async def update(request, body, entity):
+        # Once a resource is in the "deletion in progress" state, finalizers
+        # can only be removed.
+        if entity.metadata.deleted:
+            if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
+                raise web.HTTPUnprocessableEntity(
+                    body=json.dumps(
+                        {
+                            "metadata": {
+                                "finalizers": [
+                                    "Finalizers can only be removed if "
+                                    "deletion is in progress."
+                                ]
+                            }
+                        }
+                    ),
+                    content_type="application/json",
+                )
+
         copy_fields(body, entity)
 
         entity.metadata.modified = datetime.now()
 
-        await session(request).put(entity)
-        logger.info(
-            "Update %s %r (%s)",
-            resource.singular,
-            entity.metadata.name,
-            entity.metadata.uid,
-        )
+        # Resource is in "deletion in progress" state and all finalizers have
+        # been removed. Delete the resource from database.
+        #
+        # TODO: The final deletion should be done in the garbage collector
+        #   instead of the API (see #235)
+        if entity.metadata.deleted and not entity.metadata.finalizers:
+            await session(request).delete(entity)
+            logger.info(
+                "Delete %s %r (%s)",
+                resource.singular,
+                entity.metadata.name,
+                entity.metadata.uid,
+            )
+        else:
+            await session(request).put(entity)
+            logger.info(
+                "Update %s %r (%s)",
+                resource.singular,
+                entity.metadata.name,
+                entity.metadata.uid,
+            )
 
         return web.json_response(entity.serialize())
 
@@ -395,7 +427,7 @@ def _make_delete_handler(apiname, resource, operation, logger):
         if not entity.metadata.finalizers:
             await session(request).delete(entity)
             logger.info(
-                "Deleted %s %r (%s)",
+                "Delete %s %r (%s)",
                 resource.singular,
                 entity.metadata.name,
                 entity.metadata.uid,

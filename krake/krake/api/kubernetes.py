@@ -68,6 +68,10 @@ class KubernetesApi:
 
         cluster.metadata.deleted = datetime.now()
 
+        # Append cascading finializer if not already present
+        if "cascading_deletion" not in cluster.metadata.finalizers:
+            cluster.metadata.finalizers.append("cascading_deletion")
+
         # TODO: Should be update modified here?
         # cluster.metadata.modified = datetime.now()
 

@@ -21,6 +21,7 @@ import asyncio
 import logging
 import pprint
 import re
+from copy import deepcopy
 import yaml
 import yarl
 from argparse import ArgumentParser
@@ -49,12 +50,14 @@ class InvalidResourceError(ControllerError):
     code = ReasonCode.INVALID_RESOURCE
 
 
+class InvalidStateError(ControllerError):
+    """Kubernetes application is in an invalid state"""
+
+
 class ApplicationController(Controller):
     """Controller responsible for :class:`krake.data.kubernetes.Application`
     resources in "SCHEDULED" and "DELETING" state.
     """
-
-    states = (ApplicationState.SCHEDULED, ApplicationState.DELETING)
 
     async def list_and_watch(self):
         """List and watching Kubernetes applications in the ``SCHEDULED``
@@ -62,20 +65,26 @@ class ApplicationController(Controller):
         """
         kubernetes_api = KubernetesApi(self.client)
 
+        def scheduled_or_deleting(app):
+            return app.status.state == ApplicationState.SCHEDULED or (
+                app.metadata.deleted
+                and app.metadata.finalizers
+                and app.metadata.finalizers[-1] == "cleanup"
+            )
+
         async def list_apps():
             logger.info("List application")
             app_list = await kubernetes_api.list_all_applications()
-            for app in app_list.items:
+            for app in filter(scheduled_or_deleting, app_list.items):
                 logger.debug("Received %r", app)
-                if app.status.state in self.states:
-                    await self.queue.put(app.metadata.uid, app)
+                await self.queue.put(app.metadata.uid, app)
 
         async def watch_apps(watcher):
             logger.info("Watching application")
             async for event in watcher:
                 app = event.object
-                logger.debug("Received %r", app)
-                if app.status.state in self.states:
+                if scheduled_or_deleting(app):
+                    logger.debug("Received %r", app)
                     await self.queue.put(app.metadata.uid, app)
 
         async with kubernetes_api.watch_all_applications() as watcher:
@@ -162,46 +171,83 @@ class ApplicationWorker(Worker):
     @on_error(ControllerError)
     async def resource_received(self, app):
         kubernetes_api = KubernetesApi(self.client)
+        copy = deepcopy(app)
 
+        if app.metadata.deleted:
+            await self._cleanup_application(copy, kubernetes_api)
+        else:
+            assert app.status.state == ApplicationState.SCHEDULED
+            await self._apply_manifest(copy, kubernetes_api)
+
+    async def _cleanup_application(self, app, kubernetes_api):
         # Delete Kubernetes resources if the application was bound to a
         # cluster.
         if app.status.cluster:
             cluster = await kubernetes_api.read_cluster(
                 namespace=app.status.cluster.namespace, name=app.status.cluster.name
             )
-
-            # Initialize empty services dictionary: The services dictionary is
-            # initialized with "None" in the Kubernetes data model indicating
-            # that the application was not yet processed by the controller.
-            # Here we reset the services dictionary to an empty dict to
-            # signify that the application has been at least once processed.
-            # Previously created Services, if any, are overwritten because
-            # they will be updated or deleted by the Worker anyway.
-            app.status.services = {}
-
             async with KubernetesClient(cluster.spec.kubeconfig) as kube:
                 for resource in yaml.safe_load_all(app.spec.manifest):
-                    if app.status.state == ApplicationState.SCHEDULED:
-                        resp = await kube.apply(resource)
-                        await listen.emit(
-                            Event(resource["kind"], "apply"),
-                            app=app,
-                            cluster=cluster,
-                            resp=resp,
-                        )
-                    else:
-                        resp = await kube.delete(resource)
-                        await listen.emit(
-                            Event(resource["kind"], "delete"),
-                            app=app,
-                            cluster=cluster,
-                            resp=resp,
-                        )
+                    resp = await kube.delete(resource)
+                    await listen.emit(
+                        Event(resource["kind"], "delete"),
+                        app=app,
+                        cluster=cluster,
+                        resp=resp,
+                    )
 
-        if app.status.state == ApplicationState.SCHEDULED:
-            app.status.state = ApplicationState.RUNNING
-        else:
-            app.status.state = ApplicationState.DELETED
+        await kubernetes_api.update_application(
+            namespace=app.metadata.namespace, name=app.metadata.name, body=app
+        )
+
+    async def _apply_manifest(self, app, kubernetes_api):
+        if not app.status.cluster:
+            raise InvalidStateError(
+                "Application is scheduled but no cluster is assigned"
+            )
+
+        # Initialize empty services dictionary: The services dictionary is
+        # initialized with "None" in the Kubernetes data model indicating
+        # that the application was not yet processed by the controller.
+        # Here we reset the services dictionary to an empty dict to
+        # signify that the application has been at least once processed.
+        # Previously created Services, if any, are overwritten because
+        # they will be updated or deleted by the Worker anyway.
+        app.status.services = {}
+
+        cluster = await kubernetes_api.read_cluster(
+            namespace=app.status.cluster.namespace, name=app.status.cluster.name
+        )
+        async with KubernetesClient(cluster.spec.kubeconfig) as kube:
+            for resource in yaml.safe_load_all(app.spec.manifest):
+                if app.status.state == ApplicationState.SCHEDULED:
+                    resp = await kube.apply(resource)
+                    await listen.emit(
+                        Event(resource["kind"], "apply"),
+                        app=app,
+                        cluster=cluster,
+                        resp=resp,
+                    )
+                else:
+                    resp = await kube.delete(resource)
+                    await listen.emit(
+                        Event(resource["kind"], "delete"),
+                        app=app,
+                        cluster=cluster,
+                        resp=resp,
+                    )
+
+        # Append "cleanup" finalizer of not already present. This will prevent
+        # the API from deleting the resource without remove the Kubernetes
+        # resources.
+        if "cleanup" not in app.metadata.finalizers:
+            app.metadata.finalizers.append("cleanup")
+            await kubernetes_api.update_application(
+                namespace=app.metadata.namespace, name=app.metadata.name, body=app
+            )
+
+        # Transition into running state
+        app.status.state = ApplicationState.RUNNING
 
         await kubernetes_api.update_application_status(
             namespace=app.metadata.namespace, name=app.metadata.name, body=app
