@@ -14,7 +14,7 @@ Authentication
 
 Authentication is performed for every request. The
 :func:`krake.api.middlewares.authentication` middleware factory is used for
-this purpose. The concret authentication implementation will be derived from
+this purpose. The concrete authentication implementation will be derived from
 the configuration.
 
 .. code:: yaml
@@ -49,7 +49,7 @@ Currently, there are two authentication implementations available:
 Authorization
 -------------
 
-Authorization is established with the help of the :func:`protected` decoratpr
+Authorization is established with the help of the :func:`protected` decorator
 function. The decorator annotates a given aiohttp request handler with the
 required authorization information (see :class:`AuthorizationRequest`).
 
@@ -62,7 +62,7 @@ An authorizer is a simple asynchronous function:
     :raises aiohttp.web.HTTPForbidden: If the authenticated user does not have
         the permission to access the resource
 
-The concret authentication implementation will be derived from the
+The concrete authentication implementation will be derived from the
 configuration and is stored under the ``authorizer`` key of the application.
 
 .. code:: yaml
@@ -229,7 +229,7 @@ async def always_deny(request, auth_request):
 async def rbac(request, auth_request):
     """Role-based access control authorizer.
 
-    The roles of a user are loaded from the database. It is checked any role
+    The roles of a user are loaded from the database. It checks if any role
     allows the verb on the resource in the namespace. Roles are only
     permissive. There are no denial rules.
 
@@ -239,7 +239,7 @@ async def rbac(request, auth_request):
             the incoming HTTP request.
 
     Returns:
-        krake.data.syste.Role: The role allowing access.
+        krake.data.core.Role: The role allowing access.
 
     Raises:
         aiohttp.web.HTTPForbidden: If no role allows access.
@@ -288,7 +288,7 @@ def protected(api, resource, verb, namespaced=True):
     The returned decorator can be used to wrap a given aiohttp handler and
     call the current authorizer of the application (loaded from the
     ``authorizer`` key of the application). If the authorizer does not raise
-    any exception the request is authroized and the wrapped request handler is
+    any exception the request is authorized and the wrapped request handler is
     called.
 
     Example:
@@ -302,7 +302,7 @@ def protected(api, resource, verb, namespaced=True):
                 assert "user" in request
 
     Args:
-        api (str): Name if the API group
+        api (str): Name of the API group
         resource (str): Name of the resource
         verb (str, krake.data.core.Verb): Verb that should be performed
         namespaced (bool, optional): True if the resource is namespaced.

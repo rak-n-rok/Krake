@@ -251,7 +251,7 @@ class Worker(object):
         """
         raise NotImplementedError()
 
-    async def error_occured(self, resource, reason):
+    async def error_occurred(self, resource, reason):
         """Asynchronous callback executed whenever an error occurs during
         :meth:`resource_received`.
 
@@ -288,7 +288,7 @@ async def consume(queue, worker):
             raise
         except Exception as err:
             logger.exception(err)
-            await worker.error_occured(item, reason="Internal error")
+            await worker.error_occurred(item, reason="Internal error")
         finally:
             # Mark key as done allowing workers to consume the resource
             # again.
@@ -297,12 +297,7 @@ async def consume(queue, worker):
 
 def run(controller):
     """Simple blocking function running the infinite watch loop of a
-    controller. It is equivalent to:
-
-    .. code:: python
-
-        async with controller:
-            await controller
+    controller.
 
     Args:
         controller (Controller): Controller instances that should be executed

@@ -340,7 +340,7 @@ def camel_to_snake_case(name):
         name (str): Camel case name
 
     Returns:
-        str: Name in stake case
+        str: Name in snake case
 
     """
     cunder = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)

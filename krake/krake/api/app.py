@@ -164,7 +164,7 @@ def load_default_role_binding(binding):
           roles: ["system:admin"]
 
     Args:
-        role (dict): Configuration dictionary for a single role binding
+        binding (dict): Configuration dictionary for a single role binding
 
     Returns:
         krake.data.core.RoleBinding: Role binding created from configuration
