@@ -23,21 +23,28 @@ def generate_client(apidef):
     The methods will generated for every resource in the API definition and
     will be named according to the following schema:
 
-    +-----------+-------------------------------+
-    | Operation | Method                        |
-    +===========+===============================+
-    | Create    | create_{snake cased singular} |
-    +-----------+-------------------------------+
-    | List      | list_{snake cased plural}     |
-    +-----------+-------------------------------+
-    | ListAll   | list_all_{snake cased plural} |
-    +-----------+-------------------------------+
-    | Read      | read_{snake cased singular}   |
-    +-----------+-------------------------------+
-    | Update    | update_{snake cased singular} |
-    +-----------+-------------------------------+
-    | Delete    | delete_{snake cased singular} |
-    +-----------+-------------------------------+
+    ``{operation.name}_{resource.singular | resource.plural based on operation.number}``
+
+    All names are converted into *snake_case*.
+
+    The following table shows some examples for the ``Book`` API example (see
+    :mod:`krake.apidefs.definitions``).
+
+    +-----------+----------------+
+    | Operation | Method         |
+    +===========+================+
+    | Create    | create_book    |
+    +-----------+----------------+
+    | List      | list_books     |
+    +-----------+----------------+
+    | ListAll   | list_all_books |
+    +-----------+----------------+
+    | Read      | read_book      |
+    +-----------+----------------+
+    | Update    | update_book    |
+    +-----------+----------------+
+    | Delete    | delete_book    |
+    +-----------+----------------+
 
     Examples:
         .. code:: python
@@ -74,8 +81,8 @@ def generate_client(apidef):
         for resource in apidef.resources:
             create_resource_handlers(resource, cls)
 
-            for subresource in resource.subresources.values():
-                create_subresource_handlers(resource, subresource, cls)
+            for subresource in resource.subresources:
+                create_subresource_handlers(subresource, cls)
 
         if cls.__init__ == object.__init__:
             cls.__init__ = init_client
@@ -119,162 +126,177 @@ def create_resource_handlers(resource, cls):
         attrs (dict): Attributes of the generated class
 
     """
-    if hasattr(resource, "Create"):
-        name = f"create_{camel_to_snake_case(resource.singular)}"
-        if not hasattr(cls, name):
-            doc = make_docstring(
-                resource, resource.Create, f"Create specified {resource.singular}"
-            )
-            handler = make_create_handler(resource, resource.Create, doc)
-            setattr(cls, name, handler)
+    for operation in resource.operations:
+        if operation.name == "Create":
+            name = f"create_{camel_to_snake_case(resource.singular)}"
+            if not hasattr(cls, name):
+                doc = make_docstring(operation, f"Create specified {resource.singular}")
+                handler = make_create_handler(operation, doc)
+                setattr(cls, name, handler)
 
-    if hasattr(resource, "List"):
-        name = f"list_{camel_to_snake_case(resource.plural)}"
-        if not hasattr(cls, name):
-            if resource.scope == Scope.NAMESPACED:
-                description = f"List {resource.plural} in the namespace"
+        elif operation.name == "List":
+            name = f"list_{camel_to_snake_case(resource.plural)}"
+            if not hasattr(cls, name):
+                if resource.scope == Scope.NAMESPACED:
+                    description = f"List {resource.plural} in the namespace"
+                else:
+                    description = f"List all {resource.plural}"
+                doc = make_docstring(operation, description)
+                handler = make_list_handler(operation, doc)
+                setattr(cls, name, handler)
+
+            name = f"watch_{camel_to_snake_case(resource.plural)}"
+            if not hasattr(cls, name):
+                if resource.scope == Scope.NAMESPACED:
+                    description = f"Watch {resource.plural} in the namespace"
+                else:
+                    description = f"Watch all {resource.plural}"
+                doc = make_docstring(operation, description)
+                handler = make_watch_handler(operation, doc)
+                setattr(cls, name, handler)
+
+        elif operation.name == "ListAll":
+            name = f"list_all_{camel_to_snake_case(resource.plural)}"
+            if not hasattr(cls, name):
+                doc = make_docstring(
+                    operation, f"List {resource.plural} in all namespaces"
+                )
+                handler = make_list_all_handler(operation, doc)
+                setattr(cls, name, handler)
+
+            name = f"watch_all_{camel_to_snake_case(resource.plural)}"
+            if not hasattr(cls, name):
+                doc = make_docstring(
+                    operation, f"Watch {resource.plural} in all namespaces"
+                )
+                handler = make_watch_all_handler(operation, doc)
+                setattr(cls, name, handler)
+
+        elif operation.name == "Read":
+            name = f"read_{camel_to_snake_case(resource.singular)}"
+            if not hasattr(cls, name):
+                doc = make_docstring(operation, f"Read specified {resource.singular}")
+                handler = make_read_handler(operation, doc)
+                setattr(cls, name, handler)
+
+        elif operation.name == "Update":
+            name = f"update_{camel_to_snake_case(resource.singular)}"
+            if not hasattr(cls, name):
+                doc = make_docstring(operation, f"Update specified {resource.singular}")
+                handler = make_update_handler(operation, doc)
+                setattr(cls, name, handler)
+
+        elif operation.name == "Delete":
+            name = f"delete_{camel_to_snake_case(resource.singular)}"
+            if not hasattr(cls, name):
+                doc = make_docstring(operation, f"Delete specified {resource.singular}")
+                handler = make_delete_handler(operation, doc)
+                setattr(cls, name, handler)
+
+        else:
+            if operation.number == "singular":
+                resource_name = camel_to_snake_case(resource.singular)
             else:
-                description = f"List all {resource.plural}"
-            doc = make_docstring(resource, resource.List, description)
-            handler = make_list_handler(resource, resource.List, doc)
-            setattr(cls, name, handler)
+                resource_name = camel_to_snake_case(resource.plural)
+            opname = camel_to_snake_case(operation.name)
+            name = f"{opname}_{resource_name}"
 
-        name = f"watch_{camel_to_snake_case(resource.plural)}"
-        if not hasattr(cls, name):
-            if resource.scope == Scope.NAMESPACED:
-                description = f"Watch {resource.plural} in the namespace"
-            else:
-                description = f"Watch all {resource.plural}"
-            doc = make_docstring(resource, resource.List, description)
-            handler = make_watch_handler(resource, resource.List, doc)
-            setattr(cls, name, handler)
+            if not hasattr(cls, name):
+                raise NotImplementedError(
+                    f"Generator for operation {operation!r} not implemented"
+                )
 
-    if hasattr(resource, "ListAll"):
-        name = f"list_all_{camel_to_snake_case(resource.plural)}"
-        if not hasattr(cls, name):
-            doc = make_docstring(
-                resource, resource.List, f"List {resource.plural} in all namespaces"
+
+def create_subresource_handlers(subresource, cls):
+    resource = subresource.resource
+
+    for operation in subresource.operations:
+        if operation.name == "Create":
+            name = (
+                f"create_{camel_to_snake_case(resource.singular)}"
+                f"_{camel_to_snake_case(subresource.name)}"
             )
-            handler = make_list_all_handler(resource, resource.ListAll, doc)
-            setattr(cls, name, handler)
+            if not hasattr(cls, name):
+                doc = make_docstring(
+                    operation,
+                    f"Create {subresource.name} of specified {resource.singular}",
+                )
+                handler = make_create_handler(operation, doc)
+                setattr(cls, name, handler)
 
-        name = f"watch_all_{camel_to_snake_case(resource.plural)}"
-        if not hasattr(cls, name):
-            doc = make_docstring(
-                resource, resource.List, f"Watch {resource.plural} in all namespaces"
+        elif operation.name == "List":
+            name = (
+                f"list_{camel_to_snake_case(resource.plural)}"
+                f"_{camel_to_snake_case(subresource.name)}"
             )
-            handler = make_watch_all_handler(resource, resource.ListAll, doc)
-            setattr(cls, name, handler)
+            if not hasattr(cls, name):
+                doc = make_docstring(
+                    operation,
+                    f"List {subresource.name} of specified {resource.singular}",
+                )
+                handler = make_list_handler(operation, doc)
+                setattr(cls, name, handler)
 
-    if hasattr(resource, "Read"):
-        name = f"read_{camel_to_snake_case(resource.singular)}"
-        if not hasattr(cls, name):
-            doc = make_docstring(
-                resource, resource.List, f"Read specified {resource.singular}"
+            name = (
+                f"watch_{camel_to_snake_case(resource.plural)}"
+                f"_{camel_to_snake_case(subresource.name)}"
             )
-            handler = make_read_handler(resource, resource.Read, doc)
-            setattr(cls, name, handler)
+            if not hasattr(cls, name):
+                handler = make_watch_handler(operation, doc)
+                setattr(cls, name, handler)
 
-    if hasattr(resource, "Update"):
-        name = f"update_{camel_to_snake_case(resource.singular)}"
-        if not hasattr(cls, name):
-            doc = make_docstring(
-                resource, resource.Update, f"Update specified {resource.singular}"
+        elif operation.name == "Read":
+            name = (
+                f"read_{camel_to_snake_case(resource.singular)}"
+                f"_{camel_to_snake_case(subresource.name)}"
             )
-            handler = make_update_handler(resource, resource.Update, doc)
-            setattr(cls, name, handler)
+            if not hasattr(cls, name):
+                doc = make_docstring(
+                    operation,
+                    f"Read {subresource.name} of specified {resource.singular}",
+                )
+                handler = make_read_handler(operation, doc)
+                setattr(cls, name, handler)
 
-    if hasattr(resource, "Delete"):
-        name = f"delete_{camel_to_snake_case(resource.singular)}"
-        if not hasattr(cls, name):
-            doc = make_docstring(
-                resource, resource.List, f"Delete specified {resource.singular}"
+        elif operation.name == "Update":
+            name = (
+                f"update_{camel_to_snake_case(resource.singular)}"
+                f"_{camel_to_snake_case(subresource.name)}"
             )
-            handler = make_delete_handler(resource, resource.Delete, doc)
-            setattr(cls, name, handler)
+            if not hasattr(cls, name):
+                doc = make_docstring(
+                    operation,
+                    f"Update {subresource.name} of specified {resource.singular}",
+                )
+                handler = make_update_handler(operation, doc)
+                setattr(cls, name, handler)
 
-
-def create_subresource_handlers(resource, subresource, cls):
-    if hasattr(subresource, "Create"):
-        name = (
-            f"create_{camel_to_snake_case(resource.singular)}"
-            f"_{camel_to_snake_case(subresource.__name__)}"
-        )
-        if not hasattr(cls, name):
-            doc = make_docstring(
-                resource,
-                resource.List,
-                f"Create {subresource.__name__} of specified {resource.singular}",
+        elif operation.name == "Delete":
+            name = (
+                f"delete_{camel_to_snake_case(resource.singular)}"
+                f"_{camel_to_snake_case(subresource.name)}"
             )
-            handler = make_create_handler(subresource, subresource.Create, doc)
-            setattr(cls, name, handler)
+            if not hasattr(cls, name):
+                doc = make_docstring(
+                    operation,
+                    f"Delete {subresource.name} of specified {resource.singular}",
+                )
+                handler = make_delete_handler(operation, doc)
+                setattr(cls, name, handler)
 
-    if hasattr(subresource, "List"):
-        name = (
-            f"list_{camel_to_snake_case(resource.plural)}"
-            f"_{camel_to_snake_case(subresource.__name__)}"
-        )
-        if not hasattr(cls, name):
-            doc = make_docstring(
-                resource,
-                resource.List,
-                f"List {subresource.__name__} of specified {resource.singular}",
-            )
-            handler = make_list_handler(subresource, subresource.List, doc)
-            setattr(cls, name, handler)
+        else:
+            subname = camel_to_snake_case(operation.subresource.name)
+            resource_name = camel_to_snake_case(resource.singular)
+            opname = camel_to_snake_case(operation.name)
+            name = f"{opname}_{resource_name}_{subname}"
 
-        name = (
-            f"watch_{camel_to_snake_case(resource.plural)}"
-            f"_{camel_to_snake_case(subresource.__name__)}"
-        )
-        if not hasattr(cls, name):
-            handler = make_watch_handler(subresource, subresource.List, doc)
-            setattr(cls, name, handler)
-
-    if hasattr(subresource, "Read"):
-        name = (
-            f"read_{camel_to_snake_case(resource.singular)}"
-            f"_{camel_to_snake_case(subresource.__name__)}"
-        )
-        if not hasattr(cls, name):
-            doc = make_docstring(
-                resource,
-                resource.List,
-                f"Read {subresource.__name__} of specified {resource.singular}",
-            )
-            handler = make_read_handler(subresource, subresource.Read, doc)
-            setattr(cls, name, handler)
-
-    if hasattr(subresource, "Update"):
-        name = (
-            f"update_{camel_to_snake_case(resource.singular)}"
-            f"_{camel_to_snake_case(subresource.__name__)}"
-        )
-        if not hasattr(cls, name):
-            doc = make_docstring(
-                resource,
-                resource.List,
-                f"Update {subresource.__name__} of specified {resource.singular}",
-            )
-            handler = make_update_handler(subresource, subresource.Update, doc)
-            setattr(cls, name, handler)
-
-    if hasattr(subresource, "Delete"):
-        name = (
-            f"delete_{camel_to_snake_case(resource.singular)}"
-            f"_{camel_to_snake_case(subresource.__name__)}"
-        )
-        if not hasattr(cls, name):
-            doc = make_docstring(
-                resource,
-                resource.List,
-                f"Delete {subresource.__name__} of specified {resource.singular}",
-            )
-            handler = make_delete_handler(subresource, subresource.Delete, doc)
-            setattr(cls, name, handler)
+            if not hasattr(cls, name):
+                raise NotImplementedError(
+                    f"Generator for operation {operation!r} not implemented"
+                )
 
 
-def make_signature(resource, operation):
+def make_signature(operation):
     parameters = [Parameter("self", kind=Parameter.POSITIONAL_OR_KEYWORD)]
 
     for _, name, _, _ in Formatter().parse(operation.path):
@@ -287,12 +309,13 @@ def make_signature(resource, operation):
     return Signature(parameters)
 
 
-def make_docstring(resource, operation, description):
+def make_docstring(operation, description):
     pathargs = []
+    singular = operation.resource.singular
 
     for _, name, _, _ in Formatter().parse(operation.path):
         if name is not None:
-            pathargs.append(f"{name} (str): {name.title()} of the {resource.singular}")
+            pathargs.append(f"{name} (str): {name.title()} of the {singular}")
 
     pathargs = "\n    ".join(pathargs)
 
@@ -322,8 +345,8 @@ def make_docstring(resource, operation, description):
 """
 
 
-def make_create_handler(resource, operation, doc):
-    signature = make_signature(resource, operation)
+def make_create_handler(operation, doc):
+    signature = make_signature(operation)
 
     @with_signature(signature, doc=doc)
     async def create_resource(self, body, **kwargs):
@@ -341,8 +364,8 @@ def make_create_handler(resource, operation, doc):
     return create_resource
 
 
-def make_list_handler(resource, operation, doc):
-    signature = make_signature(resource, operation)
+def make_list_handler(operation, doc):
+    signature = make_signature(operation)
 
     @with_signature(signature, doc=doc)
     async def list_resources(self, **kwargs):
@@ -356,11 +379,11 @@ def make_list_handler(resource, operation, doc):
     return list_resources
 
 
-def make_watch_handler(resource, operation, doc):
+def make_watch_handler(operation, doc):
     # Infer the type of the watch event objects from the type of the list
     # of items.
     model, = get_field(operation.response, "items").type.__args__
-    signature = make_signature(resource, operation)
+    signature = make_signature(operation)
 
     @with_signature(signature, doc=doc)
     def watch_resources(self, **kwargs):
@@ -372,8 +395,8 @@ def make_watch_handler(resource, operation, doc):
     return watch_resources
 
 
-def make_list_all_handler(resource, operation, doc):
-    signature = make_signature(resource, operation)
+def make_list_all_handler(operation, doc):
+    signature = make_signature(operation)
 
     @with_signature(signature, doc=doc)
     async def list_all_resources(self, **kwargs):
@@ -387,11 +410,11 @@ def make_list_all_handler(resource, operation, doc):
     return list_all_resources
 
 
-def make_watch_all_handler(resource, operation, doc):
+def make_watch_all_handler(operation, doc):
     # Infer the type of the watch event objects from the type of the list
     # of items.
     model, = get_field(operation.response, "items").type.__args__
-    signature = make_signature(resource, operation)
+    signature = make_signature(operation)
 
     @with_signature(signature, doc=doc)
     def watch_all_resources(self, **kwargs):
@@ -403,8 +426,8 @@ def make_watch_all_handler(resource, operation, doc):
     return watch_all_resources
 
 
-def make_read_handler(resource, operation, doc):
-    signature = make_signature(resource, operation)
+def make_read_handler(operation, doc):
+    signature = make_signature(operation)
 
     @with_signature(signature, doc=doc)
     async def read_resources(self, **kwargs):
@@ -418,8 +441,8 @@ def make_read_handler(resource, operation, doc):
     return read_resources
 
 
-def make_update_handler(resource, operation, doc):
-    signature = make_signature(resource, operation)
+def make_update_handler(operation, doc):
+    signature = make_signature(operation)
 
     @with_signature(signature, doc=doc)
     async def update_resource(self, body, **kwargs):
@@ -437,8 +460,8 @@ def make_update_handler(resource, operation, doc):
     return update_resource
 
 
-def make_delete_handler(resource, operation, doc):
-    signature = make_signature(resource, operation)
+def make_delete_handler(operation, doc):
+    signature = make_signature(operation)
 
     @with_signature(signature, doc=doc)
     async def delete_resources(self, **kwargs):

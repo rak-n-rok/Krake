@@ -7,66 +7,73 @@ from krake.data.kubernetes import (
     ClusterList,
     ClusterBinding,
 )
-from .definitions import ApiDef, Resource, Subresource, Operation, Scope
+from .definitions import ApiDef, Scope, operation, subresource
 
 
 kubernetes = ApiDef("kubernetes")
 
 
 @kubernetes.resource
-class ApplicationResource(Resource):
+class ApplicationResource:
     singular = "Application"
     plural = "Applications"
     scope = Scope.NAMESPACED
 
-    class Create(Operation):
+    @operation
+    class Create:
         method = "POST"
         path = "/kubernetes/namespaces/{namespace}/applications"
         query = {"pretty": fields.Boolean(missing=False)}
         body = Application
         response = Application
 
-    class Read(Operation):
+    @operation
+    class Read:
         method = "GET"
         path = "/kubernetes/namespaces/{namespace}/applications/{name}"
         response = Application
 
-    class List(Operation):
+    @operation
+    class List:
+        number = "plural"
         method = "GET"
         query = {"watch": fields.Boolean(missing=False)}
         path = "/kubernetes/namespaces/{namespace}/applications"
         response = ApplicationList
 
-    class ListAll(Operation):
+    @operation
+    class ListAll:
+        number = "plural"
         method = "GET"
         path = "/kubernetes/applications"
         response = ApplicationList
 
-    class Update(Operation):
+    @operation
+    class Update:
         method = "PUT"
         path = "/kubernetes/namespaces/{namespace}/applications/{name}"
         body = Application
         response = Application
 
-    class Delete(Operation):
+    @operation
+    class Delete:
         method = "DELETE"
         path = "/kubernetes/namespaces/{namespace}/applications/{name}"
         response = Application
 
-    class Status(Subresource):
-        class Read(Operation):
-            method = "GET"
-            path = "/kubernetes/namespaces/{namespace}/applications/{name}/status"
-            response = Application
-
-        class Update(Operation):
+    @subresource
+    class Status:
+        @operation
+        class Update:
             method = "PUT"
             path = "/kubernetes/namespaces/{namespace}/applications/{name}/status"
             body = Application
             response = Application
 
-    class Binding(Subresource):
-        class Update(Operation):
+    @subresource
+    class Binding:
+        @operation
+        class Update:
             method = "PUT"
             path = "/kubernetes/namespaces/{namespace}/applications/{name}/binding"
             body = ClusterBinding
@@ -74,50 +81,55 @@ class ApplicationResource(Resource):
 
 
 @kubernetes.resource
-class ClusterResource(Resource):
+class ClusterResource:
     singular = "Cluster"
     plural = "Clusters"
     scope = Scope.NAMESPACED
 
-    class Create(Operation):
+    @operation
+    class Create:
         method = "POST"
         path = "/kubernetes/namespaces/{namespace}/clusters"
         body = Cluster
         response = Cluster
 
-    class List(Operation):
+    @operation
+    class List:
+        number = "plural"
         method = "GET"
         path = "/kubernetes/namespaces/{namespace}/clusters"
         response = ClusterList
 
-    class ListAll(Operation):
+    @operation
+    class ListAll:
+        number = "plural"
         method = "GET"
         path = "/kubernetes/clusters"
         response = ClusterList
 
-    class Read(Operation):
+    @operation
+    class Read:
         method = "GET"
         path = "/kubernetes/namespaces/{namespace}/clusters/{name}"
         response = Cluster
 
-    class Update(Operation):
+    @operation
+    class Update:
         method = "PUT"
         path = "/kubernetes/namespaces/{namespace}/clusters/{name}"
         body = Cluster
         response = Cluster
 
-    class Delete(Operation):
+    @operation
+    class Delete:
         method = "DELETE"
         path = "/kubernetes/namespaces/{namespace}/clusters/{name}"
         response = Cluster
 
-    class Status(Subresource):
-        class Read(Operation):
-            method = "GET"
-            path = "/kubernetes/namespaces/{namespace}/clusters/{name}/status"
-            response = Cluster
-
-        class Update(Operation):
+    @subresource
+    class Status:
+        @operation
+        class Update:
             method = "PUT"
             path = "/kubernetes/namespaces/{namespace}/clusters/{name}/status"
             body = Cluster

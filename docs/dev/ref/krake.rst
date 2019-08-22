@@ -59,6 +59,19 @@ API Generator
     :undoc-members:
     :show-inheritance:
 
+API Definitions
+---------------
+
+.. automodule:: krake.apidefs
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+.. automodule:: krake.apidefs.definitions
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 Client
 ------
 

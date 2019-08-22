@@ -4,6 +4,7 @@ for a given API definition (see :mod:`krake.apidefs`).
 import logging
 import dataclasses
 import json
+from functools import partial
 from datetime import datetime
 from uuid import uuid4
 from aiohttp import web
@@ -91,14 +92,10 @@ def generate_api(apidef):
             cls.routes = web.RouteTableDef()
 
         for resource in apidef.resources:
-            _create_resource_handlers(
-                cls, apidef.name, resource, cls.routes, cls.logger
-            )
+            _create_resource_handlers(cls, resource, cls.routes, cls.logger)
 
-            for subresource in resource.subresources.values():
-                _create_subresource_handlers(
-                    cls, apidef.name, resource, subresource, cls.routes, cls.logger
-                )
+            for subresource in resource.subresources:
+                _create_subresource_handlers(cls, subresource, cls.routes, cls.logger)
 
         return cls
 
@@ -162,80 +159,77 @@ def copy_fields(source, destination):
                 setattr(destination, field.name, value)
 
 
-def _create_resource_handlers(cls, apiname, resource, routes, logger):
-    if hasattr(resource, "Create"):
-        name = f"create_{camel_to_snake_case(resource.singular)}"
-        if not hasattr(cls, name):
-            handler = _make_create_handler(apiname, resource, resource.Create, logger)
-            setattr(cls, name, handler)
+def _generate_operation_func_name(operation):
+    # Generate resource name based on the grammatical number
+    if operation.number == "singular":
+        resource_name = camel_to_snake_case(operation.resource.singular)
+    else:
+        resource_name = camel_to_snake_case(operation.resource.plural)
 
-        routes.route(resource.Create.method, resource.Create.path)(getattr(cls, name))
+    opname = camel_to_snake_case(operation.name)
 
-    if hasattr(resource, "List"):
-        name = f"list_{camel_to_snake_case(resource.plural)}"
-        if not hasattr(cls, name):
-            handler = _make_list_handler(apiname, resource, resource.List, logger)
-            setattr(cls, name, handler)
-
-        routes.route(resource.List.method, resource.List.path)(getattr(cls, name))
-
-    if hasattr(resource, "ListAll"):
-        name = f"list_all_{camel_to_snake_case(resource.plural)}"
-        if not hasattr(cls, name):
-            handler = _make_list_handler(
-                apiname, resource, resource.ListAll, logger, all=True
-            )
-            setattr(cls, name, handler)
-
-        routes.route(resource.ListAll.method, resource.ListAll.path)(getattr(cls, name))
-
-    if hasattr(resource, "Read"):
-        name = f"read_{camel_to_snake_case(resource.singular)}"
-        if not hasattr(cls, name):
-            handler = _make_read_handler(apiname, resource, resource.Read, logger)
-            setattr(cls, name, handler)
-
-        routes.route(resource.Read.method, resource.Read.path)(getattr(cls, name))
-
-    if hasattr(resource, "Update"):
-        name = f"update_{camel_to_snake_case(resource.singular)}"
-        if not hasattr(cls, name):
-            handler = _make_update_handler(apiname, resource, resource.Update, logger)
-            setattr(cls, name, handler)
-
-        routes.route(resource.Update.method, resource.Update.path)(getattr(cls, name))
-
-    if hasattr(resource, "Delete"):
-        name = f"delete_{camel_to_snake_case(resource.singular)}"
-        if not hasattr(cls, name):
-            handler = _make_delete_handler(apiname, resource, resource.Delete, logger)
-            setattr(cls, name, handler)
-
-        routes.route(resource.Delete.method, resource.Delete.path)(getattr(cls, name))
+    if operation.subresource:
+        subname = camel_to_snake_case(operation.subresource.name)
+        return f"{opname}_{resource_name}_{subname}"
+    else:
+        return f"{opname}_{resource_name}"
 
 
-def _create_subresource_handlers(cls, apiname, resource, subresource, routes, logger):
-    if hasattr(subresource, "Update"):
-        name = (
-            f"update_{camel_to_snake_case(resource.singular)}"
-            f"_{camel_to_snake_case(subresource.__name__)}"
-        )
-        if not hasattr(cls, name):
-            handler = _make_update_subresource_handler(
-                apiname, resource, subresource, subresource.Update, logger
-            )
-            setattr(cls, name, handler)
+def _create_resource_handlers(cls, resource, routes, logger):
+    makers = {
+        "Create": _make_create_handler,
+        "List": _make_list_handler,
+        "ListAll": partial(_make_list_handler, all=True),
+        "Read": _make_read_handler,
+        "Update": _make_update_handler,
+        "Delete": _make_delete_handler,
+    }
 
-        routes.route(subresource.Update.method, subresource.Update.path)(
-            getattr(cls, name)
-        )
+    for operation in resource.operations:
+        func_name = _generate_operation_func_name(operation)
+
+        handler = getattr(cls, func_name, None)
+        if not handler:
+            try:
+                maker = makers[operation.name]
+            except KeyError:
+                raise NotImplementedError(
+                    f"Generator for operation {operation.name!r} not implemented"
+                )
+            handler = maker(operation, logger)
+            setattr(cls, func_name, handler)
+
+        routes.route(operation.method, operation.path)(handler)
 
 
-def _make_list_handler(apiname, resource, operation, logger, all=False):
+def _create_subresource_handlers(cls, subresource, routes, logger):
+    makers = {"Update": _make_update_subresource_handler}
+
+    for operation in subresource.operations:
+        func_name = _generate_operation_func_name(operation)
+        handler = getattr(cls, func_name, None)
+        if not handler:
+            try:
+                maker = makers[operation.name]
+            except KeyError:
+                raise NotImplementedError(
+                    f"Generator for subresource {operation.name!r} not implemented"
+                )
+            handler = maker(operation, logger)
+            setattr(cls, func_name, handler)
+
+        routes.route(operation.method, operation.path)(handler)
+
+
+def _make_list_handler(operation, logger, all=False):
     # FIXME: Ugly assumptions ahead!
     entity_class, = get_field(operation.response, "items").type.__args__
 
-    @protected(api=apiname, resource=resource.plural.lower(), verb="list")
+    @protected(
+        api=operation.resource.api,
+        resource=operation.resource.plural.lower(),
+        verb="list",
+    )
     @use_kwargs({"heartbeat": fields.Integer(missing=None, locations=["query"])})
     async def list_or_watch(request, heartbeat):
         if not all:
@@ -289,10 +283,14 @@ def _make_list_handler(apiname, resource, operation, logger, all=False):
     return list_or_watch
 
 
-def _make_read_handler(apiname, resource, operation, logger):
+def _make_read_handler(operation, logger):
     assert hasattr(operation.response, "__etcd_key__")
 
-    @protected(api=apiname, resource=resource.plural.lower(), verb="get")
+    @protected(
+        api=operation.resource.api,
+        resource=operation.resource.plural.lower(),
+        verb="get",
+    )
     @load("entity", operation.response)
     async def read(request, entity):
         return web.json_response(entity.serialize())
@@ -300,10 +298,14 @@ def _make_read_handler(apiname, resource, operation, logger):
     return read
 
 
-def _make_create_handler(apiname, resource, operation, logger):
+def _make_create_handler(operation, logger):
     assert hasattr(operation.body, "__etcd_key__")
 
-    @protected(api=apiname, resource=resource.plural.lower(), verb="create")
+    @protected(
+        api=operation.resource.api,
+        resource=operation.resource.plural.lower(),
+        verb="create",
+    )
     @use_schema("body", make_request_schema(operation.body))
     async def create(request, body):
         namespace = request.match_info.get("namespace")
@@ -318,11 +320,14 @@ def _make_create_handler(apiname, resource, operation, logger):
         if existing is not None:
             if namespace:
                 reason = (
-                    f"{resource.singular} {body.metadata.name!r} already "
+                    f"{operation.resource.singular} {body.metadata.name!r} already "
                     f"exists in namespace {namespace!r}"
                 )
             else:
-                reason = f"{resource.singular} {body.metadata.name!r} already exists"
+                reason = (
+                    f"{operation.resource.singular} {body.metadata.name!r} "
+                    "already exists"
+                )
             raise web.HTTPConflict(
                 text=json.dumps({"reason": reason}), content_type="application/json"
             )
@@ -343,7 +348,7 @@ def _make_create_handler(apiname, resource, operation, logger):
         await session(request).put(body)
         logger.info(
             "Created %s %r (%s)",
-            resource.singular,
+            operation.resource.singular,
             body.metadata.name,
             body.metadata.uid,
         )
@@ -353,10 +358,14 @@ def _make_create_handler(apiname, resource, operation, logger):
     return create
 
 
-def _make_update_handler(apiname, resource, operation, logger):
+def _make_update_handler(operation, logger):
     assert hasattr(operation.response, "__etcd_key__")
 
-    @protected(api=apiname, resource=resource.plural.lower(), verb="update")
+    @protected(
+        api=operation.resource.api,
+        resource=operation.resource.plural.lower(),
+        verb="update",
+    )
     @use_schema("body", make_request_schema(operation.body))
     @load("entity", operation.response)
     async def update(request, body, entity):
@@ -391,7 +400,7 @@ def _make_update_handler(apiname, resource, operation, logger):
             await session(request).delete(entity)
             logger.info(
                 "Delete %s %r (%s)",
-                resource.singular,
+                operation.resource.singular,
                 entity.metadata.name,
                 entity.metadata.uid,
             )
@@ -399,7 +408,7 @@ def _make_update_handler(apiname, resource, operation, logger):
             await session(request).put(entity)
             logger.info(
                 "Update %s %r (%s)",
-                resource.singular,
+                operation.resource.singular,
                 entity.metadata.name,
                 entity.metadata.uid,
             )
@@ -409,10 +418,14 @@ def _make_update_handler(apiname, resource, operation, logger):
     return update
 
 
-def _make_delete_handler(apiname, resource, operation, logger):
+def _make_delete_handler(operation, logger):
     assert hasattr(operation.response, "__etcd_key__")
 
-    @protected(api=apiname, resource=resource.plural.lower(), verb="delete")
+    @protected(
+        api=operation.resource.api,
+        resource=operation.resource.plural.lower(),
+        verb="delete",
+    )
     @load("entity", operation.response)
     async def delete(request, entity):
         # Resource is already deleting
@@ -425,7 +438,7 @@ def _make_delete_handler(apiname, resource, operation, logger):
             await session(request).delete(entity)
             logger.info(
                 "Delete %s %r (%s)",
-                resource.singular,
+                operation.resource.singular,
                 entity.metadata.name,
                 entity.metadata.uid,
             )
@@ -437,7 +450,7 @@ def _make_delete_handler(apiname, resource, operation, logger):
         await session(request).put(entity)
         logger.info(
             "Deleting %s %r (%s)",
-            resource.singular,
+            operation.resource.singular,
             entity.metadata.name,
             entity.metadata.uid,
         )
@@ -447,13 +460,18 @@ def _make_delete_handler(apiname, resource, operation, logger):
     return delete
 
 
-def _make_update_subresource_handler(apiname, resource, subresource, operation, logger):
+def _make_update_subresource_handler(operation, logger):
     assert hasattr(operation.response, "__etcd_key__")
 
-    resource_name = f"{resource.plural.lower()}/{subresource.__name__.lower()}"
-    attr_name = camel_to_snake_case(subresource.__name__)
+    resource_name = (
+        f"{operation.subresource.resource.plural.lower()}/"
+        f"{operation.subresource.name.lower()}"
+    )
+    attr_name = camel_to_snake_case(operation.subresource.name)
 
-    @protected(api=apiname, resource=resource_name, verb="update")
+    @protected(
+        api=operation.subresource.resource.api, resource=resource_name, verb="update"
+    )
     @use_schema("body", make_request_schema(operation.body, include={attr_name}))
     @load("entity", operation.response)
     async def update_subresource(request, body, entity):
@@ -468,8 +486,8 @@ def _make_update_subresource_handler(apiname, resource, subresource, operation, 
         await session(request).put(entity)
         logger.info(
             "Update %s of %s %r (%s)",
-            subresource.__name__,
-            resource.singular,
+            operation.subresource.name,
+            operation.subresource.resource.singular,
             entity.metadata.name,
             entity.metadata.uid,
         )
