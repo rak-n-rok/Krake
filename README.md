@@ -90,8 +90,8 @@ pytest rok/tests
 ### Documentation
 
 ```bash
-# Install Sphinx
-pip install sphinx
+# Install Sphinx and the Read The Docs theme for sphinx
+pip install sphinx sphinx_rtd_theme
 
 # Build HTML documentation
 cd docs/
