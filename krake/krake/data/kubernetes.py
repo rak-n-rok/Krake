@@ -97,6 +97,8 @@ class Cluster(ApiObject):
     status: ClusterStatus = field(metadata={"subresource": True})
 
 
-class ClusterList(Serializable):
+class ClusterList(ApiObject):
+    api: str = "kubernetes"
+    kind: str = "ClusterList"
     metadata: ListMetadata
     items: List[Cluster]
