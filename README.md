@@ -46,6 +46,10 @@ interpreter:
 ```bash
 cd krake/
 
+# Start by copying the template of the configuration file. You can then modify without any issue
+cp krake.yaml.template krake.yaml
+
+
 # Run etcd server. This will store the data in "tmp/etcd".
 support/etcd
 
