@@ -36,19 +36,15 @@ class ApplicationListTable(BaseTable):
 
 
 @application.command("list", help="List Kubernetes application")
-@argument("-a", "--all", action="store_true", help="Show deleted applications")
 @argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
 @formatting
 @depends("config", "session")
 @printer(table=ApplicationListTable(many=True))
-def list_applications(config, session, namespace, all):
+def list_applications(config, session, namespace):
     if namespace is None:
         namespace = config["user"]
 
-    if all:
-        url = f"/kubernetes/namespaces/{namespace}/applications?all"
-    else:
-        url = f"/kubernetes/namespaces/{namespace}/applications"
+    url = f"/kubernetes/namespaces/{namespace}/applications"
     resp = session.get(url)
     return resp.json()
 
