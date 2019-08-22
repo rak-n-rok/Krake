@@ -54,21 +54,23 @@ def depends(*dependencies):
     """Decorator function for marking fixture dependencies of a function.
 
     Example:
-        from rok.fixtures import fixture, depends
+        .. code:: python
 
-        @depends("engine")
-        def fetch_records(engine):
-            # Do something with the engine ...
+            from rok.fixtures import fixture, depends
 
-        # Fixtures themself can also depend on other fixtures
-        @fixture
-        @depends("config")
-        def engine(config):
-            return create_engine(config=config)
+            @depends("engine")
+            def fetch_records(engine):
+                # Do something with the engine ...
 
-        @fixture
-        def config:
-            return load_config()
+            # Fixtures themself can also depend on other fixtures
+            @fixture
+            @depends("config")
+            def engine(config):
+                return create_engine(config=config)
+
+            @fixture
+            def config:
+                return load_config()
 
     Args:
         *dependencies: Fixtures the decorated function depends on
