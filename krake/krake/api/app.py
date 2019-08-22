@@ -195,7 +195,7 @@ def load_authentication(config):
     """
     authenticators = []
 
-    allow_anonymous = config["authentication"]["allow_anonymous"]
+    allow_anonymous = config["authentication"].get("allow_anonymous", False)
     strategy = config["authentication"]["strategy"]
 
     if strategy["static"]["enabled"]:
