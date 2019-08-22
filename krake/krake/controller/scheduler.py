@@ -26,8 +26,7 @@ from krake.data.core import ReasonCode
 from krake.data.kubernetes import ApplicationState, Cluster
 
 from .exceptions import on_error, ControllerError
-from . import Controller, Worker, run
-
+from . import Controller, Worker, run, extract_ssl_config
 
 logger = logging.getLogger("krake.controller.scheduler")
 
@@ -153,13 +152,18 @@ parser.add_argument("-c", "--config", help="Path to configuration YAML file")
 def main():
     args = parser.parse_args()
     config = load_config(args.config)
+
     setup_logging(config["log"])
     logger.debug("Krake configuration settings:\n %s" % pprint.pformat(config))
+    controller_config = config["controllers"]["scheduler"]
+
+    ssl_kwargs = extract_ssl_config(controller_config)
 
     scheduler = Scheduler(
-        api_endpoint=config["controllers"]["scheduler"]["api_endpoint"],
+        api_endpoint=controller_config["api_endpoint"],
         worker_factory=SchedulerWorker,
-        worker_count=config["controllers"]["scheduler"]["worker_count"],
+        worker_count=controller_config["worker_count"],
+        **ssl_kwargs
     )
     run(scheduler)
 

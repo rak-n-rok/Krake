@@ -61,6 +61,9 @@ support/keystone
 #   certificate authentication, create a certificate for the API server.
 #	This required "cfssl" to be installed.
 support/pki "system:api-server"
+# An additional certificate can be created for each components (schedulers and controller),
+# by adding the appropriate path to the configuration file. Example:
+support/pki "system:scheduler"
 
 # Run the API server
 python -m krake.api

@@ -6,6 +6,8 @@ paradigms to implement a simple "control loop mechanism" in Python.
 """
 import asyncio
 import logging
+import os.path
+
 from aiohttp import ClientConnectorError
 
 from krake.client import Client
@@ -144,21 +146,34 @@ class Controller(object):
     """
 
     def __init__(
-        self, api_endpoint, worker_factory, api_token=None, worker_count=10, loop=None
+        self,
+        api_endpoint,
+        worker_factory,
+        worker_count=10,
+        loop=None,
+        ssl_cert=None,
+        ssl_key=None,
+        client_ca=None,
     ):
         self.loop = loop or asyncio.get_event_loop()
         self.client = None
         self.api_endpoint = api_endpoint
-        self.api_token = api_token
         self.worker_factory = worker_factory
         self.worker_count = worker_count
         self.queue = None
         self.watcher = None
         self.workers = None
+        self.ssl_cert = ssl_cert
+        self.ssl_key = ssl_key
+        self.client_ca = client_ca
 
     async def __aenter__(self):
         self.client = Client(
-            url=self.api_endpoint, token=self.api_token, loop=self.loop
+            url=self.api_endpoint,
+            loop=self.loop,
+            ssl_cert=self.ssl_cert,
+            ssl_key=self.ssl_key,
+            client_ca=self.client_ca,
         )
         await self.client.open()
         self.queue = WorkQueue(loop=self.loop)
@@ -309,3 +324,38 @@ def run(controller):
 async def _run_controller(controller):
     async with controller:
         await controller
+
+
+def extract_ssl_config(config):
+    """
+    Get the SSL-oriented parameters from the "tls" part of the configuration of a
+    controller.
+
+    Args:
+        config (dict): the configuration part of a controller
+
+    Returns:
+        dict: the path of the certificate and its key as stored in the configuration. If
+        the client authority certificate is present, its path is also given.
+
+    """
+    tls_config = config.get("tls")
+    if tls_config is None:
+        return {}
+
+    try:
+        ssl_config = {
+            "ssl_cert": tls_config["client_cert"],
+            "ssl_key": tls_config["client_key"],
+            "client_ca": tls_config.get("client_ca"),
+        }
+    except KeyError as ke:
+        raise KeyError(
+            f"The key '{ke.args[0]}' is missing from the 'tls' configuration part"
+        )
+
+    for path in ssl_config.values():
+        if path and not os.path.isfile(path):
+            raise FileNotFoundError(path)
+
+    return ssl_config
