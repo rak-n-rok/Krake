@@ -97,11 +97,9 @@ class ApiDef(object):
 class Scope(Enum):
     """Scope of resources
 
-    NONE
-        The resource is not scoped
-
-    NAMESPACED
-        The resource is generated in a namespace
+    Attributes:
+        NONE: The resource is not scoped
+        NAMESPACED: The resource is generated in a namespace
 
     """
 

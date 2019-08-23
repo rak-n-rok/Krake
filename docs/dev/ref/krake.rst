@@ -3,7 +3,6 @@ Krake Reference
 
 .. automodule:: krake
     :members:
-    :undoc-members:
     :show-inheritance:
 
 API Server
@@ -11,12 +10,10 @@ API Server
 
 .. automodule:: krake.api
     :members:
-    :undoc-members:
     :show-inheritance:
 
 .. automodule:: krake.api.app
     :members:
-    :undoc-members:
     :show-inheritance:
 
 Authentication and Authorization
@@ -24,7 +21,6 @@ Authentication and Authorization
 
 .. automodule:: krake.api.auth
     :members:
-    :undoc-members:
     :show-inheritance:
 
 Database Abstraction
@@ -32,7 +28,6 @@ Database Abstraction
 
 .. automodule:: krake.api.database
     :members:
-    :undoc-members:
     :show-inheritance:
 
 Helpers
@@ -40,7 +35,6 @@ Helpers
 
 .. automodule:: krake.api.helpers
     :members:
-    :undoc-members:
     :show-inheritance:
 
 Middlewares
@@ -48,7 +42,6 @@ Middlewares
 
 .. automodule:: krake.api.middlewares
     :members:
-    :undoc-members:
     :show-inheritance:
 
 API Generator
@@ -56,7 +49,6 @@ API Generator
 
 .. automodule:: krake.api.generator
     :members:
-    :undoc-members:
     :show-inheritance:
 
 API Definitions
@@ -64,12 +56,10 @@ API Definitions
 
 .. automodule:: krake.apidefs
     :members:
-    :undoc-members:
     :show-inheritance:
 
 .. automodule:: krake.apidefs.definitions
     :members:
-    :undoc-members:
     :show-inheritance:
 
 Client
@@ -77,7 +67,6 @@ Client
 
 .. automodule:: krake.client
     :members:
-    :undoc-members:
     :show-inheritance:
 
 Client Generator
@@ -85,7 +74,6 @@ Client Generator
 
 .. automodule:: krake.client.generator
     :members:
-    :undoc-members:
     :show-inheritance:
 
 Client APIs
@@ -93,12 +81,10 @@ Client APIs
 
 .. automodule:: krake.client.core
     :members:
-    :undoc-members:
     :show-inheritance:
 
 .. automodule:: krake.client.kubernetes
     :members:
-    :undoc-members:
     :show-inheritance:
 
 Controllers
@@ -106,7 +92,6 @@ Controllers
 
 .. automodule:: krake.controller
     :members:
-    :undoc-members:
     :show-inheritance:
 
 Data Abstration
@@ -114,16 +99,13 @@ Data Abstration
 
 .. automodule:: krake.data
     :members:
-    :undoc-members:
     :show-inheritance:
 
 .. automodule:: krake.data.core
     :members:
-    :undoc-members:
     :show-inheritance:
 
 .. automodule:: krake.data.kubernetes
     :members:
-    :undoc-members:
     :show-inheritance:
 
