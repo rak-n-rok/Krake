@@ -32,21 +32,27 @@ formatting = argument(
 
 
 class ApplicationListTable(BaseTable):
-    pass
+    state = Cell("status.state")
 
 
 @application.command("list", help="List Kubernetes application")
+@argument(
+    "-a", "--all", action="store_true", help="Show applications in all namespaces"
+)
 @argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
 @formatting
 @depends("config", "session")
 @printer(table=ApplicationListTable(many=True))
-def list_applications(config, session, namespace):
-    if namespace is None:
-        namespace = config["user"]
-
-    url = f"/kubernetes/namespaces/{namespace}/applications"
+def list_applications(config, session, namespace, all):
+    if all:
+        url = f"/kubernetes/applications"
+    else:
+        if namespace is None:
+            namespace = config["user"]
+        url = f"/kubernetes/namespaces/{namespace}/applications"
     resp = session.get(url)
-    return resp.json()
+    body = resp.json()
+    return body["items"]
 
 
 @application.command("create", help="Create Kubernetes application")
@@ -206,15 +212,22 @@ def create_cluster(config, session, namespace, kubeconfig, contexts):
 @argument(
     "-n", "--namespace", help="Namespace of the Kubernetes cluster. Defaults to user"
 )
+@argument(
+    "-a", "--all", action="store_true", help="Show applications in all namespaces"
+)
 @formatting
 @depends("config", "session")
 @printer(table=ClusterTable(many=True))
-def list_clusters(config, session, namespace):
-    if namespace is None:
-        namespace = config["user"]
-
-    resp = session.get(f"/kubernetes/namespaces/{namespace}/clusters")
-    return resp.json()
+def list_clusters(config, session, namespace, all):
+    if all:
+        url = "/kubernetes/clusters"
+    else:
+        if namespace is None:
+            namespace = config["user"]
+        url = f"/kubernetes/namespaces/{namespace}/clusters"
+    resp = session.get(url)
+    body = resp.json()
+    return body["items"]
 
 
 @cluster.command("delete", help="Delete Kubernetes cluster")

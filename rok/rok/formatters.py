@@ -349,7 +349,6 @@ class BaseTable(Table):
 
     name = Cell("metadata.name")
     namespace = Cell("metadata.namespace")
-    user = Cell("metadata.user")
-    created = Cell("status.created", formatter=format_datetime)
-    modified = Cell("status.modified", formatter=format_datetime)
-    state = Cell("status.state")
+    created = Cell("metadata.created", formatter=format_datetime)
+    modified = Cell("metadata.modified", formatter=format_datetime)
+    deleted = Cell("metadata.deleted", formatter=format_datetime)
