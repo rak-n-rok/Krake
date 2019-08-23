@@ -1,0 +1,9 @@
+api_url: https://localhost:8443
+user: system
+
+# This bloc can be removed if HTTPS is not
+# needed to communicate with the API
+tls:
+  client_ca: tmp/pki/ca.pem
+  client_cert: tmp/pki/jc.pem
+  client_key: tmp/pki/jc-key.pem

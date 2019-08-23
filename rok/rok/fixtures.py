@@ -221,7 +221,7 @@ def config():
         XDG_CONFIG_HOME = os.path.join(os.environ["HOME"], ".config")
 
     config_paths = [
-        ".rok.yaml",
+        "rok.yaml",
         os.path.join(XDG_CONFIG_HOME, "rok.yaml"),
         "/etc/rok/rok.yaml",
     ]

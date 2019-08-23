@@ -49,6 +49,9 @@ cd krake/
 # Start by copying the template of the configuration file. You can then modify without any issue
 cp krake.yaml.template krake.yaml
 
+# Optional: you can use the rok configuration template as you prefer.
+#   Otherwise rok will use the default configuration
+cp rok.yaml.template rok.yaml
 
 # Run etcd server. This will store the data in "tmp/etcd".
 support/etcd
