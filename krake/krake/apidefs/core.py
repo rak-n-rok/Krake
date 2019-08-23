@@ -1,5 +1,5 @@
 from krake.data.core import Role, RoleList, RoleBinding, RoleBindingList
-from .definitions import ApiDef, Scope, operation
+from .definitions import ApiDef, Scope, operation, ListQuery
 
 
 core = ApiDef("core")
@@ -19,7 +19,7 @@ class RoleResource:
         response = Role
 
     @operation
-    class List:
+    class List(ListQuery):
         number = "plural"
         method = "GET"
         path = "/core/roles"
@@ -59,7 +59,7 @@ class RoleBindingResource:
         response = RoleBinding
 
     @operation
-    class List:
+    class List(ListQuery):
         number = "plural"
         method = "GET"
         path = "/core/rolebindings"

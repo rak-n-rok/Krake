@@ -1,5 +1,3 @@
-from marshmallow import fields
-
 from krake.data.kubernetes import (
     Application,
     ApplicationList,
@@ -7,7 +5,7 @@ from krake.data.kubernetes import (
     ClusterList,
     ClusterBinding,
 )
-from .definitions import ApiDef, Scope, operation, subresource
+from .definitions import ApiDef, Scope, operation, subresource, ListQuery
 
 
 kubernetes = ApiDef("kubernetes")
@@ -23,7 +21,6 @@ class ApplicationResource:
     class Create:
         method = "POST"
         path = "/kubernetes/namespaces/{namespace}/applications"
-        query = {"pretty": fields.Boolean(missing=False)}
         body = Application
         response = Application
 
@@ -34,15 +31,14 @@ class ApplicationResource:
         response = Application
 
     @operation
-    class List:
+    class List(ListQuery):
         number = "plural"
         method = "GET"
-        query = {"watch": fields.Boolean(missing=False)}
         path = "/kubernetes/namespaces/{namespace}/applications"
         response = ApplicationList
 
     @operation
-    class ListAll:
+    class ListAll(ListQuery):
         number = "plural"
         method = "GET"
         path = "/kubernetes/applications"
@@ -94,14 +90,14 @@ class ClusterResource:
         response = Cluster
 
     @operation
-    class List:
+    class List(ListQuery):
         number = "plural"
         method = "GET"
         path = "/kubernetes/namespaces/{namespace}/clusters"
         response = ClusterList
 
     @operation
-    class ListAll:
+    class ListAll(ListQuery):
         number = "plural"
         method = "GET"
         path = "/kubernetes/clusters"

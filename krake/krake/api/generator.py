@@ -8,7 +8,6 @@ from functools import partial
 from datetime import datetime
 from uuid import uuid4
 from aiohttp import web
-from webargs import fields
 from webargs.aiohttpparser import use_kwargs
 
 from krake.data.serializable import readonly_fields
@@ -225,19 +224,23 @@ def _make_list_handler(operation, logger, all=False):
     # FIXME: Ugly assumptions ahead!
     entity_class, = get_field(operation.response, "items").type.__args__
 
+    assert "heartbeat" in operation.query, "'heartbeat' query parameter is required"
+    assert "watch" in operation.query, "'watch' query parameter is required"
+
     @protected(
         api=operation.resource.api,
         resource=operation.resource.plural.lower(),
         verb="list",
     )
-    @use_kwargs({"heartbeat": fields.Integer(missing=None, locations=["query"])})
-    async def list_or_watch(request, heartbeat):
+    @use_kwargs(operation.query, locations=("query",))
+    async def list_or_watch(request, heartbeat, watch, **query):
         if not all:
             namespace = request.match_info.get("namespace")
         else:
             namespace = None
 
-        if "watch" not in request.query:
+        # Return the list of resources
+        if not watch:
             if namespace is None:
                 objs = [obj async for obj, _ in session(request).all(entity_class)]
             else:
@@ -251,6 +254,7 @@ def _make_list_handler(operation, logger, all=False):
             body = operation.response(metadata=ListMetadata(), items=objs)
             return web.json_response(body.serialize())
 
+        # Watching resources
         kwargs = {}
         if namespace is not None:
             kwargs["namespace"] = namespace

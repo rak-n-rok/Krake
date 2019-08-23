@@ -151,7 +151,7 @@ def create_resource_handlers(resource, cls):
                     description = f"Watch {resource.plural} in the namespace"
                 else:
                     description = f"Watch all {resource.plural}"
-                doc = make_docstring(operation, description)
+                doc = make_docstring(operation, description, {"heartbeat"})
                 handler = make_watch_handler(operation, doc)
                 setattr(cls, name, handler)
 
@@ -167,7 +167,9 @@ def create_resource_handlers(resource, cls):
             name = f"watch_all_{camel_to_snake_case(resource.plural)}"
             if not hasattr(cls, name):
                 doc = make_docstring(
-                    operation, f"Watch {resource.plural} in all namespaces"
+                    operation,
+                    f"Watch {resource.plural} in all namespaces",
+                    {"heartbeat"},
                 )
                 handler = make_watch_all_handler(operation, doc)
                 setattr(cls, name, handler)
@@ -296,7 +298,7 @@ def create_subresource_handlers(subresource, cls):
                 )
 
 
-def make_signature(operation):
+def make_signature(operation, query=set()):
     parameters = [Parameter("self", kind=Parameter.POSITIONAL_OR_KEYWORD)]
 
     for _, name, _, _ in Formatter().parse(operation.path):
@@ -306,49 +308,74 @@ def make_signature(operation):
     if operation.body is not None:
         parameters.append(Parameter("body", kind=Parameter.POSITIONAL_OR_KEYWORD))
 
+    if operation.query:
+        for name, field in operation.query.items():
+            if name in query:
+                parameters.append(
+                    Parameter(name, default=None, kind=Parameter.POSITIONAL_OR_KEYWORD)
+                )
+
     return Signature(parameters)
 
 
-def make_docstring(operation, description):
-    pathargs = []
+class DocString(object):
+    def __init__(self, description=""):
+        self.description = description
+        self.args = []
+        self.returns = ""
+
+    def add_argument(self, name, type, description):
+        self.args.append(f"{name} ({self._type_ref(type)}): {description}")
+
+    def add_return(self, type, description):
+        self.returns = f"{self._type_ref(type)}: {description}"
+
+    def _type_ref(self, type):
+        if type.__module__ == "builtins":
+            return type.__name__
+
+        return f"{type.__module__}.{type.__qualname__}"
+
+    def __str__(self):
+        args = "\n                ".join(self.args)
+
+        return f"""{self.description}
+
+            {"Args:" if args else ""}
+                {args}
+
+            {"Returns:" if self.returns else ""}
+                {self.returns}
+
+        """
+
+
+def make_docstring(operation, description, query=set()):
+    doc = DocString(description)
     singular = operation.resource.singular
 
     for _, name, _, _ in Formatter().parse(operation.path):
         if name is not None:
-            pathargs.append(f"{name} (str): {name.title()} of the {singular}")
-
-    pathargs = "\n    ".join(pathargs)
+            doc.add_argument(name, str, f"{name.title()} of the {singular}")
 
     if operation.body:
-        body = (
-            f"body ({operation.body.__module__}.{operation.body.__qualname__}): "
-            "Body of the HTTP request"
-        )
-    else:
-        body = ""
+        doc.add_argument("body", operation.body, "Body of the HTTP request")
+
+    if operation.query:
+        for name, field in operation.query.items():
+            if name in query:
+                doc.add_argument(name, str, field.metadata["doc"])
 
     if operation.response:
-        returns = (
-            f"Returns:\n    "
-            f"{operation.response.__module__}.{operation.response.__qualname__}: "
-            "Body of the HTTP response"
-        )
+        doc.add_return(operation.response, "Body of the HTTP response")
 
-    return f"""{description}
-
-{"Args:" if pathargs or body else ""}
-    {pathargs}
-    {body}
-
-{returns}
-
-"""
+    return doc
 
 
 def make_create_handler(operation, doc):
     signature = make_signature(operation)
 
-    @with_signature(signature, doc=doc)
+    @with_signature(signature, doc=str(doc))
     async def create_resource(self, body, **kwargs):
         path = operation.path.format(**kwargs)
         url = self.client.url.with_path(path)
@@ -367,7 +394,7 @@ def make_create_handler(operation, doc):
 def make_list_handler(operation, doc):
     signature = make_signature(operation)
 
-    @with_signature(signature, doc=doc)
+    @with_signature(signature, doc=str(doc))
     async def list_resources(self, **kwargs):
         path = operation.path.format(**kwargs)
         url = self.client.url.with_path(path)
@@ -383,12 +410,17 @@ def make_watch_handler(operation, doc):
     # Infer the type of the watch event objects from the type of the list
     # of items.
     model, = get_field(operation.response, "items").type.__args__
-    signature = make_signature(operation)
+    signature = make_signature(operation, {"heartbeat"})
 
-    @with_signature(signature, doc=doc)
-    def watch_resources(self, **kwargs):
+    @with_signature(signature, doc=str(doc))
+    def watch_resources(self, heartbeat, **kwargs):
         path = operation.path.format(**kwargs)
-        url = self.client.url.with_path(path).with_query({"watch": ""})
+
+        query = {"watch": ""}
+        if heartbeat is not None:
+            query["heartbeat"] = heartbeat
+
+        url = self.client.url.with_path(path).with_query(query)
 
         return Watcher(self.client.session, url, model)
 
@@ -398,7 +430,7 @@ def make_watch_handler(operation, doc):
 def make_list_all_handler(operation, doc):
     signature = make_signature(operation)
 
-    @with_signature(signature, doc=doc)
+    @with_signature(signature, doc=str(doc))
     async def list_all_resources(self, **kwargs):
         path = operation.path.format(**kwargs)
         url = self.client.url.with_path(path)
@@ -414,9 +446,9 @@ def make_watch_all_handler(operation, doc):
     # Infer the type of the watch event objects from the type of the list
     # of items.
     model, = get_field(operation.response, "items").type.__args__
-    signature = make_signature(operation)
+    signature = make_signature(operation, query={"heartbeat"})
 
-    @with_signature(signature, doc=doc)
+    @with_signature(signature, doc=str(doc))
     def watch_all_resources(self, **kwargs):
         path = operation.path.format(**kwargs)
         url = self.client.url.with_path(path).with_query({"watch": ""})
@@ -429,7 +461,7 @@ def make_watch_all_handler(operation, doc):
 def make_read_handler(operation, doc):
     signature = make_signature(operation)
 
-    @with_signature(signature, doc=doc)
+    @with_signature(signature, doc=str(doc))
     async def read_resources(self, **kwargs):
         path = operation.path.format(**kwargs)
         url = self.client.url.with_path(path)
@@ -444,7 +476,7 @@ def make_read_handler(operation, doc):
 def make_update_handler(operation, doc):
     signature = make_signature(operation)
 
-    @with_signature(signature, doc=doc)
+    @with_signature(signature, doc=str(doc))
     async def update_resource(self, body, **kwargs):
         path = operation.path.format(**kwargs)
         url = self.client.url.with_path(path)
@@ -463,7 +495,7 @@ def make_update_handler(operation, doc):
 def make_delete_handler(operation, doc):
     signature = make_signature(operation)
 
-    @with_signature(signature, doc=doc)
+    @with_signature(signature, doc=str(doc))
     async def delete_resources(self, **kwargs):
         path = operation.path.format(**kwargs)
         url = self.client.url.with_path(path)

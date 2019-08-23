@@ -42,6 +42,8 @@ Example:
 """
 from inspect import getmembers
 from enum import Enum, auto
+from marshmallow import fields, missing
+from marshmallow.validate import Range
 
 from krake.data.serializable import ApiObject
 
@@ -227,7 +229,7 @@ class operation(object):
         self.number = getattr(template, "number", "singular")
         self.method = template.method
         self.path = template.path
-        self.query = getattr(template, "query", None)
+        self.query = getattr(template, "query", {})
         self.body = getattr(template, "body", None)
         self.response = getattr(template, "response", None)
         self.name = template.__name__
@@ -373,3 +375,47 @@ def make_resource(cls, api):
         operations=operations,
         subresources=subresources,
     )
+
+
+class QueryFlag(fields.Field):
+    """Field used for boolean query parameters.
+
+    If the query parameter exists the field is deserialized to :data:`True`
+    regardless of the value. The field is marked as ``load_only``.
+
+    """
+
+    def __init__(self, **metadata):
+        super().__init__(load_only=True, **metadata)
+
+    def deserialize(self, value, attr=None, data=None, **kwargs):
+        if value is missing:
+            return False
+        return True
+
+
+class ListQuery(object):
+    """Simple mixin class for :class:`operation` template classes.
+
+    Defines default :attr:`operation.query` attribute for *list* and *list
+    all* operations.
+
+    """
+
+    query = {
+        "heartbeat": fields.Integer(
+            missing=None,
+            doc=(
+                "Number of seconds after which the server sends a heartbeat in "
+                "form a an empty newline. Passing 0 disables the heartbeat. "
+                "Default: 10 seconds"
+            ),
+            validate=Range(min=0),
+        ),
+        "watch": QueryFlag(
+            doc=(
+                "Watch for changes to the described resources and return "
+                "them as a stream of :class:`krake.data.core.WatchEvent`"
+            )
+        ),
+    }

@@ -382,6 +382,7 @@ async def test_watch_app(aiohttp_client, config, db, loop):
         resp = await client.get(
             "/kubernetes/namespaces/testing/applications?watch&heartbeat=0"
         )
+        assert resp.status == 200
         created.set_result(None)
 
         for i in count():
