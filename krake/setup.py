@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 install_requires = [
     "aiohttp",
-    "marshmallow < 3.0.0",
+    "marshmallow",
     "dataclasses",
     "etcd3-py",
     "requests",
@@ -12,7 +12,7 @@ install_requires = [
     "PyYAML",
     "webargs",
     "marshmallow_enum",
-    "marshmallow_oneofschema < 2.0.0",
+    "marshmallow_oneofschema",
     "kubernetes_asyncio",
 ]
 

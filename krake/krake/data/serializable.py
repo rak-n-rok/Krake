@@ -11,7 +11,7 @@ from datetime import datetime, date
 from typing import get_type_hints, List, NamedTuple
 from functools import singledispatch
 from webargs import fields
-from marshmallow import Schema, post_load
+from marshmallow import Schema, post_load, EXCLUDE
 from marshmallow_enum import EnumField
 from marshmallow_oneofschema import OneOfSchema
 
@@ -115,7 +115,7 @@ def deserialize(cls, value, **kwargs):
                 title = fields.String(required=True)
 
             Book.__metadata__ = {
-                "schema": BookSchema(strict=True)
+                "schema": BookSchema()
             }
 
 
@@ -145,7 +145,7 @@ def deserialize(cls, value, **kwargs):
     if kwargs:
         value = dict(value, **kwargs)
 
-    instance, _ = cls.__metadata__["schema"].load(value)
+    instance = cls.__metadata__["schema"].load(value)
     assert isinstance(instance, cls)
     return instance
 
@@ -157,6 +157,9 @@ class ModelizedSchema(Schema):
     Subclasses can specifify a callable attribute ``__model__`` which is
     called with all deserialized attributes as keyword arguments.
 
+    The ``Meta.unknown`` field is set to avoid considering unknown fields
+    during validation. It mostly prevents create tests from failing.
+
     Attributes:
         __model__ (callable): Model factory returning a new instance of a
             specific model
@@ -165,8 +168,12 @@ class ModelizedSchema(Schema):
 
     __model__ = None
 
+    class Meta:
+        unknown = EXCLUDE
+
     @post_load
-    def create_model(self, data):
+    def create_model(self, data, **kwargs):
+        # kwargs necessary for unused additional parameters
         if self.__model__:
             return self.__model__(**data)
         return data
@@ -210,9 +217,9 @@ class PolymorphicSchema(OneOfSchema):
                 __model__ = Hardcover
 
             schema = PolymorphicSchema("kind")
-            schema.type_schemas["book"] = BookSchema(strict=True)
-            schema.type_schemas["paperback"] = PaperbackSchema(strict=True)
-            schema.type_schemas["hardcover"] = HardcoverSchema(strict=True)
+            schema.type_schemas["book"] = BookSchema()
+            schema.type_schemas["paperback"] = PaperbackSchema()
+            schema.type_schemas["hardcover"] = HardcoverSchema()
 
             # Configure metadata in order to used "deserialize()"
             Book.__metadata__ = {
@@ -473,7 +480,7 @@ def serializable(cls=None, resolvers=default_resolvers):
 
             if polymorphic_schema is None:
                 polymorphic_schema = PolymorphicSchema(
-                    cls.__metadata__["discriminator"], strict=True
+                    cls.__metadata__["discriminator"]
                 )
             else:
                 assert (
@@ -496,15 +503,15 @@ def serializable(cls=None, resolvers=default_resolvers):
                         f"already mapped to {mapped!r}"
                     )
 
-                polymorphic_schema.type_schemas[discriminator] = cls.Schema(strict=True)
+                polymorphic_schema.type_schemas[discriminator] = cls.Schema()
 
             cls.__metadata__["schema"] = polymorphic_schema
         else:
-            cls.__metadata__["schema"] = cls.Schema(strict=True)
+            cls.__metadata__["schema"] = cls.Schema()
 
         @serialize.register(cls)
         def _(value):
-            data, _ = cls.__metadata__["schema"].dump(value)
+            data = cls.__metadata__["schema"].dump(value)
             return data
 
         return cls
