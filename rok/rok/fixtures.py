@@ -248,10 +248,24 @@ class BaseUrlSession(requests.Session):
 
     """
 
-    def __init__(self, base_url=None, raise_for_status=True):
+    def __init__(
+        self,
+        base_url=None,
+        raise_for_status=True,
+        client_ca=None,
+        ssl_cert=None,
+        ssl_key=None,
+    ):
         self.base_url = base_url
         self.raise_for_status = raise_for_status
         super().__init__()
+
+        # super() done at the end would reset these values:
+        # assignment needs to be done afterward
+        if ssl_cert and ssl_key:
+            self.cert = (ssl_cert, ssl_key)
+        if client_ca:
+            self.verify = client_ca
 
     def request(self, method, url, *args, raise_for_status=None, **kwargs):
         if raise_for_status is None:
@@ -271,5 +285,24 @@ class BaseUrlSession(requests.Session):
 @fixture
 @depends("config")
 def session(config):
-    with BaseUrlSession(base_url=config["api_url"]) as session:
+    ssl_config = {}
+    if "tls" in config:
+        # Extract the SSL parameters
+        tls_config = config["tls"]
+        try:
+            ssl_config = {
+                "ssl_cert": tls_config["client_cert"],
+                "ssl_key": tls_config["client_key"],
+                "client_ca": tls_config.get("client_ca"),
+            }
+        except KeyError as ke:
+            raise KeyError(
+                f"The key '{ke.args[0]}' is missing from the 'tls' configuration part"
+            )
+
+        for path in ssl_config.values():
+            if path and not os.path.isfile(path):
+                raise FileNotFoundError(path)
+
+    with BaseUrlSession(base_url=config["api_url"], **ssl_config) as session:
         yield session
