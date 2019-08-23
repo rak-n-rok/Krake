@@ -118,12 +118,14 @@ def format_datetime(time_str):
     """Formats complex time string to the human readable form
 
     Args:
-        time_str (str): Time string
+        time_str (str, None): Time string
 
     Returns:
         str: Formatted time string to the human readable YY-mm-dd H:M:S format
 
     """
+    if time_str is None:
+        return None
     return datetime.strftime(parse(time_str), "%Y-%m-%d %H:%M:%S")
 
 
