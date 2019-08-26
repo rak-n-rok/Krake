@@ -202,6 +202,9 @@ async def register_service(app, cluster, resp):
 
     node_port = resp.spec.ports[0].node_port
 
+    if node_port is None:
+        return
+
     # Load Kubernetes configuration and get host
     loader = KubeConfigLoader(cluster.spec.kubeconfig)
     config = Configuration()
