@@ -2,11 +2,11 @@ from operator import attrgetter
 
 from krake.api.app import create_app
 from krake.client import Client
-from krake.data.kubernetes import Application, ApplicationState
+from krake.data.kubernetes import Application, ApplicationState, ClusterState, Cluster
 from krake.test_utils import with_timeout
 
 from factories.kubernetes import ApplicationFactory
-
+from tests.factories.kubernetes import ClusterFactory
 
 manifest = """---
 apiVersion: v1
@@ -172,4 +172,121 @@ async def test_watch_applications_all_namespaces(aiohttp_server, config, db, loo
             await modifying
 
 
-# TODO: Test Kubernetes clusters
+async def test_list_clusters(aiohttp_server, config, db, loop):
+    # Populate database
+    data = [
+        ClusterFactory(status__state=ClusterState.PENDING),
+        ClusterFactory(status__state=ClusterState.RUNNING),
+    ]
+    for cluster in data:
+        await db.put(cluster)
+
+    # Start API server
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        apps = await client.kubernetes.cluster.list(namespace="testing")
+
+    key = attrgetter("metadata.name")
+    assert sorted(apps, key=key) == sorted(data, key=key)
+
+
+async def test_create_cluster(aiohttp_server, config, db, loop):
+    data = ClusterFactory(status__state=ClusterState.PENDING)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        received = await client.kubernetes.cluster.create(data)
+
+    assert received.spec == data.spec
+    assert received.status.state == ClusterState.RUNNING
+
+    stored, _ = await db.get(
+        Cluster, namespace=data.metadata.namespace, name=data.metadata.name
+    )
+    assert stored == received
+
+
+async def test_get_cluster(aiohttp_server, config, db, loop):
+    data = ClusterFactory()
+    await db.put(data)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        received = await client.kubernetes.cluster.get(
+            namespace=data.metadata.namespace, name=data.metadata.name
+        )
+        assert received == data
+
+
+@with_timeout(3)
+async def test_watch_clusters_in_namespace(aiohttp_server, config, db, loop):
+    data = [ClusterFactory(), ClusterFactory(), ClusterFactory()]
+
+    async def modify():
+        for cluster in data:
+            await db.put(cluster)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        async with client.kubernetes.cluster.watch(namespace="testing") as watcher:
+            modifying = loop.create_task(modify())
+
+            async for i, received in aenumerate(watcher):
+                expected = data[i]
+                assert received == expected
+
+                if i == len(data) - 1:
+                    break
+
+            await modifying
+
+
+@with_timeout(3)
+async def test_watch_clusters_all_namespaces(aiohttp_server, config, db, loop):
+    data = [
+        ClusterFactory(metadata__namespace="testing"),
+        ClusterFactory(metadata__namespace="default"),
+    ]
+
+    async def modify():
+        for cluster in data:
+            await db.put(cluster)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        async with client.kubernetes.cluster.watch(namespace="all") as watcher:
+            modifying = loop.create_task(modify())
+
+            async for i, received in aenumerate(watcher):
+                expected = data[i]
+                assert received == expected
+
+                if i == len(data) - 1:
+                    break
+
+            await modifying
+
+
+async def test_delete_cluster(aiohttp_server, config, db, loop):
+    cluster = ClusterFactory(status__state=ClusterState.PENDING)
+    await db.put(cluster)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        received = await client.kubernetes.cluster.delete(
+            namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        )
+
+    assert received.spec == cluster.spec
+    assert received.status.state == ClusterState.DELETING
+
+    stored, _ = await db.get(
+        Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+    )
+    assert stored == received
