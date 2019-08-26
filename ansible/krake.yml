@@ -240,13 +240,17 @@
             project_src: "{{ git_dir }}/docker/krake"
             state: absent
 
+        - name: Remove Krake image
+          docker_image:
+            name: krake:latest
+            state: absent
+
         - name: Build Krake image
           docker_image:
             name: krake:latest
             dockerfile: "{{ git_dir }}/docker/krake/Dockerfile"
             path: "{{ git_dir }}"
             nocache: yes
-            force: yes
 
         - name: Start Krake infrastructure
           docker_service:
