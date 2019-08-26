@@ -106,18 +106,6 @@ all:
         krake:
           hostname: krake
           network: krake-network
-          idp: krake-central-idp
-          prometheus: krake-prometheus
-          # List of DevStack inventory names that should be managed by this
-          # Krake application.
-          devstacks:
-            - krake-devstack-1
-
-          # List of preset OpenStack clusters that should be managed by this
-          # Krake application.
-          # magnum_clusters:
-          #   - openstack-cluster-1
-          magnum_clusters: []
 
           # List of additional authorized SSH keys. Actually, every physical
           # host supports this configuration parameter.

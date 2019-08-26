@@ -109,7 +109,7 @@ class SchedulerWorker(Worker):
             )
 
     async def select_kubernetes_cluster(self, app):
-        # TODO: Evaluate spawning a new cluster
+        # TODO: Evaluate  a new cluster
         clusters = await self.client.kubernetes.cluster.list(namespace="all")
 
         if not clusters:
