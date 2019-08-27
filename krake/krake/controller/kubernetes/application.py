@@ -24,6 +24,8 @@ import yaml
 import yarl
 from argparse import ArgumentParser
 from inspect import iscoroutinefunction
+
+from krake.data.core import ReasonCode
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 from kubernetes_asyncio.client import ApiClient, CoreV1Api, AppsV1Api, Configuration
 from kubernetes_asyncio.client.rest import ApiException
@@ -32,7 +34,7 @@ from typing import NamedTuple
 from krake import load_config, setup_logging
 from krake.controller.kubernetes import KubernetesController
 from krake.data.kubernetes import ApplicationState
-from ..exceptions import on_error, ControllerError
+from ..exceptions import on_error, ControllerError, application_error_mapping
 from .. import Worker, run
 
 
@@ -41,6 +43,8 @@ logger = logging.getLogger("krake.controller.kubernetes")
 
 class InvalidResourceError(ControllerError):
     """Raised in case of invalid kubernetes resource definition."""
+
+    code = ReasonCode.INVALID_RESOURCE
 
 
 class ApplicationController(KubernetesController):
@@ -129,6 +133,7 @@ listen = EventDispatcher()
 
 
 class ApplicationWorker(Worker):
+
     @on_error(ControllerError)
     async def resource_received(self, app):
         # Delete Kubernetes resources if the application was bound to a
@@ -176,7 +181,7 @@ class ApplicationWorker(Worker):
             namespace=app.metadata.namespace, name=app.metadata.name, status=app.status
         )
 
-    async def error_occured(self, app, reason=None):
+    async def error_occurred(self, app, error=None):
         """Asynchronous callback executed whenever an error occurs during
         :meth:`resource_received`.
 
@@ -186,11 +191,17 @@ class ApplicationWorker(Worker):
         Args:
             app (krake.data.kubernetes.Application): Application object processed
                 when the error occurred
-            reason (str, optional): The reason of the exception which will be propagate
+            error (Exception, optional): The exception whose reason will be propagated
                 to the end-user. Defaults to None.
         """
-        app.status.state = ApplicationState.FAILED
+        reason = application_error_mapping(app.status.state, error)
         app.status.reason = reason
+
+        # If an important error occurred, simply delete the Application
+        if reason.code.value >= 100:
+            app.status.state = ApplicationState.DELETED
+        else:
+            app.status.state = ApplicationState.FAILED
 
         await self.client.kubernetes.application.update_status(
             namespace=app.metadata.namespace, name=app.metadata.name, status=app.status

@@ -5,7 +5,7 @@ import yaml
 from factory import Factory, SubFactory, lazy_attribute, fuzzy
 
 from .fake import fake
-from .core import NamespacedMetadataFactory
+from .core import NamespacedMetadataFactory, ReasonFactory
 from krake.data.kubernetes import (
     ApplicationSpec,
     ApplicationStatus,
@@ -46,7 +46,7 @@ class ApplicationStatusFactory(Factory):
     def reason(self):
         if self.state != ApplicationState.FAILED:
             return None
-        return fake.sentence()
+        return ReasonFactory()
 
     @lazy_attribute
     def cluster(self):
@@ -115,7 +115,7 @@ class ClusterStatusFactory(Factory):
     def reason(self):
         if self.state != ApplicationState.FAILED:
             return None
-        return fake.sentence()
+        return ReasonFactory()
 
 
 ca_cert = b"""-----BEGIN CERTIFICATE-----

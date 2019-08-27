@@ -13,7 +13,13 @@ from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 from kubernetes_asyncio.config import ConfigException
 
 from krake.data.serializable import serialize
-from krake.data.core import NamespacedMetadata, ClientMetadata, Conflict, resource_ref
+from krake.data.core import (
+    NamespacedMetadata,
+    ClientMetadata,
+    Conflict,
+    resource_ref,
+    Reason,
+)
 from krake.data.kubernetes import (
     Application,
     ApplicationStatus,
@@ -155,7 +161,7 @@ async def update_application(request, app, spec):
 @use_kwargs(
     {
         "state": EnumField(ApplicationState, required=True),
-        "reason": fields.String(required=True, allow_none=True),
+        "reason": fields.Nested(Reason.Schema, allow_none=True),
         "cluster": fields.String(required=True, allow_none=True),
         "services": fields.Dict(required=True, allow_none=True),
     }

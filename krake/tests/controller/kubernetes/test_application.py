@@ -3,7 +3,8 @@ from datetime import datetime
 
 from aiohttp.web import json_response, Response
 
-from krake.data import serialize
+from krake.data import serialize, deserialize
+from krake.data.core import Reason, ReasonCode
 from krake.data.kubernetes import ApplicationState, ApplicationStatus
 from krake.controller import Worker
 from krake.controller.kubernetes.application import (
@@ -378,12 +379,14 @@ async def test_kubernetes_error_handling(aresponses, loop):
 
     async def update_status(request):
         payload = await request.json()
+
+        reason = deserialize(Reason, payload["reason"])
         assert payload["state"] == "FAILED"
-        assert payload["reason"] == "Unsupported resources are not supported"
+        assert reason.code == ReasonCode.INVALID_RESOURCE
 
         status = ApplicationStatus(
             state=ApplicationState.FAILED,
-            reason=payload["reason"],
+            reason=reason,
             cluster=cluster.metadata.name,
             created=app.status.created,
             modified=datetime.now(),

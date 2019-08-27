@@ -97,3 +97,19 @@ def resource_ref(resource):
         kind=resource.__class__.__name__.lower(),
         name=resource.metadata.name,
     )
+
+
+class ReasonCode(Enum):
+    INTERNAL_ERROR = 1  # Default error
+
+    INVALID_RESOURCE = 10  # Invalid values in the Manifest
+    CLUSTER_NOT_REACHABLE = 11  # Connectivity issue with the Kubernetes deployment
+    NO_SUITABLE_RESOURCE = 50  # Scheduler issue
+
+    # Codes over 100 will cause the controller to delete the resource directly
+    RESOURCE_NOT_DELETED = 100
+
+
+class Reason(Serializable):
+    code: ReasonCode
+    message: str

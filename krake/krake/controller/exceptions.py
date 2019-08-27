@@ -4,6 +4,8 @@ Defines common functionality for exceptions in Krake controller module.
 import logging
 from functools import wraps
 
+from krake.data.core import Reason, ReasonCode
+from krake.data.kubernetes import ApplicationState
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +13,7 @@ logger = logging.getLogger(__name__)
 class ControllerError(Exception):
     """Base class for exceptions in this module."""
 
-    code = None
+    code = ReasonCode.INTERNAL_ERROR
 
     def __init__(self, message=None, err_resp=None):
         super().__init__(message)
@@ -25,7 +27,7 @@ class ControllerError(Exception):
     def __str__(self):
         """Custom error message for exception"""
         message = self.message or ""
-        code = f"[{str(self.code)}]" if self.code is not None else ""
+        code = f"[{str(self.code.value)}]" if self.code is not None else ""
 
         return f"{type(self).__name__}{code}: {message}"
 
@@ -50,7 +52,7 @@ def on_error(exception):
             def create_app(app):
                 ...
 
-            def error_occured(app, reason=None)
+            def error_occured(app, error=None)
                 ...
 
     """
@@ -62,8 +64,34 @@ def on_error(exception):
                 await func(cls, item, **kwargs)
             except exception as err:
                 logger.error(str(err))
-                await cls.error_occured(item, reason=err.message)
+                await cls.error_occurred(item, error=err)
 
         return wrapper
 
     return decorator
+
+
+def application_error_mapping(previous_state, error=None):
+    """
+    Create a Reason with a specific ReasonCode depending on an Application state
+    and the error sent.
+
+    Args:
+        previous_state (krake.data.kubernetes.ApplicationState): the state of the
+        Application that triggered the error.
+        error (Exception): the exception raised
+
+    Returns:
+        Reason: a Reason with RESOURCE_NOT_DELETED code if the Application was in a
+        FAILED State, the code of the Exception if it has one, or INTERNAL_ERROR code
+        by default.
+
+    """
+    if error is None or not hasattr(error, "code"):
+        return Reason(code=ReasonCode.INTERNAL_ERROR, message="Internal Error")
+
+    message = getattr(error, "message", "An exception was raised")
+    if previous_state == ApplicationState.FAILED:
+        return Reason(code=ReasonCode.RESOURCE_NOT_DELETED, message=message)
+
+    return Reason(code=error.code, message=message)

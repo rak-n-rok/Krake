@@ -4,6 +4,7 @@ import json
 from itertools import count
 from operator import attrgetter
 
+from krake.data.core import ReasonCode
 from krake.data.kubernetes import (
     Application,
     ApplicationState,
@@ -17,6 +18,7 @@ from krake.data.core import Conflict, resource_ref
 from krake.api.app import create_app
 
 from factories.kubernetes import ApplicationFactory, ClusterFactory
+from tests.factories.core import ReasonFactory
 
 uuid_re = re.compile(
     r"^[0-9A-F]{8}-[0-9A-F]{4}-[4][0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$",
@@ -259,11 +261,13 @@ async def test_update_app_status(aiohttp_client, config, db):
 
     await db.put(app)
 
+    reason = ReasonFactory()
+
     resp = await client.put(
         f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/status",
         json={
             "state": "FAILED",
-            "reason": "Stupid error",
+            "reason": serialize(reason),
             "cluster": "/kubernetes/namespaces/testing/clusters/test-cluster",
             "services": {"service1": "127.0.0.1:38531"},
         },
@@ -273,7 +277,7 @@ async def test_update_app_status(aiohttp_client, config, db):
 
     assert status.state == ApplicationState.FAILED
     assert status.created == app.status.created
-    assert status.reason == "Stupid error"
+    assert status.reason == reason
     assert status.cluster == "/kubernetes/namespaces/testing/clusters/test-cluster"
     assert status.services == {"service1": "127.0.0.1:38531"}
 
