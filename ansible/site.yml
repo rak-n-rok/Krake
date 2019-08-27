@@ -9,9 +9,10 @@
 #
 - import_playbook: network.yml
 - import_playbook: gateway.yml
-- import_playbook: central_idp.yml
-- import_playbook: prometheus.yml
-- import_playbook: devstack.yml
-- import_playbook: minikube_cluster.yml
-- import_playbook: magnum_cluster.yml
+# FIXME Temporary disabled playbooks. They need to be adapt to the new architecture.
+#- import_playbook: central_idp.yml
+#- import_playbook: prometheus.yml
+#- import_playbook: devstack.yml
+#- import_playbook: minikube_cluster.yml
+#- import_playbook: magnum_cluster.yml
 - import_playbook: krake.yml

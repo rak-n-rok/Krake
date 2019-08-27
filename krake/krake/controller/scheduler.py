@@ -16,6 +16,7 @@ Configuration is loaded from the ``controllers.scheduler`` section:
 
 """
 import logging
+import pprint
 from functools import total_ordering
 from typing import NamedTuple
 from argparse import ArgumentParser
@@ -108,7 +109,7 @@ class SchedulerWorker(Worker):
             )
 
     async def select_kubernetes_cluster(self, app):
-        # TODO: Evaluate spawning a new cluster
+        # TODO: Evaluate  a new cluster
         clusters = await self.client.kubernetes.cluster.list(namespace="all")
 
         if not clusters:
@@ -149,12 +150,14 @@ parser.add_argument("-c", "--config", help="Path to configuration YAML file")
 def main():
     args = parser.parse_args()
     config = load_config(args.config)
+    setup_logging(config["log"])
+    logger.debug("Krake configuration settings:\n %s" % pprint.pformat(config))
+
     scheduler = Scheduler(
         api_endpoint=config["controllers"]["scheduler"]["api_endpoint"],
         worker_factory=SchedulerWorker,
         worker_count=config["controllers"]["scheduler"]["worker_count"],
     )
-    setup_logging(config["log"])
     run(scheduler)
 
 

@@ -177,7 +177,19 @@ def config(etcd_server, user):
     etcd_host, etcd_port = etcd_server
 
     return {
-        "authentication": {"strategy": {"kind": "static", "name": user}},
+        "tls": {
+            "enabled": False,
+            "cert": "cert_path",
+            "key": "key_path",
+            "client_ca": "client_ca_path",
+        },
+        "authentication": {
+            "allow_anonymous": True,
+            "strategy": {
+                "keystone": {"enabled": False, "endpoint": "http://localhost"},
+                "static": {"enabled": True, "name": user},
+            },
+        },
         "authorization": "always-allow",
         "etcd": {"host": etcd_host, "port": etcd_port},
         "default-roles": [

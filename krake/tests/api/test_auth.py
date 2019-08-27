@@ -10,7 +10,13 @@ async def test_static_auth(aiohttp_client, config):
         create_app(
             config=dict(
                 config,
-                authentication={"strategy": {"kind": "static", "name": "test-user"}},
+                authentication={
+                    "allow_anonymous": True,
+                    "strategy": {
+                        "keystone": {"enabled": False, "endpoint": "localhost"},
+                        "static": {"enabled": True, "name": "test-user"},
+                    },
+                },
             )
         )
     )
@@ -107,7 +113,11 @@ async def test_keystone_auth(keystone, aiohttp_client, config):
             config=dict(
                 config,
                 authentication={
-                    "strategy": {"kind": "keystone", "endpoint": keystone.auth_url}
+                    "allow_anonymous": True,
+                    "strategy": {
+                        "keystone": {"enabled": True, "endpoint": keystone.auth_url},
+                        "static": {"enabled": False, "name": "test-user"},
+                    },
                 },
             )
         )
@@ -121,7 +131,18 @@ async def test_keystone_auth(keystone, aiohttp_client, config):
 
 async def test_deny_anonymous_requests(aiohttp_client, config):
     client = await aiohttp_client(
-        create_app(dict(config, authentication={"allow_anonymous": False}))
+        create_app(
+            config=dict(
+                config,
+                authentication={
+                    "allow_anonymous": False,
+                    "strategy": {
+                        "keystone": {"enabled": False, "endpoint": "localhost"},
+                        "static": {"enabled": False, "name": "test-user"},
+                    },
+                },
+            )
+        )
     )
     resp = await client.get("/me")
     assert resp.status == 401
@@ -134,8 +155,15 @@ async def test_client_anonymous_cert_auth(aiohttp_client, config, pki):
     app = create_app(
         config=dict(
             config,
-            authentication={"strategy": None},
+            authentication={
+                "allow_anonymous": True,
+                "strategy": {
+                    "keystone": {"enabled": False, "endpoint": "localhost"},
+                    "static": {"enabled": False, "name": "test-user"},
+                },
+            },
             tls={
+                "enabled": True,
                 "client_ca": pki.ca.cert,
                 "cert": server_cert.cert,
                 "key": server_cert.key,
@@ -160,12 +188,18 @@ async def test_client_anonymous_cert_auth(aiohttp_client, config, pki):
 async def test_client_cert_auth(aiohttp_client, config, pki):
     server_cert = pki.gencert("api-server")
     client_cert = pki.gencert("test-user")
-
     app = create_app(
         config=dict(
             config,
-            authentication={"strategy": None},
+            authentication={
+                "allow_anonymous": True,
+                "strategy": {
+                    "keystone": {"enabled": False, "endpoint": "localhost"},
+                    "static": {"enabled": False, "name": "test-user"},
+                },
+            },
             tls={
+                "enabled": True,
                 "client_ca": pki.ca.cert,
                 "cert": server_cert.cert,
                 "key": server_cert.key,
