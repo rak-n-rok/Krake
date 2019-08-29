@@ -1,4 +1,5 @@
 stages:
+  - provision
   - test
 
 variables:
@@ -8,11 +9,52 @@ variables:
   # can only cache local items.
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
 
+  OS_AUTH_URL: "https://identity-f1a.cloudandheat.com:5000/v3/"
+  OS_USERNAME: "matthias.goerens@cloudandheat.com"
+  OS_PROJECT_NAME: "cah-krake"
+  OS_DOMAIN_NAME: "Default"
+  OS_PROJECT_DOMAIN_ID: "default"
+
 # Pip's cache doesn't store the python packages
 # https://pip.pypa.io/en/stable/reference/pip_install/#caching
 cache:
   paths:
     - .cache/pip
+
+
+.on-web: &on-web
+  only:
+    - web
+
+
+provision-staging-infra:
+  stage: provision
+  image: python:3.6
+  script:
+    - python -V
+    - pip install python-openstackclient openstacksdk ansible==2.7.10 pytest
+    # apt-get update -y && apt-get install openssh-client openssh-server rsync -y
+    - apt-get update -y && apt-get install openssh-client rsync -y
+    # /usr/bin/ssh-keygen -A
+    # ssh-keygen -t rsa -P '' -f ~/.ssh/id_rsa
+    # cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys && chmod 0600 ~/.ssh/authorized_keys
+    # /etc/init.d/ssh start
+
+    - mkdir ~/.ssh/
+    - openstack keypair delete --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD my_runner_key || true
+    - openstack keypair create --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD my_runner_key > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - cat ~/.ssh/id_rsa
+
+    - export LC_ALL=C.UTF-8
+    - echo "=== provisioning staging infrastructure ==="
+    # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
+    - cd ansible
+    - chmod -v -R 700 $(pwd)
+    - ansible-playbook -i hosts-staging site.yml
+
+
+
 
 unittests-krake:
   stage: test
@@ -32,15 +74,6 @@ unittests-krake:
   tags:
     - docker
 
-# unittests-rok:
-#   stage: test
-#   image: python:3.6
-#   script:
-#     - pip install krake/
-#     - pip install rok/[dev]
-#     - pytest rok/tests
-#   tags:
-#     - docker
 
 flake8-krake:
   stage: test
