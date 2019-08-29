@@ -8,7 +8,7 @@ to wire fixtures and dependencies.
 import os
 from inspect import signature, isgeneratorfunction
 from collections import deque
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 import yaml
 import requests
 
@@ -234,7 +234,7 @@ def config():
             pass
 
     # No config file was found. Use defaults
-    return {"api_url": "http://localhost:8080", "user": "system"}
+    return {"api_url": "localhost:8080", "user": "system"}
 
 
 class BaseUrlSession(requests.Session):
@@ -282,13 +282,25 @@ class BaseUrlSession(requests.Session):
         return url
 
 
-@fixture
-@depends("config")
-def session(config):
+def _extract_ssl_parameters(config):
+    """
+    Get the SSL-oriented parameters from the "tls" part of the configuration.
+
+    Args:
+        config (dict): the complete configuration
+
+    Returns:
+        dict: the path of the certificate and its key as stored in the configuration. If
+        the client authority certificate is present, its path is also given.
+    """
     ssl_config = {}
     if "tls" in config:
         # Extract the SSL parameters
         tls_config = config["tls"]
+
+        if not tls_config["enabled"]:
+            return ssl_config
+
         try:
             ssl_config = {
                 "ssl_cert": tls_config["client_cert"],
@@ -304,5 +316,21 @@ def session(config):
             if path and not os.path.isfile(path):
                 raise FileNotFoundError(path)
 
-    with BaseUrlSession(base_url=config["api_url"], **ssl_config) as session:
+    return ssl_config
+
+
+@fixture
+@depends("config")
+def session(config):
+    ssl_config = _extract_ssl_parameters(config)
+
+    base_url = urlparse(config["api_url"])
+    if base_url.scheme:
+        raise ValueError(
+            "Scheme cannot be set on 'api_url' in config, use 'tls.enabled'"
+        )
+    api_protocol = "https" if ssl_config else "http"
+    url = f"{api_protocol}://{base_url.geturl()}"
+
+    with BaseUrlSession(base_url=url, **ssl_config) as session:
         yield session

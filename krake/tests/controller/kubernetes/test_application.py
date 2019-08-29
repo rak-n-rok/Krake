@@ -48,7 +48,7 @@ async def test_app_reception(aresponses, loop):
     worker = SimpleWorker()
 
     async with ApplicationController(
-        api_endpoint="http://api.krake.local",
+        api_endpoint="api.krake.local",
         worker_factory=lambda client: worker,
         worker_count=1,
         loop=loop,

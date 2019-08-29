@@ -35,7 +35,7 @@ from krake import load_config, setup_logging
 from krake.controller.kubernetes import KubernetesController
 from krake.data.kubernetes import ApplicationState
 from ..exceptions import on_error, ControllerError, application_error_mapping
-from .. import Worker, run, extract_ssl_config
+from .. import Worker, run, create_ssl_context
 
 
 logger = logging.getLogger("krake.controller.kubernetes")
@@ -373,13 +373,15 @@ def main():
     logger.debug("Krake configuration settings:\n %s" % pprint.pformat(config))
     controller_config = config["controllers"]["kubernetes"]["application"]
 
-    ssl_kwargs = extract_ssl_config(controller_config)
+    tls_config = controller_config.get("tls")
+    tls = tls_config is not None and tls_config["enabled"]
+    ssl_context = create_ssl_context(tls_config) if tls else None
 
     controller = ApplicationController(
         api_endpoint=controller_config["api_endpoint"],
         worker_factory=ApplicationWorker,
         worker_count=controller_config["worker_count"],
-        **ssl_kwargs,
+        ssl_context=ssl_context,
     )
     run(controller)
 

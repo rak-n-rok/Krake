@@ -7,7 +7,8 @@ paradigms to implement a simple "control loop mechanism" in Python.
 import asyncio
 import logging
 import os.path
-
+from yarl import URL
+import ssl
 from aiohttp import ClientConnectorError
 
 from krake.client import Client
@@ -146,34 +147,28 @@ class Controller(object):
     """
 
     def __init__(
-        self,
-        api_endpoint,
-        worker_factory,
-        worker_count=10,
-        loop=None,
-        ssl_cert=None,
-        ssl_key=None,
-        client_ca=None,
+        self, api_endpoint, worker_factory, worker_count=10, loop=None, ssl_context=None
     ):
         self.loop = loop or asyncio.get_event_loop()
         self.client = None
-        self.api_endpoint = api_endpoint
         self.worker_factory = worker_factory
         self.worker_count = worker_count
         self.queue = None
         self.watcher = None
         self.workers = None
-        self.ssl_cert = ssl_cert
-        self.ssl_key = ssl_key
-        self.client_ca = client_ca
+        self.ssl_context = ssl_context
+
+        base_url = URL(api_endpoint)
+        if base_url.scheme:
+            raise ValueError("Scheme cannot be set, depends on tls parameters presence")
+        api_protocol = "https" if self.ssl_context else "http"
+        url = f"{api_protocol}://{base_url}"
+
+        self.api_endpoint = url
 
     async def __aenter__(self):
         self.client = Client(
-            url=self.api_endpoint,
-            loop=self.loop,
-            ssl_cert=self.ssl_cert,
-            ssl_key=self.ssl_key,
-            client_ca=self.client_ca,
+            url=self.api_endpoint, loop=self.loop, ssl_context=self.ssl_context
         )
         await self.client.open()
         self.queue = WorkQueue(loop=self.loop)
@@ -326,36 +321,59 @@ async def _run_controller(controller):
         await controller
 
 
-def extract_ssl_config(config):
+def create_ssl_context(tls_config):
     """
-    Get the SSL-oriented parameters from the "tls" part of the configuration of a
-    controller.
+    From a certificate, create an SSL Context that can be used on the client side
+    for communicating with a Server.
 
     Args:
-        config (dict): the configuration part of a controller
+        tls_config (dict): the "tls" configuration part of a controller
 
     Returns:
-        dict: the path of the certificate and its key as stored in the configuration. If
-        the client authority certificate is present, its path is also given.
+        ssl.SSLContext: a default SSL Context tweaked with the given certificate
+        elements
 
     """
-    tls_config = config.get("tls")
-    if tls_config is None:
-        return {}
+    cert, key, client_ca = _extract_ssl_config(tls_config)
+    ssl_context = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH)
+    ssl_context.verify_mode = ssl.CERT_OPTIONAL
 
+    ssl_context.load_cert_chain(certfile=cert, keyfile=key)
+
+    # Load authorities for client certificates.
+    if client_ca:
+        ssl_context.load_verify_locations(cafile=client_ca)
+
+    return ssl_context
+
+
+def _extract_ssl_config(tls_config):
+    """
+    Get the SSL-oriented parameters from the "tls" part of the configuration of a
+    controller, if it is present
+
+    Args:
+        tls_config (dict): the "tls" configuration part of a controller
+
+    Returns:
+        tuple: a three-element tuple containing: the path of the certificate, its key
+         as stored in the config and if the client authority certificate is present,
+         its path is also given. Otherwise the last element is None.
+
+    """
     try:
-        ssl_config = {
-            "ssl_cert": tls_config["client_cert"],
-            "ssl_key": tls_config["client_key"],
-            "client_ca": tls_config.get("client_ca"),
-        }
+        cert_tuple = (
+            tls_config["client_cert"],
+            tls_config["client_key"],
+            tls_config.get("client_ca"),
+        )
     except KeyError as ke:
         raise KeyError(
             f"The key '{ke.args[0]}' is missing from the 'tls' configuration part"
         )
 
-    for path in ssl_config.values():
+    for path in cert_tuple:
         if path and not os.path.isfile(path):
             raise FileNotFoundError(path)
 
-    return ssl_config
+    return cert_tuple

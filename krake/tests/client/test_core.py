@@ -4,6 +4,7 @@ import pytest
 from aiohttp.test_utils import TestServer as Server
 from krake.api.app import create_app
 from krake.client import Client
+from krake.controller import create_ssl_context
 from krake.data.core import Role, RoleBinding
 
 from factories.core import RoleFactory, RoleBindingFactory, RoleRuleFactory
@@ -171,12 +172,13 @@ async def test_connect_ssl(aiohttp_server, config, loop, pki):
 
     client_tls = {
         "client_ca": pki.ca.cert,
-        "ssl_cert": client_cert.cert,
-        "ssl_key": client_cert.key,
+        "client_cert": client_cert.cert,
+        "client_key": client_cert.key,
     }
+    ssl_context = create_ssl_context(client_tls)
 
     url = f"https://{server.host}:{server.port}"
-    async with Client(url=url, loop=loop, **client_tls) as client:
+    async with Client(url=url, loop=loop, ssl_context=ssl_context) as client:
         resp = await client.session.get(f"{url}/me")
         data = await resp.json()
         assert data["user"] == "client"

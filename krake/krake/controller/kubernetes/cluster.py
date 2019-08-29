@@ -24,7 +24,7 @@ from argparse import ArgumentParser
 from krake import load_config, setup_logging
 from krake.controller.kubernetes import KubernetesController
 from krake.data.kubernetes import ClusterState
-from .. import Worker, run, extract_ssl_config
+from .. import Worker, run, create_ssl_context
 
 logger = logging.getLogger("krake.controller.kubernetes.cluster")
 
@@ -75,13 +75,15 @@ def main():
     logger.debug("Krake configuration settings:\n %s" % pprint.pformat(config))
     controller_config = config["controllers"]["kubernetes"]["cluster"]
 
-    ssl_kwargs = extract_ssl_config(controller_config)
+    tls_config = controller_config.get("tls")
+    tls = tls_config is not None and tls_config["enabled"]
+    ssl_context = create_ssl_context(tls_config) if tls else None
 
     controller = ClusterController(
         api_endpoint=controller_config["api_endpoint"],
         worker_factory=ClusterWorker,
         worker_count=controller_config["worker_count"],
-        **ssl_kwargs,
+        ssl_context=ssl_context,
     )
     run(controller)
 

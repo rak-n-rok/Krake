@@ -26,7 +26,7 @@ from krake.data.core import ReasonCode
 from krake.data.kubernetes import ApplicationState, Cluster
 
 from .exceptions import on_error, ControllerError
-from . import Controller, Worker, run, extract_ssl_config
+from . import Controller, Worker, run, create_ssl_context
 
 logger = logging.getLogger("krake.controller.scheduler")
 
@@ -155,15 +155,18 @@ def main():
 
     setup_logging(config["log"])
     logger.debug("Krake configuration settings:\n %s" % pprint.pformat(config))
-    controller_config = config["controllers"]["scheduler"]
+    scheduler_config = config["controllers"]["scheduler"]
 
-    ssl_kwargs = extract_ssl_config(controller_config)
+    tls_config = scheduler_config.get("tls")
+    tls = tls_config is not None and tls_config["enabled"]
+    ssl_context = create_ssl_context(tls_config) if tls else None
+    logger.debug("TLS is %r", "enabled" if tls else "disabled")
 
     scheduler = Scheduler(
-        api_endpoint=controller_config["api_endpoint"],
+        api_endpoint=scheduler_config["api_endpoint"],
         worker_factory=SchedulerWorker,
-        worker_count=controller_config["worker_count"],
-        **ssl_kwargs
+        worker_count=scheduler_config["worker_count"],
+        ssl_context=ssl_context,
     )
     run(scheduler)
 

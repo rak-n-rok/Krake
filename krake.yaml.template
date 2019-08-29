@@ -55,34 +55,38 @@ controllers:
 
   # Example:
   # <resource>_controller:
-  #   api_endpoint: https://localhost:8443
+  #   api_endpoint: localhost:8443
   #   worker_count: 5
   #   tls:
+  #     enabled: true
   #     client_ca: tmp/pki/ca.pem
   #     client_cert: tmp/pki/<resource>_contr.pem
   #     client_key: tmp/pki/<resource>_contr-key.pem
-  # If the 'tls' element is not present, the controller will not use TLS
+  # If the 'enabled' element is not true, the controller will not use TLS
   scheduler:
-    api_endpoint: https://localhost:8443
+    api_endpoint: localhost:8080
     worker_count: 5
     tls:
+      enabled: false
       client_ca: tmp/pki/ca.pem
       client_cert: tmp/pki/system:scheduler.pem
       client_key: tmp/pki/system:scheduler-key.pem
 
   kubernetes:
     cluster:
-      api_endpoint: https://localhost:8443
+      api_endpoint: localhost:8080
       worker_count: 5
       tls:
+        enabled: false
         client_ca: tmp/pki/ca.pem
         client_cert: tmp/pki/system:kube_cluster.pem
         client_key: tmp/pki/system:kube_cluster-key.pem
 
     application:
-      api_endpoint: https://localhost:8443
+      api_endpoint: localhost:8080
       worker_count: 5
       tls:
+        enabled: false
         client_ca: tmp/pki/ca.pem
         client_cert: tmp/pki/system:kube_app.pem
         client_key: tmp/pki/system:kube_app-key.pem
