@@ -286,8 +286,8 @@ async def test_update_app_binding(aiohttp_client, config, db):
     assert resp.status == 200
     body = await resp.json()
     received = Application.deserialize(body)
-    received.status.cluster == cluster_ref
-    received.status.state == ApplicationState.SCHEDULED
+    assert received.status.cluster == cluster_ref
+    assert received.status.state == ApplicationState.SCHEDULED
 
     stored, _ = await db.get(Application, namespace="testing", name=app.metadata.name)
     assert stored.status.cluster == cluster_ref
@@ -298,7 +298,6 @@ async def test_delete_app(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     # Create application
-    client = await aiohttp_client(create_app(config=config))
     app = ApplicationFactory(status__state=ApplicationState.PENDING)
     await db.put(app)
 
@@ -306,10 +305,12 @@ async def test_delete_app(aiohttp_client, config, db):
     resp = await client.delete(
         f"/kubernetes/namespaces/testing/applications/{app.metadata.name}"
     )
-    assert resp.status == 204
+    assert resp.status == 200
+    data = Application.deserialize(await resp.json())
+    assert resource_ref(data) == resource_ref(app)
 
     deleted, _ = await db.get(Application, namespace="testing", name=app.metadata.name)
-    assert deleted is None
+    assert deleted.metadata.deleted is not None
 
 
 async def test_delete_app_with_finalizers(aiohttp_client, config, db):
@@ -408,7 +409,7 @@ async def test_watch_app(aiohttp_client, config, db, loop):
                 assert app.spec == apps[1].spec
                 assert app.status.state == ApplicationState.PENDING
             elif i == 2:
-                assert event.type == WatchEventType.DELETED
+                assert event.type == WatchEventType.MODIFIED
                 assert app.metadata.name == apps[0].metadata.name
                 assert app.spec == apps[0].spec
                 assert app.status.state == ApplicationState.PENDING
@@ -429,7 +430,11 @@ async def test_watch_app(aiohttp_client, config, db, loop):
         resp = await client.delete(
             f"/kubernetes/namespaces/testing/applications/{apps[0].metadata.name}"
         )
-        assert resp.status == 204
+        assert resp.status == 200
+
+        received = Application.deserialize(await resp.json())
+        assert resource_ref(received) == resource_ref(apps[0])
+        assert received.metadata.deleted is not None
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -594,20 +599,18 @@ async def test_delete_cluster(aiohttp_client, config, db):
     resp = await client.delete(
         f"/kubernetes/namespaces/testing/clusters/{cluster.metadata.name}"
     )
-    assert resp.status == 204
+    assert resp.status == 200
+    data = Cluster.deserialize(await resp.json())
+    assert resource_ref(data) == resource_ref(cluster)
 
-    deleted, rev = await db.get(
-        Application, namespace="testing", name=cluster.metadata.name
-    )
-    assert deleted is None
-    assert rev is None
+    deleted, _ = await db.get(Cluster, namespace="testing", name=cluster.metadata.name)
+    assert deleted.metadata.deleted is not None
 
 
 async def test_delete_cluster_with_finalizers(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     # Create application
-    client = await aiohttp_client(create_app(config=config))
     cluster = ClusterFactory(metadata__finalizers=["test-finializer"])
     await db.put(cluster)
 

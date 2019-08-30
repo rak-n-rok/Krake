@@ -6,7 +6,7 @@ from krake.api.app import create_app
 from krake.client import Client
 from krake.controller import create_ssl_context
 from krake.client.core import CoreApi
-from krake.data.core import ListMetadata, Role, RoleBinding
+from krake.data.core import ListMetadata, Role, RoleBinding, resource_ref
 
 from factories.core import RoleFactory, RoleBindingFactory, RoleRuleFactory
 
@@ -93,10 +93,11 @@ async def test_delete_role(aiohttp_server, config, db, loop):
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         core_api = CoreApi(client)
         received = await core_api.delete_role(name=data.metadata.name)
-        assert received is None
+
+        assert resource_ref(received) == resource_ref(data)
 
     stored, _ = await db.get(Role, name=data.metadata.name)
-    assert stored is None
+    assert stored.metadata.deleted is not None
 
 
 async def test_list_rolebindings(aiohttp_server, config, db, loop):
@@ -187,10 +188,10 @@ async def test_delete_rolebinding(aiohttp_server, config, db, loop):
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         core_api = CoreApi(client)
         received = await core_api.delete_role_binding(name=data.metadata.name)
-        assert received is None
+        assert resource_ref(received) == resource_ref(data)
 
     stored, _ = await db.get(RoleBinding, name=data.metadata.name)
-    assert stored is None
+    assert stored.metadata.deleted is not None
 
 
 @pytest.mark.require_executable("cfssl")

@@ -20,6 +20,9 @@ class KubernetesApi:
     @use_schema("body", ClusterBinding.Schema)
     async def update_application_binding(request, body, app):
         app.status.cluster = body.cluster
+        if not app.status.depends:
+            app.status.depends = []
+        app.status.depends.append(body.cluster)
 
         # Transition into "scheduled" state
         app.status.state = ApplicationState.SCHEDULED
@@ -53,13 +56,6 @@ class KubernetesApi:
             for app in apps
             if app.status.cluster == cluster_ref and not app.metadata.deleted
         ]
-
-        # No depending applications and no finalizers, delete application from database
-        if not apps and not cluster.metadata.finalizers:
-            # TODO: The deletion from database should be done via garbage
-            #   collection (see #235)
-            await session(request).delete(cluster)
-            return web.Response(status=204)
 
         if apps and "cascade" not in request.query:
             # Do not delete if Applications are running on the cluster

@@ -44,10 +44,6 @@ class Reason(Serializable):
     message: str
 
 
-class Status(Serializable):
-    reason: Reason = None
-
-
 class WatchEventType(Enum):
     ADDED = auto()
     MODIFIED = auto()
@@ -81,6 +77,7 @@ class Role(ApiObject):
     kind: str = "ApiObject"
     metadata: Metadata
     rules: List[RoleRule]
+    cleanup: bool = False
 
 
 class RoleList(ApiObject):
@@ -102,6 +99,7 @@ class RoleBinding(ApiObject):
     metadata: Metadata
     users: List[str]
     roles: List[str]
+    cleanup: bool = False
 
 
 class RoleBindingList(ApiObject):
@@ -121,6 +119,11 @@ class ResourceRef(Serializable):
 class Conflict(Serializable):
     source: ResourceRef
     conflicting: List[ResourceRef]
+
+
+class Status(Serializable):
+    reason: Reason = None
+    depends: List[ResourceRef] = None
 
 
 def resource_ref(resource):

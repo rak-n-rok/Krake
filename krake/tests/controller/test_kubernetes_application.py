@@ -8,7 +8,7 @@ import yaml
 from krake.api.app import create_app
 from krake.data.core import resource_ref, ReasonCode
 from krake.data.kubernetes import Application, ApplicationState
-from krake.controller.kubernetes.application import (
+from krake.controller.kubernetes_application import (
     ApplicationController,
     ApplicationWorker,
 )
@@ -17,7 +17,7 @@ from krake.test_utils import server_endpoint
 
 from factories.fake import fake
 from factories.kubernetes import ApplicationFactory, ClusterFactory, make_kubeconfig
-from .. import SimpleWorker
+from . import SimpleWorker
 
 
 async def test_app_reception(aiohttp_server, config, db, loop):
@@ -370,11 +370,11 @@ async def test_app_deletion_without_binding(aiohttp_server, config, db, loop):
         worker = ApplicationWorker(client=client)
         await worker.resource_received(app)
 
-    # Ensure the application is completly removed from database
+    # Ensure the application is marked for deletion
     stored, _ = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored is None
+    assert stored.metadata.deleted is not None
 
 
 async def test_service_registration(aiohttp_server, config, db, loop):

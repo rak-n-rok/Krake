@@ -1,7 +1,7 @@
 from operator import attrgetter
 
 from krake.api.app import create_app
-from krake.data.core import Role, RoleBinding, RoleList, RoleBindingList
+from krake.data.core import Role, RoleBinding, RoleList, RoleBindingList, resource_ref
 
 from factories.core import RoleFactory, RoleBindingFactory
 
@@ -105,10 +105,12 @@ async def test_delete_role(aiohttp_client, config, db):
 
     # Delete role
     resp = await client.delete(f"/core/roles/{role.metadata.name}")
-    assert resp.status == 204
+    assert resp.status == 200
+    data = Role.deserialize(await resp.json())
+    assert resource_ref(data) == resource_ref(role)
 
     deleted, _ = await db.get(Role, name=role.metadata.name)
-    assert deleted is None
+    assert deleted.metadata.deleted is not None
 
 
 async def test_delete_role_rbac(rbac_allow, aiohttp_client, config, db):
@@ -224,10 +226,12 @@ async def test_delete_role_binding(aiohttp_client, config, db):
 
     # Delete binding
     resp = await client.delete(f"/core/rolebindings/{binding.metadata.name}")
-    assert resp.status == 204
+    assert resp.status == 200
+    data = RoleBinding.deserialize(await resp.json())
+    assert resource_ref(data) == resource_ref(binding)
 
-    deleted, _ = await db.get(Role, name=binding.metadata.name)
-    assert deleted is None
+    deleted, _ = await db.get(RoleBinding, name=binding.metadata.name)
+    assert deleted.metadata.deleted is not None
 
 
 async def test_delete_role_binding_rbac(rbac_allow, aiohttp_client, config, db):
