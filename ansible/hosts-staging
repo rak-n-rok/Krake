@@ -24,7 +24,7 @@ all:
     # If key_file is set to null, the default SSH identity
     # (~/.ssh/id_rsa) will be used.
     keypair: my_runner_key
-    key_file: null
+    key_file: ../.ssh/id_rsa
 
     # SSH jump host that is used to access the OpenStack instances. By
     # default, no OpenStack server has a floating IP assigned except hosts in
@@ -78,4 +78,4 @@ all:
           subnet_cidr: 192.168.0.0/24
           public_network: shared-public-IPv4
           router_name: krake-staging-router
-          common_secgroup_name: krake-common-secgroup
+          common_secgroup_name: krake-staging-common-secgroup

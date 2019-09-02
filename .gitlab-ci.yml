@@ -1,6 +1,7 @@
 stages:
   - provision
   - test
+  - smoke test
   - cleanup
 
 variables:
@@ -22,7 +23,6 @@ cache:
   paths:
     - .cache/pip
 
-
 .on-web: &on-web
   only:
     - web
@@ -31,6 +31,11 @@ cache:
 provision-staging-infra:
   stage: provision
   image: python:3.6
+  artifacts:
+    paths:
+      - .ssh/id_rsa
+      - ansible/.etc # Absolute path: /builds/ragnarok/krake/ansible/.etc
+    expire_in: 1 week
   script:
     - python -V
     - pip install python-openstackclient openstacksdk ansible==2.7.10 pytest
@@ -41,11 +46,11 @@ provision-staging-infra:
     # cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys && chmod 0600 ~/.ssh/authorized_keys
     # /etc/init.d/ssh start
 
-    - mkdir ~/.ssh/
+    - mkdir .ssh/
     - openstack keypair delete --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD my_runner_key || true
-    - openstack keypair create --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD my_runner_key > ~/.ssh/id_rsa
-    - chmod 600 ~/.ssh/id_rsa
-    - cat ~/.ssh/id_rsa
+    - openstack keypair create --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD my_runner_key > .ssh/id_rsa
+    - chmod 600 .ssh/id_rsa
+    - cat .ssh/id_rsa
 
     - export LC_ALL=C.UTF-8
     - echo "=== provisioning staging infrastructure ==="
@@ -53,6 +58,9 @@ provision-staging-infra:
     - cd ansible
     - chmod -v -R 700 $(pwd)
     - ansible-playbook -i hosts-staging site.yml
+    - pwd
+    - ls -al ../.ssh/id_rsa
+    - ls -al .etc
 
 
 
@@ -95,6 +103,24 @@ flake8-rok:
     - docker
 
 
+smoke_test:
+  stage: smoke test
+  image: python:3.6
+  script:
+    - ls -al .ssh/id_rsa
+    - ls -al ansible/.etc
+
+    - pip install ansible==2.7.10
+    - apt-get update -y && apt-get install openssh-client rsync -y
+
+    - export LC_ALL=C.UTF-8
+    - echo "=== provisioning staging infrastructure ==="
+    # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
+    - cd ansible
+    - chmod -v -R 700 $(pwd)
+    - ansible-playbook -i hosts-staging smoke_tests.yml
+
+
 cleanup-staging-infra:
   stage: cleanup
   image: python:3.6
@@ -102,4 +128,4 @@ cleanup-staging-infra:
     - pip install python-openstackclient openstack-heat
     - openstack stack delete -y --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD krake-staging-network krake-staging-gateway krake-staging-app || true
     - openstack keypair delete --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD my_runner_key || true
-  when: always
+#  when: always

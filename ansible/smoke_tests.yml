@@ -1,0 +1,18 @@
+- name: Running Krake smoke tests
+  become: yes
+  become_user: krake
+  hosts: krake_apps
+  vars:
+    git_dir: /home/krake/git/krake
+    test_dir: tests
+  tasks:
+    - name: Install pytest
+      pip:
+        name:
+          - pytest
+        state: present
+
+    # pytest and rok are installed in /home/krake/.local/bin
+    # This is added to the PATH in ~/.profile, which isn't loaded by Ansible
+    - name: Run smoke test for krake client
+      shell: ". ~/.profile; pytest {{ git_dir }}/{{test_dir}}/test_krake_cli.py"
