@@ -7,7 +7,7 @@ specific way.
 import sys
 import json
 import yaml
-import os
+import shutil
 from datetime import datetime
 
 from dateutil.parser import parse
@@ -298,7 +298,7 @@ class Table(object):
 
         """
         # @see https://stackoverflow.com/a/41864359/2467158
-        width, height = os.get_terminal_size(0)
+        width, height = shutil.get_terminal_size()
         table = Texttable(max_width=width)
 
         if self.many:
