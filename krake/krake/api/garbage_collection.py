@@ -2,16 +2,26 @@
 application. When a resource is marked as deleted, the GC mark all its dependents as
 deleted. After cleanup is done by the Controller, it handles the final deletion of
 resources.
+
+Configuration is loaded from the ``controllers.garbage_collector`` section:
+
+.. code:: yaml
+
+    controllers:
+      garbage_collector:
+        api_endpoint: http://localhost:8080
+        worker_count: 5
+
 """
 
 import asyncio
 import logging
-from argparse import ArgumentParser
 
-from krake import setup_logging, load_config
+from aiohttp import ClientResponseError, ClientConnectorError
 from krake.api.database import Session
 from krake.apidefs.kubernetes import ClusterResource, ApplicationResource
-from krake.controller import Controller, run, Worker
+from krake.controller import Controller, Worker
+from krake.client import Client
 from krake.client.kubernetes import KubernetesApi
 from krake.data.core import resource_ref, WatchEventType
 
@@ -212,6 +222,7 @@ class GarbageWorker(Worker):
                 return (
                     resource.status.depends
                     and resource_ref(entity) in resource.status.depends
+                    and resource.metadata.deleted is None
                 )
 
             for resource_def in RESOURCES:
@@ -261,17 +272,134 @@ class GarbageWorker(Worker):
             )
 
 
-def main(args):
-    config = load_config("krake.yaml")
+async def register_garbage_collection(app):
+    """This function needs to be registered as a handler for the "on_startup" signal
+    of an aiohttp web application.
+    Store the Garbage Collection task as an aiohttp background task.
+
+    Args:
+        app: the application that fired the signal. The created task will be
+        registered to this web application.
+
+    """
+    config = app["config"]
+    gc_config = config["controllers"]["garbage_collector"]
+    etcd_host = config["etcd"]["host"]
+    etcd_port = config["etcd"]["port"]
+
+    app["gc"] = app.loop.create_task(run_gc(gc_config, etcd_host, etcd_port))
+
+
+async def cleanup_garbage_collection(app):
+    """This function needs to be registered as a handler for the "on_cleanup" signal
+    of an aiohttp web application.
+    Cancel the Garbage Collection task.
+
+    Args:
+        app: the application that fired the signal.
+
+    """
+    app["gc"].cancel()
+    try:
+        await app["gc"]
+    except asyncio.CancelledError:
+        logger.info("Garbage Collector has been cancelled")
+
+
+async def run_gc(config, etcd_host, etcd_port):
+    """Start the Garbage Collector and restart it in case of failure.
+
+    Args:
+        config (dict): configuration of the Garbage Collector Controller
+        etcd_host (str): host of the etcd database for direct access
+        etcd_port (int): port of the etcd database for direct access
+
+    """
+    while True:
+        try:
+            await start_garbage_collector(config, etcd_host, etcd_port)
+        except asyncio.TimeoutError:
+            logger.warn("Timeout")
+        except ClientConnectorError as err:
+            logger.error(err)
+            await asyncio.sleep(1)
+        except Exception as err:
+            logger.error(
+                f"The Garbage Collector has encountered an error: "
+                f"{type(err)}, {err.args}"
+            )
+            await asyncio.sleep(1)
+
+
+async def start_garbage_collector(config, etcd_host, etcd_port):
+    """When the API is started, create the Garbage Collector and await it.
+
+    Args:
+        config (dict): configuration of the Garbage Collector Controller
+        etcd_host (str): host of the etcd database for direct access
+        etcd_port (int): port of the etcd database for direct access
+
+    """
+    api_endpoint = config["api_endpoint"]
+
+    await _is_api_ready(api_endpoint)
+
     controller = GarbageCollector(
-        api_endpoint="http://localhost:8080",
-        worker_factory=GarbageWorker,
-        worker_count=5,
+        api_endpoint=api_endpoint,
+        worker_factory=_create_garbage_worker(etcd_host, etcd_port),
+        worker_count=config["worker_count"],
     )
-    setup_logging(config["log"])
-    run(controller)
+    async with controller:
+        logger.info("Garbage Collector is started")
+        await controller
 
 
-if __name__ == "__main__":
-    parser = ArgumentParser(description="Kubernetes application controller")
-    main(parser.parse_args())
+async def _is_api_ready(api_endpoint, timeout=10):
+    """Block until the API can be reached.
+
+    Args:
+        api_endpoint (str): the complete endpoint of the API
+        timeout (int, optional): the amount of seconds to wait for the API to be up
+
+    Raises:
+        asyncio.TimeoutError: if the API cannot be reached after the timeout
+
+    """
+
+    async def wait_for_api():
+        while True:
+            client = Client(url=api_endpoint)
+            try:
+                # Only stops when a connection is possible
+                await client.open()
+                await client.session.get(api_endpoint)
+                return
+            except ClientResponseError as err:
+                if err.status != 404:
+                    raise
+            finally:
+                await client.close()
+
+            # Try again if the error status was 404
+            await asyncio.sleep(1)
+
+    await asyncio.wait_for(wait_for_api(), timeout)
+
+
+def _create_garbage_worker(etcd_host, etcd_port):
+    """Factory to create an instance of :class:`GarbageWorker` with the etcd
+    connection parameters.
+
+    Args:
+        etcd_host (str): host of the etcd database for direct access
+        etcd_port (int): port of the etcd database for direct access
+
+    Returns:
+        function: the factory to create the workers
+
+    """
+
+    def worker_factory(client):
+        return GarbageWorker(client, etcd_host=etcd_host, etcd_port=etcd_port)
+
+    return worker_factory

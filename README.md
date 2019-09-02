@@ -76,9 +76,6 @@ python -m krake.controller.scheduler
 
 # Run the Kubernetes application controller
 python -m krake.controller.kubernetes_application
-
-# Run the Garbage Collector
-python -m krake.api.garbage_collection
 ```
 
 

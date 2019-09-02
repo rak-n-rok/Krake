@@ -53,6 +53,10 @@ default-role-bindings:
 
 controllers:
 
+  garbage_collector:
+    api_endpoint: http://localhost:8080
+    worker_count: 5
+
   # Example:
   # <resource>_controller:
   #   api_endpoint: localhost:8443
