@@ -25,6 +25,7 @@
           common_secgroup: "{{ hostvars[network]['common_secgroup_name'] }}"
           create_floating_ip: "{{ floating_ip }}"
           flavor: "{{ flavor }}"
+          use_config_drive: "{{ use_config_drive }}"
       register: stack
 
     - name: Update host variables of Minikube VM
