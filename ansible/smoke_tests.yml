@@ -16,3 +16,24 @@
     # This is added to the PATH in ~/.profile, which isn't loaded by Ansible
     - name: Run smoke test for krake client
       shell: ". ~/.profile; pytest {{ git_dir }}/{{test_dir}}/test_krake_cli.py"
+
+
+- name: Running Minikube smoke tests
+  hosts: minikube_clusters
+  vars:
+    git_dir: /home/krake/git/krake
+    test_dir: tests
+  tasks:
+    - name: Install pytest
+      pip:
+        name:
+          - pytest
+        state: present
+
+    - name: Ensure Minikube smoke test is present
+      copy:
+        src: ../tests/
+        dest: tests/
+
+    - name: Run smoke test for Minikube
+      shell: ". ~/.profile; pytest tests/test_minikube_cli.py"
