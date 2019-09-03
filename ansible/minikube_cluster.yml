@@ -8,7 +8,7 @@
         msg: >
           Minikube VM is in a different network ({{ network }}) than the
           IdP ({{ hostvars[idp].network }})
-      when: "hostvars[idp].network != network"
+      when: use_keystone and "hostvars[idp].network != network"
 
     - name: Create Heat stack for Minikube VM
       delegate_to: localhost
