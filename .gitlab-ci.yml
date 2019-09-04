@@ -2,7 +2,9 @@ stages:
   - provision
   - test
   - smoke test
+  - integration test
   - cleanup
+
 
 variables:
   ETCD_VER: v3.3.13
@@ -121,9 +123,30 @@ smoke_test:
     - ansible-playbook -i hosts-staging smoke_tests.yml
 
 
+integration_test:
+  stage: integration test
+  image: python:3.6
+  script:
+    - ls -al .ssh/id_rsa
+    - ls -al ansible/.etc
+
+    - pip install ansible==2.7.10
+    - apt-get update -y && apt-get install openssh-client rsync -y
+
+    - export LC_ALL=C.UTF-8
+    - echo "=== provisioning staging infrastructure ==="
+    # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
+    - cd ansible
+    - chmod -v -R 700 $(pwd)
+    - ansible-playbook -i hosts-staging integration_tests.yml
+
+
 cleanup-staging-infra:
   stage: cleanup
   image: python:3.6
+#  only:
+#    - staging
+#    - master
   script:
     - pip install python-openstackclient openstack-heat
     - openstack stack delete -y --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD krake-staging-network krake-staging-gateway krake-staging-app minikube-cluster-staging-1 || true

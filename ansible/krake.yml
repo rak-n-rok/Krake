@@ -281,3 +281,30 @@
           pip:
             name: "{{ git_dir }}/rok"
 
+
+- name: Generate cluster config
+  become: yes
+  become_user: krake
+  hosts: krake_apps
+  vars:
+    - krake_homedir: /home/krake
+  tags:
+    - cluster_certs
+  tasks:
+
+    - name: Create directory to host clusters infos
+      file:
+        path: "{{ krake_homedir }}/clusters/config"
+        state: directory
+
+    - name: Upload certificates directory
+      copy:
+        src: cluster_certs/
+        dest: "{{ krake_homedir }}/clusters/certs/"
+        mode: preserve
+
+    - name: Generate kube config file
+      template:
+        src: files/krake/kube_config.j2
+        dest: "{{ krake_homedir }}/clusters/config/{{ item }}"
+      with_items: "{{ groups['minikube_clusters'] }}"

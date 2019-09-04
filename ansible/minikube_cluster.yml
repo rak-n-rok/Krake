@@ -255,3 +255,17 @@
       include_role:
         name: k8s-keystone-auth
       when: "use_keystone|default('')"
+
+- name: Download cluster certificates
+  hosts: minikube_clusters
+  tags:
+    - cluster_certs
+  tasks:
+    - name: Download cluster certificates
+      fetch:
+        src: "{{ item }}"
+        dest: cluster_certs
+      with_items:
+        - .minikube/ca.crt
+        - .minikube/client.crt
+        - .minikube/client.key
