@@ -20,8 +20,6 @@ class KubernetesApi:
     @use_schema("body", ClusterBinding.Schema)
     async def update_application_binding(request, body, app):
         app.status.cluster = body.cluster
-        if not app.status.depends:
-            app.status.depends = []
         app.status.depends.append(body.cluster)
 
         # Transition into "scheduled" state

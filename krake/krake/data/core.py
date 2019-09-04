@@ -77,7 +77,6 @@ class Role(ApiObject):
     kind: str = "ApiObject"
     metadata: Metadata
     rules: List[RoleRule]
-    cleanup: bool = False
 
 
 class RoleList(ApiObject):
@@ -99,7 +98,6 @@ class RoleBinding(ApiObject):
     metadata: Metadata
     users: List[str]
     roles: List[str]
-    cleanup: bool = False
 
 
 class RoleBindingList(ApiObject):
@@ -123,7 +121,7 @@ class Conflict(Serializable):
 
 class Status(Serializable):
     reason: Reason = None
-    depends: List[ResourceRef] = None
+    depends: List[ResourceRef] = field(default_factory=list)
 
 
 def resource_ref(resource):

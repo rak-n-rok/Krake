@@ -97,7 +97,6 @@ class Cluster(ApiObject):
     metadata: Metadata
     spec: ClusterSpec
     status: ClusterStatus = field(metadata={"subresource": True})
-    cleanup: bool = False  # TODO change
 
 
 class ClusterList(ApiObject):
