@@ -1,3 +1,4 @@
+from krake.apidefs import garbage_collected
 from krake.data.kubernetes import (
     Application,
     ApplicationList,
@@ -11,6 +12,7 @@ from .definitions import ApiDef, Scope, operation, subresource, ListQuery
 kubernetes = ApiDef("kubernetes")
 
 
+@garbage_collected(Application)
 @kubernetes.resource
 class ApplicationResource:
     singular = "Application"
@@ -76,6 +78,7 @@ class ApplicationResource:
             response = Application
 
 
+@garbage_collected(Cluster)
 @kubernetes.resource
 class ClusterResource:
     singular = "Cluster"
