@@ -64,40 +64,50 @@ async def test_cluster_deletion(aiohttp_server, config, db, loop):
         metadata__finalizers=["cascading_deletion"],
         metadata__deleted=fake.date_time(tzinfo=pytz.utc),
     )
-    app = ApplicationFactory(
-        metadata__finalizers=["cleanup"],
-        status__state=ApplicationState.RUNNING,
-        status__cluster=resource_ref(cluster),
-        status__depends=[resource_ref(cluster)],
-    )
 
     await db.put(cluster)
-    await db.put(app)
+
+    apps = [
+        ApplicationFactory(
+            metadata__finalizers=["cleanup"],
+            status__state=ApplicationState.RUNNING,
+            status__cluster=resource_ref(cluster),
+            status__depends=[resource_ref(cluster)],
+        )
+        for _ in range(0, 3)
+    ]
+    for app in apps:
+        await db.put(app)
 
     server = await aiohttp_server(create_app(config))
 
-    # Ensure that the Application is marked as deleted
-    async with Client(url=server_endpoint(server), loop=loop) as client:
-        worker = GarbageWorker(client=client, etcd_host=db.host, etcd_port=db.port)
-        await worker.resource_received(cluster)
+    for app in apps:
+        # Ensure that the Applications are marked as deleted
+        async with Client(url=server_endpoint(server), loop=loop) as client:
+            worker = GarbageWorker(client=client, etcd_host=db.host, etcd_port=db.port)
+            await worker.resource_received(cluster)
 
-    stored_app, _ = await db.get(
-        Application, namespace=app.metadata.namespace, name=app.metadata.name
-    )
-    assert stored_app.metadata.deleted is not None
+        stored_app, _ = await db.get(
+            Application, namespace=app.metadata.namespace, name=app.metadata.name
+        )
+        assert stored_app.metadata.deleted is not None
 
-    stored_app.metadata.finalizers.pop(-1)
-    await db.put(stored_app)
+        # Mark the application as being "cleaned up"
+        removed_finalizer = stored_app.metadata.finalizers.pop(-1)
+        assert removed_finalizer == "cleanup"
+        await db.put(stored_app)
 
-    # Ensure that the Application resource is deleted from database
-    async with Client(url=server_endpoint(server), loop=loop) as client:
-        worker = GarbageWorker(client=client, etcd_host=db.host, etcd_port=db.port)
-        await worker.resource_received(stored_app)
+        # Ensure that the Application resources are deleted from database
+        async with Client(url=server_endpoint(server), loop=loop) as client:
+            worker = GarbageWorker(client=client, etcd_host=db.host, etcd_port=db.port)
+            await worker.resource_received(stored_app)
 
-    stored_app, _ = await db.get(
-        Application, namespace=cluster.metadata.namespace, name=cluster.metadata.name
-    )
-    assert stored_app is None
+        stored_app, _ = await db.get(
+            Application,
+            namespace=cluster.metadata.namespace,
+            name=cluster.metadata.name,
+        )
+        assert stored_app is None
 
     # Ensure that the cluster has no more finalizers
     async with Client(url=server_endpoint(server), loop=loop) as client:

@@ -74,6 +74,7 @@ async def test_create_application(aiohttp_server, config, db, loop):
         Application, namespace=data.metadata.namespace, name=data.metadata.name
     )
     assert stored == received
+    assert "cleanup" in stored.metadata.finalizers
 
 
 updated_manifest = list(

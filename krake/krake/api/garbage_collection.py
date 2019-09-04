@@ -242,7 +242,6 @@ class GarbageWorker(Worker):
                 return (
                     resource.status.depends
                     and resource_ref(entity) in resource.status.depends
-                    and resource.metadata.deleted is None
                 )
 
             for resource in get_collected_resources():
