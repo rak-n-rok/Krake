@@ -133,7 +133,6 @@ listen = EventDispatcher()
 
 
 class ApplicationWorker(Worker):
-
     @on_error(ControllerError)
     async def resource_received(self, app):
         # Delete Kubernetes resources if the application was bound to a
@@ -194,7 +193,7 @@ class ApplicationWorker(Worker):
             error (Exception, optional): The exception whose reason will be propagated
                 to the end-user. Defaults to None.
         """
-        reason = application_error_mapping(app.status.state, error)
+        reason = application_error_mapping(app.status.state, app.status.reason, error)
         app.status.reason = reason
 
         # If an important error occurred, simply delete the Application

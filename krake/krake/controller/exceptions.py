@@ -71,7 +71,7 @@ def on_error(exception):
     return decorator
 
 
-def application_error_mapping(previous_state, error=None):
+def application_error_mapping(previous_state, previous_reason, error=None):
     """
     Create a Reason with a specific ReasonCode depending on an Application state
     and the error sent.
@@ -79,6 +79,7 @@ def application_error_mapping(previous_state, error=None):
     Args:
         previous_state (krake.data.kubernetes.ApplicationState): the state of the
         Application that triggered the error.
+        previous_reason (krake.data.core.Reason):
         error (Exception): the exception raised
 
     Returns:
@@ -87,11 +88,13 @@ def application_error_mapping(previous_state, error=None):
         by default.
 
     """
+    message = getattr(error, "message", "An exception was raised")
+    # WORKAROUND: added check first for previous reason, to delete FAILED application
+    # that were changed to DELETING state
+    if previous_state == ApplicationState.FAILED or previous_reason:
+        return Reason(code=ReasonCode.RESOURCE_NOT_DELETED, message=message)
+
     if error is None or not hasattr(error, "code"):
         return Reason(code=ReasonCode.INTERNAL_ERROR, message="Internal Error")
-
-    message = getattr(error, "message", "An exception was raised")
-    if previous_state == ApplicationState.FAILED:
-        return Reason(code=ReasonCode.RESOURCE_NOT_DELETED, message=message)
 
     return Reason(code=error.code, message=message)
