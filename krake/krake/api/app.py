@@ -23,7 +23,7 @@ import logging
 import ssl
 from aiohttp import web, ClientSession
 
-from krake.data.core import Metadata, Verb, RoleRule, Role, RoleBinding
+from krake.data.core import Role, RoleBinding
 from . import __version__ as version
 from . import middlewares
 from . import auth
@@ -102,14 +102,10 @@ def create_app(config):
     #   bindings during the bootstrap process of Krake (with "rag" tool).
     app["default_roles"] = {
         role.metadata.name: role
-        for role in (load_default_role(role) for role in config["default-roles"])
+        for role in (Role.deserialize(role) for role in config["default-roles"])
     }
     app["default_role_bindings"] = [
-        binding
-        for binding in (
-            load_default_role_binding(binding)
-            for binding in config["default-role-bindings"]
-        )
+        RoleBinding.deserialize(binding) for binding in config["default-role-bindings"]
     ]
 
     # Cleanup contexts
@@ -138,74 +134,6 @@ async def http_session(app):
     async with ClientSession() as session:
         app["http"] = session
         yield
-
-
-def load_default_role(role):
-    """Create :class:`krake.data.core.Role` from configuration.
-
-    This is an example configuration for default roles:
-
-    .. code:: yaml
-
-        default-roles:
-        - metadata:
-            name: system:admin
-          rules:
-          - api: all
-            namespaces: ["all"]
-            resources: ["all"]
-            verbs: ["create", "list", "get", "update", "delete"]
-
-    Args:
-        role (dict): Configuration dictionary for a single role
-
-    Returns:
-        krake.data.core.Role: Role created from configuration
-
-    """
-    return Role(
-        metadata=Metadata(
-            name=role["metadata"]["name"], uid=None, created=None, modified=None
-        ),
-        rules=[
-            RoleRule(
-                api=rule["api"],
-                namespaces=rule["namespaces"],
-                resources=rule["resources"],
-                verbs=[Verb.__members__[verb] for verb in rule["verbs"]],
-            )
-            for rule in role["rules"]
-        ],
-    )
-
-
-def load_default_role_binding(binding):
-    """Create :class:`krake.data.core.RoleBinding` from configuration.
-
-    This is an example configuration for default role bindings:
-
-    .. code:: yaml
-
-        default-role-bindings:
-        - metadata:
-            name: system:admin
-          users: ["system:admin"]
-          roles: ["system:admin"]
-
-    Args:
-        binding (dict): Configuration dictionary for a single role binding
-
-    Returns:
-        krake.data.core.RoleBinding: Role binding created from configuration
-
-    """
-    return RoleBinding(
-        metadata=Metadata(
-            name=binding["metadata"]["name"], uid=None, created=None, modified=None
-        ),
-        users=binding["users"],
-        roles=binding["roles"],
-    )
 
 
 def load_authentication(config):
