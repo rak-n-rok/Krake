@@ -89,8 +89,10 @@ def application_error_mapping(previous_state, previous_reason, error=None):
 
     """
     message = getattr(error, "message", "An exception was raised")
-    # WORKAROUND: added check first for previous reason, to delete FAILED application
-    # that were changed to DELETING state
+    # FIXME: added check for previous_reason as workaround, to delete FAILED
+    #  application that were changed to DELETING state.
+    #  Check moved first because the error may not have an error code when the
+    #  application failed to delete
     if previous_state == ApplicationState.FAILED or previous_reason:
         return Reason(code=ReasonCode.RESOURCE_NOT_DELETED, message=message)
 

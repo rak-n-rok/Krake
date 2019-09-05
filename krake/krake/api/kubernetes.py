@@ -224,7 +224,7 @@ async def delete_application(request, app):
         raise web.HTTPNotModified()
 
     app.status.state = ApplicationState.DELETING
-    # WORKAROUND: keep the reason to know if an issue occurred
+    # FIXME: reason kept as workaround to know if an issue occurred
     # app.status.reason = None
     app.status.modified = datetime.now()
 
