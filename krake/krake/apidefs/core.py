@@ -1,4 +1,13 @@
-from krake.data.core import Role, RoleList, RoleBinding, RoleBindingList
+from krake.data.core import (
+    Role,
+    RoleList,
+    RoleBinding,
+    RoleBindingList,
+    Metric,
+    MetricsProvider,
+    MetricsProviderList,
+    MetricList,
+)
 from .definitions import ApiDef, Scope, operation, ListQuery
 
 
@@ -83,3 +92,83 @@ class RoleBindingResource:
         method = "DELETE"
         path = "/core/rolebindings/{name}"
         response = RoleBinding
+
+
+@core.resource
+class MetricResource:
+    singular = "Metric"
+    plural = "Metrics"
+    scope = Scope.NONE
+
+    @operation
+    class Create:
+        method = "POST"
+        path = "/core/metric"
+        body = Metric
+        response = Metric
+
+    @operation
+    class List(ListQuery):
+        number = "plural"
+        method = "GET"
+        path = "/core/metric"
+        response = MetricList
+
+    @operation
+    class Read:
+        method = "GET"
+        path = "/core/metric/{name}"
+        response = Metric
+
+    @operation
+    class Update:
+        method = "PUT"
+        path = "/core/metric/{name}"
+        body = Metric
+        response = Metric
+
+    @operation
+    class Delete:
+        method = "DELETE"
+        path = "/core/metric/{name}"
+        response = Metric
+
+
+@core.resource
+class MetricsProviderResource:
+    singular = "MetricsProvider"
+    plural = "MetricsProviders"
+    scope = Scope.NONE
+
+    @operation
+    class Create:
+        method = "POST"
+        path = "/core/metricprovider"
+        body = MetricsProvider
+        response = MetricsProvider
+
+    @operation
+    class List(ListQuery):
+        number = "plural"
+        method = "GET"
+        path = "/core/metricprovider"
+        response = MetricsProviderList
+
+    @operation
+    class Read:
+        method = "GET"
+        path = "/core/metricprovider/{name}"
+        response = MetricsProvider
+
+    @operation
+    class Update:
+        method = "PUT"
+        path = "/core/metricprovider/{name}"
+        body = MetricsProvider
+        response = MetricsProvider
+
+    @operation
+    class Delete:
+        method = "DELETE"
+        path = "/core/metricprovider/{name}"
+        response = MetricsProvider

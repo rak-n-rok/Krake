@@ -17,7 +17,6 @@ class ResourceRef(Serializable):
 class Metadata(Serializable):
     name: str = field(metadata={"immutable": True})
     namespace: str = field(default=None, metadata={"immutable": True})
-    annotations: dict = field(default_factory=dict)
     finalizers: List[str] = field(default_factory=list)
 
     uid: str = field(metadata={"readonly": True})
@@ -142,3 +141,61 @@ def resource_ref(resource):
         namespace=resource.metadata.namespace,
         name=resource.metadata.name,
     )
+
+
+class MetricProviderType(Enum):
+
+    prometheus = auto()
+
+
+class MetricSpecProvider(Serializable):
+    name: str
+    metric: str
+
+
+class MetricSpec(Serializable):
+    value: float
+    min: float
+    max: float
+    weight: float
+    provider: MetricSpecProvider
+
+
+@persistent("/metric/{name}")
+class Metric(ApiObject):
+    api: str = "core"
+    kind: str = "Metric"
+    metadata: Metadata
+    spec: MetricSpec
+
+
+class MetricList(ApiObject):
+    api: str = "core"
+    kind: str = "MetricList"
+    metadata: ListMetadata
+    items: List[Metric]
+
+
+class MetricProviderConfig(Serializable):
+    url: str
+    metrics: List[str]
+
+
+class MetricsProviderSpec(Serializable):
+    type: MetricProviderType
+    config: MetricProviderConfig
+
+
+@persistent("/metricsprovider/{name}")
+class MetricsProvider(ApiObject):
+    api: str = "core"
+    kind: str = "MetricsProvider"
+    metadata: Metadata
+    spec: MetricsProviderSpec
+
+
+class MetricsProviderList(ApiObject):
+    api: str = "core"
+    kind: str = "MetricsProviderList"
+    metadata: ListMetadata
+    items: List[MetricsProvider]
