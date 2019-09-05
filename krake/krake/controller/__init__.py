@@ -189,6 +189,7 @@ class Controller(object):
         api_token (str, optional): Token used for API authentication
         worker_count (int, optional): Number of workers that should be spawned
         loop (asyncio.AbstractEventLoop, optional): Event loop that should be used
+        config_defaults (dict, optional): Krake defaults configuration values
 
     Attributes:
         client (krake.client.Client): Krake API client instance that should be used
@@ -207,12 +208,14 @@ class Controller(object):
         loop=None,
         ssl_context=None,
         debounce=0,
+        config_defaults=None,
     ):
         self.loop = loop or asyncio.get_event_loop()
         self.client = None
         self.worker_factory = worker_factory
         self.worker_count = worker_count
         self.debounce = debounce
+        self.config_defaults = config_defaults
         self.queue = None
         self.watcher = None
         self.workers = None
@@ -239,7 +242,11 @@ class Controller(object):
 
         # Start worker tasks
         self.workers = [
-            self.loop.create_task(consume(self.queue, self.worker_factory(self.client)))
+            self.loop.create_task(
+                consume(
+                    self.queue, self.worker_factory(self.client, self.config_defaults)
+                )
+            )
             for _ in range(self.worker_count)
         ]
         self.watcher = self.loop.create_task(reconnect(self.list_and_watch))
@@ -308,10 +315,13 @@ class Worker(object):
     Args:
         client (krake.client.Client): Krake API client that should be used for
             all interaction with the Krake HTTP API.
+        config_defaults (dict): Krake defaults configuration values
+
     """
 
-    def __init__(self, client):
+    def __init__(self, client, config_defaults):
         self.client = client
+        self.config_defaults = config_defaults
 
     async def resource_received(self, resource):
         """A new resource was received from the API. The worker should compare
