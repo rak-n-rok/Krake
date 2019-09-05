@@ -67,7 +67,7 @@ def create_application(config, session, file, namespace, name):
 
 
 class ApplicationTable(BaseTable):
-    reason = Cell("status.reason")
+    reason = Cell("status.reason", formatter=dict_formatter)
     services = Cell("status.services", formatter=dict_formatter)
 
 
