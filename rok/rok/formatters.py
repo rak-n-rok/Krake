@@ -135,8 +135,11 @@ def format_datetime(time_str):
 
 
 def dict_formatter(attr):
-    """
-    Format a dictionary into a more readable format
+    """Format a dictionary into a more readable format
+
+    In case of nested ``<value>`` structure :func:`nested_formatter`
+        translates nested ``<value>`` into a more readable format
+
     Args:
         attr (dict): an attribute with key:value elements
 
@@ -147,8 +150,75 @@ def dict_formatter(attr):
     """
     if not attr:
         return str(None)
-    formatted_attr = [f"{k}: {v}\n" for k, v in attr.items()]
+
+    def nested_formatter(item, indentation=2):
+        """Format a nested structure into a more readable format
+
+        Args:
+            item: Nested structure of :type:`list` or :type:`dict`
+            indentation (int): Indentation. Defaults to 2
+
+        Raises:
+            NotImplementedError: If unsupported type for nested formatter is given
+
+        Yields:
+            str: The next item of nested structure in more readable format
+
+        """
+
+        if isinstance(item, list):
+            if not any(isinstance(i, (list, dict)) for i in item):
+                for i in item:
+                    yield " " * indentation
+                    yield f"{i}\n"
+            else:
+                for i in item:
+                    yield from nested_formatter(i, indentation=indentation)
+
+        elif isinstance(item, dict):
+            for k, v in item.items():
+
+                if isinstance(v, (list, dict)):
+                    yield " " * indentation
+                    yield f"{k}:\n"
+                    indentation += 2
+                    yield from nested_formatter(v, indentation=indentation)
+
+                    indentation = 2
+                    continue
+
+                yield " " * indentation
+                yield f"{k}: {v}\n"
+
+        else:
+            raise NotImplementedError(
+                f"Unsupported type for nested formatter {type(item)}"
+            )
+
+    formatted_attr = []
+    for key, value in attr.items():
+        if isinstance(value, (list, dict)):
+            value = "".join(["\n"] + list(nested_formatter(value)))[:-1]
+
+        formatted_attr.append(f"{key}: {value}\n")
+
     return "".join(formatted_attr)[:-1]  # Remove the last end of line character
+
+
+def parse_args_annotation(value):
+    """Parse a key, name annotation pair, separated by '=' from the args value
+
+    First item before separator is evaluated as annotation name the rest creates value
+
+    Args:
+        value (str): value from the args
+
+    Returns:
+        dict: key, name annotation pair
+
+    """
+    key, value = value.split("=", 1)
+    return {"name": key, "value": value}
 
 
 class Cell(object):

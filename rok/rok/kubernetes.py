@@ -12,7 +12,7 @@ import yaml
 
 from .parser import ParserSpec, argument
 from .fixtures import depends
-from .formatters import BaseTable, Cell, printer, dict_formatter
+from .formatters import BaseTable, Cell, printer, dict_formatter, parse_args_annotation
 
 kubernetes = ParserSpec(
     "kubernetes", aliases=["kube"], help="Manage Kubernetes resources"
@@ -61,13 +61,29 @@ def list_applications(config, session, namespace, all):
 )
 @argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
 @argument("name", help="Name of the application")
+@argument(
+    "-a",
+    "--annotation",
+    dest="annotations_list",
+    default=[],
+    metavar="KEY=VALUE",
+    action="append",
+    help="Annotation <key=value>. Can be specified multiple times",
+)
 @depends("config", "session")
-def create_application(config, session, file, namespace, name):
+def create_application(config, session, file, namespace, name, annotations_list):
     if namespace is None:
         namespace = config["user"]
 
     manifest = list(yaml.safe_load_all(file))
-    app = {"metadata": {"name": name}, "spec": {"manifest": manifest}}
+    annotations = []
+    for annotation in annotations_list:
+        annotations.append(parse_args_annotation(annotation))
+
+    app = {
+        "metadata": {"name": name},
+        "spec": {"manifest": manifest, "constraints": {"annotations": annotations}},
+    }
     resp = session.post(f"/kubernetes/namespaces/{namespace}/applications", json=app)
     data = resp.json()
     yaml.dump(data, default_flow_style=False, stream=sys.stdout)
@@ -76,6 +92,7 @@ def create_application(config, session, file, namespace, name):
 class ApplicationTable(BaseTable):
     reason = Cell("status.reason", formatter=dict_formatter)
     services = Cell("status.services", formatter=dict_formatter)
+    constraints = Cell("spec.constraints", formatter=dict_formatter)
 
 
 @application.command("get", help="Get Kubernetes application")
@@ -106,13 +123,29 @@ def get_application(config, session, namespace, name):
     "-f", "--file", type=FileType(), required=True, help="Kubernetes manifest file"
 )
 @argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
+@argument(
+    "-a",
+    "--annotation",
+    dest="annotations_list",
+    default=[],
+    metavar="KEY=VALUE",
+    action="append",
+    help="Annotation <key=value>. Can be specified multiple times",
+)
 @depends("config", "session")
-def update_application(config, session, namespace, name, file):
+def update_application(config, session, namespace, name, file, annotations_list):
     if namespace is None:
         namespace = config["user"]
 
     manifest = list(yaml.safe_load_all(file))
-    app = {"metadata": {"name": name}, "spec": {"manifest": manifest}}
+    annotations = []
+    for annotation in annotations_list:
+        annotations.append(parse_args_annotation(annotation))
+
+    app = {
+        "metadata": {"name": name},
+        "spec": {"manifest": manifest, "constraints": {"annotations": annotations}},
+    }
     session.put(f"/kubernetes/namespaces/{namespace}/applications/{name}", json=app)
 
 
@@ -138,6 +171,23 @@ class ClusterTable(BaseTable):
 
 
 @cluster.command("create", help="Register an existing Kubernetes cluster")
+@argument(
+    "--annotation",
+    "-a",
+    dest="annotations_list",
+    default=[],
+    metavar="KEY=VALUE",
+    action="append",
+    help="Annotation <key=value>. Can be specified multiple times",
+)
+@argument(
+    "--metric",
+    "-m",
+    dest="metrics",
+    action="append",
+    default=[],
+    help="Metric name. Can be specified multiple times",
+)
 @argument("--context", "-c", dest="contexts", action="append")
 @argument(
     "-n", "--namespace", help="Namespace of the Kubernetes cluster. Defaults to user"
@@ -148,9 +198,15 @@ class ClusterTable(BaseTable):
     help="Kubeconfig file that should be used to control this cluster",
 )
 @depends("config", "session")
-def create_cluster(config, session, namespace, kubeconfig, contexts):
+def create_cluster(
+    config, session, namespace, kubeconfig, contexts, metrics, annotations_list
+):
     if namespace is None:
         namespace = config["user"]
+
+    annotations = []
+    for annotation in annotations_list:
+        annotations.append(parse_args_annotation(annotation))
 
     config = yaml.safe_load(kubeconfig)
 
@@ -199,10 +255,13 @@ def create_cluster(config, session, namespace, kubeconfig, contexts):
         cluster_config["contexts"] = [context]
         cluster_config["users"] = [user]
         cluster_config["current-context"] = context["name"]
-
         cluster = {
             "metadata": {"name": cluster["name"]},
-            "spec": {"kubeconfig": cluster_config},
+            "spec": {
+                "kubeconfig": cluster_config,
+                "metrics": metrics,
+                "annotations": annotations,
+            },
         }
         resp = session.post(
             f"/kubernetes/namespaces/{namespace}/clusters", json=cluster
