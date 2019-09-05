@@ -22,12 +22,24 @@ from functools import total_ordering
 from typing import NamedTuple
 from argparse import ArgumentParser
 
+from aiohttp import ClientConnectorError
+
 from krake import load_config, setup_logging
-from krake.data.core import resource_ref, ReasonCode
+from krake.data.core import resource_ref, ReasonCode, MetricsProvider, Metric
+from krake.controller.scheduler.metrics_provider import MetricValueError
 from krake.data.kubernetes import ApplicationState, Cluster, ClusterBinding
 from krake.client.kubernetes import KubernetesApi
+from krake.client.core import CoreApi
+from krake.controller import Controller, Worker, run
+from krake.controller.exceptions import on_error, ControllerError
 
 from .exceptions import on_error, ControllerError, application_error_mapping
+from .metrics import (
+    MissingMetricsDefinition,
+    get_metrics_providers_objs,
+    merge_obj,
+    fetch_query_tasks,
+)
 from . import Controller, Worker, run, create_ssl_context
 
 
@@ -50,6 +62,7 @@ class Scheduler(Controller):
     states = (ApplicationState.PENDING, ApplicationState.UPDATED)
 
     async def list_and_watch(self):
+
         kubernetes_api = KubernetesApi(self.client)
 
         async def list_apps():
@@ -99,6 +112,11 @@ class SchedulerWorker(Worker):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.kubernetes_api = KubernetesApi(self.client)
+        self.core_api = CoreApi(self.client)
+        self.metrics_default = self.config_defaults["default_metrics"]
+        self.metrics_providers_default = self.config_defaults[
+            "default_metrics_providers"
+        ]
 
     @on_error(ControllerError)
     async def resource_received(self, app):
@@ -125,21 +143,122 @@ class SchedulerWorker(Worker):
                 body=ClusterBinding(cluster=resource_ref(cluster)),
             )
 
-    async def select_kubernetes_cluster(self, app):
-        # TODO: Evaluate spawning a new cluster
-        clusters = await self.kubernetes_api.list_all_clusters()
+    @staticmethod
+    def match_constraints(app, cluster):
+        """Evaluate if all application constraints annotations match cluster
+        annotations.
 
-        if not clusters.items:
+        Args:
+            app (krake.data.kubernetes.Application): Application object for binding
+            cluster (Cluster): Cluster
+
+        Returns:
+            bool: True if all application constraints annotations match cluster
+                annotations, else False
+
+        """
+        return all(
+            [
+                annotation in cluster.spec.annotations
+                for annotation in app.spec.constraints.annotations
+            ]
+        )
+
+    async def select_kubernetes_cluster(self, app):
+        """Select suitable kubernetes cluster for application binding.
+
+        Args:
+            app: (krake.data.kubernetes.Application): Application object for binding
+
+        Returns:
+            Cluster: Cluster suitable for application binding
+
+        """
+        # TODO: Evaluate spawning a new cluster
+        clusters_all = await self.kubernetes_api.list_all_clusters()
+
+        clusters = [
+            cluster
+            for cluster in clusters_all.items
+            if self.match_constraints(app, cluster)
+        ]
+
+        if not clusters:
+            logger.info("Unable to match application constraints to any cluster")
             return None
 
-        ranked = [
-            await self.rank_kubernetes_cluster(cluster) for cluster in clusters.items
-        ]
-        return min(ranked).cluster
+        clusters_ranked = await self.rank_kubernetes_clusters(clusters)
 
-    async def rank_kubernetes_cluster(self, cluster):
-        # TODO: Implement ranking function
-        return ClusterRank(rank=0.5, cluster=cluster)
+        if not clusters_ranked:
+            logger.info("Unable to rank any cluster")
+            return None
+
+        return min(clusters_ranked).cluster
+
+    async def rank_kubernetes_clusters(self, clusters):
+        """Rank kubernetes clusters based on metrics values and weights.
+
+        Args:
+            clusters (List[Cluster]): List of clusters to rank
+
+        Returns:
+            List[ClusterRank]: Ranked list of clusters
+
+        """
+        session = self.client.session
+        metrics_db, metrics_providers_db = await asyncio.gather(
+            self.core_api.list_metrics(), self.core_api.list_metrics_providers()
+        )
+        metrics_all = merge_obj(metrics_db.items, self.metrics_default, Metric)
+        metrics_providers_all = merge_obj(
+            metrics_providers_db.items, self.metrics_providers_default, MetricsProvider
+        )
+        ranked_clusters = []
+        for cluster in clusters:
+            try:
+                metrics, metrics_providers = get_metrics_providers_objs(
+                    cluster, metrics_all, metrics_providers_all
+                )
+            except MissingMetricsDefinition as err:
+                logger.error(err)
+                continue
+
+            metrics_tasks = fetch_query_tasks(session, metrics, metrics_providers)
+
+            try:
+                metrics_fetched = await asyncio.gather(*metrics_tasks)
+            except (ClientConnectorError, MetricValueError) as err:
+                logger.error(err)
+                continue
+
+            if logger.level == logging.DEBUG:
+                for metric in metrics_fetched:
+                    logger.debug(
+                        f"Scheduler received metric {metric.metadata.name} "
+                        f"with value {metric.spec.value} "
+                        f"for cluster {cluster.metadata.name}"
+                    )
+
+            ranked_clusters.append(
+                ClusterRank(
+                    rank=self.weighted_sum_of_metrics(metrics_fetched), cluster=cluster
+                )
+            )
+
+        return ranked_clusters
+
+    @staticmethod
+    def weighted_sum_of_metrics(metrics):
+        """Calculate weighted sum of metrics values.
+
+        Args:
+            metrics (List[Metric]): List of metrics
+
+        Returns:
+            int: Sum of metrics values * metrics weights
+
+        """
+        return sum([metric.spec.value * metric.spec.weight for metric in metrics])
 
     async def error_occurred(self, app, error=None):
         """Asynchronous callback executed whenever an error occurs during
@@ -191,6 +310,10 @@ def main():
         worker_count=scheduler_config["worker_count"],
         ssl_context=ssl_context,
         debounce=scheduler_config.get("debounce", 0),
+        config_defaults={
+            "default_metrics": config["default-metrics"],
+            "default_metrics_providers": config["default-metrics-providers"],
+        },
     )
     run(scheduler)
 

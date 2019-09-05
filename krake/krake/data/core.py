@@ -154,7 +154,7 @@ class MetricSpecProvider(Serializable):
 
 
 class MetricSpec(Serializable):
-    value: float
+    value: float = None
     min: float
     max: float
     weight: float

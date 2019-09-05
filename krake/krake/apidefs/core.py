@@ -143,7 +143,7 @@ class MetricsProviderResource:
     @operation
     class Create:
         method = "POST"
-        path = "/core/metricprovider"
+        path = "/core/metricsprovider"
         body = MetricsProvider
         response = MetricsProvider
 
@@ -151,24 +151,24 @@ class MetricsProviderResource:
     class List(ListQuery):
         number = "plural"
         method = "GET"
-        path = "/core/metricprovider"
+        path = "/core/metricsprovider"
         response = MetricsProviderList
 
     @operation
     class Read:
         method = "GET"
-        path = "/core/metricprovider/{name}"
+        path = "/core/metricsprovider/{name}"
         response = MetricsProvider
 
     @operation
     class Update:
         method = "PUT"
-        path = "/core/metricprovider/{name}"
+        path = "/core/metricsprovider/{name}"
         body = MetricsProvider
         response = MetricsProvider
 
     @operation
     class Delete:
         method = "DELETE"
-        path = "/core/metricprovider/{name}"
+        path = "/core/metricsprovider/{name}"
         response = MetricsProvider
