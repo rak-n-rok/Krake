@@ -64,7 +64,7 @@ controllers:
   #     client_key: tmp/pki/<resource>_contr-key.pem
   # If the 'enabled' element is not true, the controller will not use TLS
   scheduler:
-    api_endpoint: localhost:8080
+    api_endpoint: http://localhost:8080
     worker_count: 5
     tls:
       enabled: false
@@ -74,7 +74,7 @@ controllers:
 
   kubernetes:
     cluster:
-      api_endpoint: localhost:8080
+      api_endpoint: http://localhost:8080
       worker_count: 5
       tls:
         enabled: false
@@ -83,7 +83,7 @@ controllers:
         client_key: tmp/pki/system:kube_cluster-key.pem
 
     application:
-      api_endpoint: localhost:8080
+      api_endpoint: http://localhost:8080
       worker_count: 5
       tls:
         enabled: false

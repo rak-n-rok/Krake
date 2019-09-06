@@ -6,6 +6,7 @@ dependency with the :func:`use` decorator. Finally, :class:`Resolver` is used
 to wire fixtures and dependencies.
 """
 import os
+import sys
 from inspect import signature, isgeneratorfunction
 from collections import deque
 from urllib.parse import urljoin, urlparse
@@ -234,7 +235,7 @@ def config():
             pass
 
     # No config file was found. Use defaults
-    return {"api_url": "localhost:8080", "user": "system"}
+    return {"api_url": "http://localhost:8080", "user": "system"}
 
 
 class BaseUrlSession(requests.Session):
@@ -324,13 +325,21 @@ def _extract_ssl_parameters(config):
 def session(config):
     ssl_config = _extract_ssl_parameters(config)
 
-    base_url = urlparse(config["api_url"])
-    if base_url.scheme:
-        raise ValueError(
-            "Scheme cannot be set on 'api_url' in config, use 'tls.enabled'"
-        )
-    api_protocol = "https" if ssl_config else "http"
-    url = f"{api_protocol}://{base_url.geturl()}"
+    url = urlparse(config["api_url"])
 
-    with BaseUrlSession(base_url=url, **ssl_config) as session:
+    if ssl_config and url.scheme != "https":
+        print(
+            "WARNING: API endpoint forced to scheme 'https', as TLS is enabled",
+            file=sys.stderr,
+        )
+        url = url._replace(scheme="https")
+
+    if not ssl_config and url.scheme != "http":
+        print(
+            "WARNING: API endpoint forced to scheme 'http', as TLS is disabled",
+            file=sys.stderr,
+        )
+        url = url._replace(scheme="http")
+
+    with BaseUrlSession(base_url=url.geturl(), **ssl_config) as session:
         yield session

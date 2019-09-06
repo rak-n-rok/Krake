@@ -158,9 +158,8 @@ def main():
     scheduler_config = config["controllers"]["scheduler"]
 
     tls_config = scheduler_config.get("tls")
-    tls = tls_config is not None and tls_config["enabled"]
-    ssl_context = create_ssl_context(tls_config) if tls else None
-    logger.debug("TLS is %r", "enabled" if tls else "disabled")
+    ssl_context = create_ssl_context(tls_config)
+    logger.debug("TLS is %s", "enabled" if ssl_context else "disabled")
 
     scheduler = Scheduler(
         api_endpoint=scheduler_config["api_endpoint"],

@@ -47,7 +47,7 @@ async def test_cluster_reception(aresponses, loop):
     worker = SimpleWorker()
 
     async with ClusterController(
-        api_endpoint="api.krake.local",
+        api_endpoint="http://api.krake.local",
         worker_factory=lambda client: worker,
         worker_count=1,
         loop=loop,

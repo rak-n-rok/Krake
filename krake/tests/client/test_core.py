@@ -171,6 +171,7 @@ async def test_connect_ssl(aiohttp_server, config, loop, pki):
     assert server.scheme == "https"
 
     client_tls = {
+        "enabled": True,
         "client_ca": pki.ca.cert,
         "client_cert": client_cert.cert,
         "client_key": client_cert.key,

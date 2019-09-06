@@ -56,7 +56,7 @@ async def test_kubernetes_reception(aresponses, loop):
     worker = CountingWorker()
 
     async with Scheduler(
-        api_endpoint="api.krake.local",
+        api_endpoint="http://api.krake.local",
         worker_factory=lambda client: worker,
         worker_count=1,
         loop=loop,

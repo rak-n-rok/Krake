@@ -374,8 +374,8 @@ def main():
     controller_config = config["controllers"]["kubernetes"]["application"]
 
     tls_config = controller_config.get("tls")
-    tls = tls_config is not None and tls_config["enabled"]
-    ssl_context = create_ssl_context(tls_config) if tls else None
+    ssl_context = create_ssl_context(tls_config)
+    logger.debug("TLS is %s", "enabled" if ssl_context else "disabled")
 
     controller = ApplicationController(
         api_endpoint=controller_config["api_endpoint"],

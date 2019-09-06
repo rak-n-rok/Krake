@@ -159,12 +159,16 @@ class Controller(object):
         self.ssl_context = ssl_context
 
         base_url = URL(api_endpoint)
-        if base_url.scheme:
-            raise ValueError("Scheme cannot be set, depends on tls parameters presence")
-        api_protocol = "https" if self.ssl_context else "http"
-        url = f"{api_protocol}://{base_url}"
 
-        self.api_endpoint = url
+        if self.ssl_context and base_url.scheme != "https":
+            logger.warning("API endpoint forced to scheme 'https', as TLS is enabled")
+            base_url = base_url.with_scheme("https")
+
+        if not self.ssl_context and base_url.scheme != "http":
+            logger.warning("API endpoint forced to scheme 'http', as TLS is disabled")
+            base_url = base_url.with_scheme("http")
+
+        self.api_endpoint = base_url
 
     async def __aenter__(self):
         self.client = Client(
@@ -334,6 +338,9 @@ def create_ssl_context(tls_config):
         elements
 
     """
+    if tls_config is None or not tls_config["enabled"]:
+        return None
+
     cert, key, client_ca = _extract_ssl_config(tls_config)
     ssl_context = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH)
     ssl_context.verify_mode = ssl.CERT_OPTIONAL
