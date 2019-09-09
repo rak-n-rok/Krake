@@ -1,6 +1,6 @@
 from base64 import b64encode
 import yaml
-from factory import Factory, SubFactory, lazy_attribute, fuzzy
+from factory import Factory, SubFactory, lazy_attribute, fuzzy, List
 from copy import deepcopy
 
 from .fake import fake
@@ -15,6 +15,8 @@ from krake.data.kubernetes import (
     ClusterState,
     ClusterStatus,
     Cluster,
+    Annotation,
+    Constraints,
 )
 
 
@@ -24,6 +26,26 @@ def fuzzy_name():
 
 states = list(ApplicationState.__members__.values())
 states.remove(ApplicationState.DELETED)
+
+
+class AnnotationFactory(Factory):
+    class Meta:
+        model = Annotation
+
+    @lazy_attribute
+    def name(self):
+        return fake.word()
+
+    @lazy_attribute
+    def value(self):
+        return fake.word()
+
+
+class ConstraintsFactory(Factory):
+    class Meta:
+        model = Constraints
+
+    annotations = List([SubFactory(AnnotationFactory) for _ in range(3)])
 
 
 class ApplicationStatusFactory(Factory):
@@ -95,6 +117,8 @@ class ApplicationSpecFactory(Factory):
     @lazy_attribute
     def manifest(self):
         return kubernetes_manifest
+
+    constraints = SubFactory(ConstraintsFactory)
 
 
 class ApplicationFactory(Factory):
@@ -249,6 +273,12 @@ class ClusterSpecFactory(Factory):
     @lazy_attribute
     def kubeconfig(self):
         return local_kubeconfig
+
+    @lazy_attribute
+    def metrics(self):
+        return fake.words()
+
+    annotations = List([SubFactory(AnnotationFactory) for _ in range(3)])
 
 
 class ClusterFactory(Factory):

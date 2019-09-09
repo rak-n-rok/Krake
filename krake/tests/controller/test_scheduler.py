@@ -4,7 +4,7 @@ from krake.api.app import create_app
 from krake.data.core import ReasonCode
 from krake.data.kubernetes import Application, ApplicationState
 from krake.controller import Worker
-from krake.controller.scheduler import Scheduler, SchedulerWorker
+from krake.controller.scheduler.__main__ import Scheduler, SchedulerWorker
 from krake.client import Client
 from krake.test_utils import server_endpoint
 
@@ -25,7 +25,7 @@ async def test_kubernetes_reception(aiohttp_server, config, db, loop):
 
     async with Scheduler(
         api_endpoint=server_endpoint(server),
-        worker_factory=lambda client: worker,
+        worker_factory=lambda client, config_defaults: worker,
         worker_count=1,
         loop=loop,
     ) as scheduler:
