@@ -315,11 +315,11 @@ class Worker(object):
     Args:
         client (krake.client.Client): Krake API client that should be used for
             all interaction with the Krake HTTP API.
-        config_defaults (dict): Krake defaults configuration values
+        config_defaults (dict, optional): Krake defaults configuration values.
 
     """
 
-    def __init__(self, client, config_defaults):
+    def __init__(self, client, config_defaults=None):
         self.client = client
         self.config_defaults = config_defaults
 

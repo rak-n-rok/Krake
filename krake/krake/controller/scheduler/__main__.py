@@ -113,10 +113,16 @@ class SchedulerWorker(Worker):
         super().__init__(*args, **kwargs)
         self.kubernetes_api = KubernetesApi(self.client)
         self.core_api = CoreApi(self.client)
-        self.metrics_default = self.config_defaults["default_metrics"]
-        self.metrics_providers_default = self.config_defaults[
-            "default_metrics_providers"
-        ]
+        self.metrics_default = (
+            self.config_defaults.get("default_metrics")
+            if self.config_defaults
+            else None
+        )
+        self.metrics_providers_default = (
+            self.config_defaults.get("default_metrics_providers")
+            if self.config_defaults
+            else None
+        )
 
     @on_error(ControllerError)
     async def resource_received(self, app):
