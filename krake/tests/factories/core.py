@@ -1,3 +1,5 @@
+import random
+
 import pytz
 from factory import Factory, SubFactory, List, lazy_attribute, fuzzy
 from datetime import datetime
@@ -11,6 +13,13 @@ from krake.data.core import (
     RoleBinding,
     Reason,
     ReasonCode,
+    Metric,
+    MetricSpec,
+    MetricSpecProvider,
+    MetricsProvider,
+    MetricsProviderSpec,
+    MetricProviderType,
+    MetricProviderConfig,
 )
 
 
@@ -32,7 +41,6 @@ class MetadataFactory(Factory):
     name = fuzzy.FuzzyAttribute(fuzzy_name)
     namespace = "testing"
     uid = fuzzy.FuzzyAttribute(fake.uuid4)
-    annotations = fuzzy.FuzzyAttribute(dict)
     created = fuzzy.FuzzyDateTime(datetime.now(tz=pytz.utc))
 
     @lazy_attribute
@@ -107,3 +115,74 @@ class ReasonFactory(Factory):
 
     message = fake.sentence()
     code = fuzzy.FuzzyChoice(list(ReasonCode.__members__.values()))
+
+
+class MetricSpecProviderFactory(Factory):
+    class Meta:
+        model = MetricSpecProvider
+
+    @lazy_attribute
+    def name(self):
+        return fake.word()
+
+    @lazy_attribute
+    def metric(self):
+        return fake.word()
+
+
+class MetricSpecFactory(Factory):
+    class Meta:
+        model = MetricSpec
+
+    min = 0
+    max = 1
+
+    @lazy_attribute
+    def value(self):
+        return random.random()
+
+    @lazy_attribute
+    def weight(self):
+        return random.random()
+
+    provider = SubFactory(MetricSpecProviderFactory)
+
+
+class MetricFactory(Factory):
+    class Meta:
+        model = Metric
+
+    metadata = SubFactory(MetadataFactory)
+    spec = SubFactory(MetricSpecFactory)
+
+
+class MetricProviderConfigFactory(Factory):
+    class Meta:
+        model = MetricProviderConfig
+
+    @lazy_attribute
+    def url(self):
+        return fake.url()
+
+    @lazy_attribute
+    def metrics(self):
+        return fake.words()
+
+
+class MetricsProviderSpecFactory(Factory):
+    class Meta:
+        model = MetricsProviderSpec
+
+    @lazy_attribute
+    def type(self):
+        return fake.random.choice(list(MetricProviderType.__members__.values()))
+
+    config = SubFactory(MetricProviderConfigFactory)
+
+
+class MetricsProviderFactory(Factory):
+    class Meta:
+        model = MetricsProvider
+
+    metadata = SubFactory(MetadataFactory)
+    spec = SubFactory(MetricsProviderSpecFactory)
