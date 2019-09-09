@@ -44,6 +44,8 @@ def to_named_deserialize(items, obj):
         dict: Item name as key and deserialize item as value
 
     """
+    if not items:
+        return {}
     named_deserialize = {}
     for item in items:
         if isinstance(item, obj):

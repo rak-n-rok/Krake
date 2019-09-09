@@ -134,7 +134,10 @@ class PrometheusMetricsProvider(MetricsProviderClient):
 
         """
         for metric_data in resp["data"]["result"]:
-            if metric_data["metric"]["__name__"] == self.metric.metadata.name:
+            if (
+                metric_data
+                and metric_data["metric"]["__name__"] == self.metric.metadata.name
+            ):
                 return float(metric_data["value"][1])
 
         raise MetricValueError(

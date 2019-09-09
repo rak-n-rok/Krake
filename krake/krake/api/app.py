@@ -100,13 +100,22 @@ def create_app(config):
     # TODO: Default roles and role bindings should reside in the database as
     #   well. This means the database needs to be populated with these roles and
     #   bindings during the bootstrap process of Krake (with "rag" tool).
-    app["default_roles"] = {
-        role.metadata.name: role
-        for role in (Role.deserialize(role) for role in config["default-roles"])
-    }
-    app["default_role_bindings"] = [
-        RoleBinding.deserialize(binding) for binding in config["default-role-bindings"]
-    ]
+    app["default_roles"] = (
+        {}
+        if not config.get("default-roles")
+        else {
+            role.metadata.name: role
+            for role in (Role.deserialize(role) for role in config["default-roles"])
+        }
+    )
+    app["default_role_bindings"] = (
+        []
+        if not config.get("default-role-bindings")
+        else [
+            RoleBinding.deserialize(binding)
+            for binding in config["default-role-bindings"]
+        ]
+    )
 
     # Cleanup contexts
     app.cleanup_ctx.append(http_session)

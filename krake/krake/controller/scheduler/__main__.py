@@ -30,17 +30,15 @@ from krake.controller.scheduler.metrics_provider import MetricValueError
 from krake.data.kubernetes import ApplicationState, Cluster, ClusterBinding
 from krake.client.kubernetes import KubernetesApi
 from krake.client.core import CoreApi
-from krake.controller import Controller, Worker, run
-from krake.controller.exceptions import on_error, ControllerError
 
-from .exceptions import on_error, ControllerError, application_error_mapping
+from ..exceptions import on_error, ControllerError, application_error_mapping
+from .. import Controller, Worker, run, create_ssl_context
 from .metrics import (
     MissingMetricsDefinition,
     get_metrics_providers_objs,
     merge_obj,
     fetch_query_tasks,
 )
-from . import Controller, Worker, run, create_ssl_context
 
 
 logger = logging.getLogger("krake.controller.scheduler")
@@ -114,12 +112,12 @@ class SchedulerWorker(Worker):
         self.kubernetes_api = KubernetesApi(self.client)
         self.core_api = CoreApi(self.client)
         self.metrics_default = (
-            self.config_defaults.get("default_metrics")
+            self.config_defaults.get("default-metrics")
             if self.config_defaults
             else None
         )
         self.metrics_providers_default = (
-            self.config_defaults.get("default_metrics_providers")
+            self.config_defaults.get("default-metrics-providers")
             if self.config_defaults
             else None
         )
