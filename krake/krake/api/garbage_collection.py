@@ -20,36 +20,16 @@ Configuration is loaded from the ``controllers.garbage_collector`` section:
 
 import asyncio
 import logging
+from datetime import datetime
 
 from aiohttp import ClientResponseError, ClientConnectorError
-from krake.api.database import Session
+from krake.api.database import Session, EventType
 from krake.apidefs import get_collected_resources
 from krake.controller import Controller, Worker
 from krake.client import Client
-from krake.client.core import CoreApi
-from krake.client.kubernetes import KubernetesApi
-from krake.data.core import resource_ref, WatchEventType
-
-from ..utils import camel_to_snake_case
+from krake.data.core import resource_ref
 
 logger = logging.getLogger("krake.api.garbage_collector")
-
-
-def _create_api_mapping(list_apis):
-    """From all API clients supported by the Garbage Collector, create a mapping
-    that match the API name to them.
-
-    Args:
-        list_apis (list): the list of supported API clients.
-
-    Returns:
-        dict: the mapping "<api_name>: <api_client>"
-
-    """
-    return {api.api_name: api for api in list_apis}
-
-
-_api_client_mapping = _create_api_mapping([CoreApi, KubernetesApi])
 
 
 class GarbageCollector(Controller):
@@ -58,85 +38,67 @@ class GarbageCollector(Controller):
     "cascading_deletion" finalizer.
     """
 
-    resources = get_collected_resources()
+    def __init__(self, *args, db_host="localhost", db_port=2379, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.db_host = db_host
+        self.db_port = db_port
+        self.resources = get_collected_resources()
 
     async def list_and_watch(self):
         """Create a task to list and watch each persistent resource
         """
-        logger.debug(
-            "Handling deletion of: %s",
-            [cls.singular for cls in self.resources.values()],
-        )
-        tasks = [
-            self.list_watch_resource(resource) for resource in self.resources.values()
-        ]
+        logger.debug("Handling deletion of: %s", [cls.kind for cls in self.resources])
+        tasks = [self.list_watch_resource(resource) for resource in self.resources]
         await asyncio.gather(*tasks)
 
-    async def list_watch_resource(self, resource_def):
-        """List and watch a specific kind of resource from the API. Consider only the
-        resources marked for deletion. Add them to the worker queue.
+    async def list_watch_resource(self, apidef):
+        """List and watch a specific kind of resource from the API.
 
         Args:
-            resource_def (krake.api.core.ResourceRef):
+            apidef (krake.api.core.ResourceRef):
 
         """
+        async with Session(host=self.db_host, port=self.db_port) as session:
 
-        def marked_for_deletion(resource):
-            return resource.metadata.deleted
+            async with session.watch(apidef) as watcher:
+                await asyncio.gather(
+                    self.list_resource(apidef, session),
+                    self.watch_resource(apidef, watcher),
+                )
 
-        async def list_resource():
-            logger.info("List %r %r", resource_def.api, resource_def.singular)
+    async def list_resource(self, apidef, session):
+        """List the resources of the given API definition. Consider only
+        the resources marked for deletion. Add them to the worker queue.
 
-            list_resources = _api_client_handler(
-                self.client, resource_def, "list_all", plural=resource_def.plural
-            )
+        Args:
+            apidef: the API definition of the kind of resource to list
+            session (krake.api.database.Session): an opened database session
 
-            resource_list = await list_resources()
-            for resource in filter(marked_for_deletion, resource_list.items):
+        """
+        logger.info("List %r %r", apidef.api, apidef.kind)
+
+        resource_list = session.all(apidef)
+
+        async for resource, _ in resource_list:
+            if resource.metadata.deleted:
                 logger.debug("Received %r", resource)
                 await self.queue.put(resource.metadata.uid, resource)
 
-        async def watch_resource(watcher):
-            logger.info("Watching %r %r", resource_def.api, resource_def.singular)
-            async for event in watcher:
-                resource = event.object
-                if (
-                    marked_for_deletion(resource)
-                    and event.type != WatchEventType.DELETED
-                ):
-                    logger.debug("Received %r", resource)
-                    await self.queue.put(resource.metadata.uid, resource)
+    async def watch_resource(self, apidef, watcher):
+        """Watch the resources of the given API definition. Consider only
+        the resources marked for deletion, but not the deleted ones.
+        Add them to the worker queue.
 
-        watch_resources = _api_client_handler(
-            self.client, resource_def, "watch_all", plural=resource_def.plural
-        )
+        Args:
+            apidef: the API definition of the kind of resource to list
+            watcher (krake.api.database.Watcher): a watcher on the database
 
-        async with watch_resources() as watcher:
-            await asyncio.gather(list_resource(), watch_resource(watcher))
-
-
-def _api_client_handler(client, resource, verb, plural=None):
-    """Get the API client handler that corresponds to a given resource and verb.
-    If the plural form of the resource is given, it is used instead of the kind.
-
-    Args:
-        client (krake.client.Client): client used to create the API handler
-        resource: the resource targeted
-        verb (str): the verb corresponding to the wanted operation
-        plural (str, optional): the plural form of the name of the resource
-
-    Returns:
-        callable: the handler for the given resource that does the :attr:`verb`
-            operation
-
-    """
-    if plural:
-        name = f"{verb}_{camel_to_snake_case(plural)}"
-    else:
-        name = f"{verb}_{camel_to_snake_case(resource.kind)}"
-
-    api = _api_client_mapping[resource.api](client)
-    return getattr(api, name)
+        """
+        logger.info("Watching %r %r", apidef.api, apidef.kind)
+        async for event, resource, rev in watcher:
+            if event != EventType.DELETE and resource.metadata.deleted:
+                logger.debug("Received %r", resource)
+                await self.queue.put(resource.metadata.uid, resource)
 
 
 class GarbageWorker(Worker):
@@ -144,10 +106,12 @@ class GarbageWorker(Worker):
     of a resource as deleted, and for deleting all resources without any finalizer.
     """
 
-    def __init__(self, client=None, etcd_host="localhost", etcd_port=2379):
+    def __init__(self, client=None, db_host="localhost", db_port=2379):
         super(GarbageWorker, self).__init__(client=client)
-        self.etcd_host = etcd_host
-        self.etcd_port = etcd_port
+        self.db_host = db_host
+        self.db_port = db_port
+        self.session = None
+        self.resources = get_collected_resources()
 
     async def resource_received(self, resource):
         """Handle the resources marked for deletion. Only one action is performed:
@@ -161,17 +125,21 @@ class GarbageWorker(Worker):
             resource (any): a resource marked for deletion
 
         """
-        # Delete a resource with no finalizer
-        if not resource.metadata.finalizers:
-            await self._delete_resource(resource)
-            return
+        async with Session(host=self.db_host, port=self.db_port) as session:
+            self.session = session
+            # Delete a resource with no finalizer
+            if not resource.metadata.finalizers:
+                await self._delete_resource(resource)
+                return
 
-        # Check if there are dependents
-        dependents_list = await self._get_dependents(resource)
-        if dependents_list:
-            await self._mark_dependents(dependents_list)
-        else:
-            await self._remove_finalizer(resource)
+            # Check if there are dependents
+            dependents_list = await self._get_dependents(resource)
+            if dependents_list:
+                await self._mark_dependents(dependents_list)
+            else:
+                await self._remove_finalizer(resource)
+
+            self.session = None
 
     async def _delete_resource(self, resource):
         """Update the dependencies of a resource before removing it from the database.
@@ -183,11 +151,8 @@ class GarbageWorker(Worker):
         await self._update_dependencies(resource)
 
         # Delete from database
-        async with Session(host=self.etcd_host, port=self.etcd_port) as session:
-            logger.debug(
-                "%s %r completely deleted", resource.kind, resource.metadata.name
-            )
-            await session.delete(resource)
+        logger.debug("%s %r completely deleted", resource.kind, resource.metadata.name)
+        await self.session.delete(resource)
 
     async def _update_dependencies(self, resource):
         """Retrieve and update all dependencies of a resource WITHOUT modifying them.
@@ -200,17 +165,31 @@ class GarbageWorker(Worker):
             return
 
         for dependency_ref in resource.status.depends:
-            get_dependency = _api_client_handler(self.client, dependency_ref, "read")
-            dependency = await get_dependency(
-                namespace=dependency_ref.namespace, name=dependency_ref.name
+            cls = self._get_class_by_name(dependency_ref.kind)
+            dependency, _ = await self.session.get(
+                cls=cls, namespace=dependency_ref.namespace, name=dependency_ref.name
             )
+            await self.session.put(dependency)
 
-            update_dependency = _api_client_handler(self.client, dependency, "update")
-            await update_dependency(
-                namespace=dependency.metadata.namespace,
-                name=dependency.metadata.name,
-                body=dependency,
-            )
+    def _get_class_by_name(self, name):
+        """From the managed resources, get the resource class that is
+        referenced by the given name.
+
+        Args:
+            name (str): the name of a class
+
+        Returns:
+            type: the class that corresponds to the given name
+
+        Raises:
+            ValueError: if the class cannot be found in the managed ones.
+
+        """
+        for cls, apidef in self.resources.items():
+            if apidef.singular == name:
+                return cls
+        else:
+            raise ValueError(f"Class '{name}' not found.")
 
     async def _mark_dependents(self, resource_list):
         """Mark all given resources as deleted.
@@ -220,10 +199,10 @@ class GarbageWorker(Worker):
 
         """
         for resource in resource_list:
-            delete_resource = _api_client_handler(self.client, resource, "delete")
-            await delete_resource(
-                namespace=resource.metadata.namespace, name=resource.metadata.name
-            )
+            if resource.metadata.deleted:
+                continue
+            resource.metadata.deleted = datetime.now()
+            await self.session.put(resource)
 
     async def _get_dependents(self, entity):
         """Retrieve all direct dependents of a resource.
@@ -236,25 +215,24 @@ class GarbageWorker(Worker):
 
         """
         all_dependents = []
-        async with Session(host=self.etcd_host, port=self.etcd_port) as session:
 
-            def _in_depends(resource):
-                return (
-                    resource.status.depends
-                    and resource_ref(entity) in resource.status.depends
-                )
+        def _in_depends(instance):
+            return (
+                instance.status.depends
+                and resource_ref(entity) in instance.status.depends
+            )
 
-            for resource in get_collected_resources():
-                all_resources = session.all(resource)
+        for resource in self.resources:
+            all_resources = self.session.all(resource)
 
-                # add all elements of current resource that have entity as dependency
-                all_dependents.extend(
-                    [
-                        resource
-                        async for resource, _ in all_resources
-                        if _in_depends(resource)
-                    ]
-                )
+            # add all elements of current resource that have entity as dependency
+            all_dependents.extend(
+                [
+                    resource
+                    async for resource, _ in all_resources
+                    if _in_depends(resource)
+                ]
+            )
 
         return all_dependents
 
@@ -269,13 +247,8 @@ class GarbageWorker(Worker):
         if resource.metadata.finalizers[-1] == "cascading_deletion":
             # Remove the last finalizer
             resource.metadata.finalizers.pop(-1)
-
-            update_dependency = _api_client_handler(self.client, resource, "update")
-            await update_dependency(
-                namespace=resource.metadata.namespace,
-                name=resource.metadata.name,
-                body=resource,
-            )
+            resource.metadata.modified = datetime.now()
+            await self.session.put(resource)
 
 
 async def register_garbage_collection(app):
@@ -290,10 +263,10 @@ async def register_garbage_collection(app):
     """
     config = app["config"]
     gc_config = config["controllers"]["garbage_collector"]
-    etcd_host = config["etcd"]["host"]
-    etcd_port = config["etcd"]["port"]
+    db_host = config["etcd"]["host"]
+    db_port = config["etcd"]["port"]
 
-    app["gc"] = app.loop.create_task(run_gc(gc_config, etcd_host, etcd_port))
+    app["gc"] = app.loop.create_task(run_gc(gc_config, db_host, db_port))
 
 
 async def cleanup_garbage_collection(app):
@@ -312,23 +285,25 @@ async def cleanup_garbage_collection(app):
         logger.info("Garbage Collector has been cancelled")
 
 
-async def run_gc(config, etcd_host, etcd_port):
+async def run_gc(config, db_host, db_port):
     """Start the Garbage Collector and restart it in case of failure.
 
     Args:
         config (dict): configuration of the Garbage Collector Controller
-        etcd_host (str): host of the etcd database for direct access
-        etcd_port (int): port of the etcd database for direct access
+        db_host (str): host of the database for direct access
+        db_port (int): port of the database for direct access
 
     """
     while True:
         try:
-            await start_garbage_collector(config, etcd_host, etcd_port)
+            await start_garbage_collector(config, db_host, db_port)
         except asyncio.TimeoutError:
             logger.warn("Timeout")
         except ClientConnectorError as err:
             logger.error(err)
             await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            raise
         except Exception as err:
             logger.error(
                 f"The Garbage Collector has encountered an error: "
@@ -337,13 +312,13 @@ async def run_gc(config, etcd_host, etcd_port):
             await asyncio.sleep(1)
 
 
-async def start_garbage_collector(config, etcd_host, etcd_port):
+async def start_garbage_collector(config, db_host, db_port):
     """When the API is started, create the Garbage Collector and await it.
 
     Args:
         config (dict): configuration of the Garbage Collector Controller
-        etcd_host (str): host of the etcd database for direct access
-        etcd_port (int): port of the etcd database for direct access
+        db_host (str): host of the database for direct access
+        db_port (int): port of the database for direct access
 
     """
     api_endpoint = config["api_endpoint"]
@@ -351,8 +326,10 @@ async def start_garbage_collector(config, etcd_host, etcd_port):
     await _is_api_ready(api_endpoint)
 
     controller = GarbageCollector(
+        db_host=db_host,
+        db_port=db_port,
         api_endpoint=api_endpoint,
-        worker_factory=_create_garbage_worker(etcd_host, etcd_port),
+        worker_factory=_create_garbage_worker(db_host, db_port),
         worker_count=config["worker_count"],
     )
     async with controller:
@@ -392,13 +369,13 @@ async def _is_api_ready(api_endpoint, timeout=10):
     await asyncio.wait_for(wait_for_api(), timeout)
 
 
-def _create_garbage_worker(etcd_host, etcd_port):
-    """Factory to create an instance of :class:`GarbageWorker` with the etcd
-    connection parameters.
+def _create_garbage_worker(db_host, db_port):
+    """Factory to create an instance of :class:`GarbageWorker` with the
+    database connection parameters.
 
     Args:
-        etcd_host (str): host of the etcd database for direct access
-        etcd_port (int): port of the etcd database for direct access
+        db_host (str): host of the database for direct access
+        db_port (int): port of the database for direct access
 
     Returns:
         callable: the factory to create the workers
@@ -406,6 +383,6 @@ def _create_garbage_worker(etcd_host, etcd_port):
     """
 
     def worker_factory(client):
-        return GarbageWorker(client, etcd_host=etcd_host, etcd_port=etcd_port)
+        return GarbageWorker(client, db_host=db_host, db_port=db_port)
 
     return worker_factory

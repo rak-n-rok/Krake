@@ -45,6 +45,8 @@ async def test_resources_reception(aiohttp_server, config, db, loop):
         worker_factory=lambda client: worker,
         worker_count=1,
         loop=loop,
+        db_host=db.host,
+        db_port=db.port,
     ) as controller:
 
         await db.put(app_updated)
@@ -84,7 +86,7 @@ async def test_cluster_deletion(aiohttp_server, config, db, loop):
     for app in apps:
         # Ensure that the Applications are marked as deleted
         async with Client(url=server_endpoint(server), loop=loop) as client:
-            worker = GarbageWorker(client=client, etcd_host=db.host, etcd_port=db.port)
+            worker = GarbageWorker(client=client, db_host=db.host, db_port=db.port)
             await worker.resource_received(cluster)
 
         stored_app, _ = await db.get(
@@ -99,7 +101,7 @@ async def test_cluster_deletion(aiohttp_server, config, db, loop):
 
         # Ensure that the Application resources are deleted from database
         async with Client(url=server_endpoint(server), loop=loop) as client:
-            worker = GarbageWorker(client=client, etcd_host=db.host, etcd_port=db.port)
+            worker = GarbageWorker(client=client, db_host=db.host, db_port=db.port)
             await worker.resource_received(stored_app)
 
         stored_app, _ = await db.get(
@@ -111,7 +113,7 @@ async def test_cluster_deletion(aiohttp_server, config, db, loop):
 
     # Ensure that the cluster has no more finalizers
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        worker = GarbageWorker(client=client, etcd_host=db.host, etcd_port=db.port)
+        worker = GarbageWorker(client=client, db_host=db.host, db_port=db.port)
         await worker.resource_received(cluster)
 
     stored_cluster, _ = await db.get(
@@ -121,7 +123,7 @@ async def test_cluster_deletion(aiohttp_server, config, db, loop):
 
     # Ensure that the cluster resource is deleted from database
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        worker = GarbageWorker(client=client, etcd_host=db.host, etcd_port=db.port)
+        worker = GarbageWorker(client=client, db_host=db.host, db_port=db.port)
         await worker.resource_received(cluster)
 
     stored_cluster, _ = await db.get(
