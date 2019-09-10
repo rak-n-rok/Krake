@@ -3,6 +3,7 @@ import re
 import json
 from itertools import count
 from operator import attrgetter
+import yaml
 
 from krake.data.core import (
     WatchEvent,
@@ -161,7 +162,9 @@ async def test_get_app_rbac(rbac_allow, config, aiohttp_client):
         assert resp.status == 404
 
 
-new_manifest = """
+new_manifest = list(
+    yaml.safe_load_all(
+        """---
 apiVersion: v1
 kind: Pod
 metadata:
@@ -186,6 +189,8 @@ spec:
     - sleep
     - "1000"
 """
+    )
+)
 
 
 async def test_update_app(aiohttp_client, config, db):

@@ -12,7 +12,7 @@ from .core import Metadata, ListMetadata, Status, ResourceRef
 
 
 class ApplicationSpec(Serializable):
-    manifest: str
+    manifest: List[dict]
 
 
 class ApplicationState(Enum):
@@ -29,6 +29,7 @@ class ApplicationStatus(Status):
     state: ApplicationState = ApplicationState.PENDING
     cluster: ResourceRef = None
     services: dict = None
+    resources: List[dict] = None
 
 
 @persistent("/kubernetes/applications/{namespace}/{name}")

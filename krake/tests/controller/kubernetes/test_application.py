@@ -1,7 +1,8 @@
 import asyncio
-from textwrap import dedent
+from copy import deepcopy
 from aiohttp import web
 import pytz
+import yaml
 
 from krake.api.app import create_app
 from krake.data.core import resource_ref, ReasonCode
@@ -54,7 +55,9 @@ async def test_app_reception(aiohttp_server, config, db, loop):
     assert worker.done.done()
 
 
-nginx_manifest = """---
+nginx_manifest = list(
+    yaml.safe_load_all(
+        """---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -87,6 +90,8 @@ spec:
     protocol: TCP
     targetPort: 80
 """
+    )
+)
 
 
 async def test_app_creation(aiohttp_server, config, db, loop):
@@ -110,8 +115,9 @@ async def test_app_creation(aiohttp_server, config, db, loop):
     app = ApplicationFactory(
         status__state=ApplicationState.SCHEDULED,
         status__cluster=resource_ref(cluster),
-        spec__manifest=dedent(
-            """---
+        spec__manifest=list(
+            yaml.safe_load_all(
+                """---
             apiVersion: apps/v1
             kind: Deployment
             metadata:
@@ -131,6 +137,7 @@ async def test_app_creation(aiohttp_server, config, db, loop):
                     ports:
                     - containerPort: 80
             """
+            )
         ),
     )
     await db.put(cluster)
@@ -257,8 +264,9 @@ async def test_service_registration(aiohttp_server, config, db, loop):
     app = ApplicationFactory(
         status__state=ApplicationState.SCHEDULED,
         status__cluster=resource_ref(cluster),
-        spec__manifest=dedent(
-            """---
+        spec__manifest=list(
+            yaml.safe_load_all(
+                """---
             apiVersion: v1
             kind: Service
             metadata:
@@ -272,6 +280,7 @@ async def test_service_registration(aiohttp_server, config, db, loop):
                 protocol: TCP
                 targetPort: 80
             """
+            )
         ),
     )
 
@@ -287,7 +296,8 @@ async def test_service_registration(aiohttp_server, config, db, loop):
 
 
 async def test_kubernetes_error_handling(aiohttp_server, config, db, loop):
-    failed_manifest = nginx_manifest.replace("kind: Deployment", "kind: Unsupported")
+    failed_manifest = deepcopy(nginx_manifest)
+    failed_manifest[0]["kind"] = "Unsupported"
 
     cluster = ClusterFactory()
     app = ApplicationFactory(

@@ -1,4 +1,5 @@
 from operator import attrgetter
+import yaml
 
 from krake.api.app import create_app
 from krake.client import Client
@@ -16,7 +17,9 @@ from krake.test_utils import with_timeout
 from factories.kubernetes import ApplicationFactory
 from tests.factories.kubernetes import ClusterFactory
 
-manifest = """---
+manifest = list(
+    yaml.safe_load_all(
+        """---
 apiVersion: v1
 kind: Service
 metadata:
@@ -31,6 +34,8 @@ spec:
     tier: mysql
   clusterIP: None
 """
+    )
+)
 
 
 async def test_list_applications(aiohttp_server, config, db, loop):
@@ -71,7 +76,9 @@ async def test_create_application(aiohttp_server, config, db, loop):
     assert stored == received
 
 
-updated_manifest = """
+updated_manifest = list(
+    yaml.safe_load_all(
+        """---
 apiVersion: apps/v1 # for versions before 1.9.0 use apps/v1beta2
 kind: Deployment
 metadata:
@@ -92,6 +99,8 @@ spec:
         ports:
         - containerPort: 80
 """
+    )
+)
 
 
 async def test_update_application(aiohttp_server, config, db, loop):

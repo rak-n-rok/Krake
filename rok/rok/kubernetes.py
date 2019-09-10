@@ -66,7 +66,8 @@ def create_application(config, session, file, namespace, name):
     if namespace is None:
         namespace = config["user"]
 
-    app = {"metadata": {"name": name}, "spec": {"manifest": file.read()}}
+    manifest = list(yaml.safe_load_all(file))
+    app = {"metadata": {"name": name}, "spec": {"manifest": manifest}}
     resp = session.post(f"/kubernetes/namespaces/{namespace}/applications", json=app)
     data = resp.json()
     yaml.dump(data, default_flow_style=False, stream=sys.stdout)
@@ -110,7 +111,8 @@ def update_application(config, session, namespace, name, file):
     if namespace is None:
         namespace = config["user"]
 
-    app = {"metadata": {"name": name}, "spec": {"manifest": file.read()}}
+    manifest = list(yaml.safe_load_all(file))
+    app = {"metadata": {"name": name}, "spec": {"manifest": manifest}}
     session.put(f"/kubernetes/namespaces/{namespace}/applications/{name}", json=app)
 
 

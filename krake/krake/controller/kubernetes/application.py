@@ -22,7 +22,6 @@ import logging
 import pprint
 import re
 from copy import deepcopy
-import yaml
 import yarl
 from argparse import ArgumentParser
 from inspect import iscoroutinefunction
@@ -181,13 +180,13 @@ class ApplicationWorker(Worker):
 
     async def _cleanup_application(self, app, kubernetes_api):
         # Delete Kubernetes resources if the application was bound to a
-        # cluster.
-        if app.status.cluster:
+        # cluster and there Kubernetes resources were created.
+        if app.status.cluster and app.status.resources:
             cluster = await kubernetes_api.read_cluster(
                 namespace=app.status.cluster.namespace, name=app.status.cluster.name
             )
             async with KubernetesClient(cluster.spec.kubeconfig) as kube:
-                for resource in yaml.safe_load_all(app.spec.manifest):
+                for resource in app.status.resources:
                     resp = await kube.delete(resource)
                     await listen.emit(
                         Event(resource["kind"], "delete"),
@@ -206,6 +205,8 @@ class ApplicationWorker(Worker):
                 "Application is scheduled but no cluster is assigned"
             )
 
+        # FIXME: Check if the manifest matches the current status
+
         # Initialize empty services dictionary: The services dictionary is
         # initialized with "None" in the Kubernetes data model indicating
         # that the application was not yet processed by the controller.
@@ -219,7 +220,7 @@ class ApplicationWorker(Worker):
             namespace=app.status.cluster.namespace, name=app.status.cluster.name
         )
         async with KubernetesClient(cluster.spec.kubeconfig) as kube:
-            for resource in yaml.safe_load_all(app.spec.manifest):
+            for resource in app.spec.manifest:
                 if app.status.state == ApplicationState.SCHEDULED:
                     resp = await kube.apply(resource)
                     await listen.emit(

@@ -1,6 +1,7 @@
 from base64 import b64encode
 import yaml
 from factory import Factory, SubFactory, lazy_attribute, fuzzy
+from copy import deepcopy
 
 from .fake import fake
 from .core import MetadataFactory, ReasonFactory
@@ -50,8 +51,25 @@ class ApplicationStatusFactory(Factory):
             api="kubernetes", kind="Cluster", name=name, namespace=namespace
         )
 
+    @lazy_attribute
+    def resources(self):
+        if self.state == ApplicationState.PENDING:
+            return None
 
-kubernetes_manifest = """---
+        if self.factory_parent:
+            manifest = self.factory_parent.spec.manifest
+
+            # Create a random sample of resources from the manifest
+            k = fake.pyint(0, len(manifest))
+            sample = fake.random.sample(manifest, k)
+
+            return deepcopy(sample)
+        return None
+
+
+kubernetes_manifest = list(
+    yaml.safe_load_all(
+        """---
 apiVersion: v1
 kind: Service
 metadata:
@@ -66,6 +84,8 @@ spec:
     tier: mysql
   clusterIP: None
 """
+    )
+)
 
 
 class ApplicationSpecFactory(Factory):
