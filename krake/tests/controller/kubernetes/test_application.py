@@ -1,5 +1,6 @@
 import asyncio
 from copy import deepcopy
+from textwrap import dedent
 from aiohttp import web
 import pytz
 import yaml
@@ -152,6 +153,175 @@ async def test_app_creation(aiohttp_server, config, db, loop):
     stored, _ = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
+    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.state == ApplicationState.RUNNING
+    assert stored.metadata.finalizers[-1] == "cleanup"
+
+
+async def test_app_update(aiohttp_server, config, db, loop):
+    routes = web.RouteTableDef()
+
+    deleted = set()
+    replaced = set()
+
+    @routes.put("/apis/apps/v1/namespaces/default/deployments/{name}")
+    async def replace_deployment(request):
+        replaced.add(request.match_info["name"])
+        return web.Response(status=200)
+
+    @routes.delete("/apis/apps/v1/namespaces/default/deployments/{name}")
+    async def delete_deployment(request):
+        deleted.add(request.match_info["name"])
+        return web.Response(status=200)
+
+    @routes.get("/apis/apps/v1/namespaces/default/deployments/{name}")
+    async def _(request):
+        deployments = ("nginx-demo-1", "nginx-demo-2", "nginx-demo-3")
+        if request.match_info["name"] in deployments:
+            return web.Response(status=200)
+        return web.Response(status=404)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.SCHEDULED,
+        status__cluster=resource_ref(cluster),
+        status__manifest=list(
+            yaml.safe_load_all(
+                dedent(
+                    """
+                    ---
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nginx-demo-1
+                    spec:
+                      selector:
+                        matchLabels:
+                          app: nginx
+                      template:
+                        metadata:
+                          labels:
+                            app: nginx
+                        spec:
+                          containers:
+                          - name: nginx
+                            image: nginx:1.7.9
+                            ports:
+                            - containerPort: 80
+                    ---
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nginx-demo-2
+                    spec:
+                      selector:
+                        matchLabels:
+                          app: nginx
+                      template:
+                        metadata:
+                          labels:
+                            app: nginx
+                        spec:
+                          containers:
+                          - name: nginx
+                            image: nginx:1.7.9
+                            ports:
+                            - containerPort: 433
+                    ---
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nginx-demo-3
+                    spec:
+                      selector:
+                        matchLabels:
+                          app: nginx
+                      template:
+                        metadata:
+                          labels:
+                            app: nginx
+                        spec:
+                          containers:
+                          - name: nginx
+                            image: nginx:1.7.9
+                            ports:
+                            - containerPort: 8080
+                    """
+                )
+            )
+        ),
+        spec__manifest=list(
+            yaml.safe_load_all(
+                dedent(
+                    """
+                    ---
+                    # Deployment "nginx-demo-1" was removed
+                    # Deployment "nginx-demo-2" is unchanged
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nginx-demo-2
+                    spec:
+                      selector:
+                        matchLabels:
+                          app: nginx
+                      template:
+                        metadata:
+                          labels:
+                            app: nginx
+                        spec:
+                          containers:
+                          - name: nginx
+                            image: nginx:1.7.9
+                            ports:
+                            - containerPort: 433
+                    ---
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nginx-demo-3
+                    spec:
+                      selector:
+                        matchLabels:
+                          app: nginx
+                      template:
+                        metadata:
+                          labels:
+                            app: nginx
+                        spec:
+                          containers:
+                          - name: nginx
+                            image: nginx:1.7.10  # updated image version
+                            ports:
+                            - containerPort: 8080
+                    """
+                )
+            )
+        ),
+    )
+
+    await db.put(cluster)
+    await db.put(app)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        worker = ApplicationWorker(client=client)
+        await worker.resource_received(app)
+
+    assert "nginx-demo-1" in deleted
+    assert "nginx-demo-3" in replaced
+
+    stored, _ = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored.status.manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "cleanup"
 
@@ -297,13 +467,15 @@ async def test_service_registration(aiohttp_server, config, db, loop):
 
 async def test_kubernetes_error_handling(aiohttp_server, config, db, loop):
     failed_manifest = deepcopy(nginx_manifest)
-    failed_manifest[0]["kind"] = "Unsupported"
+    for resource in failed_manifest:
+        resource["kind"] = "Unsupported"
 
     cluster = ClusterFactory()
     app = ApplicationFactory(
+        spec__manifest=failed_manifest,
         status__state=ApplicationState.SCHEDULED,
         status__cluster=resource_ref(cluster),
-        spec__manifest=failed_manifest,
+        status__manifest=[],
     )
 
     await db.put(cluster)

@@ -29,7 +29,7 @@ class ApplicationStatus(Status):
     state: ApplicationState = ApplicationState.PENDING
     cluster: ResourceRef = None
     services: dict = None
-    resources: List[dict] = None
+    manifest: List[dict] = None
 
 
 @persistent("/kubernetes/applications/{namespace}/{name}")

@@ -166,6 +166,33 @@ class EventDispatcher(object):
 listen = EventDispatcher()
 
 
+class ResourceID(NamedTuple):
+    """Named tuple for identifying Kubernetes resource objects by their API
+    version, kind and name.
+    """
+
+    api_version: str
+    kind: str
+    name: str
+
+    @classmethod
+    def from_resource(cls, resource):
+        """Create an identifier for the given Kubernetes resource object.
+
+        Args:
+            resource (dict): Kubernetes resource object
+
+        Returns:
+            ResourceID: Identifier for the given resource object
+
+        """
+        return cls(
+            api_version=resource["apiVersion"],
+            kind=resource["kind"],
+            name=resource["metadata"]["name"],
+        )
+
+
 class ApplicationWorker(Worker):
     @on_error(ControllerError)
     async def resource_received(self, app):
@@ -181,12 +208,12 @@ class ApplicationWorker(Worker):
     async def _cleanup_application(self, app, kubernetes_api):
         # Delete Kubernetes resources if the application was bound to a
         # cluster and there Kubernetes resources were created.
-        if app.status.cluster and app.status.resources:
+        if app.status.cluster and app.status.manifest:
             cluster = await kubernetes_api.read_cluster(
                 namespace=app.status.cluster.namespace, name=app.status.cluster.name
             )
             async with KubernetesClient(cluster.spec.kubeconfig) as kube:
-                for resource in app.status.resources:
+                for resource in app.status.manifest:
                     resp = await kube.delete(resource)
                     await listen.emit(
                         Event(resource["kind"], "delete"),
@@ -205,8 +232,6 @@ class ApplicationWorker(Worker):
                 "Application is scheduled but no cluster is assigned"
             )
 
-        # FIXME: Check if the manifest matches the current status
-
         # Initialize empty services dictionary: The services dictionary is
         # initialized with "None" in the Kubernetes data model indicating
         # that the application was not yet processed by the controller.
@@ -216,27 +241,47 @@ class ApplicationWorker(Worker):
         # they will be updated or deleted by the Worker anyway.
         app.status.services = {}
 
+        desired_resources = {
+            ResourceID.from_resource(resource): resource
+            for resource in app.spec.manifest
+        }
+        current_resources = {
+            ResourceID.from_resource(resource): resource
+            for resource in (app.status.manifest or [])
+        }
+
         cluster = await kubernetes_api.read_cluster(
             namespace=app.status.cluster.namespace, name=app.status.cluster.name
         )
         async with KubernetesClient(cluster.spec.kubeconfig) as kube:
-            for resource in app.spec.manifest:
-                if app.status.state == ApplicationState.SCHEDULED:
-                    resp = await kube.apply(resource)
+            # Delete all resources that are no longer in the spec
+            for resource_id in set(current_resources) - set(desired_resources):
+                current = current_resources[resource_id]
+                resp = await kube.delete(current)
+                await listen.emit(
+                    Event(current["kind"], "delete"),
+                    app=app,
+                    cluster=cluster,
+                    resp=resp,
+                )
+
+            # Create or update all desired resources
+            for resource_id, desired in desired_resources.items():
+                current = current_resources.get(resource_id)
+
+                # Apply resource if no current resource exists or the
+                # specification differs.
+                if not current or desired["spec"] != current["spec"]:
+                    resp = await kube.apply(desired)
                     await listen.emit(
-                        Event(resource["kind"], "apply"),
+                        Event(desired["kind"], "apply"),
                         app=app,
                         cluster=cluster,
                         resp=resp,
                     )
-                else:
-                    resp = await kube.delete(resource)
-                    await listen.emit(
-                        Event(resource["kind"], "delete"),
-                        app=app,
-                        cluster=cluster,
-                        resp=resp,
-                    )
+
+        # Update resource in application status
+        app.status.manifest = app.spec.manifest.copy()
 
         # Append "cleanup" finalizer of not already present. This will prevent
         # the API from deleting the resource without remove the Kubernetes
