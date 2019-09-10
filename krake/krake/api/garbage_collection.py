@@ -128,6 +128,12 @@ class GarbageWorker(Worker):
             resource (any): a resource marked for deletion
 
         """
+        logger.debug(
+            "Worker received %s %s %s",
+            resource.api,
+            resource.kind,
+            resource.metadata.name,
+        )
         async with Session(host=self.db_host, port=self.db_port) as session:
             self.session = session
             # Delete a resource with no finalizer
@@ -287,6 +293,7 @@ def main(config):
         worker_count=gc_config["worker_count"],
         db_host=db_host,
         db_port=db_port,
+        debounce=gc_config.get("debounce", 0),
     )
     setup_logging(krake_conf["log"])
     run(controller)

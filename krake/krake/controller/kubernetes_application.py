@@ -494,7 +494,7 @@ def main():
 
     setup_logging(config["log"])
     logger.debug("Krake configuration settings:\n %s" % pprint.pformat(config))
-    controller_config = config["controllers"]["kubernetes"]["application"]
+    controller_config = config["controllers"]["kubernetes_application"]
 
     tls_config = controller_config.get("tls")
     ssl_context = create_ssl_context(tls_config)
@@ -505,6 +505,7 @@ def main():
         worker_factory=ApplicationWorker,
         worker_count=controller_config["worker_count"],
         ssl_context=ssl_context,
+        debounce=controller_config.get("debounce", 0),
     )
     setup_logging(config["log"])
     run(controller)

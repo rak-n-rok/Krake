@@ -17,6 +17,42 @@ from krake.client import Client
 logger = logging.getLogger(__name__)
 
 
+class Timer:
+    """Allows a function to be called automatically in the future after
+    a given timeout. @see
+    https://stackoverflow.com/questions/45419723/python-timer-with-asyncio-coroutine
+
+    Args:
+        timeout (float): Time in second after which the function will be called
+        callback (callable): the function called after timeout. Can be a coroutine.
+
+    """
+
+    def __init__(self, timeout, callback):
+        self._timeout = timeout
+        self._callback = callback
+        self._task = asyncio.ensure_future(self._job())
+
+    async def _job(self):
+        if self._timeout:
+            await asyncio.sleep(self._timeout)
+        await self._callback()
+
+    def cancel(self):
+        """Cancel the task postponed by the current instance.
+        """
+        self._task.cancel()
+
+    def is_done(self):
+        """Get the finished status of the current instance
+
+        Returns:
+            bool: True if the task is done, False otherwise.
+
+        """
+        return self._task.done()
+
+
 class WorkQueue(object):
     """Simple asynchronous work queue.
 
@@ -29,14 +65,20 @@ class WorkQueue(object):
     Args:
         maxsize (int, optional): Maximal number of items in the queue before
             :meth:`put` blocks. Defaults to 0 which means the size is infinite
+        debounce (float): time in second for the debouncing of the values. A
+            number higher than 0 means that the queue will wait the given time
+            before giving a value. If a newer value is received, this time is
+            reset.
         loop (asyncio.AbstractEventLoop): Event loop that should be used
 
     Todo:
         * Implement rate limiting and delays
     """
 
-    def __init__(self, maxsize=0, loop=None):
+    def __init__(self, maxsize=0, debounce=0, loop=None):
         self.dirty = dict()
+        self.timers = dict()
+        self.debounce = debounce
         self.processing = set()
         self.queue = asyncio.Queue(maxsize=maxsize, loop=loop)
 
@@ -48,8 +90,17 @@ class WorkQueue(object):
             value: New value that is associated with the key
 
         """
-        if key not in self.processing:
-            await self.queue.put(key)
+
+        async def callback():
+            if key not in self.processing:
+                await self.queue.put(key)
+
+        # Replace the current timer if present
+        previous = self.timers.get(key)
+        if previous:
+            previous.cancel()
+        self.timers[key] = Timer(self.debounce, callback)
+
         self.dirty[key] = value
 
     async def get(self):
@@ -64,6 +115,8 @@ class WorkQueue(object):
         """
         key = await self.queue.get()
         value = self.dirty.pop(key)
+        timer = self.timers.pop(key)
+        assert timer.is_done()
         self.processing.add(key)
         return key, value
 
@@ -147,12 +200,19 @@ class Controller(object):
     """
 
     def __init__(
-        self, api_endpoint, worker_factory, worker_count=10, loop=None, ssl_context=None
+        self,
+        api_endpoint,
+        worker_factory,
+        worker_count=10,
+        loop=None,
+        ssl_context=None,
+        debounce=0,
     ):
         self.loop = loop or asyncio.get_event_loop()
         self.client = None
         self.worker_factory = worker_factory
         self.worker_count = worker_count
+        self.debounce = debounce
         self.queue = None
         self.watcher = None
         self.workers = None
@@ -175,7 +235,7 @@ class Controller(object):
             url=self.api_endpoint, loop=self.loop, ssl_context=self.ssl_context
         )
         await self.client.open()
-        self.queue = WorkQueue(loop=self.loop)
+        self.queue = WorkQueue(loop=self.loop, debounce=self.debounce)
 
         # Start worker tasks
         self.workers = [

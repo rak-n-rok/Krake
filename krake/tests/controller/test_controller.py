@@ -1,12 +1,13 @@
 import asyncio
 from unittest.mock import Mock
 
+import pytest
 from factories.kubernetes import ApplicationFactory
-from krake.controller import WorkQueue, consume
+from krake.controller import WorkQueue, consume, Timer
 
 
 async def test_put_get_done():
-    queue = WorkQueue()
+    queue = WorkQueue(debounce=0)
 
     await queue.put("key1", "value1-1")
     assert queue.size() == 1
@@ -35,6 +36,35 @@ async def test_put_get_done():
 
     await queue.done("key1")
     await queue.done("key2")
+
+    assert queue.empty()
+
+
+@pytest.mark.slow
+async def test_queue_timer(loop):
+    queue = WorkQueue(loop=loop, debounce=3)
+
+    # Each new added value should reset the timer for the "key1" key
+    await queue.put("key1", "value1-1")
+
+    # A new value is added after the start of the waiting time,
+    # which should reset the internal timer for the key
+    async def callback():
+        await queue.put("key1", "value1-2")
+
+    timer = Timer(1, callback)
+
+    start = loop.time()
+    key, value = await queue.get()
+    end = loop.time()
+
+    assert timer.is_done()
+    assert key == "key1"
+    assert value == "value1-2"
+    # The value should be received a bit after "debounce time + timer timeout"
+    assert 4 < end - start < 4.1
+
+    await queue.done("key1")
 
     assert queue.empty()
 
