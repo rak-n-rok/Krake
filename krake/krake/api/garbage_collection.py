@@ -20,16 +20,18 @@ Configuration is loaded from the ``controllers.garbage_collector`` section:
 
 import asyncio
 import logging
+from argparse import ArgumentParser
 from datetime import datetime
 
-from aiohttp import ClientResponseError, ClientConnectorError
+from krake import setup_logging, load_config
 from krake.api.database import Session, EventType
-from krake.apidefs import get_collected_resources
-from krake.controller import Controller, Worker
-from krake.client import Client
+from krake.controller import Controller, run, Worker
 from krake.data.core import resource_ref
+from krake.data.kubernetes import Application, Cluster
 
 logger = logging.getLogger("krake.api.garbage_collector")
+
+_garbage_collected = [Application, Cluster]
 
 
 class GarbageCollector(Controller):
@@ -42,13 +44,14 @@ class GarbageCollector(Controller):
         super().__init__(*args, **kwargs)
         self.db_host = db_host
         self.db_port = db_port
-        self.resources = get_collected_resources()
+        self.resources = _garbage_collected
 
     async def list_and_watch(self):
         """Create a task to list and watch each persistent resource
         """
         logger.debug("Handling deletion of: %s", [cls.kind for cls in self.resources])
         tasks = [self.list_watch_resource(resource) for resource in self.resources]
+        assert tasks
         await asyncio.gather(*tasks)
 
     async def list_watch_resource(self, apidef):
@@ -111,7 +114,7 @@ class GarbageWorker(Worker):
         self.db_host = db_host
         self.db_port = db_port
         self.session = None
-        self.resources = get_collected_resources()
+        self.resources = _garbage_collected
 
     async def resource_received(self, resource):
         """Handle the resources marked for deletion. Only one action is performed:
@@ -185,8 +188,8 @@ class GarbageWorker(Worker):
             ValueError: if the class cannot be found in the managed ones.
 
         """
-        for cls, apidef in self.resources.items():
-            if apidef.singular == name:
+        for cls in self.resources:
+            if cls.__name__ == name:
                 return cls
         else:
             raise ValueError(f"Class '{name}' not found.")
@@ -251,124 +254,6 @@ class GarbageWorker(Worker):
             await self.session.put(resource)
 
 
-async def register_garbage_collection(app):
-    """This function needs to be registered as a handler for the "on_startup" signal
-    of an aiohttp web application.
-    Store the Garbage Collection task as an aiohttp background task.
-
-    Args:
-        app: the application that fired the signal. The created task will be
-        registered to this web application.
-
-    """
-    config = app["config"]
-    gc_config = config["controllers"]["garbage_collector"]
-    db_host = config["etcd"]["host"]
-    db_port = config["etcd"]["port"]
-
-    app["gc"] = app.loop.create_task(run_gc(gc_config, db_host, db_port))
-
-
-async def cleanup_garbage_collection(app):
-    """This function needs to be registered as a handler for the "on_cleanup" signal
-    of an aiohttp web application.
-    Cancel the Garbage Collection task.
-
-    Args:
-        app: the application that fired the signal.
-
-    """
-    app["gc"].cancel()
-    try:
-        await app["gc"]
-    except asyncio.CancelledError:
-        logger.info("Garbage Collector has been cancelled")
-
-
-async def run_gc(config, db_host, db_port):
-    """Start the Garbage Collector and restart it in case of failure.
-
-    Args:
-        config (dict): configuration of the Garbage Collector Controller
-        db_host (str): host of the database for direct access
-        db_port (int): port of the database for direct access
-
-    """
-    while True:
-        try:
-            await start_garbage_collector(config, db_host, db_port)
-        except asyncio.TimeoutError:
-            logger.warn("Timeout")
-        except ClientConnectorError as err:
-            logger.error(err)
-            await asyncio.sleep(1)
-        except asyncio.CancelledError:
-            raise
-        except Exception as err:
-            logger.error(
-                f"The Garbage Collector has encountered an error: "
-                f"{type(err)}, {err.args}"
-            )
-            await asyncio.sleep(1)
-
-
-async def start_garbage_collector(config, db_host, db_port):
-    """When the API is started, create the Garbage Collector and await it.
-
-    Args:
-        config (dict): configuration of the Garbage Collector Controller
-        db_host (str): host of the database for direct access
-        db_port (int): port of the database for direct access
-
-    """
-    api_endpoint = config["api_endpoint"]
-
-    await _is_api_ready(api_endpoint)
-
-    controller = GarbageCollector(
-        db_host=db_host,
-        db_port=db_port,
-        api_endpoint=api_endpoint,
-        worker_factory=_create_garbage_worker(db_host, db_port),
-        worker_count=config["worker_count"],
-    )
-    async with controller:
-        logger.info("Garbage Collector is started")
-        await controller
-
-
-async def _is_api_ready(api_endpoint, timeout=10):
-    """Block until the API can be reached.
-
-    Args:
-        api_endpoint (str): the complete endpoint of the API
-        timeout (int, optional): the amount of seconds to wait for the API to be up
-
-    Raises:
-        asyncio.TimeoutError: if the API cannot be reached after the timeout
-
-    """
-
-    async def wait_for_api():
-        while True:
-            client = Client(url=api_endpoint)
-            try:
-                # Only stops when a connection is possible
-                await client.open()
-                await client.session.get(api_endpoint)
-                return
-            except ClientResponseError as err:
-                if err.status != 404:
-                    raise
-            finally:
-                await client.close()
-
-            # Try again if the error status was 404
-            await asyncio.sleep(1)
-
-    await asyncio.wait_for(wait_for_api(), timeout)
-
-
 def _create_garbage_worker(db_host, db_port):
     """Factory to create an instance of :class:`GarbageWorker` with the
     database connection parameters.
@@ -386,3 +271,28 @@ def _create_garbage_worker(db_host, db_port):
         return GarbageWorker(client, db_host=db_host, db_port=db_port)
 
     return worker_factory
+
+
+def main(config):
+    krake_conf = load_config(config)
+
+    db_host = krake_conf["etcd"]["host"]
+    db_port = krake_conf["etcd"]["port"]
+
+    gc_config = krake_conf["controllers"]["garbage_collector"]
+
+    controller = GarbageCollector(
+        api_endpoint=gc_config["api_endpoint"],
+        worker_factory=_create_garbage_worker(db_host, db_port),
+        worker_count=gc_config["worker_count"],
+        db_host=db_host,
+        db_port=db_port,
+    )
+    setup_logging(krake_conf["log"])
+    run(controller)
+
+
+if __name__ == "__main__":
+    parser = ArgumentParser(description="Garbage Collector for Krake")
+    parser.add_argument("-c", "--config", help="Path to configuration YAML file")
+    main(**vars(parser.parse_args()))
