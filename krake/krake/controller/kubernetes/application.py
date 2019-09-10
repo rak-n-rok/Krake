@@ -35,7 +35,7 @@ from krake import load_config, setup_logging
 from krake.controller.kubernetes import KubernetesController
 from krake.data.kubernetes import ApplicationState
 from ..exceptions import on_error, ControllerError, application_error_mapping
-from .. import Worker, run
+from .. import Worker, run, create_ssl_context
 
 
 logger = logging.getLogger("krake.controller.kubernetes")
@@ -368,13 +368,20 @@ parser.add_argument("-c", "--config", help="Path to configuration YAML file")
 def main():
     args = parser.parse_args()
     config = load_config(args.config)
+
     setup_logging(config["log"])
     logger.debug("Krake configuration settings:\n %s" % pprint.pformat(config))
+    controller_config = config["controllers"]["kubernetes"]["application"]
+
+    tls_config = controller_config.get("tls")
+    ssl_context = create_ssl_context(tls_config)
+    logger.debug("TLS is %s", "enabled" if ssl_context else "disabled")
 
     controller = ApplicationController(
-        api_endpoint=config["controllers"]["kubernetes"]["application"]["api_endpoint"],
+        api_endpoint=controller_config["api_endpoint"],
         worker_factory=ApplicationWorker,
-        worker_count=config["controllers"]["kubernetes"]["application"]["worker_count"],
+        worker_count=controller_config["worker_count"],
+        ssl_context=ssl_context,
     )
     run(controller)
 

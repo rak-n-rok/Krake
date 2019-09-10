@@ -6,6 +6,9 @@ paradigms to implement a simple "control loop mechanism" in Python.
 """
 import asyncio
 import logging
+import os.path
+from yarl import URL
+import ssl
 from aiohttp import ClientConnectorError
 
 from krake.client import Client
@@ -144,21 +147,32 @@ class Controller(object):
     """
 
     def __init__(
-        self, api_endpoint, worker_factory, api_token=None, worker_count=10, loop=None
+        self, api_endpoint, worker_factory, worker_count=10, loop=None, ssl_context=None
     ):
         self.loop = loop or asyncio.get_event_loop()
         self.client = None
-        self.api_endpoint = api_endpoint
-        self.api_token = api_token
         self.worker_factory = worker_factory
         self.worker_count = worker_count
         self.queue = None
         self.watcher = None
         self.workers = None
+        self.ssl_context = ssl_context
+
+        base_url = URL(api_endpoint)
+
+        if self.ssl_context and base_url.scheme != "https":
+            logger.warning("API endpoint forced to scheme 'https', as TLS is enabled")
+            base_url = base_url.with_scheme("https")
+
+        if not self.ssl_context and base_url.scheme != "http":
+            logger.warning("API endpoint forced to scheme 'http', as TLS is disabled")
+            base_url = base_url.with_scheme("http")
+
+        self.api_endpoint = base_url
 
     async def __aenter__(self):
         self.client = Client(
-            url=self.api_endpoint, token=self.api_token, loop=self.loop
+            url=self.api_endpoint, loop=self.loop, ssl_context=self.ssl_context
         )
         await self.client.open()
         self.queue = WorkQueue(loop=self.loop)
@@ -309,3 +323,64 @@ def run(controller):
 async def _run_controller(controller):
     async with controller:
         await controller
+
+
+def create_ssl_context(tls_config):
+    """
+    From a certificate, create an SSL Context that can be used on the client side
+    for communicating with a Server.
+
+    Args:
+        tls_config (dict): the "tls" configuration part of a controller
+
+    Returns:
+        ssl.SSLContext: a default SSL Context tweaked with the given certificate
+        elements
+
+    """
+    if tls_config is None or not tls_config["enabled"]:
+        return None
+
+    cert, key, client_ca = _extract_ssl_config(tls_config)
+    ssl_context = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH)
+    ssl_context.verify_mode = ssl.CERT_OPTIONAL
+
+    ssl_context.load_cert_chain(certfile=cert, keyfile=key)
+
+    # Load authorities for client certificates.
+    if client_ca:
+        ssl_context.load_verify_locations(cafile=client_ca)
+
+    return ssl_context
+
+
+def _extract_ssl_config(tls_config):
+    """
+    Get the SSL-oriented parameters from the "tls" part of the configuration of a
+    controller, if it is present
+
+    Args:
+        tls_config (dict): the "tls" configuration part of a controller
+
+    Returns:
+        tuple: a three-element tuple containing: the path of the certificate, its key
+         as stored in the config and if the client authority certificate is present,
+         its path is also given. Otherwise the last element is None.
+
+    """
+    try:
+        cert_tuple = (
+            tls_config["client_cert"],
+            tls_config["client_key"],
+            tls_config.get("client_ca"),
+        )
+    except KeyError as ke:
+        raise KeyError(
+            f"The key '{ke.args[0]}' is missing from the 'tls' configuration part"
+        )
+
+    for path in cert_tuple:
+        if path and not os.path.isfile(path):
+            raise FileNotFoundError(path)
+
+    return cert_tuple

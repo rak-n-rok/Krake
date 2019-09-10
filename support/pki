@@ -29,7 +29,7 @@ ca_config = {
 
 client_csr_template = {
     "CN": None,
-    "hosts": ["127.0.0.1"],
+    "hosts": ["127.0.0.1", "localhost"],
     "key": {"algo": "ecdsa", "size": 256},
     "names": [{"O": "Acme Corporation"}],
 }

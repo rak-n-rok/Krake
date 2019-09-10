@@ -6,9 +6,10 @@ dependency with the :func:`use` decorator. Finally, :class:`Resolver` is used
 to wire fixtures and dependencies.
 """
 import os
+import sys
 from inspect import signature, isgeneratorfunction
 from collections import deque
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 import yaml
 import requests
 
@@ -221,7 +222,7 @@ def config():
         XDG_CONFIG_HOME = os.path.join(os.environ["HOME"], ".config")
 
     config_paths = [
-        ".rok.yaml",
+        "rok.yaml",
         os.path.join(XDG_CONFIG_HOME, "rok.yaml"),
         "/etc/rok/rok.yaml",
     ]
@@ -248,10 +249,24 @@ class BaseUrlSession(requests.Session):
 
     """
 
-    def __init__(self, base_url=None, raise_for_status=True):
+    def __init__(
+        self,
+        base_url=None,
+        raise_for_status=True,
+        client_ca=None,
+        ssl_cert=None,
+        ssl_key=None,
+    ):
         self.base_url = base_url
         self.raise_for_status = raise_for_status
         super().__init__()
+
+        # super() done at the end would reset these values:
+        # assignment needs to be done afterward
+        if ssl_cert and ssl_key:
+            self.cert = (ssl_cert, ssl_key)
+        if client_ca:
+            self.verify = client_ca
 
     def request(self, method, url, *args, raise_for_status=None, **kwargs):
         if raise_for_status is None:
@@ -268,8 +283,63 @@ class BaseUrlSession(requests.Session):
         return url
 
 
+def _extract_ssl_parameters(config):
+    """
+    Get the SSL-oriented parameters from the "tls" part of the configuration.
+
+    Args:
+        config (dict): the complete configuration
+
+    Returns:
+        dict: the path of the certificate and its key as stored in the configuration. If
+        the client authority certificate is present, its path is also given.
+    """
+    ssl_config = {}
+    if "tls" in config:
+        # Extract the SSL parameters
+        tls_config = config["tls"]
+
+        if not tls_config["enabled"]:
+            return ssl_config
+
+        try:
+            ssl_config = {
+                "ssl_cert": tls_config["client_cert"],
+                "ssl_key": tls_config["client_key"],
+                "client_ca": tls_config.get("client_ca"),
+            }
+        except KeyError as ke:
+            raise KeyError(
+                f"The key '{ke.args[0]}' is missing from the 'tls' configuration part"
+            )
+
+        for path in ssl_config.values():
+            if path and not os.path.isfile(path):
+                raise FileNotFoundError(path)
+
+    return ssl_config
+
+
 @fixture
 @depends("config")
 def session(config):
-    with BaseUrlSession(base_url=config["api_url"]) as session:
+    ssl_config = _extract_ssl_parameters(config)
+
+    url = urlparse(config["api_url"])
+
+    if ssl_config and url.scheme != "https":
+        print(
+            "WARNING: API endpoint forced to scheme 'https', as TLS is enabled",
+            file=sys.stderr,
+        )
+        url = url._replace(scheme="https")
+
+    if not ssl_config and url.scheme != "http":
+        print(
+            "WARNING: API endpoint forced to scheme 'http', as TLS is disabled",
+            file=sys.stderr,
+        )
+        url = url._replace(scheme="http")
+
+    with BaseUrlSession(base_url=url.geturl(), **ssl_config) as session:
         yield session

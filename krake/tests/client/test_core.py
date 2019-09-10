@@ -1,7 +1,10 @@
 from operator import attrgetter
 
+import pytest
+from aiohttp.test_utils import TestServer as Server
 from krake.api.app import create_app
 from krake.client import Client
+from krake.controller import create_ssl_context
 from krake.data.core import Role, RoleBinding
 
 from factories.core import RoleFactory, RoleBindingFactory, RoleRuleFactory
@@ -137,3 +140,46 @@ async def test_get_rolebinding(aiohttp_server, config, db, loop):
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         received = await client.core.role_binding.get(name=data.metadata.name)
         assert received == data
+
+
+@pytest.mark.require_executable("cfssl")
+async def test_connect_ssl(aiohttp_server, config, loop, pki):
+    server_cert = pki.gencert("api-server")
+    client_cert = pki.gencert("client")
+
+    app = create_app(
+        config=dict(
+            config,
+            authentication={
+                "allow_anonymous": True,
+                "strategy": {
+                    "keystone": {"enabled": False, "endpoint": "localhost"},
+                    "static": {"enabled": False, "name": "test-user"},
+                },
+            },
+            tls={
+                "enabled": True,
+                "client_ca": pki.ca.cert,
+                "cert": server_cert.cert,
+                "key": server_cert.key,
+            },
+        )
+    )
+
+    server = Server(app)
+    await server.start_server(ssl=app["ssl_context"])
+    assert server.scheme == "https"
+
+    client_tls = {
+        "enabled": True,
+        "client_ca": pki.ca.cert,
+        "client_cert": client_cert.cert,
+        "client_key": client_cert.key,
+    }
+    ssl_context = create_ssl_context(client_tls)
+
+    url = f"https://{server.host}:{server.port}"
+    async with Client(url=url, loop=loop, ssl_context=ssl_context) as client:
+        resp = await client.session.get(f"{url}/me")
+        data = await resp.json()
+        assert data["user"] == "client"

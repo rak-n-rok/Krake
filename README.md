@@ -49,6 +49,9 @@ cd krake/
 # Start by copying the template of the configuration file. You can then modify without any issue
 cp krake.yaml.template krake.yaml
 
+# Optional: you can use the rok configuration template as you prefer.
+#   Otherwise rok will use the default configuration
+cp rok.yaml.template rok.yaml
 
 # Run etcd server. This will store the data in "tmp/etcd".
 support/etcd
@@ -61,6 +64,9 @@ support/keystone
 #   certificate authentication, create a certificate for the API server.
 #	This required "cfssl" to be installed.
 support/pki "system:api-server"
+# An additional certificate can be created for each components (schedulers and controller),
+# by adding the appropriate path to the configuration file. Example:
+support/pki "system:scheduler"
 
 # Run the API server
 python -m krake.api
