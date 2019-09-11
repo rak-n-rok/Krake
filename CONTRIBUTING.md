@@ -12,17 +12,21 @@ the [Krake Matrix room](https://riot.im/app/#/room/#krake:matrix.org)
 # Setup a Development Environment
 
 This section describes a quickstart for developers to get started with a Krake
-development setup.
+development setup. Advanced topics are covered in the [Developer
+Documentation](docs/dev/index.rst) and the [Admin
+Documentation](docs/admin/index.rst)
 
 
 ## Requirements
 
- - [etcdv3](https://github.com/etcd-io/etcd/releases/)
- - [Python](https://www.python.org/downloads/) >= 3.6
- - [pre-commit](https://pre-commit.com/)
- - [cfssl](https://cfssl.org/) (optional) – for setting up a development PKI
- - [keystone](https://pypi.org/project/keystone/) (optional) – for testing
- keystone server authentication
+- [etcdv3](https://github.com/etcd-io/etcd/releases/)
+- [Python](https://www.python.org/downloads/) >= 3.6
+- [pre-commit](https://pre-commit.com/)
+- [cfssl](https://cfssl.org/) (optional) – for setting up a development PKI
+- [keystone](https://pypi.org/project/keystone/) (optional) – for testing
+keystone server authentication
+- [Setup at least one Minikube
+VM](https://kubernetes.io/docs/setup/learning-environment/minikube/)
 
 
 ## Installation
@@ -50,6 +54,13 @@ interpreter:
 ```bash
 cd krake/
 
+# Start by copying the template of the configuration file. You can then modify without any issue
+cp krake.yaml.template krake.yaml
+
+# Optional: you can use the rok configuration template as you prefer.
+#   Otherwise rok will use the default configuration
+cp rok.yaml.template rok.yaml
+
 # Run etcd server. This will store the data in "tmp/etcd".
 support/etcd
 
@@ -61,11 +72,14 @@ support/keystone
 #   certificate authentication, create a certificate for the API server.
 #   This required "cfssl" to be installed.
 support/pki "system:api-server"
+# An additional certificate can be created for each components (schedulers and controller),
+# by adding the appropriate path to the configuration file. Example:
+support/pki "system:scheduler"
 
-# Run the API server
+# Run the API echo-demo
 python -m krake.api
 
-# Run the scheduler
+# Run the echo-demo
 python -m krake.controller.scheduler
 
 # Run the Kubernetes application controller
@@ -73,6 +87,104 @@ python -m krake.controller.kubernetes.application
 
 # Run the Kubernetes cluster controller
 python -m krake.controller.kubernetes.cluster
+```
+
+
+## Basic Usage
+
+This provides a simple demonstration of the Krake's functionalities. Please
+refer to the [User Documentation](docs/user/index.rst) for extended usage
+guidelines, explanations, and examples.
+
+Download the kubeconfig file, as well as the certificate and key file
+necessary to connect to your Minikube instance.
+
+```bash
+$ MINIKUBE_IP="" # Fill in with the Minikube IP address
+
+$ mkdir -p cluster_certs/certs cluster_certs/config
+
+$ scp ubuntu@$MINIKUBE_IP:~/.kubectl/config cluster_certs/config/
+$ scp ubuntu@$MINIKUBE_IP:~/.minikube/\{ca.crt,client.crt,client.key\} cluster_certs/certs
+
+$ sed -i "/certificate-authority/c\    certificate-authority: `pwd`/cluster_certs/certs/ca.crt" cluster_certs/config
+$ sed -i "/server:/c\    server: https://$MINIKUBE_IP:8443" cluster_certs/config
+$ sed -i "/client-certificate/c\    client-certificate: `pwd`/cluster_certs/certs/client.crt" cluster_certs/config
+$ sed -i "/client-key/c\    client-key: `pwd`/cluster_certs/certs/client.key" cluster_certs/config
+```
+
+Use the `rok` CLI to register your Minikube instance as a Krake backend:
+
+```bash
+$ rok kube cluster create cluster_certs/config
+```
+
+Run an application on Krake:
+
+```bash
+$ cd rok/
+$ rok kube app create -f tests/echo-demo.yaml echo-demo
+```
+
+Check the status of the application:
+
+```bash
+$ rok kube app get echo-demo
++-----------+-------------------------------+
+| reason    | None                          |
+| name      | echo-demo                     |
+| namespace | system                        |
+| user      | system:anonymous              |
+| created   | 2019-08-14 13:42:16           |
+| modified  | 2019-08-14 13:42:17           |
+| services  | echo-demo: 192.168.0.15:30421 |
+| state     | RUNNING                       |
++-----------+-------------------------------+
+```
+
+Access the application:
+
+```bash
+$ curl 192.168.0.15:30421
+
+
+Hostname: echo-demo-79bd46c485-qq75m
+
+Pod Information:
+  -no pod information available-
+
+Server values:
+  server_version=nginx: 1.13.3 - lua: 10008
+
+Request Information:
+  client_address=172.17.0.1
+  method=GET
+  real path=/
+  query=
+  request_version=1.1
+  request_scheme=http
+  request_uri=http://192.168.0.15:8080/
+
+Request Headers:
+  accept=*/*
+  host=192.168.0.15:30421
+  user-agent=curl/7.58.0
+
+Request Body:
+  -no body in request-
+
+```
+
+Delete the application:
+
+```bash
+$ rok kube app delete echo-demo
+```
+
+Delete the cluster:
+
+```bash
+$ rok kube cluster delete minikube
 ```
 
 
