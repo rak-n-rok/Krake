@@ -8,7 +8,6 @@ import yaml
 from krake.api.app import create_app
 from krake.data.core import resource_ref, ReasonCode
 from krake.data.kubernetes import Application, ApplicationState
-from krake.controller import Worker
 from krake.controller.kubernetes.application import (
     ApplicationController,
     ApplicationWorker,
@@ -18,26 +17,17 @@ from krake.test_utils import server_endpoint
 
 from factories.fake import fake
 from factories.kubernetes import ApplicationFactory, ClusterFactory, make_kubeconfig
+from .. import SimpleWorker
 
 
 async def test_app_reception(aiohttp_server, config, db, loop):
-    created = ApplicationFactory(status__state=ApplicationState.PENDING)
+    pending = ApplicationFactory(status__state=ApplicationState.PENDING)
     updated = ApplicationFactory(status__state=ApplicationState.UPDATED)
     scheduled = ApplicationFactory(status__state=ApplicationState.SCHEDULED)
 
+    # Only SCHEDULED applications are expected
+    worker = SimpleWorker(expected={scheduled.metadata.uid}, loop=loop)
     server = await aiohttp_server(create_app(config))
-
-    class SimpleWorker(Worker):
-        def __init__(self):
-            self.done = loop.create_future()
-
-        async def resource_received(self, app):
-            assert app == scheduled
-
-            if not self.done.done():
-                self.done.set_result(None)
-
-    worker = SimpleWorker()
 
     async with ApplicationController(
         api_endpoint=server_endpoint(server),
@@ -46,14 +36,18 @@ async def test_app_reception(aiohttp_server, config, db, loop):
         loop=loop,
     ) as controller:
 
-        await db.put(created)
+        await db.put(pending)
         await db.put(updated)
         await db.put(scheduled)
 
+        # There could be an error in the scheduler or the worker. Hence, we
+        # wait for both.
         await asyncio.wait(
             [controller, worker.done], timeout=1, return_when=asyncio.FIRST_COMPLETED
         )
+
     assert worker.done.done()
+    await worker.done  # If there is any exception, retrieve it here
 
 
 nginx_manifest = list(
