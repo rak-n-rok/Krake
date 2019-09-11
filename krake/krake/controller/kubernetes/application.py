@@ -20,11 +20,13 @@ Configuration is loaded from the ``controllers.kubernetes.application`` section:
 import logging
 import pprint
 import re
+from functools import wraps
 import yaml
 import yarl
 from argparse import ArgumentParser
 from inspect import iscoroutinefunction
 
+from aiohttp import ClientError
 from krake.data.core import ReasonCode
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 from kubernetes_asyncio.client import ApiClient, CoreV1Api, AppsV1Api, Configuration
@@ -45,6 +47,12 @@ class InvalidResourceError(ControllerError):
     """Raised in case of invalid kubernetes resource definition."""
 
     code = ReasonCode.INVALID_RESOURCE
+
+
+class ClusterConnectError(ControllerError):
+    """Raised when a cluster is inaccessible"""
+
+    code = ReasonCode.CLUSTER_NOT_REACHABLE
 
 
 class ApplicationController(KubernetesController):
@@ -225,6 +233,32 @@ async def register_service(app, cluster, resp):
     app.status.services[service_name] = url.host + ":" + str(node_port)
 
 
+def catch_client_error():
+    """Decorator function to catch aiohttp client error when connecting to a
+    Kubernetes cluster. Instead, an error from Krake is raised.
+
+    Returns:
+        callable: decorator for function that try to access a cluster.
+
+    Raises:
+        ClusterConnectError: if the client could not communicate with the
+        Kubernetes cluster.
+
+    """
+
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            try:
+                return await func(*args, **kwargs)
+            except ClientError:
+                raise ClusterConnectError("Scheduled cluster could not be accessed")
+
+        return wrapper
+
+    return decorator
+
+
 class KubernetesClient(object):
     def __init__(self, kubeconfig):
         self.kubeconfig = kubeconfig
@@ -287,6 +321,7 @@ class KubernetesClient(object):
         fn = getattr(api, f"delete_namespaced_{camel_to_snake_case(kind)}")
         return await fn(name=name, namespace=namespace)
 
+    @catch_client_error()
     async def apply(self, resource, namespace="default"):
         try:
             kind = resource["kind"]
@@ -320,6 +355,7 @@ class KubernetesClient(object):
 
         return resp
 
+    @catch_client_error()
     async def delete(self, resource, namespace="default"):
         try:
             kind = resource["kind"]
