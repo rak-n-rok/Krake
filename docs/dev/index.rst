@@ -5,7 +5,10 @@ Developer Documentation
 =======================
 
 .. toctree::
-    :maxdepth: 1
+    :maxdepth: 2
 
+    architecture
+    conventions
+    packages
     ref/krake
     ref/rok

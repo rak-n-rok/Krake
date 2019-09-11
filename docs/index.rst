@@ -7,7 +7,7 @@ Welcome to Krake's documentation!
 =================================
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
    :caption: Contents:
 
    user/index
