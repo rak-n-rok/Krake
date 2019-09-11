@@ -15,7 +15,7 @@ variables:
 
   OS_AUTH_URL: "https://identity-f1a.cloudandheat.com:5000/v3/"
   OS_USERNAME: "matthias.goerens@cloudandheat.com"
-  OS_PROJECT_NAME: "cah-krake"
+  OS_PROJECT_NAME: "krake-ci"
   OS_DOMAIN_NAME: "Default"
   OS_PROJECT_DOMAIN_ID: "default"
 
