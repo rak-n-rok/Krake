@@ -5,6 +5,7 @@ job1:
   stage: test
   image: python:3.6
   script:
+    - env
     - |
       if [[ -z "$CORE_MEMBERS" ]]; then
         echo "CORE_MEMBERS need to be defined"
