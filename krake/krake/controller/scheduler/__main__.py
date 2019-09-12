@@ -315,8 +315,8 @@ def main():
         ssl_context=ssl_context,
         debounce=scheduler_config.get("debounce", 0),
         config_defaults={
-            "default_metrics": config["default-metrics"],
-            "default_metrics_providers": config["default-metrics-providers"],
+            "default-metrics": config.get("default-metrics"),
+            "default-metrics-providers": config.get("default-metrics-providers"),
         },
     )
     run(scheduler)
