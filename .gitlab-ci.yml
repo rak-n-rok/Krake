@@ -5,7 +5,7 @@ job1:
   stage: test
   image: python:3.6
   script:
-    - echo "Hello world"
+    - env
   tags:
     - docker
     - rbac
