@@ -23,13 +23,15 @@ Abstraction is provided by :class:`MetricsProviderClient`.
 from aiohttp import ClientSession
 
 from krake.controller.exceptions import ControllerError
-from krake.data.core import MetricProviderType, Metric, MetricsProvider
+from krake.data.core import MetricProviderType, Metric, MetricsProvider, ReasonCode
 from yarl import URL
 
 
 class MetricValueError(ControllerError):
     """Raised when evaluation of metric value failed
     """
+
+    code = ReasonCode.INVALID_METRIC_VALUE
 
 
 class MetricsProviderClient(object):

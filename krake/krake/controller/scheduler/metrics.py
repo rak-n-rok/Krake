@@ -2,6 +2,7 @@
     backend for application
 """
 from krake.controller.exceptions import ControllerError
+from krake.data.core import ReasonCode
 
 from .metrics_provider import MetricsProviderClient
 
@@ -9,6 +10,8 @@ from .metrics_provider import MetricsProviderClient
 class MissingMetricsDefinition(ControllerError):
     """Raised in case required metric definition is missing
     """
+
+    code = ReasonCode.MISSING_METRIC_DEFINITION
 
 
 def to_named_deserialize(items, obj):
