@@ -170,8 +170,8 @@ def _generate_operation_func_name(operation):
     if operation.subresource:
         subname = camel_to_snake_case(operation.subresource.name)
         return f"{opname}_{resource_name}_{subname}"
-    else:
-        return f"{opname}_{resource_name}"
+
+    return f"{opname}_{resource_name}"
 
 
 def _create_resource_handlers(cls, resource, routes, logger):
