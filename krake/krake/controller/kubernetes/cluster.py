@@ -17,49 +17,103 @@ Configuration is loaded from the ``controllers.kubernetes.cluster`` section:
           worker_count: 5
 
 """
+import asyncio
 import logging
 import pprint
+from copy import deepcopy
 from argparse import ArgumentParser
+from aiohttp import ClientResponseError
 
 from krake import load_config, setup_logging
-from krake.controller.kubernetes import KubernetesController
-from krake.data.kubernetes import ClusterState
-from .. import Worker, run, create_ssl_context
+from krake.data.core import resource_ref
+from krake.client.kubernetes import KubernetesApi
+from .. import Controller, Worker, run, create_ssl_context
+
 
 logger = logging.getLogger("krake.controller.kubernetes.cluster")
 
 
-class ClusterController(KubernetesController):
-    """Controller responsible for :class:`krake.data.kubernetes.Application`
-    resources in "SCHEDULED" and "DELETING" state.
+class ClusterController(Controller):
+    """Controller responsible for :class:`krake.data.kubernetes.Cluster`
+    resources.
     """
 
-    states = (ClusterState.DELETING,)
-    resource_name = "cluster"
+    async def list_and_watch(self):
+        """List and watching Kubernetes clusters."""
+        kubernetes_api = KubernetesApi(self.client)
+
+        def marked_for_cleanup(cluster):
+            return (
+                cluster.metadata.deleted
+                and cluster.metadata.finalizers
+                and cluster.metadata.finalizers[-1] == "cascading_deletion"
+            )
+
+        async def list_apps():
+            logger.info("List cluster")
+            cluster_list = await kubernetes_api.list_all_clusters()
+            for cluster in filter(marked_for_cleanup, cluster_list.items):
+                logger.debug("Received %r", cluster)
+                await self.queue.put(cluster.metadata.uid, cluster)
+
+        async def watch_apps(watcher):
+            logger.info("Watching cluster")
+            async for event in watcher:
+                cluster = event.object
+                logger.debug("Received %r", cluster)
+                if marked_for_cleanup(cluster):
+                    await self.queue.put(cluster.metadata.uid, cluster)
+
+        async with kubernetes_api.watch_all_clusters() as watcher:
+            await asyncio.gather(list_apps(), watch_apps(watcher))
+
+
+async def wait_for_app_deletion(api, namespace, name):
+    while True:
+        try:
+            await api.read_application(namespace=namespace, name=name)
+        except ClientResponseError as err:
+            if err.status == 404:
+                return
+            raise
 
 
 class ClusterWorker(Worker):
     async def resource_received(self, cluster):
-        # Delete all applications bound to the cluster before updating it
+        kubernetes_api = KubernetesApi(self.client)
 
-        logger.debug("Starting deletion of %r", cluster)
-        cluster_ref = (
-            f"/kubernetes/namespaces/{cluster.metadata.namespace}"
-            f"/clusters/{cluster.metadata.name}"
-        )
+        # Delete all applications bound to the cluster before updating it
+        logger.debug("Starting cleanup of %r", cluster)
+        cluster_ref = resource_ref(cluster)
+
+        waiters = []
 
         # TODO Filter only the applications that depends on this cluster (change API)
-        for app in await self.client.kubernetes.application.list(namespace="all"):
+        cluster_list = await kubernetes_api.list_all_applications()
+        for app in cluster_list.items:
             if app.status.cluster == cluster_ref:
                 logger.debug("Delete application %r", app.metadata.name)
-                await self.client.kubernetes.application.delete(
+                await kubernetes_api.delete_application(
                     namespace=app.metadata.namespace, name=app.metadata.name
                 )
+                waiters.append(
+                    wait_for_app_deletion(
+                        kubernetes_api,
+                        namespace=app.metadata.namespace,
+                        name=app.metadata.name,
+                    )
+                )
 
-        await self.client.kubernetes.cluster.update_status(
-            namespace=cluster.metadata.namespace,
-            name=cluster.metadata.name,
-            state=ClusterState.DELETED,
+        # Wait for all applications to be deleted within 5 mins
+        timeout = 60 * 5
+        await asyncio.wait_for(asyncio.gather(*waiters), timeout)
+
+        # Remove finalizer
+        copy = deepcopy(cluster)
+        copy.metadata.finalizers.pop()
+
+        await kubernetes_api.update_cluster(
+            namespace=cluster.metadata.namespace, name=cluster.metadata.name, body=copy
         )
 
 

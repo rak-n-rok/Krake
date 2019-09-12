@@ -23,11 +23,33 @@ import logging
 import ssl
 from aiohttp import web, ClientSession
 
-from krake.data.core import CoreMetadata, Verb, RoleRule, Role, RoleBinding
+from krake.data.core import Metadata, Verb, RoleRule, Role, RoleBinding
+from . import __version__ as version
 from . import middlewares
 from . import auth
-from .core import routes as core_api
-from .kubernetes import routes as kubernetes_api
+from .helpers import session
+from .core import CoreApi
+from .kubernetes import KubernetesApi
+
+
+routes = web.RouteTableDef()
+
+
+@routes.get("/")
+async def index(request):
+    return web.json_response({"version": version})
+
+
+@routes.get("/me")
+async def me(request):
+    roles = set()
+    user = request["user"]
+
+    async for binding in session(request).all(RoleBinding):
+        if user in binding.users:
+            roles.update(binding.roles)
+
+    return web.json_response({"user": user, "roles": sorted(roles)})
 
 
 def create_app(config):
@@ -89,8 +111,9 @@ def create_app(config):
     app.cleanup_ctx.append(http_session)
 
     # Routes
-    app.add_routes(core_api)
-    app.add_routes(kubernetes_api)
+    app.add_routes(routes)
+    app.add_routes(CoreApi.routes)
+    app.add_routes(KubernetesApi.routes)
 
     return app
 
@@ -136,8 +159,9 @@ def load_default_role(role):
 
     """
     return Role(
-        metadata=CoreMetadata(name=role["metadata"]["name"], uid=None),
-        status=None,
+        metadata=Metadata(
+            name=role["metadata"]["name"], uid=None, created=None, modified=None
+        ),
         rules=[
             RoleRule(
                 api=rule["api"],
@@ -171,8 +195,9 @@ def load_default_role_binding(binding):
 
     """
     return RoleBinding(
-        metadata=CoreMetadata(name=binding["metadata"]["name"], uid=None),
-        status=None,
+        metadata=Metadata(
+            name=binding["metadata"]["name"], uid=None, created=None, modified=None
+        ),
         users=binding["users"],
         roles=binding["roles"],
     )

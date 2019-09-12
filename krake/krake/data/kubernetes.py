@@ -1,14 +1,18 @@
 """Data model definitions for Kubernetes-related resources"""
 from enum import Enum, auto
-from datetime import datetime
+from dataclasses import field
+from typing import List
+from marshmallow import ValidationError
+from kubernetes_asyncio.config.kube_config import KubeConfigLoader
+from kubernetes_asyncio.config import ConfigException
 
-from . import Key
-from .serializable import Serializable
-from .core import NamespacedMetadata, Reason
+from . import persistent
+from .serializable import Serializable, ApiObject
+from .core import Metadata, ListMetadata, Status, ResourceRef
 
 
 class ApplicationSpec(Serializable):
-    manifest: str
+    manifest: List[dict]
 
 
 class ApplicationState(Enum):
@@ -21,36 +25,55 @@ class ApplicationState(Enum):
     FAILED = auto()
 
 
-class ApplicationStatus(Serializable):
-    state: ApplicationState
-    created: datetime
-    modified: datetime
-    reason: Reason = None
-    cluster: str = None  # API endpoint of the Kubernetes cluster resource
+class ApplicationStatus(Status):
+    state: ApplicationState = ApplicationState.PENDING
+    cluster: ResourceRef = None
     services: dict = None
+    manifest: List[dict] = None
 
 
-class Application(Serializable):
-    metadata: NamespacedMetadata
+@persistent("/kubernetes/applications/{namespace}/{name}")
+class Application(ApiObject):
+    api: str = "kubernetes"
+    kind: str = "Application"
+    metadata: Metadata
     spec: ApplicationSpec
-    status: ApplicationStatus
-
-    __metadata__ = {
-        "key": Key("/kubernetes/applications/{namespace}/{name}", attribute="metadata")
-    }
+    status: ApplicationStatus = field(metadata={"subresource": True})
 
 
-class ClusterBinding(Serializable):
-    cluster: str  # API endpoint of the Kubernetes cluster resource
+class ApplicationList(ApiObject):
+    api: str = "kubernetes"
+    kind: str = "ApplicationList"
+    metadata: ListMetadata
+    items: List[Application]
+
+
+class ClusterBinding(ApiObject):
+    api: str = "kubernetes"
+    kind: str = "ClusterBinding"
+    cluster: ResourceRef
+
+
+def _validate_kubeconfig(kubeconfig):
+    try:
+        KubeConfigLoader(kubeconfig)
+    except ConfigException as err:
+        raise ValidationError(str(err))
+
+    if len(kubeconfig["contexts"]) != 1:
+        raise ValidationError("Only one context is allowed")
+
+    if len(kubeconfig["users"]) != 1:
+        raise ValidationError("Only one user is allowed")
+
+    if len(kubeconfig["clusters"]) != 1:
+        raise ValidationError("Only one cluster is allowed")
+
+    return True
 
 
 class ClusterSpec(Serializable):
-    kubeconfig: dict = None
-    provider: dict = None  # Provider-specific metadata, IF needed
-
-
-class MagnumPlatform(Serializable):
-    master_ip: str
+    kubeconfig: dict = field(default=None, metadata={"validate": _validate_kubeconfig})
 
 
 class ClusterState(Enum):
@@ -62,18 +85,21 @@ class ClusterState(Enum):
     FAILED = auto()
 
 
-class ClusterStatus(Serializable):
-    state: ClusterState
-    created: datetime
-    modified: datetime
-    reason: Reason = None
+class ClusterStatus(Status):
+    state: ClusterState = ClusterState.PENDING
 
 
-class Cluster(Serializable):
-    metadata: NamespacedMetadata
+@persistent("/kubernetes/clusters/{namespace}/{name}")
+class Cluster(ApiObject):
+    api: str = "kubernetes"
+    kind: str = "Cluster"
+    metadata: Metadata
     spec: ClusterSpec
-    status: ClusterStatus
+    status: ClusterStatus = field(metadata={"subresource": True})
 
-    __metadata__ = {
-        "key": Key("/kubernetes/clusters/{namespace}/{name}", attribute="metadata")
-    }
+
+class ClusterList(ApiObject):
+    api: str = "kubernetes"
+    kind: str = "ClusterList"
+    metadata: ListMetadata
+    items: List[Cluster]

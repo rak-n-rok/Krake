@@ -1,11 +1,12 @@
 from operator import attrgetter
-
 import pytest
 from aiohttp.test_utils import TestServer as Server
+
 from krake.api.app import create_app
 from krake.client import Client
 from krake.controller import create_ssl_context
-from krake.data.core import Role, RoleBinding
+from krake.client.core import CoreApi
+from krake.data.core import ListMetadata, Role, RoleBinding
 
 from factories.core import RoleFactory, RoleBindingFactory, RoleRuleFactory
 
@@ -20,23 +21,30 @@ async def test_list_roles(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        roles = await client.core.role.list()
+        core_api = CoreApi(client)
+        roles = await core_api.list_roles()
+
+    assert roles.api == "core"
+    assert roles.kind == "RoleList"
+    assert isinstance(roles.metadata, ListMetadata)
 
     key = attrgetter("metadata.name")
-    assert sorted(roles, key=key) == sorted(data, key=key)
+    assert sorted(roles.items, key=key) == sorted(data, key=key)
 
 
 async def test_create_role(aiohttp_server, config, db, loop):
-    data = RoleFactory(metadata__uid=None, status=None)
+    data = RoleFactory()
 
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        received = await client.core.role.create(data)
+        core_api = CoreApi(client)
+        received = await core_api.create_role(data)
 
     assert received.metadata.name == data.metadata.name
-    assert received.status.created
-    assert received.status.modified
+    assert received.metadata.namespace is None
+    assert received.metadata.created
+    assert received.metadata.modified
     assert received.rules == data.rules
 
     stored, _ = await db.get(Role, name=data.metadata.name)
@@ -51,27 +59,44 @@ async def test_update_role(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        received = await client.core.role.update(role)
+        core_api = CoreApi(client)
+        received = await core_api.update_role(name=role.metadata.name, body=role)
 
     assert received.rules == role.rules
-    assert received.status.created == role.status.created
-    assert received.status.modified
+    assert received.metadata.created == role.metadata.created
+    assert received.metadata.modified
 
     stored, _ = await db.get(Role, name=role.metadata.name)
     assert stored.rules == role.rules
-    assert stored.status.created == role.status.created
-    assert stored.status.modified
+    assert stored.metadata.created == role.metadata.created
+    assert stored.metadata.modified
 
 
-async def test_get_role(aiohttp_server, config, db, loop):
+async def test_read_role(aiohttp_server, config, db, loop):
     data = RoleFactory()
     await db.put(data)
 
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        received = await client.core.role.get(name=data.metadata.name)
+        core_api = CoreApi(client)
+        received = await core_api.read_role(name=data.metadata.name)
         assert received == data
+
+
+async def test_delete_role(aiohttp_server, config, db, loop):
+    data = RoleFactory()
+    await db.put(data)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.delete_role(name=data.metadata.name)
+        assert received is None
+
+    stored, _ = await db.get(Role, name=data.metadata.name)
+    assert stored is None
 
 
 async def test_list_rolebindings(aiohttp_server, config, db, loop):
@@ -84,23 +109,30 @@ async def test_list_rolebindings(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        roles = await client.core.role_binding.list()
+        core_api = CoreApi(client)
+        bindings = await core_api.list_role_bindings()
+
+    assert bindings.api == "core"
+    assert bindings.kind == "RoleBindingList"
+    assert isinstance(bindings.metadata, ListMetadata)
 
     key = attrgetter("metadata.name")
-    assert sorted(roles, key=key) == sorted(data, key=key)
+    assert sorted(bindings.items, key=key) == sorted(data, key=key)
 
 
 async def test_create_rolebinding(aiohttp_server, config, db, loop):
-    data = RoleBindingFactory(metadata__uid=None, status=None)
+    data = RoleBindingFactory()
 
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        received = await client.core.role_binding.create(data)
+        core_api = CoreApi(client)
+        received = await core_api.create_role_binding(data)
 
     assert received.metadata.name == data.metadata.name
-    assert received.status.created
-    assert received.status.modified
+    assert received.metadata.namespace is None
+    assert received.metadata.created
+    assert received.metadata.modified
     assert received.users == data.users
     assert received.roles == data.roles
 
@@ -117,18 +149,21 @@ async def test_update_rolebinding(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        received = await client.core.role_binding.update(binding)
+        core_api = CoreApi(client)
+        received = await core_api.update_role_binding(
+            name=binding.metadata.name, body=binding
+        )
 
     assert received.users == binding.users
     assert received.roles == binding.roles
-    assert received.status.created == binding.status.created
-    assert received.status.modified
+    assert received.metadata.created == binding.metadata.created
+    assert received.metadata.modified
 
     stored, _ = await db.get(RoleBinding, name=binding.metadata.name)
     assert stored.users == binding.users
     assert stored.roles == binding.roles
-    assert stored.status.created == binding.status.created
-    assert stored.status.modified
+    assert stored.metadata.created == binding.metadata.created
+    assert stored.metadata.modified
 
 
 async def test_get_rolebinding(aiohttp_server, config, db, loop):
@@ -138,8 +173,24 @@ async def test_get_rolebinding(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        received = await client.core.role_binding.get(name=data.metadata.name)
+        core_api = CoreApi(client)
+        received = await core_api.read_role_binding(name=data.metadata.name)
         assert received == data
+
+
+async def test_delete_rolebinding(aiohttp_server, config, db, loop):
+    data = RoleBindingFactory()
+    await db.put(data)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.delete_role_binding(name=data.metadata.name)
+        assert received is None
+
+    stored, _ = await db.get(RoleBinding, name=data.metadata.name)
+    assert stored is None
 
 
 @pytest.mark.require_executable("cfssl")

@@ -1,153 +1,100 @@
 import asyncio
-from datetime import datetime
-from aiohttp.web import json_response, Response
+import pytz
 
-from krake.data import serialize
-from krake.data.kubernetes import ApplicationStatus, ClusterStatus
-from krake.data.kubernetes import ClusterState, ApplicationState
+from krake.api.app import create_app
+from krake.data.core import resource_ref
+from krake.data.kubernetes import Application, ClusterState, ApplicationState
 from krake.controller import Worker
 from krake.controller.kubernetes.cluster import ClusterController, ClusterWorker
 from krake.client import Client
-from krake.test_utils import stream
+from krake.test_utils import server_endpoint
 
+from factories.fake import fake
 from factories.kubernetes import ApplicationFactory, ClusterFactory
 
 
-async def test_cluster_reception(aresponses, loop):
+async def test_cluster_reception(aiohttp_server, aiohttp_client, config, db, loop):
     """
     Verify that the ClusterController hands over the Cluster being deleted to the
     Workers.
     """
     creating = ClusterFactory(status__state=ClusterState.PENDING)
     running = ClusterFactory(status__state=ClusterState.RUNNING)
-    deleting = ClusterFactory(status__state=ClusterState.DELETING)
+    app = ApplicationFactory(
+        status__state=ApplicationState.RUNNING, status__cluster=resource_ref(running)
+    )
 
-    aresponses.add(
-        "api.krake.local",
-        "/kubernetes/namespaces/all/clusters",
-        "GET",
-        json_response([]),
-    )
-    aresponses.add(
-        "api.krake.local",
-        "/kubernetes/namespaces/all/clusters?watch",
-        "GET",
-        stream([creating, running, deleting], infinite=True),
-        match_querystring=True,
-    )
+    await db.put(running)
+    await db.put(app)
+
+    server = await aiohttp_server(create_app(config))
+    client = await aiohttp_client(server)
 
     class SimpleWorker(Worker):
         def __init__(self):
             self.done = loop.create_future()
 
         async def resource_received(self, cluster):
-            assert cluster == deleting
-            self.done.set_result(None)
+            assert resource_ref(cluster) == resource_ref(running)
+
+            # The received cluster is no in "deleting"
+            assert cluster.metadata.deleted
+            assert cluster.metadata.finalizers[0] == "cascading_deletion"
+
+            if not self.done.done():
+                self.done.set_result(None)
 
     worker = SimpleWorker()
 
     async with ClusterController(
-        api_endpoint="http://api.krake.local",
+        api_endpoint=server_endpoint(server),
         worker_factory=lambda client: worker,
         worker_count=1,
         loop=loop,
     ) as controller:
+        await db.put(creating)
+
+        # Delete running cluster with depending applications via API. This
+        # creates an event on the controller which should be forwarded to the
+        # worker.
+        resp = await client.delete(
+            f"/kubernetes/namespaces/{running.metadata.namespace}"
+            f"/clusters/{running.metadata.name}?cascade"
+        )
+        resp.raise_for_status()
+
         await asyncio.wait(
             [controller, worker.done], timeout=0.5, return_when=asyncio.FIRST_COMPLETED
         )
     assert worker.done.done()
 
 
-class Cluster(object):
-    pass
-
-
-async def test_cluster_deletion(aresponses, loop):
-    cluster = ClusterFactory(status__state=ClusterState.DELETING)
-    cluster_ref = (
-        f"/kubernetes/namespaces/{cluster.metadata.namespace}"
-        f"/clusters/{cluster.metadata.name}"
+async def test_cluster_deletion(aiohttp_server, config, db, loop):
+    cluster = ClusterFactory(
+        metadata__finalizers=["cleanup"],
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
     )
-
     app = ApplicationFactory(
-        status__state=ApplicationState.RUNNING, status__cluster=cluster_ref
-    )
-    app_ref = (
-        f"/kubernetes/namespaces/{app.metadata.namespace}"
-        f"/applications/{app.metadata.name}"
+        status__state=ApplicationState.RUNNING, status__cluster=resource_ref(cluster)
     )
 
-    async def delete_app(request):
-        url = request.rel_url
-        assert str(url) == app_ref
+    await db.put(cluster)
+    await db.put(app)
 
-        status = ApplicationStatus(
-            state=ApplicationState.DELETED,
-            reason=None,
-            cluster=None,
-            created=app.status.created,
-            modified=datetime.now(),
-        )
-        app.status = status
-        return json_response(serialize(app))
+    server = await aiohttp_server(create_app(config))
 
-    async def update_cluster_status(request):
-        payload = await request.json()
-        assert payload["state"] == "DELETED"
-
-        status = ClusterStatus(
-            state=ClusterState.DELETED,
-            reason=None,
-            created=cluster.status.created,
-            modified=datetime.now(),
-        )
-        return json_response(serialize(status))
-
-    # Kubernetes deployment API
-    aresponses.add(
-        "127.0.0.1:8080",
-        "/apis/apps/v1/namespaces/default/deployments/nginx-demo",
-        "GET",
-        Response(status=200),
-    )
-    aresponses.add(
-        "127.0.0.1:8080",
-        "/apis/apps/v1/namespaces/default/deployments/nginx-demo",
-        "DELETE",
-        Response(status=200),
-    )
-    aresponses.add(
-        "127.0.0.1:8080",
-        "/api/v1/namespaces/default/services/nginx-demo",
-        "DELETE",
-        Response(status=200),
-    )
-
-    # Krake API
-    aresponses.add(
-        "api.krake.local",
-        "/kubernetes/namespaces/all/applications",
-        "GET",
-        json_response([serialize(app)]),
-    )
-    aresponses.add(
-        "api.krake.local", cluster_ref, "GET", json_response(serialize(cluster))
-    )
-    aresponses.add(
-        "api.krake.local",
-        f"/kubernetes/namespaces/testing/applications/{app.metadata.name}",
-        "DELETE",
-        delete_app,
-    )
-    aresponses.add(
-        "api.krake.local",
-        f"/kubernetes/namespaces/testing/clusters/{cluster.metadata.name}/status",
-        "PUT",
-        update_cluster_status,
-    )
-
-    async with Client(url="http://api.krake.local", loop=loop) as client:
+    async with Client(url=server_endpoint(server), loop=loop) as client:
         worker = ClusterWorker(client=client)
         await worker.resource_received(cluster)
 
-    assert app.status.state == ApplicationState.DELETED
+    # Ensure that the application resource is deleted from database
+    stored_app, _ = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored_app is None
+
+    # Ensure that the cluster resource is deleted from database
+    stored_cluster, _ = await db.get(
+        Application, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+    )
+    assert stored_cluster is None

@@ -118,12 +118,14 @@ def format_datetime(time_str):
     """Formats complex time string to the human readable form
 
     Args:
-        time_str (str): Time string
+        time_str (str, None): Time string
 
     Returns:
         str: Formatted time string to the human readable YY-mm-dd H:M:S format
 
     """
+    if time_str is None:
+        return None
     return datetime.strftime(parse(time_str), "%Y-%m-%d %H:%M:%S")
 
 
@@ -347,7 +349,6 @@ class BaseTable(Table):
 
     name = Cell("metadata.name")
     namespace = Cell("metadata.namespace")
-    user = Cell("metadata.user")
-    created = Cell("status.created", formatter=format_datetime)
-    modified = Cell("status.modified", formatter=format_datetime)
-    state = Cell("status.state")
+    created = Cell("metadata.created", formatter=format_datetime)
+    modified = Cell("metadata.modified", formatter=format_datetime)
+    deleted = Cell("metadata.deleted", formatter=format_datetime)

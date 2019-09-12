@@ -12,7 +12,6 @@ import shutil
 import requests
 import pytest
 from etcd3.aio_client import AioClient
-from aresponses import ResponsesMockServer
 
 
 # Prepend package directory for working imports
@@ -213,12 +212,6 @@ def config(etcd_server, user):
             }
         ],
     }
-
-
-@pytest.fixture
-async def aresponses(loop):
-    async with ResponsesMockServer(loop=loop) as server:
-        yield server
 
 
 keystone_config = """

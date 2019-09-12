@@ -40,9 +40,9 @@ default-roles:
 - metadata:
     name: system:admin
   rules:
-  - api: all
-    namespaces: ["all"]
-    resources: ["all"]
+  - api: ""           # Empty string refers to all APIs
+    namespaces: [""]  # Empty string refers to all namespaces
+    resources: [""]   # Empty string refers to all resources
     verbs: ["create", "list", "get", "update", "delete"]
 
 default-role-bindings:

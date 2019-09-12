@@ -1,10 +1,8 @@
-import uuid
 import json
 import factory
-from factory.fuzzy import FuzzyInteger
 
 from krake.data import Key
-from krake.data.serializable import Serializable, serialize, deserialize
+from krake.data.serializable import Serializable
 from krake.api.database import EventType
 
 from factories import fake
@@ -13,55 +11,26 @@ from factories import fake
 class MyModel(Serializable):
     id: str
     name: str
-    kind: str = "my-model"
 
-    __metadata__ = {"key": Key("/model/{id}"), "discriminator": "kind"}
-
-
-class AnotherModel(MyModel):
-    number: int
-    kind: str = "another-model"
+    __etcd_key__ = Key("/model/{id}")
 
 
 class MyModelFactory(factory.Factory):
     class Meta:
         model = MyModel
 
-    @factory.lazy_attribute
-    def id(self):
-        return uuid.uuid4().hex
-
+    id = factory.fuzzy.FuzzyAttribute(fake.uuid4)
     name = factory.Sequence(lambda n: f"model-{n}")
-
-
-class AnotherModelFactory(MyModelFactory):
-    class Meta:
-        model = AnotherModel
-
-    number = FuzzyInteger(0, 42)
 
 
 def test_deserialize():
     data = MyModelFactory()
-    value = serialize(data)
-    model = deserialize(MyModel, value)
+    value = data.serialize()
+    model = MyModel.deserialize(value)
 
     assert isinstance(model, MyModel)
     assert model.id == data.id
     assert model.name == data.name
-    assert model.kind == data.kind
-
-
-def test_polymorphic_deserialize():
-    data = AnotherModelFactory()
-    value = serialize(data)
-
-    model = deserialize(MyModel, value)
-    assert isinstance(model, MyModel)
-    assert model.id == data.id
-    assert model.name == data.name
-    assert model.kind == data.kind
-    assert model.number == data.number
 
 
 async def test_put(db, etcd_client, loop):
@@ -82,7 +51,7 @@ async def test_put(db, etcd_client, loop):
 
 async def test_get(db, etcd_client):
     data = MyModelFactory()
-    await etcd_client.put(f"/model/{data.id}", json.dumps(serialize(data)))
+    await etcd_client.put(f"/model/{data.id}", json.dumps(data.serialize()))
 
     model, rev = await db.get(MyModel, id=data.id)
 
@@ -113,37 +82,6 @@ async def test_delete(db, etcd_client):
 
     resp = await etcd_client.range(f"/model/{data.id}")
     assert resp.kvs is None
-
-
-async def test_get_polymorphic(db, etcd_client):
-    class App(Serializable):
-        id: int
-        name: str
-        kind: str = "app"
-
-        __metadata__ = {
-            "key": Key("/apps/{id}"),
-            "identity": ("id",),
-            "discriminator": "kind",
-        }
-
-    class SpecificApp(App):
-        kind: str = "specific-app"
-        attr: str = "default"
-
-    app = App(id=42, name=fake.name())
-    await db.put(app)
-
-    instance, rev = await db.get(App, id=42)
-    assert isinstance(instance, App)
-    assert rev.version == 1
-
-    app = SpecificApp(id=43, name=fake.name())
-    await db.put(app)
-    assert rev.version == 1
-
-    instance, rev = await db.get(App, id=43)
-    assert isinstance(instance, SpecificApp)
 
 
 async def test_watching_create(db, loop):
@@ -202,21 +140,18 @@ async def test_watching_update(db, loop):
             if i == 0:
                 assert event == EventType.PUT
                 assert model.id == data.id
-                assert model.kind == data.kind
                 assert model.name == names[0]
                 assert rev.version == 1
 
             elif i == 1:
                 assert event == EventType.PUT
                 assert model.id == data.id
-                assert model.kind == data.kind
                 assert model.name == names[1]
                 assert rev.version == 2
 
             elif i == 2:
                 assert event == EventType.PUT
                 assert model.id == data.id
-                assert model.kind == data.kind
                 assert model.name == names[2]
                 assert rev.version == 3
 

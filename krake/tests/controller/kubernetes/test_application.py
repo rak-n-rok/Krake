@@ -1,41 +1,31 @@
 import asyncio
-from datetime import datetime
+from copy import deepcopy
+from textwrap import dedent
+from aiohttp import web
+import pytz
+import yaml
 
-from aiohttp.web import json_response, Response
-
-from krake.data import serialize, deserialize
-from krake.data.core import Reason, ReasonCode
-from krake.data.kubernetes import ApplicationState, ApplicationStatus
+from krake.api.app import create_app
+from krake.data.core import resource_ref, ReasonCode
+from krake.data.kubernetes import Application, ApplicationState
 from krake.controller import Worker
 from krake.controller.kubernetes.application import (
     ApplicationController,
     ApplicationWorker,
 )
-
 from krake.client import Client
-from krake.test_utils import stream
+from krake.test_utils import server_endpoint
 
-from factories.kubernetes import ApplicationFactory, ClusterFactory
+from factories.fake import fake
+from factories.kubernetes import ApplicationFactory, ClusterFactory, make_kubeconfig
 
 
-async def test_app_reception(aresponses, loop):
+async def test_app_reception(aiohttp_server, config, db, loop):
     created = ApplicationFactory(status__state=ApplicationState.PENDING)
     updated = ApplicationFactory(status__state=ApplicationState.UPDATED)
     scheduled = ApplicationFactory(status__state=ApplicationState.SCHEDULED)
 
-    aresponses.add(
-        "api.krake.local",
-        "/kubernetes/namespaces/all/applications",
-        "GET",
-        json_response([]),
-    )
-    aresponses.add(
-        "api.krake.local",
-        "/kubernetes/namespaces/all/applications?watch",
-        "GET",
-        stream([created, updated, scheduled], infinite=True),
-        match_querystring=True,
-    )
+    server = await aiohttp_server(create_app(config))
 
     class SimpleWorker(Worker):
         def __init__(self):
@@ -43,23 +33,32 @@ async def test_app_reception(aresponses, loop):
 
         async def resource_received(self, app):
             assert app == scheduled
-            self.done.set_result(None)
+
+            if not self.done.done():
+                self.done.set_result(None)
 
     worker = SimpleWorker()
 
     async with ApplicationController(
-        api_endpoint="http://api.krake.local",
+        api_endpoint=server_endpoint(server),
         worker_factory=lambda client: worker,
         worker_count=1,
         loop=loop,
     ) as controller:
+
+        await db.put(created)
+        await db.put(updated)
+        await db.put(scheduled)
+
         await asyncio.wait(
-            [controller, worker.done], timeout=0.5, return_when=asyncio.FIRST_COMPLETED
+            [controller, worker.done], timeout=1, return_when=asyncio.FIRST_COMPLETED
         )
     assert worker.done.done()
 
 
-nginx_manifest = """---
+nginx_manifest = list(
+    yaml.safe_load_all(
+        """---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -92,318 +91,404 @@ spec:
     protocol: TCP
     targetPort: 80
 """
-
-
-async def test_app_creation(aresponses, loop):
-
-    deploy_manifest = """---
-    apiVersion: apps/v1
-    kind: Deployment
-    metadata:
-      name: nginx-demo
-    spec:
-      selector:
-        matchLabels:
-          app: nginx
-      template:
-        metadata:
-          labels:
-            app: nginx
-        spec:
-          containers:
-          - name: nginx
-            image: nginx:1.7.9
-            ports:
-            - containerPort: 80
-    """
-
-    cluster = ClusterFactory()
-    cluster_ref = (
-        f"/kubernetes/namespaces/{cluster.metadata.namespace}"
-        f"/clusters/{cluster.metadata.name}"
     )
+)
+
+
+async def test_app_creation(aiohttp_server, config, db, loop):
+    routes = web.RouteTableDef()
+
+    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    async def _(request):
+        return web.Response(status=200)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
     app = ApplicationFactory(
         status__state=ApplicationState.SCHEDULED,
-        status__cluster=cluster_ref,
-        spec__manifest=deploy_manifest,
+        status__cluster=resource_ref(cluster),
+        spec__manifest=list(
+            yaml.safe_load_all(
+                """---
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: nginx-demo
+            spec:
+              selector:
+                matchLabels:
+                  app: nginx
+              template:
+                metadata:
+                  labels:
+                    app: nginx
+                spec:
+                  containers:
+                  - name: nginx
+                    image: nginx:1.7.9
+                    ports:
+                    - containerPort: 80
+            """
+            )
+        ),
     )
+    await db.put(cluster)
+    await db.put(app)
 
-    async def update_status(request):
-        payload = await request.json()
-        assert payload["state"] == "RUNNING"
-        assert payload["cluster"] == cluster_ref
+    api_server = await aiohttp_server(create_app(config))
 
-        status = ApplicationStatus(
-            state=ApplicationState.RUNNING,
-            reason=None,
-            cluster=payload["cluster"],
-            created=app.status.created,
-            modified=datetime.now(),
-        )
-        return json_response(serialize(status))
-
-    aresponses.add(
-        "api.krake.local", cluster_ref, "GET", json_response(serialize(cluster))
-    )
-    aresponses.add(
-        "127.0.0.1:8080",
-        "/apis/apps/v1/namespaces/default/deployments/nginx-demo",
-        "GET",
-        Response(status=404),
-    )
-    aresponses.add(
-        "127.0.0.1:8080",
-        "/apis/apps/v1/namespaces/default/deployments",
-        "POST",
-        Response(status=200),
-    )
-    aresponses.add(
-        "api.krake.local",
-        f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/status",
-        "PUT",
-        update_status,
-    )
-
-    async with Client(url="http://api.krake.local", loop=loop) as client:
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
         worker = ApplicationWorker(client=client)
         await worker.resource_received(app)
 
-
-async def test_app_deletion(aresponses, loop):
-    cluster = ClusterFactory()
-    cluster_ref = (
-        f"/kubernetes/namespaces/{cluster.metadata.namespace}"
-        f"/clusters/{cluster.metadata.name}"
+    stored, _ = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
+    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.state == ApplicationState.RUNNING
+    assert stored.metadata.finalizers[-1] == "cleanup"
+
+
+async def test_app_update(aiohttp_server, config, db, loop):
+    routes = web.RouteTableDef()
+
+    deleted = set()
+    replaced = set()
+
+    @routes.put("/apis/apps/v1/namespaces/default/deployments/{name}")
+    async def replace_deployment(request):
+        replaced.add(request.match_info["name"])
+        return web.Response(status=200)
+
+    @routes.delete("/apis/apps/v1/namespaces/default/deployments/{name}")
+    async def delete_deployment(request):
+        deleted.add(request.match_info["name"])
+        return web.Response(status=200)
+
+    @routes.get("/apis/apps/v1/namespaces/default/deployments/{name}")
+    async def _(request):
+        deployments = ("nginx-demo-1", "nginx-demo-2", "nginx-demo-3")
+        if request.match_info["name"] in deployments:
+            return web.Response(status=200)
+        return web.Response(status=404)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
     app = ApplicationFactory(
-        status__state=ApplicationState.DELETING,
-        status__cluster=cluster_ref,
+        status__state=ApplicationState.SCHEDULED,
+        status__cluster=resource_ref(cluster),
+        status__manifest=list(
+            yaml.safe_load_all(
+                dedent(
+                    """
+                    ---
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nginx-demo-1
+                    spec:
+                      selector:
+                        matchLabels:
+                          app: nginx
+                      template:
+                        metadata:
+                          labels:
+                            app: nginx
+                        spec:
+                          containers:
+                          - name: nginx
+                            image: nginx:1.7.9
+                            ports:
+                            - containerPort: 80
+                    ---
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nginx-demo-2
+                    spec:
+                      selector:
+                        matchLabels:
+                          app: nginx
+                      template:
+                        metadata:
+                          labels:
+                            app: nginx
+                        spec:
+                          containers:
+                          - name: nginx
+                            image: nginx:1.7.9
+                            ports:
+                            - containerPort: 433
+                    ---
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nginx-demo-3
+                    spec:
+                      selector:
+                        matchLabels:
+                          app: nginx
+                      template:
+                        metadata:
+                          labels:
+                            app: nginx
+                        spec:
+                          containers:
+                          - name: nginx
+                            image: nginx:1.7.9
+                            ports:
+                            - containerPort: 8080
+                    """
+                )
+            )
+        ),
+        spec__manifest=list(
+            yaml.safe_load_all(
+                dedent(
+                    """
+                    ---
+                    # Deployment "nginx-demo-1" was removed
+                    # Deployment "nginx-demo-2" is unchanged
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nginx-demo-2
+                    spec:
+                      selector:
+                        matchLabels:
+                          app: nginx
+                      template:
+                        metadata:
+                          labels:
+                            app: nginx
+                        spec:
+                          containers:
+                          - name: nginx
+                            image: nginx:1.7.9
+                            ports:
+                            - containerPort: 433
+                    ---
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nginx-demo-3
+                    spec:
+                      selector:
+                        matchLabels:
+                          app: nginx
+                      template:
+                        metadata:
+                          labels:
+                            app: nginx
+                        spec:
+                          containers:
+                          - name: nginx
+                            image: nginx:1.7.10  # updated image version
+                            ports:
+                            - containerPort: 8080
+                    """
+                )
+            )
+        ),
+    )
+
+    await db.put(cluster)
+    await db.put(app)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        worker = ApplicationWorker(client=client)
+        await worker.resource_received(app)
+
+    assert "nginx-demo-1" in deleted
+    assert "nginx-demo-3" in replaced
+
+    stored, _ = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.state == ApplicationState.RUNNING
+    assert stored.metadata.finalizers[-1] == "cleanup"
+
+
+async def test_app_deletion(aiohttp_server, config, db, loop):
+    kubernetes_app = web.Application()
+    routes = web.RouteTableDef()
+
+    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    async def _(request):
+        return web.Response(status=200)
+
+    @routes.delete("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    async def _(request):
+        return web.Response(status=200)
+
+    @routes.delete("/api/v1/namespaces/default/services/nginx-demo")
+    async def _(request):
+        return web.Response(status=200)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    app = ApplicationFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        status__state=ApplicationState.RUNNING,
+        status__cluster=resource_ref(cluster),
         spec__manifest=nginx_manifest,
     )
-    app_ref = (
-        f"/kubernetes/namespaces/{cluster.metadata.namespace}"
-        f"/applications/{app.metadata.name}"
-    )
+    await db.put(cluster)
+    await db.put(app)
 
-    async def update_status(request):
-        payload = await request.json()
-        assert payload["state"] == "DELETED"
+    api_server = await aiohttp_server(create_app(config))
 
-        status = ApplicationStatus(
-            state=ApplicationState.DELETED,
-            reason=None,
-            cluster=None,
-            created=app.status.created,
-            modified=datetime.now(),
-        )
-        return json_response(serialize(status))
-
-    aresponses.add("api.krake.local", app_ref, "GET", json_response(serialize(app)))
-    aresponses.add(
-        "api.krake.local", cluster_ref, "GET", json_response(serialize(cluster))
-    )
-    aresponses.add(
-        "127.0.0.1:8080",
-        "/apis/apps/v1/namespaces/default/deployments/nginx-demo",
-        "GET",
-        Response(status=200),
-    )
-    aresponses.add(
-        "127.0.0.1:8080",
-        "/apis/apps/v1/namespaces/default/deployments/nginx-demo",
-        "DELETE",
-        Response(status=200),
-    )
-    aresponses.add(
-        "127.0.0.1:8080",
-        "/api/v1/namespaces/default/services/nginx-demo",
-        "DELETE",
-        Response(status=200),
-    )
-    aresponses.add(
-        "api.krake.local",
-        f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/status",
-        "PUT",
-        update_status,
-    )
-
-    async with Client(url="http://api.krake.local", loop=loop) as client:
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
         worker = ApplicationWorker(client=client)
         await worker.resource_received(app)
 
 
-async def test_app_deletion_without_binding(aresponses, loop):
+async def test_app_deletion_without_binding(aiohttp_server, config, db, loop):
     app = ApplicationFactory(
-        status__state=ApplicationState.DELETING,
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        status__state=ApplicationState.RUNNING,
         status__cluster=None,
         spec__manifest=nginx_manifest,
     )
-    app_ref = (
-        f"/kubernetes/namespaces/{app.metadata.namespace}"
-        f"/applications/{app.metadata.name}"
+    await db.put(app)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        worker = ApplicationWorker(client=client)
+        await worker.resource_received(app)
+
+    # Ensure the application is completly removed from database
+    stored, _ = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
+    assert stored is None
 
-    async def update_status(request):
-        payload = await request.json()
-        assert payload["state"] == "DELETED"
 
-        status = ApplicationStatus(
-            state=ApplicationState.DELETED,
-            reason=None,
-            cluster=None,
-            created=app.status.created,
-            modified=datetime.now(),
+async def test_service_registration(aiohttp_server, config, db, loop):
+    # Setup Kubernetes API mock server
+    routes = web.RouteTableDef()
+
+    @routes.get("/api/v1/namespaces/default/services/nginx-demo")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/api/v1/namespaces/default/services")
+    async def _(request):
+        return web.json_response(
+            {
+                "kind": "Service",
+                "apiVersion": "v1",
+                "metadata": {
+                    "name": "nginx-demo",
+                    "namespace": "default",
+                    "selfLink": "/api/v1/namespaces/default/services/nginx-demo",
+                    "uid": "266728ad-090a-4282-8185-9328eb673cd3",
+                    "resourceVersion": "115304",
+                    "creationTimestamp": "2019-07-30T15:11:15Z",
+                },
+                "spec": {
+                    "ports": [
+                        {
+                            "protocol": "TCP",
+                            "port": 80,
+                            "targetPort": 80,
+                            "nodePort": 30886,
+                        }
+                    ],
+                    "selector": {"app": "nginx"},
+                    "clusterIP": "10.107.207.206",
+                    "type": "NodePort",
+                    "sessionAffinity": "None",
+                    "externalTrafficPolicy": "Cluster",
+                },
+                "status": {"loadBalancer": {}},
+            }
         )
-        return json_response(serialize(status))
 
-    aresponses.add("api.krake.local", app_ref, "GET", json_response(serialize(app)))
-    aresponses.add(
-        "api.krake.local",
-        f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/status",
-        "PUT",
-        update_status,
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    # Setup API Server
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    app = ApplicationFactory(
+        status__state=ApplicationState.SCHEDULED,
+        status__cluster=resource_ref(cluster),
+        spec__manifest=list(
+            yaml.safe_load_all(
+                """---
+            apiVersion: v1
+            kind: Service
+            metadata:
+              name: nginx-demo
+            spec:
+              type: NodePort
+              selector:
+                app: nginx
+              ports:
+              - port: 80
+                protocol: TCP
+                targetPort: 80
+            """
+            )
+        ),
     )
 
-    async with Client(url="http://api.krake.local", loop=loop) as client:
+    await db.put(cluster)
+    await db.put(app)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    # Start Kubernetes worker
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
         worker = ApplicationWorker(client=client)
         await worker.resource_received(app)
 
 
-service_manifest = """---
-apiVersion: v1
-kind: Service
-metadata:
-  name: nginx-demo
-spec:
-  type: NodePort
-  selector:
-    app: nginx
-  ports:
-  - port: 80
-    protocol: TCP
-    targetPort: 80
-"""
-
-
-async def test_service_registration(aresponses, loop):
-    cluster = ClusterFactory()
-    cluster_ref = (
-        f"/kubernetes/namespaces/{cluster.metadata.namespace}"
-        f"/clusters/{cluster.metadata.name}"
-    )
-    app = ApplicationFactory(
-        status__state=ApplicationState.SCHEDULED,
-        status__cluster=cluster_ref,
-        spec__manifest=service_manifest,
-    )
-
-    async def update_status(request):
-        payload = await request.json()
-        assert "services" in payload
-        assert payload["services"] == {"nginx-demo": "127.0.0.1:30886"}
-
-        status = ApplicationStatus(
-            state=ApplicationState.RUNNING,
-            reason=None,
-            cluster=payload["cluster"],
-            created=app.status.created,
-            modified=datetime.now(),
-            services={"nginx-demo": "127.0.0.1:30886"},
-        )
-        return json_response(serialize(status))
-
-    service_create_response = {
-        "kind": "Service",
-        "apiVersion": "v1",
-        "metadata": {
-            "name": "nginx-demo",
-            "namespace": "default",
-            "selfLink": "/api/v1/namespaces/default/services/nginx-demo",
-            "uid": "266728ad-090a-4282-8185-9328eb673cd3",
-            "resourceVersion": "115304",
-            "creationTimestamp": "2019-07-30T15:11:15Z",
-        },
-        "spec": {
-            "ports": [
-                {"protocol": "TCP", "port": 80, "targetPort": 80, "nodePort": 30886}
-            ],
-            "selector": {"app": "nginx"},
-            "clusterIP": "10.107.207.206",
-            "type": "NodePort",
-            "sessionAffinity": "None",
-            "externalTrafficPolicy": "Cluster",
-        },
-        "status": {"loadBalancer": {}},
-    }
-
-    aresponses.add(
-        "api.krake.local", cluster_ref, "GET", json_response(serialize(cluster))
-    )
-    aresponses.add(
-        "127.0.0.1:8080",
-        "/api/v1/namespaces/default/services/nginx-demo",
-        "GET",
-        Response(status=404),
-    )
-    aresponses.add(
-        "127.0.0.1:8080",
-        "/api/v1/namespaces/default/services",
-        "POST",
-        json_response(service_create_response),
-    )
-    aresponses.add(
-        "api.krake.local",
-        f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/status",
-        "PUT",
-        update_status,
-    )
-
-    async with Client(url="http://api.krake.local", loop=loop) as client:
-        worker = ApplicationWorker(client=client)
-        await worker.resource_received(app)
-
-
-async def test_kubernetes_error_handling(aresponses, loop):
-    failed_manifest = nginx_manifest.replace("kind: Deployment", "kind: Unsupported")
+async def test_kubernetes_error_handling(aiohttp_server, config, db, loop):
+    failed_manifest = deepcopy(nginx_manifest)
+    for resource in failed_manifest:
+        resource["kind"] = "Unsupported"
 
     cluster = ClusterFactory()
-    cluster_ref = (
-        f"/kubernetes/namespaces/{cluster.metadata.namespace}"
-        f"/clusters/{cluster.metadata.name}"
-    )
     app = ApplicationFactory(
-        status__state=ApplicationState.SCHEDULED,
-        status__cluster=cluster_ref,
         spec__manifest=failed_manifest,
+        status__state=ApplicationState.SCHEDULED,
+        status__cluster=resource_ref(cluster),
+        status__manifest=[],
     )
 
-    async def update_status(request):
-        payload = await request.json()
+    await db.put(cluster)
+    await db.put(app)
 
-        reason = deserialize(Reason, payload["reason"])
-        assert payload["state"] == "FAILED"
-        assert reason.code == ReasonCode.INVALID_RESOURCE
+    server = await aiohttp_server(create_app(config))
 
-        status = ApplicationStatus(
-            state=ApplicationState.FAILED,
-            reason=reason,
-            cluster=cluster.metadata.name,
-            created=app.status.created,
-            modified=datetime.now(),
-        )
-        return json_response(serialize(status))
-
-    aresponses.add(
-        "api.krake.local", cluster_ref, "GET", json_response(serialize(cluster))
-    )
-    aresponses.add(
-        "api.krake.local",
-        f"/kubernetes/namespaces/{cluster.metadata.namespace}/applications/"
-        f"{app.metadata.name}/status",
-        "PUT",
-        update_status,
-    )
-
-    async with Client(url="http://api.krake.local", loop=loop) as client:
+    async with Client(url=server_endpoint(server), loop=loop) as client:
         worker = ApplicationWorker(client=client)
         await worker.resource_received(app)
+
+    stored, _ = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored.status.state == ApplicationState.FAILED
+    assert stored.status.reason.code == ReasonCode.INVALID_RESOURCE

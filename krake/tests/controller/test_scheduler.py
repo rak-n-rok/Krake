@@ -1,42 +1,22 @@
 import asyncio
-from datetime import datetime
 
-from aiohttp.web import json_response
-
-from krake.data import serialize, deserialize
-from krake.data.core import ReasonCode, Reason
-from krake.data.kubernetes import ApplicationState, ApplicationStatus, ClusterBinding
+from krake.api.app import create_app
+from krake.data.core import ReasonCode
+from krake.data.kubernetes import Application, ApplicationState
 from krake.controller import Worker
 from krake.controller.scheduler import Scheduler, SchedulerWorker
 from krake.client import Client
-from krake.test_utils import stream
+from krake.test_utils import server_endpoint
 
 from factories.kubernetes import ApplicationFactory, ClusterFactory
 
 
-async def test_kubernetes_reception(aresponses, loop):
+async def test_kubernetes_reception(aiohttp_server, config, db, loop):
     scheduled = ApplicationFactory(status__state=ApplicationState.SCHEDULED)
     updated = ApplicationFactory(status__state=ApplicationState.UPDATED)
     created = ApplicationFactory(status__state=ApplicationState.PENDING)
 
-    aresponses.add(
-        "api.krake.local",
-        "/kubernetes/namespaces/all/applications",
-        "GET",
-        json_response([]),
-    )
-    # aresponses remove an HTTP endpoint if it was called. If the watch stream
-    # would terminate, the scheduler would restart the watcher. At this time,
-    # aresponses does not have the /watch endpoint anymore which would lead to
-    # an exception. Hence, the watch stream just blocks infinitly after all
-    # data was streamed.
-    aresponses.add(
-        "api.krake.local",
-        "/kubernetes/namespaces/all/applications?watch",
-        "GET",
-        stream([scheduled, updated, created], infinite=True),
-        match_querystring=True,
-    )
+    server = await aiohttp_server(create_app(config))
 
     class CountingWorker(Worker):
         def __init__(self):
@@ -44,96 +24,60 @@ async def test_kubernetes_reception(aresponses, loop):
             self.done = loop.create_future()
 
         async def resource_received(self, app):
-            if self.count == 0:
-                assert app == updated
-
-            elif self.count == 1:
-                assert app == created
-                self.done.set_result(None)
-
             self.count += 1
+
+            if self.count == 3:
+                self.done.set_result(None)
 
     worker = CountingWorker()
 
     async with Scheduler(
-        api_endpoint="http://api.krake.local",
+        api_endpoint=server_endpoint(server),
         worker_factory=lambda client: worker,
         worker_count=1,
         loop=loop,
     ) as scheduler:
+
+        await db.put(scheduled)
+        await db.put(updated)
+        await db.put(created)
+
         await asyncio.wait(
-            [scheduler, worker.done], timeout=0.5, return_when=asyncio.FIRST_COMPLETED
+            [scheduler, worker.done], timeout=1, return_when=asyncio.FIRST_COMPLETED
         )
 
     assert worker.done.done()
-    assert worker.count == 2
+    assert worker.count == 3
 
 
-async def test_kubernetes_scheduling(aresponses, loop):
+async def test_kubernetes_scheduling(aiohttp_server, config, db, loop):
+    cluster = ClusterFactory()
     app = ApplicationFactory(status__state=ApplicationState.UPDATED)
-    cluster = ClusterFactory(metadata__user=app.metadata.user)
+    cluster = ClusterFactory()
 
-    async def echo_binding(request):
-        payload = await request.json()
-        ref = (
-            f"/kubernetes/namespaces/{app.metadata.namespace}"
-            f"/clusters/{cluster.metadata.name}"
-        )
-        assert payload["cluster"] == ref
-        binding = ClusterBinding(cluster=payload["cluster"])
-        return json_response(serialize(binding))
+    await db.put(cluster)
+    await db.put(app)
 
-    aresponses.add(
-        "api.krake.local",
-        "/kubernetes/namespaces/all/clusters",
-        "GET",
-        json_response([serialize(cluster)]),
-    )
-    aresponses.add(
-        "api.krake.local",
-        f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/binding",
-        "PUT",
-        echo_binding,
-    )
+    server = await aiohttp_server(create_app(config))
 
-    async with Client(url="http://api.krake.local", loop=loop) as client:
+    async with Client(url=server_endpoint(server), loop=loop) as client:
         worker = SchedulerWorker(client=client)
         await worker.resource_received(app)
 
 
-async def test_kubernetes_scheduling_error_handling(aresponses, loop):
+async def test_kubernetes_scheduling_error_handling(aiohttp_server, config, db, loop):
     app = ApplicationFactory(status__state=ApplicationState.PENDING)
 
-    async def update_status(request):
-        payload = await request.json()
+    await db.put(app)
 
-        reason = deserialize(Reason, payload["reason"])
+    server = await aiohttp_server(create_app(config))
 
-        assert payload["state"] == "FAILED"
-        assert payload["cluster"] is None
-        assert reason.code == ReasonCode.NO_SUITABLE_RESOURCE
-
-        status = ApplicationStatus(
-            state=ApplicationState.FAILED,
-            reason=reason,
-            created=app.status.created,
-            modified=datetime.now(),
-        )
-        return json_response(serialize(status))
-
-    aresponses.add(
-        "api.krake.local",
-        "/kubernetes/namespaces/all/clusters",
-        "GET",
-        json_response([]),
-    )
-    aresponses.add(
-        "api.krake.local",
-        f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/status",
-        "PUT",
-        update_status,
-    )
-
-    async with Client(url="http://api.krake.local", loop=loop) as client:
+    async with Client(url=server_endpoint(server), loop=loop) as client:
         worker = SchedulerWorker(client=client)
         await worker.resource_received(app)
+
+    stored, _ = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored.status.state == ApplicationState.FAILED
+    assert stored.status.reason.code == ReasonCode.NO_SUITABLE_RESOURCE

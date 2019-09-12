@@ -1,17 +1,9 @@
-import re
 from operator import attrgetter
 
-from krake.data import serialize, deserialize
 from krake.api.app import create_app
-from krake.data.core import Role, RoleBinding
+from krake.data.core import Role, RoleBinding, RoleList, RoleBindingList
 
 from factories.core import RoleFactory, RoleBindingFactory
-
-
-uuid_re = re.compile(
-    r"^[0-9A-F]{8}-[0-9A-F]{4}-[4][0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$",
-    re.IGNORECASE,
-)
 
 
 # -----------------------------------------------------------------------------
@@ -20,19 +12,19 @@ uuid_re = re.compile(
 
 
 async def test_list_roles(aiohttp_client, config, db):
-    roles = [RoleFactory() for _ in range(10)]
-    for role in roles:
+    data = [RoleFactory() for _ in range(10)]
+    for role in data:
         await db.put(role)
 
     client = await aiohttp_client(create_app(config=config))
     resp = await client.get("/core/roles")
     assert resp.status == 200
 
-    data = await resp.json()
-    received = [deserialize(Role, item) for item in data]
+    body = await resp.json()
+    roles = RoleList.deserialize(body)
 
     key = attrgetter("metadata.uid")
-    assert sorted(received, key=key) == sorted(roles, key=key)
+    assert sorted(roles.items, key=key) == sorted(data, key=key)
 
 
 async def test_list_roles_rbac(rbac_allow, config, aiohttp_client):
@@ -48,14 +40,14 @@ async def test_list_roles_rbac(rbac_allow, config, aiohttp_client):
 
 async def test_create_role(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
-    data = RoleFactory(status=None)
+    data = RoleFactory()
 
-    resp = await client.post("/core/roles", json=serialize(data))
+    resp = await client.post("/core/roles", json=data.serialize(readonly=False))
     assert resp.status == 200
-    role = deserialize(Role, await resp.json())
+    role = Role.deserialize(await resp.json())
 
-    assert role.status.created
-    assert role.status.modified
+    assert role.metadata.created
+    assert role.metadata.modified
     assert role.rules == data.rules
 
     stored, _ = await db.get(Role, name=data.metadata.name)
@@ -70,7 +62,7 @@ async def test_create_role_rbac(rbac_allow, config, aiohttp_client):
 
     async with rbac_allow("core", "roles", "create", namespace=None):
         resp = await client.post("/core/roles")
-        assert resp.status == 422
+        assert resp.status == 415
 
 
 async def test_create_role_with_existing_name(aiohttp_client, config, db):
@@ -79,8 +71,8 @@ async def test_create_role_with_existing_name(aiohttp_client, config, db):
 
     client = await aiohttp_client(create_app(config=config))
 
-    resp = await client.post("/core/roles", json=serialize(existing))
-    assert resp.status == 400
+    resp = await client.post("/core/roles", json=existing.serialize(readonly=False))
+    assert resp.status == 409
 
 
 async def test_get_role(aiohttp_client, config, db):
@@ -89,7 +81,7 @@ async def test_get_role(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
     resp = await client.get(f"/core/roles/{role.metadata.name}")
     assert resp.status == 200
-    data = deserialize(Role, await resp.json())
+    data = Role.deserialize(await resp.json())
     assert role == data
 
 
@@ -113,7 +105,7 @@ async def test_delete_role(aiohttp_client, config, db):
 
     # Delete role
     resp = await client.delete(f"/core/roles/{role.metadata.name}")
-    assert resp.status == 200
+    assert resp.status == 204
 
     deleted, _ = await db.get(Role, name=role.metadata.name)
     assert deleted is None
@@ -144,11 +136,11 @@ async def test_list_role_bindings(aiohttp_client, config, db):
     resp = await client.get("/core/rolebindings")
     assert resp.status == 200
 
-    data = await resp.json()
-    received = [deserialize(RoleBinding, item) for item in data]
+    body = await resp.json()
+    received = RoleBindingList.deserialize(body)
 
-    key = attrgetter("metadata.uid")
-    assert sorted(received, key=key) == sorted(bindings, key=key)
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(bindings, key=key)
 
 
 async def test_list_role_bindings_rbac(rbac_allow, config, aiohttp_client):
@@ -163,15 +155,15 @@ async def test_list_role_bindings_rbac(rbac_allow, config, aiohttp_client):
 
 
 async def test_create_role_binding(aiohttp_client, config, db):
-    data = RoleBindingFactory(status=None)
+    data = RoleBindingFactory()
     client = await aiohttp_client(create_app(config=config))
 
-    resp = await client.post("/core/rolebindings", json=serialize(data))
+    resp = await client.post("/core/rolebindings", json=data.serialize(readonly=False))
     assert resp.status == 200
-    binding = deserialize(RoleBinding, await resp.json())
+    binding = RoleBinding.deserialize(await resp.json())
 
-    assert binding.status.created
-    assert binding.status.modified
+    assert binding.metadata.created
+    assert binding.metadata.modified
     assert set(binding.users) == set(data.users)
     assert set(binding.roles) == set(data.roles)
 
@@ -187,7 +179,7 @@ async def test_create_role_binding_rbac(rbac_allow, config, aiohttp_client):
 
     async with rbac_allow("core", "rolebindings", "create", namespace=None):
         resp = await client.post("/core/rolebindings")
-        assert resp.status == 422
+        assert resp.status == 415
 
 
 async def test_create_role_binding_with_existing_name(aiohttp_client, config, db):
@@ -196,8 +188,10 @@ async def test_create_role_binding_with_existing_name(aiohttp_client, config, db
 
     client = await aiohttp_client(create_app(config=config))
 
-    resp = await client.post("/core/rolebindings", json=serialize(existing))
-    assert resp.status == 400
+    resp = await client.post(
+        "/core/rolebindings", json=existing.serialize(readonly=False)
+    )
+    assert resp.status == 409
 
 
 async def test_get_role_binding(aiohttp_client, config, db):
@@ -206,7 +200,7 @@ async def test_get_role_binding(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
     resp = await client.get(f"/core/rolebindings/{binding.metadata.name}")
     assert resp.status == 200
-    data = deserialize(RoleBinding, await resp.json())
+    data = RoleBinding.deserialize(await resp.json())
     assert binding == data
 
 
@@ -230,7 +224,7 @@ async def test_delete_role_binding(aiohttp_client, config, db):
 
     # Delete binding
     resp = await client.delete(f"/core/rolebindings/{binding.metadata.name}")
-    assert resp.status == 200
+    assert resp.status == 204
 
     deleted, _ = await db.get(Role, name=binding.metadata.name)
     assert deleted is None
