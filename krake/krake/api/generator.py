@@ -106,7 +106,7 @@ def make_request_schema(cls, include=set()):
 
     Args:
         cls (type): Data class with ``Schema`` attribute
-        subresources (set, optional): Set of subresource attributes that
+        include (set, optional): Set of subresource attributes that
             should not be excluded.
 
     Returns:
