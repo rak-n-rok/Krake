@@ -1,61 +1,10 @@
 stages:
   - test
 
-variables:
-  ETCD_VER: v3.3.13
-
-  # Change pip's cache directory to be inside the project directory since we
-  # can only cache local items.
-  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-
-# Pip's cache doesn't store the python packages
-# https://pip.pypa.io/en/stable/reference/pip_install/#caching
-cache:
-  paths:
-    - .cache/pip
-
-unittests-krake:
+job1:
   stage: test
   image: python:3.6
   script:
-    # Download etcd
-    - mkdir /tmp/etcd-download
-    - curl -s -L https://github.com/etcd-io/etcd/releases/download/$ETCD_VER/etcd-$ETCD_VER-linux-amd64.tar.gz -o /tmp/etcd.tar.gz
-    - tar xzvf /tmp/etcd.tar.gz -C /tmp/etcd-download --strip-components=1
-    - mv /tmp/etcd-download/etcd /usr/local/bin
-    - rm -rf /tmp/etcd-download /tmp/etcd.tar.gz
-    - etcd --version
-
-    - pip install krake/[dev]
-    - pip install keystone
-    - pytest --runslow krake/tests
-  tags:
-    - docker
-
-# unittests-rok:
-#   stage: test
-#   image: python:3.6
-#   script:
-#     - pip install krake/
-#     - pip install rok/[dev]
-#     - pytest rok/tests
-#   tags:
-#     - docker
-
-flake8-krake:
-  stage: test
-  image: python:3.6
-  script:
-    - pip install flake8
-    - flake8 krake/krake
-  tags:
-    - docker
-
-flake8-rok:
-  stage: test
-  image: python:3.6
-  script:
-    - pip install flake8
-    - flake8 rok/rok
+    - env
   tags:
     - docker
