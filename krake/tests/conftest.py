@@ -1,6 +1,8 @@
 import os
+import random
 import sys
 import subprocess
+import threading
 from tempfile import TemporaryDirectory
 from pathlib import Path
 from typing import NamedTuple
@@ -12,7 +14,7 @@ import shutil
 import requests
 import pytest
 from etcd3.aio_client import AioClient
-
+from prometheus_client import Gauge, start_http_server
 
 # Prepend package directory for working imports
 package_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -100,15 +102,27 @@ def pytest_collection_modifyitems(config, items):
                 )
 
 
-def wait_for_url(url, timeout=5):
-    """Wait until an URL endpoint is reachable"""
+def wait_for_url(url, response_fn=None, timeout=5):
+    """Wait until an URL endpoint is reachable.
+
+    Args:
+        url (str): URL endpoint
+        response_fn (:func:, optional): Response callback function
+        timeout (int, optional): Timeout. Defaults to 5s
+
+    Raises:
+        TimeoutError: When timeout is reached
+
+    """
     start = time.time()
 
     while True:
         try:
             resp = requests.get(url)
             assert resp.status_code == 200
-        except requests.ConnectionError:
+            if response_fn:
+                assert response_fn(resp)
+        except (requests.ConnectionError, AssertionError):
             time.sleep(0.1)
             if time.time() - start > timeout:
                 raise TimeoutError(f"Can not connect to {url}")
@@ -209,6 +223,29 @@ def config(etcd_server, user):
                 "metadata": {"name": "system:admin"},
                 "users": ["system:admin"],
                 "roles": ["system:admin"],
+            }
+        ],
+        "default-metrics": [
+            {
+                "metadata": {"name": "heat_demand_zone_1"},
+                "spec": {
+                    "min": 0,
+                    "max": 1,
+                    "weight": 0.9,
+                    "provider": {"name": "prometheus-zone-1", "metric": "heat-demand"},
+                },
+            }
+        ],
+        "default-metrics-providers": [
+            {
+                "metadata": {"name": "prometheus-zone-1"},
+                "spec": {
+                    "type": "prometheus",
+                    "config": {
+                        "url": "http://localhost:9090/api/v1/query",
+                        "metrics": ["heat-demand"],
+                    },
+                },
             }
         ],
     }
@@ -587,3 +624,93 @@ def pki():
     """Public key infrastructure fixture"""
     with PublicKeyRepository() as repo:
         yield repo
+
+
+prometheus_config = """
+global:
+    scrape_interval: {interval}s
+scrape_configs:
+    - job_name: prometheus
+      static_configs:
+        - targets:
+          - localhost:{prometheus_port}
+    - job_name: heat-demand-exporter
+      static_configs:
+        - targets:
+          - localhost:{exporter_port}
+"""
+
+
+class HeatDemandExporter(threading.Thread):
+    def __init__(self, name, interval=1):
+        threading.Thread.__init__(self)
+        self.exporter_event = threading.Event()
+        self.name = name
+        self.interval = interval
+
+    def run(self):
+        metric = Gauge(self.name, "float - heat demand (kW)")
+        while not self.exporter_event.isSet():
+            metric.set(round(random.random(), 2))
+            self.exporter_event.wait(self.interval)
+
+    def join(self):
+        self.exporter_event.set()
+
+
+@pytest.fixture("session")
+def prometheus():
+    """Prometheus server and heat-demand exporter fixture
+
+    Heat demand exporter generates random heat demand metric `heat_demand_zone_1`
+    """
+    host = "localhost"
+    port = 5055
+    interval = 1  # scrape interval[s]
+    exporter_port = port + 1
+    metric_name = "heat_demand_zone_1"
+
+    def response_callback(resp):
+        if resp:
+            response = resp.json()
+            for metric_data in response["data"]["result"]:
+                if metric_data:
+                    return True
+        return False
+
+    # Prometheus heat-demand exporter
+    start_http_server(exporter_port)
+    exporter = HeatDemandExporter(metric_name, interval=interval)
+    exporter.start()
+
+    with TemporaryDirectory() as tempdir:
+        config_file = Path(tempdir) / "prometheus.yml"
+
+        # Create prometheus configuration
+        with config_file.open("w") as fd:
+            fd.write(
+                prometheus_config.format(
+                    interval=interval, prometheus_port=port, exporter_port=exporter_port
+                )
+            )
+
+        command = [
+            "prometheus",
+            "--config.file",
+            str(config_file),
+            "--web.enable-admin-api",
+            "--web.listen-address",
+            ":" + str(port),
+        ]
+        with subprocess.Popen(command) as proc:
+            try:
+                wait_for_url(
+                    f"http://{host}:{port}/api/v1/query?query={metric_name}",
+                    response_fn=response_callback,
+                    timeout=10,
+                )
+                yield host, port
+            finally:
+                time.sleep(1)
+                exporter.join()
+                proc.terminate()
