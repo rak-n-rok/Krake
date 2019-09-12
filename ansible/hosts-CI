@@ -30,7 +30,7 @@ all:
     # default, no OpenStack server has a floating IP assigned except hosts in
     # the "gateways" group. All other hosts use the "gateway" host variable to
     # define a SSH jump host.
-    gateway: krake-staging-gateway
+    gateway: krake-nightrun-gateway
 
   # Host groups
   #
@@ -40,15 +40,15 @@ all:
   children:
     gateways:
       hosts:
-        krake-staging-gateway:
-          network: krake-staging-network
+        krake-nightrun-gateway:
+          network: krake-nightrun-network
           vpn_cidr: 10.9.0.0/24
 
     minikube_clusters:
       hosts:
-        minikube-cluster-staging-1:
-          name: minikube-cluster-staging-1
-          network: krake-staging-network
+        minikube-cluster-nightrun-1:
+          name: minikube-cluster-nightrun-1
+          network: krake-nightrun-network
           # Inventory name of the IdP that should be used for getting the certificate
           # TODO Should be removed if trusted CA certificate takes place
           # This will be done in: https://publicgitlab.cloudandheat.com/ragnarok/krake/issues/168
@@ -59,9 +59,9 @@ all:
 
     krake_apps:
       hosts:
-        krake-staging-app:
-          hostname: krake-staging-app
-          network: krake-staging-network
+        krake-nightrun-app:
+          hostname: krake-nightrun-app
+          network: krake-nightrun-network
 
           # List of additional authorized SSH keys. Actually, every physical
           # host supports this configuration parameter.
@@ -73,9 +73,9 @@ all:
     # provisioning purpose. No machines are associated with them.
     networks:
       hosts:
-        krake-staging-network:
-          subnet_name: krake-staging-subnet
+        krake-nightrun-network:
+          subnet_name: krake-nightrun-subnet
           subnet_cidr: 192.168.0.0/24
           public_network: shared-public-IPv4
-          router_name: krake-staging-router
-          common_secgroup_name: krake-staging-common-secgroup
+          router_name: krake-nightrun-router
+          common_secgroup_name: krake-nightrun-common-secgroup

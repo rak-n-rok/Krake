@@ -13,21 +13,12 @@ variables:
   # can only cache local items.
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
 
-  OS_AUTH_URL: "https://identity-f1a.cloudandheat.com:5000/v3/"
-  OS_USERNAME: "matthias.goerens@cloudandheat.com"
-  OS_PROJECT_NAME: "krake-ci"
-  OS_DOMAIN_NAME: "Default"
-  OS_PROJECT_DOMAIN_ID: "default"
 
 # Pip's cache doesn't store the python packages
 # https://pip.pypa.io/en/stable/reference/pip_install/#caching
 cache:
   paths:
     - .cache/pip
-
-.on-web: &on-web
-  only:
-    - web
 
 
 provision-staging-infra:
@@ -38,6 +29,9 @@ provision-staging-infra:
       - .ssh/id_rsa
       - ansible/.etc # Absolute path: /builds/ragnarok/krake/ansible/.etc
     expire_in: 1 week
+  only:
+    - staging
+    - master
   script:
     - python -V
     - pip install python-openstackclient openstacksdk ansible==2.7.10 pytest
@@ -59,7 +53,7 @@ provision-staging-infra:
     # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
     - cd ansible
     - chmod -v -R 700 $(pwd)
-    - ansible-playbook -i hosts-staging site.yml
+    - ansible-playbook -i hosts-CI site.yml
     - pwd
     - ls -al ../.ssh/id_rsa
     - ls -al .etc
@@ -108,6 +102,9 @@ flake8-rok:
 smoke_test:
   stage: smoke test
   image: python:3.6
+  only:
+    - staging
+    - master
   script:
     - ls -al .ssh/id_rsa
     - ls -al ansible/.etc
@@ -120,12 +117,15 @@ smoke_test:
     # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
     - cd ansible
     - chmod -v -R 700 $(pwd)
-    - ansible-playbook -i hosts-staging smoke_tests.yml
+    - ansible-playbook -i hosts-CI smoke_tests.yml
 
 
 integration_test:
   stage: integration test
   image: python:3.6
+  only:
+    - staging
+    - master
   script:
     - ls -al .ssh/id_rsa
     - ls -al ansible/.etc
@@ -138,17 +138,17 @@ integration_test:
     # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
     - cd ansible
     - chmod -v -R 700 $(pwd)
-    - ansible-playbook -i hosts-staging integration_tests.yml
+    - ansible-playbook -i hosts-CI integration_tests.yml
 
 
 cleanup-staging-infra:
   stage: cleanup
   image: python:3.6
-#  only:
-#    - staging
-#    - master
+  only:
+    - staging
+    - master
   script:
     - pip install python-openstackclient openstack-heat
-    - openstack stack delete -y --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD krake-staging-network krake-staging-gateway krake-staging-app minikube-cluster-staging-1 || true
+    - openstack stack delete -y --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD krake-nightrun-network krake-nightrun-gateway krake-nightrun-app minikube-cluster-nightrun-1 || true
     - openstack keypair delete --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD my_runner_key || true
   when: always

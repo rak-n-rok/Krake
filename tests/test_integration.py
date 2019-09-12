@@ -5,7 +5,7 @@ import json
 logging.basicConfig(level=logging.DEBUG)
 
 KRAKE_HOMEDIR = "/home/krake"
-CLUSTER_NAME = "minikube-cluster-staging-1"
+CLUSTER_NAME = "minikube-cluster-nightrun-1"
 
 
 # CLUSTER_NAME_TEMPLATE = "minikube-cluster-{commit}"
