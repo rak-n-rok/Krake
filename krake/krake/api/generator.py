@@ -343,14 +343,6 @@ def _make_create_handler(operation, logger):
         body.metadata.created = now
         body.metadata.modified = now
 
-        if (
-            "cleanup" not in body.metadata.finalizers
-            and hasattr(body, "cleanup")
-            and body.cleanup
-        ):
-            # The created resource needs a Controller action to be cleaned
-            body.metadata.finalizers.append("cleanup")
-
         # Initialize subresource fields
         for field in dataclasses.fields(body):
             if field.metadata.get("subresource", False):

@@ -36,8 +36,7 @@ _garbage_collected = [Application, Cluster]
 
 class GarbageCollector(Controller):
     """The Garbage Collector is a Controller that is watching all kind of resources
-    stored in the database. It is the only component with the right to remove the
-    "cascading_deletion" finalizer.
+    stored in the database.
     """
 
     def __init__(self, *args, db_host="localhost", db_port=2379, **kwargs):
@@ -118,11 +117,9 @@ class GarbageWorker(Worker):
 
     async def resource_received(self, resource):
         """Handle the resources marked for deletion. Only one action is performed:
+         * if the resource has DIRECT dependents, mark all of them as deleted;
          * if the resource has no finalizer, its dependencies will be updated, and the
          resource will be deleted;
-         * if the resource has DIRECT dependents, mark all of them as deleted;
-         * when no dependent is present, or all have been deleted, remove the
-         "cascading_deletion" finalizer on the resource and update it.
 
         Args:
             resource (any): a resource marked for deletion
@@ -136,32 +133,32 @@ class GarbageWorker(Worker):
         )
         async with Session(host=self.db_host, port=self.db_port) as session:
             self.session = session
-            # Delete a resource with no finalizer
-            if not resource.metadata.finalizers:
-                await self._delete_resource(resource)
-                return
 
             # Check if there are dependents
             dependents_list = await self._get_dependents(resource)
             if dependents_list:
                 await self._mark_dependents(dependents_list)
-            else:
-                await self._remove_finalizer(resource)
+                self.session = None
+                return
+
+            # Delete a resource with no finalizer
+            if not resource.metadata.finalizers:
+                await self._delete_resource(resource)
 
             self.session = None
 
     async def _delete_resource(self, resource):
-        """Update the dependencies of a resource before removing it from the database.
+        """Remove a resource from the database before updating its dependencies
 
         Args:
             resource: the resource to permanently remove.
 
         """
-        await self._update_dependencies(resource)
-
         # Delete from database
         logger.debug("%s %r completely deleted", resource.kind, resource.metadata.name)
         await self.session.delete(resource)
+
+        await self._update_dependencies(resource)
 
     async def _update_dependencies(self, resource):
         """Retrieve and update all dependencies of a resource WITHOUT modifying them.
@@ -244,20 +241,6 @@ class GarbageWorker(Worker):
             )
 
         return all_dependents
-
-    async def _remove_finalizer(self, resource):
-        """Remove the "cascading_deletion" finalizer from a resource if present,
-        then update it
-
-        Args:
-            resource: the resource to update
-
-        """
-        if resource.metadata.finalizers[-1] == "cascading_deletion":
-            # Remove the last finalizer
-            resource.metadata.finalizers.pop(-1)
-            resource.metadata.modified = datetime.now()
-            await self.session.put(resource)
 
 
 def _create_garbage_worker(db_host, db_port):

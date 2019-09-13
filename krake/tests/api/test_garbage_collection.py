@@ -62,10 +62,7 @@ async def test_resources_reception(aiohttp_server, config, db, loop):
 
 
 async def test_cluster_deletion(aiohttp_server, config, db, loop):
-    cluster = ClusterFactory(
-        metadata__finalizers=["cascading_deletion"],
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
-    )
+    cluster = ClusterFactory(metadata__deleted=fake.date_time(tzinfo=pytz.utc))
 
     await db.put(cluster)
 
@@ -110,16 +107,6 @@ async def test_cluster_deletion(aiohttp_server, config, db, loop):
             name=cluster.metadata.name,
         )
         assert stored_app is None
-
-    # Ensure that the cluster has no more finalizers
-    async with Client(url=server_endpoint(server), loop=loop) as client:
-        worker = GarbageWorker(client=client, db_host=db.host, db_port=db.port)
-        await worker.resource_received(cluster)
-
-    stored_cluster, _ = await db.get(
-        Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
-    )
-    assert stored_cluster.metadata.finalizers == []
 
     # Ensure that the cluster resource is deleted from database
     async with Client(url=server_endpoint(server), loop=loop) as client:
