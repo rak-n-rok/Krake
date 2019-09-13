@@ -8,7 +8,10 @@ Developer Documentation
     :maxdepth: 2
 
     architecture
-    conventions
+    concepts
     packages
+    principles
+    garbage-collection
+    scheduling
     ref/krake
     ref/rok
