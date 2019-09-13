@@ -397,9 +397,9 @@ class KubernetesClient(object):
         fn = getattr(api, f"create_namespaced_{camel_to_snake_case(kind)}")
         return await fn(body=body, namespace=namespace)
 
-    async def _replace(self, kind, name, body, namespace):
+    async def _patch(self, kind, name, body, namespace):
         api = self.resource_apis[kind]
-        fn = getattr(api, f"replace_namespaced_{camel_to_snake_case(kind)}")
+        fn = getattr(api, f"patch_namespaced_{camel_to_snake_case(kind)}")
         return await fn(name=name, body=body, namespace=namespace)
 
     async def _delete(self, kind, name, namespace):
@@ -433,10 +433,10 @@ class KubernetesClient(object):
             resp = await self._create(kind, body=resource, namespace=namespace)
             logger.info("%s created. status=%r", kind, resp.status)
         else:
-            resp = await self._replace(
+            resp = await self._patch(
                 kind, name=name, body=resource, namespace=namespace
             )
-            logger.info("%s replaced. status=%r", kind, resp.status)
+            logger.info("%s patched. status=%r", kind, resp.status)
 
         return resp
 
