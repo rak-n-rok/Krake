@@ -199,6 +199,8 @@ def dict_formatter(attr):
     for key, value in attr.items():
         if isinstance(value, (list, dict)):
             value = "".join(["\n"] + list(nested_formatter(value)))[:-1]
+            if not value:
+                continue
 
         formatted_attr.append(f"{key}: {value}\n")
 
