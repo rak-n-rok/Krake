@@ -162,11 +162,11 @@ async def test_app_update(aiohttp_server, config, db, loop):
     routes = web.RouteTableDef()
 
     deleted = set()
-    replaced = set()
+    patched = set()
 
-    @routes.put("/apis/apps/v1/namespaces/default/deployments/{name}")
-    async def replace_deployment(request):
-        replaced.add(request.match_info["name"])
+    @routes.patch("/apis/apps/v1/namespaces/default/deployments/{name}")
+    async def patch_deployment(request):
+        patched.add(request.match_info["name"])
         return web.Response(status=200)
 
     @routes.delete("/apis/apps/v1/namespaces/default/deployments/{name}")
@@ -316,7 +316,7 @@ async def test_app_update(aiohttp_server, config, db, loop):
         await worker.resource_received(app)
 
     assert "nginx-demo-1" in deleted
-    assert "nginx-demo-3" in replaced
+    assert "nginx-demo-3" in patched
 
     stored, _ = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
