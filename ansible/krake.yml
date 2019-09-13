@@ -235,6 +235,20 @@
             owner: krake
             group: krake
 
+        - name: Generate CA
+          include_role:
+            name: certificate-authority
+          when: "tls_enabled|default('')"
+
+        - name: Generate CA signed certificate
+          vars:
+            tls_component: "{{ item }}"
+          include_role:
+            name: ca-signed-certificate
+          when: "tls_enabled|default('')"
+          with_items:
+            - "{{ tls_krake_components }}"
+
         - name: Remove Krake infrastructure
           docker_service:
             project_src: "{{ git_dir }}/docker/krake"
@@ -267,11 +281,19 @@
         XDG_CONFIG_HOME: "{{ git_dir }}"
       block:
 
+        - name: Generate CA signed certificate for Krake rok
+          vars:
+            tls_component: "{{ tls_rok_name }}"
+          include_role:
+            name: ca-signed-certificate
+          when: "tls_enabled|default('')"
+
         - name: Create Krake rok configuration file
-          copy:
+          template:
+            src: "{{ playbook_dir }}/files/krake/rok.yaml.j2"
             dest: "{{ git_dir }}/rok.yaml"
-            content: |
-              {"api_url": {{ api_host }}:{{ api_port }}, "user": "system"}
+            owner: krake
+            group: krake
 
         - name: Install Krake rok
           tags:

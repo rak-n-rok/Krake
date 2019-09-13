@@ -1,0 +1,32 @@
+- name: Generate certificate authority
+  block:
+
+    - name: Create directory for CA
+      file:
+        path: "{{ tls_host_path }}"
+        state: directory
+
+    - name: Generate OpenSSL private key for CA certificate
+      openssl_privatekey:
+        path: "{{ tls_host_path }}/{{ tls_ca_name }}-key.pem"
+
+    - name: Generate OpenSSL CA certificate signing request (CSR)
+      openssl_csr:
+        path: "{{ tls_host_path }}/{{ tls_ca_name }}.csr"
+        privatekey_path: "{{ tls_host_path }}/{{ tls_ca_name }}-key.pem"
+        common_name: "{{ tls_ca_name }}"
+        subject:
+          C: DE
+          ST: Saxony
+          L: Dresden
+          O: CLOUD&HEAT Technology GmbH
+          CN: "{{ tls_ca_name }}"
+        basic_constraints:
+          - CA:true
+
+    - name: Generate OpenSSL CA certificate
+      openssl_certificate:
+        path: "{{ tls_host_path }}/{{ tls_ca_name }}.crt"
+        privatekey_path: "{{ tls_host_path }}/{{ tls_ca_name }}-key.pem"
+        csr_path: "{{ tls_host_path }}/{{ tls_ca_name }}.csr"
+        provider: selfsigned

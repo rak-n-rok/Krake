@@ -1,0 +1,10 @@
+api_url: {{ api_host }}:{{ api_port }}
+user: system
+
+tls:
+  enabled: {{ tls_enabled|default('false') }}
+  {% if tls_enabled is defined and tls_enabled %}
+  client_ca: {{ tls_host_path }}/{{ tls_ca_name }}.crt
+  client_cert: {{ tls_host_path }}/{{ tls_rok_name }}.crt
+  client_key: {{ tls_host_path }}/{{ tls_rok_name }}-key.pem
+  {% endif %}

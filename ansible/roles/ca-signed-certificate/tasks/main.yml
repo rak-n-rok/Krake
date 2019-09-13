@@ -1,0 +1,39 @@
+- name: Generate CA signed OpenSSL certificate
+  block:
+
+    - name: Create directory for OpenSSL certificate
+      file:
+        path: "{{ tls_host_path }}"
+        state: directory
+
+    - name: Generate OpenSSL private key for server certificate
+      openssl_privatekey:
+        path: "{{ tls_host_path }}/{{ tls_component }}-key.pem"
+
+    - name: Generate OpenSSL server certificate signing request (CSR)
+      openssl_csr:
+        path: "{{ tls_host_path }}/{{ tls_component }}.csr"
+        privatekey_path: "{{ tls_host_path }}/{{ tls_component }}-key.pem"
+        common_name: "{{ tls_component }}"
+        subject:
+          C: DE
+          ST: Saxony
+          L: Dresden
+          O: CLOUD&HEAT Technology GmbH
+          CN: "{{ tls_component }}"
+        basic_constraints:
+          - CA:false
+        key_usage:
+          - digitalSignature
+          - keyEncipherment
+        extended_key_usage:
+          - serverAuth
+
+    - name: Sign OpenSSL server certificate with own CA
+      openssl_certificate:
+        path: "{{ tls_host_path }}/{{ tls_component }}.crt"
+        privatekey_path: "{{ tls_host_path }}/{{ tls_component }}-key.pem"
+        csr_path: "{{ tls_host_path }}/{{ tls_component }}.csr"
+        ownca_path: "{{ tls_host_path }}/{{ tls_ca_name }}.crt"
+        ownca_privatekey_path: "{{ tls_host_path }}/{{ tls_ca_name }}-key.pem"
+        provider: ownca

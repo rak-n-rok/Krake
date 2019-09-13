@@ -35,6 +35,7 @@ RUN pip3 install /krake
 FROM base as runner
 
 COPY --from=builder /opt/venv /opt/venv
-COPY ./krake.yaml.template /etc/krake/krake.yaml
+COPY --from=builder /krake/krake.yaml.template /etc/krake/krake.yaml
+COPY --from=builder /krake/tmp/pki /etc/krake/pki
 
 ENV PATH="/opt/venv/bin:$PATH"

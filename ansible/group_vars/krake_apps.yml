@@ -3,5 +3,18 @@ floating_ip: false
 flavor: S
 
 # Configuration parameters
+log_level: DEBUG
 api_host: krake-api
 api_port: 8080
+
+# TLS configuration
+tls_enabled: true
+tls_host_path: /home/krake/git/krake/tmp/pki
+tls_docker_path: /etc/krake/pki
+tls_ca_name: krake-ca
+tls_rok_name: krake-rok
+tls_krake_components:
+  - api
+  - scheduler
+  - kubernetes_cluster
+  - kubernetes_application
