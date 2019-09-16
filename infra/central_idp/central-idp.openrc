@@ -1,0 +1,9 @@
+export OS_AUTH_URL=https://central-idp:5001/v3
+export OS_PASSWORD=tmp
+export OS_IDENTITY_API_VERSION=3
+export OS_REGION_NAME=central-idp
+export OS_PROJECT_NAME=admin
+export OS_USERNAME=admin
+export OS_USER_DOMAIN_NAME=default
+export OS_PROJECT_DOMAIN_NAME=default
+export OS_CACERT=/home/ubuntu/git/krake/infra/central_idp/scripts/cert.pem

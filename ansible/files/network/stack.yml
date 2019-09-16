@@ -1,0 +1,85 @@
+heat_template_version: queens
+
+description: >
+  Provision network and common security group rules for Krake development
+  environment
+
+parameters:
+
+  network_name:
+    type: string
+    default: krake-network
+    description: >
+      Name of the private network used for Krake and DevStack instances
+
+  subnet_name:
+    type: string
+    default: krake-subnet
+    description: Name of the private subnetwork for the compute server
+
+  subnet_cidr:
+    type: string
+    default: 192.168.0.0/24
+    description: CIDR of the private Krake subnetwork
+
+  public_network:
+    type: string
+    default: shared-public-IPv4
+    description: >
+      Name of the public network on which to associate a floating IP for
+      DevStack
+
+  router_name:
+    type: string
+    default: krake-router
+    description: Name of the krake subnet router
+
+  common_secgroup_name:
+    type: string
+    default: krake-common-secgroup
+    description: Name of common security group
+
+resources:
+
+  network:
+    type: OS::Neutron::Net
+    properties:
+      name: { get_param: network_name }
+
+  subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      network_id: { get_resource: network }
+      name: { get_param: subnet_name }
+      cidr: { get_param: subnet_cidr }
+
+  router:
+    type: OS::Neutron::Router
+    properties:
+      name: { get_param: router_name }
+      external_gateway_info:
+        network: { get_param: public_network }
+
+  router_interface:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router_id: { get_resource: router }
+      subnet_id: { get_resource: subnet }
+
+  secgroup_common:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      description: >
+        Common security group for Krake project including rules for SSH and
+        ICMP
+      name: { get_param: common_secgroup_name }
+      rules:
+        - protocol: tcp
+          port_range_min: 22
+          port_range_max: 22
+        - protocol: icmp
+
+outputs:
+  router_uuid:
+    description: UUID of the Krake subnet router
+    value: { get_resource: router }

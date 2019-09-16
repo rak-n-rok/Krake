@@ -1,0 +1,16 @@
+etcd:
+  host: 127.0.0.1
+  port: 2379
+
+log:
+  level: INFO
+
+controllers:
+
+  scheduler:
+    api_endpoint: http://localhost:8080
+    worker_count: 5
+
+  kubernetes:
+    api_endpoint: http://localhost:8080
+    worker_count: 5

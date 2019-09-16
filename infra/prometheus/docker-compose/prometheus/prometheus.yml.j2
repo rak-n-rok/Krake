@@ -1,0 +1,81 @@
+global:
+    scrape_interval: 60s
+scrape_configs:
+    - job_name: prometheus
+      static_configs:
+        - targets:
+          - localhost:9090
+    - job_name: krake-node-exporter
+      scheme: https
+      tls_config:
+        insecure_skip_verify: {{ prometheus_skip_verify }}
+      metrics_path: /exporters/node/metrics
+      file_sd_configs:
+        - files:
+          - /etc/prometheus/krake/targets/krake_vm/*.json
+          refresh_interval: 60s
+    - job_name: krake-cadvisor
+      scheme: https
+      tls_config:
+        insecure_skip_verify: {{ prometheus_skip_verify }}
+      metrics_path: /exporters/containers/metrics
+      file_sd_configs:
+        - files:
+          - /etc/prometheus/krake/targets/krake_vm/*.json
+          refresh_interval: 60s
+    - job_name: krake-nginx-exporter
+      scheme: https
+      tls_config:
+        insecure_skip_verify: {{ prometheus_skip_verify }}
+      metrics_path: /exporters/nginx/metrics
+      file_sd_configs:
+        - files:
+          - /etc/prometheus/krake/targets/krake_vm/*.json
+          refresh_interval: 60s
+{% for i in range(uwsgi_processes + 1) %}
+    - job_name: krake-exporter_{{ 8000 + i }}
+      scheme: https
+      tls_config:
+        insecure_skip_verify: {{ prometheus_skip_verify }}
+      metrics_path: /exporters/krake/{{ 8000 + i }}/metrics
+      file_sd_configs:
+        - files:
+          - /etc/prometheus/krake/targets/krake_vm/*.json
+          refresh_interval: 60s
+{% endfor %}
+    - job_name: krake-mysqld-exporter
+      scheme: https
+      tls_config:
+        insecure_skip_verify: {{ prometheus_skip_verify }}
+      metrics_path: /exporters/mysql/metrics
+      file_sd_configs:
+        - files:
+          - /etc/prometheus/krake/targets/krake_vm/*.json
+          refresh_interval: 60s
+    - job_name: krake-rabbit
+      scheme: https
+      tls_config:
+        insecure_skip_verify: {{ prometheus_skip_verify }}
+      metrics_path: /exporters/rabbit/metrics
+      file_sd_configs:
+        - files:
+          - /etc/prometheus/krake/targets/krake_vm/*.json
+          refresh_interval: 60s
+    - job_name: backend
+      scheme: https
+      tls_config:
+        insecure_skip_verify: {{ prometheus_skip_verify }}
+      honor_labels: true
+      metrics_path: '/prometheus/federate'
+      params:
+        "match[]":
+          - '{job="dummy-exporter"}'
+          - '{job="openstack-exporter"}'
+          - '{job="kubernetes-exporter"}'
+          - '{job="kubernetes-cadvisor"}'
+      file_sd_configs:
+        - files:
+          - /etc/prometheus/krake/targets/openstack/*.json
+          - /etc/prometheus/krake/targets/k8s_cluster/*.json
+          - /etc/prometheus/krake/targets/app/*.json
+          refresh_interval: 60s

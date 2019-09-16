@@ -1,0 +1,4 @@
+---
+- import_tasks: 01_download_image.yml
+- import_tasks: 02_write_configuration.yml
+- import_tasks: 03_start_container.yml

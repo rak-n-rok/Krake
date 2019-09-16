@@ -1,0 +1,4 @@
+---
+- name: nginx_reload_config
+  command: docker kill --signal=HUP nginx
+  when: not nginx_container is changed

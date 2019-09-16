@@ -1,0 +1,14 @@
+---
+- name: Create and start Prometheus Exporter container for Openstack metrics
+  docker_container:
+    name: "{{ exporter_openstack_container_name }}"
+    image: "{{ exporter_openstack_image_name }}:{{ exporter_openstack_image_tag }}"
+    env_file: "{{ exporter_openstack_docker_folder }}env_file"
+    volumes: /opt/stack/data/ca-bundle.pem:/cert/ca-bundle.pem
+    detach: yes
+    exposed_ports:
+      - "{{ exporter_openstack_port }}:{{ exporter_openstack_port }}"
+    networks:
+      - name: "{{ docker_network }}"
+        ipv4_address: "{{ exporter_openstack_ip }}"
+    state: started

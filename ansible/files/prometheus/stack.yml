@@ -1,0 +1,124 @@
+heat_template_version: queens
+
+description: Provision Prometheus instance
+
+parameters:
+
+  instance_name:
+    type: string
+    description: Name of the Prometheus instance
+
+  key:
+    type: string
+    description: Name of a keypair to enable SSH access to the instance
+
+  network:
+    type: string
+    default: krake-network
+    description: Name of the private network used for Krake and DevStack instances
+
+  subnet:
+    type: string
+    default: krake-subnet
+    description: Name of the private subnet network for the compute server
+
+  public_network:
+    type: string
+    default: shared-public-IPv4
+    description: >
+      Name of the public network on which to associate a floating IP for
+      Prometheus
+
+  common_secgroup:
+    type: string
+    default: krake-common-secgroup
+    description: Name of common Krake security group
+
+  create_floating_ip:
+    type: boolean
+    default: true
+    description: >
+      Whether to create a floating IP for Prometheus instance or not
+
+  flavor:
+    type: string
+    description: Name of the flavor to use for the Prometheus instance
+    default: XS
+
+  ports:
+    type: comma_delimited_list
+    description: >
+      Allowed TCP ports for external communication. They are added to the
+      security group
+    default: "80,443"
+
+resources:
+
+  instance:
+    type: OS::Nova::Server
+    properties:
+      name: { get_param: instance_name }
+      flavor: { get_param: flavor }
+      image: 3763d928-2ebd-11e9-a3fe-4b7ceb61b0b3 # Ubuntu 18.04 LTS x64
+      key_name: { get_param: key }
+      networks:
+        - port: { get_resource: port }
+
+  port:
+    type: OS::Neutron::Port
+    properties:
+      name:
+        str_replace:
+          template: $NAME-port
+          params:
+            $NAME: { get_param: instance_name }
+      network_id: { get_param: network }
+      fixed_ips:
+        - subnet_id: { get_param: subnet }
+      security_groups:
+        - default
+        - { get_resource: security_group }
+        - { get_param: common_secgroup }
+
+  floating_ip:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network_id: { get_param: public_network }
+      port_id: { get_resource: port }
+    condition:
+      equals:
+        - get_param: create_floating_ip
+        - true
+
+  security_group:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      name:
+        str_replace:
+          template: $NAME-secgroup
+          params:
+            $NAME: { get_param: instance_name }
+      description: >
+        Security group for Prometheus allowing HTTP traffic over port 80 and
+        443
+      rules:
+        repeat:
+          for_each:
+            <%port%>: { get_param: ports }
+          template:
+            protocol: tcp
+            port_range_min: <%port%>
+            port_range_max: <%port%>
+
+outputs:
+  private_ip:
+    description: IP address of Prometheus instance in private network
+    value: { get_attr: [instance, first_address] }
+
+  public_ip:
+    description: Floating IP address of Prometheus instance
+    value: { get_attr: [floating_ip, floating_ip_address] }
+    condition:
+      equals:
+        - get_param: create_floating_ip
+        - true

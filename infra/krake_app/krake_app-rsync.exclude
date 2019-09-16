@@ -1,0 +1,12 @@
+# ABC order
+.git/
+.gitlab/
+.idea/
+.pytest_cache/
+*~
+*.pyc
+1del/
+DEADJOE
+documentation/
+krake_api/config_dev.py
+__pycache__

@@ -1,0 +1,16 @@
+# Top-level Ansible playbook for complete provisioning of the Krake
+# infrastructure.
+
+# The configuration and dynamic inventory is managed in a central
+# configuration file. An example inventory is given in "hosts.example". The
+# playbook is called as follows:
+#
+#   ansible-playbook -i hosts site.yml
+#
+- import_playbook: network.yml
+- import_playbook: gateway.yml
+- import_playbook: central_idp.yml
+- import_playbook: prometheus.yml
+- import_playbook: devstack.yml
+- import_playbook: magnum_cluster.yml
+- import_playbook: krake.yml

@@ -1,0 +1,12 @@
+parameters:
+  central_idp_priv_ip: 192.168.0.14
+  create_floating_ip: false
+  devstack_flavor: L.mem+
+  devstack_id: 49
+  devstack_secgroup: default
+  git_branch: master
+  key_name: matthiasgoerens
+  krake_network: krake-network
+  krake_subnet: krake-subnet
+  openstack_public_network: shared-public-IPv4
+  router_uuid: 6288d421-8720-4f12-9699-71a148cf7979

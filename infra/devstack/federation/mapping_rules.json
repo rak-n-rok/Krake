@@ -1,0 +1,25 @@
+[
+    {
+        "local": [
+            {
+                "user": {
+                    "name": "{0}"
+                }
+            },
+            {
+                "projects": [{
+                    "name": "{1}",
+                    "roles": [{"name": "member"}]
+                }]
+            }
+        ],
+        "remote": [
+            {
+                "type": "openstack_user"
+            },
+            {
+                "type": "openstack_project"
+            }
+        ]
+    }
+]

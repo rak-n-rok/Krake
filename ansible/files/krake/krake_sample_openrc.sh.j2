@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Sample file with environment variables which need to be set in order to CLI to work
+
+export OS_AUTH_URL="{{ os_auth_url }}"
+export OS_PASSWORD=tmp
+export OS_USERNAME=demo
+export OS_USER_DOMAIN_NAME=default
+
+# TODO Suppress of SSL certificate validation should be removed if trusted CA certificate takes place.
+# Krake uses self-signed certificate in the current development state.
+# This will be done in: https://publicgitlab.cloudandheat.com/ragnarok/krake/issues/168
+export VERIFY_SSL=False

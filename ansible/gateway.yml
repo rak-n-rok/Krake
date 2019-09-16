@@ -1,0 +1,212 @@
+- name: Launch network gateway instances
+  hosts: gateways
+  gather_facts: false
+  tasks:
+
+    - name: Create Heat stack for gateway
+      delegate_to: localhost
+      os_stack:
+        name: "{{ inventory_hostname }}"
+        state: present
+        template:  "{{ playbook_dir }}/files/gateway/stack.yml"
+        parameters:
+          instance_name: "{{ inventory_hostname }}"
+          key: "{{ keypair }}"
+          flavor: "{{ flavor }}"
+          gateway_secgroup: "{{ inventory_hostname }}-secgroup"
+          public_network: "{{  hostvars[network]['public_network'] }}"
+          network: "{{ hostvars[network]['inventory_hostname'] }}"
+          subnet: "{{ hostvars[network]['subnet_name'] }}"
+          common_secgroup: "{{ hostvars[network]['common_secgroup_name'] }}"
+      register: stack
+
+    - name: Update host variables of gateway
+      vars:
+        outputs: "{{ stack | stack_outputs }}"
+      update_host:
+        hostname: "{{ inventory_hostname }}"
+        ansible_host: "{{ outputs.public_ip | mandatory }}"
+        ansible_ssh_private_key_file: "{{ key_file }}"
+        ansible_ssh_common_args: >
+          -o StrictHostKeyChecking=No
+          -o UserKnownHostsFile=/dev/null
+        ansible_user: ubuntu
+        ansible_python_interpreter: python3
+        private_ip: "{{ outputs.private_ip }}"
+        public_ip: "{{ outputs.public_ip | mandatory }}"
+
+- name: Setup network gateway instances
+  hosts: gateways
+  # Run gather_facts (setup) manually to avoid a timing problem if the VM is
+  # not booted yet
+  gather_facts: false
+  become: yes
+  tags:
+    - setup
+  roles:
+    - authorized-keys
+  vars:
+    # IP subnet which is used by VMs spawned by DevStack. By convention, the
+    # 3rd block of the subnet is to the DevStack ID, e.g. address
+    # "172.16.1.100" belongs to "DevStack 1"
+    devstack_cidr: 172.16.0.0/16
+    authorized_user: ubuntu
+  tasks:
+
+    - name: Wait for gateway to show up
+      wait_for_connection:
+        timeout: 300
+
+    - name: Gathering facts
+      setup:
+
+    - name: Install apt packages
+      apt:
+        update_cache: yes
+        state: present
+        name: "{{ packages }}"
+      vars:
+        packages:
+          - openvpn
+          - ferm
+
+    - name: Create 'openvpn' group
+      group:
+        name: openvpn
+        system: true
+        state: present
+
+    - name: Create user 'openvpn'
+      user:
+        name: openvpn
+        group: openvpn
+        create_home: false
+        system: true
+        shell: /bin/bash
+        state: present
+
+    - name: Create /etc/openvpn/server/krake directory
+      file:
+        path: /etc/openvpn/server/krake
+        state: directory
+
+    - name: Copy OpenVPN server configuration
+      vars:
+        # OpenVPN subnet
+        vpn_server_ip: "{{ vpn_cidr | network_hosts | first }}"
+        vpn_network_address: "{{ vpn_cidr | network_address }}"
+        vpn_netmask: "{{ vpn_cidr | netmask }}"
+
+        # OpenStack subnet
+        private_network_address: "{{ hostvars[network]['subnet_cidr'] | network_address }}"
+        private_netmask: "{{ hostvars[network]['subnet_cidr'] | netmask }}"
+
+        # DevStack subnet
+        devstack_network_address: "{{ devstack_cidr | network_address }}"
+        devstack_netmask: "{{ devstack_cidr | netmask }}"
+      template:
+        src: "{{ playbook_dir }}/files/gateway/server.conf.j2"
+        dest: /etc/openvpn/server/krake/server.conf
+
+    # TODO: Generally, the CA key should not be stored on the VPN server for
+    #   security reasons. But since this gateway is potentially shared between
+    #   developers, it would be quite inconvenient to share a local CA key
+    #   across developers.
+    - name: Generate OpenSSL private key for CA certificate
+      openssl_privatekey:
+        path: /etc/openvpn/server/krake/ca.key
+
+    - name: Generate OpenSSL CA certificate signing request (CSR)
+      openssl_csr:
+        path: /etc/openvpn/server/krake/ca.csr
+        privatekey_path: /etc/openvpn/server/krake/ca.key
+        common_name: "{{ inventory_hostname }}-ca"
+        subject:
+          C: DE
+          ST: Saxony
+          L: Dresden
+          O: CLOUD&HEAT Technology GmbH
+          CN: "{{ inventory_hostname }}-ca"
+        basic_constraints:
+          - CA:true
+
+    - name: Generate OpenSSL CA certificate
+      openssl_certificate:
+        path: /etc/openvpn/server/krake/ca.crt
+        privatekey_path: /etc/openvpn/server/krake/ca.key
+        csr_path: /etc/openvpn/server/krake/ca.csr
+        provider: selfsigned
+
+    - name: Generate OpenSSL private key for server certificate
+      openssl_privatekey:
+        path: /etc/openvpn/server/krake/server.key
+
+    - name: Generate OpenSSL server certificate signing request (CSR)
+      openssl_csr:
+        path: /etc/openvpn/server/krake/server.csr
+        privatekey_path: /etc/openvpn/server/krake/server.key
+        common_name: "{{ inventory_hostname }}"
+        subject:
+          C: DE
+          ST: Saxony
+          L: Dresden
+          O: CLOUD&HEAT Technology GmbH
+          CN: "{{ inventory_hostname }}"
+        basic_constraints:
+          - CA:false
+        key_usage:
+          - digitalSignature
+          - keyEncipherment
+        extended_key_usage:
+          - serverAuth
+
+    - name: Sign OpenSSL server certificate
+      openssl_certificate:
+        path: /etc/openvpn/server/krake/server.crt
+        privatekey_path: /etc/openvpn/server/krake/server.key
+        csr_path: /etc/openvpn/server/krake/server.csr
+        ownca_path: /etc/openvpn/server/krake/ca.crt
+        ownca_privatekey_path: /etc/openvpn/server/krake/ca.key
+        provider: ownca
+
+    - name: Generate Diffie-Hellman parameters with 2048 bits
+      openssl_dhparam:
+        path: /etc/openvpn/server/krake/dh2048.pem
+        size: 2048
+
+    - name: Create symbolic for OpenVPN server configuration
+      file:
+        src: krake/server.conf
+        dest: /etc/openvpn/server/krake.conf
+        state: link
+
+    - name: Start OpenVPN server service
+      systemd:
+        name: openvpn-server@krake
+        state: restarted
+        enabled: true
+
+    # --------------
+    # Firewall Setup
+    # --------------
+
+    # Set ip forwarding on in /proc and in the sysctl file and reload if necessary
+    - name: Enable IPv4 forwarding
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: 1
+        sysctl_set: true
+        state: present
+        reload: true
+
+    - name: Create ferm (iptables) configuration
+      vars:
+        private_subnet_cidr: "{{ hostvars[network]['subnet_cidr'] }}"
+      template:
+        src: "{{ playbook_dir }}/files/gateway/ferm.conf.j2"
+        dest: /etc/ferm/ferm.d/krake-gateway.conf
+
+    - name: Restart ferm service
+      service:
+        name: ferm
+        state: restarted

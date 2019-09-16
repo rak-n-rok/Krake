@@ -1,0 +1,27 @@
+- name: Launch Krake networks
+  hosts: networks
+  # Disable gathering of facts because the network hosts are "virtual" which
+  # means there is no physical host.
+  gather_facts: false
+  tasks:
+    - name: Create Heat stack for network
+      delegate_to: localhost
+      os_stack:
+        name: "{{ inventory_hostname }}"
+        state: present
+        template:  "{{ playbook_dir }}/files/network/stack.yml"
+        parameters:
+          network_name: "{{ inventory_hostname }}"
+          subnet_name: "{{ subnet_name }}"
+          subnet_cidr: "{{ subnet_cidr }}"
+          public_network: "{{ public_network }}"
+          router_name: "{{ router_name }}"
+          common_secgroup_name: "{{ common_secgroup_name }}"
+      register: stack
+
+    - name: Add router UUID to inventory
+      vars:
+        outputs: "{{ stack | stack_outputs }}"
+      update_host:
+        hostname: "{{ inventory_hostname }}"
+        router_uuid: "{{ outputs.router_uuid }}"

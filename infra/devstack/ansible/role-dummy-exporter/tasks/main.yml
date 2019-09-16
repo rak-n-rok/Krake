@@ -1,0 +1,3 @@
+---
+- import_tasks: 01_build_image.yml
+- import_tasks: 02_start_container.yml

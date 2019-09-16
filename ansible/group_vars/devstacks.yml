@@ -1,0 +1,15 @@
+flavor: L.mem+
+floating_ip: false
+git_branch: master
+prometheus_port: 44301
+service_provider_port: 443
+
+# Name of the default K8s cluster template
+template_name: ct1
+# Name of the default keypair that is used to spawn K8s clusters via Magnum
+cluster_keypair: kp1
+idp_name: identity-central
+
+federated_domain_name: cloudandheat.com
+federation_protocol_name: mapped
+idp_mapping_name: idp_mapping

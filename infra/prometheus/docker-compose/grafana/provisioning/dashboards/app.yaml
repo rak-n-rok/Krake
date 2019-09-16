@@ -1,0 +1,10 @@
+# config file version
+apiVersion: 1
+
+providers:
+ - name: 'app'
+   orgId: 1
+   folder: 'Applications'
+   type: file
+   options:
+     path: /var/lib/grafana/dashboards/app

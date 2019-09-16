@@ -1,0 +1,7 @@
+---
+- name: Download Nginx Docker image
+  docker_image:
+    name: '{{ nginx_image_name }}'
+    tag: '{{ nginx_image_tag }}'
+    state: present
+

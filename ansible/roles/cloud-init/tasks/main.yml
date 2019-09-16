@@ -1,0 +1,14 @@
+- name: Wait for host to boot up
+  wait_for_connection:
+    timeout: 300
+
+- name: Gathering facts
+  setup:
+
+- name: Wait for cloud-init to finish
+  cloud_init_data_facts:
+    filter: status
+  register: result
+  until: "result.cloud_init_data_facts.status.v1.stage is defined and not result.cloud_init_data_facts.status.v1.stage"
+  retries: 360  # 60 min
+  delay: 10

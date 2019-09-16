@@ -1,0 +1,8 @@
+git_branch: master
+prometheus_admin_pass: tmp
+grafana_admin_pass: tmp
+floating_ip: false
+flavor: XS
+ports:
+  - 80
+  - 443

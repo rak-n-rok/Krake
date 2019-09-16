@@ -1,0 +1,32 @@
+---
+nginx_image_name: nginx
+nginx_image_tag: 1.14.2
+
+nginx_container_name: nginx
+nginx_config_directory: /opt/docker-mounts/nginx/config/
+nginx_proxy_config_directory: "{{ nginx_config_directory }}conf.d/"
+nginx_ssl_config_directory: "{{ nginx_config_directory }}ssl/"
+
+nginx_command: nginx -g "daemon off;"
+
+nginx_published_port: "{{ nginx_https_listen_port }}"
+
+nginx_conf: |
+  user root;
+  worker_processes 1;
+  error_log /var/log/nginx/error.log warn;
+  pid /var/run/nginx.pid;
+  events {
+      worker_connections  1024;
+  }
+  http {
+      include       /etc/nginx/mime.types;
+      default_type  application/octet-stream;
+      log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" '
+                        '"$http_user_agent" "$http_x_forwarded_for"';
+      access_log  /var/log/nginx/access.log  main;
+      sendfile        on;
+      keepalive_timeout  65;
+      include /etc/nginx/conf.d/*.conf;
+  }

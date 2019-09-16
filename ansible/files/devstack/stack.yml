@@ -1,0 +1,205 @@
+heat_template_version: queens
+
+description: >
+  Provision DevStack instance and configure a route on the external router
+
+parameters:
+
+  central_idp_ip:
+    type: string
+    description: >
+      IP of the Central Identity Provider inside private Krake network
+
+  devstack_id:
+    type: number
+    description: >
+      DevStack ID in the development environment. It will also be used to
+      specify the IP address range used by DevStack. A route is created to
+      forward traffic to the DevStack instance.
+
+  key:
+    type: string
+    description: Name of a keypair to enable SSH access to the instance
+
+  router:
+    type: string
+    description: UUID of external router for private Krake subnet
+
+  git_branch:
+    type: string
+    description: Name of the git branch to clone on DevStack
+    default: master
+
+  network:
+    type: string
+    default: krake-network
+    description: Name of the private network used for Krake and DevStack instances
+
+  subnet:
+    type: string
+    default: krake-subnet
+    description: Name of the private subnet network for the compute server
+
+  public_network:
+    type: string
+    default: shared-public-IPv4
+    description: >
+      Name of the public network on which to associate a floating IP for
+      DevStack
+
+  common_secgroup:
+    type: string
+    default: krake-common-secgroup
+    description: Name of common Krake security group
+
+  flavor:
+    type: string
+    description: Name of the flavor to use for the DevStack instance
+    default: L.mem+
+
+  create_floating_ip:
+    type: boolean
+    default: true
+    description: >
+      Control whether to create a floating IP for the DevStack instance or not
+
+  prometheus_port:
+    type: number
+    description: TCP Port on which Prometheus exporter listens
+    default: 44301
+
+  service_provider_port:
+    type: number
+    description: TCP Port on which DevStack service provider is available
+    default: 443
+
+resources:
+
+  instance:
+    type: OS::Nova::Server
+    properties:
+      name:
+        str_replace:
+          template: krake-devstack-$DEVSTACK_ID
+          params:
+            $DEVSTACK_ID: { get_param: devstack_id }
+      flavor: { get_param: flavor }
+      image: 35e19d60-2ebd-11e9-9c91-ebc42c7648d6 # Ubuntu 16.04 LTS x64
+      key_name: { get_param: key }
+      networks:
+        - port: { get_resource: port }
+      user_data: { get_resource: cloud_init }
+      user_data_format: RAW
+
+  port:
+    type: OS::Neutron::Port
+    properties:
+      name:
+        str_replace:
+          template: krake-devstack-port-$DEVSTACK_ID
+          params:
+            $DEVSTACK_ID: { get_param: devstack_id }
+      network_id: { get_param: network }
+      fixed_ips:
+        - subnet_id: { get_param: subnet }
+      security_groups:
+        - default
+        - { get_param: common_secgroup }
+        - { get_resource: security_group }
+      allowed_address_pairs:
+        - ip_address:
+            # TODO: Handle IP address range in Ansible
+            str_replace:
+              template: 172.16.$DEVSTACK_ID.0/24
+              params:
+                $DEVSTACK_ID: { get_param: devstack_id }
+
+  security_group:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      name:
+        str_replace:
+          template: krake-devstack-$DEVSTACK_ID-secgroup
+          params:
+            $DEVSTACK_ID: { get_param: devstack_id }
+      rules:
+        - protocol: tcp
+          port_range_min: { get_param: prometheus_port }
+          port_range_max: { get_param: prometheus_port }
+        - protocol: tcp
+          port_range_min: { get_param: service_provider_port }
+          port_range_max: { get_param: service_provider_port }
+
+  routing_rule:
+    type: OS::Neutron::ExtraRoute
+    properties:
+      destination:
+        str_replace:
+          template: 172.16.$DEVSTACK_ID.0/24
+          params:
+            $DEVSTACK_ID: { get_param: devstack_id }
+      nexthop: { get_attr: [port, fixed_ips, 0, ip_address] }
+      router_id: { get_param: router }
+
+  floating_ip:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network_id: { get_param: public_network }
+      port_id: { get_resource: port }
+    condition:
+      equals:
+        - get_param: create_floating_ip
+        - true
+
+  # ---------------------------------------------------------------------------
+  # cloud-init
+  # ---------------------------------------------------------------------------
+
+  cloud_init:
+    type: OS::Heat::MultipartMime
+    properties:
+      parts:
+        - config: { get_resource: install_devstack }
+        - config: { get_resource: prepare_federation }
+        - config: { get_resource: install_prometheus }
+
+  install_devstack:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: ungrouped
+      config:
+        str_replace:
+          template: { get_file: install_devstack.sh }
+          params:
+            $DEVSTACK_ID: { get_param: devstack_id }
+
+  prepare_federation:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: ungrouped
+      config:
+        str_replace:
+          template: { get_file: prepare_federation.sh }
+          params:
+            $DEVSTACK_ID: { get_param: devstack_id }
+            $CENTRAL_IDP_IP: { get_param: central_idp_ip }
+            $GIT_BRANCH: { get_param: git_branch }
+
+  install_prometheus:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: ungrouped
+      config: { get_file: install_prometheus.sh }
+
+outputs:
+  private_ip:
+    description: IP address of DevStack instance in private network
+    value: { get_attr: [instance, first_address] }
+
+  public_ip:
+    description: Floating IP address of DevStack instance
+    value: { get_attr: [floating_ip, floating_ip_address] }
+    condition:
+      equals:
+        - get_param: create_floating_ip
+        - true

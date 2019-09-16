@@ -1,0 +1,1 @@
+See [Krake-App Wiki](https://publicgitlab.cloudandheat.com/ragnarok/krake/wikis/krake-app)

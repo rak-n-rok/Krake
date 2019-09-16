@@ -1,0 +1,155 @@
+- name: Launch preset OpenStack clusters
+  hosts: magnum_clusters
+  gather_facts: false
+  vars:
+    key_file: "{{ hostvars[devstack].cluster_key_file }}"
+
+  tasks:
+
+    - name: Create OpenStack Magnum cluster {{ name }}
+      delegate_to: "{{ devstack }}"
+      shell: |
+        . /opt/stack/devstack/federate.openrc 2>&1 > /dev/null
+        if ! openstack --insecure coe cluster show {{ name }} > /dev/null; then
+          openstack --insecure coe cluster create --cluster-template {{ hostvars[devstack].template_name }} {{ name }}
+        fi
+      args:
+        executable: bash
+
+    - name: Wait for Kubernetes cluster {{ name }} to be created
+      delegate_to: "{{ devstack }}"
+      shell: |
+        . /opt/stack/devstack/federate.openrc 2>&1 > /dev/null
+        openstack --insecure coe cluster show --format value -c status {{ name }}
+      args:
+        executable: bash
+      register: status
+      until: "status.stdout != 'CREATE_IN_PROGRESS'"
+      retries: 120  # 20 min
+      delay: 10
+
+    - name: Ensure Kubernetes cluster was created
+      assert:
+        that:
+          - "status.stdout == 'CREATE_COMPLETE'"
+
+    - name: Fetch OpenStack cluster information
+      delegate_to: "{{ devstack }}"
+      shell: |
+        . /opt/stack/devstack/federate.openrc 2>&1 > /dev/null
+        openstack --insecure coe cluster show --format json {{ name }}
+      args:
+        executable: bash
+      register: cluster_info_raw
+
+    - name: Update host variables of preset OpenStack cluster with Kubernetes master IP
+      vars:
+        cluster_info: "{{ cluster_info_raw.stdout | from_json }}"
+        jump_host: "{{ hostvars[gateway].ansible_user }}@{{ hostvars[gateway].ansible_host }}"
+        jump_key_file: "{{ hostvars[gateway].ansible_ssh_private_key_file or '~/.ssh/id_rsa' }}"
+
+      update_host:
+        hostname: "{{ inventory_hostname }}"
+        # FIXME: Currently, we assume that there is only one K8s master node.
+        #   This enables the usage of the master IP address as Ansible
+        #   host address.
+        #
+        #   When there are multiple master nodes in the future this assumption
+        #   does not hold anymore and we have to rethink the handling of
+        #   K8s master nodes as Ansible hosts.
+        ansible_host: "{{ cluster_info.master_addresses | first }}"
+        ansible_ssh_private_key_file: "{{ key_file | realpath }}"
+        ansible_ssh_common_args: '
+          -o StrictHostKeyChecking=No
+          -o UserKnownHostsFile=/dev/null
+          -o ProxyCommand="ssh
+              -o StrictHostKeyChecking=No
+              -o UserKnownHostsFile=/dev/null
+              {% if jump_key_file %} -i {{ jump_key_file }} {% endif %}
+              -W %h:%p -q {{ jump_host }}"'
+        ansible_user: fedora
+        ansible_python_interpreter: python3
+
+    # FIXME Temporary workaround needed for Krake CLI to work on K8S backend.
+    #   We need to register K8S cluster on Central IdP twice:
+    #     - For keystone authentication: register the underlying DevStack IP address
+    #     - For access (e.g. to modify krake metric via krake cli): register the K8S master node URL
+    # TODO The logic will be fixed in the second iteration of
+    #  https://publicgitlab.cloudandheat.com/ragnarok/krake/milestones/32.
+    - name: Register Kubernetes {{ name }} service providers on Central-IdP
+      delegate_to: "{{ hostvars[devstack].idp }}"
+      tags:
+        - fix
+      vars:
+        sp_url: "https://{{ hostvars[devstack].ansible_host }}/Shibboleth.sso/SAML2/ECP"
+        auth_url: "https://{{ hostvars[devstack].ansible_host }}/v3/OS-FEDERATION/identity_providers/{{ hostvars[devstack].idp_name }}/protocols/mapped/auth"
+        sp_name: "sp_{{ name }}"
+        sp_url_master: "https://{{ ansible_host }}/Shibboleth.sso/SAML2/ECP"
+        auth_url_master: "https://{{ ansible_host }}/v3/OS-FEDERATION/identity_providers/{{ hostvars[devstack].idp_name }}/protocols/mapped/auth"
+        sp_name_master: "sp_master_{{ name }}"
+      shell: |
+        . /home/ubuntu/git/krake/infra/central_idp/central-idp.openrc
+        openstack service provider delete "{{ sp_name }}" "{{ sp_name_master }}"
+        openstack service provider create --service-provider-url "{{ sp_url }}" --auth-url "{{ auth_url }}" "{{ sp_name }}"
+        openstack service provider create --service-provider-url "{{ sp_url_master }}" --auth-url "{{ auth_url_master }}" "{{ sp_name_master }}"
+      args:
+        executable: bash
+
+    - name: Register Kubernetes {{ name }} on Prometheus
+      tags:
+        - prometheus
+      uri:
+        url: https://{{ hostvars[prometheus].ansible_host }}/edit_target/k8s_cluster
+        validate_certs: no
+        user: admin
+        password: "{{ hostvars[prometheus].prometheus_admin_pass }}"
+        method: POST
+        body:
+          target: "{{ ansible_host }}:31000"
+          node: "Kubernetes"
+          node_name: "{{ name }}"
+        force_basic_auth: yes
+        status_code: 200
+        body_format: json
+
+- name: Setup Kubernetes master nodes
+  hosts: magnum_clusters
+  tags:
+    - setup
+  vars:
+    k8s_namespace: infra
+    repo_dir: "{{ playbook_dir }}/.."
+  tasks:
+
+    - name: Copy k8s-infra files with rsync
+      synchronize:
+        dirs: true
+        checksum: true
+        perms: true
+        rsync_opts:
+          - --itemize-changes
+          - --executability
+        src: "{{ repo_dir }}/infra/k8s/k8s-infra"
+        dest: "/home/fedora"
+        delete: yes
+        use_ssh_args: true
+
+    - name: Create TLS certificate
+      command: bash k8s-infra/generate-cert.sh
+
+    - name: Delete k8s namespace
+      command: kubectl delete namespace --ignore-not-found infra
+
+    - name: Delete k8s cluster roles
+      command: kubectl delete --ignore-not-found -f k8s-infra/rbac.yaml
+
+    - name: Delete k8s cadvisor policy
+      command: kubectl delete --ignore-not-found podsecuritypolicies.policy cadvisor
+
+    # FIXME: Unfortunatly, the executable bits of the shell scripts are not
+    #   preserved. Furthermore, the filenames in the shell script are relative
+    #   to the k8s-directory.
+    - name: Setup k8s resources
+      command: bash k8s-deploy.sh
+      args:
+        chdir: /home/fedora/k8s-infra

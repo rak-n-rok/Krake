@@ -1,0 +1,7 @@
+# OpenStack Heat template parameters
+api_port: 443
+floating_ip: false
+flavor: S
+
+# Configuration parameters
+db_password: "tmp"

@@ -1,0 +1,11 @@
+version: "2"
+
+services:
+  dummy-prometheus-exporter:
+    container_name: dummy-prometheus-exporter
+    image: dummy-prometheus-exporter
+    build:
+      context: dummy-prometheus-exporter
+    ports:
+      - 8080:8080
+

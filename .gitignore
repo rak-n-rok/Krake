@@ -1,0 +1,23 @@
+# etcdv3 data directories
+*.etcd/
+
+# Dynamic Ansible inventory
+/ansible/.etc/
+
+# Ansible retry files
+*.retry
+
+# Default Ansible inventory
+/ansible/hosts
+
+# Public keys managed by Ansible
+/ansible/public_keys/**
+/!ansible/public_keys/.gitkeep
+
+# Temporary Python files and caches
+*.pyc
+__pycache__/
+.pytest_cache/
+
+# pip egg installation files
+*.egg-info/

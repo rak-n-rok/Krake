@@ -1,0 +1,51 @@
+version: '3'
+services:
+  db:
+    image: mariadb:10.1
+    environment:
+      MYSQL_ROOT_PASSWORD: tmp
+      MYSQL_DATABASE: keystone
+      MYSQL_USER: keystone
+      MYSQL_PASSWORD: tmp
+    volumes:
+    - mysql-data:/var/lib/mysql
+    networks:
+      federation:
+        aliases:
+        - db
+
+  keystone:
+    image: gitlab-registry.cloudandheat.com/docker/ch-kolla-docker/keystone/ubuntu-source-keystone:5.12.3
+    environment:
+      REGION_NAME: central-idp
+      PUBLIC_ENDPOINT_HOST: central-idp:5001
+      ADMIN_ENDPOINT_HOST: central-idp:35358
+      DEBIAN_FRONTEND: noninteractive
+    volumes:
+    - /etc/localtime:/etc/localtime:ro
+    - ./log/:/var/log/kolla/keystone/:rw
+    - ./config/keystone.conf:/etc/keystone/keystone.conf:ro
+    - ./config/credential-keys:/etc/keystone/credential-keys
+    - ./config/apache/:/etc/apache2/sites-enabled:ro
+    - central-idp-fernet-keys:/etc/keystone/fernet-keys
+    - /etc/ssl:/etc/ssl:ro
+    - ./scripts/:/scripts/:ro
+    command: ["bash", "-c", "chown 42425:42425 /var/log/kolla/keystone && echo 'waiting for database' && sleep 1 && /scripts/wait-for.sh -t 120 db:3306 -- /scripts/bootstrap.sh && /scripts/bootstrap-idp.sh && source /etc/apache2/envvars && apache2 -DFOREGROUND"]
+    networks:
+      federation:
+
+    ports:
+    - "5001:5001"
+    - "35358:35358"
+    tmpfs:
+    - /run
+    - /var/run
+
+volumes:
+  mysql-data:
+  central-idp-fernet-keys:
+
+networks:
+  federation:
+    driver: bridge
+

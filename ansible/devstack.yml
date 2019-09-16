@@ -1,0 +1,314 @@
+- name: Launch DevStack instances
+  hosts: devstacks
+  gather_facts: false
+  tasks:
+
+    # Check if DevStack and Central IdP are in the same network
+    - debug:
+        msg: >
+          DevStack is in a different network ({{ network }}) than the
+          IdP ({{ hostvars[idp].network }})
+      when: "hostvars[idp].network != network"
+
+    - name: Create Heat stack for DevStack
+      delegate_to: localhost
+      os_stack:
+        name: "{{ inventory_hostname }}"
+        template: "{{ playbook_dir }}/files/devstack/stack.yml"
+        state: present
+        parameters:
+          devstack_id:  "{{ id }}"
+          key: "{{ keypair }}"
+          git_branch: "{{ git_branch }}"
+          router: "{{ hostvars[network].router_uuid }}"
+          central_idp_ip: "{{ hostvars[idp].private_ip }}"
+          flavor: "{{ flavor }}"
+          create_floating_ip: "{{ floating_ip }}"
+          network: "{{ hostvars[network].inventory_hostname }}"
+          subnet: "{{ hostvars[network].subnet_name }}"
+          public_network: "{{ hostvars[network].public_network }}"
+          common_secgroup: "{{ hostvars[network].common_secgroup_name }}"
+          prometheus_port: "{{ prometheus_port }}"
+          service_provider_port: "{{ service_provider_port }}"
+      register: stack
+
+    - name: Update host variables of DevStack
+      vars:
+        outputs: "{{ stack | stack_outputs }}"
+        jump_host: "{{ hostvars[gateway].ansible_user }}@{{ hostvars[gateway].ansible_host }}"
+        jump_key_file: "{{ hostvars[gateway].ansible_ssh_private_key_file or '~/.ssh/id_rsa' }}"
+      update_host:
+        hostname: "{{ inventory_hostname }}"
+        ansible_host: "{{ outputs.private_ip }}"
+        ansible_ssh_private_key_file: "{{ key_file }}"
+        ansible_ssh_common_args: '
+          -o StrictHostKeyChecking=No
+          -o UserKnownHostsFile=/dev/null
+          -o ProxyCommand="ssh
+              -o StrictHostKeyChecking=No
+              -o UserKnownHostsFile=/dev/null
+              {% if jump_key_file %} -i {{ jump_key_file }} {% endif %}
+              -W %h:%p -q {{ jump_host }}"'
+        ansible_user: ubuntu
+        ansible_python_interpreter: python3
+        private_ip: "{{ outputs.private_ip }}"
+        public_ip: "{{ outputs.public_ip | default(None) }}"
+
+- name: Prepare DevStack instances
+  hosts: devstacks
+  become: yes
+  become_user: stack
+  gather_facts: false
+  tags:
+    - devstack-cloud-init
+  roles:
+    - cloud-init
+    - authorized-keys
+  vars:
+    repo_dir: "{{ playbook_dir }}/.."
+    authorized_user: stack
+    cluster_key_file: "{{ etc_dir }}/keys/{{ inventory_hostname }}_{{ cluster_keypair }}"
+    krake_service_account_key_file: "{{ etc_dir }}/keys/{{ inventory_hostname }}_krake_service_account_{{ cluster_keypair }}"
+
+  tasks:
+
+    - name: Add DevStack to central IdP /etc/hosts
+      become: yes
+      become_user: root
+      delegate_to: "{{ idp }}"
+      lineinfile:
+        path: /etc/hosts
+        regexp: "{{ devstack_host }}$"
+        line: "{{ ansible_host }} {{ devstack_host }}"
+      vars:
+        devstack_host : "devstack{{ id }}"
+
+    # TODO: Think of alternatives: extra shell script or Ansible module.
+    #   Eventually instance management will be outsourced anyway. This task
+    #   attempts to be idempotent by deleting and creating the service
+    #   provider.
+    - name: Register DevStack as service providers on central IdP
+      become: yes
+      become_user: ubuntu
+      delegate_to: "{{ idp }}"
+      shell: |
+        . /home/ubuntu/git/krake/infra/central_idp/central-idp.openrc
+        openstack service provider delete "{{ sp_name }}"
+        openstack service provider create --service-provider-url "{{ sp_url }}" --auth-url "{{ auth_url }}" "{{ sp_name }}"
+      vars:
+        sp_url: "https://{{ ansible_host }}/Shibboleth.sso/SAML2/ECP"
+        auth_url: "https://{{ ansible_host }}/v3/OS-FEDERATION/identity_providers/{{ idp_name }}/protocols/mapped/auth"
+        sp_name: "sp_devstack{{ id }}"
+
+    - name: Register DevStack {{ id }} on Prometheus
+      tags:
+        - prometheus
+      uri:
+        url: https://{{ hostvars[prometheus].ansible_host }}/edit_target/openstack
+        validate_certs: no
+        user: admin
+        password: "{{ hostvars[prometheus].prometheus_admin_pass }}"
+        method: POST
+        body:
+          target: "{{ ansible_host }}:44301"
+          node: "OpenStack"
+          node_name: "devstack{{ id }}"
+        force_basic_auth: yes
+        status_code: 200
+        body_format: json
+
+    - name: Install dependencies on DevStack
+      pip:
+        state: present
+        name:
+          - openstacksdk
+
+    - name: Define access control for Magnum
+      copy:
+        src: "{{ playbook_dir }}/files/devstack/magnum_policy.yml"
+        dest: /etc/magnum/policy.yaml
+
+    - name: Setup Keystone federation on DevStack
+      vars:
+        central_idp_host: "central-idp:{{ hostvars[idp].keystone_port }}"
+        central_idp_url: "https://{{ central_idp_host }}/v3/OS-FEDERATION/saml2/idp"
+      block:
+
+        - name: Establish domain '{{ federated_domain_name }}' on DevStack
+          shell: |
+            . /opt/stack/devstack/openrc admin
+            openstack domain set --disable "{{ federated_domain_name }}"
+            openstack domain delete "{{ federated_domain_name }}"
+            openstack domain create "{{ federated_domain_name }}"
+          args:
+            executable: bash
+
+        - name: Establish identity provider '{{ idp_name }}' on DevStack
+          shell: |
+            . /opt/stack/devstack/openrc admin
+            openstack identity provider delete "{{ idp_name }}"
+            openstack identity provider create --remote-id "{{ central_idp_url }}" --domain "{{ federated_domain_name }}" "{{ idp_name }}"
+          args:
+            executable: bash
+
+        - name: Establish mapping '{{ idp_mapping_name }}' on DevStack
+          shell: |
+            . /opt/stack/devstack/openrc admin
+            openstack mapping delete "{{ idp_mapping_name }}"
+            openstack mapping create --rules /opt/stack/git/krake/infra/devstack/federation/mapping_rules.json "{{ idp_mapping_name }}"
+          args:
+            executable: bash
+
+        - name: Establish federation protocol on DevStack
+          shell: |
+            . /opt/stack/devstack/openrc admin
+            openstack federation protocol delete --identity-provider "{{ idp_name }}" "{{ federation_protocol_name }}"
+            openstack federation protocol create "{{ federation_protocol_name }}" --mapping "{{ idp_mapping_name }}" --identity-provider "{{ idp_name }}"
+          args:
+            executable: bash
+
+        - name: Flush memcache to clear OpenStack Oslo cache
+          shell: |
+            echo "flush_all" | netcat localhost 11211
+
+        - name: Copy federated.openrc file on DevStack
+          copy:
+            src: "{{ repo_dir }}/infra/devstack/federation/federate.openrc"
+            dest: /opt/stack/devstack/federate.openrc
+            owner: stack
+            group: stack
+
+        - name: Replace DevStack ID in federation protocol name on DevStack
+          lineinfile:
+            path: /opt/stack/devstack/federate.openrc
+            regexp: "^export OS_SERVICE_PROVIDER=sp_<DEVSTACK_WITH_ID>$"
+            line: "export OS_SERVICE_PROVIDER=sp_devstack{{ id }}"
+
+    - name: Establish SSH keypair for "demo" user on DevStack
+      block:
+        - name: Establish OpenStack keypair for "demo" on DevStack
+          shell: |
+            . /opt/stack/devstack/federate.openrc
+            openstack --insecure keypair create --private-key /opt/stack/.ssh/id_rsa "{{ cluster_keypair }}"
+          args:
+            executable: bash
+            creates: /opt/stack/.ssh/id_rsa
+
+        - name: Fix permissions of /opt/stack/.ssh/id_rsa
+          file:
+            path: /opt/stack/.ssh/id_rsa
+            mode: 0600
+            group: stack
+            owner: stack
+
+    - name: Establish SSH keypair for "krake_service_account" user on DevStack
+      block:
+
+        - name: Establish OpenStack keypair for "krake_service_account_key_file" on DevStack
+          shell: |
+            . /opt/stack/devstack/federate.openrc krake_service_account
+            openstack --insecure keypair create --private-key /opt/stack/.ssh/krake_service_account "{{ cluster_keypair }}"
+          args:
+            executable: bash
+            creates: /opt/stack/.ssh/krake_service_account
+
+        - name: Fix permissions of /opt/stack/.ssh/krake_service_account
+          file:
+            path: /opt/stack/.ssh/krake_service_account
+            mode: 0600
+            group: stack
+            owner: stack
+
+    - name: Create key file directory
+      delegate_to: localhost
+      become: false
+      block:
+
+        - name: Create key file directory for "demo"
+          file:
+            dest: "{{ cluster_key_file | dirname }}"
+            state: directory
+
+        - name: Create key file directory for "krake_service_account"
+          file:
+            dest: "{{ krake_service_account_key_file | dirname }}"
+            state: directory
+
+    - name: Download keypairs from DevStack
+      block:
+
+      - name: Download keypair of "demo" user
+        fetch:
+          src: /opt/stack/.ssh/id_rsa
+          dest: "{{ cluster_key_file }}"
+          flat: true
+
+      - name: Download keypair of "krake_service_account" user
+        fetch:
+          src: /opt/stack/.ssh/krake_service_account
+          dest: "{{ krake_service_account_key_file }}"
+          flat: true
+
+    - name: Fix permissions of demo keypair
+      delegate_to: localhost
+      become: false
+      block:
+
+        - name: Fix permissions of "demo" keypair
+          file:
+            path: "{{ cluster_key_file }}"
+            mode: 0600
+
+        - name: Fix permissions of "krake_service_account" keypair
+          file:
+            path: "{{ krake_service_account_key_file }}"
+            mode: 0600
+
+    - name: Update host variables of DevStack with demo keypair
+      update_host:
+        hostname: "{{ inventory_hostname }}"
+        append: true  # Only append, do not delete any other extra host variable
+        cluster_key_file: "{{ cluster_key_file }}"
+
+    # FIXME: We cannot use the simple "delete and create" semantics here to
+    #   ensure idempotency because deletion of a cluster template will fail
+    #   if instances of this cluster template ("clusters") exist. We do not
+    #   want to delete existing cluster prematurely because this would kill
+    #   potential user applications running inside these clusters.
+    #
+    #   For now, we decided to break with idempotency here because cluster
+    #   template is rarely changed. The cluster template is created only if
+    #   no cluster template with the same already exists.
+    - name: "Establish OpenStack Magnum cluster template {{ template_name }} on DevStack"
+      shell: |
+        . /opt/stack/devstack/federate.openrc
+        if ! openstack --insecure coe cluster template show "{{ template_name }}"; then
+          openstack --insecure coe cluster template create \
+            --coe kubernetes \
+            --external-network public \
+            --image Fedora-Atomic-27-20180212.2.x86_64 \
+            --keypair "{{ cluster_keypair }}" \
+            --flavor ds1G \
+            --master-flavor ds1G \
+            --labels flannel_backend=host-gw \
+            --docker-storage-driver overlay2 \
+            "{{ template_name }}"
+        fi
+      args:
+        executable: bash
+      register: create_cluster_template
+      changed_when: '"HTTP 404" in create_cluster_template.stdout'
+
+    - name: Fetch federated project UUID
+      shell: |
+        . /opt/stack/devstack/federate.openrc 2>&1 > /dev/null
+        openstack --insecure project show --format value -c id demo
+      args:
+        executable: bash
+      register: federated_project_out
+
+    - name: Update host variables of DevStack with federated project UUID
+      update_host:
+        hostname: "{{ inventory_hostname }}"
+        append: true  # Only append, do not delete any other extra host variable
+        federated_project_uuid: "{{ federated_project_out.stdout }}"

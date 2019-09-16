@@ -1,0 +1,20 @@
+---
+docker_version: 18.06.1~ce~3-0~ubuntu
+docker_network: proxy_network
+docker_subnet: "172.25.0.0/24"
+
+exporter_dummy_container_name: dummy-exporter
+exporter_dummy_ip: 172.25.0.103
+exporter_dummy_api_port: 5005
+exporter_dummy_port: 9000
+
+exporter_openstack_container_name: openstack-exporter
+exporter_openstack_ip: 172.25.0.102
+exporter_openstack_port: 9103
+
+prometheus_container_name: prometheus
+prometheus_ip: 172.25.0.101
+prometheus_port: 9090
+
+nginx_https_listen_port: 44301
+nginx_proxy_ip: 172.25.0.100

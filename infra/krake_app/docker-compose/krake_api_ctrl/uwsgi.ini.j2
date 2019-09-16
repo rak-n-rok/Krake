@@ -1,0 +1,15 @@
+[uwsgi]
+plugins = python36
+socket = 0.0.0.0:5000
+uid = krake
+chdir = /home/krake/git/krake/
+master = true
+cheap = true
+processes = {{ uwsgi_processes }}
+need-app = true
+vacuum = true
+wsgi-file = /home/krake/git/krake/krake_api/krake_api.wsgi
+enable-threads = true
+touch-reload = /home/krake/git/krake/krake_api/krake_api.wsgi
+log-format = [wid: %(wid)|pid: %(pid)] %(addr) (%(user)) [%(vars) vars in %(pktsize) bytes] [%(ctime)] %(method) %(uri) => generated %(rsize) bytes in %(msecs) msecs (%(proto) %(status)) %(headers) headers in %(hsize) bytes (%(switches) switches on core %(core))
+
