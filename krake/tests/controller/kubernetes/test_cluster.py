@@ -35,11 +35,15 @@ async def test_cluster_reception(aiohttp_server, aiohttp_client, config, db, loo
             self.done = loop.create_future()
 
         async def resource_received(self, cluster):
-            assert resource_ref(cluster) == resource_ref(running)
+            try:
+                assert resource_ref(cluster) == resource_ref(running)
 
-            # The received cluster is no in "deleting"
-            assert cluster.metadata.deleted
-            assert cluster.metadata.finalizers[0] == "cascading_deletion"
+                # The received cluster is in "deleting" state
+                assert cluster.metadata.deleted
+                assert cluster.metadata.finalizers[0] == "cascading_deletion"
+
+            except AssertionError as err:
+                self.done.set_exception(err)
 
             if not self.done.done():
                 self.done.set_result(None)
