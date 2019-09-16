@@ -5,7 +5,7 @@ from krake.api.app import create_app
 from krake.data.core import resource_ref
 from krake.data.kubernetes import Application, ApplicationState, ClusterState, Cluster
 from krake.controller import Worker
-from krake.api.garbage_collection import GarbageCollector, GarbageWorker
+from krake.controller.garbage_collector import GarbageCollector, GarbageWorker
 from krake.client import Client
 from krake.test_utils import server_endpoint
 
