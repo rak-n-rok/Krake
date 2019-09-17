@@ -50,6 +50,7 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.intersphinx",
     "sphinx.ext.todo",
+    "sphinx.ext.autosectionlabel",
     "sphinx_rtd_theme",
 ]
 
@@ -75,7 +76,9 @@ napoleon_use_ivar = False
 napoleon_use_param = True
 napoleon_use_rtype = True
 
-# -- InterSphinx settings --------------------------------------------------------
+
+# -- InterSphinx settings -----------------------------------------------------
+
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "aiohttp": ("https://aiohttp.readthedocs.io/en/stable/", None),
@@ -83,6 +86,21 @@ intersphinx_mapping = {
     "webargs": ("https://webargs.readthedocs.io/en/stable/", None),
     "requests": ("https://requests.readthedocs.io/en/stable/", None),
 }
+
+
+# -- autosectionlabel settings ------------------------------------------------
+
+# True to prefix each section label with the name of the document it is in,
+# followed by a colon. For example, index:Introduction for a section called
+# Introduction that appears in document index.rst. Useful for avoiding
+# ambiguity when the same section heading appears in different documents.
+autosectionlabel_prefix_document = True
+
+# If set, autosectionlabel chooses the sections for labeling by its depth. For
+# example, when set 1 to autosectionlabel_maxdepth, labels are generated only
+# for top level sections, and deeper sections are not labeled. It defaults to
+# None (disabled).
+autosectionlabel_maxdepth = None
 
 # -- Options for HTML output -------------------------------------------------
 
