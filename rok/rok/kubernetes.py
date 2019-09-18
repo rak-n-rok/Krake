@@ -9,10 +9,11 @@ import sys
 from argparse import FileType
 from base64 import b64encode
 import yaml
+from requests import HTTPError
 
 from .parser import ParserSpec, argument
 from .fixtures import depends
-from .formatters import BaseTable, Cell, printer, dict_formatter
+from .formatters import BaseTable, Cell, printer, dict_formatter, on_error
 
 kubernetes = ParserSpec(
     "kubernetes", aliases=["kube"], help="Manage Kubernetes resources"
@@ -62,6 +63,7 @@ def list_applications(config, session, namespace, all):
 @argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
 @argument("name", help="Name of the application")
 @depends("config", "session")
+@on_error(HTTPError)
 def create_application(config, session, file, namespace, name):
     if namespace is None:
         namespace = config["user"]
@@ -107,6 +109,7 @@ def get_application(config, session, namespace, name):
 )
 @argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
 @depends("config", "session")
+@on_error(HTTPError)
 def update_application(config, session, namespace, name, file):
     if namespace is None:
         namespace = config["user"]
@@ -145,6 +148,7 @@ class ClusterTable(BaseTable):
     help="Kubeconfig file that should be used to control this cluster",
 )
 @depends("config", "session")
+@on_error(HTTPError)
 def create_cluster(config, session, namespace, kubeconfig, contexts):
     if namespace is None:
         namespace = config["user"]
@@ -243,6 +247,7 @@ def list_clusters(config, session, namespace, all):
 @formatting
 @depends("config", "session")
 @printer(table=ClusterTable())
+@on_error(HTTPError)
 def delete_cluster(config, session, namespace, name, cascade):
     if namespace is None:
         namespace = config["user"]

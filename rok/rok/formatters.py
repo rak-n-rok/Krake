@@ -13,7 +13,6 @@ from datetime import datetime
 from dateutil.parser import parse
 from functools import wraps
 
-from requests import HTTPError
 from texttable import Texttable
 
 
@@ -82,10 +81,7 @@ def printer(file=sys.stdout, **formatters):
         def wrapper(*args, **kwargs):
             format_type = kwargs.pop("format", "yaml")
 
-            try:
-                value = func(*args, **kwargs)
-            except HTTPError as he:
-                sys.exit(str(he))
+            value = func(*args, **kwargs)
 
             try:
                 formatter = formatters[format_type]
@@ -93,6 +89,32 @@ def printer(file=sys.stdout, **formatters):
                 raise KeyError(f"Unknown format {format_type!r}")
 
             formatter(value, file)
+
+        return wrapper
+
+    return decorator
+
+
+def on_error(exception):
+    """When an instance of given exception is raised on the decorated function,
+    handle the raised exception: improve display by simply printing their
+    message without any traceback.
+
+    Args:
+        exception (type): any instance of this exception class will be handled here.
+
+    Returns:
+        callable: a decorator for command functions.
+
+    """
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except exception as he:
+                sys.exit(str(he))
 
         return wrapper
 
