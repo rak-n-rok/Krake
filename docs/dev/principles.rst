@@ -1,5 +1,3 @@
-.. _dev-principles:
-
 =================
 Design Principles
 =================

@@ -1,5 +1,3 @@
-.. _user-configuration-files:
-
 ===================
 Configuration files
 ===================

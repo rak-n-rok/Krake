@@ -1,5 +1,3 @@
-.. _dev-architecture:
-
 ===========
 Architecure
 ===========

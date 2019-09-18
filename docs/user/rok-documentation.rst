@@ -1,5 +1,3 @@
-.. _user-rok-documentation:
-
 =================
 Rok documentation
 =================
