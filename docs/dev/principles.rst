@@ -25,9 +25,6 @@ See also :ref:`dev/concepts:API Conventions`.
 - Resource status must be *completly reconstructable by observation*. Any history
   kept (caching) must be just an optimization and not required for correct
   operation.
-- Low-level APIs should be designed for control by higher-level systems.
-- Higher-level APIs should be intent-oriented (think service level objectives)
-  rather than implementation-oriented (think control knobs).
 
 
 Control Logic
@@ -54,10 +51,8 @@ Control Logic
       control of a Kubernetes application controller; the controller just
       replaces the killed resource.
 
-- Do not define comprehensive state machines for objects with behaviors
-  associated with state transitions and/or "assumed" states where these states
-  or state transitions cannot be determined by observation.
-
+- Do not assume any state transition or state that cannot be determined by
+  observation.
 - Do not assume a component's decisions will not be overridden or rejected, nor
   for the component to always understand why.
 
@@ -85,14 +80,13 @@ Control Logic
 Architecture
 ============
 
-- Only the API server communicate with etcd/store, and no other components,
-  e.g. scheduler, garbage collector, etc.
+- Only the API server communicate with etcd, and no other components, e.g.
+  scheduler, garbage collector, etc.
 - Components should continue to do what they were last told in the absence of
   new instructions, e.g. due to network partition or component outage.
 - All components should keep all relevant state in memory all the time. The
-  API server write through to etcd/store, other components write
-  through to the API server, and they watch for updates made by other
-  clients.
+  API server write through to etcd, other components write through to the API
+  server, and they watch for updates made by other clients.
 - Watch is preferred over polling.
 
 
@@ -115,9 +109,9 @@ Availability
 
 .. note::
 
-    HA is about removing **single point of failure** (SPOF).
+    High-availability (HA) is about removing **single point of failure** (SPOF).
 
-- High-availability (HA) is achieved by service replication.
+- HA is achieved by service replication.
 
 .. todo::
 
@@ -144,6 +138,7 @@ Development
 
 - Self-hosting of all components is the goal.
 - Use standard tooling and defacto standards of the Python ecosystem.
+- Keep dependencies as small as possible, but do not reinvent the wheel.
 
 
 .. _CAP: https://en.wikipedia.org/wiki/CAP_theorem
