@@ -15,7 +15,7 @@ See also :ref:`dev/concepts:API Conventions`.
 - All APIs should be declarative.
 - API resources should be *complementary* and *composable*, not opaque wrappers.
 
-  .. note:: tip
+  .. note::
 
       For example, a Kubernetes cluster could be created ontop of a managed
       OpenStack project.

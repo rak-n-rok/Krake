@@ -4,7 +4,7 @@
 Set up Krake with Ansible
 =========================
 
-This sections describes prerequisites and deployment of Krake infrastructure with `Ansible <https://www.ansible.com/>`_.
+This sections describes prerequisites and deployment of a Krake infrastructure with `Ansible <https://www.ansible.com/>`_.
 
 
 Prerequisites

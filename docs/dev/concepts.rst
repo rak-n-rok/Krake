@@ -116,7 +116,7 @@ Control Plane
 =============
 
 The API does not implement control logic. The task of reconciling between
-*desired state* and *real world state* is done by so called controllers.
+*desired state* and *real world state* is done by so-called controllers.
 Controllers are independent services watching API resources and reacting on
 changes. The set of all controllers form the *Control Plane* of Krake.
 
@@ -134,9 +134,9 @@ communicating with a REST HTTP interface.
 
     On the other hand, level-based logic operates given an desired state and
     the current observed state. The functionality is resilient against loss of
-    intermediate state updates. Hence, the a component can recover easily from
-    crashes and outages which makes the overall system more robust. This was
-    the motivation for moving from and event-based system with message queuing
+    intermediate state updates. Hence, a component can recover easily from
+    crashes and outages, which makes the overall system more robust. This was
+    the motivation for moving from an event-based system with message queuing
     to a level-based system with reconciliation.
 
 

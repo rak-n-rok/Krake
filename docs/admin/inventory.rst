@@ -4,9 +4,9 @@
 Inventory
 =========
 
-This sections describes the `Ansible <https://www.ansible.com/>`_ inventory of Krake project.
+This sections describes the `Ansible <https://www.ansible.com/>`_ inventory of the Krake project.
 Ansible works against multiple infrastructure hosts. Hosts are configured in an inventory
-file **hosts.yml** which is a standard Ansible YAML inventory uses `multiple groups <https://docs.ansible.com/ansible/latest/user_guide/intro_inventory.html#hosts-in-multiple-groups>`_ structure and a
+file **hosts.yml** which is a standard Ansible YAML inventory that uses `multiple groups <https://docs.ansible.com/ansible/latest/user_guide/intro_inventory.html#hosts-in-multiple-groups>`_ structure and a
 custom **krake_inventory** plugin (see `auto plugin
 <https://docs.ansible.com/ansible/latest/dev_guide/developing_inventory.html#the-auto-plugin>`_).
 
@@ -33,7 +33,7 @@ Global variables for all hosts are defined under the ``vars`` sub-section.
 This sub-section defines following:
 
 keypair
-  OpenStack SSH key pair name of public ssh key which will be used for access to infrastructure for hosts deployment.
+  OpenStack SSH key pair name of public ssh key which will be used for accessing the infrastructure to deploy hosts.
   Different keys could be used per group or host by they definition in the corresponding host group or directly in the host.
 key_file
   SSH private key file path on local computer for corresponding **keypair**. If **key_file** is set to null, the default SSH identity
@@ -61,7 +61,7 @@ gateways
         VPN Classless Inter-Domain Routing definition (e.g. 10.9.0.0/24)
 
 networks
- Networks group define "virtual" hosts. These hosts exist purly for provisioning purpose. No machines are associated with them.
+ Networks group define "virtual" hosts. These hosts exist purely for provisioning purpose. No machines are associated with them.
 
     subnet_name
         Subnet name

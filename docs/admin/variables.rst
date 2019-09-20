@@ -29,7 +29,7 @@ central_idps.yml
     flavor
         Flavor manage the sizing for the compute, memory and storage capacity of the host
     floating_ip
-        Enables using of public IP address
+        Enables the use of public IP address
     git_branch
         Krake branch name
 
@@ -42,7 +42,7 @@ devstack.yml
     template_name
         Name of the default kubernetes cluster template
     cluster_keypair
-        Name of the default keypair that is used to spawn kubernetes clusters via magnum
+        Name of the default keypair that is used to spawn kubernetes clusters via Magnum
     idp_name
         Central IdP name
     federated_domain_name
@@ -54,7 +54,7 @@ devstack.yml
     flavor
         Flavor manage the sizing for the compute, memory and storage capacity of the host
     floating_ip
-        Enables using of public IP address
+        Enables the use of public IP address
     git_branch
         Krake branch name
 
@@ -64,13 +64,13 @@ gateways.yml
 
 krake_apps.yml
     api_host
-        OpenStack Heat template api name
+        OpenStack Heat template API name
     api_port
-        OpenStack Heat template api port
+        OpenStack Heat template API port
     flavor
         Flavor manage the sizing for the compute, memory and storage capacity of the host
     floating_ip
-        Enables using of public IP address
+        Enables the use of public IP address
 
 magnum_clusters.yml
     prometheus_port
@@ -104,7 +104,7 @@ minikube_clusters.yml
     flavor
         Flavor manage the sizing for the compute, memory and storage capacity of the host
     floating_ip
-        Enables using of public IP address
+        Enables the use of public IP address
 
 prometheus.yml
     prometheus_admin_pass
@@ -116,6 +116,6 @@ prometheus.yml
     flavor
         Flavor manage the sizing for the compute, memory and storage capacity of the host
     floating_ip
-        Enables using of public IP address
+        Enables the use of public IP address
     git_branch
         Krake branch name
