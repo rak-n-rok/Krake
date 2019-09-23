@@ -6,6 +6,9 @@ This sections describes the configuration files of Krake and Rok, respectively t
 
 Both files also have their respective templates that need to be copied before being modified: **krake.yaml.template** and **rok.yaml.template**.
 
+.. note::
+	If an example value is specified for a parameter, it means this parameter has no default value in Krake.
+
 
 Krake configuration
 ===================
@@ -15,8 +18,8 @@ etcd
 
 	host (string)
 		Address of the database. Example: ``127.0.0.1``
-	port (integer)
-		Port to communicate with the database. Example: ``2379``
+	port (integer), default: ``2379``
+		Port to communicate with the database.
 
 tls
 	This section defines the parameters needed for TLS support. If TLS is enabled, all other components and clients need TLS support to communicate with the API.
@@ -38,10 +41,10 @@ Authentication:
 authentication
 	This section defines the method for authenticating users that connect to the API. Two methods are available: keystone_ and static_. A user not recognized can still send request if anonymous_ are allowed.
 
-	allow_anonymous (boolean)
+	allow_anonymous (boolean), default: ``false``
 		.. _anonymous:
 
-		Enable the "anonymous" user. Any request executed without a user being authenticated will be processed as user ``system:anonymous``. Example: ``true``
+		Enable the "anonymous" user. Any request executed without a user being authenticated will be processed as user ``system:anonymous``.
 
 	strategy
 		This section describes the parameters for the methods of authentication.

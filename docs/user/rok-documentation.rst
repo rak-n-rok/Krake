@@ -49,12 +49,12 @@ Base command: ``rok kube <...>``
 The Cluster resource: ``cluster``
 ---------------------------------
 
-This resource manages Krake **Cluster** resources, which needs to be registered to Krake to be used. It corresponds to a cluster on Kubernetes.
+This resource manages Krake **Cluster** resources, which needs to be registered on Krake to be used. It corresponds to a cluster on Kubernetes.
 
 Base command: ``rok kube cluster <...>``
 
 create
-	Add a new cluster to the one registered to Krake on a namespace.
+	Add a new cluster to the Kubernetes clusters registered on Krake on a specified namespace.
 
 	``kubeconfig``: the path to the kubeconfig file that refers to the cluster to add.
 
@@ -80,13 +80,13 @@ delete
 The Application resource: ``app``
 ---------------------------------
 
-This resource manages Krake **Applications** resources, which need to be registered to Krake to be managed. It corresponds to a Kubernetes resource.
+This resource manages Krake **Applications** resources, which need to be registered on Krake to be managed. It corresponds to a Kubernetes resource.
 
 Base command: ``rok kube app <...>``
 
 
 create
-	Add a new cluster to the one registered to Krake on a namespace. Example:
+	Add a new Application to the ones registered on Krake on a specified namespace. Example:
 
 	.. code:: bash
 
