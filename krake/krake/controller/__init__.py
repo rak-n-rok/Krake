@@ -19,12 +19,17 @@ logger = logging.getLogger(__name__)
 
 class Timer:
     """Allows a function to be called automatically in the future after
-    a given timeout. @see
-    https://stackoverflow.com/questions/45419723/python-timer-with-asyncio-coroutine
+    a given timeout.
 
     Args:
         timeout (float): Time in second after which the function will be called
         callback (callable): the function called after timeout. Can be a coroutine.
+
+    .. seealso:: See this `StackOverflow post`_ about timers.
+
+    .. _StackOverflow post:
+        https://stackoverflow.com/questions/45419723/
+        python-timer-with-asyncio-coroutine
 
     """
 

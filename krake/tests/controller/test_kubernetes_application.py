@@ -149,7 +149,7 @@ async def test_app_creation(aiohttp_server, config, db, loop):
     )
     assert stored.status.manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
-    assert stored.metadata.finalizers[-1] == "cleanup"
+    assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
 
 async def test_app_update(aiohttp_server, config, db, loop):
@@ -317,7 +317,7 @@ async def test_app_update(aiohttp_server, config, db, loop):
     )
     assert stored.status.manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
-    assert stored.metadata.finalizers[-1] == "cleanup"
+    assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
 
 async def test_app_deletion(aiohttp_server, config, db, loop):

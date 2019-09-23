@@ -68,7 +68,7 @@ async def test_cluster_deletion(aiohttp_server, config, db, loop):
 
     apps = [
         ApplicationFactory(
-            metadata__finalizers=["cleanup"],
+            metadata__finalizers=["kubernetes_resources_deletion"],
             status__state=ApplicationState.RUNNING,
             status__cluster=resource_ref(cluster),
             status__depends=[resource_ref(cluster)],
@@ -93,7 +93,7 @@ async def test_cluster_deletion(aiohttp_server, config, db, loop):
 
         # Mark the application as being "cleaned up"
         removed_finalizer = stored_app.metadata.finalizers.pop(-1)
-        assert removed_finalizer == "cleanup"
+        assert removed_finalizer == "kubernetes_resources_deletion"
         await db.put(stored_app)
 
         # Ensure that the Application resources are deleted from database

@@ -53,19 +53,20 @@ class GarbageCollector(Controller):
         assert tasks
         await asyncio.gather(*tasks)
 
-    async def list_watch_resource(self, apidef):
+    async def list_watch_resource(self, api_object):
         """List and watch a specific kind of resource from the API.
 
         Args:
-            apidef (krake.api.core.ResourceRef):
+            api_object (krake.data.serializable.ApiObject): the definition of the
+            resource to list and watch
 
         """
         async with Session(host=self.db_host, port=self.db_port) as session:
 
-            async with session.watch(apidef) as watcher:
+            async with session.watch(api_object) as watcher:
                 await asyncio.gather(
-                    self.list_resource(apidef, session),
-                    self.watch_resource(apidef, watcher),
+                    self.list_resource(api_object, session),
+                    self.watch_resource(api_object, watcher),
                 )
 
     async def list_resource(self, apidef, session):

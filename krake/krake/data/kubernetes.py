@@ -39,7 +39,6 @@ class Application(ApiObject):
     metadata: Metadata
     spec: ApplicationSpec
     status: ApplicationStatus = field(metadata={"subresource": True})
-    cleanup: bool = True
 
 
 class ApplicationList(ApiObject):

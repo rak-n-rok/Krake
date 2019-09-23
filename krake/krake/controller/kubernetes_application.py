@@ -68,7 +68,7 @@ class ApplicationController(Controller):
             return app.status.state == ApplicationState.SCHEDULED or (
                 app.metadata.deleted
                 and app.metadata.finalizers
-                and app.metadata.finalizers[-1] == "cleanup"
+                and app.metadata.finalizers[-1] == "kubernetes_resources_deletion"
             )
 
         async def list_apps():
@@ -222,7 +222,10 @@ class ApplicationWorker(Worker):
                         resp=resp,
                     )
 
-        if app.metadata.finalizers and app.metadata.finalizers[-1] == "cleanup":
+        if (
+            app.metadata.finalizers
+            and app.metadata.finalizers[-1] == "kubernetes_resources_deletion"
+        ):
             app.metadata.finalizers.pop(-1)
 
         await kubernetes_api.update_application(
@@ -286,11 +289,11 @@ class ApplicationWorker(Worker):
         # Update resource in application status
         app.status.manifest = app.spec.manifest.copy()
 
-        # Append "cleanup" finalizer of not already present. This will prevent
-        # the API from deleting the resource without remove the Kubernetes
-        # resources.
-        if "cleanup" not in app.metadata.finalizers:
-            app.metadata.finalizers.append("cleanup")
+        # Append "kubernetes_resources_deletion" finalizer if not already present.
+        # This will prevent the API from deleting the resource without remove the
+        # Kubernetes resources.
+        if "kubernetes_resources_deletion" not in app.metadata.finalizers:
+            app.metadata.finalizers.append("kubernetes_resources_deletion")
             await kubernetes_api.update_application(
                 namespace=app.metadata.namespace, name=app.metadata.name, body=app
             )
