@@ -59,7 +59,7 @@ uid
 finalizers
     A list of strings that can be added by controllers to block the deletion
     of the resource in order to do some clean up work (finalizing). A resource
-    *MUST* not be deleted if there is at least on finalizer.
+    *MUST* not be deleted if there is at least one finalizer.
 
     Controllers *SHOULD* process only finalizers that were added by them and
     that are at the tail of the list. This ensures a strict finalizing order.
@@ -118,7 +118,7 @@ Control Plane
 The API does not implement control logic. The task of reconciling between
 *desired state* and *real world state* is done by so-called controllers.
 Controllers are independent services watching API resources and reacting on
-changes. The set of all controllers form the *Control Plane* of Krake.
+changes. The set of all controllers forms the *Control Plane* of Krake.
 
 Controllers communicate with the API server: the desired state is fetched from
 the API and status updates are pushed to the API. In theory, controllers can
@@ -132,7 +132,7 @@ communicating with a REST HTTP interface.
     they get out-of-sync if a message gets lost. Hence, a lot of effort is
     involved to make sure that no message loss occurs.
 
-    On the other hand, level-based logic operates given an desired state and
+    On the other hand, level-based logic operates given a desired state and
     the current observed state. The functionality is resilient against loss of
     intermediate state updates. Hence, a component can recover easily from
     crashes and outages, which makes the overall system more robust. This was
@@ -164,7 +164,7 @@ Authorization
     called ``RoleBinding``.
 
     Roles in Krake are **permissive** only. There is no way to deny access to
-    a resource through a role. At least on role a user is bound to needs to
+    a resource through a role. At least one role a user is bound to needs to
     allow access to the requested resource and operation. Otherwise access is
     denied.
 

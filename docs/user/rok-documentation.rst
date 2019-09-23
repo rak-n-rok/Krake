@@ -12,7 +12,7 @@ The Rok utility has a command line interface with a few specific commands, that 
 The separate elements are:
 
 ``api`` element:
-	The name of the Krake API used. Different APIs are present to handles different kind of resources. Example: ``kube`` for the Kubernetes API of Krake.
+	The name of the Krake API used. Different APIs are present to handle different kind of resources. Example: ``kube`` for the Kubernetes API of Krake.
 
 ``resource`` element:
 	The name of the resource managed. Each API holds one or several resources it can handle. Example: ``cluster`` for the Krake **Clusters**, which correspond to Kubernetes clusters.

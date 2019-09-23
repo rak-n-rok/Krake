@@ -14,7 +14,7 @@ The tests for Krake are added in the ``krake/tests/`` directory. The ``pytest`` 
 
 
 krake
-    The ``krake`` module itself only contains a few utility functions, as well as function for reading and validating the environment variables and the configuration provided. However, this module contains several sub-modules presented in the following.
+    The ``krake`` module itself only contains a few utility functions, as well as functions for reading and validating the environment variables and the configuration provided. However, this module contains several sub-modules presented in the following.
 
 
 krake.api

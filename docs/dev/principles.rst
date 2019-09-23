@@ -85,7 +85,7 @@ Architecture
 - Components should continue to do what they were last told in the absence of
   new instructions, e.g. due to network partition or component outage.
 - All components should keep all relevant state in memory all the time. The
-  API server write through to etcd, other components write through to the API
+  API server writes through to etcd, other components write through to the API
   server, and they watch for updates made by other clients.
 - Watch is preferred over polling.
 
@@ -118,19 +118,18 @@ Availability
     It needs to be decided on which level replication is introduced.
 
     Coarse grained
-        Replicate "Krake master" with all included components, e.g. API server, controllers etc.
+        Replicate "Krake master" with all included components, e.g. API
+        server, controllers etc.
 
     Fine grained
         Replicate single components. If a component is stateful -- relevant
         state should be kept in memory as stated in section
         :ref:`dev/principles:Architecture` -- the components should follow an
         active-passive principle where only one replica of a component is
-        active at the same time. A
-
-        `etcd leases`_ may be a good option for this but only the API controller
-        should have direct access to etcd. A solution for this would be to
-        introduce special API endpoints for electing a leader across multiple
-        replicas.
+        active at the same time. A `etcd lease`_ may be a good option for this
+        but only the API should have direct access to etcd. A solution for
+        this would be to introduce special API endpoints for electing a leader
+        across multiple replicas.
 
 
 Development
@@ -143,4 +142,4 @@ Development
 
 .. _CAP: https://en.wikipedia.org/wiki/CAP_theorem
 .. _Kubernetes design principles: https://github.com/kubernetes/community/blob/master/contributors/design-proposals/architecture/principles.md
-.. _etcd leases: https://etcd.io/docs/v3.3.12/dev-guide/interacting_v3/#grant-leases
+.. _etcd lease: https://etcd.io/docs/v3.3.12/dev-guide/interacting_v3/#grant-leases

@@ -25,13 +25,13 @@ central_idps.yml
     keystone_port
         Central IdP keystone port
     secgroup_name
-        Secure group name
+        Security group name
     flavor
-        Flavor manage the sizing for the compute, memory and storage capacity of the host
+        Flavor manages the sizing for the compute, memory and storage capacity of the host
     floating_ip
         Enables the use of public IP address
     git_branch
-        Krake branch name
+        Git branch name
 
 
 devstack.yml
@@ -52,11 +52,11 @@ devstack.yml
     idp_mapping_name
         Central IdP mapping name
     flavor
-        Flavor manage the sizing for the compute, memory and storage capacity of the host
+        Flavor manages the sizing for the compute, memory and storage capacity of the host
     floating_ip
         Enables the use of public IP address
     git_branch
-        Krake branch name
+        Git branch name
 
 gateways.yml
     flavor
@@ -68,7 +68,7 @@ krake_apps.yml
     api_port
         OpenStack Heat template API port
     flavor
-        Flavor manage the sizing for the compute, memory and storage capacity of the host
+        Flavor manages the sizing for the compute, memory and storage capacity of the host
     floating_ip
         Enables the use of public IP address
 
@@ -102,7 +102,7 @@ minikube_clusters.yml
     user_project
         Federated project name
     flavor
-        Flavor manage the sizing for the compute, memory and storage capacity of the host
+        Flavor manages the sizing for the compute, memory and storage capacity of the host
     floating_ip
         Enables the use of public IP address
 
@@ -114,8 +114,8 @@ prometheus.yml
     ports
         Prometheus server VM open ports
     flavor
-        Flavor manage the sizing for the compute, memory and storage capacity of the host
+        Flavor manages the sizing for the compute, memory and storage capacity of the host
     floating_ip
         Enables the use of public IP address
     git_branch
-        Krake branch name
+        Git branch name

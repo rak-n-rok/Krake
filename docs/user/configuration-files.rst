@@ -36,7 +36,7 @@ Authentication:
 
 
 authentication
-	This section defines the method for authenticating users that connect to the API. Two methods are available: keystone_ and static_. A user not recognised can still send request if anonymous_ are allowed.
+	This section defines the method for authenticating users that connect to the API. Two methods are available: keystone_ and static_. A user not recognized can still send request if anonymous_ are allowed.
 
 	allow_anonymous (boolean)
 		.. _anonymous:
