@@ -7,6 +7,7 @@ interval <`zone_number` - 1, `zone_number`). The regeneration interval of heat d
 metrics is given by prometheus scrape interval.
 
 .. code:: bash
+
     $ support/prometheus
     $ curl -s localhost:9090/api/v1/query?query=heat_demand_zone_1 | jq
     {
@@ -29,15 +30,15 @@ metrics is given by prometheus scrape interval.
       }
     }
 """
-
-import subprocess
+import asyncio
+import functools
 import random
-import threading
-import time
 from argparse import ArgumentParser, FileType
 from pathlib import Path
 
-from prometheus_client import Gauge, start_http_server
+from aiohttp import web
+from prometheus_async import aio
+from prometheus_client import Gauge
 
 
 root_dir = Path(__file__).parent.parent.resolve()
@@ -59,31 +60,58 @@ scrape_configs:
 """
 
 
-def heat_demand_metric(zone, interval):
+async def heat_demand_metric(zone, interval):
     metric = Gauge(f"heat_demand_zone_{zone}", "float - heat demand (kW)")
     while True:
         metric.set(round(random.uniform(zone - 1, zone), 2))
-        time.sleep(interval)
+        await asyncio.sleep(interval)
 
 
-def start_exporter(port, interval, zones):
-    """Start prometheus simple heat demand exporter
+async def start_metrics_tasks(zones, interval, app):
+    app["metrics"] = [
+        app.loop.create_task(heat_demand_metric(zone, interval))
+        for zone in range(1, zones + 1)
+    ]
 
-    Args:
-        port (int): Port where simple http exporter daemon is running
-        interval (int): Regeneration interval of heat demand metrics values
-        zones (int): Head demand metrics zone count
 
-    """
-    start_http_server(port)
-    for zone in range(1, zones + 1):
+async def cleanup_metrics_tasks(app):
+    for task in app["metrics"]:
+        task.cancel()
+    await app["metrics"]
 
-        threading.Thread(
-            target=heat_demand_metric,
-            args=(zone, interval),
-            name=f"heat demand zone-{zone} metric",
-        ).start()
 
+async def exporter(zones, interval, port):
+    exporter_port = port + 1
+
+    app = web.Application()
+    app.router.add_get("/metrics", aio.web.server_stats)
+    app.on_startup.append(functools.partial(start_metrics_tasks, zones, interval))
+    app.on_cleanup.append(cleanup_metrics_tasks)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "localhost", exporter_port)
+    await site.start()
+
+
+async def prometheus_server(config, interval, port):
+    exporter_port = port + 1
+    temp_dir.mkdir(exist_ok=True)
+    config_file = config or temp_dir / "prometheus.yml"
+
+    if not config:
+        with config_file.open("w") as fd:
+            fd.write(
+                prometheus_config.format(
+                    interval=interval, prometheus_port=port, exporter_port=exporter_port
+                )
+            )
+
+    proc = await asyncio.create_subprocess_shell(
+        f"prometheus --config.file {str(config_file)} "
+        f"--web.enable-admin-api --web.listen-address :{str(port)}"
+    )
+    await proc.communicate()
 
 parser = ArgumentParser(
     description="Prometheus server for development listening on http://localhost:9090"
@@ -110,34 +138,9 @@ parser.add_argument(
 )
 
 
-def main(config, port, interval, zones):
-
-    temp_dir.mkdir(exist_ok=True)
-    config_file = config or temp_dir / "prometheus.yml"
-
-    exporter_port = port + 1
-
-    if not config:
-        with config_file.open("w") as fd:
-            fd.write(
-                prometheus_config.format(
-                    interval=interval, prometheus_port=port, exporter_port=exporter_port
-                )
-            )
-
-    start_exporter(exporter_port, interval, zones)
-    subprocess.call(
-        [
-            "prometheus",
-            "--config.file",
-            str(config_file),
-            "--web.enable-admin-api",
-            "--web.listen-address",
-            ":" + str(port),
-        ]
-    )
-
-
 if __name__ == "__main__":
-    args = vars(parser.parse_args())
-    main(**args)
+    args = parser.parse_args()
+    loop = asyncio.get_event_loop()
+    loop.create_task(exporter(args.zones, args.interval, args.port))
+    loop.create_task(prometheus_server(args.config, args.interval, args.port))
+    loop.run_forever()

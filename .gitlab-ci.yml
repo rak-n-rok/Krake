@@ -37,7 +37,6 @@ unittests-krake:
 
     - pip install krake/[dev]
     - pip install keystone
-    - pip install prometheus_client
     - pytest --runslow krake/tests
   tags:
     - docker
