@@ -1,17 +1,15 @@
 import util
 import logging
 import json
+import os
 
 logging.basicConfig(level=logging.DEBUG)
 
 KRAKE_HOMEDIR = "/home/krake"
-CLUSTER_NAME = "minikube-cluster-nightrun-1"
+#CLUSTER_NAME = "minikube-cluster-nightrun-1"
 
-
-# CLUSTER_NAME_TEMPLATE = "minikube-cluster-{commit}"
-# Attention: Global variable :(
-# CLUSTER_NAME  = CLUSTER_NAME_TEMPLATE.format(commit=os.environ["CI_REF"])
-
+CLUSTER_NAME_TEMPLATE = "minikube-cluster-{ci_pipeline_id}-1"
+CLUSTER_NAME  = CLUSTER_NAME_TEMPLATE.format(ci_pipeline_id=os.environ["CI_PIPELINE_ID"])
 
 def test_scenario1():
     kubeconfig_path = f"{KRAKE_HOMEDIR}/clusters/config/{CLUSTER_NAME}"
