@@ -34,7 +34,7 @@ This sub-section defines following:
 
 keypair
   OpenStack SSH key pair name of public ssh key which will be used for accessing the infrastructure to deploy hosts.
-  Different keys could be used per group or host by they definition in the corresponding host group or directly in the host.
+  Different keys could be defined directly for specific group or host.
 key_file
   SSH private key file path on local computer for corresponding **keypair**. If **key_file** is set to null, the default SSH identity
   (~/.ssh/id_rsa) will be used.
