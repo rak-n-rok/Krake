@@ -22,16 +22,19 @@ import asyncio
 import logging
 from argparse import ArgumentParser
 from datetime import datetime
+from functools import partial
+from itertools import chain
 
 from krake import setup_logging, load_config
 from krake.api.database import Session, EventType
 from krake.controller import Controller, run, Worker
 from krake.data.core import resource_ref
+from krake.client.kubernetes import KubernetesApi
 from krake.data.kubernetes import Application, Cluster
 
 logger = logging.getLogger("krake.api.garbage_collector")
 
-_garbage_collected = [Application, Cluster]
+_garbage_collected = {KubernetesApi.api_name: [Application, Cluster]}
 
 
 class GarbageCollector(Controller):
@@ -48,8 +51,14 @@ class GarbageCollector(Controller):
     async def list_and_watch(self):
         """Create a task to list and watch each persistent resource
         """
-        logger.debug("Handling deletion of: %s", [cls.kind for cls in self.resources])
-        tasks = [self.list_watch_resource(resource) for resource in self.resources]
+        logger.debug(
+            "Handling deletion of: %s",
+            [cls.kind for cls in chain(*self.resources.values())],
+        )
+        tasks = [
+            self.list_watch_resource(resource)
+            for resource in chain(*self.resources.values())
+        ]
         assert tasks
         await asyncio.gather(*tasks)
 
@@ -78,7 +87,7 @@ class GarbageCollector(Controller):
             session (krake.api.database.Session): an opened database session
 
         """
-        logger.info("List %r %r", apidef.api, apidef.kind)
+        logger.info("List %s %s", apidef.api, apidef.kind)
 
         resource_list = session.all(apidef)
 
@@ -97,7 +106,7 @@ class GarbageCollector(Controller):
             watcher (krake.api.database.Watcher): a watcher on the database
 
         """
-        logger.info("Watching %r %r", apidef.api, apidef.kind)
+        logger.info("Watching %s %s", apidef.api, apidef.kind)
         async for event, resource, rev in watcher:
             if event != EventType.DELETE and resource.metadata.deleted:
                 logger.debug("Received %r", resource)
@@ -168,22 +177,23 @@ class GarbageWorker(Worker):
             resource: the resource whose dependencies will be updated.
 
         """
-        if not resource.status.depends:
+        if not resource.metadata.owners:
             return
 
-        for dependency_ref in resource.status.depends:
-            cls = self._get_class_by_name(dependency_ref.kind)
+        for dependency_ref in resource.metadata.owners:
+            cls = self._get_class_by_name(dependency_ref.api, dependency_ref.kind)
             dependency, _ = await self.session.get(
                 cls=cls, namespace=dependency_ref.namespace, name=dependency_ref.name
             )
             await self.session.put(dependency)
 
-    def _get_class_by_name(self, name):
-        """From the managed resources, get the resource class that is
-        referenced by the given name.
+    def _get_class_by_name(self, api_name, cls_name):
+        """From the garbage collected resources, get the resource class that
+        belongs to the given API name and referenced by the given class name.
 
         Args:
-            name (str): the name of a class
+            api_name (str): the name of an API
+            cls_name (str): the name of a class
 
         Returns:
             type: the class that corresponds to the given name
@@ -192,11 +202,15 @@ class GarbageWorker(Worker):
             ValueError: if the class cannot be found in the managed ones.
 
         """
-        for cls in self.resources:
-            if cls.__name__ == name:
+        cls_list = self.resources.get(api_name)
+        if cls_list is None:
+            raise ValueError(f"API '{api_name}' not found.")
+
+        for cls in cls_list:
+            if cls.__name__ == cls_name:
                 return cls
         else:
-            raise ValueError(f"Class '{name}' not found.")
+            raise ValueError(f"Class '{cls_name}' not found.")
 
     async def _mark_dependents(self, resource_list):
         """Mark all given resources as deleted.
@@ -223,13 +237,13 @@ class GarbageWorker(Worker):
         """
         all_dependents = []
 
-        def _in_depends(instance):
+        def _in_owners(instance):
             return (
-                instance.status.depends
-                and resource_ref(entity) in instance.status.depends
+                instance.metadata.owners
+                and resource_ref(entity) in instance.metadata.owners
             )
 
-        for resource in self.resources:
+        for resource in chain(*self.resources.values()):
             all_resources = self.session.all(resource)
 
             # add all elements of current resource that have entity as dependency
@@ -237,30 +251,11 @@ class GarbageWorker(Worker):
                 [
                     resource
                     async for resource, _ in all_resources
-                    if _in_depends(resource)
+                    if _in_owners(resource)
                 ]
             )
 
         return all_dependents
-
-
-def _create_garbage_worker(db_host, db_port):
-    """Factory to create an instance of :class:`GarbageWorker` with the
-    database connection parameters.
-
-    Args:
-        db_host (str): host of the database for direct access
-        db_port (int): port of the database for direct access
-
-    Returns:
-        callable: the factory to create the workers
-
-    """
-
-    def worker_factory(client):
-        return GarbageWorker(client, db_host=db_host, db_port=db_port)
-
-    return worker_factory
 
 
 def main(config):
@@ -271,9 +266,11 @@ def main(config):
 
     gc_config = krake_conf["controllers"]["garbage_collector"]
 
+    create_garbage_worker = partial(GarbageWorker, db_host=db_host, db_port=db_port)
+
     controller = GarbageCollector(
         api_endpoint=gc_config["api_endpoint"],
-        worker_factory=_create_garbage_worker(db_host, db_port),
+        worker_factory=create_garbage_worker,
         worker_count=gc_config["worker_count"],
         db_host=db_host,
         db_port=db_port,

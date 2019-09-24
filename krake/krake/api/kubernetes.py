@@ -18,7 +18,7 @@ class KubernetesApi:
     @use_schema("body", ClusterBinding.Schema)
     async def update_application_binding(request, body, app):
         app.status.cluster = body.cluster
-        app.status.depends.append(body.cluster)
+        app.metadata.owners.append(body.cluster)
 
         # Transition into "scheduled" state
         app.status.state = ApplicationState.SCHEDULED

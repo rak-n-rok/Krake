@@ -17,49 +17,9 @@ from krake.client import Client
 logger = logging.getLogger(__name__)
 
 
-class Timer:
-    """Allows a function to be called automatically in the future after
-    a given timeout.
-
-    Args:
-        timeout (float): Time in second after which the function will be called
-        callback (callable): the function called after timeout. Can be a coroutine.
-
-    .. seealso:: See this `StackOverflow post`_ about timers.
-
-    .. _StackOverflow post:
-        https://stackoverflow.com/questions/45419723/
-        python-timer-with-asyncio-coroutine
-
-    """
-
-    def __init__(self, timeout, callback):
-        self._timeout = timeout
-        self._callback = callback
-        self._task = asyncio.ensure_future(self._job())
-
-    async def _job(self):
-        if self._timeout > 0:
-            await asyncio.sleep(self._timeout)
-        await self._callback()
-
-    def cancel(self):
-        """Cancel the task postponed by the current instance.
-        """
-        self._task.cancel()
-
-    def is_done(self):
-        """Get the finished status of the current instance
-
-        Returns:
-            bool: True if the task is done, False otherwise.
-
-        """
-        return self._task.done()
-
-
 class WorkQueue(object):
     """Simple asynchronous work queue.
+
 
     The key manages a set of key-value pairs. The queue guarantees strict
     sequential processing of keys: If a key-value pair was retrieved via
@@ -74,17 +34,22 @@ class WorkQueue(object):
             number higher than 0 means that the queue will wait the given time
             before giving a value. If a newer value is received, this time is
             reset.
-        loop (asyncio.AbstractEventLoop): Event loop that should be used
+        loop (asyncio.AbstractEventLoop, optional): Event loop that should be
+            used
 
     Todo:
         * Implement rate limiting and delays
     """
 
     def __init__(self, maxsize=0, debounce=0, loop=None):
+        if loop is None:
+            loop = asyncio.get_event_loop()
+
         self.dirty = dict()
         self.timers = dict()
-        self.debounce = debounce
         self.processing = set()
+        self.debounce = debounce
+        self.loop = loop
         self.queue = asyncio.Queue(maxsize=maxsize, loop=loop)
 
     async def put(self, key, value):
@@ -96,17 +61,30 @@ class WorkQueue(object):
 
         """
 
-        async def callback():
+        async def debounce():
+            await asyncio.sleep(self.debounce)
+            await put_key()
+
+        async def put_key():
+            self.dirty[key] = value
+
             if key not in self.processing:
                 await self.queue.put(key)
 
-        # Replace the current timer if present
-        previous = self.timers.get(key)
-        if previous:
-            previous.cancel()
-        self.timers[key] = Timer(self.debounce, callback)
+        if self.debounce == 0:
+            await put_key()
+        else:
+            # Cancel current debounced task if present
+            previous = self.timers.pop(key, None)
+            if previous:
+                previous.cancel()
+                # Wait for the cancellation to propagate
+                try:
+                    await previous
+                except asyncio.CancelledError:
+                    pass
 
-        self.dirty[key] = value
+            self.timers[key] = self.loop.create_task(debounce())
 
     async def get(self):
         """Retrieve a key-value pair from the queue.
@@ -119,9 +97,19 @@ class WorkQueue(object):
 
         """
         key = await self.queue.get()
+
+        # Clear existing timers
+        debounced = self.timers.pop(key, None)
+        if debounced:
+            # By definition, the debounced task has to be done at this point
+            # in time.
+            assert debounced.done()
+
+            # We need to await here. Otherwise the result of the debounced
+            # task is never retrieved.
+            await debounced
+
         value = self.dirty.pop(key)
-        timer = self.timers.pop(key)
-        assert timer.is_done()
         self.processing.add(key)
         return key, value
 

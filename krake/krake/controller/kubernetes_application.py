@@ -65,11 +65,14 @@ class ApplicationController(Controller):
         kubernetes_api = KubernetesApi(self.client)
 
         def scheduled_or_deleting(app):
-            return app.status.state == ApplicationState.SCHEDULED or (
+            accepted = app.status.state == ApplicationState.SCHEDULED or (
                 app.metadata.deleted
                 and app.metadata.finalizers
                 and app.metadata.finalizers[-1] == "kubernetes_resources_deletion"
             )
+            if not accepted:
+                logger.debug(f"Rejected Application {app}")
+            return accepted
 
         async def list_apps():
             logger.info("List application")
@@ -196,6 +199,8 @@ class ResourceID(NamedTuple):
 class ApplicationWorker(Worker):
     @on_error(ControllerError)
     async def resource_received(self, app):
+        logger.debug("Handle %r", app)
+
         kubernetes_api = KubernetesApi(self.client)
         copy = deepcopy(app)
 

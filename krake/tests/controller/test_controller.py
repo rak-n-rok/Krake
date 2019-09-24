@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 from factories.kubernetes import ApplicationFactory
-from krake.controller import WorkQueue, consume, Timer
+from krake.controller import WorkQueue, consume
 
 
 async def test_put_get_done():
@@ -41,32 +41,49 @@ async def test_put_get_done():
 
 
 @pytest.mark.slow
-async def test_queue_timer(loop):
-    queue = WorkQueue(loop=loop, debounce=3)
+async def test_queue_debounce(loop):
+    queue = WorkQueue(loop=loop, debounce=1)
 
-    # Each new added value should reset the timer for the "key1" key
-    await queue.put("key1", "value1-1")
-
-    # A new value is added after the start of the waiting time,
-    # which should reset the internal timer for the key
-    async def callback():
-        await queue.put("key1", "value1-2")
-
-    timer = Timer(1, callback)
+    # Each new added value should reset the timer for the "key" key
+    await queue.put("key", 1)
 
     start = loop.time()
     key, value = await queue.get()
     end = loop.time()
 
-    assert timer.is_done()
-    assert key == "key1"
-    assert value == "value1-2"
-    # The value should be received a bit after "debounce time + timer timeout"
-    assert 4 < end - start < 4.1
+    assert len(queue.timers) == 0, "Timer was not deleted"
 
-    await queue.done("key1")
+    assert (key, value) == ("key", 1)
 
+    # The value should be received a bit after debounce time
+    assert 1 < end - start < 1.1
+
+    await queue.done("key")
     assert queue.empty()
+
+
+@pytest.mark.slow
+async def test_queue_debounce_with_done(loop):
+    queue = WorkQueue(loop=loop, debounce=1)
+
+    await queue.put("key", 1)
+    key, value1 = await queue.get()
+    assert key, value1 == ("key", 1)
+
+    # Receive the new value. This should also debounce which means that the
+    # reception takes some time.
+    await queue.put("key", 2)
+
+    # Release key while a debounce timer is active for the key
+    start = loop.time()
+    await queue.done("key")
+
+    key, value2 = await queue.get()
+    end = loop.time()
+    assert key, value2 == ("key", 2)
+
+    # The value should be received a bit after debounce time
+    assert 1 < end - start < 1.1
 
 
 async def test_consume_error_handling(loop):

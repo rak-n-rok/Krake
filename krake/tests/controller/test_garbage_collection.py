@@ -56,7 +56,7 @@ async def test_resources_reception(aiohttp_server, config, db, loop):
         await db.put(cluster_deleting)
 
         await asyncio.wait(
-            [controller, worker.done], timeout=1, return_when=asyncio.FIRST_COMPLETED
+            [controller, worker.done], timeout=3, return_when=asyncio.FIRST_COMPLETED
         )
     assert worker.done.done()
 
@@ -69,9 +69,9 @@ async def test_cluster_deletion(aiohttp_server, config, db, loop):
     apps = [
         ApplicationFactory(
             metadata__finalizers=["kubernetes_resources_deletion"],
+            metadata__owners=[resource_ref(cluster)],
             status__state=ApplicationState.RUNNING,
             status__cluster=resource_ref(cluster),
-            status__depends=[resource_ref(cluster)],
         )
         for _ in range(0, 3)
     ]
@@ -80,6 +80,7 @@ async def test_cluster_deletion(aiohttp_server, config, db, loop):
 
     server = await aiohttp_server(create_app(config))
 
+    stored_apps = []
     for app in apps:
         # Ensure that the Applications are marked as deleted
         async with Client(url=server_endpoint(server), loop=loop) as client:
@@ -95,11 +96,13 @@ async def test_cluster_deletion(aiohttp_server, config, db, loop):
         removed_finalizer = stored_app.metadata.finalizers.pop(-1)
         assert removed_finalizer == "kubernetes_resources_deletion"
         await db.put(stored_app)
+        stored_apps.append(stored_app)
 
+    for app in stored_apps:
         # Ensure that the Application resources are deleted from database
         async with Client(url=server_endpoint(server), loop=loop) as client:
             worker = GarbageWorker(client=client, db_host=db.host, db_port=db.port)
-            await worker.resource_received(stored_app)
+            await worker.resource_received(app)
 
         stored_app, _ = await db.get(
             Application,
