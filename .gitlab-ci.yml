@@ -130,7 +130,12 @@ cleanup-staging-infra:
     - schedules
     - merge_requests
   script:
-    - pip install python-openstackclient openstack-heat
-    - openstack stack delete -y --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD krake-nightrun-network krake-nightrun-gateway krake-nightrun-app minikube-cluster-nightrun-1 || true
-    - openstack keypair delete --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD my_runner_key || true
+    - pip install ansible==2.7.10
+    - apt-get update -y && apt-get install openssh-client rsync -y
+
+    - export LC_ALL=C.UTF-8
+    # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
+    - cd ansible
+    - chmod -v -R 700 $(pwd)
+    - ansible-playbook -i hosts-CI unprovision.yaml
   when: always
