@@ -1,6 +1,6 @@
 stages:
-  - provision
   - test
+  - provision
   - smoke test
   - integration test
   - cleanup
@@ -19,36 +19,6 @@ variables:
 cache:
   paths:
     - .cache/pip
-
-
-provision-staging-infra:
-  stage: provision
-  image: python:3.6
-  artifacts:
-    paths:
-      - .ssh/id_rsa
-      - ansible/.etc # Absolute path: /builds/ragnarok/krake/ansible/.etc
-    expire_in: 1 week
-  only:
-    - staging
-    - master
-  script:
-    - python -V
-    - pip install python-openstackclient openstacksdk ansible==2.7.10 pytest
-    - apt-get update -y && apt-get install openssh-client rsync -y
-
-    - mkdir .ssh/
-    - openstack keypair delete --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD my_runner_key || true
-    - openstack keypair create --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD my_runner_key > .ssh/id_rsa
-    - chmod 600 .ssh/id_rsa
-    - cat .ssh/id_rsa
-
-    - export LC_ALL=C.UTF-8
-    - echo "=== provisioning staging infrastructure ==="
-    # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
-    - cd ansible
-    - chmod -v -R 700 $(pwd)
-    - ansible-playbook -i hosts-CI site.yml
 
 
 unittests-krake:
@@ -89,12 +59,42 @@ flake8-rok:
     - docker
 
 
+provision-staging-infra:
+  stage: provision
+  image: python:3.6
+  artifacts:
+    paths:
+      - .ssh/id_rsa
+      - ansible/.etc # Absolute path: /builds/ragnarok/krake/ansible/.etc
+    expire_in: 1 day
+  only:
+    - schedules
+    - merge_requests
+  script:
+    - python -V
+    - pip install python-openstackclient openstacksdk ansible==2.7.10 pytest
+    - apt-get update -y && apt-get install openssh-client rsync -y
+
+    - mkdir .ssh/
+    - openstack keypair delete --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD my_runner_key || true
+    - openstack keypair create --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD my_runner_key > .ssh/id_rsa
+    - chmod 600 .ssh/id_rsa
+    - cat .ssh/id_rsa
+
+    - export LC_ALL=C.UTF-8
+    - echo "=== provisioning staging infrastructure ==="
+    # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
+    - cd ansible
+    - chmod -v -R 700 $(pwd)
+    - ansible-playbook -i hosts-CI site.yml
+
+
 smoke_test:
   stage: smoke test
   image: python:3.6
   only:
-    - staging
-    - master
+    - schedules
+    - merge_requests
   script:
     - pip install ansible==2.7.10
     - apt-get update -y && apt-get install openssh-client rsync -y
@@ -110,8 +110,8 @@ integration_test:
   stage: integration test
   image: python:3.6
   only:
-    - staging
-    - master
+    - schedules
+    - merge_requests
   script:
     - pip install ansible==2.7.10
     - apt-get update -y && apt-get install openssh-client rsync -y
@@ -127,8 +127,8 @@ cleanup-staging-infra:
   stage: cleanup
   image: python:3.6
   only:
-    - staging
-    - master
+    - schedules
+    - merge_requests
   script:
     - pip install python-openstackclient openstack-heat
     - openstack stack delete -y --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD krake-nightrun-network krake-nightrun-gateway krake-nightrun-app minikube-cluster-nightrun-1 || true
