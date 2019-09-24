@@ -76,10 +76,10 @@ support/pki "system:api-server"
 # by adding the appropriate path to the configuration file. Example:
 support/pki "system:scheduler"
 
-# Run the API echo-demo
+# Run the API
 python -m krake.api
 
-# Run the echo-demo
+# Run the krake Scheduler
 python -m krake.controller.scheduler
 
 # Run the Kubernetes application controller
@@ -258,47 +258,8 @@ work.
 
 Acknowledgement of this permission is done using a sign-off process in Git.
 The sign-off is a simple line at the end of the explanation for the patch. The
-text of the DCO is fairly simple (from developercertificate.org):
-
-```
-Developer Certificate of Origin
-Version 1.1
-
-Copyright (C) 2004, 2006 The Linux Foundation and its contributors.
-1 Letterman Drive
-Suite D4700
-San Francisco, CA, 94129
-
-Everyone is permitted to copy and distribute verbatim copies of this
-license document, but changing it is not allowed.
-
-
-Developer's Certificate of Origin 1.1
-
-By making a contribution to this project, I certify that:
-
-(a) The contribution was created in whole or in part by me and I
-    have the right to submit it under the open source license
-    indicated in the file; or
-
-(b) The contribution is based upon previous work that, to the best
-    of my knowledge, is covered under an appropriate open source
-    license and I have the right under that license to submit that
-    work with modifications, whether created in whole or in part
-    by me, under the same open source license (unless I am
-    permitted to submit under a different license), as indicated
-    in the file; or
-
-(c) The contribution was provided directly to me by some other
-    person who certified (a), (b) or (c) and I have not modified
-    it.
-
-(d) I understand and agree that this project and the contribution
-    are public and that a record of the contribution (including all
-    personal information I submit with it, including my sign-off) is
-    maintained indefinitely and may be redistributed consistent with
-    this project or the open source license(s) involved.
-```
+text of the [DCO](DCO.md) is fairly simple. It is also available on
+developercertificate.org.
 
 If you are willing to agree to these terms, you just add a line to every git
 commit message:
