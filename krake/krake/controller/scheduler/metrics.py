@@ -2,7 +2,7 @@
 the appropriate backend for application.
 Each metrics provider client contains methods for asynchronous querying and
 evaluating requested metrics.
-Abstraction is provided by :class:`MetricsProviderClient`.
+Abstraction is provided by :class:`Provider`.
 .. code:: python
 
     from krake.data.core import MetricsProvider
@@ -14,12 +14,12 @@ Abstraction is provided by :class:`MetricsProviderClient`.
             'config': {'url': 'http://', 'metrics': ['heat']}
         }
     })
-    provider = MetricsProviderClient.setup(
+    provider = Provider.setup(
         session=session,
         metric=metric,
         metrics_provider=metrics_provider,
     )
-    assert isinstance(provider, PrometheusMetricsProvider)
+    assert isinstance(provider, Prometheus)
 """
 from aiohttp import ClientSession
 
@@ -170,7 +170,7 @@ def fetch_query_tasks(session, metrics, metrics_providers):
     tasks = []
     for metric, metrics_provider in zip(metrics, metrics_providers):
 
-        provider = MetricsProviderClient.setup(
+        provider = Provider.setup(
             session=session, metric=metric, metrics_provider=metrics_provider
         )
         tasks.append(provider.query())
@@ -178,7 +178,7 @@ def fetch_query_tasks(session, metrics, metrics_providers):
     return tasks
 
 
-class MetricsProviderClient(object):
+class Provider(object):
     """Base metrics provider client used as an abstract interface
     for selection of appropriate metrics provider client based of metrics
     provider definition.
@@ -192,7 +192,7 @@ class MetricsProviderClient(object):
     _subclasses = {}
 
     def __init_subclass__(cls, **kwargs):
-        """Collect the :class:`MetricsProviderClient` subclasses into to the class
+        """Collect the :class:`Provider` subclasses into to the class
         variable `_subclasses`.
 
         Args:
@@ -201,22 +201,22 @@ class MetricsProviderClient(object):
         """
         super().__init_subclass__(**kwargs)
         try:
-            MetricsProviderClient._subclasses[cls._provider]
+            Provider._subclasses[cls._provider]
         except KeyError:
-            MetricsProviderClient._subclasses[cls._provider] = cls
+            Provider._subclasses[cls._provider] = cls
         else:
             raise ValueError(f"Metrics provider: {cls._provider} is already registered")
 
     @classmethod
     def setup(cls, **kwargs):
-        """Instantiate :class:`MetricsProviderClient` subclass based on defined
+        """Instantiate :class:`Provider` subclass based on defined
         metrics provider.
 
         Args:
-            **kwargs: Keyword arguments for the :class:`MetricsProviderClient` subclass
+            **kwargs: Keyword arguments for the :class:`Provider` subclass
 
         Returns:
-            :class:`MetricsProviderClient` subclass based on defined metrics provider
+            :class:`Provider` subclass based on defined metrics provider
 
         """
         provider = kwargs["metrics_provider"].spec.type.name
@@ -232,13 +232,13 @@ class MetricsProviderClient(object):
         raise NotImplementedError
 
 
-class PrometheusMetricsProvider(MetricsProviderClient):
+class Prometheus(Provider):
     """Prometheus metrics provider client. It creates and handles queries to the given
     prometheus server and evaluates requested metric values.
 
-    :class:`PrometheusMetricsProvider` is a subclass of :class:`MetricsProviderClient`,
+    :class:`Prometheus` is a subclass of :class:`Provider`,
     which is used as an abstract interface for its instantiate. Registration of any
-    metrics provider into the :class:`MetricsProviderClient` abstraction interface is
+    metrics provider into the :class:`Provider` abstraction interface is
     done by class variable `_provider` which contains metric provider type.
 `
     """
