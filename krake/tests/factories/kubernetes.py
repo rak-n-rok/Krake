@@ -15,7 +15,6 @@ from krake.data.kubernetes import (
     ClusterState,
     ClusterStatus,
     Cluster,
-    Annotation,
     Constraints,
 )
 
@@ -24,28 +23,21 @@ def fuzzy_name():
     return "-".join(fake.name().split()).lower()
 
 
+def fuzzy_dict():
+    return {fake.word(): fake.word()}
+
+
 states = list(ApplicationState.__members__.values())
 states.remove(ApplicationState.DELETED)
-
-
-class AnnotationFactory(Factory):
-    class Meta:
-        model = Annotation
-
-    @lazy_attribute
-    def name(self):
-        return fake.word()
-
-    @lazy_attribute
-    def value(self):
-        return fake.word()
 
 
 class ConstraintsFactory(Factory):
     class Meta:
         model = Constraints
 
-    annotations = List([SubFactory(AnnotationFactory) for _ in range(3)])
+    @lazy_attribute
+    def labels(self):
+        return [fuzzy_dict() for _ in range(3)]
 
 
 class ApplicationStatusFactory(Factory):
@@ -274,11 +266,7 @@ class ClusterSpecFactory(Factory):
     def kubeconfig(self):
         return local_kubeconfig
 
-    @lazy_attribute
-    def metrics(self):
-        return fake.words()
-
-    annotations = List([SubFactory(AnnotationFactory) for _ in range(3)])
+    metrics = fuzzy.FuzzyAttribute(fake.words)
 
 
 class ClusterFactory(Factory):

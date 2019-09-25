@@ -11,18 +11,13 @@ from .serializable import Serializable, ApiObject
 from .core import Metadata, ListMetadata, Status, ResourceRef
 
 
-class Annotation(Serializable):
-    name: str
-    value: str
-
-
 class Constraints(Serializable):
-    annotations: List[Annotation]
+    labels: List[dict]
 
 
 class ApplicationSpec(Serializable):
     manifest: List[dict]
-    constraints: Constraints
+    constraints: Constraints = None
 
 
 class ApplicationState(Enum):
@@ -87,7 +82,6 @@ class ClusterSpec(Serializable):
     # FIXME needs further discussion how to register stand-alone kubernetes cluster as
     #  a cluster which should be processed by krake.controller.scheduler
     metrics: List[str]
-    annotations: List[Annotation]
 
 
 class ClusterState(Enum):

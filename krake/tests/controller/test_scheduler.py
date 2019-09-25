@@ -3,19 +3,18 @@ import asyncio
 import pytest
 
 from krake.api.app import create_app
-from krake.data.core import ReasonCode, MetricProviderType
+from krake.data.core import MetricProviderType
 from krake.data.kubernetes import Application, ApplicationState
-from krake.controller import Worker
 from krake.controller.scheduler.__main__ import Scheduler, SchedulerWorker
 from krake.client import Client
 from krake.test_utils import server_endpoint
 from tests.factories.core import MetricsProviderFactory
 from tests.factories.kubernetes import (
     ApplicationFactory,
-    AnnotationFactory,
     ClusterFactory,
 )
 from . import SimpleWorker
+
 
 async def test_kubernetes_reception(aiohttp_server, config, db, loop):
     scheduled = ApplicationFactory(status__state=ApplicationState.SCHEDULED)
@@ -50,39 +49,38 @@ async def test_kubernetes_reception(aiohttp_server, config, db, loop):
 
 
 async def test_kubernetes_match_constraints(aiohttp_server, config, db, loop):
-    annotation_it = AnnotationFactory(name="location", value="IT")
-    annotation_de = AnnotationFactory(name="location", value="DE")
-    cluster = ClusterFactory(spec__annotations=[annotation_it, annotation_de])
-    app = ApplicationFactory(spec__constraints__annotations=[annotation_it])
+    cluster = ClusterFactory(metadata__labels=[
+        {"location": "DE"}, {"location": "IT"}
+    ])
+    app = ApplicationFactory(spec__constraints__labels=[{"location": "IT"}])
 
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         worker = SchedulerWorker(client=client)
-        assert worker.match_constraints(app, cluster)
+        assert worker.match_constraints_labels(app, cluster)
 
 
 async def test_kubernetes_match_constraints_empty(aiohttp_server, config, db, loop):
-    cluster = ClusterFactory(spec__annotations=[])
-    app = ApplicationFactory(spec__constraints__annotations=[])
+    cluster = ClusterFactory(metadata__labels=[])
+    app = ApplicationFactory(spec__constraints__labels=[])
 
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         worker = SchedulerWorker(client=client)
-        assert worker.match_constraints(app, cluster)
+        assert worker.match_constraints_labels(app, cluster)
 
 
 async def test_kubernetes_match_constraints_negative(aiohttp_server, config, db, loop):
-    annotation_it = AnnotationFactory(name="location", value="IT")
     cluster = ClusterFactory()
-    app = ApplicationFactory(spec__constraints__annotations=[annotation_it])
+    app = ApplicationFactory(spec__constraints__labels=[{"location": "IT"}])
 
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         worker = SchedulerWorker(client=client)
-        assert not worker.match_constraints(app, cluster)
+        assert not worker.match_constraints_labels(app, cluster)
 
 
 @pytest.mark.require_module("prometheus_client")
@@ -146,9 +144,9 @@ async def test_kubernetes_rank_missing_metric_definition(
 @pytest.mark.require_module("prometheus_client")
 @pytest.mark.slow
 async def test_kubernetes_scheduler(prometheus, aiohttp_server, config, db, loop):
-    cluster = ClusterFactory(spec__annotations=[], spec__metrics=["heat_demand_zone_1"])
+    cluster = ClusterFactory(metadata__labels=[], spec__metrics=["heat_demand_zone_1"])
     app = ApplicationFactory(
-        spec__constraints__annotations=[], status__state=ApplicationState.PENDING
+        spec__constraints__labels=[], status__state=ApplicationState.PENDING
     )
     prometheus_host, prometheus_port = prometheus
     metrics_provider = MetricsProviderFactory(

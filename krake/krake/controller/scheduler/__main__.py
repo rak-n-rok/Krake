@@ -148,23 +148,22 @@ class SchedulerWorker(Worker):
             )
 
     @staticmethod
-    def match_constraints(app, cluster):
-        """Evaluate if all application constraints annotations match cluster
-        annotations.
+    def match_constraints_labels(app, cluster):
+        """Evaluate if all application constraints labels match cluster labels.
 
         Args:
             app (krake.data.kubernetes.Application): Application object for binding
             cluster (Cluster): Cluster
 
         Returns:
-            bool: True if all application constraints annotations match cluster
-                annotations, else False
+            bool: True if all application constraints labels match cluster
+                labels, else False
 
         """
         return all(
             [
-                annotation in cluster.spec.annotations
-                for annotation in app.spec.constraints.annotations
+                label in cluster.metadata.labels
+                for label in app.spec.constraints.labels
             ]
         )
 
@@ -184,7 +183,7 @@ class SchedulerWorker(Worker):
         clusters = [
             cluster
             for cluster in clusters_all.items
-            if self.match_constraints(app, cluster)
+            if self.match_constraints_labels(app, cluster)
         ]
 
         if not clusters:

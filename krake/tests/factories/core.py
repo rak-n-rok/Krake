@@ -27,6 +27,10 @@ def fuzzy_name():
     return "-".join(fake.name().split()).lower()
 
 
+def fuzzy_dict():
+    return {fake.word(): fake.word()}
+
+
 def fuzzy_sample(population, k=None):
     if k is None:
         k = fake.pyint(1, len(population))
@@ -42,6 +46,10 @@ class MetadataFactory(Factory):
     namespace = "testing"
     uid = fuzzy.FuzzyAttribute(fake.uuid4)
     created = fuzzy.FuzzyDateTime(datetime.now(tz=pytz.utc))
+
+    @lazy_attribute
+    def labels(self):
+        return [fuzzy_dict() for _ in range(3)]
 
     @lazy_attribute
     def modified(self):
@@ -121,13 +129,8 @@ class MetricSpecProviderFactory(Factory):
     class Meta:
         model = MetricSpecProvider
 
-    @lazy_attribute
-    def name(self):
-        return fake.word()
-
-    @lazy_attribute
-    def metric(self):
-        return fake.word()
+    name = fuzzy.FuzzyAttribute(fake.word)
+    metric = fuzzy.FuzzyAttribute(fake.word)
 
 
 class MetricSpecFactory(Factory):
@@ -136,15 +139,8 @@ class MetricSpecFactory(Factory):
 
     min = 0
     max = 1
-
-    @lazy_attribute
-    def value(self):
-        return random.random()
-
-    @lazy_attribute
-    def weight(self):
-        return random.random()
-
+    value = fuzzy.FuzzyAttribute(random.random)
+    weight = fuzzy.FuzzyAttribute(random.random)
     provider = SubFactory(MetricSpecProviderFactory)
 
 
@@ -160,13 +156,8 @@ class MetricProviderConfigFactory(Factory):
     class Meta:
         model = MetricProviderConfig
 
-    @lazy_attribute
-    def url(self):
-        return fake.url()
-
-    @lazy_attribute
-    def metrics(self):
-        return fake.words()
+    url = fuzzy.FuzzyAttribute(fake.url)
+    metrics = fuzzy.FuzzyAttribute(fake.words)
 
 
 class MetricsProviderSpecFactory(Factory):
