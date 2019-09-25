@@ -5,7 +5,7 @@ import pytest
 from krake.api.app import create_app
 from krake.data.core import MetricProviderType
 from krake.data.kubernetes import Application, ApplicationState
-from krake.controller.scheduler.__main__ import Scheduler, SchedulerWorker
+from krake.controller.scheduler import Scheduler, SchedulerWorker
 from krake.client import Client
 from krake.test_utils import server_endpoint
 from tests.factories.core import MetricsProviderFactory
