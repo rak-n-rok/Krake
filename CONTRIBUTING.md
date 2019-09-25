@@ -1,12 +1,14 @@
 # Introduction
 
-First off, thank you for considering contributing to Krake! There are many
-ways to contribute, such as improving the documentation, submitting bug
-reports and feature requests or writing code which can be incorporated into
-Krake itself.
+First off all, thank you for considering contributing to Krake! 
+
+There are many ways to contribute, such as improving the documentation, 
+submitting bug reports and feature requests or writing code which can be 
+incorporated into Krake itself.
 
 Please, don't use the issue tracker for support questions. Connect with us on
-the [Krake Matrix room](https://riot.im/app/#/room/#krake:matrix.org)
+the [Krake Matrix room](https://riot.im/app/#/room/#krake:matrix.org) if you 
+have any questions or need support.
 
 
 # Setup a Development Environment
@@ -92,7 +94,7 @@ python -m krake.controller.kubernetes.cluster
 
 ## Basic Usage
 
-This provides a simple demonstration of the Krake's functionalities. Please
+This provides a simple demonstration of Krake's functionalities. Please
 refer to the [User Documentation](docs/user/index.rst) for extended usage
 guidelines, explanations, and examples.
 
@@ -272,7 +274,6 @@ configuration, you can sign your commit automatically with `git commit -s`.
 Unfortunately, you have to use your real name (i.e., pseudonyms or anonymous
 contributions cannot be made). This is because the DCO is a legally binding
 document, granting the Krake project to use your work.
-
 
 # Commit message convention
 
