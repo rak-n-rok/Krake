@@ -14,7 +14,7 @@ Abstraction is provided by :class:`Provider`.
             'config': {'url': 'http://', 'metrics': ['heat']}
         }
     })
-    provider = Provider.setup(
+    provider = Provider(
         session=session,
         metric=metric,
         metrics_provider=metrics_provider,
@@ -170,7 +170,7 @@ def fetch_query_tasks(session, metrics, metrics_providers):
     tasks = []
     for metric, metrics_provider in zip(metrics, metrics_providers):
 
-        provider = Provider.setup(
+        provider = Provider(
             session=session, metric=metric, metrics_provider=metrics_provider
         )
         tasks.append(provider.query())
@@ -184,7 +184,7 @@ class Provider(object):
     provider definition.
 
     Subclassed metrics providers are stored in class variable `_subclasses`.
-    Selection is evaluated in :meth:`setup` based on the :args:`metrics_provider`.
+    Selection is evaluated in :meth:`__new__` based on the :args:`metrics_provider`.
 
     """
 
@@ -207,20 +207,9 @@ class Provider(object):
         else:
             raise ValueError(f"Metrics provider: {cls._provider} is already registered")
 
-    @classmethod
-    def setup(cls, **kwargs):
-        """Instantiate :class:`Provider` subclass based on defined
-        metrics provider.
-
-        Args:
-            **kwargs: Keyword arguments for the :class:`Provider` subclass
-
-        Returns:
-            :class:`Provider` subclass based on defined metrics provider
-
-        """
+    def __new__(mcls, *args, **kwargs):
         provider = kwargs["metrics_provider"].spec.type.name
-        return cls._subclasses[provider](**kwargs)
+        return object.__new__(mcls._subclasses[provider])
 
     async def query(self):
         """Asynchronous callback executed whenever an error occurs during
