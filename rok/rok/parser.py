@@ -187,20 +187,20 @@ arg_formatting = argument(
 )
 arg_labels = argument(
     "-l",
-    "--labels",
+    "--label",
     dest="labels",
     default=[],
     metavar="KEY=VALUE",
     action=StoreDictPairInList,
-    help="Labels <key=value>. Can be specified multiple times",
+    help="Label <key=value>. Can be specified multiple times",
 )
 arg_constraints_labels = argument(
     "-cl",
-    "--constraints-labels",
+    "--constraint-label",
     dest="constraints_labels",
     default=[],
     action=StoreDictPairInList,
-    help="Constraints labels <key=value>. Can be specified multiple times",
+    help="Constraint label <key=value>. Can be specified multiple times",
 )
 arg_namespace = argument(
     "-n", "--namespace", help="Namespace of the resource. Defaults to user"
