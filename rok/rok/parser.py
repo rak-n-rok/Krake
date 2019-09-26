@@ -168,7 +168,11 @@ def argument(*args, **kwargs):
 class StoreDictPairInList(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         items = copy.copy(self.ensure_value(namespace, self.dest, []))
-        items.append({k: v for k, v in [values.split("=", 1)]})
+        split_value = values.split("=", 1)
+        if len(split_value) != 2:
+            print(f"Error: Malformed <key=value> format of {values!r}.")
+            raise SystemExit(1)
+        items.append(dict(zip(*split_value)))
         setattr(namespace, self.dest, items)
 
     @staticmethod
