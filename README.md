@@ -1,143 +1,43 @@
-# Krake v2 Prototype
+# Krake
 
-The current Krake v2 prototype comprises two Python packages:
+Welcome to the Krake repository! :octopus:
 
- - krake -- Krake microservices as Python submodules
- - rok -- command line interface for the Krake API
-
-
-## Development Setup
-
-This section describes a quickstart for developers to get started with a Krake
-development setup.
-
-
-### Requirements
-
- - [etcdv3](https://github.com/etcd-io/etcd/releases/)
- - [Python](https://www.python.org/downloads/) >= 3.6
- - [pre-commit](https://pre-commit.com/)
- - [cfssl](https://cfssl.org/) (optional) – for setting up a development PKI
- - [keystone](https://pypi.org/project/keystone/) (optional) – for testing keystone server authentication
+Krake [ˈkʀaːkə] is an orchestrator engine for containerized and virtualized
+workloads accross distributed and heterogeneous cloud platforms. It creates a
+thin layer of aggregaton on top of the different platforms (such as OpenStack,
+Kubernetes or OpenShift) and presents them through a single interface to the
+cloud user. The user's workloads are scheduled depending on both user
+requirements (hardware, latencies, cost) and platforms characteristics (energy
+efficiency, load). The scheduling algorithm can be optimized for example on
+latencies, cost, or energy. 
+Krake can be leveraged for a wide range of application scenarios such as 
+central management of distributed compute capacities as well as application 
+management in Edge Cloud infrastructures.
 
 
-### Installation
+## Getting Started
 
-All dependencies can be installed via the corresponding `setup.py` scripts.
-
-```bash
-# Install git pre-commit hooks
-pre-commit install
-
-# Optional: libyaml development package if you want to use the PyYAML C extension.
-sudo apt-get install libyaml-dev
-
-# Install "krake" and "rok" with dev dependencies
-pip install --editable krake/[dev]
-pip install --editable rok/[dev]
-```
+In order to get started and play with Krake, you'll need to deploy Krake
+plus at least one Kubernetes cluster to act as a backend for Krake. We
+recommend
+[Minikube](https://kubernetes.io/docs/setup/learning-environment/minikube/),
+which is a simple way to get a Kubernetes environment for development
+purposes. The whole process of deploying and testing a full Krake environment
+is described in the [Contributor
+Guidelines](CONTRIBUTING.md#setup-a-development-environment).
 
 
-### Running
+## Get in touch!
 
-All services can be run as Python modules with the `-m` option of the Python
-interpreter:
+If you need help to setup things, have a question, or simply want to chat with
+us, find us on our [Krake Matrix
+room](https://riot.im/app/#/room/#krake:matrix.org)
 
-```bash
-cd krake/
-
-# Start by copying the template of the configuration file. You can then modify without any issue
-cp krake.yaml.template krake.yaml
-
-# Optional: you can use the rok configuration template as you prefer.
-#   Otherwise rok will use the default configuration
-cp rok.yaml.template rok.yaml
-
-# Run etcd server. This will store the data in "tmp/etcd".
-support/etcd
-
-# Run local Keystone server. Related data is stored in "tmp/keystone". This
-# requires keystone to be installed (pip install keystone)
-support/keystone
-
-# Optional: If the API server should be encrypted with TLS and support client
-#   certificate authentication, create a certificate for the API server.
-#	This required "cfssl" to be installed.
-support/pki "system:api-server"
-# An additional certificate can be created for each components (schedulers and controller),
-# by adding the appropriate path to the configuration file. Example:
-support/pki "system:scheduler"
-
-# Run the API server
-python -m krake.api
-
-# Run the scheduler
-python -m krake.controller.scheduler
-
-# Run the Kubernetes application controller
-python -m krake.controller.kubernetes.application
-
-# Run the Kubernetes cluster controller
-python -m krake.controller.kubernetes.cluster
-```
+If you wish to contribute, you can also check the
+[Contributing](CONTRIBUTING.md) guide.
 
 
-### Testing
+## Project Background
 
-Tests are placed in the `tests/` directory inside the Python packages and can
-be run via `pytest`.
-
-
-```bash
-# Run tests of the "krake" package
-pytest krake/tests
-
-# Run tests of the "rok" package
-pytest rok/tests
-```
-
-
-### Documentation
-
-```bash
-# Install Sphinx and the Read The Docs theme for sphinx
-pip install sphinx sphinx_rtd_theme
-
-# Build HTML documentation
-cd docs/
-make html
-```
-
-
-### Access to local Keystone
-
-The local Keystone service ``support/keystone`` can be accessed as admin with
-the following OpenStack ``clouds.yaml`` settings (see
-[OpenStack documentation](https://docs.openstack.org/python-openstackclient/latest/configuration/index.html#clouds-yaml))
-
-```yaml
-clouds:
-  keystone:
-    auth:
-      auth_url: http://127.0.0.1:5000/v3
-      username: system:admin
-      password: admin
-      project_name: system:admin
-      user_domain_name: Default
-      project_domain_name: Default
-    region_name: RegionOne
-```
-
-Put the configuration abobe in a file `clouds.yaml` in the local working
-directory and call the OpenStack command line tool as follows.
-
-> **Note**: Make sure that no `OS_*` environmental variable is set. Otherwise
-> these environmental variables overwrite settings in the `clouds.yaml`.
-
-```bash
-# Run local keystone service
-support/keystone
-
-# List all users
-openstack --os-cloud keystone user list
-```
+The Rak'n'Rok project has initially been developped at Cloud&Heat. The
+development of Krake was transformed to an open source project in September 2019.
