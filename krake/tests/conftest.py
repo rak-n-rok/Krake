@@ -1,8 +1,9 @@
+import asyncio
+import functools
 import os
 import random
 import sys
 import subprocess
-import threading
 from tempfile import TemporaryDirectory
 from pathlib import Path
 from typing import NamedTuple
@@ -11,10 +12,12 @@ import logging.config
 from importlib import import_module
 import json
 import shutil
+import aiohttp
 import requests
 import pytest
 from etcd3.aio_client import AioClient
-from prometheus_client import Gauge, start_http_server
+from prometheus_async import aio
+from prometheus_client import Gauge
 
 # Prepend package directory for working imports
 package_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -102,12 +105,11 @@ def pytest_collection_modifyitems(config, items):
                 )
 
 
-def wait_for_url(url, response_fn=None, timeout=5):
+def wait_for_url(url, timeout=5):
     """Wait until an URL endpoint is reachable.
 
     Args:
         url (str): URL endpoint
-        response_fn (:func:, optional): Response callback function
         timeout (int, optional): Timeout. Defaults to 5s
 
     Raises:
@@ -120,14 +122,27 @@ def wait_for_url(url, response_fn=None, timeout=5):
         try:
             resp = requests.get(url)
             assert resp.status_code == 200
-            if response_fn:
-                assert response_fn(resp)
         except (requests.ConnectionError, AssertionError):
             time.sleep(0.1)
             if time.time() - start > timeout:
                 raise TimeoutError(f"Can not connect to {url}")
         else:
             return
+
+
+async def await_for_url(url, timeout=5):
+    start = time.time()
+
+    while True:
+        try:
+            async with aiohttp.ClientSession(raise_for_status=True) as client:
+                resp = await client.get(url)
+        except aiohttp.ClientError:
+            await asyncio.sleep(0.1)
+            if time.time() - start > timeout:
+                raise TimeoutError(f"Can not connect to {url}")
+        else:
+            return resp
 
 
 etcd_host = "127.0.0.1"
@@ -641,47 +656,77 @@ scrape_configs:
 """
 
 
-class HeatDemandExporter(threading.Thread):
-    def __init__(self, name, interval=1):
-        threading.Thread.__init__(self)
-        self.exporter_event = threading.Event()
-        self.name = name
-        self.interval = interval
-
-    def run(self):
-        metric = Gauge(self.name, "float - heat demand (kW)")
-        while not self.exporter_event.isSet():
-            metric.set(round(random.random(), 2))
-            self.exporter_event.wait(self.interval)
-
-    def join(self):
-        self.exporter_event.set()
+async def heat_demand_metric(metric_name, interval):
+    metric = Gauge(metric_name, "float - heat demand (kW)")
+    while True:
+        metric.set(round(random.random(), 2))
+        await asyncio.sleep(interval)
 
 
-@pytest.fixture("session")
-def prometheus():
-    """Prometheus server and heat-demand exporter fixture
+async def start_metrics_tasks(metric_name, interval, app):
+    app["metric"] = app.loop.create_task(heat_demand_metric(metric_name, interval))
 
-    Heat demand exporter generates random heat demand metric `heat_demand_zone_1`
+
+async def cleanup_metrics_tasks(app):
+    app["metric"].cancel()
+    await app["metric"]
+
+
+class AppRunner(object):
+    def __init__(self, app, host, port):
+        self.runner = aiohttp.web.AppRunner(app)
+        self.host = host
+        self.port = port
+        self.site = None
+
+    async def __aenter__(self):
+        await self.runner.setup()
+        self.site = aiohttp.web.TCPSite(self.runner, self.host, self.port)
+        await self.site.start()
+
+    async def __aexit__(self, *exc):
+        await self.site.stop()
+
+
+@pytest.fixture
+async def exporter():
+    """Heat-demand exporter fixture. Heat demand exporter generates heat
+    demand metric `heat_demand_zone_1` with random value.
     """
     host = "localhost"
-    port = 5055
-    interval = 1  # scrape interval[s]
-    exporter_port = port + 1
+    port = 5056
     metric_name = "heat_demand_zone_1"
+    interval = 1  # refresh metric value interval[s]
 
-    def response_callback(resp):
+    app = aiohttp.web.Application()
+    app.router.add_get("/metrics", aio.web.server_stats)
+    app.on_startup.append(functools.partial(start_metrics_tasks, metric_name, interval))
+    app.on_cleanup.append(cleanup_metrics_tasks)
+
+    async with AppRunner(app, host, port):
+        await await_for_url(f"http://{host}:{port}/metrics")
+        yield port, interval
+
+
+@pytest.fixture
+async def prometheus(exporter):
+    host = "localhost"
+    port = 5055
+    metric_name = "heat_demand_zone_1"
+    exporter_port, interval = exporter
+
+    async def await_for_prometheus(url, attempts=10):
+        resp = await await_for_url(url)
         if resp:
-            response = resp.json()
+            response = await resp.json()
             for metric_data in response["data"]["result"]:
                 if metric_data:
-                    return True
-        return False
+                    return
+        if not attempts:
+            raise TimeoutError(f"Can not get data from {url}")
 
-    # Prometheus heat-demand exporter
-    start_http_server(exporter_port)
-    exporter = HeatDemandExporter(metric_name, interval=interval)
-    exporter.start()
+        await asyncio.sleep(1)  # Prometheus server boot sometimes takes long time
+        await await_for_prometheus(url, attempts=attempts - 1)
 
     with TemporaryDirectory() as tempdir:
         config_file = Path(tempdir) / "prometheus.yml"
@@ -702,15 +747,11 @@ def prometheus():
             "--web.listen-address",
             ":" + str(port),
         ]
-        with subprocess.Popen(command) as proc:
+        with subprocess.Popen(command) as prometheus:
             try:
-                wait_for_url(
-                    f"http://{host}:{port}/api/v1/query?query={metric_name}",
-                    response_fn=response_callback,
-                    timeout=10,
+                await await_for_prometheus(
+                    f"http://{host}:{port}/api/v1/query?query={metric_name}"
                 )
                 yield host, port
             finally:
-                time.sleep(1)
-                exporter.join()
-                proc.terminate()
+                prometheus.terminate()
