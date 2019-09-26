@@ -1,6 +1,6 @@
 from base64 import b64encode
 import yaml
-from factory import Factory, SubFactory, lazy_attribute, fuzzy, List
+from factory import Factory, SubFactory, lazy_attribute, fuzzy
 from copy import deepcopy
 
 from .fake import fake

@@ -9,10 +9,7 @@ from krake.controller.scheduler import Scheduler, SchedulerWorker
 from krake.client import Client
 from krake.test_utils import server_endpoint
 from tests.factories.core import MetricsProviderFactory
-from tests.factories.kubernetes import (
-    ApplicationFactory,
-    ClusterFactory,
-)
+from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
 from . import SimpleWorker
 
 
@@ -49,9 +46,7 @@ async def test_kubernetes_reception(aiohttp_server, config, db, loop):
 
 
 async def test_kubernetes_match_constraints(aiohttp_server, config, db, loop):
-    cluster = ClusterFactory(metadata__labels=[
-        {"location": "DE"}, {"location": "IT"}
-    ])
+    cluster = ClusterFactory(metadata__labels=[{"location": "DE"}, {"location": "IT"}])
     app = ApplicationFactory(spec__constraints__labels=[{"location": "IT"}])
 
     server = await aiohttp_server(create_app(config))

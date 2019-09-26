@@ -204,10 +204,12 @@ class SchedulerWorker(Worker):
                 continue
 
             try:
-                metrics_fetched = await asyncio.gather(*[
-                    fetch_query(session, metric, provider) for metric, provider in
-                    zip(metrics, metrics_providers)
-                ])
+                metrics_fetched = await asyncio.gather(
+                    *[
+                        fetch_query(session, metric, provider)
+                        for metric, provider in zip(metrics, metrics_providers)
+                    ]
+                )
             except (ClientConnectorError, MetricValueError) as err:
                 logger.error(err)
                 continue

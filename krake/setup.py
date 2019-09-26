@@ -28,8 +28,11 @@ setup(
     install_requires=install_requires,
     extras_require={
         "dev": {
-            "pytest", "pytest-aiohttp", "factory-boy", "prometheus-client",
-            "prometheus-async"
+            "pytest",
+            "pytest-aiohttp",
+            "factory-boy",
+            "prometheus-client",
+            "prometheus-async",
         }
     },
 )

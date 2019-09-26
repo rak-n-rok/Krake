@@ -166,9 +166,7 @@ def fetch_query(session, metric, provider):
         Coroutine function for getting the metric value
 
     """
-    provider = Provider(
-        session=session, metric=metric, metrics_provider=provider
-    )
+    provider = Provider(session=session, metric=metric, metrics_provider=provider)
     return provider.query()
 
 
