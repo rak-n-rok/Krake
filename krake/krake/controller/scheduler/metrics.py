@@ -153,29 +153,23 @@ def get_metrics_providers_objs(cluster, metrics_all, metrics_providers_all):
     return metrics, metrics_providers
 
 
-def fetch_query_tasks(session, metrics, metrics_providers):
-    """Collect asynchronous tasks for getting the metrics values from appropriate
-    metrics providers.
+def fetch_query(session, metric, provider):
+    """Fetch asynchronous task for getting the metric value from appropriate
+    metrics provider.
 
     Args:
         session (aiohttp.client.ClientSession): Aiohttp session
-        metrics (List[Metric]): List of metrics
-        metrics_providers (List[MetricsProvider]): List of metrics providers
-            for metrics
+        metric (Metric): Metric definition
+        provider (MetricsProvider): Metrics provider definition for metric
 
     Returns:
-        list: List of asynchronous tasks
+        Coroutine function for getting the metric value
 
     """
-    tasks = []
-    for metric, metrics_provider in zip(metrics, metrics_providers):
-
-        provider = Provider(
-            session=session, metric=metric, metrics_provider=metrics_provider
-        )
-        tasks.append(provider.query())
-
-    return tasks
+    provider = Provider(
+        session=session, metric=metric, metrics_provider=provider
+    )
+    return provider.query()
 
 
 class Provider(object):
@@ -229,7 +223,7 @@ class Prometheus(Provider):
     which is used as an abstract interface for its instantiate. Registration of any
     metrics provider into the :class:`Provider` abstraction interface is
     done by class variable `_provider` which contains metric provider type.
-`
+
     """
 
     _provider = MetricProviderType.prometheus.name

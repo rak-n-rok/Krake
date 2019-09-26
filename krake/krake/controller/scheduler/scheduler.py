@@ -17,7 +17,7 @@ from .metrics import (
     MissingMetricsDefinition,
     get_metrics_providers_objs,
     merge_obj,
-    fetch_query_tasks,
+    fetch_query,
 )
 
 
@@ -203,10 +203,11 @@ class SchedulerWorker(Worker):
                 logger.error(err)
                 continue
 
-            metrics_tasks = fetch_query_tasks(session, metrics, metrics_providers)
-
             try:
-                metrics_fetched = await asyncio.gather(*metrics_tasks)
+                metrics_fetched = await asyncio.gather(*[
+                    fetch_query(session, metric, provider) for metric, provider in
+                    zip(metrics, metrics_providers)
+                ])
             except (ClientConnectorError, MetricValueError) as err:
                 logger.error(err)
                 continue
@@ -238,7 +239,7 @@ class SchedulerWorker(Worker):
             int: Sum of metrics values * metrics weights
 
         """
-        return sum([metric.spec.value * metric.spec.weight for metric in metrics])
+        return sum(metric.spec.value * metric.spec.weight for metric in metrics)
 
     async def error_occurred(self, app, error=None):
         """Asynchronous callback executed whenever an error occurs during

@@ -147,7 +147,6 @@ def resource_ref(resource):
 
 
 class MetricProviderType(Enum):
-
     prometheus = auto()
 
 
