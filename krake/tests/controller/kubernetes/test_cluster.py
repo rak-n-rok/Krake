@@ -92,13 +92,13 @@ async def test_cluster_deletion(aiohttp_server, config, db, loop):
         await worker.resource_received(cluster)
 
     # Ensure that the application resource is deleted from database
-    stored_app, _ = await db.get(
+    stored_app = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
     assert stored_app is None
 
     # Ensure that the cluster resource is deleted from database
-    stored_cluster, _ = await db.get(
+    stored_cluster = await db.get(
         Application, namespace=cluster.metadata.namespace, name=cluster.metadata.name
     )
     assert stored_cluster is None

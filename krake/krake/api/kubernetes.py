@@ -43,7 +43,7 @@ class KubernetesApi:
 
         apps = [
             app
-            async for app, _ in session(request).all(
+            async for app in session(request).all(
                 Application, namespace=cluster.metadata.namespace
             )
         ]

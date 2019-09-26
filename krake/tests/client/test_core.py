@@ -47,7 +47,7 @@ async def test_create_role(aiohttp_server, config, db, loop):
     assert received.metadata.modified
     assert received.rules == data.rules
 
-    stored, _ = await db.get(Role, name=data.metadata.name)
+    stored = await db.get(Role, name=data.metadata.name)
     assert stored == received
 
 
@@ -66,7 +66,7 @@ async def test_update_role(aiohttp_server, config, db, loop):
     assert received.metadata.created == role.metadata.created
     assert received.metadata.modified
 
-    stored, _ = await db.get(Role, name=role.metadata.name)
+    stored = await db.get(Role, name=role.metadata.name)
     assert stored.rules == role.rules
     assert stored.metadata.created == role.metadata.created
     assert stored.metadata.modified
@@ -95,7 +95,7 @@ async def test_delete_role(aiohttp_server, config, db, loop):
         received = await core_api.delete_role(name=data.metadata.name)
         assert received is None
 
-    stored, _ = await db.get(Role, name=data.metadata.name)
+    stored = await db.get(Role, name=data.metadata.name)
     assert stored is None
 
 
@@ -136,7 +136,7 @@ async def test_create_rolebinding(aiohttp_server, config, db, loop):
     assert received.users == data.users
     assert received.roles == data.roles
 
-    stored, _ = await db.get(RoleBinding, name=data.metadata.name)
+    stored = await db.get(RoleBinding, name=data.metadata.name)
     assert stored == received
 
 
@@ -159,7 +159,7 @@ async def test_update_rolebinding(aiohttp_server, config, db, loop):
     assert received.metadata.created == binding.metadata.created
     assert received.metadata.modified
 
-    stored, _ = await db.get(RoleBinding, name=binding.metadata.name)
+    stored = await db.get(RoleBinding, name=binding.metadata.name)
     assert stored.users == binding.users
     assert stored.roles == binding.roles
     assert stored.metadata.created == binding.metadata.created
@@ -189,7 +189,7 @@ async def test_delete_rolebinding(aiohttp_server, config, db, loop):
         received = await core_api.delete_role_binding(name=data.metadata.name)
         assert received is None
 
-    stored, _ = await db.get(RoleBinding, name=data.metadata.name)
+    stored = await db.get(RoleBinding, name=data.metadata.name)
     assert stored is None
 
 

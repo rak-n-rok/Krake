@@ -157,6 +157,10 @@ Data Abstration
     :members:
     :show-inheritance:
 
+.. automodule:: krake.data.serializable
+    :members:
+    :show-inheritance:
+
 .. automodule:: krake.data.core
     :members:
     :show-inheritance:

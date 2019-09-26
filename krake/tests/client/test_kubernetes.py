@@ -70,7 +70,7 @@ async def test_create_application(aiohttp_server, config, db, loop):
     assert received.spec == data.spec
     assert received.status.state == ApplicationState.PENDING
 
-    stored, _ = await db.get(
+    stored = await db.get(
         Application, namespace=data.metadata.namespace, name=data.metadata.name
     )
     assert stored == received
@@ -120,7 +120,7 @@ async def test_update_application(aiohttp_server, config, db, loop):
     assert received.spec.manifest == updated_manifest
     assert received.status.state == app.status.state
 
-    stored, _ = await db.get(
+    stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
     assert stored.spec.manifest == updated_manifest
@@ -235,7 +235,7 @@ async def test_create_cluster(aiohttp_server, config, db, loop):
 
     assert received.spec == data.spec
 
-    stored, _ = await db.get(
+    stored = await db.get(
         Cluster, namespace=data.metadata.namespace, name=data.metadata.name
     )
     assert stored == received
@@ -323,7 +323,7 @@ async def test_delete_cluster(aiohttp_server, config, db, loop):
     assert received.spec == cluster.spec
     assert received.metadata.deleted
 
-    stored, _ = await db.get(
+    stored = await db.get(
         Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
     )
     assert stored == received

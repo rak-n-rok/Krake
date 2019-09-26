@@ -144,7 +144,7 @@ async def test_app_creation(aiohttp_server, config, db, loop):
         worker = ApplicationWorker(client=client)
         await worker.resource_received(app)
 
-    stored, _ = await db.get(
+    stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
     assert stored.status.manifest == app.spec.manifest
@@ -312,7 +312,7 @@ async def test_app_update(aiohttp_server, config, db, loop):
     assert "nginx-demo-1" in deleted
     assert "nginx-demo-3" in patched
 
-    stored, _ = await db.get(
+    stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
     assert stored.status.manifest == app.spec.manifest
@@ -371,7 +371,7 @@ async def test_app_deletion_without_binding(aiohttp_server, config, db, loop):
         await worker.resource_received(app)
 
     # Ensure the application is completly removed from database
-    stored, _ = await db.get(
+    stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
     assert stored is None
@@ -481,7 +481,7 @@ async def test_kubernetes_error_handling(aiohttp_server, config, db, loop):
         worker = ApplicationWorker(client=client)
         await worker.resource_received(app)
 
-    stored, _ = await db.get(
+    stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
     assert stored.status.state == ApplicationState.FAILED
