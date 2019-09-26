@@ -190,7 +190,7 @@ def config(etcd_server, user):
             },
         },
         "authorization": "always-allow",
-        "etcd": {"host": etcd_host, "port": etcd_port},
+        "etcd": {"host": etcd_host, "port": etcd_port, "retry_transactions": 0},
         "default-roles": [
             {
                 "metadata": {"name": "system:admin"},

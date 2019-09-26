@@ -1,20 +1,28 @@
 """This modules defines aiohttp middlewares for the Krake HTTP API"""
 import asyncio
+import json
 from aiohttp import web
 
-from .database import Session
+from .database import Session, TransactionError
 
 
-def database(host, port):
-    """Middleware factory for per-request etcd database sessions
+def database(host, port, retry=1):
+    """Middleware factory for per-request etcd database sessions and
+    transaction error handling.
+
+    If an :class:`.database.TransactionError` occurs, the request handler is
+    retried for the specified number of times. If the transaction error
+    persists, a *409 Conflict* HTTP exception is raised.
 
     Args:
         host (str): Host of the etcd server
         port (int): TCP port of the etcd server
+        retry (int, optional): Number of retrires if a transaction error
+            occurs.
 
     Returns:
         aiohttp middleware injecting an etcd database session into each HTTP
-        request.
+        request and handling transaction errors.
 
     """
     # TODO: Maybe we can share the TCP connection pool across all HTTP
@@ -23,17 +31,23 @@ def database(host, port):
     async def database_middleware(request, handler):
         async with Session(host=host, port=port) as session:
             request["db"] = session
-            return await handler(request)
+
+            for _ in range(retry + 1):
+                try:
+                    return await handler(request)
+                except TransactionError as err:
+                    request.app.logger.warn("Transaction failed (%s)", err)
+
+            raise web.HTTPConflict(
+                text=json.dumps({"reason": "Concurrent writes to database"}),
+                content_type="application/json",
+            )
 
     return database_middleware
 
 
-def error_log(logger):
+def error_log():
     """Middleware factory for logging exceptions in request handlers
-
-    Args:
-        logger (logging.Logger): Logger instance that should be used for error
-            logging
 
     Returns:
         aiohttp middleware catching every exception logging it to the passed
@@ -50,7 +64,7 @@ def error_log(logger):
         except web.HTTPException:
             raise
         except Exception as err:
-            logger.exception(err)
+            request.app.logger.exception(err)
             raise
 
     return logging_middleware
