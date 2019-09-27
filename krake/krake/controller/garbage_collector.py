@@ -89,9 +89,7 @@ class GarbageCollector(Controller):
         """
         logger.info("List %s %s", apidef.api, apidef.kind)
 
-        resource_list = session.all(apidef)
-
-        async for resource, _ in resource_list:
+        async for resource in session.all(apidef):
             if resource.metadata.deleted:
                 logger.debug("Received %r", resource)
                 await self.queue.put(resource.metadata.uid, resource)
@@ -182,7 +180,7 @@ class GarbageWorker(Worker):
 
         for dependency_ref in resource.metadata.owners:
             cls = self._get_class_by_name(dependency_ref.api, dependency_ref.kind)
-            dependency, _ = await self.session.get(
+            dependency = await self.session.get(
                 cls=cls, namespace=dependency_ref.namespace, name=dependency_ref.name
             )
             await self.session.put(dependency)
@@ -235,7 +233,6 @@ class GarbageWorker(Worker):
             list: a list of all dependents of the given resource
 
         """
-        all_dependents = []
 
         def _in_owners(instance):
             return (
@@ -243,19 +240,15 @@ class GarbageWorker(Worker):
                 and resource_ref(entity) in instance.metadata.owners
             )
 
-        for resource in chain(*self.resources.values()):
-            all_resources = self.session.all(resource)
+        # add all elements of current resource that have entity as dependency
+        dependents = [
+            dependent
+            for resource in chain(*self.resources.values())
+            async for dependent in self.session.all(resource)
+            if _in_owners(dependent)
+        ]
 
-            # add all elements of current resource that have entity as dependency
-            all_dependents.extend(
-                [
-                    resource
-                    async for resource, _ in all_resources
-                    if _in_owners(resource)
-                ]
-            )
-
-        return all_dependents
+        return dependents
 
 
 def main(config):

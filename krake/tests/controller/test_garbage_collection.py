@@ -87,7 +87,7 @@ async def test_cluster_deletion(aiohttp_server, config, db, loop):
             worker = GarbageWorker(client=client, db_host=db.host, db_port=db.port)
             await worker.resource_received(cluster)
 
-        stored_app, _ = await db.get(
+        stored_app = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
         )
         assert stored_app.metadata.deleted is not None
@@ -104,7 +104,7 @@ async def test_cluster_deletion(aiohttp_server, config, db, loop):
             worker = GarbageWorker(client=client, db_host=db.host, db_port=db.port)
             await worker.resource_received(app)
 
-        stored_app, _ = await db.get(
+        stored_app = await db.get(
             Application,
             namespace=cluster.metadata.namespace,
             name=cluster.metadata.name,
@@ -114,9 +114,14 @@ async def test_cluster_deletion(aiohttp_server, config, db, loop):
     # Ensure that the cluster resource is deleted from database
     async with Client(url=server_endpoint(server), loop=loop) as client:
         worker = GarbageWorker(client=client, db_host=db.host, db_port=db.port)
+        # Fetch cluster from database again because it was modified in in the
+        # previous steps.
+        cluster = await db.get(
+            Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        )
         await worker.resource_received(cluster)
 
-    stored_cluster, _ = await db.get(
+    stored_cluster = await db.get(
         Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
     )
 

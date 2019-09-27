@@ -16,6 +16,7 @@ from krake.data.kubernetes import (
     ClusterState,
 )
 from krake.api.app import create_app
+from krake.api.database import revision
 
 from factories.kubernetes import ApplicationFactory, ClusterFactory
 from tests.factories.core import ReasonFactory
@@ -106,7 +107,7 @@ async def test_create_app(aiohttp_client, config, db):
     assert app.spec == data.spec
     assert app.status.state == ApplicationState.PENDING
 
-    stored, _ = await db.get(Application, namespace="testing", name=data.metadata.name)
+    stored = await db.get(Application, namespace="testing", name=data.metadata.name)
     assert stored == app
 
 
@@ -205,7 +206,7 @@ async def test_update_app(aiohttp_client, config, db):
     assert app.status.state == data.status.state
     assert app.spec.manifest == new_manifest
 
-    stored, _ = await db.get(
+    stored = await db.get(
         Application, namespace=data.metadata.namespace, name=app.metadata.name
     )
     assert stored == app
@@ -244,9 +245,9 @@ async def test_update_app_status(aiohttp_client, config, db):
     assert received.metadata == app.metadata
     assert received.status == app.status
 
-    stored, rev = await db.get(Application, namespace="testing", name=app.metadata.name)
+    stored = await db.get(Application, namespace="testing", name=app.metadata.name)
     assert stored.status == received.status
-    assert rev.version == 2
+    assert revision(stored).version == 2
 
 
 async def test_update_app_status_rbac(rbac_allow, config, aiohttp_client):
@@ -283,7 +284,7 @@ async def test_update_app_binding(aiohttp_client, config, db):
     assert received.status.cluster == cluster_ref
     assert received.status.state == ApplicationState.SCHEDULED
 
-    stored, _ = await db.get(Application, namespace="testing", name=app.metadata.name)
+    stored = await db.get(Application, namespace="testing", name=app.metadata.name)
     assert stored.status.cluster == cluster_ref
     assert stored.status.state == ApplicationState.SCHEDULED
 
@@ -303,7 +304,7 @@ async def test_delete_app(aiohttp_client, config, db):
     data = Application.deserialize(await resp.json())
     assert resource_ref(data) == resource_ref(app)
 
-    deleted, _ = await db.get(Application, namespace="testing", name=app.metadata.name)
+    deleted = await db.get(Application, namespace="testing", name=app.metadata.name)
     assert deleted.metadata.deleted is not None
 
 
@@ -325,7 +326,7 @@ async def test_delete_app_with_finalizers(aiohttp_client, config, db):
     received = Application.deserialize(await resp.json())
     assert received.metadata.deleted
 
-    stored, _ = await db.get(Application, namespace="testing", name=app.metadata.name)
+    stored = await db.get(Application, namespace="testing", name=app.metadata.name)
     assert stored.metadata.deleted
 
 
@@ -524,7 +525,7 @@ async def test_create_cluster(aiohttp_client, config, db):
     assert cluster.metadata.modified
     assert cluster.spec == data.spec
 
-    stored, _ = await db.get(Cluster, namespace="testing", name=data.metadata.name)
+    stored = await db.get(Cluster, namespace="testing", name=data.metadata.name)
     assert stored == cluster
 
 
@@ -567,7 +568,7 @@ async def test_update_cluster_status(aiohttp_client, config, db):
     )
     assert resp.status == 200
 
-    stored, rev = await db.get(Cluster, namespace="testing", name=cluster.metadata.name)
+    stored = await db.get(Cluster, namespace="testing", name=cluster.metadata.name)
     assert stored.status == cluster.status
 
 
@@ -597,7 +598,7 @@ async def test_delete_cluster(aiohttp_client, config, db):
     data = Cluster.deserialize(await resp.json())
     assert resource_ref(data) == resource_ref(cluster)
 
-    deleted, _ = await db.get(Cluster, namespace="testing", name=cluster.metadata.name)
+    deleted = await db.get(Cluster, namespace="testing", name=cluster.metadata.name)
     assert deleted.metadata.deleted is not None
 
 
@@ -618,7 +619,7 @@ async def test_delete_cluster_with_finalizers(aiohttp_client, config, db):
     received = Cluster.deserialize(await resp.json())
     assert received.metadata.deleted
 
-    stored, _ = await db.get(
+    stored = await db.get(
         Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
     )
     assert stored.metadata.deleted

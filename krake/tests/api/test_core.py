@@ -50,7 +50,7 @@ async def test_create_role(aiohttp_client, config, db):
     assert role.metadata.modified
     assert role.rules == data.rules
 
-    stored, _ = await db.get(Role, name=data.metadata.name)
+    stored = await db.get(Role, name=data.metadata.name)
     assert stored == role
 
 
@@ -109,7 +109,7 @@ async def test_delete_role(aiohttp_client, config, db):
     data = Role.deserialize(await resp.json())
     assert resource_ref(data) == resource_ref(role)
 
-    deleted, _ = await db.get(Role, name=role.metadata.name)
+    deleted = await db.get(Role, name=role.metadata.name)
     assert deleted.metadata.deleted is not None
 
 
@@ -169,7 +169,7 @@ async def test_create_role_binding(aiohttp_client, config, db):
     assert set(binding.users) == set(data.users)
     assert set(binding.roles) == set(data.roles)
 
-    stored, _ = await db.get(RoleBinding, name=data.metadata.name)
+    stored = await db.get(RoleBinding, name=data.metadata.name)
     assert binding == stored
 
 
@@ -230,7 +230,7 @@ async def test_delete_role_binding(aiohttp_client, config, db):
     data = RoleBinding.deserialize(await resp.json())
     assert resource_ref(data) == resource_ref(binding)
 
-    deleted, _ = await db.get(RoleBinding, name=binding.metadata.name)
+    deleted = await db.get(RoleBinding, name=binding.metadata.name)
     assert deleted.metadata.deleted is not None
 
 

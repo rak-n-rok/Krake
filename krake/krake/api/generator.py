@@ -242,11 +242,11 @@ def _make_list_handler(operation, logger, all=False):
         # Return the list of resources
         if not watch:
             if namespace is None:
-                objs = [obj async for obj, _ in session(request).all(entity_class)]
+                objs = [obj async for obj in session(request).all(entity_class)]
             else:
                 objs = [
                     obj
-                    async for obj, _ in session(request).all(
+                    async for obj in session(request).all(
                         entity_class, namespace=namespace
                     )
                 ]
@@ -275,7 +275,7 @@ def _make_list_handler(operation, logger, all=False):
                             event_type = WatchEventType.MODIFIED
                     else:
                         event_type = WatchEventType.DELETED
-                        obj, _ = await session(request).get_by_key(
+                        obj = await session(request).get_by_key(
                             entity_class, key=rev.key, revision=rev.modified - 1
                         )
 
@@ -320,7 +320,8 @@ def _make_create_handler(operation, logger):
 
         # Ensure that a resource with the same name does not already
         # exists.
-        existing, _ = await session(request).get(body.__class__, **kwargs)
+        existing = await session(request).get(body.__class__, **kwargs)
+
         if existing is not None:
             if namespace:
                 reason = (

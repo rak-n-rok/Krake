@@ -1,6 +1,7 @@
 etcd:
   host: 127.0.0.1
   port: 2379
+  retry_transactions: 1
 
 # TLS configuration of API server
 tls:

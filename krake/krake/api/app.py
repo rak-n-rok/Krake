@@ -61,7 +61,7 @@ def create_app(config):
     Returns:
         aiohttp.web.Application: Krake HTTP API
     """
-    logger = logging.getLogger("krake.api.error")
+    logger = logging.getLogger("krake.api")
 
     if not config["tls"]["enabled"]:
         ssl_context = None
@@ -82,11 +82,16 @@ def create_app(config):
     authorizer = load_authorizer(config)
 
     app = web.Application(
+        logger=logger,
         middlewares=[
-            middlewares.error_log(logger),
+            middlewares.error_log(),
             authentication,
-            middlewares.database(config["etcd"]["host"], config["etcd"]["port"]),
-        ]
+            middlewares.database(
+                host=config["etcd"]["host"],
+                port=config["etcd"]["port"],
+                retry=config["etcd"].get("retry_transactions", 1),
+            ),
+        ],
     )
     app["config"] = config
     app["authorizer"] = authorizer
