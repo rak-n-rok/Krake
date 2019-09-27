@@ -15,8 +15,9 @@ have any questions or need support.
 
 This section describes a quickstart for developers to get started with a Krake
 development setup. Advanced topics are covered in the [Developer
-Documentation](docs/dev/index.rst) and the [Admin
-Documentation](docs/admin/index.rst)
+Documentation](https://rak-n-rok.readthedocs.io/projects/krake/en/readthedocs/dev/index.html)
+and the [Admin
+Documentation](https://rak-n-rok.readthedocs.io/projects/krake/en/readthedocs/admin/index.html).
 
 
 ## Requirements
@@ -94,9 +95,10 @@ python -m krake.controller.kubernetes.cluster
 
 ## Basic Usage
 
-This provides a simple demonstration of Krake's functionalities. Please
-refer to the [User Documentation](docs/user/index.rst) for extended usage
-guidelines, explanations, and examples.
+This provides a simple demonstration of Krake's functionalities. Please refer
+to the [User
+Documentation](https://rak-n-rok.readthedocs.io/projects/krake/en/readthedocs/user/index.html)
+for extended usage guidelines, explanations, and examples.
 
 Download the kubeconfig file, as well as the certificate and key file
 necessary to connect to your Minikube instance.
