@@ -12,7 +12,10 @@
           - pytest
         state: present
 
+    # We need one Minikube cluster in order to run the integration tests
+    - assert: { that: "groups['minikube_clusters'][0] is defined" }
+
     # pytest and rok are installed in /home/krake/.local/bin
     # This is added to the PATH in ~/.profile, which isn't loaded by Ansible
     - name: Run integration tests for krake client
-      shell: ". ~/.profile; pytest {{ git_dir }}/{{test_dir}}/test_integration.py"
+      shell: ". ~/.profile; pytest {{ git_dir }}/{{test_dir}}/test_integration.py --minikubecluster {{groups['minikube_clusters'][0]}}"
