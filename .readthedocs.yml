@@ -1,0 +1,20 @@
+# Read the Docs configuration file
+# See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
+version: 2
+
+# Build documentation in the docs/ directory with Sphinx
+sphinx:
+  configuration: docs/conf.py
+
+# Formats of the documentation to be built
+formats: all
+
+# Configuration of the Python environment to be used
+python:
+  version: 3.6
+  install:
+    - requirements: docs/requirements.txt
+    - method: pip
+      path: krake/
+    - method: pip
+      path: rok/

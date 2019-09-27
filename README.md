@@ -27,6 +27,12 @@ is described in the [Contributor
 Guidelines](CONTRIBUTING.md#setup-a-development-environment).
 
 
+## Documentation
+
+The project's documentation is hosted on [Read the
+Docs](https://rak-n-rok.readthedocs.io/en/latest/).
+
+
 ## Get in touch!
 
 If you need help to setup things, have a question, or simply want to chat with
