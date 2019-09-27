@@ -166,13 +166,27 @@ def argument(*args, **kwargs):
 
 
 class StoreDictPairInList(argparse.Action):
+    """Custom action to store and validate dict <key=value> pairs in a list
+
+    Example:
+        .. code:: python
+
+            parser = argparse.ArgumentParser()
+            parser.add_argument(
+                '--foo', metavar="KEY=VALUE", action=StoreDictPairInList
+            )
+            args = parser.parse_args('--foo label=test'.split())
+            assert argparse.Namespace(foo=[{'label': 'test'}]) == args
+
+    """
+
     def __call__(self, parser, namespace, values, option_string=None):
         items = copy.copy(self.ensure_value(namespace, self.dest, []))
         split_value = values.split("=", 1)
         if len(split_value) != 2:
             print(f"Error: Malformed <key=value> format of {values!r}.")
             raise SystemExit(1)
-        items.append(dict(zip(*split_value)))
+        items.append({key: value for key, value in [split_value]})
         setattr(namespace, self.dest, items)
 
     @staticmethod
