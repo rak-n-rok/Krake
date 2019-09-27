@@ -213,7 +213,7 @@ arg_labels = argument(
     help="Label <key=value>. Can be specified multiple times",
 )
 arg_constraints_labels = argument(
-    "-cl",
+    "-L",
     "--constraint-label",
     dest="constraints_labels",
     default=[],
