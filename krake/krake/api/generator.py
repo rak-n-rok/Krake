@@ -378,7 +378,7 @@ def _make_update_handler(operation, logger):
         # can only be removed.
         if entity.metadata.deleted:
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
-                raise web.HTTPUnprocessableEntity(
+                raise web.HTTPConflict(
                     body=json.dumps(
                         {
                             "metadata": {

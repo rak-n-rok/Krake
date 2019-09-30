@@ -345,7 +345,7 @@ async def test_add_finializer_in_deleted_app(aiohttp_client, config, db):
         f"/applications/{app.metadata.name}",
         json=app.serialize(subresources=set(), readonly=False),
     )
-    assert resp.status == 422
+    assert resp.status == 409
     body = await resp.json()
     assert len(body["metadata"]["finalizers"]) == 1
 
