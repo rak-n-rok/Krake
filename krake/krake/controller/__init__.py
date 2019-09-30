@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 class WorkQueue(object):
     """Simple asynchronous work queue.
 
-
     The key manages a set of key-value pairs. The queue guarantees strict
     sequential processing of keys: If a key-value pair was retrieved via
     :meth:`get`, the same key is not returned via :meth:`get` as long as
@@ -71,20 +70,40 @@ class WorkQueue(object):
             if key not in self.processing:
                 await self.queue.put(key)
 
+        def remove_timer(timer):
+            # Remove timer from dictionary and resolve the waiter for the
+            # removal.
+            del self.timers[key]
+            timer.removed.set_result(None)
+
         if self.debounce == 0:
             await put_key()
         else:
             # Cancel current debounced task if present
-            previous = self.timers.pop(key, None)
+            previous = self.timers.get(key)
             if previous:
                 previous.cancel()
-                # Wait for the cancellation to propagate
-                try:
-                    await previous
-                except asyncio.CancelledError:
-                    pass
 
-            self.timers[key] = self.loop.create_task(debounce())
+                # Await the "removed" future instead of the task itself
+                # because it is not ensured that the "done" callback was executed
+                # when
+                #
+                #   >>> await previous
+                #
+                # returns.
+                await previous.removed
+
+            timer = self.loop.create_task(debounce())
+
+            # We attach a waiter (future) to the timer task that will be used
+            # to await the removal of the key from the timers dictionary. This
+            # is required because it is not ensured that "done" callbacks of
+            # futures are executed before other coroutines blocking in the
+            # future are continued.
+            timer.removed = self.loop.create_future()
+            timer.add_done_callback(remove_timer)
+
+            self.timers[key] = timer
 
     async def get(self):
         """Retrieve a key-value pair from the queue.
@@ -97,18 +116,6 @@ class WorkQueue(object):
 
         """
         key = await self.queue.get()
-
-        # Clear existing timers
-        debounced = self.timers.pop(key, None)
-        if debounced:
-            # By definition, the debounced task has to be done at this point
-            # in time.
-            assert debounced.done()
-
-            # We need to await here. Otherwise the result of the debounced
-            # task is never retrieved.
-            await debounced
-
         value = self.dirty.pop(key)
         self.processing.add(key)
         return key, value

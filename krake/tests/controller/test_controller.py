@@ -51,8 +51,6 @@ async def test_queue_debounce(loop):
     key, value = await queue.get()
     end = loop.time()
 
-    assert len(queue.timers) == 0, "Timer was not deleted"
-
     assert (key, value) == ("key", 1)
 
     # The value should be received a bit after debounce time
@@ -60,6 +58,21 @@ async def test_queue_debounce(loop):
 
     await queue.done("key")
     assert queue.empty()
+
+
+async def test_queue_debounce_burst(loop):
+    queue = WorkQueue(loop=loop, debounce=0.1)
+
+    await queue.put("key", 1)
+
+    await asyncio.sleep(0.05)
+    await queue.put("key", 2)
+
+    await asyncio.sleep(0.05)
+    await queue.put("key", 3)
+
+    key, value = await queue.get()
+    assert (key, value) == ("key", 3)
 
 
 @pytest.mark.slow
@@ -84,6 +97,26 @@ async def test_queue_debounce_with_done(loop):
 
     # The value should be received a bit after debounce time
     assert 1 < end - start < 1.1
+
+
+async def test_queue_pending_debounce(loop):
+    queue = WorkQueue(loop=loop, debounce=0.1)
+
+    # Put version of of the key into the queue
+    await queue.put("key", 1)
+
+    # Wait until the debounce timer triggers and put another version into the
+    # queue. This means the debounce timer is still pending when the first
+    # version is fetched from the queue.
+    await asyncio.sleep(0.2)
+    await queue.put("key", 2)
+
+    key, value = await queue.get()
+    assert (key, value) == ("key", 1)
+    await queue.done(key)
+
+    key, value = await queue.get()
+    assert (key, value) == ("key", 2)
 
 
 async def test_consume_error_handling(loop):
