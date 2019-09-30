@@ -10,7 +10,8 @@ session.
 Example:
     .. code:: python
 
-        from krake.api.database import Session, Key
+        from krake.api.database import Session
+        from krake.data import Key
         from krake.data.serialzable import Serializable
 
 
@@ -18,13 +19,11 @@ Example:
             isbn: int
             title: str
 
-            __metadata__ = {
-                "key": Key("/books/{isbn}")
-            }
+            __etcd_key__ = Key("/books/{isbn}")
 
 
         async with Session(host="localhost") as session:
-            book, revision = await session.get(Book, isbn=9783453146976)
+            book = await session.get(Book, isbn=9783453146976)
 
 .. _etcd: https://etcd.io/
 
@@ -32,7 +31,16 @@ Example:
 import json
 from typing import NamedTuple
 from enum import Enum, auto
+from etcd3 import Txn
 from etcd3.aio_client import AioClient
+
+
+class DatabaseError(Exception):
+    pass
+
+
+class TransactionError(DatabaseError):
+    pass
 
 
 class Revision(NamedTuple):
@@ -96,19 +104,20 @@ class Event(NamedTuple):
 
 
 class Session(object):
-    """Database session for loading and loading serializable objects in
-    an etcd database.
+    """Database session for managing
+    :class:`krake.data.serializable.Serializable` objects in an etcd database.
 
-    The term "serializable object" refers to objects supporting the
-    :func:`krake.data.serialize` and :func:`krake.data.deserialize` functions.
-    In additional to that, two keys are required in the special
-    ``__metadata__`` attribute of models:
+    The serializable objects need have one additional attribute:
 
-    namespace:
-        Defines the etcd key prefix
-    identity:
-        Is a tuple defining the name of the attributes that should used as
-        identifier for an object.
+    __etcd_key__
+        A :class:`krake.data.Key` template for the associated etcd key of a
+        managed object.
+
+    Objects managed by a session have an attached etcd :class:`Revision` when
+    loaded from the database. This revision can be read by :func:`revision`.
+    If an object has no revision attached, it is considered *fresh* or *new*.
+    It is expected that the associated key of a *new* object does not already
+    exist in the databse.
 
     The session is an asynchronous context manager. It takes of care of
     opening and closing an HTTP session to the gRPC JSON gateway of the etcd
@@ -156,8 +165,9 @@ class Session(object):
             **kwargs: Parameters for the etcd key
 
         Returns:
-            (object, Revision): Tuple of deserialized model and revision. If
-            the key was not found in etcd (None, None) is returned.
+            object, None: Deserialized model with attached revision. If
+            the key was not found in etcd, None is returned.
+
         """
         key = cls.__etcd_key__.format_kwargs(**kwargs)
         return await self.get_by_key(cls, key)
@@ -166,7 +176,7 @@ class Session(object):
         resp = await self.client.range(key, revision=revision)
 
         if resp.kvs is None:
-            return (None, None)
+            return None
 
         return self.load_instance(cls, resp.kvs[0])
 
@@ -225,32 +235,93 @@ class Session(object):
     async def put(self, instance):
         """Store new revision of a serializable object on etcd server.
 
+        If the instances does not have an attached :class:`Revision` (see
+        :func:`revision`), it is assumed that a key-value pair should be
+        *created*. Otherwise, it is assumed that the key-value pair is
+        updated.
+
+        A transaction ensures that
+
+        a) the etcd key was not modified in-between if the key is updated
+        b) the key does not already exists if a key is added
+
+        If the transaction is successful, the revision of the instance will
+        updated to the revision returned by the transaction response.
+
         Args:
             instance (object): Serializable object that should be stored
 
-        Returns:
-            int: key-value revision version when the request was applied
+        Raise:
+            TransactionError: If the key was modified in between or already
+                exists
 
         """
         key = instance.__etcd_key__.format_object(instance)
-        data = instance.serialize()
-        resp = await self.client.put(key, json.dumps(data))
-        return resp.header.revision
-        # TODO: Should be we fetch the previous revision here with "prev_kv"?
+        value = json.dumps(instance.serialize())
+        rev = revision(instance)
+
+        txn = Txn(self.client)
+        txn.success(txn.put(key, value))
+
+        if rev is None or rev.version == 0:
+            # Create new key. Ensure the key does not exist.
+            txn.compare(txn.key(key).create == 0)
+        else:
+            # Update existing key. Ensure the key was not modified.
+            txn.compare(txn.key(key).mod == rev.modified)
+
+        resp = await txn.commit()
+
+        if not resp.succeeded:
+            if rev is None:
+                raise TransactionError("Key already exists")
+            raise TransactionError("Key was modified")
+
+        # Update revision
+        if rev is None or rev.version == 0:
+            instance.__revision__ = Revision(
+                key=key,
+                created=resp.header.revision,
+                modified=resp.header.revision,
+                version=1,
+            )
+        else:
+            instance.__revision__ = rev._replace(
+                modified=resp.header.revision, version=rev.version + 1
+            )
 
     async def delete(self, instance):
-        """Delete a given instance from etcd
+        """Delete a given instance from etcd.
+
+        A transaction is used ensuring the etcd key was not modified
+        in-between. If the transaction is successful, the revision of the
+        instance will be updated to the revision returned by the transaction
+        response.
 
         Args:
             instance (object): Serializable object that should be deleted
 
-        Returns:
-            int: Number of keys that where deleted
+        Raises:
+            ValueError: If the passed object has no revision attached.
+            TransactionError: If the key was modified in between
 
         """
         key = instance.__etcd_key__.format_object(instance)
-        resp = await self.client.delete_range(key=key)
-        return resp.deleted
+        rev = revision(instance)
+
+        if rev is None:
+            raise ValueError(f"{instance!r} has no revision")
+
+        txn = Txn(self.client)
+        txn.compare(txn.key(key).mod == rev.modified)
+        txn.success(txn.delete(key))
+
+        resp = await txn.commit()
+
+        if not resp.succeeded:
+            raise TransactionError("Key was modified")
+
+        instance.__revision__ = rev._replace(modified=resp.header.revision, version=0)
 
     def watch(self, cls, **kwargs):
         """Watch the namespace of a given serializable type and yield
@@ -278,13 +349,29 @@ class Session(object):
             kv: etcd key-value pair
 
         Returns:
-            (object, Revision): Tuple of deserialized model and revision
+            object: Deserialized model with attached revision
         """
         value = json.loads(kv.value.decode())
         model = cls.deserialize(value)
-        rev = Revision.from_kv(kv)
+        model.__revision__ = Revision.from_kv(kv)
 
-        return model, rev
+        return model
+
+
+def revision(instance):
+    """Returns the etcd :class:`Revision` of an object used with a
+    :class:`Session`. If the object is currently *unattached* -- which means it
+    was not retrieved from the database with :meth:`Session.get` -- this function
+    returns :obj:`None`.
+
+    Args:
+        instance (object): Object used with :class:`Session`.
+
+    Returns:
+        Revision, None: The current etcd revision of the instance.
+
+    """
+    return getattr(instance, "__revision__", None)
 
 
 class Watcher(object):
@@ -343,7 +430,8 @@ class Watcher(object):
                     # Resolve event type. Empty string means "PUT" event.
                     if event.type == "":
                         type_ = EventType.PUT
-                        value, rev = self.session.load_instance(self.model, event.kv)
+                        value = self.session.load_instance(self.model, event.kv)
+                        rev = revision(value)
                     else:
                         assert event.type.name == "DELETE"
                         type_ = EventType.DELETE

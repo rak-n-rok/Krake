@@ -153,7 +153,7 @@ def load(argname, cls):
             if namespace:
                 key_params["namespace"] = namespace
 
-            instance, _ = await session(request).get(cls, **key_params)
+            instance = await session(request).get(cls, **key_params)
             if instance is None:
                 raise web.HTTPNotFound()
             kwargs[argname] = instance

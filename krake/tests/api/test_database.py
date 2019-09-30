@@ -1,9 +1,10 @@
 import json
 import factory
+import pytest
 
 from krake.data import Key
 from krake.data.serializable import Serializable
-from krake.api.database import EventType
+from krake.api.database import EventType, Revision, revision, TransactionError
 
 from factories import fake
 
@@ -33,14 +34,17 @@ def test_deserialize():
     assert model.name == data.name
 
 
-async def test_put(db, etcd_client, loop):
+async def test_put_add(db, etcd_client, loop):
     data = MyModelFactory()
     await db.put(data)
+    rev = revision(data)
 
     resp = await etcd_client.range(f"/model/{data.id}")
 
     assert len(resp.kvs) == 1
     assert resp.kvs[0].key.decode() == f"/model/{data.id}"
+    assert rev == Revision.from_kv(resp.kvs[0])
+    assert rev.version == 1
 
     value = json.loads(resp.kvs[0].value.decode())
     model = MyModel(**value)
@@ -49,11 +53,60 @@ async def test_put(db, etcd_client, loop):
     assert model.name == data.name
 
 
+async def test_put_key_already_exists(db, etcd_client):
+    data = MyModelFactory()
+    await etcd_client.put(f"/model/{data.id}", "already existing")
+
+    with pytest.raises(TransactionError):
+        await db.put(data)
+
+    assert revision(data) is None
+
+
+async def test_put_update(db, etcd_client, loop):
+    data = MyModelFactory()
+
+    await db.put(data)  # Insert first version
+
+    # Make changes and put second version
+    data.name = f"updated name"
+    await db.put(data)
+    rev = revision(data)
+
+    resp = await etcd_client.range(f"/model/{data.id}")
+
+    assert len(resp.kvs) == 1
+    assert resp.kvs[0].key.decode() == f"/model/{data.id}"
+    assert rev == Revision.from_kv(resp.kvs[0])
+    assert rev.version == 2
+
+    value = json.loads(resp.kvs[0].value.decode())
+    model = MyModel(**value)
+
+    assert model.id == data.id
+    assert model.name == data.name
+
+
+async def test_put_modified_key(db, etcd_client):
+    data = MyModelFactory()
+    await db.put(data)  # Insert first version
+
+    # Put second version in-between
+    await etcd_client.put(f"/model/{data.id}", "intermediate change")
+
+    # Make changes and try to update which should raise an transaction error
+    # because the key was modified.
+    data.name = f"updated name"
+    with pytest.raises(TransactionError):
+        await db.put(data)
+
+
 async def test_get(db, etcd_client):
     data = MyModelFactory()
     await etcd_client.put(f"/model/{data.id}", json.dumps(data.serialize()))
 
-    model, rev = await db.get(MyModel, id=data.id)
+    model = await db.get(MyModel, id=data.id)
+    rev = revision(model)
 
     assert rev.version == 1
     assert rev.key == f"/model/{data.id}"
@@ -76,12 +129,40 @@ async def test_all(db, etcd_client):
 async def test_delete(db, etcd_client):
     data = MyModelFactory()
     await db.put(data)
+    old_rev = revision(data)
 
-    deleted = await db.delete(data)
-    assert deleted == 1
+    await db.delete(data)
+    rev = revision(data)
+
+    assert rev.version == 0
+    assert rev.modified == old_rev.modified + 1
+    assert rev.created == old_rev.created
 
     resp = await etcd_client.range(f"/model/{data.id}")
     assert resp.kvs is None
+
+
+async def test_delete_key_modified(db, etcd_client):
+    data = MyModelFactory()
+    await db.put(data)
+
+    # Modify in between
+    await etcd_client.put(f"/model/{data.id}", "intermediate change")
+
+    with pytest.raises(TransactionError):
+        await db.delete(data)
+
+
+async def test_delete_and_add(db, etcd_client):
+    data = MyModelFactory()
+    await db.put(data)
+
+    await db.delete(data)
+
+    await db.put(data)
+    rev = revision(data)
+
+    assert rev.version == 1
 
 
 async def test_watching_create(db, loop):

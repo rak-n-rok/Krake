@@ -342,7 +342,7 @@ async def _fetch_roles(db, default_roles, default_role_bindings, username):
     """
     roles = set()
 
-    bindings = (binding async for binding, _ in db.all(RoleBinding))
+    bindings = (binding async for binding in db.all(RoleBinding))
 
     # FIXME: Use a cache
     async for binding in _chain(default_role_bindings, bindings):
@@ -354,7 +354,7 @@ async def _fetch_roles(db, default_roles, default_role_bindings, username):
                     try:
                         role = default_roles[name]
                     except KeyError:
-                        role, _ = await db.get(Role, name=name)
+                        role = await db.get(Role, name=name)
 
                     if role is not None:
                         yield role
