@@ -170,7 +170,6 @@ def persistent(key):
     def decorator(cls):
         assert not hasattr(cls, "__etcd_key__")
         cls.__etcd_key__ = Key(key, attribute="metadata")
-        cls.__revision__ = None
         return cls
 
     return decorator

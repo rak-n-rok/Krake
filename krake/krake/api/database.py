@@ -245,6 +245,9 @@ class Session(object):
         a) the etcd key was not modified in-between if the key is updated
         b) the key does not already exists if a key is added
 
+        If the transaction is successful, the revision of the instance will
+        updated to the revision returned by the transaction response.
+
         Args:
             instance (object): Serializable object that should be stored
 
@@ -290,8 +293,10 @@ class Session(object):
     async def delete(self, instance):
         """Delete a given instance from etcd.
 
-        A transcation is used ensuring the etcd key was not modified
-        inbetween.
+        A transaction is used ensuring the etcd key was not modified
+        in-between. If the transaction is successful, the revision of the
+        instance will be updated to the revision returned by the transaction
+        response.
 
         Args:
             instance (object): Serializable object that should be deleted
@@ -355,7 +360,9 @@ class Session(object):
 
 def revision(instance):
     """Returns the etcd :class:`Revision` of an object used with a
-    :class:`Session`.
+    :class:`Session`. If the object is currently *unattached* -- which means it
+    was not retrieved from the database with :meth:`Session.get` -- this function
+    returns :obj:`None`.
 
     Args:
         instance (object): Object used with :class:`Session`.
