@@ -37,7 +37,7 @@ def printer(file=sys.stdout, **formatters):
     :func:`print_generic_yaml` is used as default formatter for the ``yaml``
     format key.
 
-    The return value of the wrapped function is is transparently passed back
+    The return value of the wrapped function is transparently passed back
     to the caller. If :obj:`None` is returned from the wrapped function, this
     the output is considered *empty*. No formatter will be called and nothing
     is printed to stdout.
