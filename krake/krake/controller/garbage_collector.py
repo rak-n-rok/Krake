@@ -26,7 +26,7 @@ from functools import partial
 from itertools import chain
 
 from krake import setup_logging, load_config
-from krake.api.database import Session, EventType
+from krake.api.database import Session, EventType, TransactionError
 from krake.controller import Controller, run, Worker
 from krake.data.core import resource_ref
 from krake.client.kubernetes import KubernetesApi
@@ -142,28 +142,48 @@ class GarbageWorker(Worker):
         async with Session(host=self.db_host, port=self.db_port) as session:
             self.session = session
 
-            # Check if there are dependents
-            dependents_list = await self._get_dependents(resource)
-            if dependents_list:
-                await self._mark_dependents(dependents_list)
+            # Ensure that the "self.session" reference is removed after the
+            # function call in the "finally" section.
+            try:
+                # If a transaction errors occurs -- which means that that the
+                # etcd key was modified in between -- fetch the new version
+                # from the store and retry the operation until. This is
+                # repeated until the operation succeeds.
+                while True:
+                    try:
+                        return await self._cleanup(resource)
+                    except TransactionError as err:
+                        logger.warn("Transaction error: %s. Reload resource.", err)
+                        cls = self._get_class_by_name(resource.api, resource.kind)
+                        resource = await self.session.get(
+                            cls=cls,
+                            namespace=resource.metadata.namespace,
+                            name=resource.metadata.name,
+                        )
+            finally:
                 self.session = None
-                return
 
-            # Delete a resource with no finalizer
-            if not resource.metadata.finalizers:
-                await self._delete_resource(resource)
+    async def _cleanup(self, resource):
+        # Check if there are dependents
+        dependents = await self._get_dependents(resource)
+        if dependents:
+            logger.info("Delete dependencies of %s", resource_ref(resource))
+            await self._mark_dependents(dependents)
+            return
 
-            self.session = None
+        # Delete a resource with no finalizer
+        if not resource.metadata.finalizers:
+            await self._delete_resource(resource)
 
     async def _delete_resource(self, resource):
         """Remove a resource from the database before updating its dependencies
 
         Args:
-            resource: the resource to permanently remove.
+            resource: the resource to permTanently remove.
 
         """
         # Delete from database
-        logger.debug("%s %r completely deleted", resource.kind, resource.metadata.name)
+        logger.info("%s completely deleted", resource_ref(resource))
         await self.session.delete(resource)
 
         await self._update_dependencies(resource)
@@ -183,7 +203,9 @@ class GarbageWorker(Worker):
             dependency = await self.session.get(
                 cls=cls, namespace=dependency_ref.namespace, name=dependency_ref.name
             )
-            await self.session.put(dependency)
+            if dependency.metadata.deleted:
+                logger.info("Reenqueue %s", resource_ref(dependency))
+                await self.resource_received(dependency)
 
     def _get_class_by_name(self, api_name, cls_name):
         """From the garbage collected resources, get the resource class that
@@ -210,18 +232,18 @@ class GarbageWorker(Worker):
         else:
             raise ValueError(f"Class '{cls_name}' not found.")
 
-    async def _mark_dependents(self, resource_list):
+    async def _mark_dependents(self, dependents):
         """Mark all given resources as deleted.
 
         Args:
-            resource_list (list): list of resources to mark as deleted.
+            dependents (list): list of resources to mark as deleted.
 
         """
-        for resource in resource_list:
-            if resource.metadata.deleted:
-                continue
-            resource.metadata.deleted = datetime.now()
-            await self.session.put(resource)
+        for dependent in dependents:
+            if not dependent.metadata.deleted:
+                logger.info("Delete dependent %s", resource_ref(dependent))
+                dependent.metadata.deleted = datetime.now()
+                await self.session.put(dependent)
 
     async def _get_dependents(self, entity):
         """Retrieve all direct dependents of a resource.

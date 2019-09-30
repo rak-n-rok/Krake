@@ -111,16 +111,6 @@ async def test_cluster_deletion(aiohttp_server, config, db, loop):
         )
         assert stored_app is None
 
-    # Ensure that the cluster resource is deleted from database
-    async with Client(url=server_endpoint(server), loop=loop) as client:
-        worker = GarbageWorker(client=client, db_host=db.host, db_port=db.port)
-        # Fetch cluster from database again because it was modified in in the
-        # previous steps.
-        cluster = await db.get(
-            Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
-        )
-        await worker.resource_received(cluster)
-
     stored_cluster = await db.get(
         Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
     )
