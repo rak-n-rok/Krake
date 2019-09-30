@@ -124,7 +124,10 @@ def delete_application(config, session, namespace, name):
     if namespace is None:
         namespace = config["user"]
 
-    session.delete(f"/kubernetes/namespaces/{namespace}/applications/{name}")
+    resp = session.delete(f"/kubernetes/namespaces/{namespace}/applications/{name}")
+    if resp.status_code == 204:
+        return None
+    return resp.json()
 
 
 cluster = kubernetes.subparser("cluster", help="Manage Kubernetes clusters")
@@ -252,4 +255,6 @@ def delete_cluster(config, session, namespace, name, cascade):
         url = f"{url}?cascade"
 
     resp = session.delete(url)
+    if resp.status_code == 204:
+        return None
     return resp.json()
