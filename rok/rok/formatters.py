@@ -38,7 +38,9 @@ def printer(file=sys.stdout, **formatters):
     format key.
 
     The return value of the wrapped function is is transparently passed back
-    to the caller.
+    to the caller. If :obj:`None` is returned from the wrapped function, this
+    the output is considered *empty*. No formatter will be called and nothing
+    is printed to stdout.
 
     Args:
         file (file-like object, optional): Output file formatted output is
@@ -86,6 +88,9 @@ def printer(file=sys.stdout, **formatters):
                 value = func(*args, **kwargs)
             except HTTPError as he:
                 sys.exit(str(he))
+
+            if value is None:
+                return
 
             try:
                 formatter = formatters[format_type]
