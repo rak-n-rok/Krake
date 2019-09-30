@@ -47,7 +47,8 @@ async def test_transaction_retry(aiohttp_client, db, config, loop):
         book = await session(request).get(Book, isbn=request.match_info["isbn"])
         assert book is not None
 
-        # If the handler is retired, this book
+        # If the handler is called the first time, inform the modifying
+        # coroutine that the book was fetched from the database.
         if not fetched.done():
             fetched.set_result(revision(book).version)
 
@@ -62,6 +63,8 @@ async def test_transaction_retry(aiohttp_client, db, config, loop):
         return web.json_response(book.serialize())
 
     async def modify(book):
+        # Wait until the book is fetched in the request handler, then modify
+        # it and inform the request handler that it was modified.
         await fetched
         await db.put(book)
         modified.set_result(None)

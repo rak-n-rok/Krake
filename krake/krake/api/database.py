@@ -104,7 +104,7 @@ class Event(NamedTuple):
 
 
 class Session(object):
-    """Database session for manaing
+    """Database session for managing
     :class:`krake.data.serializable.Serializable` objects in an etcd database.
 
     The serializable objects need have one additional attribute:
@@ -240,9 +240,10 @@ class Session(object):
         *created*. Otherwise, it is assumed that the key-value pair is
         updated.
 
-        A transaction is used ensuring that the etcd key was not modified in
-        between for when updating a key or that the key does not already
-        exists if a key is added.
+        A transaction ensures that
+
+        a) the etcd key was not modified in-between if the key is updated
+        b) the key does not already exists if a key is added
 
         Args:
             instance (object): Serializable object that should be stored
