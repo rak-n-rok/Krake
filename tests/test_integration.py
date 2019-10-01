@@ -1,46 +1,58 @@
 import util
 import logging
 import json
-import os
-import time
-
-import sys, getopt
 
 logging.basicConfig(level=logging.DEBUG)
 
 KRAKE_HOMEDIR = "/home/krake"
 
+
 def test_scenario1(minikubecluster):
+    def check_app_running(response):
+        try:
+            app_details = json.loads(response)
+            if app_details["status"]["state"] == "RUNNING":
+                return True
+        except (KeyError, json.JSONDecodeError):
+            return False
+
+    def check_empty_list(response):
+        try:
+            if json.loads(response) == []:
+                return True
+        except json.JSONDecodeError:
+            return False
+
     CLUSTER_NAME = minikubecluster
     kubeconfig_path = f"{KRAKE_HOMEDIR}/clusters/config/{CLUSTER_NAME}"
 
     # Create cluster
-    cmd = f"rok kube cluster create {kubeconfig_path}"
-    response = util.run(cmd)
+    response = util.run(f"rok kube cluster create {kubeconfig_path}")
     logging.info("response from the command: %s\n", response)
 
     # List cluster and assert it's running
-    cmd = "rok kube cluster list -f json"
-    response = util.run(cmd)
+    response = util.run("rok kube cluster list -f json")
     logging.info("response from the command: %s\n", response)
 
     cluster_list = json.loads(response)
     assert cluster_list[0]["metadata"]["name"] == CLUSTER_NAME
 
     # Create application
-    cmd = f"rok kube app create -f \
+    response = util.run(
+        f"rok kube app create -f \
         {KRAKE_HOMEDIR}/git/krake/tests/echo-demo.yaml echo-demo"
-
-    response = util.run(cmd)
+    )
     logging.info("response from the command: %s\n", response)
-
-    # Waiting for the application to be spawned and in RUNNING state.
-    time.sleep(1)
 
     # Get application details and assert it's running on the previously
     # created cluster
-    cmd = "rok kube app get echo-demo -f json"
-    response = util.run(cmd)
+    response = util.run(
+        "rok kube app get echo-demo -f json",
+        retry=10,
+        interval=1,
+        condition=check_app_running,
+        error_message="Unable to observe the application in a RUNNING state",
+    )
     logging.info("response from the command: %s\n", response)
 
     app_details = json.loads(response)
@@ -51,35 +63,38 @@ def test_scenario1(minikubecluster):
     svc_url = app_details["status"]["services"]["echo-demo"]
 
     # Connect to the application
-    cmd = f"curl {svc_url}"
-    response = util.run(cmd, retry=10, interval=1)
+    response = util.run(f"curl {svc_url}", retry=10, interval=1)
 
     logging.info("response from the command: %s\n", response)
 
     # Delete the application
-    cmd = "rok kube app delete echo-demo"
-    response = util.run(cmd)
+    response = util.run("rok kube app delete echo-demo")
     logging.info("response from the command: %s\n", response)
 
-    # Waiting for application to be deleted
-    time.sleep(10)
-
-    cmd = "rok kube app list -f json"
-    response = util.run(cmd)
+    # Add a condition to wait for the application to be actually deleted
+    response = util.run(
+        "rok kube app list -f json",
+        retry=10,
+        interval=1,
+        condition=check_empty_list,
+        error_message="Unable to observe the application deleted",
+    )
     logging.info("response from the command: %s\n", response)
 
     assert json.loads(response) == []
 
     # Delete the cluster
-    cmd = f"rok kube cluster delete {CLUSTER_NAME}"
-    response = util.run(cmd)
+    response = util.run(f"rok kube cluster delete {CLUSTER_NAME}")
     logging.info("response from the command: %s\n", response)
 
-    # Waiting for cluster to be deleted
-    time.sleep(10)
-
-    cmd = "rok kube cluster list -f json"
-    response = util.run(cmd)
+    # Add a condition to wait for the cluster to be actually deleted
+    response = util.run(
+        "rok kube cluster list -f json",
+        retry=10,
+        interval=1,
+        condition=check_empty_list,
+        error_message="Unable to observe the cluster deleted",
+    )
     logging.info("response from the command: %s\n", response)
 
     assert json.loads(response) == []
