@@ -25,12 +25,9 @@ def test_scenario1(minikubecluster):
     logging.info("response from the command: %s\n", response)
 
     cluster_list = json.loads(response)
-    # cluster_list = response.json()
     assert cluster_list[0]["metadata"]["name"] == CLUSTER_NAME
-    # assert cluster_list[0]["status"]["state"] == "RUNNING"
 
     # Create application
-
     cmd = f"rok kube app create -f \
         {KRAKE_HOMEDIR}/git/krake/tests/echo-demo.yaml echo-demo"
 
