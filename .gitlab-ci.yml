@@ -21,7 +21,7 @@ cache:
     - .cache/pip
 
 
-unittests-krake:
+.unittests-krake-template: &unittests-krake-definition
   stage: test
   image: python:3.6
   script:
@@ -39,8 +39,20 @@ unittests-krake:
   tags:
     - docker
 
+unittests-krake:
+  <<: *unittests-krake-definition
+  except:
+    - merge_requests
+    - schedules
 
-flake8-krake:
+unittests-krake:
+  <<: *unittests-krake-definition
+  only:
+    - merge_requests
+    - schedules
+
+
+.flake8-krake-template: &flake8-krake-definition
   stage: test
   image: python:3.6
   script:
@@ -49,8 +61,20 @@ flake8-krake:
   tags:
     - docker
 
+flake8-krake:
+  <<: *flake8-krake-definition
+  except:
+    - merge_requests
+    - schedules
 
-flake8-rok:
+flake8-krake:
+  <<: *flake8-krake-definition
+  only:
+    - merge_requests
+    - schedules
+
+
+.flake8-rok-template: &flake8-rok-definition
   stage: test
   image: python:3.6
   script:
@@ -58,6 +82,18 @@ flake8-rok:
     - flake8 rok/rok
   tags:
     - docker
+
+flake8-rok:
+  <<: *flake8-rok-definition
+  except:
+    - merge_requests
+    - schedules
+
+flake8-rok:
+  <<: *flake8-rok-definition
+  only:
+    - merge_requests
+    - schedules
 
 
 provision-staging-infra:
