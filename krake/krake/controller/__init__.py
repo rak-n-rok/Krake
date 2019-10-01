@@ -29,15 +29,26 @@ class WorkQueue(object):
     Args:
         maxsize (int, optional): Maximal number of items in the queue before
             :meth:`put` blocks. Defaults to 0 which means the size is infinite
-        loop (asyncio.AbstractEventLoop): Event loop that should be used
+        debounce (float): time in second for the debouncing of the values. A
+            number higher than 0 means that the queue will wait the given time
+            before giving a value. If a newer value is received, this time is
+            reset.
+        loop (asyncio.AbstractEventLoop, optional): Event loop that should be
+            used
 
     Todo:
         * Implement rate limiting and delays
     """
 
-    def __init__(self, maxsize=0, loop=None):
+    def __init__(self, maxsize=0, debounce=0, loop=None):
+        if loop is None:
+            loop = asyncio.get_event_loop()
+
         self.dirty = dict()
+        self.timers = dict()
         self.processing = set()
+        self.debounce = debounce
+        self.loop = loop
         self.queue = asyncio.Queue(maxsize=maxsize, loop=loop)
 
     async def put(self, key, value):
@@ -48,9 +59,51 @@ class WorkQueue(object):
             value: New value that is associated with the key
 
         """
-        if key not in self.processing:
-            await self.queue.put(key)
-        self.dirty[key] = value
+
+        async def debounce():
+            await asyncio.sleep(self.debounce)
+            await put_key()
+
+        async def put_key():
+            self.dirty[key] = value
+
+            if key not in self.processing:
+                await self.queue.put(key)
+
+        def remove_timer(timer):
+            # Remove timer from dictionary and resolve the waiter for the
+            # removal.
+            del self.timers[key]
+            timer.removed.set_result(None)
+
+        if self.debounce == 0:
+            await put_key()
+        else:
+            # Cancel current debounced task if present
+            previous = self.timers.get(key)
+            if previous:
+                previous.cancel()
+
+                # Await the "removed" future instead of the task itself
+                # because it is not ensured that the "done" callback was executed
+                # when
+                #
+                #   >>> await previous
+                #
+                # returns.
+                await previous.removed
+
+            timer = self.loop.create_task(debounce())
+
+            # We attach a waiter (future) to the timer task that will be used
+            # to await the removal of the key from the timers dictionary. This
+            # is required because it is not ensured that "done" callbacks of
+            # futures are executed before other coroutines blocking in the
+            # future are continued.
+            timer.removed = self.loop.create_future()
+            timer.add_done_callback(remove_timer)
+
+            self.timers[key] = timer
 
     async def get(self):
         """Retrieve a key-value pair from the queue.
@@ -147,12 +200,19 @@ class Controller(object):
     """
 
     def __init__(
-        self, api_endpoint, worker_factory, worker_count=10, loop=None, ssl_context=None
+        self,
+        api_endpoint,
+        worker_factory,
+        worker_count=10,
+        loop=None,
+        ssl_context=None,
+        debounce=0,
     ):
         self.loop = loop or asyncio.get_event_loop()
         self.client = None
         self.worker_factory = worker_factory
         self.worker_count = worker_count
+        self.debounce = debounce
         self.queue = None
         self.watcher = None
         self.workers = None
@@ -175,7 +235,7 @@ class Controller(object):
             url=self.api_endpoint, loop=self.loop, ssl_context=self.ssl_context
         )
         await self.client.open()
-        self.queue = WorkQueue(loop=self.loop)
+        self.queue = WorkQueue(loop=self.loop, debounce=self.debounce)
 
         # Start worker tasks
         self.workers = [

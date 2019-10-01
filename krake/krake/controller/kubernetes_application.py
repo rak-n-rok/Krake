@@ -36,8 +36,8 @@ from krake.data.core import ReasonCode
 from krake.data.kubernetes import ApplicationState
 from krake.client.kubernetes import KubernetesApi
 
-from ..exceptions import on_error, ControllerError, application_error_mapping
-from .. import Controller, Worker, run, create_ssl_context
+from .exceptions import on_error, ControllerError, application_error_mapping
+from . import Controller, Worker, run, create_ssl_context
 
 
 logger = logging.getLogger("krake.controller.kubernetes")
@@ -65,17 +65,22 @@ class ApplicationController(Controller):
         kubernetes_api = KubernetesApi(self.client)
 
         def scheduled_or_deleting(app):
-            return app.status.state == ApplicationState.SCHEDULED or (
+            accepted = app.status.state == ApplicationState.SCHEDULED or (
                 app.metadata.deleted
                 and app.metadata.finalizers
-                and app.metadata.finalizers[-1] == "cleanup"
+                and app.metadata.finalizers[-1] == "kubernetes_resources_deletion"
             )
+            if not accepted:
+                logger.debug(f"Rejected Application {app}")
+            return accepted
 
         async def list_apps():
             logger.info("List application")
             app_list = await kubernetes_api.list_all_applications()
             for app in filter(scheduled_or_deleting, app_list.items):
-                logger.debug("Received %r", app)
+                logger.debug(
+                    "Received %r (%s)", app.metadata.name, app.metadata.namespace
+                )
                 await self.queue.put(app.metadata.uid, app)
 
         async def watch_apps(watcher):
@@ -83,7 +88,9 @@ class ApplicationController(Controller):
             async for event in watcher:
                 app = event.object
                 if scheduled_or_deleting(app):
-                    logger.debug("Received %r", app)
+                    logger.debug(
+                        "Received %r (%s)", app.metadata.name, app.metadata.namespace
+                    )
                     await self.queue.put(app.metadata.uid, app)
 
         async with kubernetes_api.watch_all_applications() as watcher:
@@ -196,6 +203,8 @@ class ResourceID(NamedTuple):
 class ApplicationWorker(Worker):
     @on_error(ControllerError)
     async def resource_received(self, app):
+        logger.debug("Handle %r", app)
+
         kubernetes_api = KubernetesApi(self.client)
         copy = deepcopy(app)
 
@@ -206,6 +215,8 @@ class ApplicationWorker(Worker):
             await self._apply_manifest(copy, kubernetes_api)
 
     async def _cleanup_application(self, app, kubernetes_api):
+        logger.info("Cleanup %r (%s)", app.metadata.name, app.metadata.namespace)
+
         # Delete Kubernetes resources if the application was bound to a
         # cluster and there Kubernetes resources were created.
         if app.status.cluster and app.status.manifest:
@@ -222,14 +233,31 @@ class ApplicationWorker(Worker):
                         resp=resp,
                     )
 
+        if (
+            app.metadata.finalizers
+            and app.metadata.finalizers[-1] == "kubernetes_resources_deletion"
+        ):
+            app.metadata.finalizers.pop(-1)
+
         await kubernetes_api.update_application(
             namespace=app.metadata.namespace, name=app.metadata.name, body=app
         )
 
     async def _apply_manifest(self, app, kubernetes_api):
+        logger.info("Apply manifest %r (%s)", app.metadata.name, app.metadata.namespace)
+
         if not app.status.cluster:
             raise InvalidStateError(
                 "Application is scheduled but no cluster is assigned"
+            )
+
+        # Append "kubernetes_resources_deletion" finalizer if not already present.
+        # This will prevent the API from deleting the resource without remove the
+        # Kubernetes resources.
+        if "kubernetes_resources_deletion" not in app.metadata.finalizers:
+            app.metadata.finalizers.append("kubernetes_resources_deletion")
+            await kubernetes_api.update_application(
+                namespace=app.metadata.namespace, name=app.metadata.name, body=app
             )
 
         # Initialize empty services dictionary: The services dictionary is
@@ -282,15 +310,6 @@ class ApplicationWorker(Worker):
 
         # Update resource in application status
         app.status.manifest = app.spec.manifest.copy()
-
-        # Append "cleanup" finalizer of not already present. This will prevent
-        # the API from deleting the resource without remove the Kubernetes
-        # resources.
-        if "cleanup" not in app.metadata.finalizers:
-            app.metadata.finalizers.append("cleanup")
-            await kubernetes_api.update_application(
-                namespace=app.metadata.namespace, name=app.metadata.name, body=app
-            )
 
         # Transition into running state
         app.status.state = ApplicationState.RUNNING
@@ -431,12 +450,12 @@ class KubernetesClient(object):
 
         if resp is None:
             resp = await self._create(kind, body=resource, namespace=namespace)
-            logger.info("%s created. status=%r", kind, resp.status)
+            logger.debug("%s created. status=%r", kind, resp.status)
         else:
             resp = await self._patch(
                 kind, name=name, body=resource, namespace=namespace
             )
-            logger.info("%s patched. status=%r", kind, resp.status)
+            logger.debug("%s patched. status=%r", kind, resp.status)
 
         return resp
 
@@ -458,11 +477,11 @@ class KubernetesClient(object):
             resp = await self._delete(kind, name=name, namespace=namespace)
         except ApiException as err:
             if err.status == 404:
-                logger.info("%s already deleted", kind)
+                logger.debug("%s already deleted", kind)
                 return
             raise InvalidResourceError(err_resp=err)
 
-        logger.info("%s deleted. status=%r", kind, resp.status)
+        logger.debug("%s deleted. status=%r", kind, resp.status)
 
         return resp
 
@@ -491,7 +510,7 @@ def main():
 
     setup_logging(config["log"])
     logger.debug("Krake configuration settings:\n %s" % pprint.pformat(config))
-    controller_config = config["controllers"]["kubernetes"]["application"]
+    controller_config = config["controllers"]["kubernetes_application"]
 
     tls_config = controller_config.get("tls")
     ssl_context = create_ssl_context(tls_config)
@@ -502,6 +521,7 @@ def main():
         worker_factory=ApplicationWorker,
         worker_count=controller_config["worker_count"],
         ssl_context=ssl_context,
+        debounce=controller_config.get("debounce", 0),
     )
     setup_logging(config["log"])
     run(controller)

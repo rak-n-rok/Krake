@@ -54,6 +54,11 @@ default-role-bindings:
 
 controllers:
 
+  garbage_collector:
+    api_endpoint: http://localhost:8080
+    worker_count: 5
+    debounce: 1.5
+
   # Example:
   # <resource>_controller:
   #   api_endpoint: localhost:8443
@@ -67,30 +72,23 @@ controllers:
   scheduler:
     api_endpoint: http://localhost:8080
     worker_count: 5
+    debounce: 0.5
     tls:
       enabled: false
       client_ca: tmp/pki/ca.pem
       client_cert: tmp/pki/system:scheduler.pem
       client_key: tmp/pki/system:scheduler-key.pem
 
-  kubernetes:
-    cluster:
-      api_endpoint: http://localhost:8080
-      worker_count: 5
-      tls:
-        enabled: false
-        client_ca: tmp/pki/ca.pem
-        client_cert: tmp/pki/system:kube_cluster.pem
-        client_key: tmp/pki/system:kube_cluster-key.pem
+  kubernetes_application:
+    api_endpoint: http://localhost:8080
+    worker_count: 5
+    debounce: 0.5
+    tls:
+      enabled: false
+      client_ca: tmp/pki/ca.pem
+      client_cert: tmp/pki/system:kube_app.pem
+      client_key: tmp/pki/system:kube_app-key.pem
 
-    application:
-      api_endpoint: http://localhost:8080
-      worker_count: 5
-      tls:
-        enabled: false
-        client_ca: tmp/pki/ca.pem
-        client_cert: tmp/pki/system:kube_app.pem
-        client_key: tmp/pki/system:kube_app-key.pem
 
 log:
   version: 1

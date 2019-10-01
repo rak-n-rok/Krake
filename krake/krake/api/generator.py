@@ -378,7 +378,7 @@ def _make_update_handler(operation, logger):
         # can only be removed.
         if entity.metadata.deleted:
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
-                raise web.HTTPUnprocessableEntity(
+                raise web.HTTPConflict(
                     body=json.dumps(
                         {
                             "metadata": {
@@ -396,27 +396,13 @@ def _make_update_handler(operation, logger):
 
         entity.metadata.modified = datetime.now()
 
-        # Resource is in "deletion in progress" state and all finalizers have
-        # been removed. Delete the resource from database.
-        #
-        # TODO: The final deletion should be done in the garbage collector
-        #   instead of the API (see #235)
-        if entity.metadata.deleted and not entity.metadata.finalizers:
-            await session(request).delete(entity)
-            logger.info(
-                "Delete %s %r (%s)",
-                operation.resource.singular,
-                entity.metadata.name,
-                entity.metadata.uid,
-            )
-        else:
-            await session(request).put(entity)
-            logger.info(
-                "Update %s %r (%s)",
-                operation.resource.singular,
-                entity.metadata.name,
-                entity.metadata.uid,
-            )
+        await session(request).put(entity)
+        logger.info(
+            "Update %s %r (%s)",
+            operation.resource.singular,
+            entity.metadata.name,
+            entity.metadata.uid,
+        )
 
         return web.json_response(entity.serialize())
 
@@ -437,19 +423,8 @@ def _make_delete_handler(operation, logger):
         if entity.metadata.deleted:
             return web.json_response(entity.serialize())
 
-        # No finalizers registered. Delete resource immediately
-        # TODO: Let the garbage collector delete the resource (see #235)
-        if not entity.metadata.finalizers:
-            await session(request).delete(entity)
-            logger.info(
-                "Delete %s %r (%s)",
-                operation.resource.singular,
-                entity.metadata.name,
-                entity.metadata.uid,
-            )
-            return web.Response(status=204)
-
         # TODO: Should be update "modified" here?
+        # Resource marked as deletion, to be deleted by the Garbage Collector
         entity.metadata.deleted = datetime.now()
 
         await session(request).put(entity)

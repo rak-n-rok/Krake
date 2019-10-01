@@ -90,6 +90,7 @@ def generate_client(apidef):
         if not cls.__doc__:
             cls.__doc__ = make_class_docstring(apidef, cls)
 
+        cls.api_name = apidef.name
         return cls
 
     return decorator

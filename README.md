@@ -9,9 +9,9 @@ Kubernetes or OpenShift) and presents them through a single interface to the
 cloud user. The user's workloads are scheduled depending on both user
 requirements (hardware, latencies, cost) and platforms characteristics (energy
 efficiency, load). The scheduling algorithm can be optimized for example on
-latencies, cost, or energy. 
-Krake can be leveraged for a wide range of application scenarios such as 
-central management of distributed compute capacities as well as application 
+latencies, cost, or energy.
+Krake can be leveraged for a wide range of application scenarios such as
+central management of distributed compute capacities as well as application
 management in Edge Cloud infrastructures.
 
 

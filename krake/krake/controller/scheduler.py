@@ -190,6 +190,7 @@ def main():
         worker_factory=SchedulerWorker,
         worker_count=scheduler_config["worker_count"],
         ssl_context=ssl_context,
+        debounce=scheduler_config.get("debounce", 0),
     )
     run(scheduler)
 

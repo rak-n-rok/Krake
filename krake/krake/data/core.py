@@ -7,6 +7,13 @@ from . import persistent
 from .serializable import Serializable, ApiObject
 
 
+class ResourceRef(Serializable):
+    api: str
+    namespace: str
+    kind: str
+    name: str
+
+
 class Metadata(Serializable):
     name: str = field(metadata={"immutable": True})
     namespace: str = field(default=None, metadata={"immutable": True})
@@ -17,6 +24,8 @@ class Metadata(Serializable):
     created: datetime = field(metadata={"readonly": True})
     modified: datetime = field(metadata={"readonly": True})
     deleted: datetime = field(default=None, metadata={"readonly": True})
+
+    owners: List[ResourceRef] = field(default_factory=list)
 
 
 class CoreMetadata(Serializable):
@@ -44,14 +53,14 @@ class Reason(Serializable):
     message: str
 
 
-class Status(Serializable):
-    reason: Reason = None
-
-
 class WatchEventType(Enum):
     ADDED = auto()
     MODIFIED = auto()
     DELETED = auto()
+
+
+class Status(Serializable):
+    reason: Reason = None
 
 
 class WatchEvent(Serializable):
@@ -109,13 +118,6 @@ class RoleBindingList(ApiObject):
     kind: str = "RoleBindingList"
     metadata: ListMetadata
     items: List[RoleBinding]
-
-
-class ResourceRef(Serializable):
-    api: str
-    namespace: str
-    kind: str
-    name: str
 
 
 class Conflict(Serializable):
