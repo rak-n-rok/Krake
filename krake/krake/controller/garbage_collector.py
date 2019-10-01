@@ -133,12 +133,7 @@ class GarbageWorker(Worker):
             resource (any): a resource marked for deletion
 
         """
-        logger.debug(
-            "Worker received %s %s %s",
-            resource.api,
-            resource.kind,
-            resource.metadata.name,
-        )
+        logger.debug("Received %r", resource_ref(resource))
         async with Session(host=self.db_host, port=self.db_port) as session:
             self.session = session
 

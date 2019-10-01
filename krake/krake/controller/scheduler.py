@@ -141,7 +141,7 @@ class SchedulerWorker(Worker):
         # TODO: Implement ranking function
         return ClusterRank(rank=0.5, cluster=cluster)
 
-    async def error_occurred(self, app, error=None):
+    async def error_handler(self, app, error=None):
         """Asynchronous callback executed whenever an error occurs during
         :meth:`resource_received`.
 

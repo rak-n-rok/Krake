@@ -7,6 +7,11 @@ paradigms to implement a simple "control loop mechanism" in Python.
 import asyncio
 import logging
 import os.path
+import signal
+from itertools import count
+from statistics import mean
+
+from krake.data.core import WatchEventType
 from yarl import URL
 import ssl
 from aiohttp import ClientConnectorError
@@ -157,67 +162,250 @@ class WorkQueue(object):
         return len(self.dirty)
 
 
-class Controller(object):
-    """Base class for Krake controllers providing basic functionality for
-    watching and enqueuing API resources.
-
-    The basic workflow is as follows: API resources are watched by the
-    controller. Any received new state is put into a :class:`WorkQueue`.
-    Multiple worker instances are spawned consuming this queue. Workers are
-    responsible for doing the actual state transitions. The work queue ensures
-    that a resource is processed by one worker at the same time (strict
-    sequential).
-
-    A specialized controller needs to implement the :meth:`list_and_watch`
-    coroutine listing and watching resources. The specific characteristics
-    which resource should be handled by this controller is an implementation
-    detail of the concrete controller.
-
-    It implements the asynchronous context manager protocol. The controller
-    itself can be awaited. The await call blocks until the :attr:`watcher`
-    task terminates.
-
-    .. code:: python
-
-        async with MyController("http://localhost:8080", worker_factory) as controller:
-            await controller
+class Reflector(object):
+    """Component used to contact the API, fetch resources and handle disconnections.
 
     Args:
-        api_endpoint (str): URL to the API
-        worker_factory (callable): A callable returning objects compatible with
-            the :class:`Worker` interface.
-        api_token (str, optional): Token used for API authentication
-        worker_count (int, optional): Number of workers that should be spawned
-        loop (asyncio.AbstractEventLoop, optional): Event loop that should be used
-
-    Attributes:
-        client (krake.client.Client): Krake API client instance that should be used
-            for communication with the API.
-        queue (WorkQueue): Queue for resource that should be processed
-        watcher (asyncio.Task): Task running the :meth:`list_and_watch` coroutine.
-        workers (List[asyncio.Task]): List of worker tasks running the
-            :func:`consume` coroutine.
+        listing (coroutine): the coroutine used to get the list of resources currently
+            stored by the API. Its signature is: ``() -> list``.
+        watching (coroutine): the coroutine used to watch updates on the resources, as
+            as sent by the API. Its signature is: ``() -> watching object``. This
+            watching object should be able to be used as context manager, and as
+            generator.
+        on_list (coroutine): the coroutine called when with the fetched resources
+            as parameter. Its signature is: ``(resource) -> None``.
+        on_add (coroutine, optional): the coroutine called during watch, when an
+            ADDED event has been received. Its signature is: ``(resource) -> None``.
+        on_update (coroutine, optional): the coroutine called during watch, when a
+            MODIFIED event has been received.
+            Its signature is: ``(resource) -> None``.
+        on_delete (coroutine, optional): the coroutine called during watch, when a
+            DELETED event has been received.
+            Its signature is: ``(resource) -> None``.
     """
 
     def __init__(
         self,
-        api_endpoint,
-        worker_factory,
-        worker_count=10,
+        listing,
+        watching,
+        on_list=None,
+        on_add=None,
+        on_update=None,
+        on_delete=None,
         loop=None,
-        ssl_context=None,
-        debounce=0,
     ):
-        self.loop = loop or asyncio.get_event_loop()
-        self.client = None
-        self.worker_factory = worker_factory
-        self.worker_count = worker_count
-        self.debounce = debounce
-        self.queue = None
-        self.watcher = None
-        self.workers = None
-        self.ssl_context = ssl_context
+        if not loop:
+            loop = asyncio.get_event_loop()
+        self.loop = loop
+        self.client_list = listing
+        self.client_watch = watching
+        self.on_list = on_list
+        self.on_add = on_add
+        self.on_update = on_update
+        self.on_delete = on_delete
 
+    async def list_resource(self):
+        """Pass each resource returned by the current instance's listing function
+        as parameter to the receiving function.
+        """
+        logger.info("Listing resources")
+        if self.on_list is None:
+            return
+
+        resource_list = await self.client_list()
+        for resource in resource_list.items:
+            logger.debug("Received %r", resource)
+            await self.on_list(resource)
+
+    async def watch_resource(self, watcher):
+        """Pass each resource returned by the current instance's watching object
+        as parameter to the event receiving functions.
+
+        Args:
+            watcher: an object that returns a new event every time an update on a
+                resource occurs
+
+        """
+        logger.info("Watching resources")
+        async for event in watcher:
+            logger.debug("Received %r", event)
+            resource = event.object
+
+            # If an event handler has been given, process it
+            if event.type == WatchEventType.ADDED and self.on_add:
+                await self.on_add(resource)
+            elif event.type == WatchEventType.MODIFIED and self.on_update:
+                await self.on_update(resource)
+            elif event.type == WatchEventType.DELETED and self.on_delete:
+                await self.on_delete(resource)
+
+    async def list_and_watch(self):
+        """Start the given list and watch coroutines.
+        """
+        async with self.client_watch() as watcher:
+            await joint(
+                self.list_resource(), self.watch_resource(watcher), loop=self.loop
+            )
+
+    async def __call__(self, max_retry=0):
+        """Start the Reflector. Encapsulate the connections with a retry logic.
+
+        Args:
+            max_retry (int, optional): the number of times the connection should be
+            retried. If 0 is given, it means it should be retried indefinitely
+
+        """
+        for i in count():
+            try:
+                await self.list_and_watch()
+            except ClientConnectorError as err:
+                logger.error(err)
+                await asyncio.sleep(1)
+
+            # This is never true when "max_retry" is None or 0 which leads
+            # to an infinite loop.
+            if i + 1 == max_retry:
+                break
+
+
+async def joint(*aws, loop=None):
+    """Start several coroutines together. Ensure that if one stops, all others
+    are cancelled as well.
+
+    Args:
+        aws (Awaitable): a list of awaitables to start concurrently.
+        loop (asyncio.AbstractEventLoop, optional): Event loop that should be
+            used.
+
+    """
+    if loop is None:
+        loop = asyncio.get_event_loop()
+
+    # Run every coroutine in a background task
+    tasks = [loop.create_task(c) for c in aws]
+
+    try:
+        return await asyncio.gather(*tasks)
+    finally:
+        # Cancel all tasks when returning ensuring that there are no leftover.
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+
+class Observer(object):
+    """Component used to watch the actual status of one instance of any resource.
+
+    Args:
+        resource: the instance of a resource that the Observer has to watch.
+        on_res_update (coroutine): a coroutine called when a resource's actual status
+            differs from the status sent by the database. Its signature is:
+            ``(resource) -> None``
+        time_step (int, optional): how frequently the Observer should watch the actual
+            status of the resources.
+    """
+
+    def __init__(self, resource, on_res_update, time_step=1):
+        self.resource = resource
+        self.on_res_update = on_res_update
+        self.time_step = time_step
+
+    async def poll_resource(self):
+        """Fetch the current status of the watched resource.
+
+        Returns:
+            krake.data.core.Status:
+
+        """
+        raise NotImplementedError("Implement poll_resources")
+
+    async def observe_resource(self):
+        """Update the watched resource if its status is different from the status
+        observed. The status sent for the update is the observed one.
+        """
+        status = await self.poll_resource()
+        if self.resource.status != status:
+            self.resource.status = status
+            await self.on_res_update(self.resource)
+
+    async def run(self):
+        """Start the observing process indefinitely, with the Observer time step.
+        """
+        while True:
+            logger.debug("Observing registered resource: %s", self.resource)
+            await self.observe_resource()
+            await asyncio.sleep(self.time_step)
+
+
+class Controller(object):
+    """Base class for Krake controllers providing basic functionality for
+    watching and enqueuing API resources.
+
+    The basic workflow is as follows: the controller holds several background
+    tasks. The API resources are watched by an Reflector, which calls a handler
+    on each received state of a resource. Any received new state is put into a
+    :class:`WorkQueue`. Multiple workers consume this queue. Workers are
+    responsible for doing the actual state transitions. The work queue ensures
+    that a resource is processed by one worker at the same time (strict
+    sequential). The status of the real world resources is monitored by an
+    Observer (another background task).
+
+    However, this workflow is just a possibility. By modifying :meth:`__init__`
+    (or other functions), it is possible to add other queues, change the
+    workers at will, add several Reflector or Observer, create additional
+    background tasks...
+
+    Args:
+        api_endpoint (str): URL to the API
+        loop (asyncio.AbstractEventLoop, optional): Event loop that should be
+            used.
+        ssl_context (ssl.SSLContext, optional): if given, this context will be
+            used to communicate with the API endpoint.
+        debounce (float, optional): value of the debounce for the
+            :class:`WorkQueue`.
+
+    """
+
+    def __init__(self, api_endpoint, loop=None, ssl_context=None, debounce=0):
+        if not loop:
+            loop = asyncio.get_event_loop()
+        self.loop = loop
+        self.queue = WorkQueue(loop=self.loop, debounce=debounce)
+        self.tasks = []
+        self.max_retry = 3
+        self.burst_time = 10
+
+        # Create client parameters
+        self.ssl_context = ssl_context
+        self.api_endpoint = self.create_endpoint(api_endpoint)
+        self.client = None
+
+    def create_background_tasks(self):
+        """Create several coroutines and register them as background tasks for
+        the Controller.
+        """
+        raise NotImplementedError("Implement create_background_tasks")
+
+    async def clean_background_tasks(self):
+        """Unregister all background tasks that are attributes
+        """
+        raise NotImplementedError("Implement clean_background_tasks")
+
+    def create_endpoint(self, api_endpoint):
+        """Ensure the scheme (HTTP/HTTPS) of the endpoint to connect to the
+        API, depending on the existence of a given SSL context.
+
+        Args:
+            api_endpoint (str): the given API endpoint.
+
+        Returns:
+            str: the final endpoint with the right scheme.
+
+        """
         base_url = URL(api_endpoint)
 
         if self.ssl_context and base_url.scheme != "https":
@@ -228,161 +416,195 @@ class Controller(object):
             logger.warning("API endpoint forced to scheme 'http', as TLS is disabled")
             base_url = base_url.with_scheme("http")
 
-        self.api_endpoint = base_url
+        return base_url.human_repr()
 
-    async def __aenter__(self):
+    def register_task(self, corofactory, name=None):
+        """Add a coroutine to the list of background tasks of the Controller.
+
+        Args:
+            corofactory (coroutine): the coroutine that will be used as task. It must
+                be running indefinitely and not catch :class:`asyncio.CancelledError`.
+            name (str, optional): the name of the background task, for logging
+                purposes.
+
+        """
+        if not name:
+            name = corofactory.__name__
+        self.tasks.append((corofactory, name))
+
+    async def simple_on_receive(self, resource, condition=bool):
+        """Example of a resource receiving handler, that accepts a resource
+        under conditions, and if they are met, add the resource to the queue.
+        When listing values, you get a Resource, while when watching, you get
+        an Event.
+
+        Args:
+            resource (krake.data.serializable.Serializable): a resource
+                received by listing.
+            condition (callable, optional): a condition to accept the given
+                resource. The signature should be ``(resource) -> bool``.
+
+        """
+        if condition(resource):
+            await self.queue.put(resource.metadata.uid, resource)
+        else:
+            logger.debug("Resource rejected: %s", resource)
+
+    async def retry(self, task, name="", max_retry=3, burst_time=10):
+        """Start a background task and restart it if did not fail often.
+
+        The criteria is as follow: every :attr:`max_retry` times, if the average
+        running time of the task is more than the :attr:`burst_time`, the task
+        is considered savable and will be restarted. If not, it means an issue
+        is too important and the task cannot be restarted without intervention.
+
+        Args:
+            task (coroutine): the background task to try to restart.
+            name (str): the name of the background task (for debugging purposes).
+            max_retry (int): number of times the task should be retried before
+                testing the burst time.
+            burst_time (float): maximal accepted average time for a retried
+                task.
+
+        Raises:
+            RuntimeError: if a background task keep on failing more regularly
+                than what the burst time allows.
+
+        """
+        retries = 0
+        times = [0] * max_retry
+        while True:
+            start = 0
+            try:
+                start = self.loop.time()
+                await task()
+            except asyncio.CancelledError:
+                break
+            except Exception as err:
+                logger.error(err)
+            finally:
+                # TODO: this mechanism could be changed and improved
+                end = self.loop.time()
+                times[retries] = end - start
+
+                # When errors occurred "max_try" times, check again if the average
+                # error time is less than the burst time
+                if retries + 1 >= max_retry and mean(times) < burst_time:
+                    raise RuntimeError(
+                        f"Task {name or task} failed {max_retry} times in a row"
+                    )
+                # Increase retries to update the times list with the current try
+                retries = (retries + 1) % max_retry
+
+    async def run(self):
+        """Start at once all the registered background tasks with the retry logic.
+        """
         self.client = Client(
             url=self.api_endpoint, loop=self.loop, ssl_context=self.ssl_context
         )
-        await self.client.open()
-        self.queue = WorkQueue(loop=self.loop, debounce=self.debounce)
-
-        # Start worker tasks
-        self.workers = [
-            self.loop.create_task(consume(self.queue, self.worker_factory(self.client)))
-            for _ in range(self.worker_count)
-        ]
-        self.watcher = self.loop.create_task(reconnect(self.list_and_watch))
-        return self
-
-    async def __aexit__(self, *exc):
-        # Cancel watcher task
-        if not self.watcher.done():
-            self.watcher.cancel()
-
-        # Cancel worker tasks
-        for task in self.workers:
-            task.cancel()
-        for task in self.workers:
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-
-        # Close client session
-        await self.client.close()
-        self.client = None
-
-        # Wait for watcher task at the end because otherwise exceptions in the
-        # watcher task would prevent the session and worker tasks to be
-        # closed.
         try:
-            await self.watcher
-        except asyncio.CancelledError:
-            pass
+            self.create_background_tasks()
+            await self.client.open()
+            await asyncio.gather(*(self.retry(task, name) for task, name in self.tasks))
         finally:
-            self.watcher = None
-
-    def __await__(self):
-        return self.watcher.__await__()
-
-    async def close(self):
-        """Close the controller by canceling the :attr:`watcher` task."""
-        self.watcher.cancel()
-        try:
-            await self.watcher
-        except asyncio.CancelledError:
-            pass
-
-    async def list_and_watch(self):
-        """Coroutine driving the controller that must be implemented by
-        subclasses.
-
-        The :attr:`watcher` task will run this coroutine. This coroutine
-        should do two things:
-
-        1. **list**: Fetch a list of all resources handled by this controller
-           and put them into :attr:`queue`.
-        2. **watch**: Create an infinite watch loop for the resource of
-           interest and put new resource states into :attr:`queue`.
-
-        :attr:`client` should be used for every interaction with the API.
-        """
-        raise NotImplementedError()
+            await self.client.close()
+            await self.clean_background_tasks()
+            self.tasks = []
+            self.client = None
 
 
-class Worker(object):
-    """Worker interface for consumers of the controller workqueue
-    (:attr:`Controller.queue`).
+class Executor(object):
+    """Component used to encapsulate the Controller. It takes care of starting
+    the Controller, and handles all logic not directly dependent to the
+    Controller, such as the handlers for the UNIX signals.
+
+    It implements the asynchronous context manager protocol. The controller
+    itself can be awaited. The "await" call blocks until the Controller
+    terminates.
+
+    .. code:: python
+
+        executor = Executor(controller)
+        async with executor:
+            await executor
 
     Args:
-        client (krake.client.Client): Krake API client that should be used for
-            all interaction with the Krake HTTP API.
+        controller (krake.controller.Controller): the controller that the
+            executor is tasked with starting.
+        loop (asyncio.AbstractEventLoop, optional): Event loop that should be
+            used.
+        catch_signals (bool, optional): if True, the Executor will add handlers
+            to catch killing signals in order to stop the Controller and the
+            Executor gracefully.
     """
 
-    def __init__(self, client):
-        self.client = client
+    def __init__(self, controller, loop=None, catch_signals=True):
+        self.controller = controller
+        if loop is None:
+            loop = asyncio.get_event_loop()
+        self.loop = loop
+        self._waiter = None
+        self._catch_signals = catch_signals
 
-    async def resource_received(self, resource):
-        """A new resource was received from the API. The worker should compare
-        the corresponding real-world state and take necessary actions to
-        transfer the real-world state to the desired state specified in the
-        API.
-
-        Args:
-            resource (object): API object (see :mod:`krake.data`) received
-                from the Krake client.
+    def stop(self):
+        """Called as signal handler. Stop the Controller managed by the
+        instance.
         """
-        raise NotImplementedError()
+        logger.info("Received signal, exiting...")
+        self._waiter.cancel()
 
-    async def error_occurred(self, resource, error):
-        """Asynchronous callback executed whenever an error occurs during
-        :meth:`resource_received`.
-
-        Args:
-            resource (object): API object (see :mod:`krake.data`) processed
-                when the error occurred
-            error (Exception): The exception whose reason will be propagated
-                to the end-user. Defaults to None.
+    async def __aenter__(self):
+        """Create the signal handlers and start the Controller as background
+        task.
         """
-        raise NotImplementedError()
+        if self._catch_signals:
+            self.loop.add_signal_handler(signal.SIGINT, self.stop)
+            self.loop.add_signal_handler(signal.SIGTERM, self.stop)
+        self._waiter = self.loop.create_task(self.controller.run())
+        logger.info("Controller started")
 
+    def __await__(self):
+        return self._waiter.__await__()
 
-async def reconnect(handler):
-    while True:
+    async def __aexit__(self, *exc):
+        """Wait for the managed controller to be finished and cleanup.
+        """
+        if not self._waiter.done():
+            self._waiter.cancel()
+
         try:
-            await handler()
-        except asyncio.TimeoutError:
-            logger.warn("Timeout")
-        except ClientConnectorError as err:
-            logger.error(err)
-            await asyncio.sleep(1)
-
-
-async def consume(queue, worker):
-    while True:
-        # Fetch a new resource and its correlating key from the queue. Until
-        # "queue.done(key)"" is called, no other worker can fetch another
-        # version of the resource. This ensures strict sequential processing
-        # of resources.
-        key, item = await queue.get()
-        try:
-            await worker.resource_received(item)
+            await self._waiter
         except asyncio.CancelledError:
-            raise
-        except Exception as err:
-            logger.exception(err)
-            await worker.error_occurred(item, error=err)
+            pass
         finally:
-            # Mark key as done allowing workers to consume the resource
-            # again.
-            await queue.done(key)
+            if self._catch_signals:
+                self.loop.remove_signal_handler(signal.SIGINT)
+                self.loop.remove_signal_handler(signal.SIGTERM)
+            self._waiter = None
+
+        logger.info("Controller stopped")
 
 
 def run(controller):
-    """Simple blocking function running the infinite watch loop of a
-    controller.
+    """Start the controller using an executor.
 
     Args:
-        controller (Controller): Controller instances that should be executed
+        controller (krake.controller.Controller): the controller to start
+
     """
+    executor = Executor(controller)
+
+    async def _run_controller():
+        async with executor:
+            await executor
+
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(_run_controller(controller))
-
-
-async def _run_controller(controller):
-    async with controller:
-        await controller
+    try:
+        loop.run_until_complete(_run_controller())
+    except asyncio.CancelledError:
+        pass
+    finally:
+        loop.close()
 
 
 def create_ssl_context(tls_config):

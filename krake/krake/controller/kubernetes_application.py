@@ -36,7 +36,7 @@ from krake.data.core import ReasonCode
 from krake.data.kubernetes import ApplicationState
 from krake.client.kubernetes import KubernetesApi
 
-from .exceptions import on_error, ControllerError, application_error_mapping
+from .exceptions import ControllerError, on_error, application_error_mapping
 from . import Controller, Worker, run, create_ssl_context
 
 
@@ -318,7 +318,7 @@ class ApplicationWorker(Worker):
             namespace=app.metadata.namespace, name=app.metadata.name, body=app
         )
 
-    async def error_occurred(self, app, error=None):
+    async def error_handler(self, app, error=None):
         """Asynchronous callback executed whenever an error occurs during
         :meth:`resource_received`.
 
