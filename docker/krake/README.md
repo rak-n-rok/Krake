@@ -66,7 +66,7 @@ $ cd docker/krake
 # Generate custom `.env` file from `.env.j2` template (optional)
 $ pip install jinja2_standalone_compiler
 $ vim jinja2_standalone_config  # Insert custom Krake variables, if any
-$ jinja2_standalone_compiler -s jinja2_standalone_config --path .
+$ jinja2_standalone_compiler -s jinja2_standalone_config --path .env.j2
 
 # Run docker compose
 $ docker-compose up --detach
