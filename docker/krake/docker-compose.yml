@@ -54,7 +54,7 @@ services:
       AUTHORIZATION: ${AUTHORIZATION}
     command: python3 -m krake.api
 
-  krake-ctrl-kubernetes-cluster:
+  krake-ctrl-garbage-collector:
     image: krake:latest
     restart: always
     tty: true
@@ -62,9 +62,11 @@ services:
       - krake-api
     environment:
       LOG_LEVEL: ${LOG_LEVEL}
-      CONTROLLERS_KUBERNETES_CLUSTER_API_ENDPOINT: ${CONTROLLERS_KUBERNETES_CLUSTER_API_ENDPOINT}
-      CONTROLLERS_KUBERNETES_CLUSTER_WORKER_COUNT: ${CONTROLLERS_KUBERNETES_CLUSTER_WORKER_COUNT}
-    command: python3 -m krake.controller.kubernetes.cluster
+      CONTROLLERS_GARBAGE_COLLECTOR_API_ENDPOINT: ${CONTROLLERS_GARBAGE_COLLECTOR_API_ENDPOINT}
+      CONTROLLERS_GARBAGE_COLLECTOR_WORKER_COUNT: ${CONTROLLERS_GARBAGE_COLLECTOR_WORKER_COUNT}
+      ETCD_HOST: ${ETCD_HOST}
+      ETCD_PORT: ${ETCD_PORT}
+    command: python3 -m krake.controller.garbage_collector
 
   krake-ctrl-kubernetes-application:
     image: krake:latest
@@ -76,7 +78,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL}
       CONTROLLERS_KUBERNETES_APPLICATION_API_ENDPOINT: ${CONTROLLERS_KUBERNETES_APPLICATION_API_ENDPOINT}
       CONTROLLERS_KUBERNETES_APPLICATION_WORKER_COUNT: ${CONTROLLERS_KUBERNETES_APPLICATION_WORKER_COUNT}
-    command: python3 -m krake.controller.kubernetes.application
+    command: python3 -m krake.controller.kubernetes_application
 
   krake-ctrl-scheduler:
     image: krake:latest

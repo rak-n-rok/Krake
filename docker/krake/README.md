@@ -88,10 +88,10 @@ $ docker-compose up --detach
 | AUTHENTICATION_STRATEGY_STATIC_ENABLED           | true                               | Enables Static authentication (requests are authenticated by user-name)                   |
 | AUTHENTICATION_STRATEGY_STATIC_NAME              | system                             | Static authentication user-name                                                           |
 | AUTHORIZATION                                    | always-allow                       | Authorization mode: RBAC;always-allow;always-deny                                         |
-| CONTROLLERS_KUBERNETES_CLUSTER_API_ENDPOINT      | http://localhost:8080              | Krake Api endpoint for Krake kubernetes controller                                        |
-| CONTROLLERS_KUBERNETES_CLUSTER_WORKER_COUNT      | 5                                  | Krake kubernetes controller workers count                                                 |
-| CONTROLLERS_KUBERNETES_APPLICATION_API_ENDPOINT  | http://localhost:8080              | Krake Api endpoint for Krake kubernetes controller                                        |
-| CONTROLLERS_KUBERNETES_APPLICATION_WORKER_COUNT  | 5                                  | Krake kubernetes controller workers count                                                 |
+| CONTROLLERS_GARBAGE_COLLECTOR_API_ENDPOINT       | http://localhost:8080              | Krake Api endpoint for Krake garbage collector                                            |
+| CONTROLLERS_GARBAGE_COLLECTOR_WORKER_COUNT       | 5                                  | Krake garbage collector workers count                                                     |
+| CONTROLLERS_KUBERNETES_APPLICATION_API_ENDPOINT  | http://localhost:8080              | Krake Api endpoint for Krake kubernetes application controller                            |
+| CONTROLLERS_KUBERNETES_APPLICATION_WORKER_COUNT  | 5                                  | Krake kubernetes application controller workers count                                     |
 | CONTROLLERS_SCHEDULER_API_ENDPOINT               | http://localhost:8080              | Krake Api endpoint for Krake scheduler controller                                         |
 | CONTROLLERS_SCHEDULER_WORKER_COUNT               | 5                                  | Krake scheduler controller workers count                                                  |
 | LOG_LEVEL                                        | INFO                               | Krake logging level                                                                       |
