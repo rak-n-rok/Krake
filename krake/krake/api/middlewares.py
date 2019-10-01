@@ -59,9 +59,7 @@ def error_log():
     async def logging_middleware(request, handler):
         try:
             return await handler(request)
-        except asyncio.CancelledError:
-            pass
-        except web.HTTPException:
+        except (web.HTTPException, asyncio.CancelledError):
             raise
         except Exception as err:
             request.app.logger.exception(err)
