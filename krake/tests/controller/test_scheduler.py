@@ -162,7 +162,7 @@ async def test_kubernetes_scheduler(prometheus, aiohttp_server, config, db, loop
         worker = SchedulerWorker(client=client, config_defaults=config)
         await worker.resource_received(app)
 
-    stored, _ = await db.get(Application, namespace="testing", name=app.metadata.name)
+    stored = await db.get(Application, namespace="testing", name=app.metadata.name)
     assert stored.status.cluster.name == cluster.metadata.name
     assert stored.status.state == ApplicationState.SCHEDULED
 

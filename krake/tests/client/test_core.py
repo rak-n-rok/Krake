@@ -6,8 +6,14 @@ from krake.api.app import create_app
 from krake.client import Client
 from krake.controller import create_ssl_context
 from krake.client.core import CoreApi
-from krake.data.core import ListMetadata, Role, RoleBinding, resource_ref, \
-    Metric, MetricsProvider
+from krake.data.core import (
+    ListMetadata,
+    Role,
+    RoleBinding,
+    resource_ref,
+    Metric,
+    MetricsProvider,
+)
 
 from factories.core import RoleFactory, RoleBindingFactory, RoleRuleFactory
 
@@ -281,7 +287,7 @@ async def test_create_metric(aiohttp_server, config, db, loop):
     assert received.metadata.modified
     assert received.spec == data.spec
 
-    stored, _ = await db.get(Metric, name=data.metadata.name)
+    stored = await db.get(Metric, name=data.metadata.name)
     assert stored == received
 
 
@@ -300,7 +306,7 @@ async def test_update_metric(aiohttp_server, config, db, loop):
     assert received.metadata.created == data.metadata.created
     assert received.metadata.modified
 
-    stored, _ = await db.get(Metric, name=data.metadata.name)
+    stored = await db.get(Metric, name=data.metadata.name)
     assert stored.spec == data.spec
     assert stored.metadata.created == data.metadata.created
     assert stored.metadata.modified
@@ -326,11 +332,10 @@ async def test_delete_metric(aiohttp_server, config, db, loop):
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         core_api = CoreApi(client)
-        received = await core_api.delete_metric(name=data.metadata.name)
-        assert received is None
+        await core_api.delete_metric(name=data.metadata.name)
 
-    stored, _ = await db.get(Metric, name=data.metadata.name)
-    assert stored is None
+    stored = await db.get(Metric, name=data.metadata.name)
+    assert stored.metadata.deleted is not None
 
 
 async def test_list_metrics_providers(aiohttp_server, config, db, loop):
@@ -369,7 +374,7 @@ async def test_create_metrics_provider(aiohttp_server, config, db, loop):
     assert received.metadata.modified
     assert received.spec == data.spec
 
-    stored, _ = await db.get(MetricsProvider, name=data.metadata.name)
+    stored = await db.get(MetricsProvider, name=data.metadata.name)
     assert stored == received
 
 
@@ -390,7 +395,7 @@ async def test_update_metrics_provider(aiohttp_server, config, db, loop):
     assert received.metadata.created == data.metadata.created
     assert received.metadata.modified
 
-    stored, _ = await db.get(MetricsProvider, name=data.metadata.name)
+    stored = await db.get(MetricsProvider, name=data.metadata.name)
     assert stored.spec == data.spec
     assert stored.metadata.created == data.metadata.created
     assert stored.metadata.modified
@@ -416,8 +421,7 @@ async def test_delete_metrics_provider(aiohttp_server, config, db, loop):
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         core_api = CoreApi(client)
-        received = await core_api.delete_metrics_provider(name=data.metadata.name)
-        assert received is None
+        await core_api.delete_metrics_provider(name=data.metadata.name)
 
-    stored, _ = await db.get(MetricsProvider, name=data.metadata.name)
-    assert stored is None
+    stored = await db.get(MetricsProvider, name=data.metadata.name)
+    assert stored.metadata.deleted is not None
