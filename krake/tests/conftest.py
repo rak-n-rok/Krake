@@ -1,5 +1,4 @@
 import asyncio
-import functools
 import os
 import random
 import sys
@@ -15,6 +14,7 @@ import shutil
 import aiohttp
 import requests
 import pytest
+from aiohttp import web
 from etcd3.aio_client import AioClient
 from prometheus_async import aio
 from prometheus_client import Gauge
@@ -130,8 +130,8 @@ def wait_for_url(url, timeout=5):
             return
 
 
-async def await_for_url(url, timeout=5):
-    start = time.time()
+async def await_for_url(url, loop, timeout=5):
+    start = loop.time()
 
     while True:
         try:
@@ -139,7 +139,7 @@ async def await_for_url(url, timeout=5):
                 resp = await client.get(url)
         except aiohttp.ClientError:
             await asyncio.sleep(0.1)
-            if time.time() - start > timeout:
+            if loop.time() - start > timeout:
                 raise TimeoutError(f"Can not connect to {url}")
         else:
             return resp
@@ -648,28 +648,37 @@ scrape_configs:
     - job_name: prometheus
       static_configs:
         - targets:
-          - localhost:{prometheus_port}
+          - {prometheus_host}:{prometheus_port}
     - job_name: heat-demand-exporter
       static_configs:
         - targets:
-          - localhost:{exporter_port}
+          - {exporter_host}:{exporter_port}
 """
 
+prometheus_host = exporter_host = "localhost"
+prometheus_port = 5055
+exporter_port = prometheus_port + 1
+exporter_metric = "heat_demand_zone_1"
+prometheus_interval = 1  # refresh metric value interval[s]
 
-async def heat_demand_metric(metric_name, interval):
-    metric = Gauge(metric_name, "float - heat demand (kW)")
+
+async def heat_demand_metric():
+    metric = Gauge(exporter_metric, "float - heat demand (kW)")
     while True:
         metric.set(round(random.random(), 2))
-        await asyncio.sleep(interval)
+        await asyncio.sleep(prometheus_interval)
 
 
-async def start_metrics_tasks(metric_name, interval, app):
-    app["metric"] = app.loop.create_task(heat_demand_metric(metric_name, interval))
+async def start_metric(app):
+    app["metric"] = app.loop.create_task(heat_demand_metric())
 
 
-async def cleanup_metrics_tasks(app):
+async def cleanup_metric(app):
     app["metric"].cancel()
-    await app["metric"]
+    try:
+        await app["metric"]
+    except asyncio.CancelledError:
+        pass
 
 
 class AppRunner(object):
@@ -689,34 +698,24 @@ class AppRunner(object):
 
 
 @pytest.fixture
-async def exporter():
+async def prometheus_exporter(loop):
     """Heat-demand exporter fixture. Heat demand exporter generates heat
     demand metric `heat_demand_zone_1` with random value.
     """
-    host = "localhost"
-    port = 5056
-    metric_name = "heat_demand_zone_1"
-    interval = 1  # refresh metric value interval[s]
-
-    app = aiohttp.web.Application()
+    app = web.Application()
     app.router.add_get("/metrics", aio.web.server_stats)
-    app.on_startup.append(functools.partial(start_metrics_tasks, metric_name, interval))
-    app.on_cleanup.append(cleanup_metrics_tasks)
+    app.on_startup.append(start_metric)
+    app.on_cleanup.append(cleanup_metric)
 
-    async with AppRunner(app, host, port):
-        await await_for_url(f"http://{host}:{port}/metrics")
-        yield port, interval
+    async with AppRunner(app, exporter_host, exporter_port):
+        await await_for_url(f"http://{exporter_host}:{exporter_port}/metrics", loop)
+        yield exporter_host, exporter_port
 
 
 @pytest.fixture
-async def prometheus(exporter):
-    host = "localhost"
-    port = 5055
-    metric_name = "heat_demand_zone_1"
-    exporter_port, interval = exporter
-
-    async def await_for_prometheus(url, attempts=10):
-        resp = await await_for_url(url)
+async def prometheus(prometheus_exporter, loop):
+    async def await_for_prometheus(url, loop, attempts=10):
+        resp = await await_for_url(url, loop)
         if resp:
             response = await resp.json()
             for metric_data in response["data"]["result"]:
@@ -726,7 +725,7 @@ async def prometheus(exporter):
             raise TimeoutError(f"Can not get data from {url}")
 
         await asyncio.sleep(1)  # Prometheus server boot sometimes takes long time
-        await await_for_prometheus(url, attempts=attempts - 1)
+        await await_for_prometheus(url, loop, attempts=attempts - 1)
 
     with TemporaryDirectory() as tempdir:
         config_file = Path(tempdir) / "prometheus.yml"
@@ -735,7 +734,11 @@ async def prometheus(exporter):
         with config_file.open("w") as fd:
             fd.write(
                 prometheus_config.format(
-                    interval=interval, prometheus_port=port, exporter_port=exporter_port
+                    interval=prometheus_interval,
+                    prometheus_host=prometheus_host,
+                    prometheus_port=prometheus_port,
+                    exporter_host=exporter_host,
+                    exporter_port=exporter_port,
                 )
             )
 
@@ -745,13 +748,15 @@ async def prometheus(exporter):
             str(config_file),
             "--web.enable-admin-api",
             "--web.listen-address",
-            ":" + str(port),
+            ":" + str(prometheus_port),
         ]
         with subprocess.Popen(command) as prometheus:
             try:
                 await await_for_prometheus(
-                    f"http://{host}:{port}/api/v1/query?query={metric_name}"
+                    f"http://{prometheus_host}:{prometheus_port}"
+                    f"/api/v1/query?query={exporter_metric}",
+                    loop,
                 )
-                yield host, port
+                yield prometheus_host, prometheus_port
             finally:
                 prometheus.terminate()
