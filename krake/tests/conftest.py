@@ -8,12 +8,13 @@ from pathlib import Path
 from typing import NamedTuple
 import time
 import logging.config
+from textwrap import dedent
 from importlib import import_module
 import json
 import shutil
-import aiohttp
 import requests
 import pytest
+import aiohttp
 from aiohttp import web
 from etcd3.aio_client import AioClient
 from prometheus_async import aio
@@ -145,12 +146,11 @@ async def await_for_url(url, loop, timeout=5):
             return resp
 
 
-etcd_host = "127.0.0.1"
-etcd_port = 3379
-
-
 @pytest.fixture("session")
 def etcd_server():
+    etcd_host = "127.0.0.1"
+    etcd_port = 3379
+
     with TemporaryDirectory() as tmpdir:
         command = [
             "etcd",
@@ -266,40 +266,6 @@ def config(etcd_server, user):
     }
 
 
-keystone_config = """
-[fernet_tokens]
-key_repository = {tempdir}/fernet-keys
-
-[fernet_receipts]
-key_repository = {tempdir}/fernet-keys
-
-[DEFAULT]
-log_dir = {tempdir}/logs
-
-[assignment]
-driver = sql
-
-[cache]
-enabled = false
-
-[catalog]
-driver = sql
-
-[policy]
-driver = rules
-
-[credential]
-key_repository = {tempdir}/credential-keys
-
-[token]
-provider = fernet
-expiration = 21600
-
-[database]
-connection = sqlite:///{tempdir}/keystone.db
-"""
-
-
 class KeystoneInfo(NamedTuple):
     host: str
     port: int
@@ -320,12 +286,47 @@ def keystone():
     host = "localhost"
     port = 5050
 
+    config_template = dedent(
+        """
+        [fernet_tokens]
+        key_repository = {tempdir}/fernet-keys
+
+        [fernet_receipts]
+        key_repository = {tempdir}/fernet-keys
+
+        [DEFAULT]
+        log_dir = {tempdir}/logs
+
+        [assignment]
+        driver = sql
+
+        [cache]
+        enabled = false
+
+        [catalog]
+        driver = sql
+
+        [policy]
+        driver = rules
+
+        [credential]
+        key_repository = {tempdir}/credential-keys
+
+        [token]
+        provider = fernet
+        expiration = 21600
+
+        [database]
+        connection = sqlite:///{tempdir}/keystone.db
+        """
+    )
+
     with TemporaryDirectory() as tempdir:
-        config = Path(tempdir) / "keystone.conf"
+        config_file = Path(tempdir) / "keystone.conf"
 
         # Create keystone configuration
-        with config.open("w") as fd:
-            fd.write(keystone_config.format(tempdir=tempdir))
+        with config_file.open("w") as fd:
+            fd.write(config_template.format(tempdir=tempdir))
 
         (Path(tempdir) / "fernet-keys").mkdir(mode=0o700)
         (Path(tempdir) / "credential-keys").mkdir(mode=0o700)
@@ -336,14 +337,14 @@ def keystone():
 
         # Populate identity service database
         subprocess.check_call(
-            ["keystone-manage", "--config-file", str(config), "db_sync"]
+            ["keystone-manage", "--config-file", str(config_file), "db_sync"]
         )
         # Initialize Fernet key repositories
         subprocess.check_call(
             [
                 "keystone-manage",
                 "--config-file",
-                str(config),
+                str(config_file),
                 "fernet_setup",
                 "--keystone-user",
                 str(user),
@@ -355,7 +356,7 @@ def keystone():
             [
                 "keystone-manage",
                 "--config-file",
-                str(config),
+                str(config_file),
                 "credential_setup",
                 "--keystone-user",
                 str(user),
@@ -368,7 +369,7 @@ def keystone():
             [
                 "keystone-manage",
                 "--config-file",
-                str(config),
+                str(config_file),
                 "bootstrap",
                 "--bootstrap-password",
                 "admin",
@@ -391,7 +392,7 @@ def keystone():
             str(port),
             "--",
             "--config-file",
-            str(config),
+            str(config_file),
         ]
         with subprocess.Popen(command) as proc:
             try:
@@ -641,25 +642,14 @@ def pki():
         yield repo
 
 
-prometheus_config = """
-global:
-    scrape_interval: {interval}s
-scrape_configs:
-    - job_name: prometheus
-      static_configs:
-        - targets:
-          - {prometheus_host}:{prometheus_port}
-    - job_name: heat-demand-exporter
-      static_configs:
-        - targets:
-          - {exporter_host}:{exporter_port}
-"""
+class PrometheusExporter(NamedTuple):
+    """Tuple yielded by the :func:`prometheus_exporter` fixture describing
+    server connection information and the name of the provided metric.
+    """
 
-prometheus_host = exporter_host = "localhost"
-prometheus_port = 5055
-exporter_port = prometheus_port + 1
-exporter_metric = "heat_demand_zone_1"
-prometheus_interval = 1  # refresh metric value interval[s]
+    host: str
+    port: int
+    metric: str
 
 
 @pytest.fixture
@@ -667,13 +657,16 @@ async def prometheus_exporter(loop, aiohttp_server):
     """Heat-demand exporter fixture. Heat demand exporter generates heat
     demand metric `heat_demand_zone_1` with random value.
     """
+    metric_name = "heat_demand_zone_1"
+    interval = 1  # refresh metric value interval[s]
+
     registry = CollectorRegistry(auto_describe=True)
 
     async def heat_demand_metric():
-        metric = Gauge(exporter_metric, "float - heat demand (kW)", registry=registry)
+        metric = Gauge(metric_name, "float - heat demand (kW)", registry=registry)
         while True:
             metric.set(round(random.random(), 2))
-            await asyncio.sleep(prometheus_interval)
+            await asyncio.sleep(interval)
 
     async def start_metric(app):
         app["metric"] = loop.create_task(heat_demand_metric())
@@ -701,15 +694,48 @@ async def prometheus_exporter(loop, aiohttp_server):
     app.on_startup.append(start_metric)
     app.on_cleanup.append(cleanup_metric)
 
-    await aiohttp_server(app, port=exporter_port)
+    server = await aiohttp_server(app)
 
-    yield exporter_host, exporter_port
+    yield PrometheusExporter(host=server.host, port=server.port, metric=metric_name)
+
+
+class Prometheus(NamedTuple):
+    """Tuple yielded by the :func:`prometheus` fixture. It contains
+    information about the Prometheus server connection.
+    """
+
+    host: str
+    port: int
 
 
 @pytest.fixture
 async def prometheus(prometheus_exporter, loop):
-    async def await_for_prometheus(url, loop, attempts=25):
-        for _ in range(attempts):
+    prometheus_host = "localhost"
+    prometheus_port = 5055
+
+    config = dedent(
+        """
+        global:
+            scrape_interval: 1s
+        scrape_configs:
+            - job_name: prometheus
+              static_configs:
+                - targets:
+                  - {prometheus_host}:{prometheus_port}
+            - job_name: heat-demand-exporter
+              static_configs:
+                - targets:
+                  - {exporter_host}:{exporter_port}
+        """
+    )
+
+    async def await_for_prometheus(url, timeout=10):
+        """Wait until the Prometheus server is booted up and the first metric
+        is scraped.
+        """
+        start = loop.time()
+
+        while True:
             resp = await await_for_url(url, loop)
             body = await resp.json()
 
@@ -717,10 +743,11 @@ async def prometheus(prometheus_exporter, loop):
             if body["data"]["result"]:
                 return
 
+            if loop.time() - start > timeout:
+                raise TimeoutError(f"Can not get metric from {url!r}")
+
             # Prometheus' first scrap takes some time
             await asyncio.sleep(0.25)
-
-        raise TimeoutError(f"Can not get metric from {url!r}")
 
     with TemporaryDirectory() as tempdir:
         config_file = Path(tempdir) / "prometheus.yml"
@@ -728,12 +755,11 @@ async def prometheus(prometheus_exporter, loop):
         # Create prometheus configuration
         with config_file.open("w") as fd:
             fd.write(
-                prometheus_config.format(
-                    interval=prometheus_interval,
+                config.format(
                     prometheus_host=prometheus_host,
                     prometheus_port=prometheus_port,
-                    exporter_host=exporter_host,
-                    exporter_port=exporter_port,
+                    exporter_host=prometheus_exporter.host,
+                    exporter_port=prometheus_exporter.port,
                 )
             )
 
@@ -751,9 +777,8 @@ async def prometheus(prometheus_exporter, loop):
             try:
                 await await_for_prometheus(
                     f"http://{prometheus_host}:{prometheus_port}"
-                    f"/api/v1/query?query={exporter_metric}",
-                    loop,
+                    f"/api/v1/query?query={prometheus_exporter.metric}"
                 )
-                yield prometheus_host, prometheus_port
+                yield Prometheus(host=prometheus_host, port=prometheus_port)
             finally:
                 prometheus.terminate()
