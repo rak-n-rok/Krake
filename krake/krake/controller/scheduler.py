@@ -15,10 +15,9 @@ Configuration is loaded from the ``controllers.scheduler`` section:
         worker_count: 5
 
 """
-import asyncio
 import logging
 import pprint
-from functools import total_ordering
+from functools import total_ordering, partial
 from typing import NamedTuple
 from argparse import ArgumentParser
 
@@ -27,9 +26,8 @@ from krake.data.core import resource_ref, ReasonCode
 from krake.data.kubernetes import ApplicationState, Cluster, ClusterBinding
 from krake.client.kubernetes import KubernetesApi
 
-from .exceptions import on_error, ControllerError, application_error_mapping
-from . import Controller, Worker, run, create_ssl_context
-
+from .exceptions import ControllerError, application_error_mapping
+from . import Controller, create_ssl_context, run, Reflector
 
 logger = logging.getLogger("krake.controller.scheduler")
 
@@ -40,36 +38,6 @@ class UnsuitableDeploymentError(ControllerError):
     """
 
     code = ReasonCode.NO_SUITABLE_RESOURCE
-
-
-class Scheduler(Controller):
-    """The scheduler is a controller watching all pending and updated
-    applications and select the "best" backend.
-    """
-
-    states = (ApplicationState.PENDING, ApplicationState.UPDATED)
-
-    async def list_and_watch(self):
-        kubernetes_api = KubernetesApi(self.client)
-
-        async def list_apps():
-            logger.info("List Kubernetes applications")
-            app_list = await kubernetes_api.list_all_applications()
-            for app in app_list.items:
-                logger.debug("Received %r", app)
-                if app.status.state in self.states:
-                    await self.queue.put(app.metadata.uid, app)
-
-        async def watch_apps(watcher):
-            logger.info("Watching Kubernetes applications")
-            async for event in watcher:
-                app = event.object
-                logger.debug("Received %r", app)
-                if app.status.state in self.states:
-                    await self.queue.put(app.metadata.uid, app)
-
-        async with kubernetes_api.watch_all_applications() as watcher:
-            await asyncio.gather(list_apps(), watch_apps(watcher))
 
 
 @total_ordering
@@ -90,18 +58,90 @@ class ClusterRank(NamedTuple):
         return self.rank == o.rank
 
 
-class SchedulerWorker(Worker):
-    """Worker for :class:`Scheduler` responsible for selecting the "best"
-    backend for each application based on metrics of the backends and
-    application specifications.
+class Scheduler(Controller):
+    """The scheduler is a controller that receives all pending and updated
+    applications and selects the "best" backend for each one of them based
+    on metrics of the backends and application specifications.
+
+    Args:
+        worker_count (int, optional): the amount of worker function that should be
+            run as background tasks.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self, api_endpoint, worker_count=10, loop=None, ssl_context=None, debounce=0
+    ):
+        super().__init__(
+            api_endpoint, loop=loop, ssl_context=ssl_context, debounce=debounce
+        )
+        self.kubernetes_api = None
+        self.reflector = None
+        self.worker_count = worker_count
+
+    def create_background_tasks(self):
+        assert self.client is not None
+
         self.kubernetes_api = KubernetesApi(self.client)
 
-    @on_error(ControllerError)
+        for i in range(self.worker_count):
+            self.register_task(self.handle_resource, name=f"worker_{i}")
+
+        def accept_applications(app):
+            return app.status.state in (
+                ApplicationState.PENDING,
+                ApplicationState.UPDATED,
+            )
+
+        receive_app = partial(self.simple_on_receive, condition=accept_applications)
+
+        self.reflector = Reflector(
+            listing=self.kubernetes_api.list_all_applications,
+            watching=self.kubernetes_api.watch_all_applications,
+            on_list=receive_app,
+            on_add=receive_app,
+            on_update=receive_app,
+            on_delete=receive_app,
+        )
+        self.register_task(self.reflector, name="Reflector")
+
+    async def clean_background_tasks(self):
+        self.reflector = None
+        self.kubernetes_api = None
+
+    async def handle_resource(self, run_once=False):
+        """Infinite loop which fetches and hand over the resources to the right
+        coroutine. The specific exceptions and error handling have to be added here.
+
+        This function is meant to be run as background task. Lock the handling of a
+        resource with the :attr:`lock` attribute.
+
+        Args:
+            run_once (bool, optional): if True, the function only handles one resource,
+                then stops. Otherwise, continue to handle each new resource on the
+                queue indefinitely.
+
+        """
+        while True:
+            key, app = await self.queue.get()
+            try:
+                logger.debug("Handling resource %r", app)
+                await self.resource_received(app)
+            except ControllerError as err:
+                await self.error_handler(app, error=err)
+            finally:
+                await self.queue.done(key)
+            if run_once:
+                break  # TODO: should we keep this? Only useful for tests
+
     async def resource_received(self, app):
+        """Logic for handling a received resource. No error handling is
+        performed here.
+
+        Args:
+            app (krake.data.kubernetes.Application): a newly received
+                Application to handle.
+
+        """
 
         # TODO: Global optimization instead of incremental
         # TODO: API for supporting different application types
@@ -151,7 +191,7 @@ class SchedulerWorker(Worker):
         Args:
             app (krake.data.kubernetes.Application): Application object processed
                 when the error occurred
-            reason (str, optional): The reason of the exception which will be propagate
+            error (str, optional): The reason of the exception which will be propagate
                 to the end-user. Defaults to None.
         """
         reason = application_error_mapping(app.status.state, app.status.reason, error)
@@ -169,17 +209,12 @@ class SchedulerWorker(Worker):
         )
 
 
-parser = ArgumentParser(description="Krake scheduler")
-parser.add_argument("-c", "--config", help="Path to configuration YAML file")
+def main(config):
+    krake_conf = load_config(config)
 
-
-def main():
-    args = parser.parse_args()
-    config = load_config(args.config)
-
-    setup_logging(config["log"])
-    logger.debug("Krake configuration settings:\n %s" % pprint.pformat(config))
-    scheduler_config = config["controllers"]["scheduler"]
+    setup_logging(krake_conf["log"])
+    logger.debug("Krake configuration settings:\n %s" % pprint.pformat(krake_conf))
+    scheduler_config = krake_conf["controllers"]["scheduler"]
 
     tls_config = scheduler_config.get("tls")
     ssl_context = create_ssl_context(tls_config)
@@ -187,7 +222,6 @@ def main():
 
     scheduler = Scheduler(
         api_endpoint=scheduler_config["api_endpoint"],
-        worker_factory=SchedulerWorker,
         worker_count=scheduler_config["worker_count"],
         ssl_context=ssl_context,
         debounce=scheduler_config.get("debounce", 0),
@@ -196,4 +230,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = ArgumentParser(description="Garbage Collector for Krake")
+    parser.add_argument("-c", "--config", help="Path to configuration YAML file")
+    main(**vars(parser.parse_args()))
