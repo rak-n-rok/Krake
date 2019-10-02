@@ -1,6 +1,6 @@
-import asyncio
 from copy import deepcopy
 from textwrap import dedent
+
 from aiohttp import web
 import pytz
 import yaml
@@ -8,16 +8,12 @@ import yaml
 from krake.api.app import create_app
 from krake.data.core import resource_ref, ReasonCode
 from krake.data.kubernetes import Application, ApplicationState
-from krake.controller.kubernetes_application import (
-    ApplicationController,
-    ApplicationWorker,
-)
+from krake.controller.kubernetes_application import ApplicationController
 from krake.client import Client
 from krake.test_utils import server_endpoint
 
 from factories.fake import fake
 from factories.kubernetes import ApplicationFactory, ClusterFactory, make_kubeconfig
-from . import SimpleWorker
 
 
 async def test_app_reception(aiohttp_server, config, db, loop):
@@ -25,29 +21,24 @@ async def test_app_reception(aiohttp_server, config, db, loop):
     updated = ApplicationFactory(status__state=ApplicationState.UPDATED)
     scheduled = ApplicationFactory(status__state=ApplicationState.SCHEDULED)
 
-    # Only SCHEDULED applications are expected
-    worker = SimpleWorker(expected={scheduled.metadata.uid}, loop=loop)
     server = await aiohttp_server(create_app(config))
 
-    async with ApplicationController(
-        api_endpoint=server_endpoint(server),
-        worker_factory=lambda client: worker,
-        worker_count=1,
-        loop=loop,
-    ) as controller:
+    await db.put(pending)
+    await db.put(updated)
+    await db.put(scheduled)
 
-        await db.put(pending)
-        await db.put(updated)
-        await db.put(scheduled)
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        # Update the client, to be used by the background tasks
+        controller.client = client
+        controller.create_background_tasks()  # need to be called explicitly
+        await controller.reflector.list_resource()
 
-        # There could be an error in the scheduler or the worker. Hence, we
-        # wait for both.
-        await asyncio.wait(
-            [controller, worker.done], timeout=1, return_when=asyncio.FIRST_COMPLETED
-        )
+    # Only SCHEDULED applications are expected
+    assert controller.queue.size() == 1
+    key, value = await controller.queue.get()
 
-    assert worker.done.done()
-    await worker.done  # If there is any exception, retrieve it here
+    assert key == scheduled.metadata.uid
 
 
 nginx_manifest = list(
@@ -141,8 +132,11 @@ async def test_app_creation(aiohttp_server, config, db, loop):
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        worker = ApplicationWorker(client=client)
-        await worker.resource_received(app)
+        controller = ApplicationController(server_endpoint(api_server), worker_count=0)
+        controller.client = client
+        controller.create_background_tasks()
+
+        await controller.resource_received(app)
 
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -303,11 +297,14 @@ async def test_app_update(aiohttp_server, config, db, loop):
     await db.put(cluster)
     await db.put(app)
 
-    api_server = await aiohttp_server(create_app(config))
+    server = await aiohttp_server(create_app(config))
 
-    async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        worker = ApplicationWorker(client=client)
-        await worker.resource_received(app)
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        controller.client = client
+        controller.create_background_tasks()
+
+        await controller.resource_received(app)
 
     assert "nginx-demo-1" in deleted
     assert "nginx-demo-3" in patched
@@ -348,11 +345,14 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
     await db.put(cluster)
     await db.put(app)
 
-    api_server = await aiohttp_server(create_app(config))
+    server = await aiohttp_server(create_app(config))
 
-    async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        worker = ApplicationWorker(client=client)
-        await worker.resource_received(app)
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        controller.client = client
+        controller.create_background_tasks()
+
+        await controller.resource_received(app)
 
 
 async def test_app_deletion_without_binding(aiohttp_server, config, db, loop):
@@ -367,8 +367,11 @@ async def test_app_deletion_without_binding(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        worker = ApplicationWorker(client=client)
-        await worker.resource_received(app)
+        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        controller.client = client
+        controller.create_background_tasks()
+
+        await controller.resource_received(app)
 
     # Ensure the application is marked for deletion
     stored = await db.get(
@@ -451,12 +454,14 @@ async def test_service_registration(aiohttp_server, config, db, loop):
     await db.put(cluster)
     await db.put(app)
 
-    api_server = await aiohttp_server(create_app(config))
+    server = await aiohttp_server(create_app(config))
 
-    # Start Kubernetes worker
-    async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        worker = ApplicationWorker(client=client)
-        await worker.resource_received(app)
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        controller.client = client
+        controller.create_background_tasks()
+
+        await controller.resource_received(app)
 
 
 async def test_kubernetes_error_handling(aiohttp_server, config, db, loop):
@@ -478,8 +483,12 @@ async def test_kubernetes_error_handling(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        worker = ApplicationWorker(client=client)
-        await worker.resource_received(app)
+        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        controller.client = client
+        controller.create_background_tasks()
+
+        await controller.queue.put(app.metadata.uid, app)
+        await controller.handle_resource(run_once=True)
 
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
