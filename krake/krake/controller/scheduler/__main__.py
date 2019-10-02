@@ -18,6 +18,7 @@ Configuration is loaded from the ``controllers.scheduler`` section:
 import logging
 import pprint
 from argparse import ArgumentParser
+from functools import partial
 
 from krake import load_config, setup_logging
 from ...controller import create_ssl_context, run
@@ -42,16 +43,17 @@ def main():
     ssl_context = create_ssl_context(tls_config)
     logger.debug("TLS is %s", "enabled" if ssl_context else "disabled")
 
+    create_scheduler_worker = partial(SchedulerWorker, config_defaults={
+            "default-metrics": config.get("default-metrics"),
+            "default-metrics-providers": config.get("default-metrics-providers"),
+        })
+
     scheduler = Scheduler(
         api_endpoint=scheduler_config["api_endpoint"],
-        worker_factory=SchedulerWorker,
+        worker_factory=create_scheduler_worker,
         worker_count=scheduler_config["worker_count"],
         ssl_context=ssl_context,
         debounce=scheduler_config.get("debounce", 0),
-        config_defaults={
-            "default-metrics": config.get("default-metrics"),
-            "default-metrics-providers": config.get("default-metrics-providers"),
-        },
     )
     run(scheduler)
 

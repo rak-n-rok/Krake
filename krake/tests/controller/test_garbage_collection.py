@@ -42,7 +42,7 @@ async def test_resources_reception(aiohttp_server, config, db, loop):
 
     async with GarbageCollector(
         api_endpoint=server_endpoint(server),
-        worker_factory=lambda client, *args: worker,
+        worker_factory=lambda client: worker,
         worker_count=1,
         loop=loop,
         db_host=db.host,

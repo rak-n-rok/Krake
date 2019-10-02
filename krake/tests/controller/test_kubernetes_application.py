@@ -31,7 +31,7 @@ async def test_app_reception(aiohttp_server, config, db, loop):
 
     async with ApplicationController(
         api_endpoint=server_endpoint(server),
-        worker_factory=lambda client, config_defaults: worker,
+        worker_factory=lambda client: worker,
         worker_count=1,
         loop=loop,
     ) as controller:

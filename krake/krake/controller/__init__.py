@@ -208,14 +208,12 @@ class Controller(object):
         loop=None,
         ssl_context=None,
         debounce=0,
-        config_defaults=None,
     ):
         self.loop = loop or asyncio.get_event_loop()
         self.client = None
         self.worker_factory = worker_factory
         self.worker_count = worker_count
         self.debounce = debounce
-        self.config_defaults = config_defaults
         self.queue = None
         self.watcher = None
         self.workers = None
@@ -244,8 +242,7 @@ class Controller(object):
         self.workers = [
             self.loop.create_task(
                 consume(
-                    self.queue, self.worker_factory(self.client, self.config_defaults)
-                )
+                    self.queue, self.worker_factory(self.client))
             )
             for _ in range(self.worker_count)
         ]
@@ -315,13 +312,11 @@ class Worker(object):
     Args:
         client (krake.client.Client): Krake API client that should be used for
             all interaction with the Krake HTTP API.
-        config_defaults (dict, optional): Krake defaults configuration values.
 
     """
 
-    def __init__(self, client, config_defaults=None):
+    def __init__(self, client):
         self.client = client
-        self.config_defaults = config_defaults
 
     async def resource_received(self, resource):
         """A new resource was received from the API. The worker should compare

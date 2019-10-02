@@ -87,18 +87,18 @@ class SchedulerWorker(Worker):
     application specifications.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, client=None, config_defaults=None):
+        super().__init__(client=client)
         self.kubernetes_api = KubernetesApi(self.client)
         self.core_api = CoreApi(self.client)
         self.metrics_default = (
-            self.config_defaults.get("default-metrics")
-            if self.config_defaults
+            config_defaults.get("default-metrics")
+            if config_defaults
             else None
         )
         self.metrics_providers_default = (
-            self.config_defaults.get("default-metrics-providers")
-            if self.config_defaults
+            config_defaults.get("default-metrics-providers")
+            if config_defaults
             else None
         )
 
