@@ -39,13 +39,13 @@ cache:
   tags:
     - docker
 
-unittests-krake:
+unittests-krake-commits:
   <<: *unittests-krake-definition
   except:
     - merge_requests
     - schedules
 
-unittests-krake:
+unittests-krake-mr:
   <<: *unittests-krake-definition
   only:
     - merge_requests
@@ -61,13 +61,13 @@ unittests-krake:
   tags:
     - docker
 
-flake8-krake:
+flake8-krake-commits:
   <<: *flake8-krake-definition
   except:
     - merge_requests
     - schedules
 
-flake8-krake:
+flake8-krake-mr:
   <<: *flake8-krake-definition
   only:
     - merge_requests
@@ -83,13 +83,13 @@ flake8-krake:
   tags:
     - docker
 
-flake8-rok:
+flake8-rok-commits:
   <<: *flake8-rok-definition
   except:
     - merge_requests
     - schedules
 
-flake8-rok:
+flake8-rok-mr:
   <<: *flake8-rok-definition
   only:
     - merge_requests
@@ -131,7 +131,7 @@ provision-staging-infra:
     - ansible-playbook -i hosts-CI site.yml
 
 
-smoke_test:
+smoke-tests:
   stage: smoke test
   image: python:3.6
   only:
@@ -150,7 +150,7 @@ smoke_test:
     - ansible-playbook -i hosts-CI smoke_tests.yml
 
 
-integration_test:
+integration-tests:
   stage: integration test
   image: python:3.6
   only:
