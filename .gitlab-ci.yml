@@ -21,79 +21,79 @@ cache:
     - .cache/pip
 
 
-.unittests-krake-template: &unittests-krake-definition
-  stage: test
-  image: python:3.6
-  script:
-    # Download etcd
-    - mkdir /tmp/etcd-download
-    - curl -s -L https://github.com/etcd-io/etcd/releases/download/$ETCD_VER/etcd-$ETCD_VER-linux-amd64.tar.gz -o /tmp/etcd.tar.gz
-    - tar xzvf /tmp/etcd.tar.gz -C /tmp/etcd-download --strip-components=1
-    - mv /tmp/etcd-download/etcd /usr/local/bin
-    - rm -rf /tmp/etcd-download /tmp/etcd.tar.gz
-    - etcd --version
-
-    - pip install krake/[dev]
-    - pip install keystone
-    - pytest --runslow krake/tests
-  tags:
-    - docker
-
-unittests-krake-commits:
-  <<: *unittests-krake-definition
-  except:
-    - merge_requests
-    - schedules
-
-unittests-krake-mr:
-  <<: *unittests-krake-definition
-  only:
-    - merge_requests
-    - schedules
-
-
-.flake8-krake-template: &flake8-krake-definition
-  stage: test
-  image: python:3.6
-  script:
-    - pip install flake8
-    - flake8 krake/krake
-  tags:
-    - docker
-
-flake8-krake-commits:
-  <<: *flake8-krake-definition
-  except:
-    - merge_requests
-    - schedules
-
-flake8-krake-mr:
-  <<: *flake8-krake-definition
-  only:
-    - merge_requests
-    - schedules
-
-
-.flake8-rok-template: &flake8-rok-definition
-  stage: test
-  image: python:3.6
-  script:
-    - pip install flake8
-    - flake8 rok/rok
-  tags:
-    - docker
-
-flake8-rok-commits:
-  <<: *flake8-rok-definition
-  except:
-    - merge_requests
-    - schedules
-
-flake8-rok-mr:
-  <<: *flake8-rok-definition
-  only:
-    - merge_requests
-    - schedules
+#.unittests-krake-template: &unittests-krake-definition
+#  stage: test
+#  image: python:3.6
+#  script:
+#    # Download etcd
+#    - mkdir /tmp/etcd-download
+#    - curl -s -L https://github.com/etcd-io/etcd/releases/download/$ETCD_VER/etcd-$ETCD_VER-linux-amd64.tar.gz -o /tmp/etcd.tar.gz
+#    - tar xzvf /tmp/etcd.tar.gz -C /tmp/etcd-download --strip-components=1
+#    - mv /tmp/etcd-download/etcd /usr/local/bin
+#    - rm -rf /tmp/etcd-download /tmp/etcd.tar.gz
+#    - etcd --version
+#
+#    - pip install krake/[dev]
+#    - pip install keystone
+#    - pytest --runslow krake/tests
+#  tags:
+#    - docker
+#
+#unittests-krake-commits:
+#  <<: *unittests-krake-definition
+#  except:
+#    - merge_requests
+#    - schedules
+#
+#unittests-krake-mr:
+#  <<: *unittests-krake-definition
+#  only:
+#    - merge_requests
+#    - schedules
+#
+#
+#.flake8-krake-template: &flake8-krake-definition
+#  stage: test
+#  image: python:3.6
+#  script:
+#    - pip install flake8
+#    - flake8 krake/krake
+#  tags:
+#    - docker
+#
+#flake8-krake-commits:
+#  <<: *flake8-krake-definition
+#  except:
+#    - merge_requests
+#    - schedules
+#
+#flake8-krake-mr:
+#  <<: *flake8-krake-definition
+#  only:
+#    - merge_requests
+#    - schedules
+#
+#
+#.flake8-rok-template: &flake8-rok-definition
+#  stage: test
+#  image: python:3.6
+#  script:
+#    - pip install flake8
+#    - flake8 rok/rok
+#  tags:
+#    - docker
+#
+#flake8-rok-commits:
+#  <<: *flake8-rok-definition
+#  except:
+#    - merge_requests
+#    - schedules
+#
+#flake8-rok-mr:
+#  <<: *flake8-rok-definition
+#  only:
+#    - merge_requests
+#    - schedules
 
 
 provision-staging-infra:
