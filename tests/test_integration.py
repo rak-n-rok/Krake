@@ -7,7 +7,21 @@ logging.basicConfig(level=logging.DEBUG)
 KRAKE_HOMEDIR = "/home/krake"
 
 
-def test_scenario1(minikubecluster):
+def test_createclusterandapp(minikubecluster):
+    """Basic end to end testing
+
+    We run a basic workflow in 5 steps:
+    1. Create a Minikube cluster from a config file
+    2. Create an application
+    3. Access the application
+    4. Delete the application
+    5. Delete the cluster
+
+    Args:
+        minikubecluster (str): Name of the Minikube backend.
+
+    """
+
     def check_app_running(response):
         try:
             app_details = json.loads(response)
@@ -26,7 +40,7 @@ def test_scenario1(minikubecluster):
     CLUSTER_NAME = minikubecluster
     kubeconfig_path = f"{KRAKE_HOMEDIR}/clusters/config/{CLUSTER_NAME}"
 
-    # Create cluster
+    # 1. Create a Minikube cluster from a config file
     response = util.run(f"rok kube cluster create {kubeconfig_path}")
     logging.info("response from the command: %s\n", response)
 
@@ -37,7 +51,7 @@ def test_scenario1(minikubecluster):
     cluster_list = json.loads(response)
     assert cluster_list[0]["metadata"]["name"] == CLUSTER_NAME
 
-    # Create application
+    # 2. Create an application
     response = util.run(
         f"rok kube app create -f \
         {KRAKE_HOMEDIR}/git/krake/tests/echo-demo.yaml echo-demo"
@@ -62,12 +76,12 @@ def test_scenario1(minikubecluster):
 
     svc_url = app_details["status"]["services"]["echo-demo"]
 
-    # Connect to the application
+    # 3. Access the application
     response = util.run(f"curl {svc_url}", retry=10, interval=1)
 
     logging.info("response from the command: %s\n", response)
 
-    # Delete the application
+    # 4. Delete the application
     response = util.run("rok kube app delete echo-demo")
     logging.info("response from the command: %s\n", response)
 
@@ -83,7 +97,7 @@ def test_scenario1(minikubecluster):
 
     assert json.loads(response) == []
 
-    # Delete the cluster
+    # 5. Delete the cluster
     response = util.run(f"rok kube cluster delete {CLUSTER_NAME}")
     logging.info("response from the command: %s\n", response)
 
