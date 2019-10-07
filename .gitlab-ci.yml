@@ -123,7 +123,7 @@ provision-staging-infra:
     - sed -i "s/<CI_PIPELINE_ID>/$CI_PIPELINE_ID/g" ansible/hosts-CI
 
     # Run Ansible to provision the staging infrastructure
-    - export LC_ALL=C.UTF-8
+    # - export LC_ALL=C.UTF-8
     - echo "=== provisioning staging infrastructure ==="
     # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
     - cd ansible
