@@ -127,7 +127,7 @@ provision-staging-infra:
     - echo "=== provisioning staging infrastructure ==="
     # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
     - cd ansible
-    # - chmod -v -R 700 $(pwd)
+    - chmod -v 700 $(pwd)
     - ansible-playbook -i hosts-CI site.yml
 
 
