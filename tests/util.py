@@ -1,5 +1,4 @@
 import logging
-import os
 import subprocess
 import time
 
@@ -44,14 +43,11 @@ def run(
     """
     logging.info("Running: %s \n", " ".join(command))
 
-    env = os.environ
-
     while True:
         try:
             process = subprocess.run(
                 command,
                 cwd=None,
-                env=env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 shell=shell,

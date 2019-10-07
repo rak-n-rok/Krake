@@ -123,11 +123,10 @@ provision-staging-infra:
     - sed -i "s/<CI_PIPELINE_ID>/$CI_PIPELINE_ID/g" ansible/hosts-CI
 
     # Run Ansible to provision the staging infrastructure
-    - export LC_ALL=C.UTF-8
     - echo "=== provisioning staging infrastructure ==="
     # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
     - cd ansible
-    - chmod -v -R 700 $(pwd)
+    - chmod -v 700 $(pwd)
     - ansible-playbook -i hosts-CI site.yml
 
 
@@ -143,10 +142,9 @@ smoke-tests:
     - apt-get update -y && apt-get install openssh-client rsync -y
 
     # Run Ansible playbook to execute smoke test on the staging infrastructure
-    - export LC_ALL=C.UTF-8
     # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
     - cd ansible
-    - chmod -v -R 700 $(pwd)
+    - chmod -v 700 $(pwd)
     - ansible-playbook -i hosts-CI smoke_tests.yml
 
 
@@ -162,10 +160,9 @@ integration-tests:
     - apt-get update -y && apt-get install openssh-client rsync -y
 
     # Run Ansible to execture the integration tests
-    - export LC_ALL=C.UTF-8
     # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
     - cd ansible
-    - chmod -v -R 700 $(pwd)
+    - chmod -v 700 $(pwd)
     - ansible-playbook -i hosts-CI integration_tests.yml
 
 
@@ -184,9 +181,8 @@ cleanup-staging-infra:
     - openstack keypair delete --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD my_runner_key_$CI_PIPELINE_ID || true
 
     # Delete staging infrastructure
-    - export LC_ALL=C.UTF-8
     # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
     - cd ansible
-    - chmod -v -R 700 $(pwd)
+    - chmod -v 700 $(pwd)
     - ansible-playbook -i hosts-CI unprovision.yaml
   when: always

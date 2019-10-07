@@ -53,8 +53,8 @@ def test_createclusterandapp(minikubecluster):
 
     # 2. Create an application
     response = util.run(
-        f"rok kube app create -f \
-        {KRAKE_HOMEDIR}/git/krake/tests/echo-demo.yaml echo-demo"
+        "rok kube app create -f "
+        f"{KRAKE_HOMEDIR}/git/krake/tests/echo-demo.yaml echo-demo"
     )
     logging.info("response from the command: %s\n", response)
 
