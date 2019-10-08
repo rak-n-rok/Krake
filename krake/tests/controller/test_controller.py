@@ -5,7 +5,14 @@ from unittest.mock import Mock
 import pytest
 from aiohttp import ClientConnectorError
 from factories.kubernetes import ApplicationFactory, ApplicationStatusFactory
-from krake.controller import WorkQueue, Executor, Reflector, Observer, Controller
+from krake.controller import (
+    WorkQueue,
+    Executor,
+    Reflector,
+    Controller,
+    BurstWindow,
+    Observer,
+)
 from krake.data.core import WatchEvent, WatchEventType
 from krake.data.kubernetes import ApplicationState
 from tests.controller import SimpleWorker
@@ -212,6 +219,37 @@ async def test_controller_run(loop):
 
 
 @pytest.mark.slow
+async def test_burst_window(loop):
+    """The test start a "for" loop with many iterations.
+
+    For the first two iterations, the task in this loop stops, but slow enough,
+    so that the window does not raise any exception. It simulates a task that
+    fails but that we can save.
+
+    All next iterations happen too fast, which means the task "fails" too
+    fast, and the :class:`BurstWindow` decides to raise an Exception after two
+    retries (see the `max_retry` parameter of `window` ).
+
+    """
+    window = BurstWindow("dummy_task", 0.5, max_retry=2, loop=loop)
+
+    i = 0
+    with pytest.raises(RuntimeError):
+        for i in range(6):
+            with window:
+                # Start task:
+                if i < 2:
+                    await asyncio.sleep(1)
+                else:
+                    pass  # for all other iterations, the task "fails" too fast
+
+            assert window.retries == (i + 1) % 2
+
+    # The "for" loop went through 4 iterations in total.
+    assert i == 3
+
+
+@pytest.mark.slow
 async def test_controller_retry(loop):
     """Try here the retry function with burst. For this the BackgroundTask is
     set to sleep at the beginning, before stopping. With this, the Controller
@@ -230,11 +268,13 @@ async def test_controller_retry(loop):
             self.register_task(task.run)
 
     controller = SimpleController(api_endpoint="http://localhost:8080")
+    controller.max_retry = 2
+    controller.burst_time = 1
     controller.create_background_tasks()
     with pytest.raises(RuntimeError):
         task_tuple = controller.tasks[0]
         # The task is a tuple (coroutine, name)
-        await controller.retry(task_tuple[0], max_retry=2, burst_time=1)
+        await controller.retry(task_tuple[0])
 
     assert values_gathered == {1, 3, 5, 7}
 

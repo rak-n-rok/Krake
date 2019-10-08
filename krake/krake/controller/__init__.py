@@ -450,51 +450,29 @@ class Controller(object):
         else:
             logger.debug("Resource rejected: %s", resource)
 
-    async def retry(self, task, name="", max_retry=3, burst_time=10):
-        """Start a background task and restart it if did not fail often.
-
-        The criteria is as follow: every :attr:`max_retry` times, if the average
-        running time of the task is more than the :attr:`burst_time`, the task
-        is considered savable and will be restarted. If not, it means an issue
-        is too important and the task cannot be restarted without intervention.
+    async def retry(self, coro, name=""):
+        """Start a background task. If the task fails not too regularly, restart it
+        A :class:`BurstWindow` is used to decide if the task should be restarted.
 
         Args:
-            task (coroutine): the background task to try to restart.
+            coro (coroutine): the background task to try to restart.
             name (str): the name of the background task (for debugging purposes).
-            max_retry (int): number of times the task should be retried before
-                testing the burst time.
-            burst_time (float): maximal accepted average time for a retried
-                task.
 
         Raises:
             RuntimeError: if a background task keep on failing more regularly
                 than what the burst time allows.
 
         """
-        retries = 0
-        times = [0] * max_retry
-        while True:
-            start = 0
-            try:
-                start = self.loop.time()
-                await task()
-            except asyncio.CancelledError:
-                break
-            except Exception as err:
-                logger.error(err)
-            finally:
-                # TODO: this mechanism could be changed and improved
-                end = self.loop.time()
-                times[retries] = end - start
+        window = BurstWindow(name, self.burst_time, max_retry=self.max_retry)
 
-                # When errors occurred "max_try" times, check again if the average
-                # error time is less than the burst time
-                if retries + 1 >= max_retry and mean(times) < burst_time:
-                    raise RuntimeError(
-                        f"Task {name or task} failed {max_retry} times in a row"
-                    )
-                # Increase retries to update the times list with the current try
-                retries = (retries + 1) % max_retry
+        while True:
+            with window:
+                try:
+                    await coro()
+                except asyncio.CancelledError:
+                    break
+                except Exception as err:
+                    logger.error(err)
 
     async def run(self):
         """Start at once all the registered background tasks with the retry logic.
@@ -511,6 +489,77 @@ class Controller(object):
             await self.clean_background_tasks()
             self.tasks = []
             self.client = None
+
+
+class BurstWindow(object):
+    """Context manager that can be used to check the time arbitrary code took to
+    run. This arbitrary code should be something that needs to run indefinitely. If
+    this code fails too quickly, it is not restarted.
+
+    The criteria is as follow: every :attr:`max_retry` times, if the average
+    running time of the task is more than the :attr:`burst_time`, the task
+    is considered savable and the context manager is exited. If not, an
+    exception will be raised.
+
+    .. code:: python
+
+        window = BurstWindow("my_task", 10, max_retry=3)
+
+        while True:  # use any kind of loop
+            with window:
+                # code to retry
+                # ...
+
+    Args:
+        name (str): the name of the background task (for debugging purposes).
+        burst_time (float): maximal accepted average time for a retried
+            task.
+        max_retry (int, optional): number of times the task should be retried before
+            testing the burst time. If 0, the task will be retried indefinitely,
+            without looking for attr:`burst_time`.
+        loop (asyncio.AbstractEventLoop, optional): Event loop that should be
+            used.
+
+    """
+
+    def __init__(self, name, burst_time, max_retry=0, loop=None):
+        if not loop:
+            loop = asyncio.get_event_loop()
+        self.loop = loop
+        self.name = name
+
+        self.burst_time = burst_time
+        self.max_retry = max_retry
+
+        self.retries = 0
+        self.times = [0] * max_retry
+        self.start = None
+
+    def __enter__(self):
+        self.start = self.loop.time()
+
+    def __exit__(self, *exc):
+        """After the given number of tries, raise an exception if the content of the
+        context manager failed too fast.
+
+        Raises:
+            RuntimeError: if a background task keep on failing more regularly
+                than what the burst time allows.
+
+        """
+        # TODO: this mechanism could be changed and improved
+        end = self.loop.time()
+        self.times[self.retries] = end - self.start
+
+        # When errors occurred "max_try" times, check again if the average
+        # error time is less than the burst time
+        # If max_retry is 0, the exception is never raised.
+        if self.retries + 1 == self.max_retry and mean(self.times) < self.burst_time:
+            raise RuntimeError(
+                f"Task {self.name} failed {self.max_retry} times in a row"
+            )
+        # Increase retries to update the times list with the current try
+        self.retries = (self.retries + 1) % self.max_retry
 
 
 class Executor(object):
