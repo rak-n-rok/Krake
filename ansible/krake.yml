@@ -307,4 +307,8 @@
       template:
         src: files/krake/kube_config.j2
         dest: "{{ krake_homedir }}/clusters/config/{{ item }}"
+      vars:
+        cluster_name: "{{ item }}"
+        cluster_ip: "{{ hostvars[item]['private_ip'] }}"
+        cluster_api_port: "{{ hostvars[item]['api_port'] }}"
       with_items: "{{ groups['minikube_clusters'] }}"
