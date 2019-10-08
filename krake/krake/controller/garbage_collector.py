@@ -137,7 +137,6 @@ class GarbageCollector(Controller):
         self.resources = _garbage_collected
         self.db_host = db_host
         self.db_port = db_port
-        self.session = None
         self.worker_count = worker_count
 
     def create_background_tasks(self):
@@ -183,59 +182,57 @@ class GarbageCollector(Controller):
         """
         logger.debug("Received %r", resource_ref(resource))
         async with Session(host=self.db_host, port=self.db_port) as session:
-            self.session = session
+            # If a transaction errors occurs -- which means that that the
+            # etcd key was modified in between -- fetch the new version
+            # from the store and retry the operation until. This is
+            # repeated until the operation succeeds.
+            while True:
+                try:
+                    # session is not an attribute of the GC because it needs to be
+                    # started and stopped, but the GC holds several worker function,
+                    # which can all access it.
+                    return await self._cleanup(resource, session)
+                except TransactionError as err:
+                    logger.warning("Transaction error: %s. Reload resource.", err)
+                    cls = self._get_class_by_name(resource.api, resource.kind)
+                    resource = await session.get(
+                        cls=cls,
+                        namespace=resource.metadata.namespace,
+                        name=resource.metadata.name,
+                    )
 
-            # Ensure that the "self.session" reference is removed after the
-            # function call in the "finally" section.
-            try:
-                # If a transaction errors occurs -- which means that that the
-                # etcd key was modified in between -- fetch the new version
-                # from the store and retry the operation until. This is
-                # repeated until the operation succeeds.
-                while True:
-                    try:
-                        return await self._cleanup(resource)
-                    except TransactionError as err:
-                        logger.warning("Transaction error: %s. Reload resource.", err)
-                        cls = self._get_class_by_name(resource.api, resource.kind)
-                        resource = await self.session.get(
-                            cls=cls,
-                            namespace=resource.metadata.namespace,
-                            name=resource.metadata.name,
-                        )
-            finally:
-                self.session = None
-
-    async def _cleanup(self, resource):
+    async def _cleanup(self, resource, session):
         # Check if there are dependents
-        dependents = await self._get_dependents(resource)
+        dependents = await self._get_dependents(resource, session)
         if dependents:
             logger.info("Delete dependencies of %s", resource_ref(resource))
-            await self._mark_dependents(dependents)
+            await self._mark_dependents(dependents, session)
             return
 
         # Delete a resource with no finalizer
         if not resource.metadata.finalizers:
-            await self._delete_resource(resource)
+            await self._delete_resource(resource, session)
 
-    async def _delete_resource(self, resource):
+    async def _delete_resource(self, resource, session):
         """Remove a resource from the database before updating its dependencies
 
         Args:
-            resource: the resource to permTanently remove.
+            resource: the resource to permanently remove.
+            session (krake.api.database.Session): the database session to manage data
 
         """
         # Delete from database
         logger.info("%s completely deleted", resource_ref(resource))
-        await self.session.delete(resource)
+        await session.delete(resource)
 
-        await self._update_dependencies(resource)
+        await self._update_dependencies(resource, session)
 
-    async def _update_dependencies(self, resource):
+    async def _update_dependencies(self, resource, session):
         """Retrieve and update all dependencies of a resource WITHOUT modifying them.
 
         Args:
             resource: the resource whose dependencies will be updated.
+            session (krake.api.database.Session): the database session to manage data
 
         """
         if not resource.metadata.owners:
@@ -243,7 +240,7 @@ class GarbageCollector(Controller):
 
         for dependency_ref in resource.metadata.owners:
             cls = self._get_class_by_name(dependency_ref.api, dependency_ref.kind)
-            dependency = await self.session.get(
+            dependency = await session.get(
                 cls=cls, namespace=dependency_ref.namespace, name=dependency_ref.name
             )
             if dependency.metadata.deleted:
@@ -275,24 +272,26 @@ class GarbageCollector(Controller):
         else:
             raise ValueError(f"Class '{cls_name}' not found.")
 
-    async def _mark_dependents(self, dependents):
+    async def _mark_dependents(self, dependents, session):
         """Mark all given resources as deleted.
 
         Args:
             dependents (list): list of resources to mark as deleted.
+            session (krake.api.database.Session): the database session to manage data
 
         """
         for dependent in dependents:
             if not dependent.metadata.deleted:
                 logger.info("Delete dependent %s", resource_ref(dependent))
                 dependent.metadata.deleted = datetime.now()
-                await self.session.put(dependent)
+                await session.put(dependent)
 
-    async def _get_dependents(self, entity):
+    async def _get_dependents(self, entity, session):
         """Retrieve all direct dependents of a resource.
 
         Args:
             entity: the given resource
+            session (krake.api.database.Session): the database session to manage data
 
         Returns:
             list: a list of all dependents of the given resource
@@ -309,7 +308,7 @@ class GarbageCollector(Controller):
         dependents = [
             dependent
             for resource in chain(*self.resources.values())
-            async for dependent in self.session.all(resource)
+            async for dependent in session.all(resource)
             if _in_owners(dependent)
         ]
 
