@@ -120,7 +120,7 @@ provision-staging-infra:
     - chmod 600 .ssh/id_rsa
 
     # Configure host-CI template wiht the CI Pipeline ID
-    - sed -i "s/<CI_PIPELINE_ID>/$CI_PIPELINE_ID/g" ansible/hosts-CI
+    - sed -i "s/\$CI_PIPELINE_ID/$CI_PIPELINE_ID/g" ansible/hosts-CI
 
     # Run Ansible to provision the staging infrastructure
     - echo "=== provisioning staging infrastructure ==="
