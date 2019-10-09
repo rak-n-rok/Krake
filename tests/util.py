@@ -37,7 +37,6 @@ def run(command, check=True, retry=0, interval=1, condition=None, error_message=
         try:
             process = subprocess.run(
                 command.split(),
-                cwd=None,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 check=check,
