@@ -5,15 +5,7 @@ import time
 logging.basicConfig(level=logging.DEBUG)
 
 
-def run(
-    command,
-    shell=True,
-    check=True,
-    retry=0,
-    interval=1,
-    condition=None,
-    error_message="",
-):
+def run(command, check=True, retry=0, interval=1, condition=None, error_message=""):
 
     """Runs a subprocess
 
@@ -24,8 +16,6 @@ def run(
 
     Args:
         command (str): The command to run
-        shell (bool, optional): If True, the specified command will be
-            executed through the shell
         check (bool, optional): If True, checks the return value of the
             specified command. This can be retried with specifying the retry
             option
@@ -46,11 +36,10 @@ def run(
     while True:
         try:
             process = subprocess.run(
-                command,
+                command.split(),
                 cwd=None,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                shell=shell,
                 check=check,
             )
         except subprocess.CalledProcessError as e:

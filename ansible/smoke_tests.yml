@@ -12,16 +12,18 @@
           - pytest
         state: present
 
-    # pytest and rok are installed in /home/krake/.local/bin
-    # This is added to the PATH in ~/.profile, which isn't loaded by Ansible
+    # pytest and rok are installed locally in /home/krake/.local/bin which
+    # isn't in the default PATH
     - name: Run smoke test for krake client
-      shell: ". ~/.profile; pytest {{ git_dir }}/{{test_dir}}/test_krake_cli.py"
+      command: "pytest {{ git_dir }}/{{test_dir}}/test_krake_cli.py"
+      environment:
+        PATH: "{{ ansible_env.PATH }}:{{ansible_env.HOME}}/.local/bin"
 
 
 - name: Running Minikube smoke tests
   hosts: minikube_clusters
   vars:
-    git_dir: /home/krake/git/krake
+    home_dir: /home/ubuntu
     test_dir: tests
   tasks:
     - name: Install pytest
@@ -35,5 +37,9 @@
         src: ../tests/
         dest: tests/
 
+    # pytest and rok are installed locally in /home/ubuntu/.local/bin which
+    # isn't in the default PATH
     - name: Run smoke test for Minikube
-      shell: ". ~/.profile; pytest tests/test_minikube_cli.py"
+      command: "pytest {{ home_dir }}/{{test_dir}}/test_minikube_cli.py"
+      environment:
+        PATH: "{{ ansible_env.PATH }}:{{ansible_env.HOME}}/.local/bin"
