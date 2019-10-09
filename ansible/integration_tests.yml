@@ -13,7 +13,8 @@
         state: present
 
     # We need one Minikube cluster in order to run the integration tests
-    - assert:
+    - name: Check if a Minikube cluster has been spawned
+      assert:
         that: "groups['minikube_clusters'][0] is defined"
 
     # pytest and rok are installed locally in /home/krake/.local/bin which
