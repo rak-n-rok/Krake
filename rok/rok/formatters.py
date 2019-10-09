@@ -7,7 +7,7 @@ specific way.
 import sys
 import json
 import yaml
-import shutil
+import os
 from datetime import datetime
 
 from dateutil.parser import parse
@@ -289,6 +289,61 @@ class Table(object):
 
         cls.cells = cells
 
+    @staticmethod
+    def get_terminal_size(fallback=(80, 24)):
+        """Get the current terminal size
+
+        This method is a thin wrapper around the :func:`os.get_terminal_size`
+        function. :func:`os.get_terminal_size` takes as argument the file
+        descriptor to use:
+
+        - ``0``: Standard Input
+        - ``1``: Standard Output
+        - ``2``: Standard Error
+
+        If the selected file descriptor is a non-interactive terminal, then
+        the function raises an `OSError` exception. This happen especially in
+        the following situations (assuming these commands are ran in an
+        interactive terminal):
+
+        .. code:: bash
+
+            # stdout of rok is not the interactive terminal
+            $ python3 program.py | cat -
+
+            # stdin is not the interactive terminal
+            $ cat - | python3 program.py
+
+            # neither stdin nor stdout are the interactive terminals, however
+            # stderr is.
+            $ cat - | python3 program.py | cat -
+
+            # neither stdin nor stdout nor stderr are the interactive
+            # terminals.
+            $ cat - | python3 program.py 2>somefile | cat -
+
+        We are trying all possible file descriptors, hoping that at least one
+        of them is a tty. In case no tty can be found, we fallback to default
+        values.
+
+        Visit `this blog post
+        <http://granitosaurus.rocks/getting-terminal-size.html#edit_1>`_ for
+        more information.
+
+        Args:
+            fallback (tuple, optional): Fallback values for width and height
+                in case no tty is found.
+
+        """
+        for i in range(0, 3):
+            try:
+                return os.get_terminal_size(i)
+            except OSError:
+                continue
+            break
+
+        return fallback
+
     def __call__(self, data, file):
         """Print a table from the passed data
 
@@ -297,8 +352,7 @@ class Table(object):
             file: File-like object where the output should be written
 
         """
-        # @see https://stackoverflow.com/a/41864359/2467158
-        width, height = shutil.get_terminal_size()
+        width, height = self.get_terminal_size()
         table = Texttable(max_width=width)
 
         if self.many:
