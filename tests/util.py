@@ -2,7 +2,7 @@ import logging
 import subprocess
 import time
 
-logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 
 def run(command, check=True, retry=0, interval=1, condition=None, error_message=""):
@@ -31,7 +31,7 @@ def run(command, check=True, retry=0, interval=1, condition=None, error_message=
             met, the provided error message.
 
     """
-    logging.info("Running: %s \n", " ".join(command))
+    logger.debug(f"Running: {command}")
 
     while True:
         try:
@@ -43,13 +43,13 @@ def run(command, check=True, retry=0, interval=1, condition=None, error_message=
                 check=check,
             )
         except subprocess.CalledProcessError as e:
-            logging.info(
+            logger.debug(
                 "Caught CalledProcessError: command exited with a non-zero exit code"
             )
             retry -= 1
             if retry <= 0:
                 return e.stdout.decode()
-            logging.info("Going to sleep... will retry")
+            logger.debug("Going to sleep... will retry")
             time.sleep(interval)
             continue
 
@@ -64,9 +64,9 @@ def run(command, check=True, retry=0, interval=1, condition=None, error_message=
             return response
 
         # If condition is not met, decrease the amount of retries and sleep
-        logging.info("Provided condition is not met")
+        logger.debug("Provided condition is not met")
         retry -= 1
         if retry <= 0:
             return error_message
-        logging.info("Going to sleep... will retry")
+        logger.debug("Going to sleep... will retry")
         time.sleep(interval)
