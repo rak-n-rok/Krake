@@ -34,7 +34,7 @@
 
     - name: Ensure Minikube smoke test is present
       copy:
-        src: "{{ playbook_dir }}/../tests"
+        src: "{{ playbook_dir }}/../tests/"
         dest: "{{ home_dir }}/{{test_dir}}"
 
     # pytest and rok are installed locally in /home/ubuntu/.local/bin which
