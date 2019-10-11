@@ -6,4 +6,4 @@ def test_list_krake_applications():
     response = util.run(cmd)
     util.logger.debug(f"Response from the command: \n{response}")
 
-    assert "name" in response
+    assert "name" in response.output

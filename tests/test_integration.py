@@ -19,20 +19,19 @@ def test_createclusterandapp(minikubecluster):
 
     """
 
-    def check_app_running(response):
-        try:
-            app_details = json.loads(response)
-            if app_details["status"]["state"] == "RUNNING":
-                return True
-        except (KeyError, json.JSONDecodeError):
-            return False
+    def check_app_running(response, error_message):
 
-    def check_empty_list(response):
+        app_details = response.json
         try:
-            if json.loads(response) == []:
-                return True
+            assert app_details["status"]["state"] == "RUNNING"
+        except (KeyError, json.JSONDecodeError):
+            raise AssertionError(error_message)
+
+    def check_empty_list(response, error_message):
+        try:
+            assert response.json == []
         except json.JSONDecodeError:
-            return False
+            raise AssertionError(error_message)
 
     CLUSTER_NAME = minikubecluster
     kubeconfig_path = f"{KRAKE_HOMEDIR}/clusters/config/{CLUSTER_NAME}"
@@ -45,7 +44,7 @@ def test_createclusterandapp(minikubecluster):
     response = util.run("rok kube cluster list -f json")
     util.logger.debug(f"Response from the command: \n{response}")
 
-    cluster_list = json.loads(response)
+    cluster_list = response.json
     assert cluster_list[0]["metadata"]["name"] == CLUSTER_NAME
 
     # 2. Create an application
@@ -66,10 +65,8 @@ def test_createclusterandapp(minikubecluster):
     )
     util.logger.debug(f"Response from the command: \n{response}")
 
-    app_details = json.loads(response)
-
+    app_details = response.json
     assert app_details["status"]["cluster"]["name"] == CLUSTER_NAME
-    assert app_details["status"]["state"] == "RUNNING"
 
     svc_url = app_details["status"]["services"]["echo-demo"]
 
@@ -91,8 +88,6 @@ def test_createclusterandapp(minikubecluster):
     )
     util.logger.debug(f"Response from the command: \n{response}")
 
-    assert json.loads(response) == []
-
     # 5. Delete the cluster
     response = util.run(f"rok kube cluster delete {CLUSTER_NAME}")
     util.logger.debug("response from the command: %s\n", response)
@@ -106,5 +101,3 @@ def test_createclusterandapp(minikubecluster):
         error_message="Unable to observe the cluster deleted",
     )
     util.logger.debug("response from the command: %s\n", response)
-
-    assert json.loads(response) == []

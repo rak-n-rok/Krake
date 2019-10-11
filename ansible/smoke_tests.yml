@@ -6,10 +6,11 @@
     git_dir: /home/krake/git/krake
     test_dir: tests
   tasks:
-    - name: Install pytest
+    - name: Ensure pytest and dataclasses are installed
       pip:
         name:
           - pytest
+          - dataclasses
         state: present
 
     # pytest and rok are installed locally in /home/krake/.local/bin which
@@ -26,10 +27,11 @@
     home_dir: /home/ubuntu
     test_dir: tests
   tasks:
-    - name: Install pytest
+    - name: Ensure pytest and dataclasses are installed
       pip:
         name:
           - pytest
+          - dataclasses
         state: present
 
     - name: Ensure Minikube smoke test is present
