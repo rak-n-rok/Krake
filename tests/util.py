@@ -106,11 +106,13 @@ def run(command, retry=0, interval=1, condition=None, error_message=""):
 
         # If no condition has been given to check, simply return the response
         if condition is None:
+            logger.debug(f"Response from the command: \n{response.output}")
             return response
 
         try:
             condition(response, error_message)
             # If condition is met, return the response
+            logger.debug(f"Response from the command: \n{response.output}")
             return response
         except AssertionError:
             # If condition is not met, decrease the amount of retries and sleep

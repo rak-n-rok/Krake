@@ -38,11 +38,9 @@ def test_createclusterandapp(minikubecluster):
 
     # 1. Create a Minikube cluster from a config file
     response = util.run(f"rok kube cluster create {kubeconfig_path}")
-    util.logger.debug(f"Response from the command: \n{response}")
 
     # List cluster and assert it's running
     response = util.run("rok kube cluster list -f json")
-    util.logger.debug(f"Response from the command: \n{response}")
 
     cluster_list = response.json
     assert cluster_list[0]["metadata"]["name"] == CLUSTER_NAME
@@ -52,7 +50,6 @@ def test_createclusterandapp(minikubecluster):
         "rok kube app create -f "
         f"{KRAKE_HOMEDIR}/git/krake/tests/echo-demo.yaml echo-demo"
     )
-    util.logger.debug(f"Response from the command: \n{response}")
 
     # Get application details and assert it's running on the previously
     # created cluster
@@ -63,7 +60,6 @@ def test_createclusterandapp(minikubecluster):
         condition=check_app_running,
         error_message="Unable to observe the application in a RUNNING state",
     )
-    util.logger.debug(f"Response from the command: \n{response}")
 
     app_details = response.json
     assert app_details["status"]["cluster"]["name"] == CLUSTER_NAME
@@ -72,11 +68,9 @@ def test_createclusterandapp(minikubecluster):
 
     # 3. Access the application
     response = util.run(f"curl {svc_url}", retry=10, interval=1)
-    util.logger.debug(f"Response from the command: \n{response}")
 
     # 4. Delete the application
     response = util.run("rok kube app delete echo-demo")
-    util.logger.debug(f"Response from the command: \n{response}")
 
     # Add a condition to wait for the application to be actually deleted
     response = util.run(
@@ -86,11 +80,9 @@ def test_createclusterandapp(minikubecluster):
         condition=check_empty_list,
         error_message="Unable to observe the application deleted",
     )
-    util.logger.debug(f"Response from the command: \n{response}")
 
     # 5. Delete the cluster
     response = util.run(f"rok kube cluster delete {CLUSTER_NAME}")
-    util.logger.debug("response from the command: %s\n", response)
 
     # Add a condition to wait for the cluster to be actually deleted
     response = util.run(
@@ -100,4 +92,3 @@ def test_createclusterandapp(minikubecluster):
         condition=check_empty_list,
         error_message="Unable to observe the cluster deleted",
     )
-    util.logger.debug("response from the command: %s\n", response)
