@@ -38,21 +38,9 @@ services:
       - ${API_PORT}:${API_PORT}
     depends_on:
       - krake-etcd
-    environment:
-      LOG_LEVEL: ${LOG_LEVEL}
-      ETCD_HOST: ${ETCD_HOST}
-      ETCD_PORT: ${ETCD_PORT}
-      TLS_ENABLED: ${TLS_ENABLED}
-      TLS_CERT: ${TLS_CERT}
-      TLS_KEY: ${TLS_KEY}
-      TLS_CLIENT_CA: ${TLS_CLIENT_CA}
-      AUTHENTICATION_ALLOW_ANONYMOUS: ${AUTHENTICATION_ALLOW_ANONYMOUS}
-      AUTHENTICATION_STRATEGY_KEYSTONE_ENABLED: ${AUTHENTICATION_STRATEGY_KEYSTONE_ENABLED}
-      AUTHENTICATION_STRATEGY_KEYSTONE_ENDPOINT: ${AUTHENTICATION_STRATEGY_KEYSTONE_ENDPOINT}
-      AUTHENTICATION_STRATEGY_STATIC_ENABLED: ${AUTHENTICATION_STRATEGY_STATIC_ENABLED}
-      AUTHENTICATION_STRATEGY_STATIC_NAME: ${AUTHENTICATION_STRATEGY_STATIC_NAME}
-      AUTHORIZATION: ${AUTHORIZATION}
     command: python3 -m krake.api
+    volumes:
+      - /etc/krake:/etc/krake:ro
 
   krake-ctrl-garbage-collector:
     image: krake:latest
@@ -60,13 +48,9 @@ services:
     tty: true
     depends_on:
       - krake-api
-    environment:
-      LOG_LEVEL: ${LOG_LEVEL}
-      CONTROLLERS_GARBAGE_COLLECTOR_API_ENDPOINT: ${CONTROLLERS_GARBAGE_COLLECTOR_API_ENDPOINT}
-      CONTROLLERS_GARBAGE_COLLECTOR_WORKER_COUNT: ${CONTROLLERS_GARBAGE_COLLECTOR_WORKER_COUNT}
-      ETCD_HOST: ${ETCD_HOST}
-      ETCD_PORT: ${ETCD_PORT}
     command: python3 -m krake.controller.garbage_collector
+    volumes:
+      - /etc/krake:/etc/krake:ro
 
   krake-ctrl-kubernetes-application:
     image: krake:latest
@@ -74,11 +58,9 @@ services:
     tty: true
     depends_on:
       - krake-api
-    environment:
-      LOG_LEVEL: ${LOG_LEVEL}
-      CONTROLLERS_KUBERNETES_APPLICATION_API_ENDPOINT: ${CONTROLLERS_KUBERNETES_APPLICATION_API_ENDPOINT}
-      CONTROLLERS_KUBERNETES_APPLICATION_WORKER_COUNT: ${CONTROLLERS_KUBERNETES_APPLICATION_WORKER_COUNT}
     command: python3 -m krake.controller.kubernetes_application
+    volumes:
+      - /etc/krake:/etc/krake:ro
 
   krake-ctrl-scheduler:
     image: krake:latest
@@ -86,8 +68,6 @@ services:
     tty: true
     depends_on:
       - krake-api
-    environment:
-      LOG_LEVEL: ${LOG_LEVEL}
-      CONTROLLERS_SCHEDULER_API_ENDPOINT: ${CONTROLLERS_SCHEDULER_API_ENDPOINT}
-      CONTROLLERS_SCHEDULER_WORKER_COUNT: ${CONTROLLERS_SCHEDULER_WORKER_COUNT}
     command: python3 -m krake.controller.scheduler
+    volumes:
+      - /etc/krake:/etc/krake:ro
