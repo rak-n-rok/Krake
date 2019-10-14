@@ -105,6 +105,7 @@ provision-staging-infra:
       - ansible/.etc # Absolute path: /builds/ragnarok/krake/ansible/.etc
       - ansible/hosts-CI
     expire_in: 1 day
+    when: always
   only:
     - schedules
     - merge_requests
