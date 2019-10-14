@@ -194,11 +194,16 @@ if __name__ == "__main__":
         " to the given destination directory, while applying the given"
         " configuration."
     )
-    parser.add_argument("dst", help="Destination directory for generated files.")
-
-    # Source files
     parser.add_argument(
-        "--src-files",
+        "--dst",
+        default=".",
+        help=(
+            "Destination directory for generated files. Default is current "
+            "working directory."
+        ),
+    )
+    parser.add_argument(
+        "src_files",
         nargs="+",
         help="Source files for template. Multiple files paths can be given",
     )

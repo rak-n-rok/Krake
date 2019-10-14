@@ -273,7 +273,7 @@
         # The files generated overwrite the ones created
         - name: Generate the configuration files
           script: |
-            {{ repo_dir }}/config/generate {{ configuration_dir }}\
+            {{ repo_dir }}/config/generate --dst {{ configuration_dir }}\
             {% if enable_tls is defined and enable_tls %} --tls-enabled {% endif %} \
             {% if enable_tls is defined and enable_tls %} --cert-dir /etc/krake/certs {% endif %} \
             {% if api_host is defined %} --host {{ api_host }} {% endif %} \
@@ -282,7 +282,7 @@
             {% if etcd_port is defined %} --etcd-port {{ etcd_port }} {% endif %} \
             {% if worker_count is defined %} --worker-count {{ worker_count }} {% endif %} \
             {% if debounce is defined %} --debounce {{ debounce }} {% endif %} \
-            --src-files {{ git_dir }}/config/*template
+            {{ git_dir }}/config/*template
 
         - name: Build Krake image
           docker_image:
@@ -318,12 +318,12 @@
 
         - name: Create Krake rok configuration file
           script: |
-            {{ repo_dir }}/config/generate {{ git_dir }} \
+            {{ repo_dir }}/config/generate --dst {{ git_dir }} \
             {% if enable_tls is defined and enable_tls %} --tls-enabled {% endif %} \
             {% if enable_tls is defined and enable_tls %} --cert-dir /etc/krake/certs {% endif %} \
             --host localhost \
             {% if api_port is defined %} --port {{ api_port }} {% endif %} \
-            --src-files {{ git_dir }}/rok.yaml.template
+            {{ git_dir }}/rok.yaml.template
 
 - name: Generate cluster config
   become: yes

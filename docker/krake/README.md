@@ -74,24 +74,12 @@ $ docker-compose up --detach
 
 ## Environment Variables Explanations
 
-| Environment Variable                             | Default Value                      | Description                                                                               |
-|--------------------------------------------------|------------------------------------|-------------------------------------------------------------------------------------------|
-| ETCD_HOST                                        | 127.0.0.1                          | Krake [etcdv3](https://github.com/etcd-io/etcd/releases/) database address                |
-| ETCD_PORT                                        | 2379                               | Krake [etcdv3](https://github.com/etcd-io/etcd/releases/) database port                   |
-| TLS_ENABLED                                      | false                              | Enables TLS on Krake Api                                                                  |
-| TLS_CERT                                         | tmp/pki/system:api-server.pem      | Krake Api certificate file path                                                           |
-| TLS_KEY                                          | tmp/pki/system:api-server-key.pem  | Krake Api private-key file path                                                           |
-| TLS_CLIENT_CA                                    | tmp/pki/ca.pem                     | Krake Api client certificate authentication file path - contains certificate authorities  |
-| AUTHENTICATION_ALLOW_ANONYMOUS                   | true                               | Enables anonymous request                                                                 |
-| AUTHENTICATION_STRATEGY_KEYSTONE_ENABLED         | false                              | Enables Keystone authentication                                                           |
-| AUTHENTICATION_STRATEGY_KEYSTONE_ENDPOINT        | http://localhost:5000/v3           | Keystone authentication endpoint                                                          |
-| AUTHENTICATION_STRATEGY_STATIC_ENABLED           | true                               | Enables Static authentication (requests are authenticated by user-name)                   |
-| AUTHENTICATION_STRATEGY_STATIC_NAME              | system                             | Static authentication user-name                                                           |
-| AUTHORIZATION                                    | always-allow                       | Authorization mode: RBAC;always-allow;always-deny                                         |
-| CONTROLLERS_GARBAGE_COLLECTOR_API_ENDPOINT       | http://localhost:8080              | Krake Api endpoint for Krake garbage collector                                            |
-| CONTROLLERS_GARBAGE_COLLECTOR_WORKER_COUNT       | 5                                  | Krake garbage collector workers count                                                     |
-| CONTROLLERS_KUBERNETES_APPLICATION_API_ENDPOINT  | http://localhost:8080              | Krake Api endpoint for Krake kubernetes application controller                            |
-| CONTROLLERS_KUBERNETES_APPLICATION_WORKER_COUNT  | 5                                  | Krake kubernetes application controller workers count                                     |
-| CONTROLLERS_SCHEDULER_API_ENDPOINT               | http://localhost:8080              | Krake Api endpoint for Krake scheduler controller                                         |
-| CONTROLLERS_SCHEDULER_WORKER_COUNT               | 5                                  | Krake scheduler controller workers count                                                  |
-| LOG_LEVEL                                        | INFO                               | Krake logging level                                                                       |
+These variables need to be set in the `.env` file, or can be automatically added by Ansible in the `.env.j2` template.
+
+| Environment Variable | Default Value | Description                                                                                                    |
+|----------------------|---------------|----------------------------------------------------------------------------------------------------------------|
+| ETCD_HOST            | krake-db      | Krake [etcdv3](https://github.com/etcd-io/etcd/releases/) database address (only used internally, not exposed) |
+| ETCD_PORT            | 2379          | Krake [etcdv3](https://github.com/etcd-io/etcd/releases/) database port (only used internally, not exposed)    |
+| ETCD_PEER_PORT       | 2380          | Krake [etcdv3](https://github.com/etcd-io/etcd/releases/) database port for peers listening                    |
+| API_HOST             | krake-api     | Address of the Krake API endpoint (only used internally, not exposed)                                          |
+| API_PORT             | 8080          | Port of the Krake API endpoint                                                                                 |

@@ -32,7 +32,7 @@ COPY ./krake /krake
 
 COPY ./config /tmp/config
 RUN mkdir -p /etc/krake && \
-  /tmp/config/generate /etc/krake --src-files /tmp/config/*template
+  /tmp/config/generate --dst /etc/krake /tmp/config/*template
 
 RUN pip3 install /krake
 
