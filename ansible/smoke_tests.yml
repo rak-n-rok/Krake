@@ -4,13 +4,11 @@
   hosts: krake_apps
   vars:
     git_dir: /home/krake/git/krake
-    test_dir: tests
+    test_dir: rak/functionals
   tasks:
-    - name: Ensure pytest and dataclasses are installed
+    - name: Install Tests dependencies
       pip:
-        name:
-          - pytest
-          - dataclasses
+        name: "{{ git_dir }}/rak/[test]"
         state: present
 
     # pytest and rok are installed locally in /home/krake/.local/bin which
@@ -25,19 +23,17 @@
   hosts: minikube_clusters
   vars:
     home_dir: /home/ubuntu
-    test_dir: tests
+    test_dir: rak/functionals
   tasks:
-    - name: Ensure pytest and dataclasses are installed
-      pip:
-        name:
-          - pytest
-          - dataclasses
-        state: present
-
-    - name: Ensure Minikube smoke test is present
+    - name: Ensure rak directory is present
       copy:
-        src: "{{ playbook_dir }}/../tests/"
-        dest: "{{ home_dir }}/{{test_dir}}"
+        src: "{{ playbook_dir }}/../rak/"
+        dest: "{{ home_dir }}/rak/"
+
+    - name: Install Tests dependencies
+      pip:
+        name: "{{ home_dir }}/rak/[test]"
+        state: present
 
     # pytest and rok are installed locally in /home/ubuntu/.local/bin which
     # isn't in the default PATH

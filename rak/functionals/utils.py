@@ -4,7 +4,7 @@ import subprocess
 import time
 from dataclasses import MISSING
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("krake.test_utils.run")
 
 
 class Response(object):

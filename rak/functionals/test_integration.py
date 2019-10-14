@@ -1,7 +1,9 @@
-import util
+from utils import run
 import json
 
 KRAKE_HOMEDIR = "/home/krake"
+GIT_DIR = "git/krake"
+TEST_DIR = "rak/functionals"
 
 
 def test_createclusterandapp(minikubecluster):
@@ -21,15 +23,18 @@ def test_createclusterandapp(minikubecluster):
 
     def check_app_running(response, error_message):
 
-        app_details = response.json
         try:
-            assert app_details["status"]["state"] == "RUNNING"
+            app_details = response.json
+            assert app_details["status"]["state"] == "RUNNING", error_message
         except (KeyError, json.JSONDecodeError):
             raise AssertionError(error_message)
 
+    def check_return_code(response, error_message):
+        assert response.returncode == 0, error_message
+
     def check_empty_list(response, error_message):
         try:
-            assert response.json == []
+            assert response.json == [], error_message
         except json.JSONDecodeError:
             raise AssertionError(error_message)
 
@@ -37,23 +42,23 @@ def test_createclusterandapp(minikubecluster):
     kubeconfig_path = f"{KRAKE_HOMEDIR}/clusters/config/{CLUSTER_NAME}"
 
     # 1. Create a Minikube cluster from a config file
-    response = util.run(f"rok kube cluster create {kubeconfig_path}")
+    response = run(f"rok kube cluster create {kubeconfig_path}")
 
     # List cluster and assert it's running
-    response = util.run("rok kube cluster list -f json")
+    response = run("rok kube cluster list -f json")
 
     cluster_list = response.json
     assert cluster_list[0]["metadata"]["name"] == CLUSTER_NAME
 
     # 2. Create an application
-    response = util.run(
+    response = run(
         "rok kube app create -f "
-        f"{KRAKE_HOMEDIR}/git/krake/tests/echo-demo.yaml echo-demo"
+        f"{KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}/echo-demo.yaml echo-demo"
     )
 
     # Get application details and assert it's running on the previously
     # created cluster
-    response = util.run(
+    response = run(
         "rok kube app get echo-demo -f json",
         retry=10,
         interval=1,
@@ -67,13 +72,19 @@ def test_createclusterandapp(minikubecluster):
     svc_url = app_details["status"]["services"]["echo-demo"]
 
     # 3. Access the application
-    response = util.run(f"curl {svc_url}", retry=10, interval=1)
+    response = run(
+        f"curl {svc_url}",
+        retry=10,
+        interval=1,
+        condition=check_return_code,
+        error_message="Application is not reachable",
+    )
 
     # 4. Delete the application
-    response = util.run("rok kube app delete echo-demo")
+    response = run("rok kube app delete echo-demo")
 
     # Add a condition to wait for the application to be actually deleted
-    response = util.run(
+    response = run(
         "rok kube app list -f json",
         retry=10,
         interval=1,
@@ -82,10 +93,10 @@ def test_createclusterandapp(minikubecluster):
     )
 
     # 5. Delete the cluster
-    response = util.run(f"rok kube cluster delete {CLUSTER_NAME}")
+    response = run(f"rok kube cluster delete {CLUSTER_NAME}")
 
     # Add a condition to wait for the cluster to be actually deleted
-    response = util.run(
+    response = run(
         "rok kube cluster list -f json",
         retry=10,
         interval=1,

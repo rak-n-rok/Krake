@@ -4,12 +4,11 @@
   hosts: krake_apps
   vars:
     git_dir: /home/krake/git/krake
-    test_dir: tests
+    test_dir: rak/functionals
   tasks:
-    - name: Install pytest
+    - name: Install Tests dependencies
       pip:
-        name:
-          - pytest
+        name: "{{ git_dir }}/rak/[test]"
         state: present
 
     # We need one Minikube cluster in order to run the integration tests
