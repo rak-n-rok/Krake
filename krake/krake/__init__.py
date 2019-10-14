@@ -123,7 +123,7 @@ def load_env_config(base_config):
     return env_config
 
 
-def load_yaml_config(filepath=None):
+def load_yaml_config(filename, filepath=None):
     """Load Krake base configuration settings from YAML file
 
     If no filepath is specified, the configuration is searched in the
@@ -133,6 +133,8 @@ def load_yaml_config(filepath=None):
     2. ``/etc/krake/krake.yaml``
 
     Args:
+        filename (os.PathLike): name given by default to the
+            configuration file of a component.
         filepath (os.PathLike, optional): Path to YAML configuration file
 
     Raises:
@@ -145,7 +147,7 @@ def load_yaml_config(filepath=None):
     if filepath is not None:
         filepaths = [filepath]
     else:
-        filepaths = ["krake.yaml", "/etc/krake/krake.yaml"]
+        filepaths = [filename, os.path.join("/etc/krake/", filename)]
 
     for path in filepaths:
         try:
@@ -157,7 +159,7 @@ def load_yaml_config(filepath=None):
     raise FileNotFoundError(f"No config file found: {filepaths}")
 
 
-def load_config(filepath=None):
+def load_config(filename=None, filepath=None):
     """Load Krake configuration settings
 
     Krake base configuration settings is defined by Krake YAML configuration file.
@@ -165,13 +167,15 @@ def load_config(filepath=None):
     environment variables.
 
     Args:
+        filename (os.PathLike): name given by default to the
+            configuration file of a component.
         filepath (os.PathLike, optional): Path to YAML configuration file
 
     Returns:
         dict: Krake configuration
 
     """
-    base_config = load_yaml_config(filepath=filepath)
+    base_config = load_yaml_config(filename, filepath=filepath)
     env_config = load_env_config(base_config)
 
     config = copy.deepcopy(base_config)

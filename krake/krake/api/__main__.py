@@ -23,7 +23,7 @@ parser.add_argument("--config", "-c", help="Path to configuration file")
 
 def main():
     args = parser.parse_args()
-    config = load_config(args.config)
+    config = load_config("api.yaml", args.config)
     setup_logging(config["log"])
     logger.debug("Krake configuration settings:\n %s" % pprint.pformat(config))
 

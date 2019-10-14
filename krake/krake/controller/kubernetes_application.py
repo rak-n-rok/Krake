@@ -537,11 +537,12 @@ parser.add_argument("-c", "--config", help="Path to configuration YAML file")
 
 
 def main(config):
-    krake_conf = load_config(config)
+    controller_config = load_config("kubernetes.yaml", config)
 
-    setup_logging(krake_conf["log"])
-    logger.debug("Krake configuration settings:\n %s" % pprint.pformat(krake_conf))
-    controller_config = krake_conf["controllers"]["kubernetes_application"]
+    setup_logging(controller_config["log"])
+    logger.debug(
+        "Krake configuration settings:\n %s", pprint.pformat(controller_config)
+    )
 
     tls_config = controller_config.get("tls")
     ssl_context = create_ssl_context(tls_config)
@@ -553,7 +554,6 @@ def main(config):
         ssl_context=ssl_context,
         debounce=controller_config.get("debounce", 0),
     )
-    setup_logging(krake_conf["log"])
     run(controller)
 
 

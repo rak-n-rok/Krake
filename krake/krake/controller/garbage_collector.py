@@ -44,7 +44,7 @@ class DatabaseReflector(object):
 
     Args:
         on_receive (coroutine):
-        apidef: the API definition of the kind of resource to list and watch.
+        api_def: the API definition of the kind of resource to list and watch.
         db_host (str): the host to connect to the database
         db_port (int): the port to connect to the database
     """
@@ -132,6 +132,9 @@ class GarbageCollector(Controller):
     def __init__(
         self, worker_count=10, loop=None, debounce=0, db_host="localhost", db_port=2379
     ):
+        # api_endpoint is set to an arbitrary value because it is not used, but needed
+        # by the Controller initializer
+        # TODO Will be removed with GC V2
         super().__init__("http://localhost", loop=loop, debounce=debounce)
         self.reflectors = []
         self.resources = _garbage_collected
@@ -319,12 +322,10 @@ class GarbageCollector(Controller):
 
 
 def main(config):
-    krake_conf = load_config(config)
+    gc_config = load_config("garbage_collector.yaml", config)
 
-    db_host = krake_conf["etcd"]["host"]
-    db_port = krake_conf["etcd"]["port"]
-
-    gc_config = krake_conf["controllers"]["garbage_collector"]
+    db_host = gc_config["etcd"]["host"]
+    db_port = gc_config["etcd"]["port"]
 
     controller = GarbageCollector(
         worker_count=gc_config["worker_count"],
@@ -332,7 +333,7 @@ def main(config):
         db_port=db_port,
         debounce=gc_config.get("debounce", 0),
     )
-    setup_logging(krake_conf["log"])
+    setup_logging(gc_config["log"])
     run(controller)
 
 

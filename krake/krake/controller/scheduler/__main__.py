@@ -31,11 +31,12 @@ parser.add_argument("-c", "--config", help="Path to configuration YAML file")
 
 
 def main(config):
-    krake_conf = load_config(config)
+    scheduler_config = load_config("scheduler.yaml", config)
 
-    setup_logging(krake_conf["log"])
-    logger.debug("Krake configuration settings:\n %s" % pprint.pformat(krake_conf))
-    scheduler_config = krake_conf["controllers"]["scheduler"]
+    setup_logging(scheduler_config["log"])
+    logger.debug(
+        "Krake configuration settings:\n %s" % pprint.pformat(scheduler_config)
+    )
 
     tls_config = scheduler_config.get("tls")
     ssl_context = create_ssl_context(tls_config)

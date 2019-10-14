@@ -1,18 +1,20 @@
+## Configuration file for the Krake API
+
 etcd:
-  host: 127.0.0.1
-  port: 2379
+  host: $etcd_host
+  port: $etcd_port
   retry_transactions: 1
 
 # TLS configuration of API server
 tls:
-  enabled: false
-  cert: tmp/pki/system:api-server.pem
-  key: tmp/pki/system:api-server-key.pem
+  enabled: $tls_enabled
+  cert: $cert_dir/system:api-server.pem
+  key: $cert_dir/system:api-server-key.pem
 
   # Enable client certificate authentication by setting this option to a file
   # containing one or more certificate authorities that should be used to
   # validate client certificates.
-  client_ca: tmp/pki/ca.pem
+  client_ca: $cert_dir/ca.pem
 
 authentication:
   # If enabled, every request not rejected and not authenticated by any
@@ -51,43 +53,6 @@ default-role-bindings:
     name: system:admin
   users: ["system:admin"]
   roles: ["system:admin"]
-
-controllers:
-
-  garbage_collector:
-    api_endpoint: http://localhost:8080
-    worker_count: 5
-    debounce: 1.5
-
-  # Example:
-  # <resource>_controller:
-  #   api_endpoint: localhost:8443
-  #   worker_count: 5
-  #   tls:
-  #     enabled: true
-  #     client_ca: tmp/pki/ca.pem
-  #     client_cert: tmp/pki/<resource>_contr.pem
-  #     client_key: tmp/pki/<resource>_contr-key.pem
-  # If the 'enabled' element is not true, the controller will not use TLS
-  scheduler:
-    api_endpoint: http://localhost:8080
-    worker_count: 5
-    debounce: 0.5
-    tls:
-      enabled: false
-      client_ca: tmp/pki/ca.pem
-      client_cert: tmp/pki/system:scheduler.pem
-      client_key: tmp/pki/system:scheduler-key.pem
-
-  kubernetes_application:
-    api_endpoint: http://localhost:8080
-    worker_count: 5
-    debounce: 0.5
-    tls:
-      enabled: false
-      client_ca: tmp/pki/ca.pem
-      client_cert: tmp/pki/system:kube_app.pem
-      client_key: tmp/pki/system:kube_app-key.pem
 
 
 log:
