@@ -27,8 +27,10 @@ def fuzzy_name():
     return "-".join(fake.name().split()).lower()
 
 
-def fuzzy_dict():
-    return {fake.word(): fake.word()}
+def fuzzy_dict(size=None):
+    if size is None:
+        size = fake.pyint(0, 3)
+    return {fake.word(): fake.word() for _ in range(size)}
 
 
 def fuzzy_sample(population, k=None):
@@ -46,10 +48,7 @@ class MetadataFactory(Factory):
     namespace = "testing"
     uid = fuzzy.FuzzyAttribute(fake.uuid4)
     created = fuzzy.FuzzyDateTime(datetime.now(tz=pytz.utc))
-
-    @lazy_attribute
-    def labels(self):
-        return [fuzzy_dict() for _ in range(3)]
+    labels = fuzzy.FuzzyAttribute(fuzzy_dict)
 
     @lazy_attribute
     def modified(self):

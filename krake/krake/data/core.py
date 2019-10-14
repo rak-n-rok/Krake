@@ -17,7 +17,7 @@ class ResourceRef(Serializable):
 class Metadata(Serializable):
     name: str = field(metadata={"immutable": True})
     namespace: str = field(default=None, metadata={"immutable": True})
-    labels: List[dict] = field(default_factory=list)
+    labels: dict = field(default_factory=dict)
     finalizers: List[str] = field(default_factory=list)
 
     uid: str = field(metadata={"readonly": True})

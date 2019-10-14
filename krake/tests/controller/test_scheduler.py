@@ -4,7 +4,7 @@ import pytest
 
 from krake.api.app import create_app
 from krake.data.core import MetricProviderType
-from krake.data.kubernetes import Application, ApplicationState
+from krake.data.kubernetes import Application, ApplicationState, LabelConstraint
 from krake.controller.scheduler import Scheduler, SchedulerWorker
 from krake.client import Client
 from krake.test_utils import server_endpoint
@@ -45,37 +45,33 @@ async def test_kubernetes_reception(aiohttp_server, config, db, loop):
     await worker.done  # If there is any exception, retrieve it here
 
 
-async def test_kubernetes_match_constraints(aiohttp_server, config, db, loop):
-    cluster = ClusterFactory(metadata__labels=[{"location": "DE"}, {"location": "IT"}])
-    app = ApplicationFactory(spec__constraints__labels=[{"location": "IT"}])
+def test_kubernetes_match_cluster_label_constraints():
+    cluster = ClusterFactory(metadata__labels={"location": "IT"})
+    app = ApplicationFactory(
+        spec__constraints__cluster__labels=[LabelConstraint.parse("location is IT")]
+    )
 
-    server = await aiohttp_server(create_app(config))
-
-    async with Client(url=server_endpoint(server), loop=loop) as client:
-        worker = SchedulerWorker(client=client)
-        assert worker.match_constraints_labels(app, cluster)
+    assert SchedulerWorker.match_cluster_constraints(app, cluster)
 
 
-async def test_kubernetes_match_constraints_empty(aiohttp_server, config, db, loop):
+def test_kubernetes_match_empty_cluster_label_constraints():
     cluster = ClusterFactory(metadata__labels=[])
-    app = ApplicationFactory(spec__constraints__labels=[])
+    app1 = ApplicationFactory(spec__constraints=None)
+    app2 = ApplicationFactory(spec__constraints__cluster=None)
+    app3 = ApplicationFactory(spec__constraints__cluster__labels=None)
 
-    server = await aiohttp_server(create_app(config))
-
-    async with Client(url=server_endpoint(server), loop=loop) as client:
-        worker = SchedulerWorker(client=client)
-        assert worker.match_constraints_labels(app, cluster)
+    assert SchedulerWorker.match_cluster_constraints(app1, cluster)
+    assert SchedulerWorker.match_cluster_constraints(app2, cluster)
+    assert SchedulerWorker.match_cluster_constraints(app3, cluster)
 
 
-async def test_kubernetes_match_constraints_negative(aiohttp_server, config, db, loop):
+def test_kubernetes_not_match_cluster_label_constraints():
     cluster = ClusterFactory()
-    app = ApplicationFactory(spec__constraints__labels=[{"location": "IT"}])
+    app = ApplicationFactory(
+        spec__constraints__cluster__labels=[LabelConstraint.parse("location is IT")]
+    )
 
-    server = await aiohttp_server(create_app(config))
-
-    async with Client(url=server_endpoint(server), loop=loop) as client:
-        worker = SchedulerWorker(client=client)
-        assert not worker.match_constraints_labels(app, cluster)
+    assert not SchedulerWorker.match_cluster_constraints(app, cluster)
 
 
 @pytest.mark.require_module("prometheus_client")
@@ -114,12 +110,11 @@ async def test_kubernetes_rank_missing_metric_definition(
 ):
     cluster_miss = ClusterFactory()
     cluster = ClusterFactory(spec__metrics=["heat_demand_zone_1"])
-    prometheus_host, prometheus_port = prometheus
     metrics_provider = MetricsProviderFactory(
         metadata__name="prometheus-zone-1",
         spec__type=MetricProviderType.prometheus,
         spec__config={
-            "url": f"http://{prometheus_host}:{prometheus_port}/api/v1/query",
+            "url": f"http://{prometheus.host}:{prometheus.port}/api/v1/query",
             "metrics": ["heat-demand"],
         },
     )
@@ -138,17 +133,16 @@ async def test_kubernetes_rank_missing_metric_definition(
 
 @pytest.mark.require_module("prometheus_client")
 @pytest.mark.slow
-async def test_kubernetes_scheduler(prometheus, aiohttp_server, config, db, loop):
-    cluster = ClusterFactory(metadata__labels=[], spec__metrics=["heat_demand_zone_1"])
+async def test_kubernetes_scheduling(prometheus, aiohttp_server, config, db, loop):
+    cluster = ClusterFactory(metadata__labels={}, spec__metrics=["heat_demand_zone_1"])
     app = ApplicationFactory(
-        spec__constraints__labels=[], status__state=ApplicationState.PENDING
+        spec__constraints__cluster__labels=[], status__state=ApplicationState.PENDING
     )
-    prometheus_host, prometheus_port = prometheus
     metrics_provider = MetricsProviderFactory(
         metadata__name="prometheus-zone-1",
         spec__type=MetricProviderType.prometheus,
         spec__config={
-            "url": f"http://{prometheus_host}:{prometheus_port}/api/v1/query",
+            "url": f"http://{prometheus.host}:{prometheus.port}/api/v1/query",
             "metrics": ["heat-demand"],
         },
     )

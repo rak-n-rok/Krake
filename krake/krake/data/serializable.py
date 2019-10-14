@@ -60,6 +60,14 @@ def field_for_schema(type_, default=dataclasses.MISSING, **metadata):
     If ``metadata`` contains ``marshmallow_field`` key, the value will be used
     directly as field.
 
+    If ``type_`` has a ``Schema`` attribute which should be a subclass of
+    :class:`marshmallow.Schema` a :class.`marshmallow.fields.Nested` field
+    will be returned wrapping the schema.
+
+    If ``type_`` has a ``Field`` attribute which should be a subclass of
+    :class:`marshmallow.fields.Field` an instance of this attribute will be
+    returned.
+
     Args:
         type_ (type): Type of the field
         default (optional): Default value of the field
@@ -72,6 +80,7 @@ def field_for_schema(type_, default=dataclasses.MISSING, **metadata):
     Raises:
         NotImplementedError: If the marshmallow field cannot not be determined
             for the passed type
+
     """
     if "marshmallow_field" in metadata:
         return metadata["marshmallow_field"]
@@ -99,6 +108,9 @@ def field_for_schema(type_, default=dataclasses.MISSING, **metadata):
 
     if hasattr(type_, "Schema"):
         return fields.Nested(type_.Schema, **metadata)
+
+    if hasattr(type_, "Field"):
+        return type_.Field(**metadata)
 
     raise NotImplementedError(f"No serializer found for {type_!r}")
 
