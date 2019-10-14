@@ -37,6 +37,7 @@ def run(command, retry=0, interval=1, condition=None, error_message=""):
     wait for an object to reach a certain state (RUNNING, DELETED, ...)
 
     Therefore, this function implements a retry logic:
+
     - The ``condition`` callable takes the command's response as argument and
       checks if it suits a certain format.
     - The ``retry`` and ``interval`` arguments control respectively the number
@@ -76,9 +77,8 @@ def run(command, retry=0, interval=1, condition=None, error_message=""):
 
             # This condition will check if the command has a null return
             # value
-            def check_return_code(response, error_message)
-                if response.returncode != 0
-                    raise AssertionError
+            def check_return_code(response, error_message):
+                assert response.returncode == 0, error_message
 
             # This command has a risk of race condition
             some_command = "..."
@@ -88,11 +88,10 @@ def run(command, retry=0, interval=1, condition=None, error_message=""):
             util.run(
                 some_command,
                 condition=check_return_code,
-                error_message="Unable to open my_file",
+                error_message="Unable to run the command successfully",
                 retry=10,
                 interval=1,
             )
-            error_message="Unable to open my_file", retry=10, interval=1)
 
     """
     logger.debug(f"Running: {command}")
