@@ -21,9 +21,25 @@ cache:
     - .cache/pip
 
 
-.unittests-krake-template: &unittests-krake-definition
+# Unit tests and flake8 are run on commits on branches which are not yet in a
+# merge requests (including master), on merge requests, and on scheduled
+# pipeline (night runs). Unfortunately, this configuration create duplicates
+# pipelines on merge requests. Unit tests and Flake are run twice.
+
+# It is not possible to workaround this issue. See
+# https://gitlab.com/gitlab-org/gitlab-foss/issues/56632. Until workflow rules
+# are added to the gitlab CI (See MR
+# https://gitlab.com/gitlab-org/gitlab/merge_requests/18130), we have to work
+# with duplicated pipelines on merge requests.
+
+unittests-krake:
   stage: test
   image: python:3.6
+  only:
+    - tags
+    - branches
+    - merge_requests
+    - schedules
   script:
     # Download etcd
     - mkdir /tmp/etcd-download
@@ -39,62 +55,41 @@ cache:
   tags:
     - docker
 
-unittests-krake-commits:
-  <<: *unittests-krake-definition
-  except:
-    - merge_requests
-    - schedules
 
-unittests-krake-mr:
-  <<: *unittests-krake-definition
-  only:
-    - merge_requests
-    - schedules
-
-
-.flake8-krake-template: &flake8-krake-definition
+flake8-krake:
   stage: test
   image: python:3.6
+  only:
+    - tags
+    - branches
+    - merge_requests
+    - schedules
   script:
     - pip install flake8
     - flake8 krake/krake
   tags:
     - docker
 
-flake8-krake-commits:
-  <<: *flake8-krake-definition
-  except:
-    - merge_requests
-    - schedules
 
-flake8-krake-mr:
-  <<: *flake8-krake-definition
-  only:
-    - merge_requests
-    - schedules
-
-
-.flake8-rok-template: &flake8-rok-definition
+flake8-rok:
   stage: test
   image: python:3.6
+  only:
+    - tags
+    - branches
+    - merge_requests
+    - schedules
   script:
     - pip install flake8
     - flake8 rok/rok
   tags:
     - docker
 
-flake8-rok-commits:
-  <<: *flake8-rok-definition
-  except:
-    - merge_requests
-    - schedules
 
-flake8-rok-mr:
-  <<: *flake8-rok-definition
-  only:
-    - merge_requests
-    - schedules
-
+# Following jobs are for end to end testing. We provisioning the staging
+# infrastructure, run the smoke tests and the functional tests, and cleanup
+# the staging infrastructure. They are run only on the master branch, on merge
+# requests, and on scheduled pipeline (night runs)
 
 provision-staging-infra:
   stage: provision
@@ -107,8 +102,9 @@ provision-staging-infra:
     expire_in: 1 day
     when: always
   only:
-    - schedules
+    - master
     - merge_requests
+    - schedules
   script:
     # Pre-requisites: openstack, ansible and pytest
     - pip install python-openstackclient openstacksdk ansible==2.7.10 pytest
@@ -135,8 +131,9 @@ smoke-tests:
   stage: smoke test
   image: python:3.6
   only:
-    - schedules
+    - master
     - merge_requests
+    - schedules
   script:
     # Pre-requisites: Ansible
     - pip install ansible==2.7.10
@@ -153,8 +150,9 @@ integration-tests:
   stage: integration test
   image: python:3.6
   only:
-    - schedules
+    - master
     - merge_requests
+    - schedules
   script:
     # Pre-requisites: Ansible
     - pip install ansible==2.7.10
@@ -171,8 +169,9 @@ cleanup-staging-infra:
   stage: cleanup
   image: python:3.6
   only:
-    - schedules
+    - master
     - merge_requests
+    - schedules
   script:
     # Pre-requisites: OpenStack and Ansible
     - pip install python-openstackclient openstacksdk ansible==2.7.10
