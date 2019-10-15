@@ -73,7 +73,6 @@ def test_kubernetes_not_match_cluster_label_constraints():
     assert not SchedulerWorker.match_cluster_constraints(app, cluster)
 
 
-@pytest.mark.require_module("prometheus_client")
 @pytest.mark.slow
 async def test_kubernetes_rank(prometheus, aiohttp_server, config, db, loop):
     clusters = [
@@ -98,7 +97,6 @@ async def test_kubernetes_rank(prometheus, aiohttp_server, config, db, loop):
         assert ranked.cluster == cluster
 
 
-@pytest.mark.require_module("prometheus_client")
 @pytest.mark.slow
 async def test_kubernetes_rank_missing_metric_definition(
     prometheus, aiohttp_server, config, db, loop
@@ -131,7 +129,6 @@ async def test_kubernetes_rank_missing_metric_definition(
     assert ranked_clusters[0].cluster == cluster
 
 
-@pytest.mark.require_module("prometheus_client")
 @pytest.mark.slow
 async def test_kubernetes_scheduling(prometheus, aiohttp_server, config, db, loop):
     cluster = ClusterFactory(metadata__labels={}, spec__metrics=["heat-demand"])

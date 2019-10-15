@@ -9,12 +9,11 @@ from typing import NamedTuple
 import time
 import logging.config
 from textwrap import dedent
-from importlib import import_module
 import json
-import shutil
 import requests
 import pytest
 import aiohttp
+import shutil
 from aiohttp import web
 from etcd3.aio_client import AioClient
 from prometheus_async import aio
@@ -57,12 +56,6 @@ def pytest_configure(config):
     """
     config.addinivalue_line("markers", "slow: mark test as slow to run")
     config.addinivalue_line(
-        "markers", "require_module(name): skip test if module is not installed"
-    )
-    config.addinivalue_line(
-        "markers", "require_executable(name): skip test if executable is not found"
-    )
-    config.addinivalue_line(
         "markers", "timeout(time): mark async test with maximal duration"
     )
 
@@ -82,28 +75,6 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "slow" in item.keywords:
                 item.add_marker(skip_slow)
-
-    for item in items:
-        if "require_module" in item.keywords:
-            marker = item.get_closest_marker("require_module")
-            module = marker.args[0]
-            try:
-                import_module(module)
-            except ImportError:
-                item.add_marker(
-                    pytest.mark.skip(
-                        reason=f"Required module {module!r} is not installed"
-                    )
-                )
-        if "require_executable" in item.keywords:
-            marker = item.get_closest_marker("require_executable")
-            executable = marker.args[0]
-            if not shutil.which(executable):
-                item.add_marker(
-                    pytest.mark.skip(
-                        reason=f"Required executable {executable!r} was not found"
-                    )
-                )
 
 
 def wait_for_url(url, timeout=5):
@@ -260,6 +231,8 @@ class KeystoneInfo(NamedTuple):
 
 @pytest.fixture("session")
 def keystone():
+    pytest.importorskip("keystone")
+
     host = "localhost"
     port = 5050
 
@@ -615,6 +588,9 @@ class PublicKeyRepository(object):
 @pytest.fixture("session")
 def pki():
     """Public key infrastructure fixture"""
+    if not shutil.which("cfssl"):
+        pytest.skip("Executable 'cfssl' not found")
+
     with PublicKeyRepository() as repo:
         yield repo
 
@@ -689,6 +665,9 @@ class Prometheus(NamedTuple):
 async def prometheus(prometheus_exporter, loop):
     prometheus_host = "localhost"
     prometheus_port = 5055
+
+    if not shutil.which("prometheus"):
+        pytest.skip("Executable 'prometheus' not found")
 
     config = dedent(
         """

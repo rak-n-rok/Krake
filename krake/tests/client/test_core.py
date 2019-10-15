@@ -1,5 +1,4 @@
 from operator import attrgetter
-import pytest
 from aiohttp.test_utils import TestServer as Server
 
 from krake.api.app import create_app
@@ -208,7 +207,6 @@ async def test_delete_rolebinding(aiohttp_server, config, db, loop):
     assert stored.metadata.deleted is not None
 
 
-@pytest.mark.require_executable("cfssl")
 async def test_connect_ssl(aiohttp_server, config, loop, pki):
     server_cert = pki.gencert("api-server")
     client_cert = pki.gencert("client")
