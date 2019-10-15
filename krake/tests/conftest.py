@@ -240,29 +240,6 @@ def config(etcd_server, user):
                 "roles": ["system:admin"],
             }
         ],
-        "default-metrics": [
-            {
-                "metadata": {"name": "heat_demand_zone_1"},
-                "spec": {
-                    "min": 0,
-                    "max": 1,
-                    "weight": 0.9,
-                    "provider": {"name": "prometheus-zone-1", "metric": "heat-demand"},
-                },
-            }
-        ],
-        "default-metrics-providers": [
-            {
-                "metadata": {"name": "prometheus-zone-1"},
-                "spec": {
-                    "type": "prometheus",
-                    "config": {
-                        "url": "http://localhost:9090/api/v1/query",
-                        "metrics": ["heat-demand"],
-                    },
-                },
-            }
-        ],
     }
 
 

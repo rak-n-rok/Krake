@@ -3,12 +3,11 @@ import asyncio
 import pytest
 
 from krake.api.app import create_app
-from krake.data.core import MetricProviderType
 from krake.data.kubernetes import Application, ApplicationState, LabelConstraint
 from krake.controller.scheduler import Scheduler, SchedulerWorker
 from krake.client import Client
 from krake.test_utils import server_endpoint
-from tests.factories.core import MetricsProviderFactory
+from tests.factories.core import MetricsProviderFactory, MetricFactory
 from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
 from . import SimpleWorker
 
@@ -78,24 +77,20 @@ def test_kubernetes_not_match_cluster_label_constraints():
 @pytest.mark.slow
 async def test_kubernetes_rank(prometheus, aiohttp_server, config, db, loop):
     clusters = [
-        ClusterFactory(spec__metrics=["heat_demand_zone_1"]),
-        ClusterFactory(spec__metrics=["heat_demand_zone_1"]),
+        ClusterFactory(spec__metrics=["heat-demand"]),
+        ClusterFactory(spec__metrics=["heat-demand"]),
     ]
-    prometheus_host, prometheus_port = prometheus
     metrics_provider = MetricsProviderFactory(
         metadata__name="prometheus-zone-1",
-        spec__type=MetricProviderType.prometheus,
-        spec__config={
-            "url": f"http://{prometheus_host}:{prometheus_port}/api/v1/query",
-            "metrics": ["heat-demand"],
-        },
+        spec__type="prometheus",
+        spec__prometheus__url=f"http://{prometheus.host}:{prometheus.port}",
     )
     await db.put(metrics_provider)
 
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        worker = SchedulerWorker(client=client, config_defaults=config)
+        worker = SchedulerWorker(client=client)
         ranked_clusters = await worker.rank_kubernetes_clusters(clusters)
 
     for ranked, cluster in zip(ranked_clusters, clusters):
@@ -109,43 +104,54 @@ async def test_kubernetes_rank_missing_metric_definition(
     prometheus, aiohttp_server, config, db, loop
 ):
     cluster_miss = ClusterFactory()
-    cluster = ClusterFactory(spec__metrics=["heat_demand_zone_1"])
+    cluster = ClusterFactory(spec__metrics=["heat-demand"])
+    metric = MetricFactory(
+        metadata__name="heat-demand",
+        spec__min=0,
+        spec__max=1,
+        spec__weight=0.9,
+        spec__provider__name="prometheus-zone-1",
+        spec__provider__metric="heat_demand_zone_1",
+    )
     metrics_provider = MetricsProviderFactory(
         metadata__name="prometheus-zone-1",
-        spec__type=MetricProviderType.prometheus,
-        spec__config={
-            "url": f"http://{prometheus.host}:{prometheus.port}/api/v1/query",
-            "metrics": ["heat-demand"],
-        },
+        spec__type="prometheus",
+        spec__prometheus__url=f"http://{prometheus.host}:{prometheus.port}",
     )
+    await db.put(metric)
     await db.put(metrics_provider)
 
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        worker = SchedulerWorker(client=client, config_defaults=config)
+        worker = SchedulerWorker(client=client)
         ranked_clusters = await worker.rank_kubernetes_clusters([cluster, cluster_miss])
 
     assert len(ranked_clusters) == 1
-    assert ranked_clusters[0].rank is not None
     assert ranked_clusters[0].cluster == cluster
 
 
 @pytest.mark.require_module("prometheus_client")
 @pytest.mark.slow
 async def test_kubernetes_scheduling(prometheus, aiohttp_server, config, db, loop):
-    cluster = ClusterFactory(metadata__labels={}, spec__metrics=["heat_demand_zone_1"])
+    cluster = ClusterFactory(metadata__labels={}, spec__metrics=["heat-demand"])
     app = ApplicationFactory(
         spec__constraints__cluster__labels=[], status__state=ApplicationState.PENDING
     )
+    metric = MetricFactory(
+        metadata__name="heat-demand",
+        spec__min=0,
+        spec__max=1,
+        spec__weight=0.9,
+        spec__provider__name="prometheus-zone-1",
+        spec__provider__metric="heat_demand_zone_1",
+    )
     metrics_provider = MetricsProviderFactory(
         metadata__name="prometheus-zone-1",
-        spec__type=MetricProviderType.prometheus,
-        spec__config={
-            "url": f"http://{prometheus.host}:{prometheus.port}/api/v1/query",
-            "metrics": ["heat-demand"],
-        },
+        spec__type="prometheus",
+        spec__prometheus__url=f"http://{prometheus.host}:{prometheus.port}",
     )
+    await db.put(metric)
     await db.put(metrics_provider)
     await db.put(cluster)
     await db.put(app)
@@ -153,7 +159,7 @@ async def test_kubernetes_scheduling(prometheus, aiohttp_server, config, db, loo
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        worker = SchedulerWorker(client=client, config_defaults=config)
+        worker = SchedulerWorker(client=client)
         await worker.resource_received(app)
 
     stored = await db.get(Application, namespace="testing", name=app.metadata.name)

@@ -189,7 +189,6 @@ class Controller(object):
         api_token (str, optional): Token used for API authentication
         worker_count (int, optional): Number of workers that should be spawned
         loop (asyncio.AbstractEventLoop, optional): Event loop that should be used
-        config_defaults (dict, optional): Krake defaults configuration values
 
     Attributes:
         client (krake.client.Client): Krake API client instance that should be used
@@ -240,10 +239,7 @@ class Controller(object):
 
         # Start worker tasks
         self.workers = [
-            self.loop.create_task(
-                consume(
-                    self.queue, self.worker_factory(self.client))
-            )
+            self.loop.create_task(consume(self.queue, self.worker_factory(self.client)))
             for _ in range(self.worker_count)
         ]
         self.watcher = self.loop.create_task(reconnect(self.list_and_watch))

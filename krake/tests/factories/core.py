@@ -1,7 +1,8 @@
 import random
+from dataclasses import MISSING
 
 import pytz
-from factory import Factory, SubFactory, List, lazy_attribute, fuzzy
+from factory import Factory, SubFactory, List, lazy_attribute, fuzzy, Maybe
 from datetime import datetime
 
 from .fake import fake
@@ -18,8 +19,7 @@ from krake.data.core import (
     MetricSpecProvider,
     MetricsProvider,
     MetricsProviderSpec,
-    MetricProviderType,
-    MetricProviderConfig,
+    PrometheusSpec,
 )
 
 
@@ -138,7 +138,6 @@ class MetricSpecFactory(Factory):
 
     min = 0
     max = 1
-    value = fuzzy.FuzzyAttribute(random.random)
     weight = fuzzy.FuzzyAttribute(random.random)
     provider = SubFactory(MetricSpecProviderFactory)
 
@@ -151,23 +150,36 @@ class MetricFactory(Factory):
     spec = SubFactory(MetricSpecFactory)
 
 
-class MetricProviderConfigFactory(Factory):
+class PrometheusSpecFactory(Factory):
     class Meta:
-        model = MetricProviderConfig
+        model = PrometheusSpec
 
     url = fuzzy.FuzzyAttribute(fake.url)
-    metrics = fuzzy.FuzzyAttribute(fake.words)
 
 
 class MetricsProviderSpecFactory(Factory):
     class Meta:
         model = MetricsProviderSpec
 
+    class Params:
+        @lazy_attribute
+        def is_prometheus(self):
+            return self.type == "prometheus"
+
+    prometheus = Maybe("is_prometheus", SubFactory(PrometheusSpecFactory), MISSING)
+
     @lazy_attribute
     def type(self):
-        return fake.random.choice(list(MetricProviderType.__members__.values()))
+        return fake.random.choice(list(MetricsProviderSpec.Schema._registry.keys()))
 
-    config = SubFactory(MetricProviderConfigFactory)
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        # Remove MISSING attributes
+        for key in list(kwargs.keys()):
+            if kwargs[key] is MISSING:
+                del kwargs[key]
+
+        return model_class(*args, **kwargs)
 
 
 class MetricsProviderFactory(Factory):

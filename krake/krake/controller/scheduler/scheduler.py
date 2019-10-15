@@ -3,22 +3,16 @@ import logging
 from functools import total_ordering
 from typing import NamedTuple
 
-from aiohttp import ClientConnectorError
+from aiohttp import ClientConnectorError, ClientResponseError
 
-from krake.data.core import resource_ref, ReasonCode, MetricsProvider, Metric
+from krake.data.core import resource_ref, ReasonCode
 from krake.data.kubernetes import ApplicationState, Cluster, ClusterBinding
 from krake.client.kubernetes import KubernetesApi
 from krake.client.core import CoreApi
 
 from ..exceptions import on_error, ControllerError, application_error_mapping
 from .. import Controller, Worker
-from .metrics import (
-    MetricValueError,
-    MissingMetricsDefinition,
-    get_metrics_providers_objs,
-    merge_obj,
-    fetch_query,
-)
+from .metrics import MetricValueError, fetch_query
 
 
 logger = logging.getLogger(__name__)
@@ -26,10 +20,16 @@ logger = logging.getLogger(__name__)
 
 class UnsuitableDeploymentError(ControllerError):
     """Raised in case when there is not enough resources for spawning an application
-        on any of the deployments.
+    on any of the deployments.
     """
 
     code = ReasonCode.NO_SUITABLE_RESOURCE
+
+
+class MissingMetricsDefinition(ControllerError):
+    """Raised in case required metric definition is missing."""
+
+    code = ReasonCode.MISSING_METRIC_DEFINITION
 
 
 class Scheduler(Controller):
@@ -87,18 +87,10 @@ class SchedulerWorker(Worker):
     application specifications.
     """
 
-    def __init__(self, client=None, config_defaults=None):
+    def __init__(self, client=None):
         super().__init__(client=client)
         self.kubernetes_api = KubernetesApi(self.client)
         self.core_api = CoreApi(self.client)
-        self.metrics_default = (
-            config_defaults.get("default-metrics") if config_defaults else None
-        )
-        self.metrics_providers_default = (
-            config_defaults.get("default-metrics-providers")
-            if config_defaults
-            else None
-        )
 
     @on_error(ControllerError)
     async def resource_received(self, app):
@@ -210,63 +202,64 @@ class SchedulerWorker(Worker):
             List[ClusterRank]: Ranked list of clusters
 
         """
-        session = self.client.session
-        metrics_db, metrics_providers_db = await asyncio.gather(
-            self.core_api.list_metrics(), self.core_api.list_metrics_providers()
-        )
-        metrics_all = merge_obj(metrics_db.items, self.metrics_default, Metric)
-        metrics_providers_all = merge_obj(
-            metrics_providers_db.items, self.metrics_providers_default, MetricsProvider
-        )
         ranked_clusters = []
         for cluster in clusters:
             try:
-                metrics, metrics_providers = get_metrics_providers_objs(
-                    cluster, metrics_all, metrics_providers_all
-                )
-            except MissingMetricsDefinition as err:
+                metrics = await self._fetch_metrics(cluster)
+            except (
+                MissingMetricsDefinition,
+                ClientConnectorError,
+                ClientResponseError,
+                MetricValueError,
+            ) as err:
+                # If there is any issue with a metric, skip this cluster for
+                # evaluation.
                 logger.error(err)
                 continue
 
-            try:
-                metrics_fetched = await asyncio.gather(
-                    *[
-                        fetch_query(session, metric, provider)
-                        for metric, provider in zip(metrics, metrics_providers)
-                    ]
+            for metric, value in metrics:
+                logger.debug(
+                    "Received metric %r with value %r for cluster %r",
+                    metric.metadata.name,
+                    value,
+                    cluster.metadata.name,
                 )
-            except (ClientConnectorError, MetricValueError) as err:
-                logger.error(err)
-                continue
-
-            if logger.level == logging.DEBUG:
-                for metric in metrics_fetched:
-                    logger.debug(
-                        f"Scheduler received metric {metric.metadata.name} "
-                        f"with value {metric.spec.value} "
-                        f"for cluster {cluster.metadata.name}"
-                    )
 
             ranked_clusters.append(
-                ClusterRank(
-                    rank=self.weighted_sum_of_metrics(metrics_fetched), cluster=cluster
-                )
+                ClusterRank(rank=self.weighted_sum_of_metrics(metrics), cluster=cluster)
             )
 
         return ranked_clusters
+
+    async def _fetch_metrics(self, cluster):
+        if not cluster.spec.metrics:
+            raise MissingMetricsDefinition(
+                f"Missing metrics definition for cluster {cluster.metadata.name!r}."
+            )
+
+        fetching = []
+
+        for name in cluster.spec.metrics:
+            metric = await self.core_api.read_metric(name=name)
+            metrics_provider = await self.core_api.read_metrics_provider(
+                name=metric.spec.provider.name
+            )
+            fetching.append(fetch_query(self.client.session, metric, metrics_provider))
+
+        return await asyncio.gather(*fetching)
 
     @staticmethod
     def weighted_sum_of_metrics(metrics):
         """Calculate weighted sum of metrics values.
 
         Args:
-            metrics (List[Metric]): List of metrics
+            metrics (List[Tuple[Metric, float]]): List of metric value tuples
 
         Returns:
             int: Sum of metrics values * metrics weights
 
         """
-        return sum(metric.spec.value * metric.spec.weight for metric in metrics)
+        return sum(value * metric.spec.weight for metric, value in metrics)
 
     async def error_occurred(self, app, error=None):
         """Asynchronous callback executed whenever an error occurs during

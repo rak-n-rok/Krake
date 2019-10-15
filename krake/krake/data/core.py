@@ -4,7 +4,7 @@ from dataclasses import field
 from typing import List
 
 from . import persistent
-from .serializable import Serializable, ApiObject
+from .serializable import Serializable, ApiObject, PolymorphicContainer
 
 
 class ResourceRef(Serializable):
@@ -146,17 +146,12 @@ def resource_ref(resource):
     )
 
 
-class MetricProviderType(Enum):
-    prometheus = auto()
-
-
 class MetricSpecProvider(Serializable):
     name: str
     metric: str
 
 
 class MetricSpec(Serializable):
-    value: float = None
     min: float
     max: float
     weight: float
@@ -178,14 +173,13 @@ class MetricList(ApiObject):
     items: List[Metric]
 
 
-class MetricProviderConfig(Serializable):
+class MetricsProviderSpec(PolymorphicContainer):
+    type: str
+
+
+@MetricsProviderSpec.register("prometheus")
+class PrometheusSpec(Serializable):
     url: str
-    metrics: List[str]
-
-
-class MetricsProviderSpec(Serializable):
-    type: MetricProviderType
-    config: MetricProviderConfig
 
 
 @persistent("/metricsprovider/{name}")
