@@ -1,7 +1,10 @@
 """This module defines a declarative API for Python's standard :mod:`argparse`
 module.
 """
+import copy
 from argparse import ArgumentParser
+
+import argparse
 
 
 class ParserSpec(object):
@@ -160,3 +163,71 @@ def argument(*args, **kwargs):
         return fn
 
     return decorator
+
+
+class StoreDictPairInList(argparse.Action):
+    """Custom action to store and validate dict <key=value> pairs in a list
+
+    Example:
+        .. code:: python
+
+            parser = argparse.ArgumentParser()
+            parser.add_argument(
+                '--foo', metavar="KEY=VALUE", action=StoreDictPairInList
+            )
+            args = parser.parse_args('--foo label=test'.split())
+            assert argparse.Namespace(foo=[{'label': 'test'}]) == args
+
+    """
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        items = copy.copy(self.ensure_value(namespace, self.dest, []))
+        split_value = values.split("=", 1)
+        if len(split_value) != 2:
+            print(f"Error: Malformed <key=value> format of {values!r}.")
+            raise SystemExit(1)
+        items.append({key: value for key, value in [split_value]})
+        setattr(namespace, self.dest, items)
+
+    @staticmethod
+    def ensure_value(namespace, name, value):
+        if getattr(namespace, name, None) is None:
+            setattr(namespace, name, value)
+        return getattr(namespace, name)
+
+
+arg_formatting = argument(
+    "-f",
+    "--format",
+    choices=["table", "json", "yaml"],
+    default="table",
+    help="Format of the output, table by default",
+)
+arg_labels = argument(
+    "-l",
+    "--label",
+    dest="labels",
+    default=[],
+    metavar="KEY=VALUE",
+    action=StoreDictPairInList,
+    help="Label <key=value>. Can be specified multiple times",
+)
+arg_constraints_labels = argument(
+    "-L",
+    "--constraint-label",
+    dest="constraints_labels",
+    default=[],
+    action=StoreDictPairInList,
+    help="Constraint label <key=value>. Can be specified multiple times",
+)
+arg_namespace = argument(
+    "-n", "--namespace", help="Namespace of the resource. Defaults to user"
+)
+arg_metric = argument(
+    "--metric",
+    "-m",
+    dest="metrics",
+    action="append",
+    default=[],
+    help="Metric name. Can be specified multiple times",
+)

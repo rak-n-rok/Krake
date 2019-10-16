@@ -60,6 +60,9 @@ cp rok.yaml.template rok.yaml
 # Run etcd server. This will store the data in "tmp/etcd".
 support/etcd
 
+# Run prometheus server. This will store the data in "tmp/prometheus".
+support/prometheus
+
 # Run the API
 python -m krake.api
 
@@ -198,6 +201,7 @@ transformed to an open source project in September 2019.
 
 [minikube]: https://kubernetes.io/docs/setup/learning-environment/minikube/
 [etcd]: https://github.com/etcd-io/etcd/releases/
+[prometheus]: https://prometheus.io/download/
 [python]: https://www.python.org/downloads/
 [rtfd]: https://rak-n-rok.readthedocs.io/
 [dev-docs]: https://rak-n-rok.readthedocs.io/projects/krake/en/readthedocs/dev/index.html

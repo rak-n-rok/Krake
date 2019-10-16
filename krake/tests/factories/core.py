@@ -1,5 +1,8 @@
+import random
+from dataclasses import MISSING
+
 import pytz
-from factory import Factory, SubFactory, List, lazy_attribute, fuzzy
+from factory import Factory, SubFactory, List, lazy_attribute, fuzzy, Maybe
 from datetime import datetime
 
 from .fake import fake
@@ -11,11 +14,23 @@ from krake.data.core import (
     RoleBinding,
     Reason,
     ReasonCode,
+    Metric,
+    MetricSpec,
+    MetricSpecProvider,
+    MetricsProvider,
+    MetricsProviderSpec,
+    PrometheusSpec,
 )
 
 
 def fuzzy_name():
     return "-".join(fake.name().split()).lower()
+
+
+def fuzzy_dict(size=None):
+    if size is None:
+        size = fake.pyint(0, 3)
+    return {fake.word(): fake.word() for _ in range(size)}
 
 
 def fuzzy_sample(population, k=None):
@@ -32,8 +47,8 @@ class MetadataFactory(Factory):
     name = fuzzy.FuzzyAttribute(fuzzy_name)
     namespace = "testing"
     uid = fuzzy.FuzzyAttribute(fake.uuid4)
-    annotations = fuzzy.FuzzyAttribute(dict)
     created = fuzzy.FuzzyDateTime(datetime.now(tz=pytz.utc))
+    labels = fuzzy.FuzzyAttribute(fuzzy_dict)
 
     @lazy_attribute
     def modified(self):
@@ -107,3 +122,69 @@ class ReasonFactory(Factory):
 
     message = fake.sentence()
     code = fuzzy.FuzzyChoice(list(ReasonCode.__members__.values()))
+
+
+class MetricSpecProviderFactory(Factory):
+    class Meta:
+        model = MetricSpecProvider
+
+    name = fuzzy.FuzzyAttribute(fake.word)
+    metric = fuzzy.FuzzyAttribute(fake.word)
+
+
+class MetricSpecFactory(Factory):
+    class Meta:
+        model = MetricSpec
+
+    min = 0
+    max = 1
+    weight = fuzzy.FuzzyAttribute(random.random)
+    provider = SubFactory(MetricSpecProviderFactory)
+
+
+class MetricFactory(Factory):
+    class Meta:
+        model = Metric
+
+    metadata = SubFactory(MetadataFactory)
+    spec = SubFactory(MetricSpecFactory)
+
+
+class PrometheusSpecFactory(Factory):
+    class Meta:
+        model = PrometheusSpec
+
+    url = fuzzy.FuzzyAttribute(fake.url)
+
+
+class MetricsProviderSpecFactory(Factory):
+    class Meta:
+        model = MetricsProviderSpec
+
+    class Params:
+        @lazy_attribute
+        def is_prometheus(self):
+            return self.type == "prometheus"
+
+    prometheus = Maybe("is_prometheus", SubFactory(PrometheusSpecFactory), MISSING)
+
+    @lazy_attribute
+    def type(self):
+        return fake.random.choice(list(MetricsProviderSpec.Schema._registry.keys()))
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        # Remove MISSING attributes
+        for key in list(kwargs.keys()):
+            if kwargs[key] is MISSING:
+                del kwargs[key]
+
+        return model_class(*args, **kwargs)
+
+
+class MetricsProviderFactory(Factory):
+    class Meta:
+        model = MetricsProvider
+
+    metadata = SubFactory(MetadataFactory)
+    spec = SubFactory(MetricsProviderSpecFactory)

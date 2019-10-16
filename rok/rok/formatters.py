@@ -135,8 +135,8 @@ def format_datetime(time_str):
 
 
 def dict_formatter(attr):
-    """
-    Format a dictionary into a more readable format
+    """Format a dictionary into a more readable format
+
     Args:
         attr (dict): an attribute with key:value elements
 
@@ -147,7 +147,33 @@ def dict_formatter(attr):
     """
     if not attr:
         return str(None)
-    formatted_attr = [f"{k}: {v}\n" for k, v in attr.items()]
+
+    formatted_attr = []
+    for key, value in attr.items():
+        formatted_value = list_formatter(value) if isinstance(value, list) else value
+        formatted_attr.append(f"{key}: {formatted_value}\n")
+
+    return "".join(formatted_attr)[:-1]  # Remove the last end of line character
+
+
+def list_formatter(attr):
+    """Format a list into a more readable format
+
+    Args:
+        attr (list): an attribute with items
+
+    Returns:
+        str: Formatted list
+
+    """
+    if not attr:
+        return str(None)
+
+    formatted_attr = []
+    for item in attr:
+        formatted_item = dict_formatter(item) if isinstance(item, dict) else item
+        formatted_attr.append(f"{formatted_item}\n")
+
     return "".join(formatted_attr)[:-1]  # Remove the last end of line character
 
 
@@ -354,6 +380,7 @@ class BaseTable(Table):
 
     name = Cell("metadata.name")
     namespace = Cell("metadata.namespace")
+    labels = Cell("metadata.labels", formatter=list_formatter)
     created = Cell("metadata.created", formatter=format_datetime)
     modified = Cell("metadata.modified", formatter=format_datetime)
     deleted = Cell("metadata.deleted", formatter=format_datetime)

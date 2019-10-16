@@ -1,6 +1,7 @@
 from base64 import b64encode
+from itertools import cycle
 import yaml
-from factory import Factory, SubFactory, lazy_attribute, fuzzy
+from factory import Factory, SubFactory, lazy_attribute, fuzzy, Iterator
 from copy import deepcopy
 
 from .fake import fake
@@ -15,6 +16,12 @@ from krake.data.kubernetes import (
     ClusterState,
     ClusterStatus,
     Cluster,
+    Constraints,
+    ClusterConstraints,
+    EqualConstraint,
+    NotEqualConstraint,
+    InConstraint,
+    NotInConstraint,
 )
 
 
@@ -22,8 +29,36 @@ def fuzzy_name():
     return "-".join(fake.name().split()).lower()
 
 
+def fuzzy_dict():
+    return {fake.word(): fake.word()}
+
+
+label_constraints = cycle(
+    (
+        EqualConstraint(label="location", value="EU"),
+        NotEqualConstraint(label="location", value="DE"),
+        InConstraint(label="location", values=("SK", "DE")),
+        NotInConstraint(label="location", values=("SK", "DE")),
+    )
+)
+
+
 states = list(ApplicationState.__members__.values())
 states.remove(ApplicationState.DELETED)
+
+
+class ClusterConstraintsFactory(Factory):
+    class Meta:
+        model = ClusterConstraints
+
+    labels = Iterator(map(lambda constraint: [constraint], label_constraints))
+
+
+class ConstraintsFactory(Factory):
+    class Meta:
+        model = Constraints
+
+    cluster = SubFactory(ClusterConstraintsFactory)
 
 
 class ApplicationStatusFactory(Factory):
@@ -95,6 +130,8 @@ class ApplicationSpecFactory(Factory):
     @lazy_attribute
     def manifest(self):
         return kubernetes_manifest
+
+    constraints = SubFactory(ConstraintsFactory)
 
 
 class ApplicationFactory(Factory):
@@ -249,6 +286,8 @@ class ClusterSpecFactory(Factory):
     @lazy_attribute
     def kubeconfig(self):
         return local_kubeconfig
+
+    metrics = fuzzy.FuzzyAttribute(fake.words)
 
 
 class ClusterFactory(Factory):

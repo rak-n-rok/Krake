@@ -3,6 +3,7 @@ stages:
 
 variables:
   ETCD_VER: v3.3.13
+  PROMETHEUS_VER: 2.12.0
 
   # Change pip's cache directory to be inside the project directory since we
   # can only cache local items.
@@ -25,6 +26,14 @@ unittests-krake:
     - mv /tmp/etcd-download/etcd /usr/local/bin
     - rm -rf /tmp/etcd-download /tmp/etcd.tar.gz
     - etcd --version
+
+    # Download prometheus
+    - mkdir /tmp/prometheus-download
+    - curl -s -L  https://github.com/prometheus/prometheus/releases/download/v$PROMETHEUS_VER/prometheus-$PROMETHEUS_VER.linux-amd64.tar.gz  -o /tmp/prometheus.tar.gz
+    - tar xzvf /tmp/prometheus.tar.gz -C /tmp/prometheus-download --strip-components=1
+    - mv /tmp/prometheus-download/prometheus /usr/local/bin
+    - rm -rf /tmp/prometheus-download /tmp/prometheus.tar.gz
+    - prometheus --version
 
     - pip install krake/[dev]
     - pip install keystone

@@ -308,6 +308,7 @@ class Worker(object):
     Args:
         client (krake.client.Client): Krake API client that should be used for
             all interaction with the Krake HTTP API.
+
     """
 
     def __init__(self, client):

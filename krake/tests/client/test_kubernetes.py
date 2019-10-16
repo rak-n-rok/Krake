@@ -14,8 +14,7 @@ from krake.data.kubernetes import (
 )
 from krake.test_utils import with_timeout
 
-from factories.kubernetes import ApplicationFactory
-from tests.factories.kubernetes import ClusterFactory
+from factories.kubernetes import ApplicationFactory, ClusterFactory
 
 manifest = list(
     yaml.safe_load_all(

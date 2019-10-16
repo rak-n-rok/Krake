@@ -10,7 +10,15 @@ from argparse import FileType
 from base64 import b64encode
 import yaml
 
-from .parser import ParserSpec, argument
+from .parser import (
+    ParserSpec,
+    argument,
+    arg_formatting,
+    arg_labels,
+    arg_namespace,
+    arg_constraints_labels,
+    arg_metric,
+)
 from .fixtures import depends
 from .formatters import BaseTable, Cell, printer, dict_formatter
 
@@ -22,14 +30,6 @@ application = kubernetes.subparser(
     "application", aliases=["app"], help="Manage Kubernetes applications"
 )
 
-formatting = argument(
-    "-f",
-    "--format",
-    choices=["table", "json", "yaml"],
-    default="table",
-    help="Format of the output, table by default",
-)
-
 
 class ApplicationListTable(BaseTable):
     state = Cell("status.state")
@@ -39,8 +39,8 @@ class ApplicationListTable(BaseTable):
 @argument(
     "-a", "--all", action="store_true", help="Show applications in all namespaces"
 )
-@argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
-@formatting
+@arg_namespace
+@arg_formatting
 @depends("config", "session")
 @printer(table=ApplicationListTable(many=True))
 def list_applications(config, session, namespace, all):
@@ -59,15 +59,22 @@ def list_applications(config, session, namespace, all):
 @argument(
     "-f", "--file", type=FileType(), required=True, help="Kubernetes manifest file"
 )
-@argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
 @argument("name", help="Name of the application")
+@arg_constraints_labels
+@arg_namespace
+@arg_labels
 @depends("config", "session")
-def create_application(config, session, file, namespace, name):
+def create_application(
+    config, session, file, name, namespace, constraints_labels, labels
+):
     if namespace is None:
         namespace = config["user"]
 
     manifest = list(yaml.safe_load_all(file))
-    app = {"metadata": {"name": name}, "spec": {"manifest": manifest}}
+    app = {
+        "metadata": {"name": name, "labels": labels},
+        "spec": {"manifest": manifest, "constraints": {"labels": constraints_labels}},
+    }
     resp = session.post(f"/kubernetes/namespaces/{namespace}/applications", json=app)
     data = resp.json()
     yaml.dump(data, default_flow_style=False, stream=sys.stdout)
@@ -76,12 +83,13 @@ def create_application(config, session, file, namespace, name):
 class ApplicationTable(BaseTable):
     reason = Cell("status.reason", formatter=dict_formatter)
     services = Cell("status.services", formatter=dict_formatter)
+    constraints = Cell("spec.constraints", formatter=dict_formatter)
 
 
 @application.command("get", help="Get Kubernetes application")
-@argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
 @argument("name", help="Kubernetes application name")
-@formatting
+@arg_namespace
+@arg_formatting
 @depends("config", "session")
 @printer(table=ApplicationTable())
 def get_application(config, session, namespace, name):
@@ -105,20 +113,27 @@ def get_application(config, session, namespace, name):
 @argument(
     "-f", "--file", type=FileType(), required=True, help="Kubernetes manifest file"
 )
-@argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
+@arg_constraints_labels
+@arg_namespace
+@arg_labels
 @depends("config", "session")
-def update_application(config, session, namespace, name, file):
+def update_application(
+    config, session, namespace, name, file, labels, constraints_labels
+):
     if namespace is None:
         namespace = config["user"]
 
     manifest = list(yaml.safe_load_all(file))
-    app = {"metadata": {"name": name}, "spec": {"manifest": manifest}}
+    app = {
+        "metadata": {"name": name, "labels": labels},
+        "spec": {"manifest": manifest, "constraints": {"labels": constraints_labels}},
+    }
     session.put(f"/kubernetes/namespaces/{namespace}/applications/{name}", json=app)
 
 
 @application.command("delete", help="Delete Kubernetes application")
-@argument("-n", "--namespace", help="Namespace of the application. Defaults to user")
 @argument("name", help="Kubernetes application name")
+@arg_namespace
 @depends("config", "session")
 def delete_application(config, session, namespace, name):
     if namespace is None:
@@ -140,15 +155,15 @@ class ClusterTable(BaseTable):
 @cluster.command("create", help="Register an existing Kubernetes cluster")
 @argument("--context", "-c", dest="contexts", action="append")
 @argument(
-    "-n", "--namespace", help="Namespace of the Kubernetes cluster. Defaults to user"
-)
-@argument(
     "kubeconfig",
     type=FileType(),
     help="Kubeconfig file that should be used to control this cluster",
 )
+@arg_metric
+@arg_namespace
+@arg_labels
 @depends("config", "session")
-def create_cluster(config, session, namespace, kubeconfig, contexts):
+def create_cluster(config, session, namespace, kubeconfig, contexts, metrics, labels):
     if namespace is None:
         namespace = config["user"]
 
@@ -199,10 +214,9 @@ def create_cluster(config, session, namespace, kubeconfig, contexts):
         cluster_config["contexts"] = [context]
         cluster_config["users"] = [user]
         cluster_config["current-context"] = context["name"]
-
         cluster = {
-            "metadata": {"name": cluster["name"]},
-            "spec": {"kubeconfig": cluster_config},
+            "metadata": {"name": cluster["name"], "labels": labels},
+            "spec": {"kubeconfig": cluster_config, "metrics": metrics},
         }
         resp = session.post(
             f"/kubernetes/namespaces/{namespace}/clusters", json=cluster
@@ -215,12 +229,10 @@ def create_cluster(config, session, namespace, kubeconfig, contexts):
 
 @cluster.command("list", help="List Kubernetes clusters")
 @argument(
-    "-n", "--namespace", help="Namespace of the Kubernetes cluster. Defaults to user"
-)
-@argument(
     "-a", "--all", action="store_true", help="Show applications in all namespaces"
 )
-@formatting
+@arg_namespace
+@arg_formatting
 @depends("config", "session")
 @printer(table=ClusterTable(many=True))
 def list_clusters(config, session, namespace, all):
@@ -236,14 +248,14 @@ def list_clusters(config, session, namespace, all):
 
 
 @cluster.command("delete", help="Delete Kubernetes cluster")
-@argument("-n", "--namespace", help="Namespace of the cluster. Defaults to user")
 @argument(
     "--cascade",
     help="Delete the cluster and all dependent resources",
     action="store_true",
 )
 @argument("name", help="Kubernetes cluster name")
-@formatting
+@arg_namespace
+@arg_formatting
 @depends("config", "session")
 @printer(table=ClusterTable())
 def delete_cluster(config, session, namespace, name, cascade):

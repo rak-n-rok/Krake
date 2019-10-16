@@ -1,4 +1,6 @@
+import asyncio
 import os
+import random
 import sys
 import subprocess
 from tempfile import TemporaryDirectory
@@ -6,13 +8,16 @@ from pathlib import Path
 from typing import NamedTuple
 import time
 import logging.config
-from importlib import import_module
+from textwrap import dedent
 import json
-import shutil
 import requests
 import pytest
+import aiohttp
+import shutil
+from aiohttp import web
 from etcd3.aio_client import AioClient
-
+from prometheus_async import aio
+from prometheus_client import Gauge, CollectorRegistry, CONTENT_TYPE_LATEST
 
 # Prepend package directory for working imports
 package_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -51,12 +56,6 @@ def pytest_configure(config):
     """
     config.addinivalue_line("markers", "slow: mark test as slow to run")
     config.addinivalue_line(
-        "markers", "require_module(name): skip test if module is not installed"
-    )
-    config.addinivalue_line(
-        "markers", "require_executable(name): skip test if executable is not found"
-    )
-    config.addinivalue_line(
         "markers", "timeout(time): mark async test with maximal duration"
     )
 
@@ -77,51 +76,52 @@ def pytest_collection_modifyitems(config, items):
             if "slow" in item.keywords:
                 item.add_marker(skip_slow)
 
-    for item in items:
-        if "require_module" in item.keywords:
-            marker = item.get_closest_marker("require_module")
-            module = marker.args[0]
-            try:
-                import_module(module)
-            except ImportError:
-                item.add_marker(
-                    pytest.mark.skip(
-                        reason=f"Required module {module!r} is not installed"
-                    )
-                )
-        if "require_executable" in item.keywords:
-            marker = item.get_closest_marker("require_executable")
-            executable = marker.args[0]
-            if not shutil.which(executable):
-                item.add_marker(
-                    pytest.mark.skip(
-                        reason=f"Required executable {executable!r} was not found"
-                    )
-                )
-
 
 def wait_for_url(url, timeout=5):
-    """Wait until an URL endpoint is reachable"""
+    """Wait until an URL endpoint is reachable.
+
+    Args:
+        url (str): URL endpoint
+        timeout (int, optional): Timeout. Defaults to 5s
+
+    Raises:
+        TimeoutError: When timeout is reached
+
+    """
     start = time.time()
 
     while True:
         try:
             resp = requests.get(url)
             assert resp.status_code == 200
-        except requests.ConnectionError:
+        except (requests.ConnectionError, AssertionError):
             time.sleep(0.1)
             if time.time() - start > timeout:
-                raise TimeoutError(f"Can not connect to {url}")
+                raise TimeoutError(f"Cannot connect to {url}")
         else:
             return
 
 
-etcd_host = "127.0.0.1"
-etcd_port = 3379
+async def await_for_url(url, loop, timeout=5):
+    start = loop.time()
+
+    while True:
+        try:
+            async with aiohttp.ClientSession(raise_for_status=True) as client:
+                resp = await client.get(url)
+        except aiohttp.ClientError:
+            await asyncio.sleep(0.1)
+            if loop.time() - start > timeout:
+                raise TimeoutError(f"Cannot connect to {url!r}")
+        else:
+            return resp
 
 
 @pytest.fixture("session")
 def etcd_server():
+    etcd_host = "127.0.0.1"
+    etcd_port = 3379
+
     with TemporaryDirectory() as tmpdir:
         command = [
             "etcd",
@@ -214,40 +214,6 @@ def config(etcd_server, user):
     }
 
 
-keystone_config = """
-[fernet_tokens]
-key_repository = {tempdir}/fernet-keys
-
-[fernet_receipts]
-key_repository = {tempdir}/fernet-keys
-
-[DEFAULT]
-log_dir = {tempdir}/logs
-
-[assignment]
-driver = sql
-
-[cache]
-enabled = false
-
-[catalog]
-driver = sql
-
-[policy]
-driver = rules
-
-[credential]
-key_repository = {tempdir}/credential-keys
-
-[token]
-provider = fernet
-expiration = 21600
-
-[database]
-connection = sqlite:///{tempdir}/keystone.db
-"""
-
-
 class KeystoneInfo(NamedTuple):
     host: str
     port: int
@@ -265,15 +231,52 @@ class KeystoneInfo(NamedTuple):
 
 @pytest.fixture("session")
 def keystone():
+    pytest.importorskip("keystone")
+
     host = "localhost"
     port = 5050
 
+    config_template = dedent(
+        """
+        [fernet_tokens]
+        key_repository = {tempdir}/fernet-keys
+
+        [fernet_receipts]
+        key_repository = {tempdir}/fernet-keys
+
+        [DEFAULT]
+        log_dir = {tempdir}/logs
+
+        [assignment]
+        driver = sql
+
+        [cache]
+        enabled = false
+
+        [catalog]
+        driver = sql
+
+        [policy]
+        driver = rules
+
+        [credential]
+        key_repository = {tempdir}/credential-keys
+
+        [token]
+        provider = fernet
+        expiration = 21600
+
+        [database]
+        connection = sqlite:///{tempdir}/keystone.db
+        """
+    )
+
     with TemporaryDirectory() as tempdir:
-        config = Path(tempdir) / "keystone.conf"
+        config_file = Path(tempdir) / "keystone.conf"
 
         # Create keystone configuration
-        with config.open("w") as fd:
-            fd.write(keystone_config.format(tempdir=tempdir))
+        with config_file.open("w") as fd:
+            fd.write(config_template.format(tempdir=tempdir))
 
         (Path(tempdir) / "fernet-keys").mkdir(mode=0o700)
         (Path(tempdir) / "credential-keys").mkdir(mode=0o700)
@@ -284,14 +287,14 @@ def keystone():
 
         # Populate identity service database
         subprocess.check_call(
-            ["keystone-manage", "--config-file", str(config), "db_sync"]
+            ["keystone-manage", "--config-file", str(config_file), "db_sync"]
         )
         # Initialize Fernet key repositories
         subprocess.check_call(
             [
                 "keystone-manage",
                 "--config-file",
-                str(config),
+                str(config_file),
                 "fernet_setup",
                 "--keystone-user",
                 str(user),
@@ -303,7 +306,7 @@ def keystone():
             [
                 "keystone-manage",
                 "--config-file",
-                str(config),
+                str(config_file),
                 "credential_setup",
                 "--keystone-user",
                 str(user),
@@ -316,7 +319,7 @@ def keystone():
             [
                 "keystone-manage",
                 "--config-file",
-                str(config),
+                str(config_file),
                 "bootstrap",
                 "--bootstrap-password",
                 "admin",
@@ -339,7 +342,7 @@ def keystone():
             str(port),
             "--",
             "--config-file",
-            str(config),
+            str(config_file),
         ]
         with subprocess.Popen(command) as proc:
             try:
@@ -585,5 +588,153 @@ class PublicKeyRepository(object):
 @pytest.fixture("session")
 def pki():
     """Public key infrastructure fixture"""
+    if not shutil.which("cfssl"):
+        pytest.skip("Executable 'cfssl' not found")
+
     with PublicKeyRepository() as repo:
         yield repo
+
+
+class PrometheusExporter(NamedTuple):
+    """Tuple yielded by the :func:`prometheus_exporter` fixture describing
+    server connection information and the name of the provided metric.
+    """
+
+    host: str
+    port: int
+    metric: str
+
+
+@pytest.fixture
+async def prometheus_exporter(loop, aiohttp_server):
+    """Heat-demand exporter fixture. Heat demand exporter generates heat
+    demand metric `heat_demand_zone_1` with random value.
+    """
+    metric_name = "heat_demand_zone_1"
+    interval = 1  # refresh metric value interval[s]
+
+    registry = CollectorRegistry(auto_describe=True)
+
+    async def heat_demand_metric():
+        metric = Gauge(metric_name, "float - heat demand (kW)", registry=registry)
+        while True:
+            metric.set(round(random.random(), 2))
+            await asyncio.sleep(interval)
+
+    async def start_metric(app):
+        app["metric"] = loop.create_task(heat_demand_metric())
+
+    async def cleanup_metric(app):
+        app["metric"].cancel()
+        try:
+            await app["metric"]
+        except asyncio.CancelledError:
+            pass
+
+    async def server_stats(request):
+        """Return a web response with the plain text version of the metrics."""
+        resp = web.Response(body=aio.web.generate_latest(registry))
+
+        # This is set separately because aiohttp complains about ";"" in
+        # content_type thinking it means there's also a charset.
+        # @see https://github.com/aio-libs/aiohttp/issues/2197
+        resp.content_type = CONTENT_TYPE_LATEST
+
+        return resp
+
+    app = web.Application()
+    app.router.add_get("/metrics", server_stats)
+    app.on_startup.append(start_metric)
+    app.on_cleanup.append(cleanup_metric)
+
+    server = await aiohttp_server(app)
+
+    yield PrometheusExporter(host=server.host, port=server.port, metric=metric_name)
+
+
+class Prometheus(NamedTuple):
+    """Tuple yielded by the :func:`prometheus` fixture. It contains
+    information about the Prometheus server connection.
+    """
+
+    host: str
+    port: int
+
+
+@pytest.fixture
+async def prometheus(prometheus_exporter, loop):
+    prometheus_host = "localhost"
+    prometheus_port = 5055
+
+    if not shutil.which("prometheus"):
+        pytest.skip("Executable 'prometheus' not found")
+
+    config = dedent(
+        """
+        global:
+            scrape_interval: 1s
+        scrape_configs:
+            - job_name: prometheus
+              static_configs:
+                - targets:
+                  - {prometheus_host}:{prometheus_port}
+            - job_name: heat-demand-exporter
+              static_configs:
+                - targets:
+                  - {exporter_host}:{exporter_port}
+        """
+    )
+
+    async def await_for_prometheus(url, timeout=10):
+        """Wait until the Prometheus server is booted up and the first metric
+        is scraped.
+        """
+        start = loop.time()
+
+        while True:
+            resp = await await_for_url(url, loop)
+            body = await resp.json()
+
+            # If the returned metric list is not empty, stop waiting.
+            if body["data"]["result"]:
+                return
+
+            if loop.time() - start > timeout:
+                raise TimeoutError(f"Cannot get metric from {url!r}")
+
+            # Prometheus' first scrap takes some time
+            await asyncio.sleep(0.25)
+
+    with TemporaryDirectory() as tempdir:
+        config_file = Path(tempdir) / "prometheus.yml"
+
+        # Create prometheus configuration
+        with config_file.open("w") as fd:
+            fd.write(
+                config.format(
+                    prometheus_host=prometheus_host,
+                    prometheus_port=prometheus_port,
+                    exporter_host=prometheus_exporter.host,
+                    exporter_port=prometheus_exporter.port,
+                )
+            )
+
+        command = [
+            "prometheus",
+            "--config.file",
+            str(config_file),
+            "--storage.tsdb.path",
+            str(Path(tempdir) / "data"),
+            "--web.enable-admin-api",
+            "--web.listen-address",
+            ":" + str(prometheus_port),
+        ]
+        with subprocess.Popen(command) as prometheus:
+            try:
+                await await_for_prometheus(
+                    f"http://{prometheus_host}:{prometheus_port}"
+                    f"/api/v1/query?query={prometheus_exporter.metric}"
+                )
+                yield Prometheus(host=prometheus_host, port=prometheus_port)
+            finally:
+                prometheus.terminate()
