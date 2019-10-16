@@ -1,0 +1,43 @@
+- name: Running Krake smoke tests
+  become: yes
+  become_user: krake
+  hosts: krake_apps
+  vars:
+    git_dir: /home/krake/git/krake
+    test_dir: rak/functionals
+  tasks:
+    - name: Install Tests dependencies
+      pip:
+        name: "{{ git_dir }}/rak/[test]"
+        state: present
+
+    # pytest and rok are installed locally in /home/krake/.local/bin which
+    # isn't in the default PATH
+    - name: Run smoke test for krake client
+      command: "pytest {{ git_dir }}/{{ test_dir }}/test_krake_cli.py"
+      environment:
+        PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
+
+
+- name: Running Minikube smoke tests
+  hosts: minikube_clusters
+  vars:
+    home_dir: /home/ubuntu
+    test_dir: rak/functionals
+  tasks:
+    - name: Ensure rak directory is present
+      copy:
+        src: "{{ playbook_dir }}/../rak/"
+        dest: "{{ home_dir }}/rak/"
+
+    - name: Install Tests dependencies
+      pip:
+        name: "{{ home_dir }}/rak/[test]"
+        state: present
+
+    # pytest and rok are installed locally in /home/ubuntu/.local/bin which
+    # isn't in the default PATH
+    - name: Run smoke test for Minikube
+      command: "pytest {{ home_dir }}/{{ test_dir }}/test_minikube_cli.py"
+      environment:
+        PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"

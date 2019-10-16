@@ -1,0 +1,19 @@
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority: {{ krake_homedir }}/clusters/certs/{{cluster_name}}/.minikube/ca.crt
+    server: https://{{cluster_ip}}:{{cluster_api_port}}
+  name: {{cluster_name}}
+contexts:
+- context:
+    cluster: {{cluster_name}}
+    user: minikube
+  name: minikube
+current-context: minikube
+kind: Config
+preferences: {}
+users:
+- name: minikube
+  user:
+    client-certificate: {{ krake_homedir }}/clusters/certs/{{cluster_name}}/.minikube/client.crt
+    client-key: {{ krake_homedir }}/clusters/certs/{{cluster_name}}/.minikube/client.key

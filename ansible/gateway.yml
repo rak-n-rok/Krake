@@ -18,6 +18,7 @@
           network: "{{ hostvars[network]['inventory_hostname'] }}"
           subnet: "{{ hostvars[network]['subnet_name'] }}"
           common_secgroup: "{{ hostvars[network]['common_secgroup_name'] }}"
+          use_config_drive: "{{ use_config_drive }}"
       register: stack
 
     - name: Update host variables of gateway

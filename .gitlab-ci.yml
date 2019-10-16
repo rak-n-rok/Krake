@@ -1,5 +1,10 @@
 stages:
   - test
+  - provision
+  - smoke test
+  - integration test
+  - cleanup
+
 
 variables:
   ETCD_VER: v3.3.13
@@ -9,15 +14,33 @@ variables:
   # can only cache local items.
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
 
+
 # Pip's cache doesn't store the python packages
 # https://pip.pypa.io/en/stable/reference/pip_install/#caching
 cache:
   paths:
     - .cache/pip
 
+
+# Unit tests and flake8 are run on commits on branches which are not yet in a
+# merge requests (including master), on merge requests, and on scheduled
+# pipeline (night runs). Unfortunately, this configuration create duplicates
+# pipelines on merge requests. Unit tests and Flake are run twice.
+
+# It is not possible to workaround this issue. See
+# https://gitlab.com/gitlab-org/gitlab-foss/issues/56632. Until workflow rules
+# are added to the gitlab CI (See MR
+# https://gitlab.com/gitlab-org/gitlab/merge_requests/18130), we have to work
+# with duplicated pipelines on merge requests.
+
 unittests-krake:
   stage: test
   image: python:3.6
+  only:
+    - tags
+    - branches
+    - merge_requests
+    - schedules
   script:
     # Download etcd
     - mkdir /tmp/etcd-download
@@ -41,30 +64,134 @@ unittests-krake:
   tags:
     - docker
 
-# unittests-rok:
-#   stage: test
-#   image: python:3.6
-#   script:
-#     - pip install krake/
-#     - pip install rok/[dev]
-#     - pytest rok/tests
-#   tags:
-#     - docker
 
 flake8-krake:
   stage: test
   image: python:3.6
+  only:
+    - tags
+    - branches
+    - merge_requests
+    - schedules
   script:
     - pip install flake8
     - flake8 krake/krake
   tags:
     - docker
 
+
 flake8-rok:
   stage: test
   image: python:3.6
+  only:
+    - tags
+    - branches
+    - merge_requests
+    - schedules
   script:
     - pip install flake8
     - flake8 rok/rok
   tags:
     - docker
+
+
+# Following jobs are for end to end testing. We provisioning the staging
+# infrastructure, run the smoke tests and the functional tests, and cleanup
+# the staging infrastructure. They are run only on the master branch, on merge
+# requests, and on scheduled pipeline (night runs)
+
+provision-staging-infra:
+  stage: provision
+  image: python:3.6
+  artifacts:
+    paths:
+      - .ssh/id_rsa
+      - ansible/.etc # Absolute path: /builds/ragnarok/krake/ansible/.etc
+      - ansible/hosts-CI
+    expire_in: 1 day
+    when: always
+  only:
+    - master
+    - merge_requests
+    - schedules
+  script:
+    # Pre-requisites: openstack, ansible and pytest
+    - pip install python-openstackclient openstacksdk ansible==2.7.10 pytest
+    - apt-get update -y && apt-get install openssh-client rsync -y
+
+    # Create SSH keys for to use during the whole pipeline
+    - mkdir .ssh/
+    - openstack keypair delete --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD my_runner_key_$CI_PIPELINE_ID || true
+    - openstack keypair create --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD my_runner_key_$CI_PIPELINE_ID > .ssh/id_rsa
+    - chmod 600 .ssh/id_rsa
+
+    # Configure host-CI template wiht the CI Pipeline ID
+    - sed -i "s/\$CI_PIPELINE_ID/$CI_PIPELINE_ID/g" ansible/hosts-CI
+
+    # Run Ansible to provision the staging infrastructure
+    - echo "=== provisioning staging infrastructure ==="
+    # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
+    - cd ansible
+    - chmod -v 700 $(pwd)
+    - ansible-playbook -i hosts-CI site.yml
+
+
+smoke-tests:
+  stage: smoke test
+  image: python:3.6
+  only:
+    - master
+    - merge_requests
+    - schedules
+  script:
+    # Pre-requisites: Ansible
+    - pip install ansible==2.7.10
+    - apt-get update -y && apt-get install openssh-client rsync -y
+
+    # Run Ansible playbook to execute smoke test on the staging infrastructure
+    # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
+    - cd ansible
+    - chmod -v 700 $(pwd)
+    - ansible-playbook -i hosts-CI smoke_tests.yml
+
+
+integration-tests:
+  stage: integration test
+  image: python:3.6
+  only:
+    - master
+    - merge_requests
+    - schedules
+  script:
+    # Pre-requisites: Ansible
+    - pip install ansible==2.7.10
+    - apt-get update -y && apt-get install openssh-client rsync -y
+
+    # Run Ansible to execture the integration tests
+    # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
+    - cd ansible
+    - chmod -v 700 $(pwd)
+    - ansible-playbook -i hosts-CI integration_tests.yml
+
+
+cleanup-staging-infra:
+  stage: cleanup
+  image: python:3.6
+  only:
+    - master
+    - merge_requests
+    - schedules
+  script:
+    # Pre-requisites: OpenStack and Ansible
+    - pip install python-openstackclient openstacksdk ansible==2.7.10
+    - apt-get update -y && apt-get install openssh-client rsync -y
+
+    # Delete the runner SSH keys
+    - openstack keypair delete --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD my_runner_key_$CI_PIPELINE_ID || true
+
+    # Delete staging infrastructure
+    # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
+    - cd ansible
+    - chmod -v 700 $(pwd)
+    - ansible-playbook -i hosts-CI unprovision.yaml
+  when: always

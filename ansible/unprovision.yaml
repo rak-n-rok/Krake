@@ -1,0 +1,14 @@
+- name: Unprovision infrastructure
+  hosts: all
+  gather_facts: false
+  tasks:
+
+    - name: Delete Heat stack
+      delegate_to: localhost
+      os_stack:
+        name: "{{ inventory_hostname }}"
+        state: absent
+
+    - name: Clean host variables
+      delete_host:
+        hostname: "{{ inventory_hostname }}"

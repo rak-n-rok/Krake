@@ -1,0 +1,24 @@
+- name: Running Krake integration tests
+  become: yes
+  become_user: krake
+  hosts: krake_apps
+  vars:
+    git_dir: /home/krake/git/krake
+    test_dir: rak/functionals
+  tasks:
+    - name: Install Tests dependencies
+      pip:
+        name: "{{ git_dir }}/rak/[test]"
+        state: present
+
+    # We need one Minikube cluster in order to run the integration tests
+    - name: Check if a Minikube cluster has been spawned
+      assert:
+        that: "groups['minikube_clusters'][0] is defined"
+
+    # pytest and rok are installed locally in /home/krake/.local/bin which
+    # isn't in the default PATH
+    - name: Run integration tests for krake client
+      command: "pytest {{ git_dir }}/{{test_dir}}/test_integration.py --minikubecluster {{groups['minikube_clusters'][0]}}"
+      environment:
+        PATH: "{{ ansible_env.PATH }}:{{ansible_env.HOME}}/.local/bin"
