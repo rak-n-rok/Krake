@@ -21,10 +21,10 @@ def pytest_addoption(parser):
     parser.addoption(
         "--minikubecluster",
         action="store",
-        default="minikube cluster to use for integration tests",
+        help="minikube cluster to use for integration tests",
     )
 
 
 @pytest.fixture
 def minikubecluster(request):
-    return request.config.getoption("--minikubecluster")
+    return request.config.getoption("--minikubecluster", skip=True)
