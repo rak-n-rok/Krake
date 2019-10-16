@@ -97,7 +97,7 @@ def wait_for_url(url, timeout=5):
         except (requests.ConnectionError, AssertionError):
             time.sleep(0.1)
             if time.time() - start > timeout:
-                raise TimeoutError(f"Can not connect to {url}")
+                raise TimeoutError(f"Cannot connect to {url}")
         else:
             return
 
@@ -112,7 +112,7 @@ async def await_for_url(url, loop, timeout=5):
         except aiohttp.ClientError:
             await asyncio.sleep(0.1)
             if loop.time() - start > timeout:
-                raise TimeoutError(f"Can not connect to {url!r}")
+                raise TimeoutError(f"Cannot connect to {url!r}")
         else:
             return resp
 
@@ -700,7 +700,7 @@ async def prometheus(prometheus_exporter, loop):
                 return
 
             if loop.time() - start > timeout:
-                raise TimeoutError(f"Can not get metric from {url!r}")
+                raise TimeoutError(f"Cannot get metric from {url!r}")
 
             # Prometheus' first scrap takes some time
             await asyncio.sleep(0.25)
