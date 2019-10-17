@@ -1,5 +1,4 @@
 import asyncio
-
 import pytest
 
 from krake.api.app import create_app
@@ -7,8 +6,8 @@ from krake.data.kubernetes import Application, ApplicationState, LabelConstraint
 from krake.controller.scheduler import Scheduler, SchedulerWorker
 from krake.client import Client
 from krake.test_utils import server_endpoint
-from tests.factories.core import MetricsProviderFactory, MetricFactory
-from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
+from factories.core import MetricsProviderFactory, MetricFactory
+from factories.kubernetes import ApplicationFactory, ClusterFactory
 from . import SimpleWorker
 
 
@@ -97,11 +96,54 @@ async def test_kubernetes_rank(prometheus, aiohttp_server, config, db, loop):
         assert ranked.cluster == cluster
 
 
+async def test_kubernetes_rank_with_metrics_only():
+    clusters = [ClusterFactory(spec__metrics=[]), ClusterFactory(spec__metrics=[])]
+
+    with pytest.raises(AssertionError):
+        await SchedulerWorker(client=None).rank_kubernetes_clusters(clusters)
+
+
+async def test_kubernetes_rank_missing_metric(aiohttp_server, config, loop):
+    clusters = [
+        ClusterFactory(spec__metrics=["non-existent-metric"]),
+        ClusterFactory(spec__metrics=["also-not-existing"]),
+    ]
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        ranked = await SchedulerWorker(client=client).rank_kubernetes_clusters(clusters)
+
+    assert len(ranked) == 0
+
+
+async def test_kubernetes_rank_missing_metrics_provider(
+    aiohttp_server, config, db, loop
+):
+    clusters = [ClusterFactory(spec__metrics=["my-metric"])]
+    metric = MetricFactory(
+        metadata__name="my-metric",
+        spec__min=0,
+        spec__max=1,
+        spec__weight=1,
+        spec__provider__name="non-existent-provider",
+        spec__provider__metric="non-existent-metric",
+    )
+    await db.put(metric)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        ranked = await SchedulerWorker(client=client).rank_kubernetes_clusters(clusters)
+
+    assert len(ranked) == 0
+
+
 @pytest.mark.slow
-async def test_kubernetes_rank_missing_metric_definition(
+async def test_kubernetes_prefer_cluster_with_metrics(
     prometheus, aiohttp_server, config, db, loop
 ):
-    cluster_miss = ClusterFactory()
+    cluster_miss = ClusterFactory(spec__metrics=[])
     cluster = ClusterFactory(spec__metrics=["heat-demand"])
     metric = MetricFactory(
         metadata__name="heat-demand",
@@ -116,6 +158,7 @@ async def test_kubernetes_rank_missing_metric_definition(
         spec__type="prometheus",
         spec__prometheus__url=f"http://{prometheus.host}:{prometheus.port}",
     )
+    app = ApplicationFactory(spec__constraints=None)
     await db.put(metric)
     await db.put(metrics_provider)
 
@@ -123,10 +166,19 @@ async def test_kubernetes_rank_missing_metric_definition(
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         worker = SchedulerWorker(client=client)
-        ranked_clusters = await worker.rank_kubernetes_clusters([cluster, cluster_miss])
+        selected = await worker.select_kubernetes_cluster(app, (cluster_miss, cluster))
 
-    assert len(ranked_clusters) == 1
-    assert ranked_clusters[0].cluster == cluster
+    assert selected == cluster
+
+
+async def test_kubernetes_select_cluster_without_metric(aiohttp_server, config, loop):
+    clusters = (ClusterFactory(spec__metrics=[]), ClusterFactory(spec__metrics=[]))
+    app = ApplicationFactory(spec__constraints=None)
+
+    selected = await SchedulerWorker(client=None).select_kubernetes_cluster(
+        app, clusters
+    )
+    assert selected in clusters
 
 
 @pytest.mark.slow

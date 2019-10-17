@@ -43,7 +43,6 @@ class ReasonCode(Enum):
     INVALID_RESOURCE = 10  # Invalid values in the Manifest
     CLUSTER_NOT_REACHABLE = 11  # Connectivity issue with the Kubernetes deployment
     NO_SUITABLE_RESOURCE = 50  # Scheduler issue
-    MISSING_METRIC_DEFINITION = 51  # Scheduler issue
     INVALID_METRIC_VALUE = 52  # Scheduler issue
 
     # Codes over 100 will cause the controller to delete the resource directly
