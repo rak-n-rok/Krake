@@ -3,8 +3,7 @@ import logging
 import random
 from functools import total_ordering
 from typing import NamedTuple
-
-from aiohttp import ClientConnectorError, ClientResponseError
+from aiohttp import ClientError
 
 from krake.data.core import resource_ref, ReasonCode
 from krake.data.kubernetes import ApplicationState, Cluster, ClusterBinding
@@ -13,7 +12,7 @@ from krake.client.core import CoreApi
 
 from ..exceptions import on_error, ControllerError, application_error_mapping
 from .. import Controller, Worker
-from .metrics import MetricValueError, fetch_query
+from .metrics import MetricError, fetch_query
 
 
 logger = logging.getLogger(__name__)
@@ -215,7 +214,7 @@ class SchedulerWorker(Worker):
         for cluster in clusters:
             try:
                 metrics = await self._fetch_metrics(cluster)
-            except (ClientConnectorError, ClientResponseError, MetricValueError) as err:
+            except (MetricError, ClientError) as err:
                 # If there is any issue with a metric, skip this cluster for
                 # evaluation.
                 logger.error(err)
