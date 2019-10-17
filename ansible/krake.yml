@@ -268,11 +268,16 @@
         XDG_CONFIG_HOME: "{{ git_dir }}"
       block:
 
+        # This is a temporary fix, will be override by !261
         - name: Create Krake rok configuration file
+          vars:
+            file_content:
+              "api_url": "http://{{ api_host }}:{{ api_port }}"
+              "user": "system"
           copy:
             dest: "{{ git_dir }}/rok.yaml"
             content: |
-              {"api_url": {{ api_host }}:{{ api_port }}, "user": "system"}
+              {{ file_content | to_json }}
 
         - name: Install Krake rok
           tags:
