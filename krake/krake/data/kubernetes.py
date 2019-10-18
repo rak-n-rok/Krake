@@ -368,10 +368,10 @@ def _validate_kubeconfig(kubeconfig):
 
 
 class ClusterSpec(Serializable):
-    kubeconfig: dict = field(default=None, metadata={"validate": _validate_kubeconfig})
+    kubeconfig: dict = field(metadata={"validate": _validate_kubeconfig})
     # FIXME needs further discussion how to register stand-alone kubernetes cluster as
     #  a cluster which should be processed by krake.controller.scheduler
-    metrics: List[str]
+    metrics: List[str] = field(default_factory=list)
 
 
 class ClusterState(Enum):

@@ -1,9 +1,9 @@
 import asyncio
 import logging
+import random
 from functools import total_ordering
 from typing import NamedTuple
-
-from aiohttp import ClientConnectorError, ClientResponseError
+from aiohttp import ClientError
 
 from krake.data.core import resource_ref, ReasonCode
 from krake.data.kubernetes import ApplicationState, Cluster, ClusterBinding
@@ -12,7 +12,7 @@ from krake.client.core import CoreApi
 
 from ..exceptions import on_error, ControllerError, application_error_mapping
 from .. import Controller, Worker
-from .metrics import MetricValueError, fetch_query
+from .metrics import MetricError, fetch_query
 
 
 logger = logging.getLogger(__name__)
@@ -24,12 +24,6 @@ class UnsuitableDeploymentError(ControllerError):
     """
 
     code = ReasonCode.NO_SUITABLE_RESOURCE
-
-
-class MissingMetricsDefinition(ControllerError):
-    """Raised in case required metric definition is missing."""
-
-    code = ReasonCode.MISSING_METRIC_DEFINITION
 
 
 class Scheduler(Controller):
@@ -95,9 +89,10 @@ class SchedulerWorker(Worker):
     @on_error(ControllerError)
     async def resource_received(self, app):
 
-        # TODO: Global optimization instead of incremental
         # TODO: API for supporting different application types
-        cluster = await self.select_kubernetes_cluster(app)
+        # TODO: Evaluate spawning a new cluster
+        clusters = await self.kubernetes_api.list_all_clusters()
+        cluster = await self.select_kubernetes_cluster(app, clusters.items)
 
         if cluster is None:
             logger.info(
@@ -161,30 +156,43 @@ class SchedulerWorker(Worker):
 
         return True
 
-    async def select_kubernetes_cluster(self, app):
+    async def select_kubernetes_cluster(self, app, clusters):
         """Select suitable kubernetes cluster for application binding.
 
         Args:
-            app: (krake.data.kubernetes.Application): Application object for binding
+            app (krake.data.kubernetes.Application): Application object for binding
+            clusters (List[krake.data.kubernetes.Cluster]): Clusters between which
+                the "best" one should be chosen.
 
         Returns:
             Cluster: Cluster suitable for application binding
 
         """
-        # TODO: Evaluate spawning a new cluster
-        clusters_all = await self.kubernetes_api.list_all_clusters()
-
-        clusters = [
+        matching = [
             cluster
-            for cluster in clusters_all.items
+            for cluster in clusters
             if self.match_cluster_constraints(app, cluster)
         ]
 
-        if not clusters:
+        if not matching:
             logger.info("Unable to match application constraints to any cluster")
             return None
 
-        clusters_ranked = await self.rank_kubernetes_clusters(clusters)
+        # Partition list if matching clusters into a list if clusters with
+        # metrics and without metrics. Clusters with metrics are preferred
+        # over clusters without metrics.
+        with_metrics = [cluster for cluster in matching if cluster.spec.metrics]
+        without_metrics = [cluster for cluster in matching if not cluster.spec.metrics]
+
+        # Only use clusters without metrics when there are no clusters with
+        # metrics.
+        if not with_metrics:
+            # TODO: Use a more advanced selection
+            return random.choice(without_metrics)
+
+        # Rank the clusters based on their metric and return the cluster with
+        # a minimal rank.
+        clusters_ranked = await self.rank_kubernetes_clusters(with_metrics)
 
         if not clusters_ranked:
             logger.info("Unable to rank any cluster")
@@ -206,12 +214,7 @@ class SchedulerWorker(Worker):
         for cluster in clusters:
             try:
                 metrics = await self._fetch_metrics(cluster)
-            except (
-                MissingMetricsDefinition,
-                ClientConnectorError,
-                ClientResponseError,
-                MetricValueError,
-            ) as err:
+            except (MetricError, ClientError) as err:
                 # If there is any issue with a metric, skip this cluster for
                 # evaluation.
                 logger.error(err)
@@ -232,11 +235,7 @@ class SchedulerWorker(Worker):
         return ranked_clusters
 
     async def _fetch_metrics(self, cluster):
-        if not cluster.spec.metrics:
-            raise MissingMetricsDefinition(
-                f"Missing metrics definition for cluster {cluster.metadata.name!r}."
-            )
-
+        assert cluster.spec.metrics, "Cluster does not have any metric assigned"
         fetching = []
 
         for name in cluster.spec.metrics:

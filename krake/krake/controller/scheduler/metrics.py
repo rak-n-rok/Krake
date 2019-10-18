@@ -29,18 +29,14 @@ Abstraction is provided by :class:`Provider`.
     assert isinstance(provider, Prometheus)
 
 """
-from aiohttp import ClientSession
+from aiohttp import ClientSession, ClientError
 
-from krake.controller.exceptions import ControllerError
-from krake.data.core import MetricsProvider, ReasonCode
+from krake.data.core import MetricsProvider
 from yarl import URL
 
 
-class MetricValueError(ControllerError):
-    """Raised when evaluation of metric value failed
-    """
-
-    code = ReasonCode.INVALID_METRIC_VALUE
+class MetricError(Exception):
+    """Raised when evaluation of metric value fails"""
 
 
 def validate(metric, value):
@@ -51,11 +47,11 @@ def validate(metric, value):
         value (float): Metric value
 
     Raises:
-        MetricValueError: When evaluation of metric value failed
+        MetricError: When evaluation of metric value failed
 
     """
     if not metric.spec.min <= value <= metric.spec.max:
-        raise MetricValueError(f"Invalid metric value {value!r}")
+        raise MetricError(f"Invalid metric value {value!r}")
 
 
 async def fetch_query(session, metric, provider):
@@ -68,7 +64,7 @@ async def fetch_query(session, metric, provider):
         provider (MetricsProvider): Metrics provider definition for metric
 
     Raises:
-        MetricValueError: If the value of the metric is invalid
+        MetricError: If the value of the metric cannot be fetched or is invalid
 
     Returns:
         Tuple[Metric, float]: Tuple of metric and its fetched value
@@ -143,8 +139,9 @@ class Prometheus(Provider):
             float: Metric value fetched from Prometheus
 
         Raises:
-            MetricValueError: When Prometheus server response doesn't contain requested
-                metric name or the metric cannot be converted into a float
+            MetricError: If the request to Prometheus fails, the response does
+                not contain the requested metric name or the metric cannot be
+                converted into a float.
 
         """
         metric_name = metric.spec.provider.metric
@@ -153,17 +150,21 @@ class Prometheus(Provider):
             URL(self.metric_provider.spec.prometheus.url) / "api/v1/query"
         ).with_query({"query": metric_name})
 
-        async with self.session.get(url) as resp:
-            body = await resp.json()
+        try:
+            async with self.session.get(url) as resp:
+                resp.raise_for_status()
+                body = await resp.json()
+        except ClientError as err:
+            raise MetricError("Failed to query Prometheus") from err
 
         # @see https://prometheus.io/docs/prometheus/latest/querying/api/
         for result in body["data"]["result"]:
             if result and result["metric"]["__name__"] == metric_name:
                 try:
                     return float(result["value"][1])
-                except (TypeError, ValueError) as e:
-                    raise MetricValueError(
+                except (TypeError, ValueError) as err:
+                    raise MetricError(
                         f"Invalid value for metric {metric_name!r}"
-                    ) from e
+                    ) from err
 
-        raise MetricValueError(f"Metric {metric_name!r} not in Prometheus response")
+        raise MetricError(f"Metric {metric_name!r} not in Prometheus response")

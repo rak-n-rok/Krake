@@ -16,11 +16,11 @@ from .parser import (
     arg_formatting,
     arg_labels,
     arg_namespace,
-    arg_constraints_labels,
     arg_metric,
 )
 from .fixtures import depends
 from .formatters import BaseTable, Cell, printer, dict_formatter
+
 
 kubernetes = ParserSpec(
     "kubernetes", aliases=["kube"], help="Manage Kubernetes resources"
@@ -28,6 +28,15 @@ kubernetes = ParserSpec(
 
 application = kubernetes.subparser(
     "application", aliases=["app"], help="Manage Kubernetes applications"
+)
+
+arg_cluster_label_constraints = argument(
+    "-L",
+    "--cluster-label-constraint",
+    dest="cluster_label_constraints",
+    default=[],
+    action="append",
+    help="Constraint for labels of the cluster. Can be specified multiple times",
 )
 
 
@@ -60,12 +69,12 @@ def list_applications(config, session, namespace, all):
     "-f", "--file", type=FileType(), required=True, help="Kubernetes manifest file"
 )
 @argument("name", help="Name of the application")
-@arg_constraints_labels
+@arg_cluster_label_constraints
 @arg_namespace
 @arg_labels
 @depends("config", "session")
 def create_application(
-    config, session, file, name, namespace, constraints_labels, labels
+    config, session, file, name, namespace, cluster_label_constraints, labels
 ):
     if namespace is None:
         namespace = config["user"]
@@ -73,7 +82,10 @@ def create_application(
     manifest = list(yaml.safe_load_all(file))
     app = {
         "metadata": {"name": name, "labels": labels},
-        "spec": {"manifest": manifest, "constraints": {"labels": constraints_labels}},
+        "spec": {
+            "manifest": manifest,
+            "constraints": {"cluster": {"labels": cluster_label_constraints}},
+        },
     }
     resp = session.post(f"/kubernetes/namespaces/{namespace}/applications", json=app)
     data = resp.json()
@@ -113,12 +125,12 @@ def get_application(config, session, namespace, name):
 @argument(
     "-f", "--file", type=FileType(), required=True, help="Kubernetes manifest file"
 )
-@arg_constraints_labels
+@arg_cluster_label_constraints
 @arg_namespace
 @arg_labels
 @depends("config", "session")
 def update_application(
-    config, session, namespace, name, file, labels, constraints_labels
+    config, session, namespace, name, file, labels, cluster_label_constraints
 ):
     if namespace is None:
         namespace = config["user"]
@@ -126,7 +138,10 @@ def update_application(
     manifest = list(yaml.safe_load_all(file))
     app = {
         "metadata": {"name": name, "labels": labels},
-        "spec": {"manifest": manifest, "constraints": {"labels": constraints_labels}},
+        "spec": {
+            "manifest": manifest,
+            "constraints": {"cluster": {"labels": cluster_label_constraints}},
+        },
     }
     session.put(f"/kubernetes/namespaces/{namespace}/applications/{name}", json=app)
 
