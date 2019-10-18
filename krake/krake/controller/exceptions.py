@@ -64,7 +64,7 @@ def on_error(exception):
                 await func(cls, item, **kwargs)
             except exception as err:
                 logger.error(str(err))
-                await cls.error_occurred(item, error=err)
+                await cls.error_handler(item, error=err)
 
         return wrapper
 

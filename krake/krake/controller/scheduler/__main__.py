@@ -21,7 +21,7 @@ from argparse import ArgumentParser
 
 from krake import load_config, setup_logging
 from ...controller import create_ssl_context, run
-from .scheduler import Scheduler, SchedulerWorker
+from .scheduler import Scheduler
 
 logger = logging.getLogger("krake.controller.scheduler")
 
@@ -30,13 +30,12 @@ parser = ArgumentParser(description="Krake scheduler")
 parser.add_argument("-c", "--config", help="Path to configuration YAML file")
 
 
-def main():
-    args = parser.parse_args()
-    config = load_config(args.config)
+def main(config):
+    krake_conf = load_config(config)
 
-    setup_logging(config["log"])
-    logger.debug("Krake configuration settings:\n %s" % pprint.pformat(config))
-    scheduler_config = config["controllers"]["scheduler"]
+    setup_logging(krake_conf["log"])
+    logger.debug("Krake configuration settings:\n %s" % pprint.pformat(krake_conf))
+    scheduler_config = krake_conf["controllers"]["scheduler"]
 
     tls_config = scheduler_config.get("tls")
     ssl_context = create_ssl_context(tls_config)
@@ -44,7 +43,6 @@ def main():
 
     scheduler = Scheduler(
         api_endpoint=scheduler_config["api_endpoint"],
-        worker_factory=SchedulerWorker,
         worker_count=scheduler_config["worker_count"],
         ssl_context=ssl_context,
         debounce=scheduler_config.get("debounce", 0),
@@ -53,4 +51,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = ArgumentParser(description="Garbage Collector for Krake")
+    parser.add_argument("-c", "--config", help="Path to configuration YAML file")
+    main(**vars(parser.parse_args()))

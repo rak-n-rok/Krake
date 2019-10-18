@@ -1,16 +1,16 @@
-import asyncio
 from time import time
 import pytest
 from aiohttp import web, ClientSession, ClientConnectorError, ClientResponseError
 
 from krake.api.app import create_app
 from krake.data.kubernetes import Application, ApplicationState, LabelConstraint
-from krake.controller.scheduler import Scheduler, SchedulerWorker, metrics
+from krake.controller.scheduler import Scheduler, metrics
+
 from krake.client import Client
+from krake.data.core import resource_ref, ReasonCode
 from krake.test_utils import server_endpoint
 from factories.core import MetricsProviderFactory, MetricFactory
 from factories.kubernetes import ApplicationFactory, ClusterFactory
-from . import SimpleWorker
 
 
 def make_prometheus(metrics):
@@ -65,35 +65,32 @@ def make_prometheus(metrics):
 
 
 async def test_kubernetes_reception(aiohttp_server, config, db, loop):
+    # Test that the Reflector present on the Scheduler actually put the
+    # right received Applications on the WorkQueue.
     scheduled = ApplicationFactory(status__state=ApplicationState.SCHEDULED)
     updated = ApplicationFactory(status__state=ApplicationState.UPDATED)
     pending = ApplicationFactory(status__state=ApplicationState.PENDING)
 
-    # Only PENDING and UPDATED applications are expected
-    worker = SimpleWorker(
-        expected={pending.metadata.uid, updated.metadata.uid}, loop=loop
-    )
     server = await aiohttp_server(create_app(config))
 
-    async with Scheduler(
-        api_endpoint=server_endpoint(server),
-        worker_factory=lambda client: worker,
-        worker_count=1,
-        loop=loop,
-    ) as scheduler:
+    await db.put(scheduled)
+    await db.put(updated)
+    await db.put(pending)
 
-        await db.put(scheduled)
-        await db.put(updated)
-        await db.put(pending)
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        # Update the client, to be used by the background tasks
+        scheduler.client = client
+        scheduler.create_background_tasks()  # need to be called explicitly
+        await scheduler.reflector.list_resource()
 
-        # There could be an error in the scheduler or the worker. Hence, we
-        # wait for both.
-        await asyncio.wait(
-            [scheduler, worker.done], timeout=1, return_when=asyncio.FIRST_COMPLETED
-        )
+    assert scheduler.queue.size() == 2
+    key_1, value_1 = await scheduler.queue.get()
+    key_2, value_2 = await scheduler.queue.get()
 
-    assert worker.done.done()
-    await worker.done  # If there is any exception, retrieve it here
+    assert key_1 in (pending.metadata.uid, updated.metadata.uid)
+    assert key_2 in (pending.metadata.uid, updated.metadata.uid)
+    assert key_1 != key_2
 
 
 async def test_prometheus_provider(aiohttp_server, loop):
@@ -178,7 +175,7 @@ def test_kubernetes_match_cluster_label_constraints():
         spec__constraints__cluster__labels=[LabelConstraint.parse("location is IT")]
     )
 
-    assert SchedulerWorker.match_cluster_constraints(app, cluster)
+    assert Scheduler.match_cluster_constraints(app, cluster)
 
 
 def test_kubernetes_match_empty_cluster_label_constraints():
@@ -187,9 +184,9 @@ def test_kubernetes_match_empty_cluster_label_constraints():
     app2 = ApplicationFactory(spec__constraints__cluster=None)
     app3 = ApplicationFactory(spec__constraints__cluster__labels=None)
 
-    assert SchedulerWorker.match_cluster_constraints(app1, cluster)
-    assert SchedulerWorker.match_cluster_constraints(app2, cluster)
-    assert SchedulerWorker.match_cluster_constraints(app3, cluster)
+    assert Scheduler.match_cluster_constraints(app1, cluster)
+    assert Scheduler.match_cluster_constraints(app2, cluster)
+    assert Scheduler.match_cluster_constraints(app3, cluster)
 
 
 def test_kubernetes_not_match_cluster_label_constraints():
@@ -198,7 +195,7 @@ def test_kubernetes_not_match_cluster_label_constraints():
         spec__constraints__cluster__labels=[LabelConstraint.parse("location is IT")]
     )
 
-    assert not SchedulerWorker.match_cluster_constraints(app, cluster)
+    assert not Scheduler.match_cluster_constraints(app, cluster)
 
 
 async def test_kubernetes_rank(aiohttp_server, config, db, loop):
@@ -236,8 +233,10 @@ async def test_kubernetes_rank(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        worker = SchedulerWorker(client=client)
-        ranked_clusters = await worker.rank_kubernetes_clusters(clusters)
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        scheduler.client = client
+        scheduler.create_background_tasks()
+        ranked_clusters = await scheduler.rank_kubernetes_clusters(clusters)
 
     for ranked, cluster in zip(ranked_clusters, clusters):
         assert ranked.rank is not None
@@ -248,7 +247,9 @@ async def test_kubernetes_rank_with_metrics_only():
     clusters = [ClusterFactory(spec__metrics=[]), ClusterFactory(spec__metrics=[])]
 
     with pytest.raises(AssertionError):
-        await SchedulerWorker(client=None).rank_kubernetes_clusters(clusters)
+        scheduler = Scheduler("http://localhost:8080", worker_count=0)
+        scheduler.create_background_tasks()
+        await scheduler.rank_kubernetes_clusters(clusters)
 
 
 async def test_kubernetes_rank_missing_metric(aiohttp_server, config, loop):
@@ -260,7 +261,10 @@ async def test_kubernetes_rank_missing_metric(aiohttp_server, config, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        ranked = await SchedulerWorker(client=client).rank_kubernetes_clusters(clusters)
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        scheduler.client = client
+        scheduler.create_background_tasks()
+        ranked = await scheduler.rank_kubernetes_clusters(clusters)
 
     assert len(ranked) == 0
 
@@ -282,7 +286,10 @@ async def test_kubernetes_rank_missing_metrics_provider(
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        ranked = await SchedulerWorker(client=client).rank_kubernetes_clusters(clusters)
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        scheduler.client = client
+        scheduler.create_background_tasks()
+        ranked = await scheduler.rank_kubernetes_clusters(clusters)
 
     assert len(ranked) == 0
 
@@ -321,7 +328,10 @@ async def test_kubernetes_rank_failing_metrics_provider(
     api = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api), loop=loop) as client:
-        ranked = await SchedulerWorker(client=client).rank_kubernetes_clusters(clusters)
+        scheduler = Scheduler(server_endpoint(api), worker_count=0)
+        scheduler.client = client
+        scheduler.create_background_tasks()
+        ranked = await scheduler.rank_kubernetes_clusters(clusters)
 
     assert len(ranked) == 0
 
@@ -351,8 +361,12 @@ async def test_kubernetes_prefer_cluster_with_metrics(aiohttp_server, config, db
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        worker = SchedulerWorker(client=client)
-        selected = await worker.select_kubernetes_cluster(app, (cluster_miss, cluster))
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        scheduler.client = client
+        scheduler.create_background_tasks()
+        selected = await scheduler.select_kubernetes_cluster(
+            app, (cluster_miss, cluster)
+        )
 
     assert selected == cluster
 
@@ -361,9 +375,8 @@ async def test_kubernetes_select_cluster_without_metric(aiohttp_server, config, 
     clusters = (ClusterFactory(spec__metrics=[]), ClusterFactory(spec__metrics=[]))
     app = ApplicationFactory(spec__constraints=None)
 
-    selected = await SchedulerWorker(client=None).select_kubernetes_cluster(
-        app, clusters
-    )
+    scheduler = Scheduler("http://localhost:8080", worker_count=0)
+    selected = await scheduler.select_kubernetes_cluster(app, clusters)
     assert selected in clusters
 
 
@@ -394,21 +407,30 @@ async def test_kubernetes_scheduling(prometheus, aiohttp_server, config, db, loo
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        worker = SchedulerWorker(client=client)
-        await worker.resource_received(app)
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        scheduler.client = client
+        scheduler.create_background_tasks()
+        await scheduler.resource_received(app)
 
     stored = await db.get(Application, namespace="testing", name=app.metadata.name)
-    assert stored.status.cluster.name == cluster.metadata.name
+
+    assert stored.status.cluster == resource_ref(cluster)
     assert stored.status.state == ApplicationState.SCHEDULED
 
 
-async def test_kubernetes_scheduling_error_handling(aiohttp_server, config, db, loop):
-    app = ApplicationFactory(status__state=ApplicationState.PENDING)
+async def test_kubernetes_scheduling_error(aiohttp_server, config, db, loop):
+    app = ApplicationFactory(status__state=ApplicationState.UPDATED)
 
     await db.put(app)
 
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        worker = SchedulerWorker(client=client)
-        await worker.resource_received(app)
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        scheduler.client = client
+        scheduler.create_background_tasks()
+        await scheduler.queue.put(app.metadata.uid, app)
+        await scheduler.handle_resource(run_once=True)
+
+    stored = await db.get(Application, namespace="testing", name=app.metadata.name)
+    assert stored.status.reason.code == ReasonCode.NO_SUITABLE_RESOURCE

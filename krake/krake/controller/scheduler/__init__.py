@@ -1,5 +1,5 @@
 """Module comprises Krake scheduling logic of the Krake application.
 """
-from .scheduler import Scheduler, SchedulerWorker
+from .scheduler import Scheduler
 
-__all__ = ["Scheduler", "SchedulerWorker"]
+__all__ = ["Scheduler"]

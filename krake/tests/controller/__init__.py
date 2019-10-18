@@ -1,7 +1,4 @@
-from krake.controller import Worker
-
-
-class SimpleWorker(Worker):
+class SimpleWorker(object):
     """Simple controller worker which validates received resource UIDs against
     a set of expected UIDs.
 

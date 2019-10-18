@@ -17,11 +17,12 @@ Configuration is loaded from the ``controllers.kubernetes.application`` section:
           worker_count: 5
 
 """
-import asyncio
 import logging
 import pprint
 import re
 from copy import deepcopy
+from functools import partial
+
 import yarl
 from argparse import ArgumentParser
 from inspect import iscoroutinefunction
@@ -36,8 +37,8 @@ from krake.data.core import ReasonCode
 from krake.data.kubernetes import ApplicationState
 from krake.client.kubernetes import KubernetesApi
 
-from .exceptions import on_error, ControllerError, application_error_mapping
-from . import Controller, Worker, run, create_ssl_context
+from .exceptions import ControllerError, application_error_mapping
+from . import Controller, create_ssl_context, run, Reflector
 
 
 logger = logging.getLogger("krake.controller.kubernetes")
@@ -51,50 +52,6 @@ class InvalidResourceError(ControllerError):
 
 class InvalidStateError(ControllerError):
     """Kubernetes application is in an invalid state"""
-
-
-class ApplicationController(Controller):
-    """Controller responsible for :class:`krake.data.kubernetes.Application`
-    resources in "SCHEDULED" and "DELETING" state.
-    """
-
-    async def list_and_watch(self):
-        """List and watching Kubernetes applications in the ``SCHEDULED``
-        state.
-        """
-        kubernetes_api = KubernetesApi(self.client)
-
-        def scheduled_or_deleting(app):
-            accepted = app.status.state == ApplicationState.SCHEDULED or (
-                app.metadata.deleted
-                and app.metadata.finalizers
-                and app.metadata.finalizers[-1] == "kubernetes_resources_deletion"
-            )
-            if not accepted:
-                logger.debug(f"Rejected Application {app}")
-            return accepted
-
-        async def list_apps():
-            logger.info("List application")
-            app_list = await kubernetes_api.list_all_applications()
-            for app in filter(scheduled_or_deleting, app_list.items):
-                logger.debug(
-                    "Received %r (%s)", app.metadata.name, app.metadata.namespace
-                )
-                await self.queue.put(app.metadata.uid, app)
-
-        async def watch_apps(watcher):
-            logger.info("Watching application")
-            async for event in watcher:
-                app = event.object
-                if scheduled_or_deleting(app):
-                    logger.debug(
-                        "Received %r (%s)", app.metadata.name, app.metadata.namespace
-                    )
-                    await self.queue.put(app.metadata.uid, app)
-
-        async with kubernetes_api.watch_all_applications() as watcher:
-            await asyncio.gather(list_apps(), watch_apps(watcher))
 
 
 class Event(NamedTuple):
@@ -200,27 +157,103 @@ class ResourceID(NamedTuple):
         )
 
 
-class ApplicationWorker(Worker):
-    @on_error(ControllerError)
+class ApplicationController(Controller):
+    """Controller responsible for :class:`krake.data.kubernetes.Application`
+    resources in "SCHEDULED" and "DELETING" state.
+
+    Args:
+        worker_count (int, optional): the amount of worker function that should be
+            run as background tasks.
+
+    """
+
+    def __init__(
+        self, api_endpoint, worker_count=10, loop=None, ssl_context=None, debounce=0
+    ):
+        super().__init__(
+            api_endpoint, loop=loop, ssl_context=ssl_context, debounce=debounce
+        )
+        self.kubernetes_api = None
+        self.reflector = None
+        self.worker_count = worker_count
+
+    def create_background_tasks(self):
+        assert self.client is not None
+
+        self.kubernetes_api = KubernetesApi(self.client)
+
+        for i in range(self.worker_count):
+            self.register_task(self.handle_resource, name=f"worker_{i}")
+
+        def scheduled_or_deleting(app):
+            accepted = app.status.state == ApplicationState.SCHEDULED or (
+                app.metadata.deleted
+                and app.metadata.finalizers
+                and app.metadata.finalizers[-1] == "kubernetes_resources_deletion"
+            )
+            if not accepted:
+                logger.debug("Rejected Application %r", app)
+            return accepted
+
+        receive_app = partial(self.simple_on_receive, condition=scheduled_or_deleting)
+
+        self.reflector = Reflector(
+            listing=self.kubernetes_api.list_all_applications,
+            watching=self.kubernetes_api.watch_all_applications,
+            on_list=receive_app,
+            on_add=receive_app,
+            on_update=receive_app,
+            on_delete=receive_app,
+        )
+        self.register_task(self.reflector, name="Reflector")
+
+    async def clean_background_tasks(self):
+        self.reflector = None
+        self.kubernetes_api = None
+
+    async def handle_resource(self, run_once=False):
+        """Infinite loop which fetches and hand over the resources to the right
+        coroutine. The specific exceptions and error handling have to be added here.
+
+        This function is meant to be run as background task. Lock the handling of a
+        resource with the :attr:`lock` attribute.
+
+        Args:
+            run_once (bool, optional): if True, the function only handles one resource,
+                then stops. Otherwise, continue to handle each new resource on the
+                queue indefinitely.
+
+        """
+        while True:
+            key, app = await self.queue.get()
+            try:
+                logger.debug("Handling application %r", app)
+                await self.resource_received(app)
+            except ControllerError as err:
+                await self.error_handler(app, error=err)
+            finally:
+                await self.queue.done(key)
+            if run_once:
+                break  # TODO: should we keep this? Only useful for tests
+
     async def resource_received(self, app):
         logger.debug("Handle %r", app)
 
-        kubernetes_api = KubernetesApi(self.client)
         copy = deepcopy(app)
 
         if app.metadata.deleted:
-            await self._cleanup_application(copy, kubernetes_api)
+            await self._cleanup_application(copy)
         else:
             assert app.status.state == ApplicationState.SCHEDULED
-            await self._apply_manifest(copy, kubernetes_api)
+            await self._apply_manifest(copy)
 
-    async def _cleanup_application(self, app, kubernetes_api):
+    async def _cleanup_application(self, app):
         logger.info("Cleanup %r (%s)", app.metadata.name, app.metadata.namespace)
 
         # Delete Kubernetes resources if the application was bound to a
         # cluster and there Kubernetes resources were created.
         if app.status.cluster and app.status.manifest:
-            cluster = await kubernetes_api.read_cluster(
+            cluster = await self.kubernetes_api.read_cluster(
                 namespace=app.status.cluster.namespace, name=app.status.cluster.name
             )
             async with KubernetesClient(cluster.spec.kubeconfig) as kube:
@@ -239,11 +272,11 @@ class ApplicationWorker(Worker):
         ):
             app.metadata.finalizers.pop(-1)
 
-        await kubernetes_api.update_application(
+        await self.kubernetes_api.update_application(
             namespace=app.metadata.namespace, name=app.metadata.name, body=app
         )
 
-    async def _apply_manifest(self, app, kubernetes_api):
+    async def _apply_manifest(self, app):
         logger.info("Apply manifest %r (%s)", app.metadata.name, app.metadata.namespace)
 
         if not app.status.cluster:
@@ -256,7 +289,7 @@ class ApplicationWorker(Worker):
         # Kubernetes resources.
         if "kubernetes_resources_deletion" not in app.metadata.finalizers:
             app.metadata.finalizers.append("kubernetes_resources_deletion")
-            await kubernetes_api.update_application(
+            await self.kubernetes_api.update_application(
                 namespace=app.metadata.namespace, name=app.metadata.name, body=app
             )
 
@@ -266,7 +299,7 @@ class ApplicationWorker(Worker):
         # Here we reset the services dictionary to an empty dict to
         # signify that the application has been at least once processed.
         # Previously created Services, if any, are overwritten because
-        # they will be updated or deleted by the Worker anyway.
+        # they will be updated or deleted by the Controller anyway.
         app.status.services = {}
 
         desired_resources = {
@@ -278,7 +311,7 @@ class ApplicationWorker(Worker):
             for resource in (app.status.manifest or [])
         }
 
-        cluster = await kubernetes_api.read_cluster(
+        cluster = await self.kubernetes_api.read_cluster(
             namespace=app.status.cluster.namespace, name=app.status.cluster.name
         )
         async with KubernetesClient(cluster.spec.kubeconfig) as kube:
@@ -314,11 +347,11 @@ class ApplicationWorker(Worker):
         # Transition into running state
         app.status.state = ApplicationState.RUNNING
 
-        await kubernetes_api.update_application_status(
+        await self.kubernetes_api.update_application_status(
             namespace=app.metadata.namespace, name=app.metadata.name, body=app
         )
 
-    async def error_occurred(self, app, error=None):
+    async def error_handler(self, app, error=None):
         """Asynchronous callback executed whenever an error occurs during
         :meth:`resource_received`.
 
@@ -340,8 +373,7 @@ class ApplicationWorker(Worker):
         else:
             app.status.state = ApplicationState.FAILED
 
-        kubernetes_api = KubernetesApi(self.client)
-        await kubernetes_api.update_application_status(
+        await self.kubernetes_api.update_application_status(
             namespace=app.metadata.namespace, name=app.metadata.name, body=app
         )
 
@@ -504,13 +536,12 @@ parser = ArgumentParser(description="Kubernetes application controller")
 parser.add_argument("-c", "--config", help="Path to configuration YAML file")
 
 
-def main():
-    args = parser.parse_args()
-    config = load_config(args.config)
+def main(config):
+    krake_conf = load_config(config)
 
-    setup_logging(config["log"])
-    logger.debug("Krake configuration settings:\n %s" % pprint.pformat(config))
-    controller_config = config["controllers"]["kubernetes_application"]
+    setup_logging(krake_conf["log"])
+    logger.debug("Krake configuration settings:\n %s" % pprint.pformat(krake_conf))
+    controller_config = krake_conf["controllers"]["kubernetes_application"]
 
     tls_config = controller_config.get("tls")
     ssl_context = create_ssl_context(tls_config)
@@ -518,14 +549,15 @@ def main():
 
     controller = ApplicationController(
         api_endpoint=controller_config["api_endpoint"],
-        worker_factory=ApplicationWorker,
         worker_count=controller_config["worker_count"],
         ssl_context=ssl_context,
         debounce=controller_config.get("debounce", 0),
     )
-    setup_logging(config["log"])
+    setup_logging(krake_conf["log"])
     run(controller)
 
 
 if __name__ == "__main__":
-    main()
+    parser = ArgumentParser(description="Garbage Collector for Krake")
+    parser.add_argument("-c", "--config", help="Path to configuration YAML file")
+    main(**vars(parser.parse_args()))
