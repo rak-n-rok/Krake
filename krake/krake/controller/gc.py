@@ -20,9 +20,13 @@ The configuration should have the following structure:
       client_cert: tmp/pki/system:gc.pem
       client_key: tmp/pki/system:gc-key.pem
 
+    log:
+      ...
+
 """
 
 import logging
+import pprint
 from argparse import ArgumentParser
 from collections import defaultdict
 from copy import deepcopy
@@ -30,6 +34,7 @@ from copy import deepcopy
 from krake import setup_logging, load_config, search_config
 from krake.apidefs.kubernetes import ApplicationResource, ClusterResource
 from krake.controller import Controller, run, Reflector, create_ssl_context
+from krake.data.config import ControllerConfiguration
 from krake.data.core import resource_ref
 from krake.client.kubernetes import KubernetesApi
 from krake.data.kubernetes import Application, Cluster
@@ -490,21 +495,25 @@ class GarbageCollector(Controller):
 
 
 def main(config):
-    gc_config = load_config(config or search_config("garbage_collector.yaml"))
+    filepath = config or search_config("garbage_collector.yaml")
+    gc_config = load_config(ControllerConfiguration, filepath=filepath)
 
-    setup_logging(gc_config["log"])
+    setup_logging(gc_config.log)
+    logger.debug(
+        "Krake Garbage Collector configuration settings:\n %s",
+        pprint.pformat(gc_config)
+    )
 
-    tls_config = gc_config.get("tls")
+    tls_config = gc_config.tls
     ssl_context = create_ssl_context(tls_config)
     logger.debug("TLS is %s", "enabled" if ssl_context else "disabled")
 
     controller = GarbageCollector(
-        api_endpoint=gc_config["api_endpoint"],
-        worker_count=gc_config["worker_count"],
+        api_endpoint=gc_config.api_endpoint,
+        worker_count=gc_config.worker_count,
         ssl_context=ssl_context,
-        debounce=gc_config.get("debounce", 0),
+        debounce=gc_config.debounce,
     )
-    setup_logging(gc_config["log"])
     run(controller)
 
 

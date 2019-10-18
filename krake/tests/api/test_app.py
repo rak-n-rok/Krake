@@ -1,5 +1,4 @@
 import asyncio
-from copy import deepcopy
 from aiohttp import web
 
 from krake.api import __version__ as version
@@ -29,8 +28,7 @@ async def test_transaction_retry(aiohttp_client, db, config, loop):
     The database middleware should catch the transaction error and retry the
     request handler. The handler should succeed the second time.
     """
-    config = deepcopy(config)
-    config["etcd"]["retry_transactions"] = 2
+    config.etcd.retry_transactions = 2
 
     class Book(Serializable):
         isbn: str

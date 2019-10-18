@@ -700,14 +700,15 @@ def create_ssl_context(tls_config):
     for communicating with a Server.
 
     Args:
-        tls_config (dict): the "tls" configuration part of a controller
+        tls_config (krake.data.config.TLSConfiguration): the "tls" configuration part
+            of a controller.
 
     Returns:
         ssl.SSLContext: a default SSL Context tweaked with the given certificate
         elements
 
     """
-    if tls_config is None or not tls_config["enabled"]:
+    if not tls_config.enabled:
         return None
 
     cert, key, client_ca = _extract_ssl_config(tls_config)
@@ -729,7 +730,8 @@ def _extract_ssl_config(tls_config):
     controller, if it is present
 
     Args:
-        tls_config (dict): the "tls" configuration part of a controller
+        tls_config (krake.data.config.TLSConfiguration): the "tls" configuration part
+            of a controller.
 
     Returns:
         tuple: a three-element tuple containing: the path of the certificate, its key
@@ -739,9 +741,9 @@ def _extract_ssl_config(tls_config):
     """
     try:
         cert_tuple = (
-            tls_config["client_cert"],
-            tls_config["client_key"],
-            tls_config.get("client_ca"),
+            tls_config.client_cert,
+            tls_config.client_key,
+            tls_config.client_ca,
         )
     except KeyError as ke:
         raise KeyError(

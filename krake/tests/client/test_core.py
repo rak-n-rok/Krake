@@ -5,6 +5,7 @@ from krake.api.app import create_app
 from krake.client import Client
 from krake.controller import create_ssl_context
 from krake.client.core import CoreApi
+from krake.data.config import TLSConfiguration, AuthenticationConfiguration
 from krake.data.core import (
     ListMetadata,
     Role,
@@ -211,24 +212,23 @@ async def test_connect_ssl(aiohttp_server, config, loop, pki):
     server_cert = pki.gencert("api-server")
     client_cert = pki.gencert("client")
 
-    app = create_app(
-        config=dict(
-            config,
-            authentication={
-                "allow_anonymous": True,
-                "strategy": {
-                    "keystone": {"enabled": False, "endpoint": "localhost"},
-                    "static": {"enabled": False, "name": "test-user"},
-                },
-            },
-            tls={
-                "enabled": True,
-                "client_ca": pki.ca.cert,
-                "cert": server_cert.cert,
-                "key": server_cert.key,
-            },
-        )
-    )
+    authentication = {
+        "allow_anonymous": True,
+        "strategy": {
+            "keystone": {"enabled": False, "endpoint": "localhost"},
+            "static": {"enabled": False, "name": "test-user"},
+        },
+    }
+    config.authentication = AuthenticationConfiguration.deserialize(authentication)
+
+    tls_config = {
+        "enabled": True,
+        "client_ca": pki.ca.cert,
+        "client_cert": server_cert.cert,
+        "client_key": server_cert.key,
+    }
+    config.tls = TLSConfiguration.deserialize(tls_config)
+    app = create_app(config=config)
 
     server = Server(app)
     await server.start_server(ssl=app["ssl_context"])
@@ -240,7 +240,7 @@ async def test_connect_ssl(aiohttp_server, config, loop, pki):
         "client_cert": client_cert.cert,
         "client_key": client_cert.key,
     }
-    ssl_context = create_ssl_context(client_tls)
+    ssl_context = create_ssl_context(TLSConfiguration.deserialize(client_tls))
 
     url = f"https://{server.host}:{server.port}"
     async with Client(url=url, loop=loop, ssl_context=ssl_context) as client:

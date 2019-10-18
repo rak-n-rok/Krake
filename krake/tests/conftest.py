@@ -19,6 +19,8 @@ from prometheus_async import aio
 from prometheus_client import Gauge, CollectorRegistry, CONTENT_TYPE_LATEST
 
 # Prepend package directory for working imports
+from krake.data.config import ApiConfiguration
+
 package_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, package_dir)
 
@@ -175,11 +177,11 @@ def user():
 def config(etcd_server, user):
     etcd_host, etcd_port = etcd_server
 
-    return {
+    config = {
         "tls": {
             "enabled": False,
-            "cert": "cert_path",
-            "key": "key_path",
+            "client_cert": "cert_path",
+            "client_key": "key_path",
             "client_ca": "client_ca_path",
         },
         "authentication": {
@@ -191,7 +193,7 @@ def config(etcd_server, user):
         },
         "authorization": "always-allow",
         "etcd": {"host": etcd_host, "port": etcd_port, "retry_transactions": 0},
-        "default-roles": [
+        "default_roles": [
             {
                 "metadata": {"name": "system:admin"},
                 "rules": [
@@ -204,14 +206,16 @@ def config(etcd_server, user):
                 ],
             }
         ],
-        "default-role-bindings": [
+        "default_role_bindings": [
             {
                 "metadata": {"name": "system:admin"},
                 "users": ["system:admin"],
                 "roles": ["system:admin"],
             }
         ],
+        "log": {},
     }
+    return ApiConfiguration.deserialize(config)
 
 
 class KeystoneInfo(NamedTuple):

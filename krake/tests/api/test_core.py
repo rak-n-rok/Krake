@@ -29,7 +29,8 @@ async def test_list_roles(aiohttp_client, config, db):
 
 
 async def test_list_roles_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
 
     resp = await client.get("/core/roles")
     assert resp.status == 403
@@ -56,7 +57,8 @@ async def test_create_role(aiohttp_client, config, db):
 
 
 async def test_create_role_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
 
     resp = await client.post("/core/roles")
     assert resp.status == 403
@@ -91,7 +93,8 @@ async def test_get_role(aiohttp_client, config, db):
 
 
 async def test_get_role_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
 
     resp = await client.get("/core/roles/myrole")
     assert resp.status == 403
@@ -119,7 +122,8 @@ async def test_delete_role(aiohttp_client, config, db):
 
 
 async def test_delete_role_rbac(rbac_allow, aiohttp_client, config, db):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
 
     resp = await client.delete("/core/roles/myrole")
     assert resp.status == 403
@@ -151,7 +155,8 @@ async def test_list_role_bindings(aiohttp_client, config, db):
 
 
 async def test_list_role_bindings_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
 
     resp = await client.get("/core/rolebindings")
     assert resp.status == 403
@@ -179,7 +184,8 @@ async def test_create_role_binding(aiohttp_client, config, db):
 
 
 async def test_create_role_binding_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
 
     resp = await client.post("/core/rolebindings")
     assert resp.status == 403
@@ -212,7 +218,8 @@ async def test_get_role_binding(aiohttp_client, config, db):
 
 
 async def test_get_role_binding_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
 
     resp = await client.get("/core/rolebindings/mybinding")
     assert resp.status == 403
@@ -240,7 +247,8 @@ async def test_delete_role_binding(aiohttp_client, config, db):
 
 
 async def test_delete_role_binding_rbac(rbac_allow, aiohttp_client, config, db):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
 
     resp = await client.delete("/core/rolebindings/mybinding")
     assert resp.status == 403

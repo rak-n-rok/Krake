@@ -9,10 +9,19 @@ Configuration is loaded from the ``controllers.scheduler`` section:
 
 .. code:: yaml
 
-    controllers:
-      scheduler:
-        api_endpoint: http://localhost:8080
-        worker_count: 5
+    api_endpoint: http://localhost:8080
+    worker_count: 5
+    debounce: 1
+    reschedule_after: 60
+    stickiness: 0.1
+    tls:
+      enabled: false
+      client_ca: tmp/pki/ca.pem
+      client_cert: tmp/pki/system:gc.pem
+      client_key: tmp/pki/system:gc-key.pem
+
+    log:
+      ...
 
 """
 import logging
@@ -20,6 +29,8 @@ import pprint
 from argparse import ArgumentParser
 
 from krake import load_config, setup_logging, search_config
+from krake.data.config import SchedulerConfiguration
+
 from ...controller import create_ssl_context, run
 from .scheduler import Scheduler
 
@@ -27,24 +38,26 @@ logger = logging.getLogger("krake.controller.scheduler")
 
 
 def main(config):
-    scheduler_config = load_config(config or search_config("scheduler.yaml"))
+    filepath = config or search_config("scheduler.yaml")
+    scheduler_config = load_config(SchedulerConfiguration, filepath=filepath)
 
-    setup_logging(scheduler_config["log"])
+    setup_logging(scheduler_config.log)
     logger.debug(
-        "Krake configuration settings:\n %s" % pprint.pformat(scheduler_config)
+        "Krake Scheduler configuration settings:\n %s",
+        pprint.pformat(scheduler_config)
     )
 
-    tls_config = scheduler_config.get("tls")
+    tls_config = scheduler_config.tls
     ssl_context = create_ssl_context(tls_config)
     logger.debug("TLS is %s", "enabled" if ssl_context else "disabled")
 
     scheduler = Scheduler(
-        api_endpoint=scheduler_config["api_endpoint"],
-        worker_count=scheduler_config["worker_count"],
+        api_endpoint=scheduler_config.api_endpoint,
+        worker_count=scheduler_config.worker_count,
         ssl_context=ssl_context,
-        debounce=scheduler_config.get("debounce", 0),
-        reschedule_after=scheduler_config.get("reschedule_after", 60),
-        stickiness=scheduler_config.get("stickiness", 0.1),
+        debounce=scheduler_config.debounce,
+        reschedule_after=scheduler_config.reschedule_after,
+        stickiness=scheduler_config.stickiness,
     )
     run(scheduler)
 

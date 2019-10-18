@@ -202,7 +202,8 @@ async def complete(app, api_endpoint, ssl_context, config):
             when the hook is called
         api_endpoint (str): the given API endpoint
         ssl_context (ssl.SSLContext): SSL context to communicate with the API endpoint
-        config (dict): Complete hook configuration
+        config (krake.data.config.HooksConfiguration): Complete hook
+            configuration.
 
     """
     if "complete" not in app.spec.hooks:
@@ -213,9 +214,9 @@ async def complete(app, api_endpoint, ssl_context, config):
     hook = Complete(
         api_endpoint,
         ssl_context,
-        ca_dest=config["complete"]["ca_dest"],
-        env_token=config["complete"]["env_token"],
-        env_complete=config["complete"]["env_complete"],
+        ca_dest=config.complete.ca_dest,
+        env_token=config.complete.env_token,
+        env_complete=config.complete.env_complete,
     )
     hook.mangle_app(
         app.metadata.name, app.metadata.namespace, app.status.token, app.status.mangling
