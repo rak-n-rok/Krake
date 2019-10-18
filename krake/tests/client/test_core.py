@@ -1,14 +1,27 @@
 from operator import attrgetter
-import pytest
 from aiohttp.test_utils import TestServer as Server
 
 from krake.api.app import create_app
 from krake.client import Client
 from krake.controller import create_ssl_context
 from krake.client.core import CoreApi
-from krake.data.core import ListMetadata, Role, RoleBinding, resource_ref
+from krake.data.core import (
+    ListMetadata,
+    Role,
+    RoleBinding,
+    resource_ref,
+    Metric,
+    MetricsProvider,
+)
 
 from factories.core import RoleFactory, RoleBindingFactory, RoleRuleFactory
+
+from tests.factories.core import (
+    MetricFactory,
+    MetricSpecProviderFactory,
+    MetricsProviderFactory,
+    MetricsProviderSpecFactory,
+)
 
 
 async def test_list_roles(aiohttp_server, config, db, loop):
@@ -194,7 +207,6 @@ async def test_delete_rolebinding(aiohttp_server, config, db, loop):
     assert stored.metadata.deleted is not None
 
 
-@pytest.mark.require_executable("cfssl")
 async def test_connect_ssl(aiohttp_server, config, loop, pki):
     server_cert = pki.gencert("api-server")
     client_cert = pki.gencert("client")
@@ -235,3 +247,179 @@ async def test_connect_ssl(aiohttp_server, config, loop, pki):
         resp = await client.session.get(f"{url}/me")
         data = await resp.json()
         assert data["user"] == "client"
+
+
+async def test_list_metrics(aiohttp_server, config, db, loop):
+    # Populate database
+    data = [MetricFactory(), MetricFactory()]
+    for metric in data:
+        await db.put(metric)
+
+    # Start API server
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        metrics = await core_api.list_metrics()
+
+    assert metrics.api == "core"
+    assert metrics.kind == "MetricList"
+    assert isinstance(metrics.metadata, ListMetadata)
+
+    key = attrgetter("metadata.name")
+    assert sorted(metrics.items, key=key) == sorted(data, key=key)
+
+
+async def test_create_metric(aiohttp_server, config, db, loop):
+    data = MetricFactory()
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.create_metric(data)
+
+    assert received.metadata.name == data.metadata.name
+    assert received.metadata.namespace is None
+    assert received.metadata.created
+    assert received.metadata.modified
+    assert received.spec == data.spec
+
+    stored = await db.get(Metric, name=data.metadata.name)
+    assert stored == received
+
+
+async def test_update_metric(aiohttp_server, config, db, loop):
+    data = MetricFactory()
+    await db.put(data)
+    data.spec.provider = MetricSpecProviderFactory()
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.update_metric(name=data.metadata.name, body=data)
+
+    assert received.spec == data.spec
+    assert received.metadata.created == data.metadata.created
+    assert received.metadata.modified
+
+    stored = await db.get(Metric, name=data.metadata.name)
+    assert stored.spec == data.spec
+    assert stored.metadata.created == data.metadata.created
+    assert stored.metadata.modified
+
+
+async def test_read_metric(aiohttp_server, config, db, loop):
+    data = MetricFactory()
+    await db.put(data)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.read_metric(name=data.metadata.name)
+        assert received == data
+
+
+async def test_delete_metric(aiohttp_server, config, db, loop):
+    data = MetricFactory()
+    await db.put(data)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        await core_api.delete_metric(name=data.metadata.name)
+
+    stored = await db.get(Metric, name=data.metadata.name)
+    assert stored.metadata.deleted is not None
+
+
+async def test_list_metrics_providers(aiohttp_server, config, db, loop):
+    # Populate database
+    data = [MetricsProviderFactory(), MetricsProviderFactory()]
+    for metrics_provider in data:
+        await db.put(metrics_provider)
+
+    # Start API server
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        metrics_providers = await core_api.list_metrics_providers()
+
+    assert metrics_providers.api == "core"
+    assert metrics_providers.kind == "MetricsProviderList"
+    assert isinstance(metrics_providers.metadata, ListMetadata)
+
+    key = attrgetter("metadata.name")
+    assert sorted(metrics_providers.items, key=key) == sorted(data, key=key)
+
+
+async def test_create_metrics_provider(aiohttp_server, config, db, loop):
+    data = MetricsProviderFactory()
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.create_metrics_provider(data)
+
+    assert received.metadata.name == data.metadata.name
+    assert received.metadata.namespace is None
+    assert received.metadata.created
+    assert received.metadata.modified
+    assert received.spec == data.spec
+
+    stored = await db.get(MetricsProvider, name=data.metadata.name)
+    assert stored == received
+
+
+async def test_update_metrics_provider(aiohttp_server, config, db, loop):
+    data = MetricsProviderFactory()
+    await db.put(data)
+    data.spec = MetricsProviderSpecFactory()
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.update_metrics_provider(
+            name=data.metadata.name, body=data
+        )
+
+    assert received.spec == data.spec
+    assert received.metadata.created == data.metadata.created
+    assert received.metadata.modified
+
+    stored = await db.get(MetricsProvider, name=data.metadata.name)
+    assert stored.spec == data.spec
+    assert stored.metadata.created == data.metadata.created
+    assert stored.metadata.modified
+
+
+async def test_read_metrics_provider(aiohttp_server, config, db, loop):
+    data = MetricsProviderFactory()
+    await db.put(data)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.read_metrics_provider(name=data.metadata.name)
+        assert received == data
+
+
+async def test_delete_metrics_provider(aiohttp_server, config, db, loop):
+    data = MetricsProviderFactory()
+    await db.put(data)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        await core_api.delete_metrics_provider(name=data.metadata.name)
+
+    stored = await db.get(MetricsProvider, name=data.metadata.name)
+    assert stored.metadata.deleted is not None

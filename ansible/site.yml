@@ -13,6 +13,6 @@
 #- import_playbook: central_idp.yml
 #- import_playbook: prometheus.yml
 #- import_playbook: devstack.yml
-#- import_playbook: minikube_cluster.yml
+- import_playbook: minikube_cluster.yml
 #- import_playbook: magnum_cluster.yml
 - import_playbook: krake.yml

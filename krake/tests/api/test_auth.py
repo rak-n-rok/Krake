@@ -27,7 +27,6 @@ async def test_static_auth(aiohttp_client, config):
     assert data["user"] == "test-user"
 
 
-@pytest.mark.require_module("keystone")
 @pytest.mark.slow
 async def test_keystone(keystone):
     async with ClientSession() as session:
@@ -76,7 +75,6 @@ async def test_keystone(keystone):
         assert resp.status == 204
 
 
-@pytest.mark.require_module("keystone")
 @pytest.mark.slow
 async def test_keystone_auth(keystone, aiohttp_client, config):
     async with ClientSession() as session:
@@ -148,7 +146,6 @@ async def test_deny_anonymous_requests(aiohttp_client, config):
     assert resp.status == 401
 
 
-@pytest.mark.require_executable("cfssl")
 async def test_client_anonymous_cert_auth(aiohttp_client, config, pki):
     server_cert = pki.gencert("api-server")
 
@@ -184,7 +181,6 @@ async def test_client_anonymous_cert_auth(aiohttp_client, config, pki):
         await server.close()
 
 
-@pytest.mark.require_executable("cfssl")
 async def test_client_cert_auth(aiohttp_client, config, pki):
     server_cert = pki.gencert("api-server")
     client_cert = pki.gencert("test-user")

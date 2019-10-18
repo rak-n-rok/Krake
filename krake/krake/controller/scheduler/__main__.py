@@ -1,0 +1,56 @@
+"""Module for Krake controller responsible for binding Krake
+applications to specific backends and entry point of Krake scheduler.
+
+.. code:: bash
+
+    python -m krake.controller.scheduler --help
+
+Configuration is loaded from the ``controllers.scheduler`` section:
+
+.. code:: yaml
+
+    controllers:
+      scheduler:
+        api_endpoint: http://localhost:8080
+        worker_count: 5
+
+"""
+import logging
+import pprint
+from argparse import ArgumentParser
+
+from krake import load_config, setup_logging
+from ...controller import create_ssl_context, run
+from .scheduler import Scheduler
+
+logger = logging.getLogger("krake.controller.scheduler")
+
+
+parser = ArgumentParser(description="Krake scheduler")
+parser.add_argument("-c", "--config", help="Path to configuration YAML file")
+
+
+def main(config):
+    krake_conf = load_config(config)
+
+    setup_logging(krake_conf["log"])
+    logger.debug("Krake configuration settings:\n %s" % pprint.pformat(krake_conf))
+    scheduler_config = krake_conf["controllers"]["scheduler"]
+
+    tls_config = scheduler_config.get("tls")
+    ssl_context = create_ssl_context(tls_config)
+    logger.debug("TLS is %s", "enabled" if ssl_context else "disabled")
+
+    scheduler = Scheduler(
+        api_endpoint=scheduler_config["api_endpoint"],
+        worker_count=scheduler_config["worker_count"],
+        ssl_context=ssl_context,
+        debounce=scheduler_config.get("debounce", 0),
+    )
+    run(scheduler)
+
+
+if __name__ == "__main__":
+    parser = ArgumentParser(description="Garbage Collector for Krake")
+    parser.add_argument("-c", "--config", help="Path to configuration YAML file")
+    main(**vars(parser.parse_args()))

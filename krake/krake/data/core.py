@@ -4,7 +4,7 @@ from dataclasses import field
 from typing import List
 
 from . import persistent
-from .serializable import Serializable, ApiObject
+from .serializable import Serializable, ApiObject, PolymorphicContainer
 
 
 class ResourceRef(Serializable):
@@ -17,7 +17,7 @@ class ResourceRef(Serializable):
 class Metadata(Serializable):
     name: str = field(metadata={"immutable": True})
     namespace: str = field(default=None, metadata={"immutable": True})
-    annotations: dict = field(default_factory=dict)
+    labels: dict = field(default_factory=dict)
     finalizers: List[str] = field(default_factory=list)
 
     uid: str = field(metadata={"readonly": True})
@@ -142,3 +142,54 @@ def resource_ref(resource):
         namespace=resource.metadata.namespace,
         name=resource.metadata.name,
     )
+
+
+class MetricSpecProvider(Serializable):
+    name: str
+    metric: str
+
+
+class MetricSpec(Serializable):
+    min: float
+    max: float
+    weight: float
+    provider: MetricSpecProvider
+
+
+@persistent("/metric/{name}")
+class Metric(ApiObject):
+    api: str = "core"
+    kind: str = "Metric"
+    metadata: Metadata
+    spec: MetricSpec
+
+
+class MetricList(ApiObject):
+    api: str = "core"
+    kind: str = "MetricList"
+    metadata: ListMetadata
+    items: List[Metric]
+
+
+class MetricsProviderSpec(PolymorphicContainer):
+    type: str
+
+
+@MetricsProviderSpec.register("prometheus")
+class PrometheusSpec(Serializable):
+    url: str
+
+
+@persistent("/metricsprovider/{name}")
+class MetricsProvider(ApiObject):
+    api: str = "core"
+    kind: str = "MetricsProvider"
+    metadata: Metadata
+    spec: MetricsProviderSpec
+
+
+class MetricsProviderList(ApiObject):
+    api: str = "core"
+    kind: str = "MetricsProviderList"
+    metadata: ListMetadata
+    items: List[MetricsProvider]

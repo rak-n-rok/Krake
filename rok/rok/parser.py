@@ -1,7 +1,7 @@
 """This module defines a declarative API for Python's standard :mod:`argparse`
 module.
 """
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentError, Action
 
 
 class ParserSpec(object):
@@ -160,3 +160,66 @@ def argument(*args, **kwargs):
         return fn
 
     return decorator
+
+
+class StoreDict(Action):
+    """Action storing <key=value> pairs in a dictionary.
+
+    Example:
+        .. code:: python
+
+            parser = argparse.ArgumentParser()
+            parser.add_argument(
+                '--foo', action=StoreDict
+            )
+            args = parser.parse_args('--foo label=test'.split())
+            assert argparse.Namespace(foo={'label': 'test'}) == args
+
+    """
+
+    def __init__(self, option_strings, dest, nargs=None, metavar="KEY=VALUE", **kwargs):
+        if nargs is not None:
+            raise ValueError("nargs not allowed")
+        super().__init__(option_strings, dest, metavar=metavar, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        if "=" not in values:
+            raise ArgumentError(self, "Must be of form 'key=value'")
+
+        if hasattr(namespace, self.dest):
+            setattr(namespace, self.dest, {})
+        items = getattr(namespace, self.dest)
+
+        key, value = values.split("=", 1)
+        items[key] = value
+
+
+arg_formatting = argument(
+    "-f",
+    "--format",
+    choices=["table", "json", "yaml"],
+    default="table",
+    help="Format of the output, table by default",
+)
+arg_labels = argument(
+    "-l",
+    "--label",
+    dest="labels",
+    default={},
+    action=StoreDict,
+    help="Label attached to the resource. Can be specified multiple times",
+)
+arg_namespace = argument(
+    "-n", "--namespace", help="Namespace of the resource. Defaults to user"
+)
+arg_metric = argument(
+    "--metric",
+    "-m",
+    dest="metrics",
+    action="append",
+    default=[],
+    help=(
+        "Metric name that should be used for this resource. "
+        "Can be specified multiple times"
+    ),
+)

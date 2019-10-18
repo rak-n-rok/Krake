@@ -20,6 +20,10 @@
 /ansible/public_keys/**
 /!ansible/public_keys/.gitkeep
 
+# Cluster certificates
+/ansible/cluster_certs/**
+!/ansible/cluster_certs/.gitkeep
+
 # Temporary Python files and caches
 *.pyc
 __pycache__/

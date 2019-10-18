@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+"""Simple helper script for starting a prometheus server and simple heat demand
+exporter for development purpose. Heat demand exporter generates random heat
+demand metrics for multiple zones. Default number of zones is 5: `heat_demand_zone_1` ..
+`heat_demand_zone_5`. Random heat demand metric value is generated from
+interval <`zone_number` - 1, `zone_number`). The regeneration interval of heat demand
+metrics is given by prometheus scrape interval.
+
+.. code:: bash
+
+    $ support/prometheus
+    $ curl -s localhost:9090/api/v1/query?query=heat_demand_zone_1 | jq
+    {
+      "status": "success",
+      "data": {
+        "resultType": "vector",
+        "result": [
+          {
+            "metric": {
+              "__name__": "heat_demand_zone_1",
+              "instance": "localhost:9091",
+              "job": "heat-demand-exporter"
+            },
+            "value": [
+              1567703101.949,
+              "0.47"
+            ]
+          }
+        ]
+      }
+    }
+"""
+import asyncio
+import functools
+import random
+from argparse import ArgumentParser, FileType
+from pathlib import Path
+
+from aiohttp import web
+from prometheus_async import aio
+from prometheus_client import Gauge
+
+
+root_dir = Path(__file__).parent.parent.resolve()
+
+temp_dir = root_dir / "tmp/prometheus"
+
+prometheus_config = """
+global:
+    scrape_interval: {interval}s
+scrape_configs:
+    - job_name: prometheus
+      static_configs:
+        - targets:
+          - localhost:{prometheus_port}
+    - job_name: heat-demand-exporter
+      static_configs:
+        - targets:
+          - localhost:{exporter_port}
+"""
+
+
+async def heat_demand_metric(zone, interval):
+    metric = Gauge(f"heat_demand_zone_{zone}", "float - heat demand (kW)")
+    while True:
+        metric.set(round(random.uniform(zone - 1, zone), 2))
+        await asyncio.sleep(interval)
+
+
+async def start_metrics_tasks(zones, interval, app):
+    app["metrics"] = [
+        app.loop.create_task(heat_demand_metric(zone, interval))
+        for zone in range(1, zones + 1)
+    ]
+
+
+async def cleanup_metrics_tasks(app):
+    for task in app["metrics"]:
+        task.cancel()
+    await app["metrics"]
+
+
+async def exporter(zones, interval, port):
+    exporter_port = port + 1
+
+    app = web.Application()
+    app.router.add_get("/metrics", aio.web.server_stats)
+    app.on_startup.append(functools.partial(start_metrics_tasks, zones, interval))
+    app.on_cleanup.append(cleanup_metrics_tasks)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "localhost", exporter_port)
+    await site.start()
+
+
+async def prometheus_server(config, interval, port):
+    exporter_port = port + 1
+    temp_dir.mkdir(exist_ok=True)
+    config_file = config or temp_dir / "prometheus.yml"
+
+    if not config:
+        with config_file.open("w") as fd:
+            fd.write(
+                prometheus_config.format(
+                    interval=interval, prometheus_port=port, exporter_port=exporter_port
+                )
+            )
+
+    proc = await asyncio.create_subprocess_shell(
+        f"prometheus --config.file {str(config_file)} "
+        f"--web.enable-admin-api --web.listen-address :{str(port)}"
+    )
+    await proc.communicate()
+
+parser = ArgumentParser(
+    description="Prometheus server for development listening on http://localhost:9090"
+)
+parser.add_argument(
+    "--config",
+    type=FileType(),
+    help="Prometheus server configuration file path for overwriting the default",
+)
+parser.add_argument(
+    "--port",
+    type=int,
+    default=9090,
+    help="Prometheus server port to listen on. Default: 9090",
+)
+parser.add_argument(
+    "--interval",
+    type=int,
+    default=10,
+    help="Prometheus scrape interval[s]. Default: 10",
+)
+parser.add_argument(
+    "--zones", type=int, default=5, help="Head demand metrics zone count Default: 5"
+)
+
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+    loop = asyncio.get_event_loop()
+    loop.create_task(exporter(args.zones, args.interval, args.port))
+    loop.create_task(prometheus_server(args.config, args.interval, args.port))
+    loop.run_forever()

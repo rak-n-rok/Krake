@@ -8,7 +8,7 @@
         msg: >
           Minikube VM is in a different network ({{ network }}) than the
           IdP ({{ hostvars[idp].network }})
-      when: "hostvars[idp].network != network"
+      when: use_keystone and "hostvars[idp].network != network"
 
     - name: Create Heat stack for Minikube VM
       delegate_to: localhost
@@ -25,6 +25,7 @@
           common_secgroup: "{{ hostvars[network]['common_secgroup_name'] }}"
           create_floating_ip: "{{ floating_ip }}"
           flavor: "{{ flavor }}"
+          use_config_drive: "{{ use_config_drive }}"
       register: stack
 
     - name: Update host variables of Minikube VM
@@ -254,3 +255,17 @@
       include_role:
         name: k8s-keystone-auth
       when: "use_keystone|default('')"
+
+- name: Download cluster certificates
+  hosts: minikube_clusters
+  tags:
+    - cluster_certs
+  tasks:
+    - name: Download cluster certificates
+      fetch:
+        src: "{{ item }}"
+        dest: cluster_certs
+      with_items:
+        - .minikube/ca.crt
+        - .minikube/client.crt
+        - .minikube/client.key

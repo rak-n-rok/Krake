@@ -2,7 +2,7 @@ from typing import List
 import pytest
 from marshmallow import ValidationError
 
-from krake.data.serializable import Serializable, ApiObject
+from krake.data.serializable import Serializable, ApiObject, PolymorphicContainer
 
 
 def test_serializable():
@@ -128,3 +128,49 @@ def test_api_object():
 
     with pytest.raises(ValidationError):
         Book.deserialize({"kind": "Letter"})
+
+
+class DataSpec(PolymorphicContainer):
+    pass
+
+
+@DataSpec.register("float")
+class FloatSpec(Serializable):
+    min: float
+    max: float
+
+
+@DataSpec.register("bool")
+class BoolSpec(Serializable):
+    pass
+
+
+def test_polymorphic_serialize():
+    assert DataSpec(type="float", float=FloatSpec(min=0, max=1.0)).serialize() == {
+        "type": "float",
+        "float": {"min": 0, "max": 1.0},
+    }
+    assert DataSpec(type="bool", bool=BoolSpec()).serialize() == {
+        "type": "bool",
+        "bool": {},
+    }
+
+
+def test_polymorphic_deserialize():
+    spec = DataSpec.deserialize({"type": "float", "float": {"min": 0, "max": 1.0}})
+    assert isinstance(spec, DataSpec)
+    assert hasattr(spec, "float")
+    assert isinstance(spec.float, FloatSpec)
+    assert spec.float.min == 0
+    assert spec.float.max == 1.0
+
+    spec = DataSpec.deserialize({"type": "bool"})
+    assert isinstance(spec, DataSpec)
+    assert hasattr(spec, "bool")
+    assert isinstance(spec.bool, BoolSpec)
+
+
+def test_polymorphic_multiple_subfields():
+    with pytest.raises(TypeError) as err:
+        DataSpec(type="float", float=None, bool=None)
+    assert "Got unexpected keyword argument 'bool'" == str(err.value)

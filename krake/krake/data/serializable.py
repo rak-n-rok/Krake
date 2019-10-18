@@ -6,7 +6,16 @@ from enum import Enum
 from datetime import datetime, date
 from typing import List
 from webargs import fields
-from marshmallow import Schema, post_load, EXCLUDE, missing
+from marshmallow import (
+    Schema,
+    post_load,
+    EXCLUDE,
+    INCLUDE,
+    missing,
+    ValidationError,
+    validates,
+    validates_schema,
+)
 from marshmallow.validate import Equal
 from marshmallow_enum import EnumField
 
@@ -60,6 +69,14 @@ def field_for_schema(type_, default=dataclasses.MISSING, **metadata):
     If ``metadata`` contains ``marshmallow_field`` key, the value will be used
     directly as field.
 
+    If ``type_`` has a ``Schema`` attribute which should be a subclass of
+    :class:`marshmallow.Schema` a :class.`marshmallow.fields.Nested` field
+    will be returned wrapping the schema.
+
+    If ``type_`` has a ``Field`` attribute which should be a subclass of
+    :class:`marshmallow.fields.Field` an instance of this attribute will be
+    returned.
+
     Args:
         type_ (type): Type of the field
         default (optional): Default value of the field
@@ -72,6 +89,7 @@ def field_for_schema(type_, default=dataclasses.MISSING, **metadata):
     Raises:
         NotImplementedError: If the marshmallow field cannot not be determined
             for the passed type
+
     """
     if "marshmallow_field" in metadata:
         return metadata["marshmallow_field"]
@@ -99,6 +117,9 @@ def field_for_schema(type_, default=dataclasses.MISSING, **metadata):
 
     if hasattr(type_, "Schema"):
         return fields.Nested(type_.Schema, **metadata)
+
+    if hasattr(type_, "Field"):
+        return type_.Field(**metadata)
 
     raise NotImplementedError(f"No serializer found for {type_!r}")
 
@@ -138,31 +159,31 @@ class SerializableMeta(type):
     specified class into an dataclass (see :func:`dataclasses.dataclass`) and
     creates a corresponding :class:`marshmallow.Schema` class. The schema
     class is assigned to the :attr:`Schema` attribute.
-
-    Attributes:
-        Schema (ModelizedSchema): Schema for this dataclass
-
     """
 
     def __new__(mcls, name, bases, attrs, **kwargs):
         cls = super().__new__(mcls, name, bases, attrs, **kwargs)
         cls = dataclasses.dataclass(cls, init=False)
 
-        schema_attrs = {
-            "__module__": cls.__module__,
-            "__qualname__": f"{cls.__qualname__}.Schema",
-            "__model__": cls,
-        }
+        # Check if the class defines an own "Schema" attribute but not its
+        # parent classes. Therefore, we use the "__dict__" attribute directly
+        # here instead of "hasattr()".
+        if "Schema" not in cls.__dict__:
+            schema_attrs = {
+                "__module__": cls.__module__,
+                "__qualname__": f"{cls.__qualname__}.Schema",
+                "__model__": cls,
+            }
 
-        for field in dataclasses.fields(cls):
-            if field.default_factory != dataclasses.MISSING:
-                default = field.default_factory
-            else:
-                default = field.default
-            serializer = field_for_schema(field.type, default, **field.metadata)
-            schema_attrs[field.name] = serializer
+            for field in dataclasses.fields(cls):
+                if field.default_factory != dataclasses.MISSING:
+                    default = field.default_factory
+                else:
+                    default = field.default
+                serializer = field_for_schema(field.type, default, **field.metadata)
+                schema_attrs[field.name] = serializer
 
-        cls.Schema = type("Schema", (ModelizedSchema,), schema_attrs)
+            cls.Schema = type("Schema", (ModelizedSchema,), schema_attrs)
 
         return cls
 
@@ -203,6 +224,9 @@ class Serializable(metaclass=SerializableMeta):
                 isbn: str = fields(metadata={"readonly": True})
 
             assert hasattr(Book, "Schema")
+
+    Attributes:
+        Schema (ModelizedSchema): Schema for this dataclass
 
     """
 
@@ -306,3 +330,194 @@ class ApiObject(Serializable):
 
         cls.api = dataclasses.field(default=api, metadata={"validate": Equal(api)})
         cls.kind = dataclasses.field(default=kind, metadata={"validate": Equal(kind)})
+
+
+class PolymorphicContainerSchema(Schema):
+    """Schema that is used by :class:`PolymorphicContainer`
+
+    It declares just one string field :attr:`type` which is used as
+    discriminator for the different types.
+
+    There should be a field called exactly like the type. The value of this
+    field is passed to the registered schema for deserialziation.
+
+    .. code:: yaml
+
+        ---
+        type: float
+        float:
+            min: 0
+            max: 1.0
+        ---
+        type: int
+        int:
+            min: 0
+            max: 100
+
+    Every subclass will create its own internal subtype registry.
+
+    """
+
+    type = fields.String(required=True)
+
+    class Meta:
+        # Include unknwon fields. They will be forwared to the subfield schema.
+        unknown = INCLUDE
+
+    def __init_subclass__(cls):
+        cls._registry = {}
+
+    @classmethod
+    def register(cls, type, dataclass):
+        """Register a :class:`Serializable` for the given type string
+
+        Args:
+            type (str): Type name that should be used as discriminator
+            dataclass (object): Dataclass that will be used when the type
+                field equals the specified name.
+
+        Raises:
+            ValueError: If the type name is already registered
+
+        """
+        if type in cls._registry:
+            raise ValueError(f"{type!r} already registered by {cls._registry[type]!r}")
+
+        cls._registry[type] = dataclass
+
+    @validates("type")
+    def validate_type(self, data, **kwargs):
+        if data not in self._registry:
+            raise ValidationError(f"Unknown type {data!r}")
+
+    @validates_schema
+    def require_data_for_subschema(self, data, **kwargs):
+        type_ = data["type"]
+        dataclass = self._registry[type_]
+        if dataclass.__dataclass_fields__ and type_ not in data:
+            raise ValidationError(f"Field is required", type_)
+
+    @post_load
+    def load_subschema(self, data, **kwargs):
+        type_ = data["type"]
+        subschema = self._registry[type_].Schema
+        subdata = data.get(type_, {})
+        subfields = {type_: subschema().load(subdata)}
+        return self.__model__(type=type_, **subfields)
+
+    def _serialize(self, obj, *, many=False):
+        if many and obj is not None:
+            return [self._serialize(d, many=False) for d in obj]
+
+        ret = self.dict_class()
+
+        for attr_name, field_obj in self.dump_fields.items():
+            value = field_obj.serialize(attr_name, obj, accessor=self.get_attribute)
+
+            if value is missing:
+                continue
+
+            key = field_obj.data_key if field_obj.data_key is not None else attr_name
+            ret[key] = value
+
+        # Add the subfield
+        type_ = ret["type"]
+        subschema = self._registry[type_].Schema
+        value = getattr(obj, type_)
+        ret[type_] = subschema().dump(value)
+
+        return ret
+
+
+class PolymorphicContainer(Serializable):
+    """Base class for polymorphic serializable objects.
+
+    The polymorphic serializable has a string attribute :attr:`type` which is
+    used as discriminator for the different types. There is an attribute named
+    exeactly like the value of the :attr:`type` attribute containing the
+    deserialized subtype.
+
+    Every new subclass will create its own :attr:`Schema` attribute. This
+    means every subclass has its own internal subtype registry.
+
+    Attributes:
+        Schema (PolymorphicContainerSchema): Schema that will be used for
+            (de-)serialization of the class.
+
+    Example:
+        .. code:: python
+
+        from krake.data.serializable import Serializable, PolymorphicContainer
+
+        class ValueSpec(PolymorphicContainer):
+            pass
+
+        @ProviderSpec.register("float")
+        class FloatSpec(Serializable):
+            min: float
+            max: float
+
+        @ProviderSpec.register("bool")
+        class BoolSpec(Serializable):
+            pass
+
+        # Deserialization
+        spec = ProviderSpec.deserialize({
+            "type": "float",
+            "float": {
+                "min": 0,
+                "max": 1.0,
+            },
+        })
+        assert isinstance(spec.float, FloatSpec)
+
+        # Serialization
+        assert ProviderSpec(type="bool", bool=BoolSpec()).serialize() == {
+            "type": bool,
+            "bool": {},
+        }
+
+    """
+
+    type: str
+
+    @classmethod
+    def register(cls, name):
+        """Decorator function for registering a class under a unique name.
+
+        Args:
+            name (str): Name that will be used as value for the :attr:`type`
+                field to identify the decorated class.
+
+        Returns:
+            callable: Decorator that will register the decorated class in
+            the polymorphic schema (see
+            :meth:`PolymorphicContainerSchema.register`).
+
+        """
+
+        def decorator(dataclass):
+            cls.Schema.register(name, dataclass)
+            return dataclass
+
+        return decorator
+
+    def __init_subclass__(cls):
+        # Create a new Schema attribute for every subclass. Hence, every
+        # subclass will use its very own subtype registry.
+        cls.Schema = type(
+            "Schema",
+            (PolymorphicContainerSchema,),
+            {"__qualname__": f"{cls.__name__}.Schema", "__model__": cls},
+        )
+
+    def __init__(self, **kwargs):
+        # Add the subfield as attribute
+        type_ = kwargs["type"]
+        try:
+            value = kwargs.pop(type_)
+        except KeyError:
+            raise TypeError(f"Missing required keyword argument {type_!r}")
+        setattr(self, type_, value)
+
+        super().__init__(**kwargs)
