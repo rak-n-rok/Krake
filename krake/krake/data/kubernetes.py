@@ -374,26 +374,12 @@ class ClusterSpec(Serializable):
     metrics: List[str] = field(default_factory=list)
 
 
-class ClusterState(Enum):
-    PENDING = auto()
-    RUNNING = auto()
-    UPDATED = auto()
-    DELETING = auto()
-    DELETED = auto()
-    FAILED = auto()
-
-
-class ClusterStatus(Status):
-    state: ClusterState = ClusterState.PENDING
-
-
 @persistent("/kubernetes/clusters/{namespace}/{name}")
 class Cluster(ApiObject):
     api: str = "kubernetes"
     kind: str = "Cluster"
     metadata: Metadata
     spec: ClusterSpec
-    status: ClusterStatus = field(metadata={"subresource": True})
 
 
 class ClusterList(ApiObject):

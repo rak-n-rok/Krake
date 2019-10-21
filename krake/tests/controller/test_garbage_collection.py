@@ -3,7 +3,7 @@ import pytz
 from krake.api.database import Session
 from krake.client import Client
 from krake.data.core import resource_ref
-from krake.data.kubernetes import Application, ApplicationState, ClusterState, Cluster
+from krake.data.kubernetes import Application, ApplicationState, Cluster
 from krake.controller.garbage_collector import GarbageCollector
 
 from factories.fake import fake
@@ -17,17 +17,14 @@ async def test_resources_reception(config, db, loop):
         metadata__deleted=fake.date_time(tzinfo=pytz.utc),
     )
 
-    cluster_updated = ClusterFactory(status__state=ClusterState.UPDATED)
-    cluster_deleting = ClusterFactory(
-        status__state=ClusterState.RUNNING,
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
-    )
+    cluster_running = ClusterFactory()
+    cluster_deleted = ClusterFactory(metadata__deleted=fake.date_time(tzinfo=pytz.utc))
 
     await db.put(app_updated)
     await db.put(app_deleting)
 
-    await db.put(cluster_updated)
-    await db.put(cluster_deleting)
+    await db.put(cluster_running)
+    await db.put(cluster_deleted)
 
     gc = GarbageCollector(worker_count=0, db_host=db.host, db_port=db.port)
 
@@ -42,8 +39,8 @@ async def test_resources_reception(config, db, loop):
     key_1, value_1 = await gc.queue.get()
     key_2, value_2 = await gc.queue.get()
 
-    assert key_1 in (app_deleting.metadata.uid, cluster_deleting.metadata.uid)
-    assert key_2 in (app_deleting.metadata.uid, cluster_deleting.metadata.uid)
+    assert key_1 in (app_deleting.metadata.uid, cluster_deleted.metadata.uid)
+    assert key_2 in (app_deleting.metadata.uid, cluster_deleted.metadata.uid)
     assert key_1 != key_2
 
 

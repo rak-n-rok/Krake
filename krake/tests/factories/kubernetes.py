@@ -13,8 +13,6 @@ from krake.data.kubernetes import (
     ApplicationState,
     Application,
     ClusterSpec,
-    ClusterState,
-    ClusterStatus,
     Cluster,
     Constraints,
     ClusterConstraints,
@@ -141,19 +139,6 @@ class ApplicationFactory(Factory):
     metadata = SubFactory(MetadataFactory)
     spec = SubFactory(ApplicationSpecFactory)
     status = SubFactory(ApplicationStatusFactory)
-
-
-class ClusterStatusFactory(Factory):
-    class Meta:
-        model = ClusterStatus
-
-    state = fuzzy.FuzzyChoice(list(ClusterState.__members__.values()))
-
-    @lazy_attribute
-    def reason(self):
-        if self.state != ApplicationState.FAILED:
-            return None
-        return ReasonFactory()
 
 
 ca_cert = b"""-----BEGIN CERTIFICATE-----
@@ -295,5 +280,4 @@ class ClusterFactory(Factory):
         model = Cluster
 
     metadata = SubFactory(MetadataFactory)
-    status = SubFactory(ClusterStatusFactory)
     spec = SubFactory(ClusterSpecFactory)

@@ -13,7 +13,6 @@ from krake.data.kubernetes import (
     ClusterBinding,
     Cluster,
     ClusterList,
-    ClusterState,
     LabelConstraint,
     EqualConstraint,
     NotEqualConstraint,
@@ -609,7 +608,7 @@ async def test_list_clusters_rbac(rbac_allow, config, aiohttp_client):
 
 async def test_create_cluster(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
-    data = ClusterFactory(status=None)
+    data = ClusterFactory()
 
     resp = await client.post(
         f"/kubernetes/namespaces/{data.metadata.namespace}/clusters",
@@ -648,43 +647,9 @@ async def test_create_invalid_cluster(aiohttp_client, config):
     assert resp.status == 422
 
 
-async def test_update_cluster_status(aiohttp_client, config, db):
-    client = await aiohttp_client(create_app(config=config))
-    cluster = ClusterFactory(status__state=ClusterState.RUNNING)
-
-    await db.put(cluster)
-
-    cluster.status.state = ClusterState.FAILED
-    cluster.status.reason = ReasonFactory()
-    cluster.status.cluster = ResourceRef(
-        api="kubernetes", kind="Cluster", namespace="testing", name="test-cluster"
-    )
-    resp = await client.put(
-        f"/kubernetes/namespaces/testing/clusters/{cluster.metadata.name}/status",
-        json=cluster.serialize(subresources={"status"}),
-    )
-    assert resp.status == 200
-
-    stored = await db.get(Cluster, namespace="testing", name=cluster.metadata.name)
-    assert stored.status == cluster.status
-
-
-async def test_update_cluster_status_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
-
-    resp = await client.put("/kubernetes/namespaces/testing/clusters/mycluster/status")
-    assert resp.status == 403
-
-    async with rbac_allow("kubernetes", "clusters/status", "update"):
-        resp = await client.put(
-            "/kubernetes/namespaces/testing/clusters/mycluster/status"
-        )
-        assert resp.status == 415
-
-
 async def test_delete_cluster(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
-    cluster = ClusterFactory(status__state=ClusterState.RUNNING)
+    cluster = ClusterFactory()
     await db.put(cluster)
 
     # Delete application
