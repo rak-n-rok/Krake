@@ -13,6 +13,7 @@
 api_endpoint: $api_endpoint
 worker_count: $worker_count
 debounce: $debounce
+reschedule_after: 60
 tls:
   enabled: $tls_enabled
   client_ca: $cert_dir/ca.pem

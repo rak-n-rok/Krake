@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import random
-from functools import total_ordering, partial
+from functools import total_ordering
 from typing import NamedTuple
 from aiohttp import ClientError
 
@@ -50,12 +50,27 @@ class Scheduler(Controller):
     on metrics of the backends and application specifications.
 
     Args:
-        worker_count (int, optional): the amount of worker function that should be
-            run as background tasks.
+        worker_count (int, optional): the amount of worker function that
+            should be run as background tasks.
+        reschedule (float, optional): number of seconds after which a resource
+            should be rescheduled.
+        ssl_context (ssl.SSLContext, optional): SSL context that should be
+            used to communicate with the API server.
+        debounce (float, optional): number of seconds the scheduler should wait
+            before it reacts to a state change.
+        loop (asyncio.AbstractEventLoop, optional): Event loop that should be
+            used.
+
     """
 
     def __init__(
-        self, api_endpoint, worker_count=10, loop=None, ssl_context=None, debounce=0
+        self,
+        api_endpoint,
+        worker_count=10,
+        reschedule_after=60,
+        ssl_context=None,
+        debounce=0,
+        loop=None,
     ):
         super().__init__(
             api_endpoint, loop=loop, ssl_context=ssl_context, debounce=debounce
@@ -64,6 +79,7 @@ class Scheduler(Controller):
         self.core_api = None
         self.reflector = None
         self.worker_count = worker_count
+        self.reschedule_after = reschedule_after
 
     async def prepare(self, client):
         assert client is not None
@@ -74,21 +90,13 @@ class Scheduler(Controller):
         for i in range(self.worker_count):
             self.register_task(self.handle_resource, name=f"worker_{i}")
 
-        def accept_applications(app):
-            return app.status.state in (
-                ApplicationState.PENDING,
-                ApplicationState.UPDATED,
-            )
-
-        receive_app = partial(self.simple_on_receive, condition=accept_applications)
-
         self.reflector = Reflector(
             listing=self.kubernetes_api.list_all_applications,
             watching=self.kubernetes_api.watch_all_applications,
-            on_list=receive_app,
-            on_add=receive_app,
-            on_update=receive_app,
-            on_delete=receive_app,
+            on_list=self.received_kubernetes_app,
+            on_add=self.received_kubernetes_app,
+            on_update=self.received_kubernetes_app,
+            on_delete=self.received_kubernetes_app,
         )
         self.register_task(self.reflector, name="Reflector")
 
@@ -96,6 +104,24 @@ class Scheduler(Controller):
         self.reflector = None
         self.kubernetes_api = None
         self.core_api = None
+
+    async def received_kubernetes_app(self, app):
+        """Handler for Kubernetes application reflector.
+
+        Args:
+            app (krake.data.kubernetes.Application): Application received from the API
+
+        """
+        if app.metadata.deleted:
+            # TODO: If an application is deleted, the scheduling of other
+            #   applications should potentially revised.
+            logger.debug("Cancel rescheduling of deleted %r", app)
+            await self.queue.cancel(app.metadata.uid)
+        elif app.status.scheduled and app.metadata.modified <= app.status.scheduled:
+            await self.reschedule_kubernetes_application(app)
+        else:
+            logger.debug("Accept %r", app)
+            await self.queue.put(app.metadata.uid, app)
 
     async def handle_resource(self, run_once=False):
         """Infinite loop which fetches and hand over the resources to the right
@@ -123,29 +149,50 @@ class Scheduler(Controller):
                 break  # TODO: should we keep this? Only useful for tests
 
     async def resource_received(self, app):
-
         # TODO: API for supporting different application types
         # TODO: Evaluate spawning a new cluster
+
+        await self.schedule_kubernetes_application(app)
+        await self.reschedule_kubernetes_application(app)
+
+    async def schedule_kubernetes_application(self, app):
+        logger.info("Schedule %r", app)
+
         clusters = await self.kubernetes_api.list_all_clusters()
         cluster = await self.select_kubernetes_cluster(app, clusters.items)
 
         if cluster is None:
-            logger.info(
-                "Unable to schedule Kubernetes application %r", app.metadata.name
-            )
+            logger.info("Unable to schedule %r", app.metadata.name)
             raise UnsuitableDeploymentError("No cluster available")
 
-        else:
+        scheduled_to = resource_ref(cluster)
+
+        # Check if the scheduling decision changed
+        if app.status.scheduled_to == scheduled_to:
+            logger.info("No change for %r", app)
+            return
+
+        if app.status.scheduled_to:
             logger.info(
-                "Schedule Kubernetes application %r to cluster %r",
-                app.metadata.name,
-                cluster.metadata.name,
+                "Migrate %r from %s to %s", app, app.status.scheduled_to, scheduled_to
             )
-            await self.kubernetes_api.update_application_binding(
-                namespace=app.metadata.namespace,
-                name=app.metadata.name,
-                body=ClusterBinding(cluster=resource_ref(cluster)),
-            )
+        else:
+            logger.info("Scheduled %r to cluster %r", app, cluster)
+        await self.kubernetes_api.update_application_binding(
+            namespace=app.metadata.namespace,
+            name=app.metadata.name,
+            body=ClusterBinding(cluster=scheduled_to),
+        )
+
+    async def reschedule_kubernetes_application(self, app):
+        # Put the application into the work queue with a certain delay. This
+        # ensures the rescheduling of the application. Only put it if there is
+        # not already another version of the resource in the queue. This check
+        # is needed to ensure that we do not overwrite state changes with the
+        # current one which might be outdated.
+        if app.metadata.uid not in self.queue.dirty:
+            logger.debug("Reschedule %r in %s secs", app, self.reschedule_after)
+            await self.queue.put(app.metadata.uid, app, delay=self.reschedule_after)
 
     @staticmethod
     def match_cluster_constraints(app, cluster):

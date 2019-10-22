@@ -460,9 +460,6 @@ def _make_update_subresource_handler(operation, logger):
 
         copy_fields(source, dest)
 
-        # TODO: Should we update "metadata.modified" here?
-        # entity.metadata.modified = datetime.now()
-
         await session(request).put(entity)
         logger.info(
             "Update %s of %s %r (%s)",

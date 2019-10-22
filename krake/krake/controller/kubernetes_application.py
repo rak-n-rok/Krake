@@ -29,7 +29,7 @@ from inspect import iscoroutinefunction
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 from kubernetes_asyncio.client import ApiClient, CoreV1Api, AppsV1Api, Configuration
 from kubernetes_asyncio.client.rest import ApiException
-from typing import NamedTuple
+from typing import NamedTuple, Tuple
 
 from krake import load_config, search_config, setup_logging
 from krake.data.core import ReasonCode
@@ -185,14 +185,31 @@ class ApplicationController(Controller):
             self.register_task(self.handle_resource, name=f"worker_{i}")
 
         def scheduled_or_deleting(app):
-            accepted = app.status.state == ApplicationState.SCHEDULED or (
-                app.metadata.deleted
-                and app.metadata.finalizers
-                and app.metadata.finalizers[-1] == "kubernetes_resources_deletion"
-            )
-            if not accepted:
-                logger.debug("Rejected Application %r", app)
-            return accepted
+            # Always cleanup deleted applications even if they are in FAILED
+            # state.
+            if app.metadata.deleted:
+                if (
+                    app.metadata.finalizers
+                    and app.metadata.finalizers[-1] == "kubernetes_resources_deletion"
+                ):
+                    logger.debug("Accept deleted %r", app)
+                    return True
+
+                logger.debug("Reject deleted %r without finalizer", app)
+                return False
+
+            # Ignore all other failed application
+            if app.status.state == ApplicationState.FAILED:
+                logger.debug("Reject failed %r", app)
+                return False
+
+            # Accept scheduled applications
+            if app.status.scheduled and app.status.scheduled >= app.metadata.modified:
+                logger.debug("Accept scheduled %r", app)
+                return True
+
+            logger.debug("Reject %r", app)
+            return False
 
         receive_app = partial(self.simple_on_receive, condition=scheduled_or_deleting)
 
@@ -241,19 +258,47 @@ class ApplicationController(Controller):
         copy = deepcopy(app)
 
         if app.metadata.deleted:
-            await self._cleanup_application(copy)
+            await self._delete_application(copy)
+        elif (
+            copy.status.running_on
+            and copy.status.running_on != copy.status.scheduled_to
+        ):
+            await self._migrate_application(copy)
         else:
-            assert app.status.state == ApplicationState.SCHEDULED
-            await self._apply_manifest(copy)
+            await self._reconcile_application(copy)
 
-    async def _cleanup_application(self, app):
-        logger.info("Cleanup %r (%s)", app.metadata.name, app.metadata.namespace)
+    async def _delete_application(self, app):
+        logger.info("Delete %r (%s)", app.metadata.name, app.metadata.namespace)
 
+        # Transition into "DELETING" state
+        app.status.state = ApplicationState.DELETING
+        await self.kubernetes_api.update_application_status(
+            namespace=app.metadata.namespace, name=app.metadata.name, body=app
+        )
+
+        await self._delete_manifest(app)
+
+        # Remove finalizer
+        finalizer = app.metadata.finalizers.pop(-1)
+        assert finalizer == "kubernetes_resources_deletion"
+
+        # Save status changes
+        await self.kubernetes_api.update_application_status(
+            namespace=app.metadata.namespace, name=app.metadata.name, body=app
+        )
+
+        # Update owners and finalizers
+        await self.kubernetes_api.update_application(
+            namespace=app.metadata.namespace, name=app.metadata.name, body=app
+        )
+
+    async def _delete_manifest(self, app):
         # Delete Kubernetes resources if the application was bound to a
         # cluster and there Kubernetes resources were created.
-        if app.status.cluster and app.status.manifest:
+        if app.status.running_on and app.status.manifest:
             cluster = await self.kubernetes_api.read_cluster(
-                namespace=app.status.cluster.namespace, name=app.status.cluster.name
+                namespace=app.status.running_on.namespace,
+                name=app.status.running_on.name,
             )
             async with KubernetesClient(cluster.spec.kubeconfig) as kube:
                 for resource in app.status.manifest:
@@ -265,24 +310,51 @@ class ApplicationController(Controller):
                         resp=resp,
                     )
 
-        if (
-            app.metadata.finalizers
-            and app.metadata.finalizers[-1] == "kubernetes_resources_deletion"
-        ):
-            app.metadata.finalizers.pop(-1)
+        if app.status.running_on:
+            app.metadata.owners.remove(app.status.running_on)
 
-        await self.kubernetes_api.update_application(
-            namespace=app.metadata.namespace, name=app.metadata.name, body=app
-        )
+        # Clear manifest in status
+        app.status.manifest = None
+        app.status.running_on = None
 
-    async def _apply_manifest(self, app):
-        logger.info("Apply manifest %r (%s)", app.metadata.name, app.metadata.namespace)
+    async def _reconcile_application(self, app):
 
-        if not app.status.cluster:
+        if not app.status.scheduled_to:
             raise InvalidStateError(
                 "Application is scheduled but no cluster is assigned"
             )
 
+        logger.info("Reconcile %r (%s)", app.metadata.name, app.metadata.namespace)
+
+        # Ensure finalizer exists before changing Kubernetes objects
+        await self._ensure_finalizer(app)
+
+        if not app.status.running_on:
+            # Transition into "CREATING" state if the application is currently
+            # not running on any cluster.
+            app.status.state = ApplicationState.CREATING
+        else:
+            # Transition into "RECONCILING" state if application is already
+            # running.
+            app.status.state = ApplicationState.RECONCILING
+
+        await self.kubernetes_api.update_application_status(
+            namespace=app.metadata.namespace, name=app.metadata.name, body=app
+        )
+
+        await self._apply_manifest(app)
+
+        # Transition into "RUNNING" state
+        app.status.state = ApplicationState.RUNNING
+        await self.kubernetes_api.update_application_status(
+            namespace=app.metadata.namespace, name=app.metadata.name, body=app
+        )
+
+        logger.info(
+            "Reconciliation finished %r (%s)", app.metadata.name, app.metadata.namespace
+        )
+
+    async def _apply_manifest(self, app):
         # Append "kubernetes_resources_deletion" finalizer if not already present.
         # This will prevent the API from deleting the resource without remove the
         # Kubernetes resources.
@@ -311,7 +383,8 @@ class ApplicationController(Controller):
         }
 
         cluster = await self.kubernetes_api.read_cluster(
-            namespace=app.status.cluster.namespace, name=app.status.cluster.name
+            namespace=app.status.scheduled_to.namespace,
+            name=app.status.scheduled_to.name,
         )
         async with KubernetesClient(cluster.spec.kubeconfig) as kube:
             # Delete all resources that are no longer in the spec
@@ -341,14 +414,53 @@ class ApplicationController(Controller):
                     )
 
         # Update resource in application status
-        app.status.manifest = app.spec.manifest.copy()
+        app.status.manifest = app.spec.manifest.copy()  # TODO: Do we need to copy here?
 
-        # Transition into running state
-        app.status.state = ApplicationState.RUNNING
+        # Application is now running on the scheduled cluster
+        app.status.running_on = app.status.scheduled_to
+
+    async def _migrate_application(self, app):
+        logger.info(
+            "Migrate %r from %r to %r",
+            app,
+            app.status.running_on,
+            app.status.scheduled_to,
+        )
+
+        # Ensure finalizer exists before changing Kubernetes objects
+        await self._ensure_finalizer(app)
+
+        # Transition into "MIGRATING" state
+        app.status.state = ApplicationState.MIGRATING
 
         await self.kubernetes_api.update_application_status(
             namespace=app.metadata.namespace, name=app.metadata.name, body=app
         )
+
+        await self._delete_manifest(app)
+        await self._apply_manifest(app)
+
+        # Transition into "RUNNING" state
+        app.status.state = ApplicationState.RUNNING
+        await self.kubernetes_api.update_application_status(
+            namespace=app.metadata.namespace, name=app.metadata.name, body=app
+        )
+        # Update owners
+        await self.kubernetes_api.update_application(
+            namespace=app.metadata.namespace, name=app.metadata.name, body=app
+        )
+
+        logger.info("Migration of %r finished", app)
+
+    async def _ensure_finalizer(self, app):
+        # Append "kubernetes_resources_deletion" finalizer if not already present.
+        # This will prevent the API from deleting the resource without removing the
+        # Kubernetes resources.
+        if "kubernetes_resources_deletion" not in app.metadata.finalizers:
+            app.metadata.finalizers.append("kubernetes_resources_deletion")
+            await self.kubernetes_api.update_application(
+                namespace=app.metadata.namespace, name=app.metadata.name, body=app
+            )
 
     async def error_handler(self, app, error=None):
         """Asynchronous callback executed whenever an error occurs during

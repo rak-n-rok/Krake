@@ -11,7 +11,9 @@ from factories.kubernetes import ApplicationFactory, ClusterFactory
 
 
 async def test_resources_reception(config, db, loop):
-    app_updated = ApplicationFactory(status__state=ApplicationState.UPDATED)
+    app_updated = ApplicationFactory(
+        status__state=ApplicationState.RUNNING, status__is_scheduled=False
+    )
     app_deleting = ApplicationFactory(
         status__state=ApplicationState.RUNNING,
         metadata__deleted=fake.date_time(tzinfo=pytz.utc),
@@ -54,7 +56,7 @@ async def test_cluster_deletion(config, db, loop):
             metadata__finalizers=["kubernetes_resources_deletion"],
             metadata__owners=[resource_ref(cluster)],
             status__state=ApplicationState.RUNNING,
-            status__cluster=resource_ref(cluster),
+            status__scheduled_to=resource_ref(cluster),
         )
         for _ in range(0, 3)
     ]

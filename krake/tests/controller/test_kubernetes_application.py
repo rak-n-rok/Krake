@@ -17,15 +17,57 @@ from factories.kubernetes import ApplicationFactory, ClusterFactory, make_kubeco
 
 
 async def test_app_reception(aiohttp_server, config, db, loop):
-    pending = ApplicationFactory(status__state=ApplicationState.PENDING)
-    updated = ApplicationFactory(status__state=ApplicationState.UPDATED)
-    scheduled = ApplicationFactory(status__state=ApplicationState.SCHEDULED)
+    # Pending and not scheduled
+    pending = ApplicationFactory(
+        status__state=ApplicationState.PENDING, status__is_scheduled=False
+    )
+    # Running and not scheduled
+    waiting = ApplicationFactory(
+        status__state=ApplicationState.RUNNING, status__is_scheduled=False
+    )
+    # Running and scheduled
+    scheduled = ApplicationFactory(
+        status__state=ApplicationState.RUNNING, status__is_scheduled=True
+    )
+    # Failed and scheduled
+    failed = ApplicationFactory(
+        status__state=ApplicationState.FAILED, status__is_scheduled=True
+    )
+    # Running and deleted without finalizers
+    deleted = ApplicationFactory(
+        status__state=ApplicationState.RUNNING,
+        status__is_scheduled=True,
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+    )
+    # Running, not scheduled and deleted without finalizers
+    deleted_with_finalizer = ApplicationFactory(
+        status__state=ApplicationState.RUNNING,
+        status__is_scheduled=False,
+        metadata__finalizers=["kubernetes_resources_deletion"],
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+    )
+    # Failed, not scheduled and deleted with finalizers
+    deleted_and_failed_with_finalizer = ApplicationFactory(
+        status__is_scheduled=False,
+        status__state=ApplicationState.FAILED,
+        metadata__finalizers=["kubernetes_resources_deletion"],
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+    )
 
-    server = await aiohttp_server(create_app(config))
+    assert pending.status.scheduled is None
+    assert waiting.status.scheduled < waiting.metadata.modified
+    assert scheduled.status.scheduled >= scheduled.metadata.modified
+    assert failed.status.scheduled >= failed.metadata.modified
 
     await db.put(pending)
-    await db.put(updated)
+    await db.put(waiting)
     await db.put(scheduled)
+    await db.put(failed)
+    await db.put(deleted)
+    await db.put(deleted_with_finalizer)
+    await db.put(deleted_and_failed_with_finalizer)
+
+    server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         controller = ApplicationController(server_endpoint(server), worker_count=0)
@@ -33,11 +75,13 @@ async def test_app_reception(aiohttp_server, config, db, loop):
         await controller.prepare(client)  # need to be called explicitly
         await controller.reflector.list_resource()
 
-    # Only SCHEDULED applications are expected
-    assert controller.queue.size() == 1
-    key, value = await controller.queue.get()
-
-    assert key == scheduled.metadata.uid
+    assert pending.metadata.uid not in controller.queue.dirty
+    assert waiting.metadata.uid not in controller.queue.dirty
+    assert scheduled.metadata.uid in controller.queue.dirty
+    assert failed.metadata.uid not in controller.queue.dirty
+    assert deleted.metadata.uid not in controller.queue.dirty
+    assert deleted_with_finalizer.metadata.uid in controller.queue.dirty
+    assert deleted_and_failed_with_finalizer.metadata.uid in controller.queue.dirty
 
 
 nginx_manifest = list(
@@ -98,8 +142,9 @@ async def test_app_creation(aiohttp_server, config, db, loop):
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
 
     app = ApplicationFactory(
-        status__state=ApplicationState.SCHEDULED,
-        status__cluster=resource_ref(cluster),
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
         spec__manifest=list(
             yaml.safe_load_all(
                 """---
@@ -175,8 +220,10 @@ async def test_app_update(aiohttp_server, config, db, loop):
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
 
     app = ApplicationFactory(
-        status__state=ApplicationState.SCHEDULED,
-        status__cluster=resource_ref(cluster),
+        status__state=ApplicationState.RUNNING,
+        status__is_scheduled=True,
+        status__running_on=resource_ref(cluster),
+        status__scheduled_to=resource_ref(cluster),
         status__manifest=list(
             yaml.safe_load_all(
                 dedent(
@@ -314,6 +361,135 @@ async def test_app_update(aiohttp_server, config, db, loop):
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
 
+async def test_app_migration(aiohttp_server, config, db, loop):
+    """Application was scheduled to a different cluster. The controller should
+    delete objects from the old cluster and create objects on the new cluster.
+    """
+    routes = web.RouteTableDef()
+
+    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    async def _(request):
+        body = await request.json()
+        request.app["created"].add(body["metadata"]["name"])
+        return web.Response(status=201)
+
+    @routes.delete("/apis/apps/v1/namespaces/default/deployments/{name}")
+    async def delete_deployment(request):
+        request.app["deleted"].add(request.match_info["name"])
+        return web.Response(status=200)
+
+    @routes.get("/apis/apps/v1/namespaces/default/deployments/{name}")
+    async def _(request):
+        if request.match_info["name"] in request.app["existing"]:
+            return web.Response(status=200)
+        return web.Response(status=404)
+
+    async def make_kubernetes_api(existing=()):
+        app = web.Application()
+        app["created"] = set()
+        app["deleted"] = set()
+        app["existing"] = set(existing)  # Set of existing deployments
+
+        app.add_routes(routes)
+
+        return await aiohttp_server(app)
+
+    kubernetes_server_A = await make_kubernetes_api({"nginx-demo"})
+    kubernetes_server_B = await make_kubernetes_api()
+
+    cluster_A = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server_A))
+    cluster_B = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server_B))
+
+    old_manifest = list(
+        yaml.safe_load_all(
+            dedent(
+                """
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: nginx-demo
+                spec:
+                  selector:
+                    matchLabels:
+                      app: nginx
+                  template:
+                    metadata:
+                      labels:
+                        app: nginx
+                    spec:
+                      containers:
+                      - name: nginx
+                        image: nginx:1.7.9
+                        ports:
+                        - containerPort: 80
+                """
+            )
+        )
+    )
+    new_manifest = list(
+        yaml.safe_load_all(
+            dedent(
+                """
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: echoserver
+                spec:
+                  selector:
+                    matchLabels:
+                      app: echo
+                  template:
+                    metadata:
+                      labels:
+                        app: echo
+                    spec:
+                      containers:
+                      - name: echo
+                        image: k8s.gcr.io/echoserver:1.4
+                        ports:
+                        - containerPort: 8080
+        """
+            )
+        )
+    )
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.RUNNING,
+        status__is_scheduled=True,
+        status__running_on=resource_ref(cluster_A),
+        status__scheduled_to=resource_ref(cluster_B),
+        status__manifest=old_manifest,
+        spec__manifest=new_manifest,
+    )
+
+    assert resource_ref(cluster_A) in app.metadata.owners
+    assert resource_ref(cluster_B) in app.metadata.owners
+
+    await db.put(cluster_A)
+    await db.put(cluster_B)
+    await db.put(app)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        await controller.prepare(client)
+
+        await controller.resource_received(app)
+
+    assert "nginx-demo" in kubernetes_server_A.app["deleted"]
+    assert "echoserver" in kubernetes_server_B.app["created"]
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.state == ApplicationState.RUNNING
+    assert stored.status.running_on == resource_ref(cluster_B)
+    assert resource_ref(cluster_A) not in stored.metadata.owners
+    assert resource_ref(cluster_B) in stored.metadata.owners
+
+
 async def test_app_deletion(aiohttp_server, config, db, loop):
     kubernetes_app = web.Application()
     routes = web.RouteTableDef()
@@ -336,9 +512,13 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
     app = ApplicationFactory(
         metadata__deleted=fake.date_time(tzinfo=pytz.utc),
         status__state=ApplicationState.RUNNING,
-        status__cluster=resource_ref(cluster),
+        status__scheduled_to=resource_ref(cluster),
+        status__running_on=resource_ref(cluster),
         spec__manifest=nginx_manifest,
+        metadata__finalizers=["kubernetes_resources_deletion"],
     )
+    assert resource_ref(cluster) in app.metadata.owners
+
     await db.put(cluster)
     await db.put(app)
 
@@ -350,29 +530,12 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
 
         await controller.resource_received(app)
 
-
-async def test_app_deletion_without_binding(aiohttp_server, config, db, loop):
-    app = ApplicationFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
-        status__state=ApplicationState.RUNNING,
-        status__cluster=None,
-        spec__manifest=nginx_manifest,
-    )
-    await db.put(app)
-
-    server = await aiohttp_server(create_app(config))
-
-    async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = ApplicationController(server_endpoint(server), worker_count=0)
-        await controller.prepare(client)
-
-        await controller.resource_received(app)
-
-    # Ensure the application is marked for deletion
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.metadata.deleted is not None
+    assert stored.status.running_on is None
+    assert "kubernetes_resources_deletion" not in stored.metadata.finalizers
+    assert resource_ref(cluster) not in stored.metadata.owners
 
 
 async def test_service_registration(aiohttp_server, config, db, loop):
@@ -424,8 +587,9 @@ async def test_service_registration(aiohttp_server, config, db, loop):
     # Setup API Server
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
     app = ApplicationFactory(
-        status__state=ApplicationState.SCHEDULED,
-        status__cluster=resource_ref(cluster),
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=True,
+        status__scheduled_to=resource_ref(cluster),
         spec__manifest=list(
             yaml.safe_load_all(
                 """---
@@ -466,8 +630,9 @@ async def test_kubernetes_error_handling(aiohttp_server, config, db, loop):
     cluster = ClusterFactory()
     app = ApplicationFactory(
         spec__manifest=failed_manifest,
-        status__state=ApplicationState.SCHEDULED,
-        status__cluster=resource_ref(cluster),
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=True,
+        status__scheduled_to=resource_ref(cluster),
         status__manifest=[],
     )
 

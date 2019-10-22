@@ -1,8 +1,9 @@
 import logging
+from datetime import datetime
 from aiohttp import web
 
 from krake.apidefs.kubernetes import kubernetes
-from krake.data.kubernetes import Application, ClusterBinding, ApplicationState
+from krake.data.kubernetes import Application, ClusterBinding
 from .auth import protected
 from .helpers import use_schema, load, session
 from .generator import generate_api
@@ -17,15 +18,11 @@ class KubernetesApi:
     @load("app", Application)
     @use_schema("body", ClusterBinding.Schema)
     async def update_application_binding(request, body, app):
-        app.status.cluster = body.cluster
-        app.metadata.owners.append(body.cluster)
+        app.status.scheduled = datetime.now()
+        app.status.scheduled_to = body.cluster
 
-        # Transition into "scheduled" state
-        app.status.state = ApplicationState.SCHEDULED
-        app.status.reason = None
-
-        # TODO: Should be update modified here?
-        # app.metadata.modified = datetime.now()
+        if body.cluster not in app.metadata.owners:
+            app.metadata.owners.append(body.cluster)
 
         await session(request).put(app)
         logger.info(

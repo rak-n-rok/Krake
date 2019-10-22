@@ -47,6 +47,7 @@ def main(config):
         worker_count=scheduler_config["worker_count"],
         ssl_context=ssl_context,
         debounce=scheduler_config.get("debounce", 0),
+        reschedule_after=scheduler_config.get("reschedule_after", 60),
     )
     run(scheduler)
 

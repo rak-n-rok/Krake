@@ -1,5 +1,6 @@
 from time import time
 import pytest
+from datetime import datetime
 from aiohttp import web, ClientSession, ClientConnectorError, ClientResponseError
 
 from krake.api.app import create_app
@@ -18,16 +19,32 @@ def make_prometheus(metrics):
     API of Prometheus. The metric names and corresponding values are given as a
     simple dictionary.
 
+    The values are iterables that are advanced for every HTTP call made to the
+    server.
+
     Examples:
         .. code:: python
 
             async test_my_func(aiohttp_server):
                 prometheus = await aiohttp_server(make_prometheus({
-                    "my_metric": "0.42"
+                    "my_metric": ["0.42"]
                 }))
 
+        If you want to return the same value for every HTTP request, use
+        :func:`itertools.cycle`:
+
+        .. code:: python
+
+            from itertools import cycle
+
+            prometheus = await aiohttp_server(make_prometheus({
+                "my_metric": cycle(["0.42"])
+            }))
+
+
     Args:
-        metrics (dict): Mapping of metric names and the corresponding value
+        metrics (Dict[str, Iterable]): Mapping of metric names an iterable of
+            the corresponding value.
 
     Returns:
 
@@ -37,12 +54,15 @@ def make_prometheus(metrics):
     """
     routes = web.RouteTableDef()
 
+    series = {name: iter(value) for name, value in metrics.items()}
+
     @routes.get("/api/v1/query")
     async def _(request):
         name = request.query.get("query")
         if name not in metrics:
             result = []
         else:
+            value = next(series[name])
             result = [
                 {
                     "metric": {
@@ -50,7 +70,7 @@ def make_prometheus(metrics):
                         "instance": "unittest",
                         "job": "unittest",
                     },
-                    "value": [time(), str(metrics[name])],
+                    "value": [time(), str(value)],
                 }
             ]
 
@@ -67,15 +87,29 @@ def make_prometheus(metrics):
 async def test_kubernetes_reception(aiohttp_server, config, db, loop):
     # Test that the Reflector present on the Scheduler actually put the
     # right received Applications on the WorkQueue.
-    scheduled = ApplicationFactory(status__state=ApplicationState.SCHEDULED)
-    updated = ApplicationFactory(status__state=ApplicationState.UPDATED)
-    pending = ApplicationFactory(status__state=ApplicationState.PENDING)
+    scheduled = ApplicationFactory(
+        status__state=ApplicationState.PENDING, status__is_scheduled=True
+    )
+    updated = ApplicationFactory(
+        status__state=ApplicationState.RUNNING, status__is_scheduled=False
+    )
+    pending = ApplicationFactory(
+        status__state=ApplicationState.PENDING, status__is_scheduled=False
+    )
+    deleted = ApplicationFactory(
+        metadata__deleted=datetime.now(),
+        status__state=ApplicationState.RUNNING,
+        status__is_scheduled=False,
+    )
+
+    assert updated.metadata.modified > updated.status.scheduled
 
     server = await aiohttp_server(create_app(config))
 
     await db.put(scheduled)
     await db.put(updated)
     await db.put(pending)
+    await db.put(deleted)
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
@@ -83,17 +117,37 @@ async def test_kubernetes_reception(aiohttp_server, config, db, loop):
         await scheduler.prepare(client)  # need to be called explicitly
         await scheduler.reflector.list_resource()
 
-    assert scheduler.queue.size() == 2
-    key_1, value_1 = await scheduler.queue.get()
-    key_2, value_2 = await scheduler.queue.get()
+    assert scheduled.metadata.uid not in scheduler.queue.dirty
+    assert updated.metadata.uid in scheduler.queue.dirty
+    assert pending.metadata.uid in scheduler.queue.dirty
+    assert deleted.metadata.uid not in scheduler.queue.dirty
 
-    assert key_1 in (pending.metadata.uid, updated.metadata.uid)
-    assert key_2 in (pending.metadata.uid, updated.metadata.uid)
-    assert key_1 != key_2
+    assert scheduled.metadata.uid in scheduler.queue.timers
+    assert deleted.metadata.uid not in scheduler.queue.timers
+
+
+@pytest.mark.slow
+async def test_prometheus_provider_against_prometheus(prometheus, loop):
+    metric = MetricFactory(
+        spec__provider__name="my-provider",
+        spec__provider__metric=prometheus.exporter.metric,
+    )
+    metrics_provider = MetricsProviderFactory(
+        metadata__name="my-provider",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+
+    async with ClientSession() as session:
+        provider = metrics.Provider(metrics_provider=metrics_provider, session=session)
+        assert isinstance(provider, metrics.Prometheus)
+
+        value = await provider.query(metric)
+        assert 0 <= value <= 1.0
 
 
 async def test_prometheus_provider(aiohttp_server, loop):
-    prometheus = await aiohttp_server(make_prometheus({"my-metric": "0.42"}))
+    prometheus = await aiohttp_server(make_prometheus({"my-metric": ["0.42"]}))
 
     metric = MetricFactory(
         spec__provider__name="my-provider", spec__provider__metric="my-metric"
@@ -199,7 +253,7 @@ def test_kubernetes_not_match_cluster_label_constraints():
 
 async def test_kubernetes_rank(aiohttp_server, config, db, loop):
     prometheus = await aiohttp_server(
-        make_prometheus({"test_metric_1": "0.42", "test_metric_2": "0.5"})
+        make_prometheus({"test_metric_1": ["0.42"], "test_metric_2": ["0.5"]})
     )
 
     clusters = [
@@ -332,7 +386,7 @@ async def test_kubernetes_rank_failing_metrics_provider(
 
 
 async def test_kubernetes_prefer_cluster_with_metrics(aiohttp_server, config, db, loop):
-    prometheus = await aiohttp_server(make_prometheus({"my_metric": "0.4"}))
+    prometheus = await aiohttp_server(make_prometheus({"my_metric": ["0.4"]}))
 
     cluster_miss = ClusterFactory(spec__metrics=[])
     cluster = ClusterFactory(spec__metrics=["heat-demand"])
@@ -374,11 +428,14 @@ async def test_kubernetes_select_cluster_without_metric(aiohttp_server, config, 
     assert selected in clusters
 
 
-@pytest.mark.slow
-async def test_kubernetes_scheduling(prometheus, aiohttp_server, config, db, loop):
-    cluster = ClusterFactory(metadata__labels={}, spec__metrics=["heat-demand"])
+async def test_kubernetes_scheduling(aiohttp_server, config, db, loop):
+    prometheus = await aiohttp_server(make_prometheus({"heat_demand_zone_1": ["0.25"]}))
+
+    cluster = ClusterFactory(spec__metrics=["heat-demand"])
     app = ApplicationFactory(
-        spec__constraints__cluster__labels=[], status__state=ApplicationState.PENDING
+        spec__constraints__cluster__labels=[],
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=False,
     )
     metric = MetricFactory(
         metadata__name="heat-demand",
@@ -405,14 +462,18 @@ async def test_kubernetes_scheduling(prometheus, aiohttp_server, config, db, loo
         await scheduler.prepare(client)
         await scheduler.resource_received(app)
 
-    stored = await db.get(Application, namespace="testing", name=app.metadata.name)
+        stored = await db.get(Application, namespace="testing", name=app.metadata.name)
 
-    assert stored.status.cluster == resource_ref(cluster)
-    assert stored.status.state == ApplicationState.SCHEDULED
+        assert stored.status.scheduled_to == resource_ref(cluster)
+        assert stored.status.scheduled
+
+        assert app.metadata.uid in scheduler.queue.timers, "Application is rescheduled"
 
 
 async def test_kubernetes_scheduling_error(aiohttp_server, config, db, loop):
-    app = ApplicationFactory(status__state=ApplicationState.UPDATED)
+    app = ApplicationFactory(
+        status__state=ApplicationState.RUNNING, status__is_scheduled=False
+    )
 
     await db.put(app)
 
@@ -426,3 +487,69 @@ async def test_kubernetes_scheduling_error(aiohttp_server, config, db, loop):
 
     stored = await db.get(Application, namespace="testing", name=app.metadata.name)
     assert stored.status.reason.code == ReasonCode.NO_SUITABLE_RESOURCE
+
+
+async def test_kubernetes_migration(aiohttp_server, config, db, loop):
+    prometheus = await aiohttp_server(
+        make_prometheus(
+            {"heat_demand_1": ("0.25", "0.5"), "heat_demand_2": ("0.5", "0.25")}
+        )
+    )
+
+    cluster1 = ClusterFactory(spec__metrics=["heat-demand-1"])
+    cluster2 = ClusterFactory(spec__metrics=["heat-demand-2"])
+    app = ApplicationFactory(
+        spec__constraints__cluster__labels=[],
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=False,
+    )
+    metric1 = MetricFactory(
+        metadata__name="heat-demand-1",
+        spec__min=0,
+        spec__max=1,
+        spec__weight=1.0,
+        spec__provider__name="prometheus",
+        spec__provider__metric="heat_demand_1",
+    )
+    metric2 = MetricFactory(
+        metadata__name="heat-demand-2",
+        spec__min=0,
+        spec__max=1,
+        spec__weight=1.0,
+        spec__provider__name="prometheus",
+        spec__provider__metric="heat_demand_2",
+    )
+    metrics_provider = MetricsProviderFactory(
+        metadata__name="prometheus",
+        spec__type="prometheus",
+        spec__prometheus__url=f"http://{prometheus.host}:{prometheus.port}",
+    )
+    await db.put(metric1)
+    await db.put(metric2)
+    await db.put(metrics_provider)
+    await db.put(cluster1)
+    await db.put(cluster2)
+    await db.put(app)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        await scheduler.resource_received(app)
+
+        stored1 = await db.get(
+            Application, namespace=app.metadata.namespace, name=app.metadata.name
+        )
+        assert stored1.status.scheduled_to == resource_ref(cluster1)
+        assert stored1.status.state == ApplicationState.PENDING
+
+        # Schedule a second time the scheduled resource
+        await scheduler.resource_received(stored1)
+
+        stored2 = await db.get(
+            Application, namespace=app.metadata.namespace, name=app.metadata.name
+        )
+        assert stored2.status.scheduled_to == resource_ref(cluster2)
+        assert stored2.status.state == ApplicationState.PENDING
+        assert stored2.status.scheduled > stored1.status.scheduled
