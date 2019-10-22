@@ -1,6 +1,7 @@
 import pytz
 
 from krake.api.database import Session
+from krake.client import Client
 from krake.data.core import resource_ref
 from krake.data.kubernetes import Application, ApplicationState, ClusterState, Cluster
 from krake.controller.garbage_collector import GarbageCollector
@@ -29,7 +30,10 @@ async def test_resources_reception(config, db, loop):
     await db.put(cluster_deleting)
 
     gc = GarbageCollector(worker_count=0, db_host=db.host, db_port=db.port)
-    gc.create_background_tasks()  # need to be called explicitly
+
+    async with Client(url="http://localhost:8080", loop=loop) as client:
+        await gc.prepare(client)  # need to be called explicitly
+
     async with Session(host=gc.db_host, port=gc.db_port) as session:
         for reflector in gc.reflectors:
             await reflector.list_resource(session)

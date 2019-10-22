@@ -80,8 +80,7 @@ async def test_kubernetes_reception(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         # Update the client, to be used by the background tasks
-        scheduler.client = client
-        scheduler.create_background_tasks()  # need to be called explicitly
+        await scheduler.prepare(client)  # need to be called explicitly
         await scheduler.reflector.list_resource()
 
     assert scheduler.queue.size() == 2
@@ -234,8 +233,7 @@ async def test_kubernetes_rank(aiohttp_server, config, db, loop):
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
-        scheduler.client = client
-        scheduler.create_background_tasks()
+        await scheduler.prepare(client)
         ranked_clusters = await scheduler.rank_kubernetes_clusters(clusters)
 
     for ranked, cluster in zip(ranked_clusters, clusters):
@@ -248,7 +246,7 @@ async def test_kubernetes_rank_with_metrics_only():
 
     with pytest.raises(AssertionError):
         scheduler = Scheduler("http://localhost:8080", worker_count=0)
-        scheduler.create_background_tasks()
+        # need to be called explicitly
         await scheduler.rank_kubernetes_clusters(clusters)
 
 
@@ -262,8 +260,7 @@ async def test_kubernetes_rank_missing_metric(aiohttp_server, config, loop):
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
-        scheduler.client = client
-        scheduler.create_background_tasks()
+        await scheduler.prepare(client)
         ranked = await scheduler.rank_kubernetes_clusters(clusters)
 
     assert len(ranked) == 0
@@ -287,8 +284,7 @@ async def test_kubernetes_rank_missing_metrics_provider(
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
-        scheduler.client = client
-        scheduler.create_background_tasks()
+        await scheduler.prepare(client)
         ranked = await scheduler.rank_kubernetes_clusters(clusters)
 
     assert len(ranked) == 0
@@ -329,8 +325,7 @@ async def test_kubernetes_rank_failing_metrics_provider(
 
     async with Client(url=server_endpoint(api), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(api), worker_count=0)
-        scheduler.client = client
-        scheduler.create_background_tasks()
+        await scheduler.prepare(client)
         ranked = await scheduler.rank_kubernetes_clusters(clusters)
 
     assert len(ranked) == 0
@@ -362,8 +357,7 @@ async def test_kubernetes_prefer_cluster_with_metrics(aiohttp_server, config, db
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
-        scheduler.client = client
-        scheduler.create_background_tasks()
+        await scheduler.prepare(client)
         selected = await scheduler.select_kubernetes_cluster(
             app, (cluster_miss, cluster)
         )
@@ -408,8 +402,7 @@ async def test_kubernetes_scheduling(prometheus, aiohttp_server, config, db, loo
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
-        scheduler.client = client
-        scheduler.create_background_tasks()
+        await scheduler.prepare(client)
         await scheduler.resource_received(app)
 
     stored = await db.get(Application, namespace="testing", name=app.metadata.name)
@@ -427,8 +420,7 @@ async def test_kubernetes_scheduling_error(aiohttp_server, config, db, loop):
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
-        scheduler.client = client
-        scheduler.create_background_tasks()
+        await scheduler.prepare(client)
         await scheduler.queue.put(app.metadata.uid, app)
         await scheduler.handle_resource(run_once=True)
 

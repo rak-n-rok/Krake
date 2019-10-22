@@ -30,8 +30,7 @@ async def test_app_reception(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         controller = ApplicationController(server_endpoint(server), worker_count=0)
         # Update the client, to be used by the background tasks
-        controller.client = client
-        controller.create_background_tasks()  # need to be called explicitly
+        await controller.prepare(client)  # need to be called explicitly
         await controller.reflector.list_resource()
 
     # Only SCHEDULED applications are expected
@@ -133,8 +132,7 @@ async def test_app_creation(aiohttp_server, config, db, loop):
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
         controller = ApplicationController(server_endpoint(api_server), worker_count=0)
-        controller.client = client
-        controller.create_background_tasks()
+        await controller.prepare(client)
 
         await controller.resource_received(app)
 
@@ -301,8 +299,7 @@ async def test_app_update(aiohttp_server, config, db, loop):
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         controller = ApplicationController(server_endpoint(server), worker_count=0)
-        controller.client = client
-        controller.create_background_tasks()
+        await controller.prepare(client)
 
         await controller.resource_received(app)
 
@@ -349,8 +346,7 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         controller = ApplicationController(server_endpoint(server), worker_count=0)
-        controller.client = client
-        controller.create_background_tasks()
+        await controller.prepare(client)
 
         await controller.resource_received(app)
 
@@ -368,8 +364,7 @@ async def test_app_deletion_without_binding(aiohttp_server, config, db, loop):
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         controller = ApplicationController(server_endpoint(server), worker_count=0)
-        controller.client = client
-        controller.create_background_tasks()
+        await controller.prepare(client)
 
         await controller.resource_received(app)
 
@@ -458,8 +453,7 @@ async def test_service_registration(aiohttp_server, config, db, loop):
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         controller = ApplicationController(server_endpoint(server), worker_count=0)
-        controller.client = client
-        controller.create_background_tasks()
+        await controller.prepare(client)
 
         await controller.resource_received(app)
 
@@ -484,8 +478,7 @@ async def test_kubernetes_error_handling(aiohttp_server, config, db, loop):
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         controller = ApplicationController(server_endpoint(server), worker_count=0)
-        controller.client = client
-        controller.create_background_tasks()
+        await controller.prepare(client)
 
         await controller.queue.put(app.metadata.uid, app)
         await controller.handle_resource(run_once=True)

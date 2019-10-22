@@ -177,9 +177,9 @@ class ApplicationController(Controller):
         self.reflector = None
         self.worker_count = worker_count
 
-    def create_background_tasks(self):
-        assert self.client is not None
-
+    async def prepare(self, client):
+        assert client is not None
+        self.client = client
         self.kubernetes_api = KubernetesApi(self.client)
 
         for i in range(self.worker_count):
@@ -207,7 +207,7 @@ class ApplicationController(Controller):
         )
         self.register_task(self.reflector, name="Reflector")
 
-    async def clean_background_tasks(self):
+    async def cleanup(self):
         self.reflector = None
         self.kubernetes_api = None
 

@@ -384,13 +384,19 @@ class Controller(object):
         self.api_endpoint = self.create_endpoint(api_endpoint)
         self.client = None
 
-    def create_background_tasks(self):
-        """Create several coroutines and register them as background tasks for
-        the Controller.
-        """
-        raise NotImplementedError("Implement create_background_tasks")
+    async def prepare(self, client):
+        """Start all API clients that the controller will be using. Create all
+        necessary coroutines and register them as background tasks that will be
+        started by the Controller.
 
-    async def clean_background_tasks(self):
+        Args:
+            client (krake.client.Client): the base client to use for the API client
+                to connect to the API.
+
+        """
+        raise NotImplementedError("Implement prepare")
+
+    async def cleanup(self):
         """Unregister all background tasks that are attributes
         """
         raise NotImplementedError("Implement clean_background_tasks")
@@ -419,7 +425,8 @@ class Controller(object):
         return base_url.human_repr()
 
     def register_task(self, corofactory, name=None):
-        """Add a coroutine to the list of background tasks of the Controller.
+        """Add a coroutine to the list of task that will be run in the background
+         of the Controller.
 
         Args:
             corofactory (coroutine): the coroutine that will be used as task. It must
@@ -477,16 +484,16 @@ class Controller(object):
     async def run(self):
         """Start at once all the registered background tasks with the retry logic.
         """
-        self.client = Client(
+        client = Client(
             url=self.api_endpoint, loop=self.loop, ssl_context=self.ssl_context
         )
         try:
-            self.create_background_tasks()
+            await self.prepare(client)
             await self.client.open()
             await asyncio.gather(*(self.retry(task, name) for task, name in self.tasks))
         finally:
-            await self.client.close()
-            await self.clean_background_tasks()
+            await client.close()
+            await self.cleanup()
             self.tasks = []
             self.client = None
 
