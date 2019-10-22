@@ -10,6 +10,7 @@ import os.path
 import signal
 from itertools import count
 from statistics import mean
+from contextlib import suppress
 
 from krake.data.core import WatchEventType
 from yarl import URL
@@ -56,17 +57,22 @@ class WorkQueue(object):
         self.loop = loop
         self.queue = asyncio.Queue(maxsize=maxsize, loop=loop)
 
-    async def put(self, key, value):
+    async def put(self, key, value, delay=None):
         """Put a new key-value pair into the queue.
 
         Args:
             key: Key that used to identity the value
             value: New value that is associated with the key
+            delay (float, optional): Number of seconds the put should be
+                delayed. If :data:`None` is given, :attr:`debounce` will be
+                used.
 
         """
+        if delay is None:
+            delay = self.debounce
 
         async def debounce():
-            await asyncio.sleep(self.debounce)
+            await asyncio.sleep(delay)
             await put_key()
 
         async def put_key():
@@ -75,18 +81,18 @@ class WorkQueue(object):
             if key not in self.processing:
                 await self.queue.put(key)
 
-        def remove_timer(timer):
+        def remove_timer(_):
             # Remove timer from dictionary and resolve the waiter for the
             # removal.
-            del self.timers[key]
-            timer.removed.set_result(None)
+            _, removed = self.timers.pop(key)
+            removed.set_result(None)
 
-        if self.debounce == 0:
+        if delay == 0:
             await put_key()
         else:
             # Cancel current debounced task if present
-            previous = self.timers.get(key)
-            if previous:
+            if key in self.timers:
+                previous, removed = self.timers.get(key)
                 previous.cancel()
 
                 # Await the "removed" future instead of the task itself
@@ -96,7 +102,7 @@ class WorkQueue(object):
                 #   >>> await previous
                 #
                 # returns.
-                await previous.removed
+                await removed
 
             timer = self.loop.create_task(debounce())
 
@@ -105,10 +111,10 @@ class WorkQueue(object):
             # is required because it is not ensured that "done" callbacks of
             # futures are executed before other coroutines blocking in the
             # future are continued.
-            timer.removed = self.loop.create_future()
+            removed = self.loop.create_future()
             timer.add_done_callback(remove_timer)
 
-            self.timers[key] = timer
+            self.timers[key] = timer, removed
 
     async def get(self):
         """Retrieve a key-value pair from the queue.
@@ -132,6 +138,24 @@ class WorkQueue(object):
 
         if key in self.dirty:
             await self.queue.put(key)
+
+    async def cancel(self, key):
+        if key in self.timers:
+            timer, removed = self.timers[key]
+            timer.cancel()
+            with suppress(asyncio.CancelledError):
+                await removed
+
+    async def close(self):
+        """Cancel all pending debounce timers."""
+        timers = list(self.timers.values())
+
+        for timer, _ in timers:
+            timer.cancel()
+
+        for timer, _ in timers:
+            with suppress(asyncio.CancelledError):
+                await timer
 
     def empty(self):
         """Check of the queue is empty
@@ -291,10 +315,8 @@ async def joint(*aws, loop=None):
         for task in tasks:
             if not task.done():
                 task.cancel()
-                try:
+                with suppress(asyncio.CancelledError):
                     await task
-                except asyncio.CancelledError:
-                    pass
 
 
 class Observer(object):
@@ -493,6 +515,7 @@ class Controller(object):
             await asyncio.gather(*(self.retry(task, name) for task, name in self.tasks))
         finally:
             await client.close()
+            await self.queue.close()
             await self.cleanup()
             self.tasks = []
             self.client = None

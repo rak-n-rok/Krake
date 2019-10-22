@@ -132,6 +132,25 @@ async def test_queue_pending_debounce(loop):
     assert (key, value) == ("key", 2)
 
 
+async def test_queue_delayed_put(loop):
+    queue = WorkQueue(loop=loop, debounce=0)
+
+    # Each new added value should reset the timer for the "key" key
+    await queue.put("key", 1, delay=0.1)
+
+    start = loop.time()
+    key, value = await queue.get()
+    end = loop.time()
+
+    assert (key, value) == ("key", 1)
+
+    # The value should be received a bit after the delay time
+    assert 0.1 < end - start < 0.15
+
+    await queue.done("key")
+    assert queue.empty()
+
+
 async def test_executor(loop):
     # Do not use a unittest.Mock because run() needs to be asynchronous
     class SimpleController(object):
