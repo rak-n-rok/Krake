@@ -27,11 +27,11 @@ The configuration should have the following structure:
 
 import logging
 import pprint
-from argparse import ArgumentParser
+from argparse import ArgumentParser, MetavarTypeHelpFormatter
 from collections import defaultdict
 from copy import deepcopy
 
-from krake import setup_logging, load_config, search_config
+from krake import setup_logging, load_config, search_config, add_opt_args
 from krake.apidefs.kubernetes import ApplicationResource, ClusterResource
 from krake.controller import Controller, run, Reflector, create_ssl_context
 from krake.data.config import ControllerConfiguration
@@ -494,9 +494,17 @@ class GarbageCollector(Controller):
             )
 
 
-def main(config):
-    filepath = config or search_config("garbage_collector.yaml")
-    gc_config = load_config(ControllerConfiguration, filepath=filepath)
+def main():
+    option_fields_mapping = add_opt_args(parser, ControllerConfiguration)
+
+    args = parser.parse_args()
+    filepath = args.config or search_config("garbage_collector.yaml")
+    gc_config = load_config(
+        ControllerConfiguration,
+        filepath=filepath,
+        args=args,
+        option_fields_mapping=option_fields_mapping,
+    )
 
     setup_logging(gc_config.log)
     logger.debug(
@@ -517,9 +525,11 @@ def main(config):
     run(controller)
 
 
-if __name__ == "__main__":
-    parser = ArgumentParser(description="Garbage Collector for Krake")
-    parser.add_argument("-c", "--config", help="Path to configuration YAML file")
+parser = ArgumentParser(
+    description="Garbage Collector for Krake", formatter_class=MetavarTypeHelpFormatter
+)
+parser.add_argument("-c", "--config", type=str, help="Path to configuration YAML file")
 
-    args = parser.parse_args()
-    main(**vars(args))
+
+if __name__ == "__main__":
+    main()

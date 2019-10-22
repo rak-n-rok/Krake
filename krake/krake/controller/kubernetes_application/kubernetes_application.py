@@ -1,5 +1,4 @@
 import logging
-import pprint
 import re
 from copy import deepcopy
 from functools import partial
@@ -10,7 +9,6 @@ from kubernetes_asyncio.client.rest import ApiException
 from typing import NamedTuple, Tuple
 
 from krake.data.core import ReasonCode
-from krake.data.config import ControllerConfiguration
 from krake.data.kubernetes import ApplicationState
 from krake.client.kubernetes import KubernetesApi
 

@@ -9,13 +9,9 @@ class TLSConfiguration(Serializable):
     enabled: bool = field(
         default=False, metadata={"help": "Enable TLS client certificate authentication"}
     )
-    client_ca: str = field(default="", metadata={"help": "Path to the CA certificate."})
-    client_cert: str = field(
-        default="", metadata={"help": "Path to the client certificate."}
-    )
-    client_key: str = field(
-        default="", metadata={"help": "Path to the client certificate key."}
-    )
+    client_ca: str = field(metadata={"help": "Path to the CA certificate."})
+    client_cert: str = field(metadata={"help": "Path to the client certificate."})
+    client_key: str = field(metadata={"help": "Path to the client certificate key."})
 
 
 class EtcdConfiguration(Serializable):
@@ -45,7 +41,7 @@ class KeystoneAuthenticationConfiguration(Serializable):
 
 class StaticAuthenticationConfiguration(Serializable):
     enabled: bool = field(
-        default=True, metadata={"help": "If true, enables the static authentication"}
+        default=False, metadata={"help": "If true, enables the static authentication"}
     )
     name: str = field(
         default="system",
@@ -147,7 +143,7 @@ class ApiConfiguration(Serializable):
     etcd: EtcdConfiguration
     tls: TLSConfiguration
     authentication: AuthenticationConfiguration
-    authorization: str
+    authorization: str = field(metadata={"help": "Authorization mode"})
     default_roles: List[Role] = field(default_factory=list)
     default_role_bindings: List[RoleBinding] = field(default_factory=list)
     log: dict

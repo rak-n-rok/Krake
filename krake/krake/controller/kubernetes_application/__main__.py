@@ -32,9 +32,9 @@ Configuration is loaded from the ``controllers.kubernetes.application`` section:
 """
 import logging
 import pprint
-from argparse import ArgumentParser
+from argparse import ArgumentParser, MetavarTypeHelpFormatter
 
-from krake import load_config, setup_logging, search_config
+from krake import load_config, setup_logging, search_config, add_opt_args
 from krake.data.config import KubernetesConfiguration
 
 from ...controller import create_ssl_context, run
@@ -44,9 +44,17 @@ from .kubernetes_application import ApplicationController
 logger = logging.getLogger("krake.controller.kubernetes")
 
 
-def main(config):
-    filepath = config or search_config("kubernetes.yaml")
-    controller_config = load_config(KubernetesConfiguration, filepath=filepath)
+def main():
+    option_fields_mapping = add_opt_args(parser, KubernetesConfiguration)
+    args = parser.parse_args()
+
+    filepath = args.config or search_config("kubernetes.yaml")
+    controller_config = load_config(
+        KubernetesConfiguration,
+        filepath=filepath,
+        args=args,
+        option_fields_mapping=option_fields_mapping,
+    )
 
     setup_logging(controller_config.log)
     logger.debug(
@@ -68,7 +76,12 @@ def main(config):
     run(controller)
 
 
+parser = ArgumentParser(
+    description="Kubernetes application controller",
+    formatter_class=MetavarTypeHelpFormatter,
+)
+parser.add_argument("-c", "--config", type=str, help="Path to configuration YAML file")
+
+
 if __name__ == "__main__":
-    parser = ArgumentParser(description="Kubernetes application controller")
-    parser.add_argument("-c", "--config", help="Path to configuration YAML file")
-    main(**vars(parser.parse_args()))
+    main()

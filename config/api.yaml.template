@@ -8,8 +8,8 @@ etcd:
 # TLS configuration of API server
 tls:
   enabled: $tls_enabled
-  cert: $cert_dir/system:api-server.pem
-  key: $cert_dir/system:api-server-key.pem
+  client_cert: $cert_dir/system:api-server.pem
+  client_key: $cert_dir/system:api-server-key.pem
 
   # Enable client certificate authentication by setting this option to a file
   # containing one or more certificate authorities that should be used to
