@@ -21,6 +21,8 @@ Configuration is loaded from the ``controllers.garbage_collector`` section:
 import asyncio
 import logging
 from argparse import ArgumentParser
+from collections import defaultdict
+from copy import deepcopy
 from datetime import datetime
 from itertools import chain
 
@@ -35,6 +37,164 @@ from krake.data.kubernetes import Application, Cluster
 logger = logging.getLogger("krake.api.garbage_collector")
 
 _garbage_collected = {KubernetesApi.api_name: [Application, Cluster]}
+
+
+class DependencyGraph(object):
+    """Representation of the dependencies of all Krake resources by an acyclic
+    directed graph. This graph can be used to get the dependents of any resource that
+    the graph received.
+
+    If an instance of a resource A depends on a resource B, A will have B in its owner
+    list. In this case,
+     * A depends on B
+     * B is a dependency of A
+     * A is a dependent of B
+
+    The nodes of the graph are :class:`krake.data.core.ResourceRef`, created from the
+    actual resources. The edges are directed links from a dependency to its dependents.
+
+    :class:`krake.data.core.ResourceRef` are used instead of the resource directly, as
+    they are hashable and can be used as key of a dictionary. Otherwise, we would need
+    to make any newly added resource as hashable for the sake of the dependency graph.
+
+    The actual resources are still referenced in the :attr:`_resources`. It allows the
+    access to the actual owners of a resource, not their
+    :class:`krake.data.core.ResourceRef`.
+    """
+
+    def __init__(self):
+        self._relationships = defaultdict(list)
+        self._resources = {}
+
+    def get_direct_dependents(self, resource):
+        """Get the dependents of a resource, but only the ones directly dependent, no
+        recursion is performed.
+
+        Args:
+            resource (krake.data.serializable.Serializable): the resource for which#
+                the search will be performed.
+
+        Returns:
+            list: the list of :class:`krake.data.core.ResourceRef` to the dependents
+                of the given resource (=that depends on the resource).
+
+        """
+        references = self._relationships[resource_ref(resource)]
+        return [self._resources[reference] for reference in references]
+
+    def add_resource(self, resource):
+        """Add a resource and its dependencies relationships to the graph.
+
+        Args:
+            resource (krake.data.serializable.Serializable): the resource to add to
+                the graph.
+
+        """
+        resource = deepcopy(resource)
+        res_ref = resource_ref(resource)
+        self._resources[res_ref] = resource
+
+        # No need to add the value explicitly here,
+        # as it is lazy created in the cycles check
+
+        for owner in resource.metadata.owners:
+            self._relationships[owner].append(res_ref)
+
+        self._check_for_cycles(res_ref)
+
+    def remove_resource(self, resource, check_dependents=True):
+        """If a resource has no dependent, remove it from the dependency graph,
+        and from the dependents of other resources.
+
+        Args:
+            resource (krake.data.serializable.Serializable): the resource to remove.
+            check_dependents (bool, optional): if False, does not check if the
+                resource to remove has dependents, and simply remove it along with the
+                 dependents.
+
+        Raises:
+            ValueError: if the resource to remove has dependents.
+
+        """
+        res_ref = resource_ref(resource)
+        del self._resources[res_ref]
+
+        if check_dependents and self._relationships[res_ref]:
+            raise ValueError("Cannot remove a resource which holds dependents")
+
+        del self._relationships[res_ref]
+
+        # Remove "pointers" to the resources from any dependency
+        # All dependents need to be checked because the owners
+        # may not be consistent anymore (e.g with migration).
+        for dependents in self._relationships.values():
+            if res_ref in dependents:
+                dependents.remove(res_ref)
+
+    def update_resource(self, resource):
+        """Update the dependency relationships of a resource on the graph.
+
+        Args:
+            resource (krake.data.serializable.Serializable): the resource whose
+                ownership may need to be modified.
+
+        """
+        resource = deepcopy(resource)
+        stored = self._resources[resource_ref(resource)]
+
+        # If no update has been done on the dependency relations of the resource,
+        # simply update its reference.
+        if resource.metadata.owners == stored.metadata.owners:
+            self._resources[resource_ref(resource)] = resource
+            return
+
+        dependents = self.get_direct_dependents(resource)
+
+        # This action removes the dependents entirely,
+        # that is why they need to be stored beforehand.
+        self.remove_resource(resource, check_dependents=False)
+        self.add_resource(resource)
+
+        dependents_references = [resource_ref(resource) for resource in dependents]
+        self._relationships[resource_ref(resource)] = dependents_references
+
+    def _check_for_cycles(self, reference, visited=None):
+        """Verify if a cycle exists in the graph.
+
+        Args:
+            reference (krake.data.core.ResourceRef): the resource from which the
+                search should be started.
+            visited (set, optional): the set of already visited nodes. Should be empty
+                when calling the function.
+
+        Raises:
+            RuntimeError: raised if a cycle has been discovered.
+
+        """
+        if not visited:
+            visited = set()
+
+        if reference in visited:
+            raise RuntimeError(f"Cycle in dependency graph for resource {reference}")
+
+        visited.add(reference)
+        # Empty relationships are lazy created here
+        for dependent in self._relationships[reference]:
+            self._check_for_cycles(dependent, visited)
+
+    def get_owners(self, resource):
+        """Retrieve the actual owners (not references) of a resource.
+
+        Args:
+            resource (krake.data.serializable.Serializable): the instances of the
+                owners of this resource will be retrieved.
+
+        Returns:
+            list: the list of owners of the given resource.
+
+        """
+        owners_refs = resource.metadata.owners
+        return [self._resources[owner_ref] for owner_ref in owners_refs]
 
 
 class DatabaseReflector(object):

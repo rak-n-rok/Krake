@@ -13,6 +13,9 @@ class ResourceRef(Serializable):
     kind: str
     name: str
 
+    def __hash__(self):
+        return hash((self.api, self.namespace, self.kind, self.name))
+
 
 class Metadata(Serializable):
     name: str = field(metadata={"immutable": True})

@@ -1,13 +1,17 @@
+import pytest
 import pytz
+from factory import Factory, SubFactory
 
 from krake.api.database import Session
 from krake.client import Client
-from krake.data.core import resource_ref
+from krake.data.core import resource_ref, Metadata
 from krake.data.kubernetes import Application, ApplicationState, Cluster
-from krake.controller.garbage_collector import GarbageCollector
+from krake.controller.garbage_collector import DependencyGraph, GarbageCollector
 
+from factories.core import MetadataFactory
 from factories.fake import fake
 from factories.kubernetes import ApplicationFactory, ClusterFactory
+from krake.data.serializable import Serializable
 
 
 async def test_resources_reception(config, db, loop):
@@ -97,3 +101,166 @@ async def test_cluster_deletion(config, db, loop):
     )
 
     assert stored_cluster is None
+
+
+class UpperResource(Serializable):
+    api: str = "upper_api"
+    kind: str = "Upper"
+    metadata: Metadata
+
+
+class UpperResourceFactory(Factory):
+    class Meta:
+        model = UpperResource
+
+    metadata = SubFactory(MetadataFactory)
+
+
+def test_dependency_graph():
+    graph = DependencyGraph()
+
+    up = UpperResourceFactory()
+    graph.add_resource(up)
+
+    cluster = ClusterFactory(metadata__owners=[resource_ref(up)])
+    graph.add_resource(cluster)
+
+    cluster_ref = resource_ref(cluster)
+
+    apps = [
+        ApplicationFactory(
+            metadata__owners=[cluster_ref], status__scheduled_to=cluster_ref
+    )
+        for _ in range(0, 3)
+    ]
+
+    for app in apps:
+        graph.add_resource(app)
+
+    assert len(graph._relationships) == 5
+    assert graph.get_direct_dependents(up) == [cluster]
+    assert graph.get_direct_dependents(cluster) == apps
+
+    for app in apps:
+        assert len(graph.get_direct_dependents(app)) == 0
+
+    graph.remove_resource(apps[0])
+    assert len(graph._relationships) == 4
+    assert graph.get_direct_dependents(up) == [cluster]
+    assert graph.get_direct_dependents(cluster) == apps[1:]
+
+    for app in apps:
+        assert len(graph.get_direct_dependents(app)) == 0
+
+    with pytest.raises(ValueError):
+        graph.remove_resource(up)
+
+
+def test_dependency_graph_wrong_order():
+    up = UpperResourceFactory()
+    cluster = ClusterFactory(metadata__owners=[resource_ref(up)])
+
+    cluster_ref = resource_ref(cluster)
+
+    app = ApplicationFactory(
+        metadata__owners=[cluster_ref], status__scheduled_to=cluster_ref
+    )
+
+    graph = DependencyGraph()
+    graph.add_resource(app)
+    graph.add_resource(cluster)
+    graph.add_resource(up)
+
+    assert len(graph._relationships) == 3
+    assert graph.get_direct_dependents(up) == [cluster]
+    assert graph.get_direct_dependents(cluster) == [app]
+    assert graph.get_direct_dependents(app) == []
+
+    # Verify that adding objects in any order does not change the result.
+    right_order_graph = DependencyGraph()
+    right_order_graph.add_resource(up)
+    right_order_graph.add_resource(cluster)
+    right_order_graph.add_resource(app)
+
+    assert right_order_graph._resources == graph._resources
+    assert right_order_graph._relationships == graph._relationships
+
+    # check that the graph only copied the resources
+    for key in right_order_graph._resources:
+        assert right_order_graph._resources[key] is not graph._resources[key]
+
+
+def test_error_on_cycle_in_dependency_graph():
+    # Create a cycle in dependency
+    up = UpperResourceFactory()
+    cluster = ClusterFactory(metadata__owners=[resource_ref(up)])
+    apps = [
+        ApplicationFactory(metadata__owners=[resource_ref(cluster)])
+        for _ in range(0, 3)
+    ]
+    up.metadata.owners.append(resource_ref(apps[0]))
+
+    graph = DependencyGraph()
+    graph.add_resource(up)
+    graph.add_resource(cluster)
+
+    # Add resources without cycle
+    for app in apps[1:]:
+        graph.add_resource(app)
+
+    # Add resource with cycle
+    with pytest.raises(RuntimeError):
+        graph.add_resource(apps[0])
+
+
+def test_update_resource_dependency_graph():
+    up_1 = UpperResourceFactory()
+    cluster_1 = ClusterFactory(metadata__owners=[resource_ref(up_1)])
+    cluster_2 = ClusterFactory(metadata__owners=[resource_ref(up_1)])
+    app_1 = ApplicationFactory(metadata__owners=[resource_ref(cluster_1)])
+
+    graph = DependencyGraph()
+    graph.add_resource(up_1)
+    graph.add_resource(cluster_1)
+    graph.add_resource(cluster_2)
+    graph.add_resource(app_1)
+
+    # Replace ownership
+    app_1.metadata.owners = [resource_ref(cluster_2)]
+    graph.update_resource(app_1)
+
+    assert graph.get_direct_dependents(cluster_2) == [app_1]
+    assert graph.get_direct_dependents(cluster_1) == []
+
+    # Remove ownership
+    cluster_2.metadata.owners = []
+    graph.update_resource(cluster_2)
+
+    assert graph.get_direct_dependents(cluster_2) == [app_1]
+    assert graph.get_direct_dependents(up_1) == [cluster_1]
+
+    # Add new ownership
+    up_2 = UpperResourceFactory()
+    graph.add_resource(up_2)
+
+    cluster_2.metadata.owners = [resource_ref(up_2)]
+    graph.update_resource(cluster_2)
+
+    assert graph.get_direct_dependents(cluster_2) == [app_1]
+    assert graph.get_direct_dependents(up_2) == [cluster_2]
+
+
+def test_dependency_owners():
+    ups = [UpperResourceFactory() for _ in range(2)]
+    cluster = ClusterFactory(metadata__owners=[resource_ref(up) for up in ups])
+
+    graph = DependencyGraph()
+    for up in ups:
+        graph.add_resource(up)
+    graph.add_resource(cluster)
+
+    owners = graph.get_owners(cluster)
+
+    assert owners == ups
+
+
