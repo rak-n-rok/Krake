@@ -193,5 +193,5 @@ cleanup-staging-infra:
     # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
     - cd ansible
     - chmod -v 700 $(pwd)
-    - ansible-playbook -i hosts-CI unprovision.yaml
+    - ansible-playbook -i hosts-CI unprovision.yml
   when: always
