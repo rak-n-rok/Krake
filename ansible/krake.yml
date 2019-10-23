@@ -130,13 +130,10 @@
         dest: /home/krake/.hushlogin
         force: no
 
-    # TODO: Remove once issue is resolved
-    #   C&H infra currently suffers from "MTU bug" when typical value of 1500 causes connectivity
-    #   issues. Following is a workaround.
-    - name: Create workaround in Docker for C&H's MTU issues
-      copy:
-        dest: "/etc/docker.json"
-        content: '{ "mtu" : 1450 }'
+    - name: Configure Docker daemon MTU
+      template:
+        src: files/krake/daemon.json.j2
+        dest: /etc/docker/daemon.json
 
     - name: Restart docker to reload the configuration
       systemd:
@@ -228,6 +225,14 @@
       tags:
         - krake-deployment
       block:
+
+        # The docker-compose.override only contains the network definition and
+        # will automatically be merged with docker-compose.yml when
+        # "docker-compose up" is run.
+        - name: Configure krake_default bridge MTU
+          template:
+            src: files/krake/docker-compose.override.yml.j2
+            dest: "{{ git_dir }}/docker/krake/docker-compose.override.yml"
 
         - name: Generate dot env configuration file
           template:
