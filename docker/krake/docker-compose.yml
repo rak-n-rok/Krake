@@ -48,7 +48,7 @@ services:
     tty: true
     depends_on:
       - krake-api
-    command: python3 -m krake.controller.garbage_collector
+    command: python3 -m krake.controller.gc
     volumes:
       - /etc/krake:/etc/krake:ro
 

@@ -6,7 +6,7 @@ from krake.api.database import Session
 from krake.client import Client
 from krake.data.core import resource_ref, Metadata
 from krake.data.kubernetes import Application, ApplicationState, Cluster
-from krake.controller.garbage_collector import DependencyGraph, GarbageCollector
+from krake.controller.gc import DependencyGraph, GarbageCollector
 
 from factories.core import MetadataFactory
 from factories.fake import fake
