@@ -1,11 +1,12 @@
 import asyncio
 import json
+import pytest
+import pytz
+import yaml
+
 from itertools import count
 from operator import attrgetter
 from secrets import token_urlsafe
-
-import yaml
-import pytest
 
 from krake.data.core import WatchEvent, WatchEventType, ResourceRef, resource_ref
 from krake.data.kubernetes import (
@@ -26,7 +27,7 @@ from krake.api.app import create_app
 from krake.api.database import revision
 
 from factories.kubernetes import ApplicationFactory, ClusterFactory
-from tests.factories.core import ReasonFactory
+from factories.core import ReasonFactory
 from factories.fake import fake
 
 
@@ -395,6 +396,31 @@ async def test_update_app_binding(aiohttp_client, config, db):
     assert cluster_ref in stored.metadata.owners
 
 
+async def test_update_app_to_delete(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__finalizers=["cascade_deletion"],
+    )
+    await db.put(app)
+
+    # Delete application
+    app.metadata.finalizers = []
+    resp = await client.put(
+        f"/kubernetes/namespaces/testing/applications/{app.metadata.name}",
+        json=app.serialize(),
+    )
+    assert resp.status == 200
+    data = Application.deserialize(await resp.json())
+    assert resource_ref(data) == resource_ref(app)
+
+    # The Application should be deleted from the database
+    stored = await db.get(Application, namespace="testing", name=app.metadata.name)
+    assert stored is None
+
+
 async def test_delete_app(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
@@ -412,28 +438,7 @@ async def test_delete_app(aiohttp_client, config, db):
 
     deleted = await db.get(Application, namespace="testing", name=app.metadata.name)
     assert deleted.metadata.deleted is not None
-
-
-async def test_delete_app_with_finalizers(aiohttp_client, config, db):
-    client = await aiohttp_client(create_app(config=config))
-
-    # Create application
-    app = ApplicationFactory(
-        status__state=ApplicationState.PENDING, metadata__finalizers=["test-finializer"]
-    )
-    await db.put(app)
-
-    # Delete application
-    resp = await client.delete(
-        f"/kubernetes/namespaces/testing/applications/{app.metadata.name}"
-    )
-    assert resp.status == 200
-
-    received = Application.deserialize(await resp.json())
-    assert received.metadata.deleted
-
-    stored = await db.get(Application, namespace="testing", name=app.metadata.name)
-    assert stored.metadata.deleted
+    assert "cascade_deletion" in deleted.metadata.finalizers
 
 
 async def test_add_finializer_in_deleted_app(aiohttp_client, config, db):

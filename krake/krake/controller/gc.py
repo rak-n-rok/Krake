@@ -1,42 +1,40 @@
 """This module defines the Garbage Collector present as a background task on the API
 application. When a resource is marked as deleted, the GC mark all its dependents as
-deleted. After cleanup is done by the Controller, it handles the final deletion of
-resources.
+deleted. After cleanup is done by the respective Controller, the gc handles the final
+deletion of resources.
 
-Important: the Garbage Collector does not handle conflicts: the API is the one that
-should decide if a resource can be marked as deleted even if it has dependents. The
-Garbage Collector only handles resources after they are marked.
+Marking a resource as deleted (by setting the deleted timestamp of its metadata) is
+irreversible: if the garbage collector receives such a resource, it will start the
+complete deletion process, with no further user involvement.
 
-Configuration is loaded from the ``controllers.garbage_collector`` section:
+The configuration should have the following structure:
 
 .. code:: yaml
 
-    controllers:
-      garbage_collector:
-        api_endpoint: http://localhost:8080
-        worker_count: 5
+    api_endpoint: http://localhost:8080
+    worker_count: 5
+    debounce: 1
+    tls:
+      enabled: false
+      client_ca: tmp/pki/ca.pem
+      client_cert: tmp/pki/system:gc.pem
+      client_key: tmp/pki/system:gc-key.pem
 
 """
 
-import asyncio
 import logging
 from argparse import ArgumentParser
 from collections import defaultdict
 from copy import deepcopy
-from datetime import datetime
-from itertools import chain
 
-from aiohttp import ClientConnectorError
 from krake import setup_logging, load_config, search_config
-from krake.api.database import Session, EventType, TransactionError
-from krake.controller import Controller, run
+from krake.apidefs.kubernetes import ApplicationResource, ClusterResource
+from krake.controller import Controller, run, Reflector, create_ssl_context
 from krake.data.core import resource_ref
 from krake.client.kubernetes import KubernetesApi
 from krake.data.kubernetes import Application, Cluster
 
-logger = logging.getLogger("krake.api.garbage_collector")
-
-_garbage_collected = {KubernetesApi.api_name: [Application, Cluster]}
+logger = logging.getLogger("krake.controller.garbage_collector")
 
 
 class DependencyGraph(object):
@@ -197,110 +195,40 @@ class DependencyGraph(object):
         return [self._resources[owner_ref] for owner_ref in owners_refs]
 
 
-class DatabaseReflector(object):
-    """Reimplementation of the :class:`krake.controller.Reflector` to watch the
-    database using a session, instead of watching the API. One instance can only
-    be used to list and watch one kind of resource.
-
-    Args:
-        on_receive (coroutine):
-        api_def: the API definition of the kind of resource to list and watch.
-        db_host (str): the host to connect to the database
-        db_port (int): the port to connect to the database
-    """
-
-    def __init__(self, on_receive, api_def, db_host="localhost", db_port=2379):
-        self.db_host = db_host
-        self.db_port = db_port
-        self.on_receive = on_receive
-        self.api_def = api_def
-
-    async def list_and_watch(self):
-        """List and watch a specific kind of resource from the API.
-        """
-        async with Session(host=self.db_host, port=self.db_port) as session:
-
-            async with session.watch(self.api_def) as watcher:
-                await asyncio.gather(
-                    self.list_resource(session), self.watch_resource(watcher)
-                )
-
-    async def list_resource(self, session):
-        """List the resources of the given API definition. Consider only
-        the resources marked for deletion. Add them to the worker queue.
-
-        Args:
-            session (krake.api.database.Session): an opened database session
-
-        """
-        logger.info("List %s %s", self.api_def.api, self.api_def.kind)
-
-        async for resource in session.all(self.api_def):
-            if resource.metadata.deleted:
-                logger.debug("Received %r", resource)
-                await self.on_receive(resource)
-
-    async def watch_resource(self, watcher):
-        """Watch the resources of the given API definition. Consider only
-        the resources marked for deletion, but not the deleted ones.
-        Add them to the worker queue.
-
-        Args:
-            watcher (krake.api.database.Watcher): a watcher on the database
-
-        """
-        logger.info("Watching %s %s", self.api_def.api, self.api_def.kind)
-        async for event, resource, rev in watcher:
-            if event != EventType.DELETE and resource.metadata.deleted:
-                logger.debug("Received %r", resource)
-                await self.on_receive(resource)
-
-    async def __call__(self, max_retry=0):
-        """Start the Reflector. Encapsulate the connections with a retry logic.
-
-        Args:
-            max_retry (int, optional): the number of times the connection should be
-            retried. If 0 is given, it means it should be retried indefinitely
-
-        """
-        count = 0
-        while count < max_retry or max_retry == 0:
-            try:
-                await self.list_and_watch()
-            except ClientConnectorError as err:
-                logger.error(err)
-                await asyncio.sleep(1)
-            finally:
-                count += 1
-
-
 class GarbageCollector(Controller):
     """Controller responsible for marking the dependents
     of a resource as deleted, and for deleting all resources without any finalizer.
 
     Args:
+        api_endpoint (str): URL to the API
         worker_count (int, optional): the amount of worker function that should be
             run as background tasks.
         loop (asyncio.AbstractEventLoop, optional): Event loop that should be
             used.
-        debounce (float, optional): value of the debounce for the :class:`WorkQueue`.
-        db_host (str): the host to connect to the database
-        db_port (int): the port to connect to the database
+        ssl_context (ssl.SSLContext, optional): if given, this context will be
+            used to communicate with the API endpoint.
+        debounce (float, optional): value of the debounce for the
+            :class:`WorkQueue`.
 
     """
 
     def __init__(
-        self, worker_count=10, loop=None, debounce=0, db_host="localhost", db_port=2379
+        self, api_endpoint, worker_count=10, loop=None, ssl_context=None, debounce=0
     ):
-        # api_endpoint is set to an arbitrary value because it is not used, but needed
-        # by the Controller initializer
-        # TODO Will be removed with GC V2
-        super().__init__("http://localhost", loop=loop, debounce=debounce)
+        super().__init__(
+            api_endpoint, loop=loop, ssl_context=ssl_context, debounce=debounce
+        )
+        self.apis = {}
         self.reflectors = []
-        self.resources = _garbage_collected
-        self.db_host = db_host
-        self.db_port = db_port
         self.worker_count = worker_count
+
+        self.resources = {
+            KubernetesApi: [
+                (Application, ApplicationResource),
+                (Cluster, ClusterResource),
+            ]
+        }
+        self.graph = DependencyGraph()
 
     async def prepare(self, client):
         assert client is not None
@@ -309,20 +237,94 @@ class GarbageCollector(Controller):
         for i in range(self.worker_count):
             self.register_task(self.handle_resource, name=f"worker_{i}")
 
-        # Create one reflector for each resource managed by the GC.
-        for resource in chain(*self.resources.values()):
-            reflector = DatabaseReflector(
-                on_receive=self.simple_on_receive,
-                api_def=resource,
-                db_host=self.db_host,
-                db_port=self.db_port,
-            )
-            self.reflectors.append(reflector)
-            name = f"{resource.api}_{resource.kind}_Reflector"
-            self.register_task(reflector, name=name)
+        # Create one reflector for each kind of resource managed by the GC.
+        for api_cls, kind_list in self.resources.items():
+            api = api_cls(self.client)
+
+            # For each selected resource of the current API
+            for kind, client_resource in kind_list:
+                self.apis[kind] = api
+
+                resource_plural = client_resource.plural.lower()
+                list_resources = getattr(api, f"list_all_{resource_plural}")
+                watch_resources = getattr(api, f"watch_all_{resource_plural}")
+
+                reflector = Reflector(
+                    listing=list_resources,
+                    watching=watch_resources,
+                    on_list=self.on_received_new,
+                    on_add=self.on_received_new,
+                    on_update=self.on_received_update,
+                    on_delete=self.on_received_deleted,
+                    loop=self.loop,
+                    resource_plural=client_resource.plural,
+                )
+                self.reflectors.append(reflector)
+
+                name = f"{kind.api}_{kind.kind}_Reflector"
+                self.register_task(reflector, name=name)
+
+    @staticmethod
+    def is_in_deletion(resource):
+        """Check if a resource needs to be deleted or not.
+
+        Args:
+            resource (krake.data.serializable.Serializable): the resource to check.
+
+        Returns:
+            bool: True if the given resource is in deletion state, False otherwise.
+
+        """
+        if (
+            resource.metadata.deleted
+            and resource.metadata.finalizers
+            and resource.metadata.finalizers[-1] == "cascade_deletion"
+        ):
+            return True
+
+        logger.debug("Rejected resource %r", resource)
+        return False
+
+    async def on_received_new(self, resource):
+        """To be called when a resource is received for the first time by the garbage
+        collector. Add the resource to the dependency graph and handle the resource if
+        accepted.
+
+        Args:
+            resource (krake.data.serializable.Serializable): the newly added resource.
+
+        """
+        self.graph.add_resource(resource)
+        await self.simple_on_receive(resource, condition=self.is_in_deletion)
+
+    async def on_received_update(self, resource):
+        """To be called when a resource is updated on the API. Update the resource on
+        the dependency graph and handle the resource if accepted.
+
+        Args:
+            resource (krake.data.serializable.Serializable): the updated resource.
+
+        """
+        self.graph.update_resource(resource)
+        await self.simple_on_receive(resource, condition=self.is_in_deletion)
+
+    async def on_received_deleted(self, resource):
+        """To be called when a resource is deleted on the API. Remove the resource
+        from the dependency graph and add its dependencies to the Worker queue.
+
+        Args:
+            resource (krake.data.serializable.Serializable): the deleted resource.
+
+        """
+        for dependency in self.graph.get_owners(resource):
+            await self.queue.put(dependency.metadata.uid, dependency)
+
+        self.graph.remove_resource(resource)
 
     async def cleanup(self):
         self.reflectors = []
+        self.apis = {}
+        self.graph = None
 
     async def handle_resource(self):
         """Infinite loop which fetches and hand over the resources to the right
@@ -337,170 +339,86 @@ class GarbageCollector(Controller):
                 await self.queue.done(key)
 
     async def resource_received(self, resource):
-        """Handle the resources marked for deletion. Only one action is performed:
-         * if the resource has DIRECT dependents, mark all of them as deleted;
-         * if the resource has no finalizer, its dependencies will be updated, and the
-         resource will be deleted;
+        """Core functionality of the garbage collector. Mark the given resource's
+        direct dependents as to be deleted, or remove the deletion finalizer if the
+        resource has no dependent.
 
         Args:
-            resource (any): a resource marked for deletion
+            resource (krake.data.serializable.Serializable): a resource in deletion
+                state.
 
         """
         logger.debug("Received %r", resource_ref(resource))
-        async with Session(host=self.db_host, port=self.db_port) as session:
-            # If a transaction errors occurs -- which means that that the
-            # etcd key was modified in between -- fetch the new version
-            # from the store and retry the operation until. This is
-            # repeated until the operation succeeds.
-            while True:
-                try:
-                    # session is not an attribute of the GC because it needs to be
-                    # started and stopped, but the GC holds several worker function,
-                    # which can all access it.
-                    return await self._cleanup(resource, session)
-                except TransactionError as err:
-                    logger.warning("Transaction error: %s. Reload resource.", err)
-                    cls = self._get_class_by_name(resource.api, resource.kind)
-                    resource = await session.get(
-                        cls=cls,
-                        namespace=resource.metadata.namespace,
-                        name=resource.metadata.name,
-                    )
 
-    async def _cleanup(self, resource, session):
-        # Check if there are dependents
-        dependents = await self._get_dependents(resource, session)
+        dependents = self.graph.get_direct_dependents(resource)
         if dependents:
-            logger.info("Delete dependencies of %s", resource_ref(resource))
-            await self._mark_dependents(dependents, session)
-            return
-
-        # Delete a resource with no finalizer
-        if not resource.metadata.finalizers:
-            await self._delete_resource(resource, session)
-
-    async def _delete_resource(self, resource, session):
-        """Remove a resource from the database before updating its dependencies
-
-        Args:
-            resource: the resource to permanently remove.
-            session (krake.api.database.Session): the database session to manage data
-
-        """
-        # Delete from database
-        logger.info("%s completely deleted", resource_ref(resource))
-        await session.delete(resource)
-
-        await self._update_dependencies(resource, session)
-
-    async def _update_dependencies(self, resource, session):
-        """Retrieve and update all dependencies of a resource WITHOUT modifying them.
-
-        Args:
-            resource: the resource whose dependencies will be updated.
-            session (krake.api.database.Session): the database session to manage data
-
-        """
-        if not resource.metadata.owners:
-            return
-
-        for dependency_ref in resource.metadata.owners:
-            cls = self._get_class_by_name(dependency_ref.api, dependency_ref.kind)
-            dependency = await session.get(
-                cls=cls, namespace=dependency_ref.namespace, name=dependency_ref.name
-            )
-            if dependency.metadata.deleted:
-                logger.info("Reenqueue %s", resource_ref(dependency))
-                await self.resource_received(dependency)
-
-    def _get_class_by_name(self, api_name, cls_name):
-        """From the garbage collected resources, get the resource class that
-        belongs to the given API name and referenced by the given class name.
-
-        Args:
-            api_name (str): the name of an API
-            cls_name (str): the name of a class
-
-        Returns:
-            type: the class that corresponds to the given name
-
-        Raises:
-            ValueError: if the class cannot be found in the managed ones.
-
-        """
-        cls_list = self.resources.get(api_name)
-        if cls_list is None:
-            raise ValueError(f"API '{api_name}' not found.")
-
-        for cls in cls_list:
-            if cls.__name__ == cls_name:
-                return cls
+            await self._mark_dependents(dependents)
         else:
-            raise ValueError(f"Class '{cls_name}' not found.")
+            logger.debug("Resource has no dependent anymore: %s", resource)
+            await self._remove_cascade_deletion_finalizer(resource)
 
-    async def _mark_dependents(self, dependents, session):
-        """Mark all given resources as deleted.
+    async def _mark_dependents(self, dependents):
+        """Request the deletion of a list of resources.
 
         Args:
-            dependents (list): list of resources to mark as deleted.
-            session (krake.api.database.Session): the database session to manage data
+            dependents (list): the list of resources to delete.
 
         """
         for dependent in dependents:
-            if not dependent.metadata.deleted:
-                logger.info("Delete dependent %s", resource_ref(dependent))
-                dependent.metadata.deleted = datetime.now()
-                await session.put(dependent)
+            api = self.apis[type(dependent)]
+            kind = dependent.kind.lower()
+            delete_resource = getattr(api, f"delete_{kind}")
 
-    async def _get_dependents(self, entity, session):
-        """Retrieve all direct dependents of a resource.
-
-        Args:
-            entity: the given resource
-            session (krake.api.database.Session): the database session to manage data
-
-        Returns:
-            list: a list of all dependents of the given resource
-
-        """
-
-        def _in_owners(instance):
-            return (
-                instance.metadata.owners
-                and resource_ref(entity) in instance.metadata.owners
+            logger.info("Mark dependent as deleted: %s", resource_ref(dependent))
+            await delete_resource(
+                namespace=dependent.metadata.namespace, name=dependent.metadata.name
             )
 
-        # add all elements of current resource that have entity as dependency
-        dependents = [
-            dependent
-            for resource in chain(*self.resources.values())
-            async for dependent in session.all(resource)
-            if _in_owners(dependent)
-        ]
+    async def _remove_cascade_deletion_finalizer(self, resource):
+        """Update the given resource to remove its garbage-collector-specific
+        finalizer.
 
-        return dependents
+        Args:
+            resource (krake.data.serializable.Serializable): the finalizer will be
+                removed from this resource.
+
+        """
+        api = self.apis[type(resource)]
+        kind = resource.kind.lower()
+        update_resource = getattr(api, f"update_{kind}")
+
+        finalizer = resource.metadata.finalizers.pop(-1)
+        assert finalizer == "cascade_deletion"
+        logger.info("Resource ready for deletion: %s", resource_ref(resource))
+        await update_resource(
+            namespace=resource.metadata.namespace,
+            name=resource.metadata.name,
+            body=resource,
+        )
 
 
 def main(config):
     gc_config = load_config(config or search_config("garbage_collector.yaml"))
 
-    db_host = gc_config["etcd"]["host"]
-    db_port = gc_config["etcd"]["port"]
+    setup_logging(gc_config["log"])
+
+    tls_config = gc_config.get("tls")
+    ssl_context = create_ssl_context(tls_config)
+    logger.debug("TLS is %s", "enabled" if ssl_context else "disabled")
 
     controller = GarbageCollector(
+        api_endpoint=gc_config["api_endpoint"],
         worker_count=gc_config["worker_count"],
-        db_host=db_host,
-        db_port=db_port,
+        ssl_context=ssl_context,
         debounce=gc_config.get("debounce", 0),
     )
     setup_logging(gc_config["log"])
     run(controller)
 
 
-parser = ArgumentParser(description="Garbage Collector for Krake")
-parser.add_argument("-c", "--config", help="Path to configuration YAML file")
-
-
 if __name__ == "__main__":
+    parser = ArgumentParser(description="Garbage Collector for Krake")
+    parser.add_argument("-c", "--config", help="Path to configuration YAML file")
+
     args = parser.parse_args()
     main(**vars(args))

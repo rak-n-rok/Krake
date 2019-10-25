@@ -185,7 +185,6 @@ class ApplicationController(Controller):
             on_list=receive_app,
             on_add=receive_app,
             on_update=receive_app,
-            on_delete=receive_app,
         )
         self.register_task(self.reflector, name="Reflector")
 
