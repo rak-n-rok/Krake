@@ -479,7 +479,7 @@ class Controller(object):
                 except asyncio.CancelledError:
                     break
                 except Exception as err:
-                    logger.error(err)
+                    logger.exception(err)
 
     async def run(self):
         """Start at once all the registered background tasks with the retry logic.
