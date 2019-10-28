@@ -5,6 +5,7 @@ from unittest.mock import Mock
 import pytest
 from aiohttp import ClientConnectorError
 from factories.kubernetes import ApplicationFactory, ApplicationStatusFactory
+from krake.client import Client
 from krake.controller import (
     WorkQueue,
     Executor,
@@ -200,19 +201,23 @@ async def test_controller_run(loop):
     values_gathered = set()
 
     class SimpleController(Controller):
-        def create_background_tasks(self):
+        async def prepare(self, client):
+            self.client = client
             self.task_1 = BackgroundTask(1, values_gathered)
             self.register_task(self.task_1.run)
             self.task_2 = BackgroundTask(2, values_gathered)
             self.register_task(self.task_2.run)
 
-        async def clean_background_tasks(self):
+        async def cleanup(self):
             self.task_1, self.task_2 = None, None
 
-    controller = SimpleController(api_endpoint="http://localhost:8080")
-    controller.create_background_tasks()  # need to be called explicitly
-    with pytest.raises(RuntimeError):
-        await controller.run()
+    endpoint = "http://localhost:8080"
+    controller = SimpleController(api_endpoint=endpoint)
+
+    async with Client(url=endpoint, loop=loop) as client:
+        await controller.prepare(client)  # need to be called explicitly
+        with pytest.raises(RuntimeError):
+            await controller.run()
 
     assert values_gathered == {1, 2, 3, 4, 5, 6}  # Each task is restarted 3 times.
     assert controller.task_1 is None

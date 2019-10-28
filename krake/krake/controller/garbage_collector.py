@@ -139,7 +139,10 @@ class GarbageCollector(Controller):
         self.db_port = db_port
         self.worker_count = worker_count
 
-    def create_background_tasks(self):
+    async def prepare(self, client):
+        assert client is not None
+        self.client = client
+
         for i in range(self.worker_count):
             self.register_task(self.handle_resource, name=f"worker_{i}")
 
@@ -155,7 +158,7 @@ class GarbageCollector(Controller):
             name = f"{resource.api}_{resource.kind}_Reflector"
             self.register_task(reflector, name=name)
 
-    async def clean_background_tasks(self):
+    async def cleanup(self):
         self.reflectors = []
 
     async def handle_resource(self):
