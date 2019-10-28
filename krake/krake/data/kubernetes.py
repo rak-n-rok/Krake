@@ -343,7 +343,7 @@ class ApplicationStatus(Status):
     scheduled: datetime = None
     scheduled_to: ResourceRef = None
     running_on: ResourceRef = None
-    services: dict = None
+    services: dict = field(default_factory=dict)
     manifest: List[dict] = None
 
 

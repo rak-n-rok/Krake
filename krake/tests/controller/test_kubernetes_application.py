@@ -618,8 +618,117 @@ async def test_service_registration(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         controller = ApplicationController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
-
         await controller.resource_received(app)
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    # The API server of the Kubernetes cluster listens on "127.0.0.1"
+    assert stored.status.services == {"nginx-demo": "127.0.0.1:30886"}
+
+
+async def test_service_unregistration(aiohttp_server, config, db, loop):
+    # Setup Kubernetes API mock server
+    routes = web.RouteTableDef()
+
+    @routes.get("/api/v1/namespaces/default/services/nginx-demo")
+    async def _(request):
+        return web.json_response(
+            {
+                "api_version": "v1",
+                "kind": "Service",
+                "metadata": {
+                    "creation_timestamp": "2019-11-12 08:44:02+00:00",
+                    "name": "nginx-demo",
+                    "namespace": "default",
+                    "resource_version": "2075568",
+                    "self_link": "/api/v1/namespaces/default/services/nginx-demo",
+                    "uid": "4da165e0-e58f-4058-be44-fa393a58c2c8",
+                },
+                "spec": {
+                    "cluster_ip": "10.98.197.124",
+                    "external_traffic_policy": "Cluster",
+                    "ports": [
+                        {
+                            "node_port": 30704,
+                            "port": 8080,
+                            "protocol": "TCP",
+                            "target_port": 8080,
+                        }
+                    ],
+                    "selector": {"app": "echo"},
+                    "session_affinity": "None",
+                    "type": "NodePort",
+                },
+                "status": {"load_balancer": {}},
+            }
+        )
+        return web.Response(status=404)
+
+    @routes.delete("/api/v1/namespaces/default/services/nginx-demo")
+    async def _(request):
+        return web.json_response(
+            {
+                "api_version": "v1",
+                "details": {
+                    "kind": "services",
+                    "name": "nginx-demo",
+                    "uid": "4da165e0-e58f-4058-be44-fa393a58c2c8",
+                },
+                "kind": "Status",
+                "metadata": {},
+                "status": "Success",
+            }
+        )
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    # Setup API Server
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    manifest = list(
+        yaml.safe_load_all(
+            """---
+            apiVersion: v1
+            kind: Service
+            metadata:
+              name: nginx-demo
+            spec:
+              type: NodePort
+              selector:
+                app: nginx
+              ports:
+              - port: 8080
+                protocol: TCP
+                targetPort: 8080
+        """
+        )
+    )
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=True,
+        status__scheduled_to=resource_ref(cluster),
+        spec__manifest=[],
+        status__services={"nginx-demo": "127.0.0.1:30704"},
+        status__manifest=manifest,
+    )
+
+    await db.put(cluster)
+    await db.put(app)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        await controller.prepare(client)
+        await controller.resource_received(app)
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored.status.services == {}
 
 
 async def test_kubernetes_error_handling(aiohttp_server, config, db, loop):

@@ -104,6 +104,7 @@ class EventDispatcher(object):
                 self.registry[(event.kind, event.action)] = [handler]
             else:
                 self.registry[(event.kind, event.action)].append(handler)
+            return handler
 
         return decorator
 
@@ -154,6 +155,65 @@ class ResourceID(NamedTuple):
             kind=resource["kind"],
             name=resource["metadata"]["name"],
         )
+
+
+class ResourceDelta(NamedTuple):
+    """Description of the difference between the resource of two Kubernetes
+    application.
+
+    Resources are identified by :class:`ResourceID`. Resources with the same
+    ID will be compared by their content.
+
+    Attributes:
+        new (Tuple[dict, ...]): Resources that are new in the specification
+            and not in the status.
+        deleted (Tuple[dict, ...]): Resources that are not in the
+            specification but in the status.
+        modified (Tuple[dict, ...]): Resources that are in the specification
+            and the status but the resource content differs.
+
+    """
+
+    new: Tuple[dict, ...]
+    deleted: Tuple[dict, ...]
+    modified: Tuple[dict, ...]
+
+    @classmethod
+    def calculate(cls, app):
+        """Calculate the difference between the resources in the specification
+        and the status of the given application.
+
+        Args:
+            app (krake.data.kubernetes.Application): Kubernetes application
+
+        Returns:
+            ResourceDelta: Difference in resources between specification and
+            status.
+
+        """
+        desired = {
+            ResourceID.from_resource(resource): resource
+            for resource in app.spec.manifest
+        }
+        current = {
+            ResourceID.from_resource(resource): resource
+            for resource in (app.status.manifest or [])
+        }
+
+        deleted = [current[rid] for rid in set(current) - set(desired)]
+
+        new = [desired[rid] for rid in set(desired) - set(current)]
+
+        modified = [
+            desired[rid]
+            for rid in set(desired) & set(current)
+            if desired[rid]["spec"] != current[rid]["spec"]
+        ]
+
+        return cls(new=tuple(new), deleted=tuple(deleted), modified=tuple(modified))
+
+    def __bool__(self):
+        return any([self.new, self.deleted, self.modified])
 
 
 class ApplicationController(Controller):
@@ -307,7 +367,8 @@ class ApplicationController(Controller):
                         Event(resource["kind"], "delete"),
                         app=app,
                         cluster=cluster,
-                        resp=resp,
+                        resource=resource,
+                        response=resp,
                     )
 
         if app.status.running_on:
@@ -318,13 +379,20 @@ class ApplicationController(Controller):
         app.status.running_on = None
 
     async def _reconcile_application(self, app):
-
         if not app.status.scheduled_to:
             raise InvalidStateError(
                 "Application is scheduled but no cluster is assigned"
             )
 
-        logger.info("Reconcile %r (%s)", app.metadata.name, app.metadata.namespace)
+        delta = ResourceDelta.calculate(app)
+
+        if not delta:
+            logger.info(
+                "%r (%s) is up-to-date", app.metadata.name, app.metadata.namespace
+            )
+            return
+
+        logger.info("Reconcile %r", app)
 
         # Ensure finalizer exists before changing Kubernetes objects
         await self._ensure_finalizer(app)
@@ -342,7 +410,7 @@ class ApplicationController(Controller):
             namespace=app.metadata.namespace, name=app.metadata.name, body=app
         )
 
-        await self._apply_manifest(app)
+        await self._apply_manifest(app, delta)
 
         # Transition into "RUNNING" state
         app.status.state = ApplicationState.RUNNING
@@ -354,7 +422,7 @@ class ApplicationController(Controller):
             "Reconciliation finished %r (%s)", app.metadata.name, app.metadata.namespace
         )
 
-    async def _apply_manifest(self, app):
+    async def _apply_manifest(self, app, delta):
         # Append "kubernetes_resources_deletion" finalizer if not already present.
         # This will prevent the API from deleting the resource without remove the
         # Kubernetes resources.
@@ -364,54 +432,43 @@ class ApplicationController(Controller):
                 namespace=app.metadata.namespace, name=app.metadata.name, body=app
             )
 
-        # Initialize empty services dictionary: The services dictionary is
-        # initialized with "None" in the Kubernetes data model indicating
-        # that the application was not yet processed by the controller.
-        # Here we reset the services dictionary to an empty dict to
-        # signify that the application has been at least once processed.
-        # Previously created Services, if any, are overwritten because
-        # they will be updated or deleted by the Controller anyway.
-        app.status.services = {}
-
-        desired_resources = {
-            ResourceID.from_resource(resource): resource
-            for resource in app.spec.manifest
-        }
-        current_resources = {
-            ResourceID.from_resource(resource): resource
-            for resource in (app.status.manifest or [])
-        }
-
         cluster = await self.kubernetes_api.read_cluster(
             namespace=app.status.scheduled_to.namespace,
             name=app.status.scheduled_to.name,
         )
         async with KubernetesClient(cluster.spec.kubeconfig) as kube:
             # Delete all resources that are no longer in the spec
-            for resource_id in set(current_resources) - set(desired_resources):
-                current = current_resources[resource_id]
-                resp = await kube.delete(current)
+            for deleted in delta.deleted:
+                resp = await kube.delete(deleted)
                 await listen.emit(
-                    Event(current["kind"], "delete"),
+                    Event(deleted["kind"], "delete"),
                     app=app,
                     cluster=cluster,
-                    resp=resp,
+                    resource=deleted,
+                    response=resp,
                 )
 
-            # Create or update all desired resources
-            for resource_id, desired in desired_resources.items():
-                current = current_resources.get(resource_id)
+            # Create new resource
+            for new in delta.new:
+                resp = await kube.apply(new)
+                await listen.emit(
+                    Event(new["kind"], "create"),
+                    app=app,
+                    cluster=cluster,
+                    resource=new,
+                    response=resp,
+                )
 
-                # Apply resource if no current resource exists or the
-                # specification differs.
-                if not current or desired["spec"] != current["spec"]:
-                    resp = await kube.apply(desired)
-                    await listen.emit(
-                        Event(desired["kind"], "apply"),
-                        app=app,
-                        cluster=cluster,
-                        resp=resp,
-                    )
+            # Update modified resource
+            for modified in delta.modified:
+                resp = await kube.apply(modified)
+                await listen.emit(
+                    Event(modified["kind"], "update"),
+                    app=app,
+                    cluster=cluster,
+                    resource=modified,
+                    response=resp,
+                )
 
         # Update resource in application status
         app.status.manifest = app.spec.manifest.copy()  # TODO: Do we need to copy here?
@@ -437,8 +494,12 @@ class ApplicationController(Controller):
             namespace=app.metadata.namespace, name=app.metadata.name, body=app
         )
 
+        # Delete all resources currently running on the old cluster
         await self._delete_manifest(app)
-        await self._apply_manifest(app)
+
+        # Create complete manifest on the new cluster
+        delta = ResourceDelta(new=tuple(app.spec.manifest), modified=(), deleted=())
+        await self._apply_manifest(app, delta)
 
         # Transition into "RUNNING" state
         app.status.state = ApplicationState.RUNNING
@@ -489,22 +550,63 @@ class ApplicationController(Controller):
         )
 
 
-@listen.on(event=Event("Service", "apply"))
-async def register_service(app, cluster, resp):
-    service_name = resp.metadata.name
+@listen.on(event=Event("Service", "create"))
+@listen.on(event=Event("Service", "update"))
+async def register_service(app, cluster, resource, response):
+    """Register endpoint of Kubernetes Service object on creation and update.
 
-    node_port = resp.spec.ports[0].node_port
+    Args:
+        app (krake.data.kubernetes.Application): Application the service belongs to
+        cluster (krake.data.kubernetes.Cluster): The cluster on which the
+            application is running
+        resource (dict): Kubernetes object description as specified in the
+            specification of the application.
+        response (V1Service): Response of the Kubernetes API
 
+    """
+    service_name = resource["metadata"]["name"]
+    node_port = None
+
+    # Ensure that ports are specified
+    if response.spec.ports:
+        node_port = response.spec.ports[0].node_port
+
+    # If the service does not have a node port, remove a potential reference
+    # end return.
     if node_port is None:
+        try:
+            del app.status.services[service_name]
+        except KeyError:
+            pass
         return
 
-    # Load Kubernetes configuration and get host
+    # Determine URL of Kubernetes cluster API
     loader = KubeConfigLoader(cluster.spec.kubeconfig)
     config = Configuration()
     await loader.load_and_set(config)
-    url = yarl.URL(config.host)
+    cluster_url = yarl.URL(config.host)
 
-    app.status.services[service_name] = url.host + ":" + str(node_port)
+    app.status.services[service_name] = f"{cluster_url.host}:{node_port}"
+
+
+@listen.on(event=Event("Service", "delete"))
+async def unregister_service(app, cluster, resource, response):
+    """Unregister endpoint of Kubernetes Service object on deletion.
+
+    Args:
+        app (krake.data.kubernetes.Application): Application the service belongs to
+        cluster (krake.data.kubernetes.Cluster): The cluster on which the
+            application is running
+        resource (dict): Kubernetes object description as specified in the
+            specification of the application.
+        response (V1Status): Response of the Kubernetes API
+
+    """
+    service_name = resource["metadata"]["name"]
+    try:
+        del app.status.services[service_name]
+    except KeyError:
+        pass
 
 
 class KubernetesClient(object):
