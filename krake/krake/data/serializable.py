@@ -323,6 +323,26 @@ class ApiObject(Serializable):
         cls.api = dataclasses.field(default=api, metadata={"validate": Equal(api)})
         cls.kind = dataclasses.field(default=kind, metadata={"validate": Equal(kind)})
 
+        # HACK:
+        #   dataclasses.dataclass() checks if the class implements its own
+        #   __repr__ method (by checking directly its presence in __dict__). We
+        #   want to use the same __repr__() implementation for every subclass.
+        #   Therefore, we put an explicit reference to ApiObject.__repr__()
+        #   into the class' __dict__.
+        if "__repr__" not in cls.__dict__:
+            cls.__repr__ = ApiObject.__repr__
+
+    def __repr__(self):
+        if self.metadata.namespace:
+            return (
+                f"<{self.api}.{self.kind} namespace={self.metadata.namespace!r} "
+                f"name={self.metadata.name!r} uid={self.metadata.uid!r}>"
+            )
+        return (
+            f"<{self.api}.{self.kind} name={self.metadata.name!r} "
+            f"uid={self.metadata.uid!r}>"
+        )
+
 
 class PolymorphicContainerSchema(Schema):
     """Schema that is used by :class:`PolymorphicContainer`
