@@ -58,13 +58,13 @@ class ParserSpec(object):
         and keyword arguments for a subparser.
 
         Args:
-            str (name): Name of the command that will be used in the command
+            name (name): Name of the command that will be used in the command
                 line.
             *args: Positional arguments for the subparser
             **kwargs: Keyword arguments for the subparser
 
         Returns:
-            callable: Decorator for functions that will be registed as
+            callable: Decorator for functions that will be registered as
             ``command`` default argument on the subparser.
         """
 

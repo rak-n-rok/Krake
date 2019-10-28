@@ -172,7 +172,7 @@
     - name: Delete k8s cadvisor policy
       command: kubectl delete --ignore-not-found podsecuritypolicies.policy cadvisor
 
-    # FIXME: Unfortunatly, the executable bits of the shell scripts are not
+    # FIXME: Unfortunately, the executable bits of the shell scripts are not
     #   preserved. Furthermore, the filenames in the shell script are relative
     #   to the k8s-directory.
     - name: Setup k8s resources

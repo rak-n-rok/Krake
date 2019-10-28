@@ -35,7 +35,7 @@ def session(request):
 
 
 class Heartbeat(object):
-    """Asyncronous context manager for heartbeating long running HTTP responses.
+    """Asynchronous context manager for heartbeating long running HTTP responses.
 
     Writes newlines to the response body in a given heartbeat interval. If
     ``interval`` is set to 0, no heartbeat will be sent.
@@ -107,7 +107,7 @@ class Heartbeat(object):
             self.task = None
 
     async def heartbeat(self):
-        """Indefinitly write a new line to the response body and sleep for
+        """Indefinitely write a new line to the response body and sleep for
         :attr:`interval`.
         """
         while True:
@@ -179,7 +179,7 @@ def use_schema(argname, schema):
             the request body
 
     Returns:
-        callable: Decoratpr for aiohttp request handlers
+        callable: Decorator for aiohttp request handlers
 
     """
     if isinstance(schema, type):

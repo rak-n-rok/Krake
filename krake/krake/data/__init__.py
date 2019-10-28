@@ -1,9 +1,9 @@
 """Data abstraction module for all REST resources used by the Krake API. This
-module provides common data defintions for :mod:`krake.api` and
+module provides common data definitions for :mod:`krake.api` and
 :mod:`krake.client`.
 
 The core functionality is provided by :mod:`.serializable` providing a Python
-API for declarative defintions of data models together with serializing and
+API for declarative definitions of data models together with serializing and
 deserializing functionality.
 
 Domain-specific models are defined in corresponding submodules, e.g.

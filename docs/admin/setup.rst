@@ -17,13 +17,13 @@ It is suggested that Ansible is installed inside the virtualenv of Krake.
 
 .. code::
 
-	pip install ansible~=2.7.0 docker
+    pip install ansible~=2.7.0 docker
 
 Check the version and Python executable of the Ansible installation:
 
 .. code::
 
-	ansible --version
+    ansible --version
 
 .. code::
 

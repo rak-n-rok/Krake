@@ -65,7 +65,6 @@ def pytest_collection_modifyitems(config, items):
     re-order the items in-place.
 
     Args:
-        session (pytest.main.Session): pytest session
         config (pytest.config.Config): config object
         items (List[pytest.nodes.Item]): list of test item objects
 

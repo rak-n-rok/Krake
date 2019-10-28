@@ -36,7 +36,7 @@ def on_error(exception):
     """Simple decorator factory for handling controller specific exceptions.
 
     When any exception defined by :param:`exception` occurs,
-    then :meth: `error_occured` will be called as a callback of wrapped function.
+    then :meth: `error_occurred` will be called as a callback of wrapped function.
 
     Args:
         exception (Exception): Exception that calls wrapped function callback
@@ -52,7 +52,7 @@ def on_error(exception):
             def create_app(app):
                 ...
 
-            def error_occured(app, error=None)
+            def error_occurred(app, error=None)
                 ...
 
     """

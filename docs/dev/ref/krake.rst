@@ -159,8 +159,8 @@ Controllers
     :members:
     :show-inheritance:
 
-Data Abstration
----------------
+Data Abstraction
+----------------
 
 .. automodule:: krake.data
     :members:
