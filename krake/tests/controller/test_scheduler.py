@@ -1,4 +1,3 @@
-from time import time
 import pytest
 from datetime import datetime
 from aiohttp import web, ClientSession, ClientConnectorError, ClientResponseError
@@ -9,79 +8,9 @@ from krake.controller.scheduler import Scheduler, metrics
 
 from krake.client import Client
 from krake.data.core import resource_ref, ReasonCode
-from krake.test_utils import server_endpoint
+from krake.test_utils import server_endpoint, make_prometheus
 from factories.core import MetricsProviderFactory, MetricFactory
 from factories.kubernetes import ApplicationFactory, ClusterFactory
-
-
-def make_prometheus(metrics):
-    """Create an :class:`aiohttp.web.Application` instance mocking the HTTP
-    API of Prometheus. The metric names and corresponding values are given as a
-    simple dictionary.
-
-    The values are iterables that are advanced for every HTTP call made to the
-    server.
-
-    Examples:
-        .. code:: python
-
-            async test_my_func(aiohttp_server):
-                prometheus = await aiohttp_server(make_prometheus({
-                    "my_metric": ["0.42"]
-                }))
-
-        If you want to return the same value for every HTTP request, use
-        :func:`itertools.cycle`:
-
-        .. code:: python
-
-            from itertools import cycle
-
-            prometheus = await aiohttp_server(make_prometheus({
-                "my_metric": cycle(["0.42"])
-            }))
-
-
-    Args:
-        metrics (Dict[str, Iterable]): Mapping of metric names an iterable of
-            the corresponding value.
-
-    Returns:
-
-        aiohttp.web.Application: aiohttp application that can be run with the
-        `aiohttp_server` fixture.
-
-    """
-    routes = web.RouteTableDef()
-
-    series = {name: iter(value) for name, value in metrics.items()}
-
-    @routes.get("/api/v1/query")
-    async def _(request):
-        name = request.query.get("query")
-        if name not in metrics:
-            result = []
-        else:
-            value = next(series[name])
-            result = [
-                {
-                    "metric": {
-                        "__name__": name,
-                        "instance": "unittest",
-                        "job": "unittest",
-                    },
-                    "value": [time(), str(value)],
-                }
-            ]
-
-        return web.json_response(
-            {"status": "success", "data": {"resultType": "vector", "result": result}}
-        )
-
-    app = web.Application()
-    app.add_routes(routes)
-
-    return app
 
 
 async def test_kubernetes_reception(aiohttp_server, config, db, loop):
@@ -144,6 +73,87 @@ async def test_prometheus_provider_against_prometheus(prometheus, loop):
 
         value = await provider.query(metric)
         assert 0 <= value <= 1.0
+
+
+async def test_prometheus_mock(aiohttp_client):
+    client = await aiohttp_client(make_prometheus({"my-metric": ["0.42", "1.0"]}))
+
+    resp = await client.get("/api/v1/query?query=my-metric")
+    body = await resp.json()
+    assert body["status"] == "success"
+    assert body["data"]["resultType"] == "vector"
+    assert len(body["data"]["result"]) == 1
+    result = body["data"]["result"][0]
+    assert "metric" in result
+    assert result["metric"]["__name__"] == "my-metric"
+    assert "value" in result
+    assert result["value"][1] == "0.42"
+
+    resp = await client.get("/api/v1/query?query=my-metric")
+    body = await resp.json()
+    assert body["data"]["result"][0]["value"][1] == "1.0"
+
+    resp = await client.get("/api/v1/query?query=my-metric")
+    body = await resp.json()
+    assert len(body["data"]["result"]) == 0
+
+
+async def test_prometheus_mock_update(aiohttp_client):
+    client = await aiohttp_client(make_prometheus({}))
+
+    resp = await client.post("/-/update", json={"metrics": {"my-metric": ["0.42"]}})
+    assert resp.status == 200
+
+    resp = await client.get("/api/v1/query?query=my-metric")
+    body = await resp.json()
+    assert len(body["data"]["result"]) == 1
+    assert body["data"]["result"][0]["value"][1] == "0.42"
+
+    resp = await client.get("/api/v1/query?query=my-metric")
+    body = await resp.json()
+    assert len(body["data"]["result"]) == 0
+
+
+async def test_prometheus_mock_update_validation(aiohttp_client):
+    client = await aiohttp_client(make_prometheus({}))
+
+    resp = await client.post("/-/update", data=b"invalid JSON")
+    assert resp.status == 400
+
+    resp = await client.post("/-/update", json=[])
+    assert resp.status == 400
+
+    resp = await client.post("/-/update", json={})
+    assert resp.status == 400
+
+    resp = await client.post("/-/update", json={"metrics": []})
+    assert resp.status == 400
+
+    resp = await client.post("/-/update", json={"metrics": {"my-metric": "text"}})
+    assert resp.status == 400
+
+    resp = await client.post("/-/update", json={"metrics": {"my-metric": ["1.0"]}})
+    assert resp.status == 200
+
+
+async def test_prometheus_mock_cycle_update(aiohttp_client):
+    client = await aiohttp_client(make_prometheus({}))
+
+    resp = await client.post(
+        "/-/update", json={"metrics": {"my-metric": ["0.42", "1.0"]}, "cycle": True}
+    )
+    assert resp.status == 200
+
+    for _ in range(2):
+        resp = await client.get("/api/v1/query?query=my-metric")
+        body = await resp.json()
+        assert len(body["data"]["result"]) == 1
+        assert body["data"]["result"][0]["value"][1] == "0.42"
+
+        resp = await client.get("/api/v1/query?query=my-metric")
+        body = await resp.json()
+        assert len(body["data"]["result"]) == 1
+        assert body["data"]["result"][0]["value"][1] == "1.0"
 
 
 async def test_prometheus_provider(aiohttp_server, loop):
