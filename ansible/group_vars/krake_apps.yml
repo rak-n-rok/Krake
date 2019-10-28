@@ -5,3 +5,6 @@ flavor: S
 # Configuration parameters
 api_host: krake-api
 api_port: 8080
+
+# OpenStack networks have MTU value of 1450
+docker_daemon_mtu: 1450
