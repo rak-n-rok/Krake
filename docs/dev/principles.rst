@@ -17,12 +17,12 @@ See also :ref:`dev/concepts:API Conventions`.
 
   .. note::
 
-      For example, a Kubernetes cluster could be created ontop of a managed
+      For example, a Kubernetes cluster could be created on top of a managed
       OpenStack project.
 
 - The control plane should be *transparent* -- there are no hidden internal
   APIs.
-- Resource status must be *completly reconstructable by observation*. Any history
+- Resource status must be *completely reconstructable by observation*. Any history
   kept (caching) must be just an optimization and not required for correct
   operation.
 
@@ -136,7 +136,7 @@ Development
 ===========
 
 - Self-hosting of all components is the goal.
-- Use standard tooling and defacto standards of the Python ecosystem.
+- Use standard tooling and de facto standards of the Python ecosystem.
 - Keep dependencies as small as possible, but do not reinvent the wheel.
 
 

@@ -17,7 +17,7 @@ def database(host, port, retry=1):
     Args:
         host (str): Host of the etcd server
         port (int): TCP port of the etcd server
-        retry (int, optional): Number of retrires if a transaction error
+        retry (int, optional): Number of retries if a transaction error
             occurs.
 
     Returns:

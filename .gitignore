@@ -15,6 +15,7 @@
 
 # Default Ansible inventory
 /ansible/hosts
+/ansible/hosts.yml
 
 # Public keys managed by Ansible
 /ansible/public_keys/**

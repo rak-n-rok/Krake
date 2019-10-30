@@ -63,7 +63,7 @@ def depends(*dependencies):
             def fetch_records(engine):
                 # Do something with the engine ...
 
-            # Fixtures themself can also depend on other fixtures
+            # Fixtures themselves can also depend on other fixtures
             @fixture
             @depends("config")
             def engine(config):

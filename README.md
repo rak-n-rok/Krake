@@ -4,7 +4,7 @@ Welcome to the Krake repository! :octopus:
 
 Krake [ˈkʀaːkə] is an orchestrator engine for containerized and virtualized
 workloads accross distributed and heterogeneous cloud platforms. It creates a
-thin layer of aggregaton on top of the different platforms (such as OpenStack,
+thin layer of aggregation on top of the different platforms (such as OpenStack,
 Kubernetes or OpenShift) and presents them through a single interface to the
 cloud user. The user's workloads are scheduled depending on both user
 requirements (hardware, latencies, cost) and platforms characteristics (energy
@@ -192,7 +192,7 @@ If you wish to contribute, you can also check the
 
 ## Project Background
 
-The Rak'n'Rok project has initially been developped at
+The Rak'n'Rok project has initially been developed at
 [Cloud&Heat](https://www.cloudandheat.com/). The development of Krake was
 transformed to an open source project in September 2019.
 

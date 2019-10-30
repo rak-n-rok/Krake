@@ -125,7 +125,7 @@ provision-staging-infra:
     - openstack keypair create --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD my_runner_key_$CI_PIPELINE_ID > .ssh/id_rsa
     - chmod 600 .ssh/id_rsa
 
-    # Configure host-CI template wiht the CI Pipeline ID
+    # Configure host-CI template with the CI Pipeline ID
     - sed -i "s/\$CI_PIPELINE_ID/$CI_PIPELINE_ID/g" ansible/hosts-CI
 
     # Run Ansible to provision the staging infrastructure
@@ -167,7 +167,7 @@ integration-tests:
     - pip install ansible==2.7.10
     - apt-get update -y && apt-get install openssh-client rsync -y
 
-    # Run Ansible to execture the integration tests
+    # Run Ansible to execute the integration tests
     # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
     - cd ansible
     - chmod -v 700 $(pwd)

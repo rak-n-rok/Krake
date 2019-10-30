@@ -314,7 +314,7 @@ class subresource(object):
                     response = Book
 
     Attributes:
-        name (str): Name of the subresource. This is automatically infered
+        name (str): Name of the subresource. This is automatically inferred
             from the class name of the decorated class.
 
     Args:

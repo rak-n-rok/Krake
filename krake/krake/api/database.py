@@ -12,7 +12,7 @@ Example:
 
         from krake.api.database import Session
         from krake.data import Key
-        from krake.data.serialzable import Serializable
+        from krake.data.serializable import Serializable
 
 
         class Book(Serializable):
@@ -92,7 +92,7 @@ class Event(NamedTuple):
     """Events that are yielded by :meth:`Session.watch`
 
     Attributes:
-        event (EventType): Type of event that occured (PUT or DELETE)
+        event (EventType): Type of event that occurred (PUT or DELETE)
         value (object, None): Deserialized object. None if the event is of
             kind DELETE.
         rev (Revision): Revision of the object
@@ -117,7 +117,7 @@ class Session(object):
     loaded from the database. This revision can be read by :func:`revision`.
     If an object has no revision attached, it is considered *fresh* or *new*.
     It is expected that the associated key of a *new* object does not already
-    exist in the databse.
+    exist in the database.
 
     The session is an asynchronous context manager. It takes of care of
     opening and closing an HTTP session to the gRPC JSON gateway of the etcd
@@ -183,10 +183,10 @@ class Session(object):
     async def all(self, cls, **kwargs):
         """Fetch all instances of a given type
 
-        The instances can be filtered by partial identites. Every identity can
+        The instances can be filtered by partial identities. Every identity can
         be specified as keyword argument and only instances with this
-        idenenity attribute are returned. The only requirement for a filtered
-        identity attribute is that all preceeding identity attributes must
+        identity attribute are returned. The only requirement for a filtered
+        identity attribute is that all preceding identity attributes must
         also be given.
 
         Example:
@@ -218,7 +218,7 @@ class Session(object):
             (object, Revision): Tuple of deserialized model and revision
 
         Raises:
-            TypeError: If an identity attribute is given without all preceeding
+            TypeError: If an identity attribute is given without all preceding
                 identity attributes.
 
         """
@@ -328,7 +328,7 @@ class Session(object):
         every change in this namespace.
 
         Internally, it uses the etcd watch API. The ``created`` future can be
-        used to signal succesful creation of an etcd watcher.
+        used to signal successful creation of an etcd watcher.
 
         Args:
             cls (type): Serializable type of which the namespace should be
@@ -418,7 +418,7 @@ class Watcher(object):
         """Async generator for watching database prefix.
 
         Yields:
-            Event: Databse event holding the loaded model (see ``model``
+            Event: Database event holding the loaded model (see ``model``
                 argument) and database revision.
 
         """

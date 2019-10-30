@@ -1,6 +1,6 @@
 """Authentication and Authorization module for Krake.
 
-Access to the Krake API is controlled by two distinced mechanisms performed
+Access to the Krake API is controlled by two distinct mechanisms performed
 after each other:
 
 Authentication
@@ -110,7 +110,7 @@ def static_authentication(name):
 
 
 def client_certificate_authentication():
-    """Authenticator factory for authenticaing requests with client
+    """Authenticator factory for authenticating requests with client
     certificates.
 
     The client certificate is loaded from the ``peercert`` attribute of the
@@ -361,10 +361,10 @@ async def _fetch_roles(db, default_roles, default_role_bindings, username):
 
 
 async def _chain(*iterators):
-    """Chain asynchronous and syncronous iterables
+    """Chain asynchronous and synchronous iterables
 
     Args:
-        *iterators: asynchronous and syncronous iterables
+        *iterators: asynchronous and synchronous iterables
 
     Yield:
         Values of all passed iterables

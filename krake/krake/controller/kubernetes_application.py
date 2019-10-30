@@ -63,7 +63,7 @@ class EventDispatcher(object):
     """Simple wrapper around a registry of handlers associated to Events
 
     Events are characterized by a "kind" and an "action" (see :class:`Event`).
-    Listeners for cetain events can be registered via :meth:`on`. Registered
+    Listeners for certain events can be registered via :meth:`on`. Registered
     listeners are executed if an event gets emitted via :meth:`emit`.
 
     Example:

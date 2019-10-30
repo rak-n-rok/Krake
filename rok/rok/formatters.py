@@ -200,7 +200,7 @@ class Cell(object):
 
     def load_attribute(self, obj):
         """Load an attribute from a dictionary. :attr:`attribute` allows
-        nested attributes. Hence, item access is recursed.
+        nested attributes. Hence, item is recursively accessed.
 
         Args:
             obj (dict): Data dictionary from witch the cell attribute should
@@ -288,7 +288,7 @@ class Table(object):
         self.many = many
 
     def __init_subclass__(cls):
-        """Collect :class:`Cell` attributes and assignes it to the
+        """Collect :class:`Cell` attributes and assigns it to the
         :attr:`cells` attribute.
 
         Args:
@@ -366,7 +366,6 @@ class Table(object):
                 return os.get_terminal_size(i)
             except OSError:
                 continue
-            break
 
         return fallback
 

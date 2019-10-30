@@ -16,7 +16,7 @@ tls:
 
 authentication:
   # If enabled, every request not rejected and not authenticated by any
-  # authentication method is treatet as anonymous request.
+  # authentication method is treated as anonymous request.
   allow_anonymous: true
 
   # Keystone authentication

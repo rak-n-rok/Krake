@@ -84,7 +84,7 @@ def run(command, retry=0, interval=1, condition=None, error_message=""):
             some_command = "..."
 
             # The command will be retried 10 time until the command is
-            # successul or will raise an AssertionError
+            # successful or will raise an AssertionError
             util.run(
                 some_command,
                 condition=check_return_code,

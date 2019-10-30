@@ -121,10 +121,9 @@ def create_resource_handlers(resource, cls):
     """Create resource handlers for a given resource of an API
 
     Args:
-        api (krake.apidefs.ApiDef): API definition
         resource (krake.apidefs.Resource): Resource handlers are created
             for
-        attrs (dict): Attributes of the generated class
+        cls (type): the handlers will be added to this client class.
 
     """
     for operation in resource.operations:
@@ -546,7 +545,7 @@ class Watcher(object):
 
         Yields:
             krake.data.core.WatchEvent: Watch events where ``object`` is
-                already deserialized correctly occording to the API
+                already deserialized correctly according to the API
                 definition (see ``model`` argument)
 
         """

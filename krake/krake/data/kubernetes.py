@@ -86,7 +86,7 @@ class LabelConstraint(object):
             if not isinstance(other, self.__class__):
                 return False
         else:
-            # Comparsion with other types is not implemented
+            # Comparison with other types is not implemented
             return NotImplemented
 
         return self._as_tuple() == other._as_tuple()
@@ -277,7 +277,7 @@ class InConstraint(LabelConstraint):
 
 
 class NotInConstraint(InConstraint):
-    """Label constraint where the value ofa lbal must not be in a set of
+    """Label constraint where the value of a label must not be in a set of
     values.
 
     Example:

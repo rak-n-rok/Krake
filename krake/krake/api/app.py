@@ -130,11 +130,11 @@ def create_app(config):
 
 async def http_session(app):
     """Async generator creating an :class:`aiohttp.ClientSession` HTTP session
-    that can be used by other components (middlewares, route handlers). The HTTP
+    that can be used by other components (middleware, route handlers). The HTTP
     client session is available under the ``http`` key of the application.
 
     This function should be used as cleanup context (see
-    :attr:`aiohttp.web.Application.cleapup_ctx`).
+    :attr:`aiohttp.web.Application.cleanup_ctx`).
 
     Args:
         app (aiohttp.web.Application): Web application

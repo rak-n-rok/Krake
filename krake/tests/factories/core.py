@@ -82,7 +82,7 @@ class RoleRuleFactory(Factory):
 
     @lazy_attribute
     def namespaces(self):
-        return [fuzzy_name() for i in range(fake.pyint(1, 10))]
+        return [fuzzy_name() for _ in range(fake.pyint(1, 10))]
 
     @lazy_attribute
     def verbs(self):

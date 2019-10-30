@@ -1,6 +1,6 @@
-===========
-Architecure
-===========
+============
+Architecture
+============
 
 This chapters gives a high-level overview about the software architecture of
 Krake. The following figure gives an overview about the components of Krake. The
