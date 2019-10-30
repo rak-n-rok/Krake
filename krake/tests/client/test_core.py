@@ -338,7 +338,10 @@ async def test_delete_metric(aiohttp_server, config, db, loop):
 
 async def test_list_metrics_providers(aiohttp_server, config, db, loop):
     # Populate database
-    data = [MetricsProviderFactory(), MetricsProviderFactory()]
+    data = [
+        MetricsProviderFactory(spec__type="prometheus"),
+        MetricsProviderFactory(spec__type="static"),
+    ]
     for metrics_provider in data:
         await db.put(metrics_provider)
 

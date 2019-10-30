@@ -29,9 +29,10 @@ Abstraction is provided by :class:`Provider`.
     assert isinstance(provider, Prometheus)
 
 """
+from typing import NamedTuple
 from aiohttp import ClientSession, ClientError
 
-from krake.data.core import MetricsProvider
+from krake.data.core import MetricsProvider, Metric
 from yarl import URL
 
 
@@ -39,22 +40,34 @@ class MetricError(Exception):
     """Raised when evaluation of metric value fails"""
 
 
-def validate(metric, value):
-    """Validate metric value based on rules stored in metric specification
+class QueryResult(NamedTuple):
+    metric: Metric
+    weight: float
+    value: float
+
+
+def normalize(metric, value):
+    """Normalize metric value into range [0; 1] based on the given borders in
+    the specification of the metric.
 
     Args:
         metric (Metric): Metric description
         value (float): Metric value
 
     Raises:
-        MetricError: When evaluation of metric value failed
+        MetricError: If metric value is out of the specified range
+
+    Returns:
+        float: Normalized metric value in range [0; 1]
 
     """
     if not metric.spec.min <= value <= metric.spec.max:
         raise MetricError(f"Invalid metric value {value!r}")
 
+    return (value - metric.spec.min) / (metric.spec.max - metric.spec.min)
 
-async def fetch_query(session, metric, provider):
+
+async def fetch_query(session, metric, provider, weight):
     """Fetch asynchronous task for getting the metric value from appropriate
     metrics provider.
 
@@ -62,18 +75,18 @@ async def fetch_query(session, metric, provider):
         session (aiohttp.client.ClientSession): Aiohttp session
         metric (Metric): Metric definition
         provider (MetricsProvider): Metrics provider definition for metric
+        weight (float): Weight of the metric
 
     Raises:
         MetricError: If the value of the metric cannot be fetched or is invalid
 
     Returns:
-        Tuple[Metric, float]: Tuple of metric and its fetched value
+        QueryResult: Tuple of metric, its fetched value and its weight.
 
     """
     provider = Provider(session=session, metrics_provider=provider)
     value = await provider.query(metric)
-    validate(metric, value)
-    return metric, value
+    return QueryResult(metric=metric, value=normalize(metric, value), weight=weight)
 
 
 class Provider(object):
@@ -127,7 +140,7 @@ class Prometheus(Provider):
 
     def __init__(self, session: ClientSession, metrics_provider: MetricsProvider):
         self.session = session
-        self.metric_provider = metrics_provider
+        self.metrics_provider = metrics_provider
 
     async def query(self, metric):
         """Querying a metric from a Prometheus server.
@@ -147,7 +160,7 @@ class Prometheus(Provider):
         metric_name = metric.spec.provider.metric
 
         url = (
-            URL(self.metric_provider.spec.prometheus.url) / "api/v1/query"
+            URL(self.metrics_provider.spec.prometheus.url) / "api/v1/query"
         ).with_query({"query": metric_name})
 
         try:
@@ -168,3 +181,37 @@ class Prometheus(Provider):
                     ) from err
 
         raise MetricError(f"Metric {metric_name!r} not in Prometheus response")
+
+
+class Static(Provider):
+    """Static metrics provider client. It simply returns the value configured
+    in the metric's :class:`krake.data.core.StaticSpec`.
+    """
+
+    type = "static"
+
+    def __init__(self, session, metrics_provider):
+        self.metrics_provider = metrics_provider
+
+    async def query(self, metric):
+        """Returns the metric defined in the static metrics provider
+        specification.
+
+        Args:
+            metric (Metric): Metric description. Ignored by this method
+
+        Returns:
+            float: Metric value specified in the static metrics provider
+            specification.
+
+        Raises:
+            MetricError: If the requested metric name cannot be found in the
+                specification.
+
+        """
+        name = metric.spec.provider.metric
+
+        try:
+            return self.metrics_provider.spec.static.metrics[name]
+        except KeyError as err:
+            raise MetricError(f"Metric {name!r} not defined") from err

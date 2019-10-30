@@ -387,11 +387,16 @@ def _validate_kubeconfig(kubeconfig):
     return True
 
 
+class ClusterMetricRef(Serializable):
+    name: str
+    weight: float
+
+
 class ClusterSpec(Serializable):
     kubeconfig: dict = field(metadata={"validate": _validate_kubeconfig})
     # FIXME needs further discussion how to register stand-alone kubernetes cluster as
     #  a cluster which should be processed by krake.controller.scheduler
-    metrics: List[str] = field(default_factory=list)
+    metrics: List[ClusterMetricRef] = field(default_factory=list)
 
 
 @persistent("/kubernetes/clusters/{namespace}/{name}")

@@ -1,7 +1,7 @@
 from enum import Enum, auto
 from datetime import datetime
 from dataclasses import field
-from typing import List
+from typing import List, Dict
 
 from . import persistent
 from .serializable import Serializable, ApiObject, PolymorphicContainer
@@ -152,7 +152,6 @@ class MetricSpecProvider(Serializable):
 class MetricSpec(Serializable):
     min: float
     max: float
-    weight: float
     provider: MetricSpecProvider
 
 
@@ -178,6 +177,11 @@ class MetricsProviderSpec(PolymorphicContainer):
 @MetricsProviderSpec.register("prometheus")
 class PrometheusSpec(Serializable):
     url: str
+
+
+@MetricsProviderSpec.register("static")
+class StaticSpec(Serializable):
+    metrics: Dict[str, float]
 
 
 @persistent("/metricsprovider/{name}")

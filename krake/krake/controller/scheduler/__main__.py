@@ -48,6 +48,7 @@ def main(config):
         ssl_context=ssl_context,
         debounce=scheduler_config.get("debounce", 0),
         reschedule_after=scheduler_config.get("reschedule_after", 60),
+        stickiness=scheduler_config.get("stickiness", 0.1),
     )
     run(scheduler)
 

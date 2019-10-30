@@ -20,6 +20,7 @@ from krake.data.kubernetes import (
     ApplicationStatus,
     ApplicationState,
     Application,
+    ClusterMetricRef,
     ClusterSpec,
     Cluster,
     Constraints,
@@ -331,15 +332,28 @@ def make_kubeconfig(server):
     }
 
 
+class ClusterMetricRefFactory(Factory):
+    class Meta:
+        model = ClusterMetricRef
+
+    weight = fuzzy.FuzzyFloat(0, 1.0)
+    name = fuzzy.FuzzyAttribute(fake.name)
+
+
 class ClusterSpecFactory(Factory):
     class Meta:
         model = ClusterSpec
+
+    class Params:
+        metric_count = 3
 
     @lazy_attribute
     def kubeconfig(self):
         return local_kubeconfig
 
-    metrics = fuzzy.FuzzyAttribute(fake.words)
+    @lazy_attribute
+    def metrics(self):
+        return [ClusterMetricRefFactory() for _ in range(self.metric_count)]
 
 
 class ClusterFactory(Factory):
