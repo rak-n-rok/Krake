@@ -26,10 +26,6 @@ from .scheduler import Scheduler
 logger = logging.getLogger("krake.controller.scheduler")
 
 
-parser = ArgumentParser(description="Krake scheduler")
-parser.add_argument("-c", "--config", help="Path to configuration YAML file")
-
-
 def main(config):
     scheduler_config = load_config(config or search_config("kubernetes.yaml"))
 
@@ -54,6 +50,6 @@ def main(config):
 
 
 if __name__ == "__main__":
-    parser = ArgumentParser(description="Garbage Collector for Krake")
+    parser = ArgumentParser(description="Krake scheduler")
     parser.add_argument("-c", "--config", help="Path to configuration YAML file")
     main(**vars(parser.parse_args()))
