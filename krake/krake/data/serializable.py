@@ -4,7 +4,7 @@ JSON-serializable and JSON-deserializable.
 import dataclasses
 from enum import Enum
 from datetime import datetime, date
-from typing import List
+from typing import List, Dict
 from webargs import fields
 from marshmallow import (
     Schema,
@@ -114,6 +114,11 @@ def field_for_schema(type_, default=dataclasses.MISSING, **metadata):
         inner_type = type_.__args__[0]
         inner_serializer = field_for_schema(inner_type)
         return fields.List(inner_serializer, **metadata)
+
+    if issubclass(type_, Dict):
+        keys_field = field_for_schema(type_.__args__[0])
+        values_field = field_for_schema(type_.__args__[1])
+        return fields.Dict(keys=keys_field, values=values_field, **metadata)
 
     if hasattr(type_, "Schema"):
         return fields.Nested(type_.Schema, **metadata)
@@ -529,8 +534,8 @@ class PolymorphicContainer(Serializable):
         type_ = kwargs["type"]
         try:
             value = kwargs.pop(type_)
-        except KeyError:
-            raise TypeError(f"Missing required keyword argument {type_!r}")
+        except KeyError as err:
+            raise TypeError(f"Missing required keyword argument {type_!r}") from err
         setattr(self, type_, value)
 
         super().__init__(**kwargs)
