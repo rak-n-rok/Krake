@@ -122,42 +122,6 @@ def make_request_schema(cls, include=set()):
     return cls.Schema(exclude=exclude)
 
 
-def copy_fields(source, destination):
-    """Copy data class fields that are not marked as _subresource_, _readonly_
-    or _immutable_ from the source object to the destination object.
-
-    The function works recursive for nested data class attributes. If the
-    nested target attribute is None, the attribute will be directly copied
-    from the source object.
-
-    Args:
-        source: Data class instance from which attributes will be copied
-        destination: Object to which attributes are copied
-
-    """
-    for field in dataclasses.fields(source):
-        if (
-            not field.metadata.get("subresource", False)
-            and not field.metadata.get("readonly", False)
-            and not field.metadata.get("immutable", False)
-        ):
-            value = getattr(source, field.name)
-
-            if dataclasses.is_dataclass(value):
-                # Source value is None, just set it directly
-                if value is None:
-                    setattr(destination, field.name, None)
-                # Destination attribute is None, copy the whole attribute
-                # FIXME: What about subresource/readonly/immutable
-                elif getattr(destination, field.name) is None:
-                    setattr(destination, field.name, value)
-                # Update field by field
-                else:
-                    copy_fields(value, getattr(destination, field.name))
-            else:
-                setattr(destination, field.name, value)
-
-
 def _generate_operation_func_name(operation):
     # Generate resource name based on the grammatical number
     if operation.number == "singular":
@@ -392,8 +356,7 @@ def _make_update_handler(operation, logger):
                     content_type="application/json",
                 )
 
-        copy_fields(body, entity)
-
+        entity.update(body)
         entity.metadata.modified = datetime.now()
 
         await session(request).put(entity)
@@ -458,7 +421,7 @@ def _make_update_subresource_handler(operation, logger):
         source = getattr(body, attr_name)
         dest = getattr(entity, attr_name)
 
-        copy_fields(source, dest)
+        dest.update(source)
 
         await session(request).put(entity)
         logger.info(

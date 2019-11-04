@@ -380,9 +380,9 @@ async def test_create_metrics_provider(aiohttp_server, config, db, loop):
 
 
 async def test_update_metrics_provider(aiohttp_server, config, db, loop):
-    data = MetricsProviderFactory()
+    data = MetricsProviderFactory(spec__type="static")
     await db.put(data)
-    data.spec = MetricsProviderSpecFactory()
+    data.spec = MetricsProviderSpecFactory(type="prometheus")
 
     server = await aiohttp_server(create_app(config=config))
 
