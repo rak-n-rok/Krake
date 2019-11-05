@@ -25,7 +25,7 @@ from datetime import datetime
 from itertools import chain
 
 from aiohttp import ClientConnectorError
-from krake import setup_logging, load_config
+from krake import setup_logging, load_config, search_config
 from krake.api.database import Session, EventType, TransactionError
 from krake.controller import Controller, run
 from krake.data.core import resource_ref
@@ -322,7 +322,7 @@ class GarbageCollector(Controller):
 
 
 def main(config):
-    gc_config = load_config("garbage_collector.yaml", config)
+    gc_config = load_config(config or search_config("garbage_collector.yaml"))
 
     db_host = gc_config["etcd"]["host"]
     db_port = gc_config["etcd"]["port"]
@@ -337,7 +337,10 @@ def main(config):
     run(controller)
 
 
+parser = ArgumentParser(description="Garbage Collector for Krake")
+parser.add_argument("-c", "--config", help="Path to configuration YAML file")
+
+
 if __name__ == "__main__":
-    parser = ArgumentParser(description="Garbage Collector for Krake")
-    parser.add_argument("-c", "--config", help="Path to configuration YAML file")
-    main(**vars(parser.parse_args()))
+    args = parser.parse_args()
+    main(**vars(args))

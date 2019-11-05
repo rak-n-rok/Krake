@@ -123,18 +123,10 @@ def load_env_config(base_config):
     return env_config
 
 
-def load_yaml_config(filename, filepath=None):
+def load_yaml_config(filepath):
     """Load Krake base configuration settings from YAML file
 
-    If no filepath is specified, the configuration is searched in the
-    following locations by this order:
-
-    1. ``krake.yaml`` (current working directory)
-    2. ``/etc/krake/krake.yaml``
-
     Args:
-        filename (os.PathLike): name given by default to the
-            configuration file of a component.
         filepath (os.PathLike, optional): Path to YAML configuration file
 
     Raises:
@@ -144,22 +136,11 @@ def load_yaml_config(filename, filepath=None):
         dict: Krake YAML file configuration
 
     """
-    if filepath is not None:
-        filepaths = [filepath]
-    else:
-        filepaths = [filename, os.path.join("/etc/krake/", filename)]
-
-    for path in filepaths:
-        try:
-            with open(path, "r") as fd:
-                return yaml.safe_load(fd)
-        except FileNotFoundError:
-            pass
-
-    raise FileNotFoundError(f"No config file found: {filepaths}")
+    with open(filepath, "r") as fd:
+        return yaml.safe_load(fd)
 
 
-def load_config(filename=None, filepath=None):
+def load_config(filepath):
     """Load Krake configuration settings
 
     Krake base configuration settings is defined by Krake YAML configuration file.
@@ -167,15 +148,13 @@ def load_config(filename=None, filepath=None):
     environment variables.
 
     Args:
-        filename (os.PathLike): name given by default to the
-            configuration file of a component.
-        filepath (os.PathLike, optional): Path to YAML configuration file
+        filepath (os.PathLike):  Path to YAML configuration file
 
     Returns:
         dict: Krake configuration
 
     """
-    base_config = load_yaml_config(filename, filepath=filepath)
+    base_config = load_yaml_config(filepath)
     env_config = load_env_config(base_config)
 
     config = copy.deepcopy(base_config)
@@ -184,6 +163,32 @@ def load_config(filename=None, filepath=None):
         reduce(lambda d, k: d[k], keys[:-1], config)[keys[-1]] = value
 
     return config
+
+
+def search_config(filename):
+    """Search configuration file in known directories.
+
+    The filename is searched in the following directories in given order:
+
+    1. Current working directory
+    2. ``/etc/krake``
+
+    Returns:
+        os.PathLike: Path to configuration file
+
+    Raises:
+        FileNotFoundError: If the configuration cannot be found in any of the
+            search locations.
+
+    """
+    options = [filename, os.path.join("/etc/krake/", filename)]
+
+    for path in options:
+        if os.path.exists(path):
+            return path
+
+    locations = ", ".join(map(repr, options))
+    raise FileNotFoundError(f"Configuration in {locations} not found")
 
 
 def setup_logging(config_log):

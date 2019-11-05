@@ -6,30 +6,28 @@
 
 """
 import logging
-import pprint
 from argparse import ArgumentParser
 from aiohttp import web
 
-from .. import load_config, setup_logging
+from .. import load_config, search_config, setup_logging
 from .app import create_app
 
 
 logger = logging.getLogger(__name__)
 
 
+def main(config):
+    api_config = load_config(config or search_config("api.yaml"))
+    setup_logging(api_config["log"])
+
+    app = create_app(api_config)
+    web.run_app(app, ssl_context=app["ssl_context"])
+
+
 parser = ArgumentParser(description="Krake API server")
 parser.add_argument("--config", "-c", help="Path to configuration file")
 
 
-def main():
-    args = parser.parse_args()
-    config = load_config("api.yaml", args.config)
-    setup_logging(config["log"])
-    logger.debug("Krake configuration settings:\n %s" % pprint.pformat(config))
-
-    app = create_app(config)
-    web.run_app(app, ssl_context=app["ssl_context"])
-
-
 if __name__ == "__main__":
-    main()
+    args = parser.parse_args()
+    main(**vars(args))

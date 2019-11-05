@@ -18,7 +18,6 @@ Configuration is loaded from the ``controllers.kubernetes.application`` section:
 
 """
 import logging
-import pprint
 import re
 from copy import deepcopy
 from functools import partial
@@ -32,7 +31,7 @@ from kubernetes_asyncio.client import ApiClient, CoreV1Api, AppsV1Api, Configura
 from kubernetes_asyncio.client.rest import ApiException
 from typing import NamedTuple
 
-from krake import load_config, setup_logging
+from krake import load_config, search_config, setup_logging
 from krake.data.core import ReasonCode
 from krake.data.kubernetes import ApplicationState
 from krake.client.kubernetes import KubernetesApi
@@ -532,17 +531,10 @@ def camel_to_snake_case(name):
     return re.sub("([a-z0-9])([A-Z])", r"\1_\2", cunder).lower()
 
 
-parser = ArgumentParser(description="Kubernetes application controller")
-parser.add_argument("-c", "--config", help="Path to configuration YAML file")
-
-
 def main(config):
-    controller_config = load_config("kubernetes.yaml", config)
+    controller_config = load_config(config or search_config("kubernetes.yaml"))
 
     setup_logging(controller_config["log"])
-    logger.debug(
-        "Krake configuration settings:\n %s", pprint.pformat(controller_config)
-    )
 
     tls_config = controller_config.get("tls")
     ssl_context = create_ssl_context(tls_config)
@@ -557,7 +549,13 @@ def main(config):
     run(controller)
 
 
+parser = ArgumentParser(description="Kubernetes application controller")
+parser.add_argument("-c", "--config", help="Path to configuration YAML file")
+
+
 if __name__ == "__main__":
     parser = ArgumentParser(description="Garbage Collector for Krake")
     parser.add_argument("-c", "--config", help="Path to configuration YAML file")
-    main(**vars(parser.parse_args()))
+
+    args = parser.parse_args()
+    main(**vars(args))

@@ -19,7 +19,7 @@ import logging
 import pprint
 from argparse import ArgumentParser
 
-from krake import load_config, setup_logging
+from krake import load_config, setup_logging, search_config
 from ...controller import create_ssl_context, run
 from .scheduler import Scheduler
 
@@ -31,7 +31,7 @@ parser.add_argument("-c", "--config", help="Path to configuration YAML file")
 
 
 def main(config):
-    scheduler_config = load_config("scheduler.yaml", config)
+    scheduler_config = load_config(config or search_config("kubernetes.yaml"))
 
     setup_logging(scheduler_config["log"])
     logger.debug(
