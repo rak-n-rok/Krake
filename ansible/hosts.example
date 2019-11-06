@@ -107,20 +107,6 @@ all:
           hostname: krake
           network: krake-network
 
-          ## etcd database parameters
-          # address and port for the etcd container
-          etcd_host: krake-db
-          etcd_port: 2379
-          etcd_peer_port: 2380
-
-          # Set TLS to enabled on all Krake components.
-          # The certificates have to be added in '/etc/krake/certs' on the VM.
-          enable_tls: false
-
-          ## Controllers parameters
-          worker_count: 5
-          debounce: 1.0
-
           # List of additional authorized SSH keys. Actually, every physical
           # host supports this configuration parameter.
           # authorized_keys:

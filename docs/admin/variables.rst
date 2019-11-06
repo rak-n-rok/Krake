@@ -63,14 +63,37 @@ gateways.yml
         Flavor manage the sizing for the compute, memory and storage capacity of the host
 
 krake_apps.yml
-    api_host
-        OpenStack Heat template API name
-    api_port
-        OpenStack Heat template API port
     flavor
         Flavor manages the sizing for the compute, memory and storage capacity of the host
     floating_ip
         Enables the use of public IP address
+    api_host
+        OpenStack Heat template API name
+    api_port
+        OpenStack Heat template API port
+
+    etcd_host (string)
+        Name of the etcd container started using docker-compose.
+    etcd_port (int)
+        Port of the etcd cluster in the etcd container started using docker-compose.
+    etcd_peer_port (int)
+        Peer listening port of the etcd cluster in the etcd container started using docker-compose.
+
+    api_host (string)
+        Name of the Krake API container started using docker-compose.
+    api_port (int)
+        Port that can be used to reach the Krake API present in the container started using docker-compose.
+
+    enable_tls (boolean)
+        Enable or disable TLS support for communications with the API (for the API, controllers and Rok utility).
+        The certificates need to be added manually into the ``/etc/krake`` directory in the Krake VM.
+
+    worker_count (integer)
+        On each Controller, amount of working units that will handle resources received concurrently.
+    debounce (float)
+        On each Controller, timeout (in seconds) for the worker queue before handing over a resource,
+        to wait for an updated state.
+
 
 magnum_clusters.yml
     prometheus_port
