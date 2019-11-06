@@ -129,7 +129,7 @@
           O: CLOUD&HEAT Technology GmbH
           CN: "{{ inventory_hostname }}-ca"
         basic_constraints:
-          - CA:true
+          - CA:TRUE
 
     - name: Generate OpenSSL CA certificate
       openssl_certificate:
@@ -154,7 +154,7 @@
           O: CLOUD&HEAT Technology GmbH
           CN: "{{ inventory_hostname }}"
         basic_constraints:
-          - CA:false
+          - CA:FALSE
         key_usage:
           - digitalSignature
           - keyEncipherment
