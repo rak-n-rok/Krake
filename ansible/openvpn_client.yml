@@ -55,7 +55,7 @@
           O: CLOUD&HEAT Technology GmbH
           CN: "{{ hostname }}"
         basic_constraints:
-          - CA:false
+          - CA:FALSE
         key_usage:
           - digitalSignature
           - keyEncipherment
