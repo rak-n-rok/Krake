@@ -177,6 +177,8 @@
   vars:
     git_dir: /home/krake/git/krake
     repo_dir: "{{ playbook_dir }}/.."
+    # Directory on the VM for the bind mount, to store the configuration files of Krake
+    configuration_dir: /etc/krake
     authorized_user: krake
 
   tasks:
@@ -251,6 +253,37 @@
             name: krake:latest
             state: absent
 
+        - name: Create configuration directory
+          become_user: root
+          file:
+            path: "{{ configuration_dir }}"
+            state: directory
+            owner: krake
+            group: krake
+
+        - name: Create configuration certificates sub-directory
+          become_user: root
+          file:
+            path: "{{ configuration_dir }}/certs"
+            state: directory
+            owner: krake
+            group: krake
+
+
+        # The files generated overwrite the ones created
+        - name: Generate the configuration files
+          script: |
+            {{ repo_dir }}/config/generate --dst {{ configuration_dir }}\
+            {% if enable_tls is defined and enable_tls %} --tls-enabled {% endif %} \
+            {% if enable_tls is defined and enable_tls %} --cert-dir /etc/krake/certs {% endif %} \
+            {% if api_host is defined %} --host {{ api_host }} {% endif %} \
+            {% if api_port is defined %} --port {{ api_port }} {% endif %} \
+            {% if etcd_host is defined %} --etcd-host {{ etcd_host }} {% endif %} \
+            {% if etcd_port is defined %} --etcd-port {{ etcd_port }} {% endif %} \
+            {% if worker_count is defined %} --worker-count {{ worker_count }} {% endif %} \
+            {% if debounce is defined %} --debounce {{ debounce }} {% endif %} \
+            {{ git_dir }}/config/*template
+
         - name: Build Krake image
           docker_image:
             name: krake:latest
@@ -267,22 +300,14 @@
     - name: Krake rok deployment
       tags:
         - krake-rok-deployment
-      vars:
-        api_host: localhost
-      environment:
-        XDG_CONFIG_HOME: "{{ git_dir }}"
       block:
 
-        # This is a temporary fix, will be override by !261
-        - name: Create Krake rok configuration file
-          vars:
-            file_content:
-              "api_url": "http://{{ api_host }}:{{ api_port }}"
-              "user": "system"
-          copy:
-            dest: "{{ git_dir }}/rok.yaml"
-            content: |
-              {{ file_content | to_json }}
+        # Add the path to directory to look for the Rok configuration file
+        - name: Add the rok config path to profile
+          lineinfile:
+            path: /home/krake/.profile
+            regexp: '^export XDG_CONFIG_HOME='
+            line: "export XDG_CONFIG_HOME={{ git_dir }}"
 
         - name: Install Krake rok
           tags:
@@ -291,6 +316,14 @@
           pip:
             name: "{{ git_dir }}/rok"
 
+        - name: Create Krake rok configuration file
+          script: |
+            {{ repo_dir }}/config/generate --dst {{ git_dir }} \
+            {% if enable_tls is defined and enable_tls %} --tls-enabled {% endif %} \
+            {% if enable_tls is defined and enable_tls %} --cert-dir /etc/krake/certs {% endif %} \
+            --host localhost \
+            {% if api_port is defined %} --port {{ api_port }} {% endif %} \
+            {{ git_dir }}/rok.yaml.template
 
 - name: Generate cluster config
   become: yes

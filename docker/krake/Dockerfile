@@ -30,11 +30,15 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 COPY ./krake /krake
 
+COPY ./config /tmp/config
+RUN mkdir -p /etc/krake && \
+  /tmp/config/generate --dst /etc/krake /tmp/config/*template
+
 RUN pip3 install /krake
 
 FROM base as runner
 
+COPY --from=builder /etc/krake /etc/krake
 COPY --from=builder /opt/venv /opt/venv
-COPY ./krake.yaml.template /etc/krake/krake.yaml
 
 ENV PATH="/opt/venv/bin:$PATH"

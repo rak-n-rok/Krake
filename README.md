@@ -46,17 +46,26 @@ pip install --editable krake/[dev] rok/[dev]
 
 ### Running
 
+First, the configuration files need to be generated with a script. They can
+then be modified at will.
+
+```bash
+# Start by copying the templates of the configuration files for all components.
+# You can then modify each file at your preference.
+config/generate config/api.yaml.template
+
+# Optional: you can use the rok configuration template as you prefer. It can also be generated.
+#   Otherwise rok will use the default configuration
+config/generate rok.yaml.template
+
+# Multiple files can be generated at the same time:
+config/generate config/*.template rok.yaml.template
+```
+
 All services can be run as Python modules with the `-m` option of the Python
 interpreter:
 
 ```bash
-# Start by copying the template of the configuration file. You can then modify without any issue
-cp krake.yaml.template krake.yaml
-
-# Optional: you can use the rok configuration template as you prefer.
-#   Otherwise rok will use the default configuration
-cp rok.yaml.template rok.yaml
-
 # Run etcd server. This will store the data in "tmp/etcd".
 support/etcd
 

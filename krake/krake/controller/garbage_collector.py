@@ -25,7 +25,7 @@ from datetime import datetime
 from itertools import chain
 
 from aiohttp import ClientConnectorError
-from krake import setup_logging, load_config
+from krake import setup_logging, load_config, search_config
 from krake.api.database import Session, EventType, TransactionError
 from krake.controller import Controller, run
 from krake.data.core import resource_ref
@@ -44,7 +44,7 @@ class DatabaseReflector(object):
 
     Args:
         on_receive (coroutine):
-        apidef: the API definition of the kind of resource to list and watch.
+        api_def: the API definition of the kind of resource to list and watch.
         db_host (str): the host to connect to the database
         db_port (int): the port to connect to the database
     """
@@ -132,6 +132,9 @@ class GarbageCollector(Controller):
     def __init__(
         self, worker_count=10, loop=None, debounce=0, db_host="localhost", db_port=2379
     ):
+        # api_endpoint is set to an arbitrary value because it is not used, but needed
+        # by the Controller initializer
+        # TODO Will be removed with GC V2
         super().__init__("http://localhost", loop=loop, debounce=debounce)
         self.reflectors = []
         self.resources = _garbage_collected
@@ -319,12 +322,10 @@ class GarbageCollector(Controller):
 
 
 def main(config):
-    krake_conf = load_config(config)
+    gc_config = load_config(config or search_config("garbage_collector.yaml"))
 
-    db_host = krake_conf["etcd"]["host"]
-    db_port = krake_conf["etcd"]["port"]
-
-    gc_config = krake_conf["controllers"]["garbage_collector"]
+    db_host = gc_config["etcd"]["host"]
+    db_port = gc_config["etcd"]["port"]
 
     controller = GarbageCollector(
         worker_count=gc_config["worker_count"],
@@ -332,11 +333,14 @@ def main(config):
         db_port=db_port,
         debounce=gc_config.get("debounce", 0),
     )
-    setup_logging(krake_conf["log"])
+    setup_logging(gc_config["log"])
     run(controller)
 
 
+parser = ArgumentParser(description="Garbage Collector for Krake")
+parser.add_argument("-c", "--config", help="Path to configuration YAML file")
+
+
 if __name__ == "__main__":
-    parser = ArgumentParser(description="Garbage Collector for Krake")
-    parser.add_argument("-c", "--config", help="Path to configuration YAML file")
-    main(**vars(parser.parse_args()))
+    args = parser.parse_args()
+    main(**vars(args))

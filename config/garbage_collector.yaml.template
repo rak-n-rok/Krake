@@ -1,0 +1,31 @@
+## Configuration file for the Krake Garbage Collector
+
+etcd:
+  host: $etcd_host
+  port: $etcd_port
+worker_count: $worker_count
+debounce: $debounce
+
+
+log:
+  version: 1
+  level: INFO
+  disable_existing_loggers: false
+  formatters:
+    krake:
+      format: "%(asctime)s - [%(name)s] - [%(levelname)-5s] - %(message)s"
+  handlers:
+    console:
+      class: logging.StreamHandler
+      formatter: krake
+      stream: ext://sys.stdout
+    file:
+      class: logging.handlers.WatchedFileHandler
+      formatter: krake
+      filename: krake.log
+  root: # Configuring the default (root) logger is highly recommended
+    handlers: [console]
+  loggers:
+    krake:
+      handlers: [console]
+      propagate: no
