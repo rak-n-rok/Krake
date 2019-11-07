@@ -31,7 +31,12 @@ from argparse import ArgumentParser, MetavarTypeHelpFormatter
 from collections import defaultdict
 from copy import deepcopy
 
-from krake import setup_logging, load_config, search_config, add_opt_args
+from krake import (
+    setup_logging,
+    search_config,
+    load_yaml_config,
+    ConfigurationOptionMapper,
+)
 from krake.apidefs.kubernetes import ApplicationResource, ClusterResource
 from krake.controller import Controller, run, Reflector, create_ssl_context
 from krake.data.config import ControllerConfiguration
@@ -494,42 +499,39 @@ class GarbageCollector(Controller):
             )
 
 
-def main():
-    option_fields_mapping = add_opt_args(parser, ControllerConfiguration)
-
-    args = parser.parse_args()
-    filepath = args.config or search_config("garbage_collector.yaml")
-    gc_config = load_config(
-        ControllerConfiguration,
-        filepath=filepath,
-        args=args,
-        option_fields_mapping=option_fields_mapping,
-    )
-
-    setup_logging(gc_config.log)
-    logger.debug(
-        "Krake Garbage Collector configuration settings:\n %s",
-        pprint.pformat(gc_config)
-    )
-
-    tls_config = gc_config.tls
-    ssl_context = create_ssl_context(tls_config)
-    logger.debug("TLS is %s", "enabled" if ssl_context else "disabled")
-
-    controller = GarbageCollector(
-        api_endpoint=gc_config.api_endpoint,
-        worker_count=gc_config.worker_count,
-        ssl_context=ssl_context,
-        debounce=gc_config.debounce,
-    )
-    run(controller)
-
-
 parser = ArgumentParser(
     description="Garbage Collector for Krake", formatter_class=MetavarTypeHelpFormatter
 )
 parser.add_argument("-c", "--config", type=str, help="Path to configuration YAML file")
 
+mapper = ConfigurationOptionMapper(ControllerConfiguration)
+mapper.add_arguments(parser)
+
+
+def main(config):
+    setup_logging(config.log)
+    logger.debug(
+        "Krake Garbage Collector configuration settings:\n %s",
+        pprint.pformat(config)
+    )
+
+    tls_config = config.tls
+    ssl_context = create_ssl_context(tls_config)
+    logger.debug("TLS is %s", "enabled" if ssl_context else "disabled")
+
+    controller = GarbageCollector(
+        api_endpoint=config.api_endpoint,
+        worker_count=config.worker_count,
+        ssl_context=ssl_context,
+        debounce=config.debounce,
+    )
+    run(controller)
+
 
 if __name__ == "__main__":
-    main()
+    args = vars(parser.parse_args())
+
+    config = load_yaml_config(args["config"] or search_config("garbage_collector.yaml"))
+    gc_config = mapper.merge(config, args)
+
+    main(gc_config)

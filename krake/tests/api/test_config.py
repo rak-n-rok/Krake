@@ -1,4 +1,5 @@
 from argparse import ArgumentParser, Namespace
+from typing import List
 
 import marshmallow
 import pytest
@@ -7,13 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from dataclasses import field
-from krake import (
-    load_config as load_krake_config,
-    replace_hyphen,
-    load_command_line,
-    replace_from_cli,
-    add_opt_args,
-)
+from krake import ConfigurationOptionMapper, load_yaml_config
 from krake.data.config import ApiConfiguration
 from krake.data.serializable import Serializable
 
@@ -24,9 +19,9 @@ def load_config(config):
 
         with base_config_path.open("w") as fd:
             yaml.dump(config.serialize(), stream=fd)
-        config = load_krake_config(ApiConfiguration, filepath=base_config_path)
+        raw_config = load_yaml_config(base_config_path)
 
-    return config
+    return ApiConfiguration.deserialize(raw_config)
 
 
 def test_config_load_base(config):
@@ -54,7 +49,7 @@ def test_replace_hyphen():
     }
     copy = dict(origin)
 
-    new = replace_hyphen(origin)
+    new = ConfigurationOptionMapper._replace_hyphen(origin)
 
     expected = {
         "key_1": "value-1",
@@ -73,10 +68,25 @@ def test_replace_hyphen():
     assert origin["key-5"] is not new["key_5"]
 
 
+# Command line option mapping
+
+
 class Field(object):
     def __init__(self, name, default=None):
         self.name = name
         self.default = default
+
+
+class NestedConfiguration(Serializable):
+    fourth_key: int
+
+
+class RootConfiguration(Serializable):
+    first_key: str
+    second_key: bool = field(default=False)
+    third_key: bool = field(default=False)
+    the: NestedConfiguration
+    fifth_key: List[NestedConfiguration] = field(default_factory=list)
 
 
 args = Namespace(first_key=None, second_key=True, third_key=False, the_fourth_key=4)
@@ -90,22 +100,16 @@ option_fields_mapping = {
 }
 
 
-def test_add_opt_args():
-    class NestedConfiguration(Serializable):
-        fourth_key: int
-
-    class RootConfiguration(Serializable):
-        first_key: str
-        second_key: bool = field(default=False)
-        third_key: bool = field(default=False)
-        the: NestedConfiguration
-
+def test_add_argumentss():
     parser = ArgumentParser()
-    mapping = add_opt_args(parser, RootConfiguration)
+    mapper = ConfigurationOptionMapper(RootConfiguration)
+    mapper.add_arguments(parser)
+    mapping = mapper.option_fields_mapping
 
     assert len(mapping["first-key"]) == len(mapping["second-key"]) == 1
     assert len(mapping["third-key"]) == len(mapping["second-key"])
     assert len(mapping["the-fourth-key"]) == 2
+    assert "fifth_key" not in mapping
 
     opt = mapping["the-fourth-key"][0].name + "_" + mapping["the-fourth-key"][1].name
     assert opt == "the_fourth_key"
@@ -115,9 +119,20 @@ def test_add_opt_args():
 
     assert parsed == args
 
+    # The list should not be parsed
+    argv = "--second-key --fifth-key lorem".split()
+    with pytest.raises(SystemExit):
+        parser.parse_args(argv)
+
 
 def test_load_command_line():
-    modified = load_command_line(args, option_fields_mapping)
+    modified_args = vars(args).copy()
+    modified_args["foo"] = "over"
+
+    mapper = ConfigurationOptionMapper(
+        RootConfiguration, option_fields_mapping=option_fields_mapping
+    )
+    modified = mapper._load_command_line(modified_args)
 
     # Only values modified compared to the ones set in the Fields.
     expected = {"second_key": True, "the_fourth_key": 4}
@@ -131,7 +146,10 @@ def test_replace_from_cli():
         "third_key": False,
         "the": {"fourth_key": 0},
     }
-    final_config = replace_from_cli(loaded_config, args, option_fields_mapping)
+    mapper = ConfigurationOptionMapper(
+        RootConfiguration, option_fields_mapping=option_fields_mapping
+    )
+    final_config = mapper._replace_from_cli(loaded_config, vars(args).copy())
 
     expected = {
         "first_key": "value_one",

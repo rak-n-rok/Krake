@@ -7,6 +7,7 @@ import yaml
 import logging.config
 
 from dataclasses import is_dataclass
+from krake.data.serializable import is_generic_subtype, is_qualified_generic
 from marshmallow import ValidationError
 
 
@@ -27,48 +28,12 @@ def load_yaml_config(filepath):
         return yaml.safe_load(fd)
 
 
-def _create_error_message(err):
-    """Create a prettier display from the Marshmallow ValidationError
-
-    Args:
-        err (ValidationError): Error that occurred during parsing of the
-            configuration file
-
-    Returns:
-        str: the message that can be displayed.
-
-    """
-    message = "Parsing configuration failed with error(s): \n"
-
-    lines = [
-        f" - field '{field}': " + ", ".join(errors)
-        for field, errors in err.messages.items()
-    ]
-    return message + "\n".join(lines)
-
-
-def generate_option_name(fields):
-    """From a hierarchical list of fields, create the corresponding option name, by
-    taking the name of all fields in order, joining them with dash characters and
-    replacing all underscores with dashes.
-
-    Args:
-        fields (list): a list of fields
-
-    Returns:
-        str: the concatenated string of the name of all fields, with dash
-            characters.
-
-    """
-    fields_names = [field.name.replace("_", "-") for field in fields]
-    return "-".join(fields_names)
-
-
-def add_opt_args(parser, config_cls, parents=None):
-    """Using the configuration class given, create automatically and recursively
-    command-line options to set the different attributes of the configuration.
-    Nested options keep the upper layers as prefixes, which are separated by a "-"
-    character.
+class ConfigurationOptionMapper(object):
+    """Handle the creation of command line options for a specific Configuration
+    class. For each attribute of the Configuration, and recursively, an option will
+    be added to set it from the command line. A mapping between the option name and
+    the hierarchical list of fields is created. Nested options keep the upper layers
+    as prefixes, which are separated by a "-" character.
 
     For instance, the following classes:
 
@@ -76,7 +41,6 @@ def add_opt_args(parser, config_cls, parents=None):
 
         class SpaceShipConfiguration(Serializable):
             name: str
-            cockpit: CockpitConfiguration
             propulsion: PropulsionConfiguration
 
         class PropulsionConfiguration(Serializable):
@@ -94,7 +58,7 @@ def add_opt_args(parser, config_cls, parents=None):
         --propulsion-power int
         --propulsion-engine-type-name: str
 
-    And the returned option-fields mapping will be:
+    And the option-fields mapping will be:
 
     .. code:: python
 
@@ -110,161 +74,271 @@ def add_opt_args(parser, config_cls, parents=None):
             ],
         }
 
+    Then, from parsed arguments, the default value of an element of configuration
+    are replaced by the elements set by the user through the parser, using this
+    mapping.
+
+    The mapping of the option name to the list of fields is necessary here
+    because a configuration element called ``"lorem-ipsum"`` with a
+    ``"dolor-sit-amet"`` element will be transformed into a
+    ``"--lorem-ipsum-dolor-sit-amet"`` option. It will then be parsed as
+    ``"lorem_ipsum_dolor_sit_amet"``. This last string, if split with ``"_"``, could
+    be separated into ``"lorem"`` and ``"ipsum_dolor_sit_amet"``, or
+    ``"lorem_ipsum_dolor"`` and ``"sit_amet"``. Hence the idea of the mapping to get
+    the right separation.
+
     Args:
-        parser (argparse.Argumentparser): the parser to which the new command-line
-            options will be added.
-        config_cls (type): the configuration class
-            which will be used as a model to generate the options.
-        parents (list): hierarchy of fields of the current configuration class.
-
-    Returns:
-        dict: a mapping of the option names created, to the hierarchy of configuration
-            classes of the option attribute.
-
+        config_cls (type): the configuration class which will be used as a model to
+            generate the options.
+        option_fields_mapping (dict, optional): a mapping of the option names, with
+            POSIX convention (with "-" character"), to the list of fields:
+            <option_name_with_dash>: <hierarchical_list_of_fields>
+            This argument can be used to set the mapping directly, instead of creating
+            it from a Configuration class.
     """
-    if not parents:
-        parents = []
 
-    option_fields_mapping = {}
-    for field in config_cls.__dataclass_fields__.values():
-        new_parents = list(parents)  # Need to copy to prevent adding to another list
-        new_parents.append(field)
+    def __init__(self, config_cls, option_fields_mapping=None):
+        self.config_cls = config_cls
 
-        if is_dataclass(field.type):
-            # Create options for the config class recursively
-            sub_options = add_opt_args(parser, field.type, parents=new_parents)
-            option_fields_mapping = dict(sub_options, **option_fields_mapping)
-        else:
-            kwargs = {}
+        if not option_fields_mapping:
+            option_fields_mapping = {}
+        self.option_fields_mapping = option_fields_mapping
 
-            if "help" in field.metadata:
-                kwargs["help"] = field.metadata["help"]
+    @staticmethod
+    def _generate_option_name(fields):
+        """From a hierarchical list of fields, create the corresponding option name, by
+        taking the name of all fields in order, joining them with dash characters and
+        replacing all underscores with dashes.
 
-            if field.type is bool:
-                # If the default is True, the action should be "store_false"
-                kwargs["action"] = f"store_{str(not field.default).lower()}"
+        Args:
+            fields (list): a list of fields
+
+        Returns:
+            str: the concatenated string of the name of all fields, with dash
+                characters.
+
+        """
+        return "-".join(field.name.replace("_", "-") for field in fields)
+
+    def add_arguments(self, parser):
+        """Using the configuration class given, create automatically and recursively
+        command-line options to set the different attributes of the configuration.
+        Nested options keep the upper layers as prefixes, which are separated by a "-"
+        character.
+
+        Generate the mapping between the option name and the hierarchy of the
+        attributes of the Configuration.
+
+        Args:
+            parser (argparse.ArgumentParser): the parser to which the new command-line
+                options will be added.
+
+        """
+        self.option_fields_mapping = self._add_opt_args(parser, self.config_cls)
+
+    @classmethod
+    def _add_opt_args(cls, parser, config_cls, parents=None):
+        """Recursive function to go through all attributes of the Configuration class
+        given, add options to the parser and generate the mapping of option name
+        to fields.
+
+        Args:
+            parser (argparse.ArgumentParser): the parser to which the new command-line
+                options will be added.
+            config_cls (type): the configuration class which will be used as a
+                model to generate the options.
+            parents (list): hierarchy of fields of the current configuration class.
+
+        Returns:
+            dict: a mapping of the option names created, to the hierarchy of
+            configuration classes of the option attribute.
+
+        """
+        if not parents:
+            parents = []
+
+        option_fields_mapping = {}
+        for field in config_cls.__dataclass_fields__.values():
+            new_parents = list(
+                parents
+            )  # Need to copy to prevent adding to another list
+            new_parents.append(field)
+
+            if is_dataclass(field.type):
+                # Create options for the config class recursively
+                sub_options = cls._add_opt_args(parser, field.type, parents=new_parents)
+                option_fields_mapping = dict(sub_options, **option_fields_mapping)
             else:
-                kwargs["type"] = field.type
+                # Ignore fields that are "subclasses" of List (List[int], List[str]...)
+                if is_qualified_generic(field.type) and is_generic_subtype(
+                    field.type, List
+                ):
+                    continue
 
-            if getattr(field.type, "__origin__", None) == List:
+                kwargs = {}
+
+                if "help" in field.metadata:
+                    kwargs["help"] = field.metadata["help"]
+
+                if field.type is bool:
+                    # If the default is True, the action should be "store_false"
+                    opposite = str(not field.default).lower()
+                    kwargs["action"] = f"store_{opposite}"
+                else:
+                    kwargs["type"] = field.type
+
+                name = cls._generate_option_name(new_parents)
+                optname = "--" + name
+                option_fields_mapping[name] = new_parents
+                parser.add_argument(optname, **kwargs)
+
+        return option_fields_mapping
+
+    @classmethod
+    def _replace_hyphen(cls, dictionary):
+        """Loop all keys of a dictionary recursively to replace hyphen characters in the
+        key by underscores.
+
+        Args:
+            dictionary (dict): the dictionary to loop on
+
+        Returns:
+            dict: a copy of the given dictionary, with all hyphens in keys replaced.
+
+        """
+        # During recursion, copy any value that is not a dict
+        if type(dictionary) is not dict:
+            return deepcopy(dictionary)  # do a copy for values such as lists
+
+        copy = dict(dictionary)
+        # For each key of the given dictionary,
+        # - replace the dict values with the same dict without hyphens.
+        # - replace the hyphen in the current key by an underscore
+        for old_key in dictionary:
+            new_key = old_key.replace("-", "_")
+
+            # Replace the keys in the current value in any case
+            copy[new_key] = cls._replace_hyphen(copy[old_key])
+
+            # If the key has been modified, a new entry has been added,
+            # the old one needs to be removed
+            if new_key != old_key:
+                del copy[old_key]
+
+        return copy
+
+    @staticmethod
+    def _create_error_message(err):
+        """Create a prettier display from the Marshmallow ValidationError
+
+        Args:
+            err (ValidationError): Error that occurred during parsing of the
+                configuration file
+
+        Returns:
+            str: the message that can be displayed.
+
+        """
+        message = "Parsing configuration failed with error(s): \n"
+
+        lines = [
+            f" - field '{field}': " + ", ".join(errors)
+            for field, errors in err.messages.items()
+        ]
+        return message + "\n".join(lines)
+
+    def _load_command_line(self, args):
+        """From the options parsed, keep only the values that have been set with
+         the command line. Any argument that was set not through the mapper will be
+         ignored.
+
+        Args:
+            args (dict): the values read by the command line parser.
+
+        Returns:
+            dict: the values set by the user: <option_name_with_underscore>: <value>
+
+        """
+        modified = {}
+        for arg, value in args.items():
+            # If the value is not set, continue
+            if value is None:
                 continue
 
-            name = generate_option_name(new_parents)
-            optname = "--" + name
-            option_fields_mapping[name] = new_parents
-            parser.add_argument(optname, **kwargs)
+            # The names of the options have "-" as separation character, but argparse
+            # changed it into "_" character.
+            option = arg.replace("_", "-")
+            field = self.option_fields_mapping.get(option)
 
-    return option_fields_mapping
+            # If an argument has been added by the user on top of the Configuration
+            # object, it will not appear in the mapping
+            if not field:
+                continue
 
+            # field holds the whole hierarchy of the option,
+            # here just the name of the value is needed (last element).
+            if field[-1].default == value:
+                continue
 
-def load_command_line(args, option_fields_mapping):
-    """From the options parsed, keep only the values that have been set with
-     the command line.
+            modified[arg] = value
 
-    Args:
-        args (argparse.Namespace): the values read by the command line parser.
-        option_fields_mapping (dict): a mapping of the option names, with POSIX
-            convention (with "-" character"), to the list of fields:
-            <option_name_with_dash>: <hierarchical_list_of_fields>
+        return modified
 
-    Returns:
-        dict: the values set by the user: <option_name_with_underscore>: <value>
+    def _replace_from_cli(self, loaded_config, args):
+        """Update the given configuration with the arguments read from the command line.
 
-    """
-    modified = {}
-    for arg, value in vars(args).items():
-        # If the value is not set, continue
-        if value is None:
-            continue
+        Args:
+            loaded_config (dict): the configuration to replace the values from.
+            args (dict): the values read by the command line parser.
 
-        # The names of the options have "-" as separation character, but argparse
-        # changed it into "_" character.
-        option = arg.replace("_", "-")
-        field = option_fields_mapping[option]
+        Returns:
+            dict: a copy of the given configuration, with the values given by command
+                line updated.
+        """
+        cl_config = self._load_command_line(args)
 
-        # field holds the whole hierarchy of the option,
-        # here just the name of the value is needed (last element).
-        if field[-1].default == value:
-            continue
+        config = dict(loaded_config)
+        for option, new_value in cl_config.items():
+            field_list = self.option_fields_mapping[option.replace("_", "-")]
 
-        modified[arg] = value
+            # Loop through the configuration to access the right attribute
+            config_to_change = config
+            for field in field_list[:-1]:
+                config_to_change = config_to_change[field.name]
 
-    return modified
+            # Update the configuration
+            option_name = field_list[-1].name
+            config_to_change[option_name] = new_value
 
+        return config
 
-def replace_from_cli(loaded_config, args, option_fields_mapping):
-    """Update the given configuration with the arguments read from the command line.
+    def merge(self, config, args):
+        """Merge the configuration taken from file and the one from the command line
+        arguments. The arguments have priority and replace the values read from
+        configuration.
 
-    Args:
-        loaded_config (dict): the configuration to replace the values from.
-        args (argparse.Namespace): the values read by the command line parser.
-        option_fields_mapping (dict): a mapping of the option names, with POSIX
-            convention (with "-" character"), to the list of fields:
-            <option_name_with_dash>: <hierarchical_list_of_fields>
+        Args:
+            config (dict): the configuration to replace the values from.
+            args (dict): the values read by the command line parser.
 
-    Returns:
-        dict: a copy of the given configuration, with the values given by command line
-            updated.
-    """
-    cl_config = load_command_line(args, option_fields_mapping)
+        Returns:
+            krake.data.serializable.Serializable: the result of the merge of the CLI
+                arguments into the configuration, as serializable object.
 
-    config = dict(loaded_config)
-    for option, new_value in cl_config.items():
-        # The mapping of the option name to the list of fields is necessary here
-        # because a configuration element called "lorem-ipsum" with a "dolor-sit-amet"
-        # element will be transformed into a "--lorem-ipsum-dolor-sit-amet" option.
-        # It will then be parsed as "lorem_ipsum_dolor_sit_amet". This last string,
-        # if split with "_", could be separated into "lorem" and
-        # "ipsum_dolor_sit_amet", or  "lorem_ipsum_dolor" and "sit_amet". Thus the
-        # idea of the mapping to get the right separation.
-        field_list = option_fields_mapping[option.replace("_", "-")]
+        """
+        # Prevent side effect
+        args = args.copy()
+        merged = deepcopy(config)
 
-        # Loop through the configuration to access the right attribute
-        config_to_change = config
-        for field in field_list[:-1]:
-            config_to_change = config_to_change[field.name]
+        processed_config = self._replace_hyphen(merged)
+        merged = self._replace_from_cli(processed_config, args)
 
-        # Update the configuration
-        option_name = field_list[-1].name
-        config_to_change[option_name] = new_value
+        try:
+            config_obj = self.config_cls.deserialize(merged)
+        except ValidationError as err:
+            sys.exit(self._create_error_message(err))
 
-    return config
-
-
-def load_config(template, args=None, option_fields_mapping=None, filepath=None):
-    """Load Krake configuration settings
-
-    Krake base configuration settings is defined by Krake YAML configuration file.
-    Only selected configuration values can be overwritten by values loaded from
-    environment variables.
-
-    Args:
-        template (type): Configuration class used to validate the read configuration.
-        args (argparse.Namespace): the values read by the command line parser.
-        option_fields_mapping (dict): a mapping of the option names, with POSIX
-            convention (with "-" character"), to the list of fields:
-            <option_name_with_dash>: <hierarchical_list_of_fields>
-        filepath (os.PathLike, optional): Path to YAML configuration file
-
-    Returns:
-        krake.data.serialize.Serializable: Krake configuration
-
-    """
-    read_config = load_yaml_config(filepath)
-    final_config = replace_hyphen(read_config)
-
-    if bool(args) != bool(option_fields_mapping):
-        raise ValueError("'args' and 'option_field_mapping' should both be set.")
-
-    if args and option_fields_mapping:
-        final_config = replace_from_cli(final_config, args, option_fields_mapping)
-
-    try:
-        config = template.deserialize(final_config)
-    except ValidationError as err:
-        sys.exit(_create_error_message(err))
-
-    return config
+        return config_obj
 
 
 def search_config(filename):
@@ -291,39 +365,6 @@ def search_config(filename):
 
     locations = ", ".join(map(repr, options))
     raise FileNotFoundError(f"Configuration in {locations} not found")
-
-
-def replace_hyphen(dictionary):
-    """Loop all keys of a dictionary recursively to replace hyphen characters in the
-    key by underscores.
-
-    Args:
-        dictionary (dict): the dictionary to loop on
-
-    Returns:
-        dict: a copy of the given dictionary, with all hyphens in keys replaced.
-
-    """
-    # During recursion, copy any value that is not a dict
-    if type(dictionary) is not dict:
-        return deepcopy(dictionary)  # do a copy for values such as lists
-
-    copy = dict(dictionary)
-    # For each key of the given dictionary,
-    # - replace the dict values with the same dict without hyphens.
-    # - replace the hyphen in the current key by an underscore
-    for old_key in dictionary:
-        new_key = old_key.replace("-", "_")
-
-        # Replace the keys in the current value in any case
-        copy[new_key] = replace_hyphen(copy[old_key])
-
-        # If the key has been modified, a new entry has been added,
-        # the old one needs to be removed
-        if new_key != old_key:
-            del copy[old_key]
-
-    return copy
 
 
 def setup_logging(config_log):

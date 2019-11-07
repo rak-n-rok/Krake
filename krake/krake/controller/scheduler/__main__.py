@@ -26,9 +26,14 @@ Configuration is loaded from the ``controllers.scheduler`` section:
 """
 import logging
 import pprint
-from argparse import ArgumentParser
+from argparse import ArgumentParser, MetavarTypeHelpFormatter
 
-from krake import load_config, setup_logging, search_config
+from krake import (
+    setup_logging,
+    search_config,
+    ConfigurationOptionMapper,
+    load_yaml_config,
+)
 from krake.data.config import SchedulerConfiguration
 
 from ...controller import create_ssl_context, run
@@ -37,32 +42,41 @@ from .scheduler import Scheduler
 logger = logging.getLogger("krake.controller.scheduler")
 
 
-def main(config):
-    filepath = config or search_config("scheduler.yaml")
-    scheduler_config = load_config(SchedulerConfiguration, filepath=filepath)
+parser = ArgumentParser(
+    description="Krake scheduler", formatter_class=MetavarTypeHelpFormatter
+)
+parser.add_argument("-c", "--config", type=str, help="Path to configuration YAML file")
 
-    setup_logging(scheduler_config.log)
+mapper = ConfigurationOptionMapper(SchedulerConfiguration)
+mapper.add_arguments(parser)
+
+
+def main(config):
+    setup_logging(config.log)
     logger.debug(
         "Krake Scheduler configuration settings:\n %s",
-        pprint.pformat(scheduler_config)
+        pprint.pformat(config)
     )
 
-    tls_config = scheduler_config.tls
+    tls_config = config.tls
     ssl_context = create_ssl_context(tls_config)
     logger.debug("TLS is %s", "enabled" if ssl_context else "disabled")
 
     scheduler = Scheduler(
-        api_endpoint=scheduler_config.api_endpoint,
-        worker_count=scheduler_config.worker_count,
+        api_endpoint=config.api_endpoint,
+        worker_count=config.worker_count,
         ssl_context=ssl_context,
-        debounce=scheduler_config.debounce,
-        reschedule_after=scheduler_config.reschedule_after,
-        stickiness=scheduler_config.stickiness,
+        debounce=config.debounce,
+        reschedule_after=config.reschedule_after,
+        stickiness=config.stickiness,
     )
     run(scheduler)
 
 
 if __name__ == "__main__":
-    parser = ArgumentParser(description="Krake scheduler")
-    parser.add_argument("-c", "--config", help="Path to configuration YAML file")
-    main(**vars(parser.parse_args()))
+    args = vars(parser.parse_args())
+
+    config = load_yaml_config(args["config"] or search_config("scheduler.yaml"))
+    scheduler_config = mapper.merge(config, args)
+
+    main(scheduler_config)
