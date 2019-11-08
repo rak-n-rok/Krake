@@ -32,6 +32,15 @@ arg_cluster_label_constraints = argument(
     help="Constraint for labels of the cluster. Can be specified multiple times",
 )
 
+arg_hooks = argument(
+    "-H",
+    "--hook",
+    dest="hooks",
+    default=[],
+    action="append",
+    help="Application hook. Can be specified multiple times",
+)
+
 
 class ApplicationListTable(BaseTable):
     state = Cell("status.state")
@@ -65,9 +74,10 @@ def list_applications(config, session, namespace, all):
 @arg_cluster_label_constraints
 @arg_namespace
 @arg_labels
+@arg_hooks
 @depends("config", "session")
 def create_application(
-    config, session, file, name, namespace, cluster_label_constraints, labels
+    config, session, file, name, namespace, cluster_label_constraints, labels, hooks
 ):
     if namespace is None:
         namespace = config["user"]
@@ -76,6 +86,7 @@ def create_application(
     app = {
         "metadata": {"name": name, "labels": labels},
         "spec": {
+            "hooks": hooks,
             "manifest": manifest,
             "constraints": {"cluster": {"labels": cluster_label_constraints}},
         },
@@ -121,9 +132,10 @@ def get_application(config, session, namespace, name):
 @arg_cluster_label_constraints
 @arg_namespace
 @arg_labels
+@arg_hooks
 @depends("config", "session")
 def update_application(
-    config, session, namespace, name, file, labels, cluster_label_constraints
+    config, session, namespace, name, file, labels, cluster_label_constraints, hooks
 ):
     if namespace is None:
         namespace = config["user"]
@@ -132,6 +144,7 @@ def update_application(
     app = {
         "metadata": {"name": name, "labels": labels},
         "spec": {
+            "hooks": hooks,
             "manifest": manifest,
             "constraints": {"cluster": {"labels": cluster_label_constraints}},
         },

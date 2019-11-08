@@ -1,3 +1,4 @@
+import copy
 import logging
 import re
 from copy import deepcopy
@@ -14,7 +15,7 @@ from krake.client.kubernetes import KubernetesApi
 
 from ..exceptions import ControllerError, application_error_mapping
 from .. import Controller, Reflector
-from .events import listen, Event
+from .hooks import listen, Hook
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +127,13 @@ class ApplicationController(Controller):
     """
 
     def __init__(
-        self, api_endpoint, worker_count=10, loop=None, ssl_context=None, debounce=0
+        self,
+        api_endpoint,
+        worker_count=10,
+        loop=None,
+        ssl_context=None,
+        debounce=0,
+        hooks=None,
     ):
         super().__init__(
             api_endpoint, loop=loop, ssl_context=ssl_context, debounce=debounce
@@ -134,6 +141,7 @@ class ApplicationController(Controller):
         self.kubernetes_api = None
         self.reflector = None
         self.worker_count = worker_count
+        self.hooks = hooks
 
     async def prepare(self, client):
         assert client is not None
@@ -422,6 +430,25 @@ class ApplicationController(Controller):
                 namespace=app.metadata.namespace, name=app.metadata.name, body=app
             )
 
+    async def _apply(self, kube, app, cluster, resource):
+
+        await listen.hook(
+            Hook.PreApply, app=app, cluster=cluster, resource=resource, controller=self
+        )
+        resp = await kube.apply(resource)
+        await listen.hook(
+            Hook.PostApply, app=app, cluster=cluster, resource=resource, resp=resp
+        )
+
+    async def _delete(self, kube, app, cluster, resource):
+        await listen.hook(
+            Hook.PreDelete, app=app, cluster=cluster, resource=resource, controller=self
+        )
+        resp = await kube.delete(resource)
+        await listen.hook(
+            Hook.PostDelete, app=app, cluster=cluster, resource=resource, resp=resp
+        )
+
     async def error_handler(self, app, error=None):
         """Asynchronous callback executed whenever an error occurs during
         :meth:`resource_received`.
@@ -491,6 +518,15 @@ class KubernetesClient(object):
     async def __aexit__(self, *exec):
         self.resource_apis = None
 
+    @staticmethod
+    def log_resp(resp, kind, action=None):
+        resp_log = (
+            f"status={resp.status!r}"
+            if hasattr(resp, "status")
+            else f"resource={resp!r}"
+        )
+        logger.debug(f"%s {action}. %r", kind, resp_log)
+
     async def _read(self, kind, name, namespace):
         api = self.resource_apis[kind]
         fn = getattr(api, f"read_namespaced_{camel_to_snake_case(kind)}")
@@ -535,12 +571,12 @@ class KubernetesClient(object):
 
         if resp is None:
             resp = await self._create(kind, body=resource, namespace=namespace)
-            logger.debug("%s created. status=%r", kind, resp.status)
+            self.log_resp(resp, kind, action="created")
         else:
             resp = await self._patch(
                 kind, name=name, body=resource, namespace=namespace
             )
-            logger.debug("%s patched. status=%r", kind, resp.status)
+            self.log_resp(resp, kind, action="patched")
 
         return resp
 
@@ -566,7 +602,7 @@ class KubernetesClient(object):
                 return
             raise InvalidResourceError(err_resp=err)
 
-        logger.debug("%s deleted. status=%r", kind, resp.status)
+        self.log_resp(resp, kind, action="deleted")
 
         return resp
 

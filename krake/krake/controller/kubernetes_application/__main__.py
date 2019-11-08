@@ -18,10 +18,9 @@ Configuration is loaded from the ``controllers.kubernetes.application`` section:
 
 """
 import logging
-import pprint
 from argparse import ArgumentParser
 
-from krake import load_config, setup_logging
+from krake import load_config, setup_logging, search_config
 
 from ...controller import create_ssl_context, run
 from .kubernetes_application import ApplicationController
@@ -31,11 +30,9 @@ logger = logging.getLogger("krake.controller.kubernetes")
 
 
 def main(config):
-    krake_conf = load_config(config)
+    controller_config = load_config(config or search_config("kubernetes.yaml"))
 
-    setup_logging(krake_conf["log"])
-    logger.debug("Krake configuration settings:\n %s" % pprint.pformat(krake_conf))
-    controller_config = krake_conf["controllers"]["kubernetes_application"]
+    setup_logging(controller_config["log"])
 
     tls_config = controller_config.get("tls")
     ssl_context = create_ssl_context(tls_config)
@@ -46,8 +43,8 @@ def main(config):
         worker_count=controller_config["worker_count"],
         ssl_context=ssl_context,
         debounce=controller_config.get("debounce", 0),
+        hooks=controller_config["hooks"],
     )
-    setup_logging(krake_conf["log"])
     run(controller)
 
 

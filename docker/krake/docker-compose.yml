@@ -59,6 +59,11 @@ services:
     depends_on:
       - krake-api
     command: python3 -m krake.controller.kubernetes_application
+    environment:
+      # FIXME: Krake hostname is temporary loaded from
+      # environment variable "KRAKE_HOST", if present. This should
+      # be removed when DNS service takes place.
+      KRAKE_HOST: ${KRAKE_HOST}
     volumes:
       - /etc/krake:/etc/krake:ro
 
