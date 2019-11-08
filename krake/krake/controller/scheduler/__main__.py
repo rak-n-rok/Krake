@@ -27,7 +27,7 @@ logger = logging.getLogger("krake.controller.scheduler")
 
 
 def main(config):
-    scheduler_config = load_config(config or search_config("kubernetes.yaml"))
+    scheduler_config = load_config(config or search_config("scheduler.yaml"))
 
     setup_logging(scheduler_config["log"])
     logger.debug(
