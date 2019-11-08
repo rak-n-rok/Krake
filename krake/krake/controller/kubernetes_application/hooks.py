@@ -170,7 +170,7 @@ async def complete(app, api_endpoint, ssl_context, config):
     if complete_config is None:
         return
 
-    app.spec.token = app.spec.token if app.spec.token else token_urlsafe()
+    app.status.token = app.status.token if app.status.token else token_urlsafe()
 
     hook = Complete(
         api_endpoint,

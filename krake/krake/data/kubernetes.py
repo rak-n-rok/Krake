@@ -309,7 +309,6 @@ class Constraints(Serializable):
 class ApplicationSpec(Serializable):
     manifest: List[dict]
     constraints: Constraints = None
-    token: str = None
     hooks: List[str] = field(default_factory=list)
 
 
