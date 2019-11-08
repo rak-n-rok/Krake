@@ -101,6 +101,9 @@ create
 	``-n | --namespace`` (optional):
 		The namespace to which the Application has to be added. If none is given, the user namespace is selected.
 
+	``-H | --hook`` (optional):
+		The Application hook which modify the creation or liveness of Application.
+
 list
 	List all Applications of a namespace.
 
@@ -133,6 +136,9 @@ update
 
 	``-n | --namespace`` (optional):
 		The namespace from which the Applications have to be taken. If none is given, the user namespace is selected.
+
+	``-H | --hook`` (optional):
+		The Application hook which modify the creation or liveness of Application.
 
 delete
 	Request the deletion of a specific Application from a namespace.

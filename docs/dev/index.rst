@@ -22,5 +22,6 @@ API reference of all modules is provided.
     principles
     garbage-collection
     scheduling
+    hooks
     ref/krake
     ref/rok

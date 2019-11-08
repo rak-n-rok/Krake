@@ -168,6 +168,25 @@ controllers:
                 client_key (path)
                     Set the path to the client key. Example: ``./tmp/pki/jc-key.pem``
 
+Kubernetes application controller
+---------------------------------
+additional parameters, specific for the Kubernetes application controller:
+
+    hooks (string)
+        All the parameters for the application hooks are described here.
+
+        complete (string)
+            This section defines the parameters needed for the Application complete hook. If is not defined the Application complete hook is disabled.
+
+            ca_dest (path)
+                Set the path to the certificate authority in deployed Application. Example: ``/etc/krake_ca/ca.pem``
+            env_token (string)
+                Name of the environment variable, which stores Krake authentication token. Example: ``KRAKE_TOKEN``
+            env_complete (string)
+                Name of the environment variable, which stores Krake complete hook URL. Example: ``KRAKE_COMPLETE_URL``
+
+
+
 
 Logging
 -----------
