@@ -2,11 +2,13 @@ from copy import deepcopy
 from textwrap import dedent
 
 from aiohttp import web
+from aiohttp.test_utils import TestServer as Server
 import pytz
 import yaml
 from kubernetes_asyncio.client import V1Status, V1Service, V1ServiceSpec, V1ServicePort
 
 from krake.api.app import create_app
+from krake.controller import create_ssl_context
 from krake.data.core import resource_ref, ReasonCode
 from krake.data.kubernetes import Application, ApplicationState
 from krake.controller.kubernetes_application import (
@@ -805,6 +807,278 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
     assert stored.status.services == {}
+
+
+async def test_complete_hook(aiohttp_server, config, db, loop):
+    routes = web.RouteTableDef()
+    hooks_config = dict(
+        complete={
+            "ca_dest": "/etc/krake_ca/ca.pem",
+            "env_token": "KRAKE_TOKEN",
+            "env_complete": "KRAKE_COMPLETE_URL",
+        }
+    )
+
+    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    async def _(request):
+        return web.Response(status=200)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.SCHEDULED,
+        status__cluster=resource_ref(cluster),
+        spec__hooks="complete",
+        spec__manifest=list(
+            yaml.safe_load_all(
+                """---
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: nginx-demo
+            spec:
+              selector:
+                matchLabels:
+                  app: nginx
+              template:
+                metadata:
+                  labels:
+                    app: nginx
+                spec:
+                  containers:
+                  - name: nginx
+                    image: nginx:1.7.9
+                    ports:
+                    - containerPort: 80
+            """
+            )
+        ),
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        controller = ApplicationController(
+            server_endpoint(api_server), worker_count=0, hooks=hooks_config
+        )
+        await controller.prepare(client)
+        await controller.resource_received(app)
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    for resource in stored.status.manifest:
+        if resource["kind"] != "Deployment":
+            continue
+
+        for container in resource["spec"]["template"]["spec"]["containers"]:
+            assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
+            assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
+
+    assert stored.status.state == ApplicationState.RUNNING
+    assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
+
+
+async def test_complete_hook_disable_by_user(aiohttp_server, config, db, loop):
+    routes = web.RouteTableDef()
+    hooks_config = dict(
+        complete={
+            "ca_dest": "/etc/krake_ca/ca.pem",
+            "env_token": "KRAKE_TOKEN",
+            "env_complete": "KRAKE_COMPLETE_URL",
+        }
+    )
+
+    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    async def _(request):
+        return web.Response(status=200)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.SCHEDULED,
+        status__cluster=resource_ref(cluster),
+        spec__manifest=list(
+            yaml.safe_load_all(
+                """---
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: nginx-demo
+            spec:
+              selector:
+                matchLabels:
+                  app: nginx
+              template:
+                metadata:
+                  labels:
+                    app: nginx
+                spec:
+                  containers:
+                  - name: nginx
+                    image: nginx:1.7.9
+                    ports:
+                    - containerPort: 80
+            """
+            )
+        ),
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        controller = ApplicationController(
+            server_endpoint(api_server), worker_count=0, hooks=hooks_config
+        )
+        await controller.prepare(client)
+        await controller.resource_received(app)
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    for resource in stored.status.manifest:
+        if resource["kind"] != "Deployment":
+            continue
+
+        for container in resource["spec"]["template"]["spec"]["containers"]:
+            assert "env" not in container
+
+    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.state == ApplicationState.RUNNING
+    assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
+
+
+async def test_complete_hook_tls(aiohttp_server, config, pki, db, loop):
+    routes = web.RouteTableDef()
+    hooks_config = dict(
+        complete={
+            "ca_dest": "/etc/krake_ca/ca.pem",
+            "env_token": "KRAKE_TOKEN",
+            "env_complete": "KRAKE_COMPLETE_URL",
+        }
+    )
+    server_cert = pki.gencert("api-server")
+    client_cert = pki.gencert("client")
+    client_tls = {
+        "enabled": True,
+        "client_ca": pki.ca.cert,
+        "client_cert": client_cert.cert,
+        "client_key": client_cert.key,
+    }
+    ssl_context = create_ssl_context(client_tls)
+    config = dict(
+        config,
+        tls={
+            "enabled": True,
+            "client_ca": pki.ca.cert,
+            "cert": server_cert.cert,
+            "key": server_cert.key,
+        },
+    )
+
+    @routes.get("/api/v1/namespaces/default/configmaps/ca.pem")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/api/v1/namespaces/default/configmaps")
+    async def _(request):
+        return web.Response(status=200)
+
+    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    async def _(request):
+        return web.Response(status=200)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.SCHEDULED,
+        status__cluster=resource_ref(cluster),
+        spec__hooks="complete",
+        spec__manifest=list(
+            yaml.safe_load_all(
+                """---
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: nginx-demo
+            spec:
+              selector:
+                matchLabels:
+                  app: nginx
+              template:
+                metadata:
+                  labels:
+                    app: nginx
+                spec:
+                  containers:
+                  - name: nginx
+                    image: nginx:1.7.9
+                    ports:
+                    - containerPort: 80
+            """
+            )
+        ),
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    server_app = create_app(config)
+    api_server = Server(server_app)
+
+    await api_server.start_server(ssl=server_app["ssl_context"])
+    assert api_server.scheme == "https"
+
+    async with Client(
+        url=server_endpoint(api_server), loop=loop, ssl_context=ssl_context
+    ) as client:
+        controller = ApplicationController(
+            server_endpoint(api_server),
+            worker_count=0,
+            ssl_context=ssl_context,
+            hooks=hooks_config,
+        )
+        await controller.prepare(client)
+        await controller.resource_received(app)
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    for resource in stored.status.manifest:
+        if resource["kind"] != "Deployment":
+            continue
+
+        for container in resource["spec"]["template"]["spec"]["containers"]:
+            assert "volumeMounts" in container
+            assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
+            assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
+
+    assert stored.status.state == ApplicationState.RUNNING
+    assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
 
 async def test_kubernetes_error_handling(aiohttp_server, config, db, loop):
