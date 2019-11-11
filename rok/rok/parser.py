@@ -212,14 +212,3 @@ arg_labels = argument(
 arg_namespace = argument(
     "-n", "--namespace", help="Namespace of the resource. Defaults to user"
 )
-arg_metric = argument(
-    "--metric",
-    "-m",
-    dest="metrics",
-    action="append",
-    default=[],
-    help=(
-        "Metric name that should be used for this resource. "
-        "Can be specified multiple times"
-    ),
-)
