@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Dict, Union
-from dataclasses import field
 import pytest
+from dataclasses import field
 from marshmallow import ValidationError
 
 from krake.data.serializable import (
@@ -193,6 +193,66 @@ def test_api_object():
 
     with pytest.raises(ValidationError):
         Book.deserialize({"kind": "Letter"})
+
+
+def test_creation_ignored():
+    class Status(Serializable):
+        state: str
+
+    class Metadata(Serializable):
+        created: str = field(metadata={"readonly": True})
+        name: str = field(metadata={"readonly": True})
+        changing: str
+
+    class Annotations(Serializable):
+        metadata: Metadata
+
+    class Application(Serializable):
+        id: int
+        kind: str = "app"
+        status: Status = field(metadata={"subresource": True})
+        metadata: Metadata
+        annotations: List[Annotations]
+
+    annotation_1 = Annotations(
+        metadata=Metadata(created=None, name="annot_1", changing="foo")
+    )
+    annotation_2 = Annotations(
+        metadata=Metadata(created="yes", name="annot_2", changing="bar")
+    )
+    app = Application(
+        id=42,
+        status=None,
+        metadata=Metadata(created=None, name="name", changing="foobar"),
+        annotations=[annotation_1, annotation_2],
+    )
+    serialized = app.serialize()
+
+    assert serialized["metadata"]["changing"] == "foobar"
+    assert serialized["metadata"]["created"] is None
+    assert serialized["annotations"][0]["metadata"]["created"] is None
+    assert serialized["annotations"][1]["metadata"]["created"] == "yes"
+
+    # The readonly and subresources are ignored
+    deserialized = Application.deserialize(serialized, creation_ignored=True)
+
+    assert deserialized.status is None
+    assert deserialized.metadata.created is None
+    assert deserialized.annotations[0].metadata.created is None
+    assert deserialized.annotations[1].metadata.created is None
+
+    # Do not ignore the readonly and subresources
+    with pytest.raises(ValidationError) as err:
+        Application.deserialize(serialized)
+
+    error_messages = err.value.messages
+
+    assert "status" in error_messages
+    assert "metadata" in error_messages
+    assert "created" in error_messages["metadata"]
+    assert "name" not in error_messages["metadata"]
+    assert "created" in error_messages["annotations"][0]["metadata"]
+    assert 1 not in error_messages["annotations"]
 
 
 class DataSpec(PolymorphicContainer):

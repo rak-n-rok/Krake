@@ -218,10 +218,9 @@ def field_for_schema(type_, default=dataclasses.MISSING, **metadata):
     if default is not dataclasses.MISSING:
         metadata.setdefault("missing", default)
 
-    if metadata.get("readonly", False):
-        metadata.setdefault("missing", None)
-
-    if metadata.get("missing", missing) == missing:
+    # If no default value is given in the class definition,
+    # it means this field needs to be given
+    if metadata.get("missing", missing) is missing:
         metadata.setdefault("required", True)
 
     if hasattr(type_, "Schema"):
@@ -248,36 +247,6 @@ def field_for_schema(type_, default=dataclasses.MISSING, **metadata):
         return EnumField(type_, **metadata)
 
     raise NotImplementedError(f"No serializer found for {type_!r}")
-
-
-def readonly_fields(cls, prefix=None):
-    """Return the name of all read-only fields. Nested fields are returned
-    with dot-notation
-
-    Args:
-        cls (type): Dataclass from which fields should be loaded
-        prefix (str, optional): Used for internal recursion
-
-    Returns:
-        set: Set of field names that are marked as with ``readonly`` in their
-        metadata.
-
-    """
-    found = set()
-
-    for field in dataclasses.fields(cls):
-        if dataclasses.is_dataclass(field.type):
-            if prefix is None:
-                found |= readonly_fields(field.type, prefix=field.name)
-            else:
-                found |= readonly_fields(field.type, prefix=f"{prefix}.{field.name}")
-        elif field.metadata.get("readonly", False):
-            if prefix is None:
-                found.add(field.name)
-            else:
-                found.add(f"{prefix}.{field.name}")
-
-    return found
 
 
 class SerializableMeta(type):
@@ -371,15 +340,100 @@ class Serializable(metaclass=SerializableMeta):
             key, _ = kwargs.popitem()
             raise TypeError(f"Got unexpected keyword argument {key!r}")
 
-    def serialize(self, subresources=None, readonly=True):
+    @classmethod
+    def readonly_fields(cls, prefix=None):
+        """Return the name of all read-only fields. Nested fields are returned
+        with dot-notation, for lists also. In this case, the argument is the one taken
+        into account for looking at the read-only fields.
+
+        Example:
+
+        .. code:: python
+
+            class Comment(Serializable):
+                id: int = field(metadata={"readonly": True})
+                content: str
+
+            class BookMetadata(Serializable):
+                name: str = field(metadata={"readonly": True})
+                published: datetime = field(metadata={"readonly": True})
+                last_borrowed: datetime
+
+            class Book(Serializable):
+                id: int = field(metadata={"readonly": True})
+                metadata: BookMetadata
+                status: str
+                comments: List[Comment]
+
+            expected = {'id', 'metadata.name', 'metadata.published', 'comment.id'}
+            assert Book.readonly_fields() == expected
+
+        Args:
+            prefix (str, optional): Used for internal recursion
+
+        Returns:
+            set: Set of field names that are marked as with ``readonly`` in their
+            metadata.
+
+        """
+        found = set()
+
+        for field in dataclasses.fields(cls):
+            # Update the prefix if needed
+            new_prefix = field.name
+            if prefix:
+                new_prefix = f"{prefix}.{new_prefix}"
+
+            if dataclasses.is_dataclass(field.type):
+                # Go into the nested Serializable
+                found |= field.type.readonly_fields(prefix=new_prefix)
+            elif field.metadata.get("readonly", False):
+                found.add(new_prefix)
+            elif is_qualified_generic(field.type) and is_generic_subtype(
+                field.type, typing.List
+            ):
+                inside = field.type.__args__[0]
+                # For the lists of elements, go into the type listed,
+                # if it is a Serializable
+                if issubclass(field.type.__args__[0], Serializable):
+                    found |= inside.readonly_fields(prefix=new_prefix)
+
+        return found
+
+    @classmethod
+    def subresources_fields(cls):
+        """Return the name of all fields that are defined as subresource.
+
+        Returns:
+            set: Set of field names that are marked as ``subresource`` in their
+                metadata
+
+        """
+        return set(
+            field.name
+            for field in dataclasses.fields(cls)
+            if field.metadata.get("subresource")
+        )
+
+    @classmethod
+    def fields_ignored_by_creation(cls):
+        """Return the name of all fields that do not have to be provided during the
+        creation of an instance.
+
+        Returns:
+            set: Set of name of fields that are either subresources or read-only, or
+            nested read-only fields.
+
+        """
+        return cls.readonly_fields() | cls.subresources_fields()
+
+    def serialize(self, creation_ignored=False):
         """Serialize the object using the generated :attr:`Schema`.
 
         Args:
-            subresources (set, optional): Set of fields marked as
-                subresources that should be included. If None, all
-                subresources are included.
-            readonly (bool, optional): If False, all fields marked as readonly
-                will be excluded from serialization.
+            creation_ignored (bool): if True, all attributes not needed at the
+                creation are ignored. This contains the read-only and subresources,
+                which can only be created by the API.
 
         Returns:
             dict: JSON representation of the object
@@ -387,32 +441,30 @@ class Serializable(metaclass=SerializableMeta):
         """
         exclude = set()
 
-        # Exclude all subresources that are not named in the set of subresource
-        if subresources:
-            exclude = set(
-                field.name
-                for field in dataclasses.fields(self)
-                if field.metadata.get("subresource", False)
-                and field.name not in subresources
-            )
-        # Exclude all read-only fields
-        if not readonly:
-            exclude |= readonly_fields(self)
+        if creation_ignored:
+            exclude = self.fields_ignored_by_creation()
 
         return self.Schema(exclude=exclude).dump(self)
 
     @classmethod
-    def deserialize(cls, data):
+    def deserialize(cls, data, creation_ignored=False):
         """Loading an instance of the class from JSON-encoded data.
 
         Args:
             data (dict): JSON dictionary that should be deserialized.
+            creation_ignored (bool): if True, all attributes not needed at the
+                creation are ignored. This contains the read-only and subresources,
+                which can only be created by the API.
 
         Raises:
             marshmallow.ValidationError: If the data is invalid
 
         """
-        return cls.Schema().load(data)
+        exclude = set()
+        if creation_ignored:
+            exclude = cls.fields_ignored_by_creation()
+
+        return cls.Schema(exclude=exclude).load(data)
 
     def update(self, overwrite):
         """Update data class fields with corresponding fields from the

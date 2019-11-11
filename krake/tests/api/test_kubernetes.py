@@ -198,8 +198,7 @@ async def test_create_app(aiohttp_client, config, db):
     data = ApplicationFactory(status=None)
 
     resp = await client.post(
-        "/kubernetes/namespaces/testing/applications",
-        json=data.serialize(subresources=set()),
+        "/kubernetes/namespaces/testing/applications", json=data.serialize()
     )
     assert resp.status == 200
     app = Application.deserialize(await resp.json())
@@ -302,7 +301,7 @@ async def test_update_app(aiohttp_client, config, db):
     resp = await client.put(
         f"/kubernetes/namespaces/{data.metadata.namespace}"
         f"/applications/{data.metadata.name}",
-        json=data.serialize(subresources=set(), readonly=False),
+        json=data.serialize(),
     )
     assert resp.status == 200
     app = Application.deserialize(await resp.json())
@@ -343,7 +342,7 @@ async def test_update_app_status(aiohttp_client, config, db):
 
     resp = await client.put(
         f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/status",
-        json=app.serialize(subresources={"status"}, readonly=False),
+        json=app.serialize(),
     )
     assert resp.status == 200
     received = Application.deserialize(await resp.json())
@@ -459,7 +458,7 @@ async def test_add_finializer_in_deleted_app(aiohttp_client, config, db):
     resp = await client.put(
         f"/kubernetes/namespaces/{app.metadata.namespace}"
         f"/applications/{app.metadata.name}",
-        json=app.serialize(subresources=set(), readonly=False),
+        json=app.serialize(),
     )
     assert resp.status == 409
     body = await resp.json()
@@ -534,8 +533,7 @@ async def test_watch_app(aiohttp_client, config, db, loop):
         # Create two applications
         for app in apps:
             resp = await client.post(
-                "/kubernetes/namespaces/testing/applications",
-                json=app.serialize(subresources=set(), readonly=False),
+                "/kubernetes/namespaces/testing/applications", json=app.serialize()
             )
             assert resp.status == 200
 
@@ -589,7 +587,7 @@ async def test_watch_app_from_all_namespaces(aiohttp_client, config, db, loop):
         for app in apps:
             resp = await client.post(
                 f"/kubernetes/namespaces/{app.metadata.namespace}/applications",
-                json=app.serialize(subresources=set(), readonly=False),
+                json=app.serialize(),
             )
             assert resp.status == 200
 
@@ -671,7 +669,7 @@ async def test_create_cluster(aiohttp_client, config, db):
 
     resp = await client.post(
         f"/kubernetes/namespaces/{data.metadata.namespace}/clusters",
-        json=data.serialize(subresources=set(), readonly=False),
+        json=data.serialize(),
     )
     assert resp.status == 200
     cluster = Cluster.deserialize(await resp.json())
@@ -701,8 +699,7 @@ async def test_create_invalid_cluster(aiohttp_client, config):
     data = ClusterFactory(spec__kubeconfig={"invalid": "kubeconfig"})
 
     resp = await client.post(
-        "/kubernetes/namespaces/testing/clusters",
-        json=data.serialize(subresources=set(), readonly=False),
+        "/kubernetes/namespaces/testing/clusters", json=data.serialize()
     )
     assert resp.status == 422
 
