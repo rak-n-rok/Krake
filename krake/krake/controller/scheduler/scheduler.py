@@ -248,7 +248,7 @@ class Scheduler(Controller):
                 for constraint in app.spec.constraints.cluster.labels:
                     if constraint.match(cluster.metadata.labels or {}):
                         logger.debug(
-                            "Cluster %s does not match constraint %r",
+                            "Cluster %s matches constraint %r",
                             resource_ref(cluster),
                             constraint,
                         )
