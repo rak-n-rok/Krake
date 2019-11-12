@@ -1,14 +1,9 @@
 import logging
-from datetime import datetime
 from aiohttp import web
 from datetime import datetime
 
 from krake.apidefs.kubernetes import kubernetes
-from krake.data.kubernetes import (
-    Application,
-    ClusterBinding,
-    ApplicationComplete,
-)
+from krake.data.kubernetes import Application, ClusterBinding, ApplicationComplete
 from .auth import protected
 from .helpers import use_schema, load, session
 from .generator import generate_api

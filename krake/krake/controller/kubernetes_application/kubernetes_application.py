@@ -1,4 +1,3 @@
-import copy
 import logging
 import re
 from copy import deepcopy
@@ -93,7 +92,7 @@ class ResourceDelta(NamedTuple):
         """
         desired = {
             ResourceID.from_resource(resource): resource
-            for resource in app.spec.manifest
+            for resource in app.status.mangling
         }
         current = {
             ResourceID.from_resource(resource): resource
@@ -269,9 +268,16 @@ class ApplicationController(Controller):
             )
             async with KubernetesClient(cluster.spec.kubeconfig) as kube:
                 for resource in app.status.manifest:
+                    await listen.hook(
+                        Hook.PreDelete,
+                        app=app,
+                        cluster=cluster,
+                        resource=resource,
+                        controller=self,
+                    )
                     resp = await kube.delete(resource)
-                    await listen.emit(
-                        Event(resource["kind"], "delete"),
+                    await listen.hook(
+                        Hook.PostDelete,
                         app=app,
                         cluster=cluster,
                         resource=resource,
@@ -283,6 +289,7 @@ class ApplicationController(Controller):
 
         # Clear manifest in status
         app.status.manifest = None
+        app.status.mangling = None
         app.status.running_on = None
 
     async def _reconcile_application(self, app):
@@ -290,6 +297,16 @@ class ApplicationController(Controller):
             raise InvalidStateError(
                 "Application is scheduled but no cluster is assigned"
             )
+
+        # Mangle desired spec resource by Mangling hook
+        app.status.mangling = deepcopy(app.spec.manifest)
+        await listen.hook(
+            Hook.Mangling,
+            app=app,
+            api_endpoint=self.api_endpoint,
+            ssl_context=self.ssl_context,
+            config=self.hooks,
+        )
 
         delta = ResourceDelta.calculate(app)
 
@@ -346,9 +363,16 @@ class ApplicationController(Controller):
         async with KubernetesClient(cluster.spec.kubeconfig) as kube:
             # Delete all resources that are no longer in the spec
             for deleted in delta.deleted:
+                await listen.hook(
+                    Hook.PreDelete,
+                    app=app,
+                    cluster=cluster,
+                    resource=deleted,
+                    controller=self,
+                )
                 resp = await kube.delete(deleted)
-                await listen.emit(
-                    Event(deleted["kind"], "delete"),
+                await listen.hook(
+                    Hook.PostDelete,
                     app=app,
                     cluster=cluster,
                     resource=deleted,
@@ -357,9 +381,16 @@ class ApplicationController(Controller):
 
             # Create new resource
             for new in delta.new:
+                await listen.hook(
+                    Hook.PreCreate,
+                    app=app,
+                    cluster=cluster,
+                    resource=new,
+                    controller=self,
+                )
                 resp = await kube.apply(new)
-                await listen.emit(
-                    Event(new["kind"], "create"),
+                await listen.hook(
+                    Hook.PostCreate,
                     app=app,
                     cluster=cluster,
                     resource=new,
@@ -368,9 +399,16 @@ class ApplicationController(Controller):
 
             # Update modified resource
             for modified in delta.modified:
+                await listen.hook(
+                    Hook.PreUpdate,
+                    app=app,
+                    cluster=cluster,
+                    resource=modified,
+                    controller=self,
+                )
                 resp = await kube.apply(modified)
-                await listen.emit(
-                    Event(modified["kind"], "update"),
+                await listen.hook(
+                    Hook.PostUpdate,
                     app=app,
                     cluster=cluster,
                     resource=modified,
@@ -378,7 +416,7 @@ class ApplicationController(Controller):
                 )
 
         # Update resource in application status
-        app.status.manifest = app.spec.manifest.copy()  # TODO: Do we need to copy here?
+        app.status.manifest = deepcopy(app.status.mangling)
 
         # Application is now running on the scheduled cluster
         app.status.running_on = app.status.scheduled_to
@@ -404,9 +442,21 @@ class ApplicationController(Controller):
         # Delete all resources currently running on the old cluster
         await self._delete_manifest(app)
 
+        # Mangle desired spec resource by Mangling hook
+        app.status.mangling = deepcopy(app.spec.manifest)
+        await listen.hook(
+            Hook.Mangling,
+            app=app,
+            api_endpoint=self.api_endpoint,
+            ssl_context=self.ssl_context,
+            config=self.hooks,
+        )
         # Create complete manifest on the new cluster
-        delta = ResourceDelta(new=tuple(app.spec.manifest), modified=(), deleted=())
+        delta = ResourceDelta(new=tuple(app.status.mangling), modified=(), deleted=())
         await self._apply_manifest(app, delta)
+
+        # Update resource in application status
+        app.status.manifest = deepcopy(app.status.mangling)
 
         # Transition into "RUNNING" state
         app.status.state = ApplicationState.RUNNING
@@ -429,25 +479,6 @@ class ApplicationController(Controller):
             await self.kubernetes_api.update_application(
                 namespace=app.metadata.namespace, name=app.metadata.name, body=app
             )
-
-    async def _apply(self, kube, app, cluster, resource):
-
-        await listen.hook(
-            Hook.PreApply, app=app, cluster=cluster, resource=resource, controller=self
-        )
-        resp = await kube.apply(resource)
-        await listen.hook(
-            Hook.PostApply, app=app, cluster=cluster, resource=resource, resp=resp
-        )
-
-    async def _delete(self, kube, app, cluster, resource):
-        await listen.hook(
-            Hook.PreDelete, app=app, cluster=cluster, resource=resource, controller=self
-        )
-        resp = await kube.delete(resource)
-        await listen.hook(
-            Hook.PostDelete, app=app, cluster=cluster, resource=resource, resp=resp
-        )
 
     async def error_handler(self, app, error=None):
         """Asynchronous callback executed whenever an error occurs during

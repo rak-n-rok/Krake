@@ -546,7 +546,7 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
 
 
 async def test_register_service():
-    resource = {"metadata": {"name": "nginx"}}
+    resource = {"kind": "Service", "metadata": {"name": "nginx"}}
     cluster = ClusterFactory()
     app = ApplicationFactory()
     response = V1Service(
@@ -563,7 +563,7 @@ async def test_register_service_without_spec():
     """Ensure that the old endpoint of the service is removed if the new
     service does not have and node port.
     """
-    resource = {"metadata": {"name": "nginx"}}
+    resource = {"kind": "Service", "metadata": {"name": "nginx"}}
     cluster = ClusterFactory()
     app = ApplicationFactory(status__services={"nginx": "127.0.0.1:1234"})
     response = V1Service()
@@ -572,7 +572,7 @@ async def test_register_service_without_spec():
 
 
 async def test_register_service_without_ports():
-    resource = {"metadata": {"name": "nginx"}}
+    resource = {"kind": "Service", "metadata": {"name": "nginx"}}
     cluster = ClusterFactory()
     app = ApplicationFactory(status__services={"nginx": "127.0.0.1:1234"})
     response = V1Service(spec=V1ServiceSpec())
@@ -581,7 +581,7 @@ async def test_register_service_without_ports():
 
 
 async def test_register_service_with_empty_ports():
-    resource = {"metadata": {"name": "nginx"}}
+    resource = {"kind": "Service", "metadata": {"name": "nginx"}}
     cluster = ClusterFactory()
     app = ApplicationFactory(status__services={"nginx": "127.0.0.1:1234"})
     response = V1Service(spec=V1ServiceSpec(ports=[]))
@@ -590,7 +590,7 @@ async def test_register_service_with_empty_ports():
 
 
 async def test_register_service_without_node_port():
-    resource = {"metadata": {"name": "nginx"}}
+    resource = {"kind": "Service", "metadata": {"name": "nginx"}}
     cluster = ClusterFactory()
     app = ApplicationFactory(status__services={"nginx": "127.0.0.1:1234"})
     response = V1Service(spec=V1ServiceSpec(ports=[]))
@@ -688,7 +688,7 @@ async def test_service_registration(aiohttp_server, config, db, loop):
 
 
 async def test_unregister_service():
-    resource = {"metadata": {"name": "nginx"}}
+    resource = {"kind": "Service", "metadata": {"name": "nginx"}}
     cluster = ClusterFactory()
     app = ApplicationFactory(status__services={"nginx": "127.0.0.1:1234"})
     response = V1Status()
@@ -697,7 +697,7 @@ async def test_unregister_service():
 
 
 async def test_unregister_service_without_previous_service():
-    resource = {"metadata": {"name": "nginx"}}
+    resource = {"kind": "Service", "metadata": {"name": "nginx"}}
     cluster = ClusterFactory()
     app = ApplicationFactory(status__services={})
     response = V1Status()
@@ -833,8 +833,9 @@ async def test_complete_hook(aiohttp_server, config, db, loop):
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
 
     app = ApplicationFactory(
-        status__state=ApplicationState.SCHEDULED,
-        status__cluster=resource_ref(cluster),
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
         spec__hooks="complete",
         spec__manifest=list(
             yaml.safe_load_all(
@@ -912,8 +913,9 @@ async def test_complete_hook_disable_by_user(aiohttp_server, config, db, loop):
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
 
     app = ApplicationFactory(
-        status__state=ApplicationState.SCHEDULED,
-        status__cluster=resource_ref(cluster),
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
         spec__manifest=list(
             yaml.safe_load_all(
                 """---
@@ -1016,8 +1018,9 @@ async def test_complete_hook_tls(aiohttp_server, config, pki, db, loop):
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
 
     app = ApplicationFactory(
-        status__state=ApplicationState.SCHEDULED,
-        status__cluster=resource_ref(cluster),
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
         spec__hooks="complete",
         spec__manifest=list(
             yaml.safe_load_all(

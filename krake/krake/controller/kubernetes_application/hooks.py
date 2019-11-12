@@ -8,11 +8,11 @@ import os
 from functools import reduce
 from operator import getitem
 from enum import Enum, auto
-from functools import wraps
 from inspect import iscoroutinefunction
 from typing import NamedTuple
 
 import OpenSSL
+import yarl
 from yarl import URL
 from secrets import token_urlsafe
 
@@ -40,8 +40,10 @@ class InvalidResourceError(ControllerError):
 
 
 class Hook(Enum):
-    PreApply = auto()
-    PostApply = auto()
+    PreCreate = auto()
+    PostCreate = auto()
+    PreUpdate = auto()
+    PostUpdate = auto()
     PreDelete = auto()
     PostDelete = auto()
     Mangling = auto()
@@ -95,11 +97,7 @@ class HookDispatcher(object):
             else:
                 self.registry[hook].append(handler)
 
-            @wraps(handler)
-            def wrapper(*args, **kwargs):
-                handler(*args, **kwargs)
-
-            return wrapper
+            return handler
 
         return decorator
 
@@ -126,25 +124,71 @@ class HookDispatcher(object):
 listen = HookDispatcher()
 
 
-@listen.on(Hook.PostApply)
-async def register_service(app, cluster, resource, resp):
+@listen.on(Hook.PostCreate)
+@listen.on(Hook.PostUpdate)
+async def register_service(app, cluster, resource, response):
+    """Register endpoint of Kubernetes Service object on creation and update.
+
+    Args:
+        app (krake.data.kubernetes.Application): Application the service belongs to
+        cluster (krake.data.kubernetes.Cluster): The cluster on which the
+            application is running
+        resource (dict): Kubernetes object description as specified in the
+            specification of the application.
+        response (kubernetes_asyncio.client.V1Service): Response of the
+            Kubernetes API
+
+    """
     if resource["kind"] != "Service":
         return
 
-    service_name = resp.metadata.name
+    service_name = resource["metadata"]["name"]
+    node_port = None
 
-    node_port = resp.spec.ports[0].node_port
+    # Ensure that ports are specified
+    if response.spec and response.spec.ports:
+        node_port = response.spec.ports[0].node_port
 
+    # If the service does not have a node port, remove a potential reference
+    # end return.
     if node_port is None:
+        try:
+            del app.status.services[service_name]
+        except KeyError:
+            pass
         return
 
-    # Load Kubernetes configuration and get host
+    # Determine URL of Kubernetes cluster API
     loader = KubeConfigLoader(cluster.spec.kubeconfig)
     config = Configuration()
     await loader.load_and_set(config)
-    url = URL(config.host)
+    cluster_url = yarl.URL(config.host)
 
-    app.status.services[service_name] = url.host + ":" + str(node_port)
+    app.status.services[service_name] = f"{cluster_url.host}:{node_port}"
+
+
+@listen.on(Hook.PostDelete)
+async def unregister_service(app, cluster, resource, response):
+    """Unregister endpoint of Kubernetes Service object on deletion.
+
+    Args:
+        app (krake.data.kubernetes.Application): Application the service belongs to
+        cluster (krake.data.kubernetes.Cluster): The cluster on which the
+            application is running
+        resource (dict): Kubernetes object description as specified in the
+            specification of the application.
+        response (kubernetes_asyncio.client.V1Status): Response of the
+            Kubernetes API
+
+    """
+    if resource["kind"] != "Service":
+        return
+
+    service_name = resource["metadata"]["name"]
+    try:
+        del app.status.services[service_name]
+    except KeyError:
+        pass
 
 
 @listen.on(Hook.Mangling)
