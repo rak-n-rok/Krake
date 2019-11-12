@@ -13,7 +13,6 @@ from krake.data.kubernetes import (
     ClusterBinding,
     Cluster,
     ClusterList,
-    ClusterState,
     LabelConstraint,
     EqualConstraint,
     NotEqualConstraint,
@@ -129,8 +128,9 @@ def test_str_notin_constraint():
 async def test_list_apps(aiohttp_client, config, db):
     apps = [
         ApplicationFactory(status__state=ApplicationState.PENDING),
-        ApplicationFactory(status__state=ApplicationState.SCHEDULED),
-        ApplicationFactory(status__state=ApplicationState.UPDATED),
+        ApplicationFactory(status__state=ApplicationState.CREATING),
+        ApplicationFactory(status__state=ApplicationState.RECONCILING),
+        ApplicationFactory(status__state=ApplicationState.MIGRATING),
         ApplicationFactory(status__state=ApplicationState.DELETING),
         ApplicationFactory(
             metadata__namespace="system", status__state=ApplicationState.RUNNING
@@ -365,7 +365,9 @@ async def test_update_app_binding(aiohttp_client, config, db):
     app = ApplicationFactory(status__state=ApplicationState.PENDING)
     cluster = ClusterFactory()
 
-    assert app.status.cluster is None, "Application is not scheduled"
+    assert not app.metadata.owners, "There are no owners"
+    assert app.status.scheduled_to is None, "Application is not scheduled"
+    assert app.status.running_on is None, "Application is not running on a cluster"
 
     await db.put(app)
     await db.put(cluster)
@@ -378,12 +380,16 @@ async def test_update_app_binding(aiohttp_client, config, db):
     assert resp.status == 200
     body = await resp.json()
     received = Application.deserialize(body)
-    assert received.status.cluster == cluster_ref
-    assert received.status.state == ApplicationState.SCHEDULED
+    assert received.status.scheduled_to == cluster_ref
+    assert received.status.running_on is None
+    assert received.status.state == ApplicationState.PENDING
+    assert cluster_ref in received.metadata.owners
 
     stored = await db.get(Application, namespace="testing", name=app.metadata.name)
-    assert stored.status.cluster == cluster_ref
-    assert stored.status.state == ApplicationState.SCHEDULED
+    assert stored.status.scheduled_to == cluster_ref
+    assert stored.status.running_on is None
+    assert stored.status.state == ApplicationState.PENDING
+    assert cluster_ref in stored.metadata.owners
 
 
 async def test_delete_app(aiohttp_client, config, db):
@@ -609,7 +615,7 @@ async def test_list_clusters_rbac(rbac_allow, config, aiohttp_client):
 
 async def test_create_cluster(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
-    data = ClusterFactory(status=None)
+    data = ClusterFactory()
 
     resp = await client.post(
         f"/kubernetes/namespaces/{data.metadata.namespace}/clusters",
@@ -648,43 +654,9 @@ async def test_create_invalid_cluster(aiohttp_client, config):
     assert resp.status == 422
 
 
-async def test_update_cluster_status(aiohttp_client, config, db):
-    client = await aiohttp_client(create_app(config=config))
-    cluster = ClusterFactory(status__state=ClusterState.RUNNING)
-
-    await db.put(cluster)
-
-    cluster.status.state = ClusterState.FAILED
-    cluster.status.reason = ReasonFactory()
-    cluster.status.cluster = ResourceRef(
-        api="kubernetes", kind="Cluster", namespace="testing", name="test-cluster"
-    )
-    resp = await client.put(
-        f"/kubernetes/namespaces/testing/clusters/{cluster.metadata.name}/status",
-        json=cluster.serialize(subresources={"status"}),
-    )
-    assert resp.status == 200
-
-    stored = await db.get(Cluster, namespace="testing", name=cluster.metadata.name)
-    assert stored.status == cluster.status
-
-
-async def test_update_cluster_status_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
-
-    resp = await client.put("/kubernetes/namespaces/testing/clusters/mycluster/status")
-    assert resp.status == 403
-
-    async with rbac_allow("kubernetes", "clusters/status", "update"):
-        resp = await client.put(
-            "/kubernetes/namespaces/testing/clusters/mycluster/status"
-        )
-        assert resp.status == 415
-
-
 async def test_delete_cluster(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
-    cluster = ClusterFactory(status__state=ClusterState.RUNNING)
+    cluster = ClusterFactory()
     await db.put(cluster)
 
     # Delete application

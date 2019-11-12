@@ -132,6 +132,25 @@ async def test_queue_pending_debounce(loop):
     assert (key, value) == ("key", 2)
 
 
+async def test_queue_delayed_put(loop):
+    queue = WorkQueue(loop=loop, debounce=0)
+
+    # Each new added value should reset the timer for the "key" key
+    await queue.put("key", 1, delay=0.1)
+
+    start = loop.time()
+    key, value = await queue.get()
+    end = loop.time()
+
+    assert (key, value) == ("key", 1)
+
+    # The value should be received a bit after the delay time
+    assert 0.1 < end - start < 0.15
+
+    await queue.done("key")
+    assert queue.empty()
+
+
 async def test_executor(loop):
     # Do not use a unittest.Mock because run() needs to be asynchronous
     class SimpleController(object):
@@ -183,14 +202,14 @@ async def test_controller_background_tasks(loop):
     values_gathered = set()
 
     class SimpleController(Controller):
-        def create_background_tasks(self):
+        def prepare(self):
             task_1 = BackgroundTask(1, values_gathered)
             self.register_task(task_1.run)
             task_2 = BackgroundTask(2, values_gathered)
             self.register_task(task_2.run)
 
     controller = SimpleController(api_endpoint="http://localhost:8080")
-    controller.create_background_tasks()  # need to be called explicitly
+    controller.prepare()  # need to be called explicitly
     await asyncio.gather(*(task() for task, name in controller.tasks))
 
     assert values_gathered == {1, 2}
@@ -268,14 +287,14 @@ async def test_controller_retry(loop):
     values_gathered = set()
 
     class SimpleController(Controller):
-        def create_background_tasks(self):
+        def prepare(self):
             task = BackgroundTask(1, values_gathered, sleep_first=3)
             self.register_task(task.run)
 
     controller = SimpleController(api_endpoint="http://localhost:8080")
     controller.max_retry = 2
     controller.burst_time = 1
-    controller.create_background_tasks()
+    controller.prepare()
     with pytest.raises(RuntimeError):
         task_tuple = controller.tasks[0]
         # The task is a tuple (coroutine, name)
@@ -367,8 +386,7 @@ async def test_observer(loop):
     is_res_updated = loop.create_future()
 
     app = ApplicationFactory(status__state=ApplicationState.RUNNING)
-
-    real_world_status = ApplicationStatusFactory(state=ApplicationState.UPDATED)
+    real_world_status = ApplicationStatusFactory(state=ApplicationState.RUNNING)
 
     async def on_res_update(resource):
         assert resource == app

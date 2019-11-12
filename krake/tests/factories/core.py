@@ -1,9 +1,8 @@
-import random
 from dataclasses import MISSING
 
 import pytz
-from factory import Factory, SubFactory, List, lazy_attribute, fuzzy, Maybe
-from datetime import datetime
+from factory import Factory, SubFactory, List, lazy_attribute, fuzzy, Maybe, Dict
+from datetime import timedelta
 
 from .fake import fake
 from krake.data.core import (
@@ -20,6 +19,7 @@ from krake.data.core import (
     MetricsProvider,
     MetricsProviderSpec,
     PrometheusSpec,
+    StaticSpec,
 )
 
 
@@ -47,12 +47,16 @@ class MetadataFactory(Factory):
     name = fuzzy.FuzzyAttribute(fuzzy_name)
     namespace = "testing"
     uid = fuzzy.FuzzyAttribute(fake.uuid4)
-    created = fuzzy.FuzzyDateTime(datetime.now(tz=pytz.utc))
     labels = fuzzy.FuzzyAttribute(fuzzy_dict)
+    deleted = None  # Not deleted by default
+
+    @lazy_attribute
+    def created(self):
+        return fake.date_time(tzinfo=pytz.utc)
 
     @lazy_attribute
     def modified(self):
-        delta = fake.time_delta()
+        delta = timedelta(seconds=fake.pyint(0, 86400))  # 86400 s == 1 day
         return self.created + delta
 
 
@@ -138,7 +142,6 @@ class MetricSpecFactory(Factory):
 
     min = 0
     max = 1
-    weight = fuzzy.FuzzyAttribute(random.random)
     provider = SubFactory(MetricSpecProviderFactory)
 
 
@@ -157,6 +160,18 @@ class PrometheusSpecFactory(Factory):
     url = fuzzy.FuzzyAttribute(fake.url)
 
 
+class StaticSpecFactory(Factory):
+    class Meta:
+        model = StaticSpec
+
+    metrics = Dict(
+        {
+            "static_metric_1": fuzzy.FuzzyFloat(0, 1),
+            "static_metric_2": fuzzy.FuzzyFloat(0, 1),
+        }
+    )
+
+
 class MetricsProviderSpecFactory(Factory):
     class Meta:
         model = MetricsProviderSpec
@@ -166,7 +181,12 @@ class MetricsProviderSpecFactory(Factory):
         def is_prometheus(self):
             return self.type == "prometheus"
 
+        @lazy_attribute
+        def is_static(self):
+            return self.type == "static"
+
     prometheus = Maybe("is_prometheus", SubFactory(PrometheusSpecFactory), MISSING)
+    static = Maybe("is_static", SubFactory(StaticSpecFactory), MISSING)
 
     @lazy_attribute
     def type(self):

@@ -2,6 +2,7 @@
 from enum import Enum, auto
 from dataclasses import field
 from typing import List
+from datetime import datetime
 from marshmallow import ValidationError, fields
 from marshmallow.utils import ensure_text_type
 from lark import Lark, UnexpectedInput
@@ -312,18 +313,37 @@ class ApplicationSpec(Serializable):
 
 class ApplicationState(Enum):
     PENDING = auto()
-    UPDATED = auto()
-    SCHEDULED = auto()
+    CREATING = auto()
     RUNNING = auto()
+    RECONCILING = auto()
+    MIGRATING = auto()
     DELETING = auto()
-    DELETED = auto()
     FAILED = auto()
 
 
 class ApplicationStatus(Status):
+    """Status subresource of :class:`Application`.
+
+    Attributes:
+        state (ApplicationState): Current state of the application
+        scheduled (datetime.datetime): Timestamp when the application was last
+            scheduled.
+        scheduled_to (ResourceRef): Reference to the cluster where the
+            application should run.
+        running_on (ResourceRef): Reference to the cluster where the
+            application is currently running.
+        services (dict): Mapping of Kubernetes service names to their public
+            endpoints.
+        manifest (list[dict]): List of Kubernetes objects currently currently
+            existing
+
+    """
+
     state: ApplicationState = ApplicationState.PENDING
-    cluster: ResourceRef = None
-    services: dict = None
+    scheduled: datetime = None
+    scheduled_to: ResourceRef = None
+    running_on: ResourceRef = None
+    services: dict = field(default_factory=dict)
     manifest: List[dict] = None
 
 
@@ -367,24 +387,16 @@ def _validate_kubeconfig(kubeconfig):
     return True
 
 
+class ClusterMetricRef(Serializable):
+    name: str
+    weight: float
+
+
 class ClusterSpec(Serializable):
     kubeconfig: dict = field(metadata={"validate": _validate_kubeconfig})
     # FIXME needs further discussion how to register stand-alone kubernetes cluster as
     #  a cluster which should be processed by krake.controller.scheduler
-    metrics: List[str] = field(default_factory=list)
-
-
-class ClusterState(Enum):
-    PENDING = auto()
-    RUNNING = auto()
-    UPDATED = auto()
-    DELETING = auto()
-    DELETED = auto()
-    FAILED = auto()
-
-
-class ClusterStatus(Status):
-    state: ClusterState = ClusterState.PENDING
+    metrics: List[ClusterMetricRef] = field(default_factory=list)
 
 
 @persistent("/kubernetes/clusters/{namespace}/{name}")
@@ -393,7 +405,6 @@ class Cluster(ApiObject):
     kind: str = "Cluster"
     metadata: Metadata
     spec: ClusterSpec
-    status: ClusterStatus = field(metadata={"subresource": True})
 
 
 class ClusterList(ApiObject):

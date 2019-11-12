@@ -8,7 +8,6 @@ from krake.data.kubernetes import (
     Application,
     ApplicationList,
     ApplicationState,
-    ClusterState,
     ClusterList,
     Cluster,
 )
@@ -202,10 +201,7 @@ async def test_watch_applications_all_namespaces(aiohttp_server, config, db, loo
 
 async def test_list_clusters(aiohttp_server, config, db, loop):
     # Populate database
-    data = [
-        ClusterFactory(status__state=ClusterState.PENDING),
-        ClusterFactory(status__state=ClusterState.RUNNING),
-    ]
+    data = [ClusterFactory(), ClusterFactory()]
     for cluster in data:
         await db.put(cluster)
 

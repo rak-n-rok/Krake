@@ -1,8 +1,16 @@
 from base64 import b64encode
 from itertools import cycle
-import yaml
-from factory import Factory, SubFactory, lazy_attribute, fuzzy, Iterator
 from copy import deepcopy
+from factory import (
+    Factory,
+    SubFactory,
+    lazy_attribute,
+    fuzzy,
+    Iterator,
+    post_generation,
+)
+import yaml
+import pytz
 
 from .fake import fake
 from .core import MetadataFactory, ReasonFactory
@@ -12,9 +20,8 @@ from krake.data.kubernetes import (
     ApplicationStatus,
     ApplicationState,
     Application,
+    ClusterMetricRef,
     ClusterSpec,
-    ClusterState,
-    ClusterStatus,
     Cluster,
     Constraints,
     ClusterConstraints,
@@ -43,10 +50,6 @@ label_constraints = cycle(
 )
 
 
-states = list(ApplicationState.__members__.values())
-states.remove(ApplicationState.DELETED)
-
-
 class ClusterConstraintsFactory(Factory):
     class Meta:
         model = ClusterConstraints
@@ -65,7 +68,19 @@ class ApplicationStatusFactory(Factory):
     class Meta:
         model = ApplicationStatus
 
-    state = fuzzy.FuzzyChoice(states)
+    class Params:
+        """
+        Attributes:
+            is_scheduled (bool): Is used to control whether the
+                ``.status.scheduled`` timestamp of before or after the
+                ``.metadata.modified`` timestamp. If the application is in
+                *PENDING* state, ``.status.scheduled`` is set to :data:`None`.
+
+        """
+
+        is_scheduled = fuzzy.FuzzyChoice([True, False])
+
+    state = fuzzy.FuzzyChoice(list(ApplicationState.__members__.values()))
 
     @lazy_attribute
     def reason(self):
@@ -74,9 +89,47 @@ class ApplicationStatusFactory(Factory):
         return ReasonFactory()
 
     @lazy_attribute
-    def cluster(self):
+    def scheduled(self):
+        if not self.factory_parent:
+            return fake.date_time()
+
+        created = self.factory_parent.metadata.created
+        modified = self.factory_parent.metadata.modified
+
+        assert created < modified
+
+        if self.is_scheduled:
+            return fake.date_time_between(start_date=modified, tzinfo=pytz.utc)
+        elif self.state == ApplicationState.PENDING:
+            return None  # Application was never scheduled
+        else:
+            return fake.date_time_between(
+                start_date=created, end_date=modified, tzinfo=pytz.utc
+            )
+
+    @lazy_attribute
+    def scheduled_to(self):
         if self.state == ApplicationState.PENDING:
             return None
+        if self.factory_parent:
+            namespace = self.factory_parent.metadata.namespace
+        else:
+            namespace = fuzzy_name()
+        name = fuzzy_name()
+        return ResourceRef(
+            api="kubernetes", kind="Cluster", name=name, namespace=namespace
+        )
+
+    @lazy_attribute
+    def running_on(self):
+        if self.state == ApplicationState.PENDING:
+            return None
+
+        # If application is not migrating, the application is running on the
+        # same cluster to which it was scheduled.
+        if self.state != ApplicationState.MIGRATING:
+            return self.scheduled_to
+
         if self.factory_parent:
             namespace = self.factory_parent.metadata.namespace
         else:
@@ -142,18 +195,18 @@ class ApplicationFactory(Factory):
     spec = SubFactory(ApplicationSpecFactory)
     status = SubFactory(ApplicationStatusFactory)
 
+    @post_generation
+    def add_owners(app, created, extracted, **kwargs):
+        if app.status is None:
+            return
 
-class ClusterStatusFactory(Factory):
-    class Meta:
-        model = ClusterStatus
+        if app.status.scheduled_to:
+            if app.status.scheduled_to not in app.metadata.owners:
+                app.metadata.owners.append(app.status.scheduled_to)
 
-    state = fuzzy.FuzzyChoice(list(ClusterState.__members__.values()))
-
-    @lazy_attribute
-    def reason(self):
-        if self.state != ApplicationState.FAILED:
-            return None
-        return ReasonFactory()
+        if app.status.running_on:
+            if app.status.running_on not in app.metadata.owners:
+                app.metadata.owners.append(app.status.running_on)
 
 
 ca_cert = b"""-----BEGIN CERTIFICATE-----
@@ -279,15 +332,28 @@ def make_kubeconfig(server):
     }
 
 
+class ClusterMetricRefFactory(Factory):
+    class Meta:
+        model = ClusterMetricRef
+
+    weight = fuzzy.FuzzyFloat(0, 1.0)
+    name = fuzzy.FuzzyAttribute(fake.name)
+
+
 class ClusterSpecFactory(Factory):
     class Meta:
         model = ClusterSpec
+
+    class Params:
+        metric_count = 3
 
     @lazy_attribute
     def kubeconfig(self):
         return local_kubeconfig
 
-    metrics = fuzzy.FuzzyAttribute(fake.words)
+    @lazy_attribute
+    def metrics(self):
+        return [ClusterMetricRefFactory() for _ in range(self.metric_count)]
 
 
 class ClusterFactory(Factory):
@@ -295,5 +361,4 @@ class ClusterFactory(Factory):
         model = Cluster
 
     metadata = SubFactory(MetadataFactory)
-    status = SubFactory(ClusterStatusFactory)
     spec = SubFactory(ClusterSpecFactory)

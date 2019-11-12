@@ -67,7 +67,7 @@ def test_createclusterandapp(minikubecluster):
     )
 
     app_details = response.json
-    assert app_details["status"]["cluster"]["name"] == CLUSTER_NAME
+    assert app_details["status"]["running_on"]["name"] == CLUSTER_NAME
 
     svc_url = app_details["status"]["services"]["echo-demo"]
 

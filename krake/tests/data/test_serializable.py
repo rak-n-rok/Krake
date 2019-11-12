@@ -1,8 +1,27 @@
+from datetime import datetime
 from typing import List
+from dataclasses import field
 import pytest
 from marshmallow import ValidationError
 
 from krake.data.serializable import Serializable, ApiObject, PolymorphicContainer
+
+
+class Person(Serializable):
+    given_name: str
+    surname: str
+
+    @property
+    def fullname(self):
+        return f"{self.given_name} {self.surname}"
+
+
+class Book(Serializable):
+    id: int = field(metadata={"immutable": True})
+    created: datetime = field(default_factory=datetime.now, metadata={"readonly": True})
+    name: str
+    author: Person
+    characters: List[Person] = field(default_factory=list)
 
 
 def test_serializable():
@@ -46,19 +65,6 @@ def test_serializable():
 
 
 def test_nested_attrs():
-    class Person(Serializable):
-        given_name: str
-        surname: str
-
-        @property
-        def fullname(self):
-            return f"{self.given_name} {self.surname}"
-
-    class Book(Serializable):
-        id: int
-        name: str
-        author: Person
-
     book = Book(
         id=42,
         name="The Hitchhiker's Guide to the Galaxy",
@@ -75,31 +81,20 @@ def test_nested_attrs():
 
 
 def test_list_attr():
-    class Character(Serializable):
-        given_name: str
-        surname: str
-
-        @property
-        def fullname(self):
-            return f"{self.given_name} {self.surname}"
-
-    class Book(Serializable):
-        id: int
-        name: str
-        characters: List[Character]
-
     book = Book(
         id=42,
         name="The Hitchhiker's Guide to the Galaxy",
+        author=None,
         characters=[
-            Character(given_name="Arthur", surname="Dent"),
-            Character(given_name="Ford", surname="Perfect"),
+            Person(given_name="Arthur", surname="Dent"),
+            Person(given_name="Ford", surname="Perfect"),
         ],
     )
     data = book.serialize()
 
     assert data["id"] == 42
     assert data["name"] == "The Hitchhiker's Guide to the Galaxy"
+    assert data["author"] is None
     assert isinstance(data["characters"], list)
     assert len(data["characters"]) == 2
 
@@ -108,6 +103,68 @@ def test_list_attr():
 
     assert data["characters"][1]["given_name"] == "Ford"
     assert data["characters"][1]["surname"] == "Perfect"
+
+
+def test_update():
+    book = Book(
+        id=42,
+        created=datetime(1979, 10, 12),
+        name="The Hitchhiker's Guide to the Galaxy",
+        author=Person(given_name="Douglas", surname="Adams"),
+    )
+    update = Book(
+        id=9780465025275,
+        name="Six Easy Pieces",
+        created=datetime(2011, 3, 11),
+        author=Person(given_name="Richard", surname="Feynman"),
+    )
+
+    book.update(update)
+
+    assert book.id == 42
+    assert book.created == book.created
+    assert book.name == "Six Easy Pieces"
+    assert book.author is not update.author
+    assert book.author.given_name == "Richard"
+    assert book.author.surname == "Feynman"
+
+
+def test_update_replacing_value_with_none():
+    book = Book(
+        id=42,
+        created=datetime(1979, 10, 12),
+        name="The Hitchhiker's Guide to the Galaxy",
+        author=Person(given_name="Douglas", surname="Adams"),
+    )
+    update = Book(
+        id=9780465025275,
+        name="Six Easy Pieces",
+        created=datetime(2011, 3, 11),
+        author=None,
+    )
+    book.update(update)
+
+    assert book.author is None
+
+
+def test_update_replacing_none_with_value():
+    book = Book(
+        id=9780465025275,
+        name="Six Easy Pieces",
+        created=datetime(2011, 3, 11),
+        author=None,
+    )
+    update = Book(
+        id=42,
+        created=datetime(1979, 10, 12),
+        name="The Hitchhiker's Guide to the Galaxy",
+        author=Person(given_name="Douglas", surname="Adams"),
+    )
+    book.update(update)
+
+    assert book.author is update.author
+    assert book.author.given_name == "Douglas"
+    assert book.author.surname == "Adams"
 
 
 def test_api_object():
@@ -174,3 +231,14 @@ def test_polymorphic_multiple_subfields():
     with pytest.raises(TypeError) as err:
         DataSpec(type="float", float=None, bool=None)
     assert "Got unexpected keyword argument 'bool'" == str(err.value)
+
+
+def test_polymorphic_update():
+    spec = DataSpec(type="float", float=FloatSpec(min=0, max=1.0))
+    update = DataSpec(type="bool", bool=BoolSpec())
+
+    spec.update(update)
+
+    assert spec.type == "bool"
+    assert spec.bool == update.bool
+    assert spec.bool is update.bool

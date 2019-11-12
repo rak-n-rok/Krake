@@ -656,8 +656,10 @@ class Prometheus(NamedTuple):
     information about the Prometheus server connection.
     """
 
+    scheme: str
     host: str
     port: int
+    exporter: PrometheusExporter
 
 
 @pytest.fixture
@@ -734,6 +736,11 @@ async def prometheus(prometheus_exporter, loop):
                     f"http://{prometheus_host}:{prometheus_port}"
                     f"/api/v1/query?query={prometheus_exporter.metric}"
                 )
-                yield Prometheus(host=prometheus_host, port=prometheus_port)
+                yield Prometheus(
+                    scheme="http",
+                    host=prometheus_host,
+                    port=prometheus_port,
+                    exporter=prometheus_exporter,
+                )
             finally:
                 prometheus.terminate()

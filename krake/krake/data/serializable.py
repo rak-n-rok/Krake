@@ -4,7 +4,7 @@ JSON-serializable and JSON-deserializable.
 import dataclasses
 from enum import Enum
 from datetime import datetime, date
-from typing import List
+from typing import List, Dict
 from webargs import fields
 from marshmallow import (
     Schema,
@@ -114,6 +114,11 @@ def field_for_schema(type_, default=dataclasses.MISSING, **metadata):
         inner_type = type_.__args__[0]
         inner_serializer = field_for_schema(inner_type)
         return fields.List(inner_serializer, **metadata)
+
+    if issubclass(type_, Dict):
+        keys_field = field_for_schema(type_.__args__[0])
+        values_field = field_for_schema(type_.__args__[1])
+        return fields.Dict(keys=keys_field, values=values_field, **metadata)
 
     if hasattr(type_, "Schema"):
         return fields.Nested(type_.Schema, **metadata)
@@ -288,6 +293,61 @@ class Serializable(metaclass=SerializableMeta):
         """
         return cls.Schema().load(data)
 
+    def update(self, overwrite):
+        """Update data class fields with corresponding fields from the
+        overwrite object.
+
+        If a field is marked as _subresource_, _readonly_ or _immutable_ it is
+        not modified. Otherwise, attributes from overwrite will replace
+        attributes from the current object.
+
+        The function works recursively for nested :class:`Serializable`
+        attributes which means the :meth:`update` method of the attribute will
+        be used. This means the identity of a :class:`Serializable` attribute
+        will not change unless the current attribute or the overwrite
+        attribute is :data:`None`.
+
+        All other attributes are updated by assigning **references** from the
+        overwrite attributes to the current object. This leads to a behavior
+        similar to "shallow copying" (see :func:`copy.copy`). If the attribute
+        is mutable, e.g. :class:`list` or :class:`dict`, the attribute in the
+        current object will reference the same object as in the overwrite
+        object.
+
+        Args:
+            overwrite (Serializable): Serializable object will be merged with
+                the current object.
+
+        """
+        for field in dataclasses.fields(self):
+            immutable = any(
+                (
+                    field.metadata.get("subresource", False),
+                    field.metadata.get("readonly", False),
+                    field.metadata.get("immutable", False),
+                )
+            )
+            if not immutable:
+                value = getattr(overwrite, field.name)
+
+                if issubclass(field.type, Serializable):
+                    # Overwrite value is None, just set it directly
+                    if value is None:
+                        setattr(self, field.name, None)
+                    # Current attribute is None, copy the whole attribute
+                    # FIXME: What about subresource/readonly/immutable
+                    elif getattr(self, field.name) is None:
+                        setattr(self, field.name, value)
+                    # Update field by field
+                    else:
+                        getattr(self, field.name).update(value)
+                else:
+                    # We do not make copies from attributes. This leads to
+                    # behavior similar to "shallow copying". If the overwrite
+                    # attribute is mutable, e.g. a dict, list, it will be just
+                    # referenced here.
+                    setattr(self, field.name, value)
+
 
 class ApiObject(Serializable):
     """Base class for objects manipulated via REST API.
@@ -322,6 +382,26 @@ class ApiObject(Serializable):
 
         cls.api = dataclasses.field(default=api, metadata={"validate": Equal(api)})
         cls.kind = dataclasses.field(default=kind, metadata={"validate": Equal(kind)})
+
+        # HACK:
+        #   dataclasses.dataclass() checks if the class implements its own
+        #   __repr__ method (by checking directly its presence in __dict__). We
+        #   want to use the same __repr__() implementation for every subclass.
+        #   Therefore, we put an explicit reference to ApiObject.__repr__()
+        #   into the class' __dict__.
+        if "__repr__" not in cls.__dict__:
+            cls.__repr__ = ApiObject.__repr__
+
+    def __repr__(self):
+        if self.metadata.namespace:
+            return (
+                f"<{self.api}.{self.kind} namespace={self.metadata.namespace!r} "
+                f"name={self.metadata.name!r} uid={self.metadata.uid!r}>"
+            )
+        return (
+            f"<{self.api}.{self.kind} name={self.metadata.name!r} "
+            f"uid={self.metadata.uid!r}>"
+        )
 
 
 class PolymorphicContainerSchema(Schema):
@@ -509,8 +589,30 @@ class PolymorphicContainer(Serializable):
         type_ = kwargs["type"]
         try:
             value = kwargs.pop(type_)
-        except KeyError:
-            raise TypeError(f"Missing required keyword argument {type_!r}")
+        except KeyError as err:
+            raise TypeError(f"Missing required keyword argument {type_!r}") from err
         setattr(self, type_, value)
 
         super().__init__(**kwargs)
+
+    def update(self, overwrite):
+        """Update the polymorphic container with fields from the overwrite
+        object.
+
+        A reference to the polymorphic field – the field called like the value
+        of the :attr:`type` attribute – of the overwrite object is assigned to
+        the current object even if the types of the current object and the
+        overwrite object are identical.
+
+        Args:
+            overwrite (Serializable): Serializable object will be merged with
+                the current object.
+
+        """
+        # Clear current type
+        delattr(self, self.type)
+
+        # Copy new type
+        self.type = overwrite.type
+        value = getattr(overwrite, overwrite.type)
+        setattr(self, overwrite.type, value)

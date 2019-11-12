@@ -1,4 +1,5 @@
 import json
+from dataclasses import field
 import factory
 import pytest
 
@@ -10,7 +11,7 @@ from factories import fake
 
 
 class MyModel(Serializable):
-    id: str
+    id: str = field(metadata={"immutable": True})
     name: str
 
     __etcd_key__ = Key("/model/{id}")
@@ -243,3 +244,20 @@ async def test_watching_update(db, loop):
                 break
 
         await modifying
+
+
+async def test_update(db):
+    original = MyModelFactory()
+    await db.put(original)
+
+    rev = revision(original)
+    original_id = original.id
+
+    overwrite = MyModelFactory()
+    assert revision(overwrite) is None
+
+    original.update(overwrite)
+
+    assert revision(original) is rev
+    assert original_id == original.id
+    assert original.name == overwrite.name
