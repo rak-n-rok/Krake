@@ -4,11 +4,16 @@ from textwrap import dedent
 from aiohttp import web
 import pytz
 import yaml
+from kubernetes_asyncio.client import V1Status, V1Service, V1ServiceSpec, V1ServicePort
 
 from krake.api.app import create_app
 from krake.data.core import resource_ref, ReasonCode
 from krake.data.kubernetes import Application, ApplicationState
-from krake.controller.kubernetes_application import ApplicationController
+from krake.controller.kubernetes_application import (
+    ApplicationController,
+    register_service,
+    unregister_service,
+)
 from krake.client import Client
 from krake.test_utils import server_endpoint
 
@@ -538,6 +543,59 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
     assert resource_ref(cluster) not in stored.metadata.owners
 
 
+async def test_register_service():
+    resource = {"metadata": {"name": "nginx"}}
+    cluster = ClusterFactory()
+    app = ApplicationFactory()
+    response = V1Service(
+        spec=V1ServiceSpec(
+            ports=[V1ServicePort(port=80, target_port=80, node_port=1234)]
+        )
+    )
+    await register_service(app, cluster, resource, response)
+
+    assert app.status.services == {"nginx": "127.0.0.1:1234"}
+
+
+async def test_register_service_without_spec():
+    """Ensure that the old endpoint of the service is removed if the new
+    service does not have and node port.
+    """
+    resource = {"metadata": {"name": "nginx"}}
+    cluster = ClusterFactory()
+    app = ApplicationFactory(status__services={"nginx": "127.0.0.1:1234"})
+    response = V1Service()
+    await register_service(app, cluster, resource, response)
+    assert app.status.services == {}
+
+
+async def test_register_service_without_ports():
+    resource = {"metadata": {"name": "nginx"}}
+    cluster = ClusterFactory()
+    app = ApplicationFactory(status__services={"nginx": "127.0.0.1:1234"})
+    response = V1Service(spec=V1ServiceSpec())
+    await register_service(app, cluster, resource, response)
+    assert app.status.services == {}
+
+
+async def test_register_service_with_empty_ports():
+    resource = {"metadata": {"name": "nginx"}}
+    cluster = ClusterFactory()
+    app = ApplicationFactory(status__services={"nginx": "127.0.0.1:1234"})
+    response = V1Service(spec=V1ServiceSpec(ports=[]))
+    await register_service(app, cluster, resource, response)
+    assert app.status.services == {}
+
+
+async def test_register_service_without_node_port():
+    resource = {"metadata": {"name": "nginx"}}
+    cluster = ClusterFactory()
+    app = ApplicationFactory(status__services={"nginx": "127.0.0.1:1234"})
+    response = V1Service(spec=V1ServiceSpec(ports=[]))
+    await register_service(app, cluster, resource, response)
+    assert app.status.services == {}
+
+
 async def test_service_registration(aiohttp_server, config, db, loop):
     # Setup Kubernetes API mock server
     routes = web.RouteTableDef()
@@ -625,6 +683,24 @@ async def test_service_registration(aiohttp_server, config, db, loop):
     )
     # The API server of the Kubernetes cluster listens on "127.0.0.1"
     assert stored.status.services == {"nginx-demo": "127.0.0.1:30886"}
+
+
+async def test_unregister_service():
+    resource = {"metadata": {"name": "nginx"}}
+    cluster = ClusterFactory()
+    app = ApplicationFactory(status__services={"nginx": "127.0.0.1:1234"})
+    response = V1Status()
+    await unregister_service(app, cluster, resource, response)
+    assert app.status.services == {}
+
+
+async def test_unregister_service_without_previous_service():
+    resource = {"metadata": {"name": "nginx"}}
+    cluster = ClusterFactory()
+    app = ApplicationFactory(status__services={})
+    response = V1Status()
+    await unregister_service(app, cluster, resource, response)
+    assert app.status.services == {}
 
 
 async def test_service_unregistration(aiohttp_server, config, db, loop):

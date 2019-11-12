@@ -561,14 +561,15 @@ async def register_service(app, cluster, resource, response):
             application is running
         resource (dict): Kubernetes object description as specified in the
             specification of the application.
-        response (V1Service): Response of the Kubernetes API
+        response (kubernetes_asyncio.client.V1Service): Response of the
+            Kubernetes API
 
     """
     service_name = resource["metadata"]["name"]
     node_port = None
 
     # Ensure that ports are specified
-    if response.spec.ports:
+    if response.spec and response.spec.ports:
         node_port = response.spec.ports[0].node_port
 
     # If the service does not have a node port, remove a potential reference
@@ -599,7 +600,8 @@ async def unregister_service(app, cluster, resource, response):
             application is running
         resource (dict): Kubernetes object description as specified in the
             specification of the application.
-        response (V1Status): Response of the Kubernetes API
+        response (kubernetes_asyncio.client.V1Status): Response of the
+            Kubernetes API
 
     """
     service_name = resource["metadata"]["name"]
