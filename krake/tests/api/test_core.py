@@ -1,6 +1,7 @@
 from operator import attrgetter
 
 from krake.api.app import create_app
+from krake.api.helpers import HttpReason, HttpReasonCode
 from krake.data.core import Role, RoleBinding, RoleList, RoleBindingList, resource_ref
 
 from factories.core import RoleFactory, RoleBindingFactory
@@ -73,6 +74,10 @@ async def test_create_role_with_existing_name(aiohttp_client, config, db):
 
     resp = await client.post("/core/roles", json=existing.serialize(readonly=False))
     assert resp.status == 409
+
+    json = await resp.json()
+    reason = HttpReason.deserialize(json)
+    assert reason.code == HttpReasonCode.RESOURCE_ALREADY_EXISTS
 
 
 async def test_get_role(aiohttp_client, config, db):

@@ -4,7 +4,7 @@ from aiohttp import web
 
 from krake.api import __version__ as version
 from krake.api.app import create_app
-from krake.api.helpers import session
+from krake.api.helpers import session, HttpReason, HttpReasonCode
 from krake.api.database import revision, TransactionError
 from krake.data import Key
 from krake.data.serializable import Serializable
@@ -103,3 +103,7 @@ async def test_transaction_error(aiohttp_client, db, config, loop):
     client = await aiohttp_client(app)
     resp = await client.put("/raise")
     assert resp.status == 409
+
+    json = await resp.json()
+    reason = HttpReason.deserialize(json)
+    assert reason.code == HttpReasonCode.TRANSACTION_ERROR

@@ -1,9 +1,28 @@
 """Simple helper functions that are used by the HTTP endpoints."""
 import asyncio
 import json
+from enum import Enum, auto
 from functools import wraps
 from aiohttp import web
+from krake.data.serializable import Serializable
 from marshmallow import ValidationError
+
+
+class HttpReasonCode(Enum):
+    # When a database transaction failed
+    TRANSACTION_ERROR = auto()
+    # When the authentication through keystone failed
+    INVALID_KEYSTONE_TOKEN = auto()
+    # When a resource already in database is requested to be created
+    RESOURCE_ALREADY_EXISTS = auto()
+
+
+class HttpReason(Serializable):
+    """Store the reasons for failures on the HTTP layers for the API.
+    """
+
+    code: HttpReasonCode
+    reason: str
 
 
 def json_error(exc, content):
