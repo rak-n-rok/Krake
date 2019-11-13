@@ -8,11 +8,12 @@ import asyncio
 import logging
 import os.path
 import signal
+from copy import deepcopy
 from itertools import count
 from statistics import mean
 from contextlib import suppress
 
-from krake.data.core import WatchEventType
+from krake.data.core import WatchEventType, resource_ref
 from yarl import URL
 import ssl
 from aiohttp import ClientConnectorError
@@ -334,13 +335,17 @@ class Observer(object):
         resource: the instance of a resource that the Observer has to watch.
         on_res_update (coroutine): a coroutine called when a resource's actual status
             differs from the status sent by the database. Its signature is:
-            ``(resource) -> None``
+            ``(resource) -> updated_resource``. ``updated_resource`` is the instance of
+            the resource that is up-to-date with the API. The Observer internal instance
+            of the resource to observe will be updated. If the API cannot be contacted,
+            ``None`` can be returned. In this case the internal instance of the Observer
+            will not be updated.
         time_step (int, optional): how frequently the Observer should watch the actual
             status of the resources.
     """
 
     def __init__(self, resource, on_res_update, time_step=1):
-        self.resource = resource
+        self.resource = deepcopy(resource)
         self.on_res_update = on_res_update
         self.time_step = time_step
 
@@ -358,17 +363,29 @@ class Observer(object):
         observed. The status sent for the update is the observed one.
         """
         status = await self.poll_resource()
+
         if self.resource.status != status:
-            self.resource.status = status
-            await self.on_res_update(self.resource)
+            logger.info("Actual resource for %s changed.", resource_ref(self.resource))
+
+            to_update = deepcopy(self.resource)
+            to_update.status = status
+            updated = await self.on_res_update(to_update)
+
+            # If the API accepted the update, observe the new status.
+            # If not, there may be a connectivity issue for now, so the Observer will
+            # try again in the next iteration of its main loop.
+            if updated:
+                self.resource = updated
+        else:
+            logger.debug("Resource %s did not change", resource_ref(self.resource))
 
     async def run(self):
         """Start the observing process indefinitely, with the Observer time step.
         """
         while True:
+            await asyncio.sleep(self.time_step)
             logger.debug("Observing registered resource: %s", self.resource)
             await self.observe_resource()
-            await asyncio.sleep(self.time_step)
 
 
 class Controller(object):
