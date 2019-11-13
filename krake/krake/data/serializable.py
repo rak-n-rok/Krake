@@ -320,6 +320,34 @@ class Serializable(metaclass=SerializableMeta):
 
             assert hasattr(Book, "Schema")
 
+    .. rubric: Schema-level Validation
+
+    There are cases where multiple levels needs to be validated together. In
+    this case, the ``validates`` metadata key for a single field is not
+    sufficient anymore. One solution is to overwrite the auto-generated schema
+    by a custom schema using the
+    :func:`marshmallow.decorators.validates_schema` decorator.
+
+    Another solution is leveraging the ``__post_init__()`` method of
+    dataclasses. The fields can be validated in this method and a raised
+    :class:`marshmallow.ValidationError` will propagate to the Schema
+    deserialization method.
+
+    .. code:: python
+
+        from marshmallow import ValidationError
+
+        class Interval(Serializable):
+            max: int
+            min: int
+
+            def __post_init__(self):
+                if self.min > self.max:
+                    raise ValidationError("'min' must not be greater than 'max'")
+
+        # This will raise a ValidationError
+        interval = Interval.deserialize({"min": 2, "max": 1})
+
     Attributes:
         Schema (ModelizedSchema): Schema for this dataclass
 
@@ -339,6 +367,20 @@ class Serializable(metaclass=SerializableMeta):
         if kwargs:
             key, _ = kwargs.popitem()
             raise TypeError(f"Got unexpected keyword argument {key!r}")
+
+        self.__post_init__()
+
+    def __post_init__(self):
+        """The :meth:`__init__` method calls this method after all fields are
+        initialized.
+
+        It is mostly useful for schema-level validation (see above).
+
+        For now, :class:`Serializable` does not support init-only variables
+        because they do not make much sense for object stored in a database.
+        This means no additional parameters are passed to this method.
+        """
+        pass
 
     @classmethod
     def readonly_fields(cls, prefix=None):
