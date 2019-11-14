@@ -5,7 +5,7 @@ from krake.api.app import create_app
 
 from krake.client import Client
 from krake.data.core import resource_ref, Metadata
-from krake.data.kubernetes import Application, ApplicationState, Cluster
+from krake.data.kubernetes import ApplicationState
 from krake.controller.gc import DependencyGraph, GarbageCollector
 
 from factories.core import MetadataFactory
@@ -66,7 +66,8 @@ def test_dependency_graph():
     for app in apps:
         assert len(graph.get_direct_dependents(app)) == 0
 
-    with pytest.raises(ValueError):
+    error_message = "Cannot remove a resource which holds dependents"
+    with pytest.raises(ValueError, match=error_message):
         graph.remove_resource(up)
 
 
@@ -131,7 +132,7 @@ def test_error_on_cycle_in_dependency_graph():
         graph.add_resource(app)
 
     # Add resource with cycle
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match=apps[0].metadata.name):
         graph.add_resource(apps[0])
 
 
@@ -228,6 +229,9 @@ async def test_resources_reception(aiohttp_server, config, db, loop):
     assert key_2 in (app_deleting.metadata.uid, cluster_deleting.metadata.uid)
     assert key_1 != key_2
 
+    await gc.queue.done(key_1)
+    await gc.queue.done(key_2)
+
 
 async def test_new_event_reception(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
@@ -296,6 +300,49 @@ async def test_delete_event_reception(aiohttp_server, config, db, loop):
         assert gc.queue.size() == 2
 
 
+async def is_marked_for_deletion(resource, db):
+    """Check that a resource present on the database has been marked for deletion.
+
+    Args:
+        resource: the resource to check
+        db: the database session
+
+    Returns:
+        tuple: a tuple (<marked_for_deletion>, <stored_resource>)
+            marked_for_deletion: True if the resource given is marked for deletion,
+                False otherwise
+            stored_resource: the version of the resource present in the database
+
+    """
+    cls = resource.__class__
+    stored = await db.get(
+        cls, namespace=resource.metadata.namespace, name=resource.metadata.name
+    )
+    marked = (
+        "cascade_deletion" in stored.metadata.finalizers
+        and stored.metadata.deleted is not None
+    )
+    return marked, stored
+
+
+async def is_completely_deleted(resource, db):
+    """Check that a resource has been completely removed from the database.
+
+    Args:
+        resource: the resource to check
+        db: the database session
+
+    Returns:
+        bool: True if the resource given has been deleted, False otherwise
+
+    """
+    cls = resource.__class__
+    stored = await db.get(
+        cls, namespace=resource.metadata.namespace, name=resource.metadata.name
+    )
+    return stored is None
+
+
 async def test_several_dependents_deletion(aiohttp_server, config, db, loop):
     # Test the deletion of a resource that holds several dependents. The resource and
     # all its dependents should be deleted.
@@ -332,11 +379,8 @@ async def test_several_dependents_deletion(aiohttp_server, config, db, loop):
         # Ensure that the Applications are marked as deleted
         stored_apps = []
         for app in apps:
-            stored_app = await db.get(
-                Application, namespace=app.metadata.namespace, name=app.metadata.name
-            )
-            assert stored_app.metadata.deleted is not None
-            assert "cascade_deletion" in stored_app.metadata.finalizers
+            marked, stored_app = await is_marked_for_deletion(app, db)
+            assert marked
 
             # Mark the application as being "cleaned up"
             stored_app.metadata.finalizers.remove("kubernetes_resources_deletion")
@@ -347,29 +391,56 @@ async def test_several_dependents_deletion(aiohttp_server, config, db, loop):
         for app in stored_apps:
             await gc.resource_received(app)
 
-            stored_app = await db.get(
-                Application,
-                namespace=cluster.metadata.namespace,
-                name=cluster.metadata.name,
-            )
-            assert stored_app is None
+            assert await is_completely_deleted(app, db)
+
             await gc.on_received_deleted(app)  # Simulate DELETED event
             await gc.resource_received(cluster)
 
         # Ensure that the Cluster is deleted from the database
-        stored_cluster = await db.get(
-            Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
-        )
-        assert stored_cluster is None
+        assert await is_completely_deleted(cluster, db)
         await gc.on_received_deleted(cluster)  # Simulate DELETED event
 
         assert not gc.graph._resources
         assert not gc.graph._relationships
 
 
+async def ensure_dependency_to_delete(gc, to_be_deleted, dependency_number):
+    """Handle one resource from queue that needs to be deleted, and check if its
+    dependency is put in queue afterwards.
+
+    Args:
+        gc (GarbageCollector): the garbage collector that handles the resource
+        to_be_deleted: the resource to handle, that is supposed to be in the queue
+            before using this function
+        dependency_number (int): the number of dependencies of the resource that are
+            supposed to be put into the queue when the resource is deleted
+
+    """
+    key, from_queue = await gc.queue.get()
+    assert from_queue.metadata.deleted is not None
+
+    await gc.resource_received(from_queue)
+    await gc.queue.done(key)
+
+    await gc.on_received_deleted(from_queue)
+
+    assert (
+        gc.queue.size() == dependency_number
+    ), f"{resource_ref(to_be_deleted)} has not been deleted"
+
+
 async def test_three_layers_deletion(aiohttp_server, config, db, loop):
-    # Test the deletion of a resource, whose dependent holds a dependent.
-    # All direct and indirect dependents should be deleted.
+    """Test the deletion of a resource, whose dependent holds a dependent. All direct
+    and indirect dependents should be deleted.
+
+    The dependency relations is: upper <-- middle <-- lower (where A <- B signifies that
+    B depends on A, that A is in the owners list of B).
+
+    ``upper`` is marked for deletion, so the gc recursively marks ``middle`` and
+    ``lower`` as deleted.
+
+    Then, ``lower`` is deleted, then ``middle``, then ``upper``
+    """
 
     upper = ClusterFactory(
         metadata__deleted=fake.date_time(tzinfo=pytz.utc),
@@ -392,86 +463,62 @@ async def test_three_layers_deletion(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         await gc.prepare(client)
 
+        ##
         # First step: Update direct dependents of upper
 
         await gc.resource_received(upper)
 
-        # Get the versions of the resources updated by the API
-        stored_middle = await db.get(
-            Cluster, namespace=middle.metadata.namespace, name=middle.metadata.name
-        )
-        assert stored_middle.metadata.deleted is not None
+        # Get the versions of the resources updated by the API:
+        # middle, as direct dependent, is marked as deleted, while lower is not.
+        marked, stored_middle = await is_marked_for_deletion(middle, db)
+        assert marked
 
-        stored_lower = await db.get(
-            Cluster, namespace=lower.metadata.namespace, name=lower.metadata.name
-        )
-        assert stored_lower.metadata.deleted is None
+        marked, stored_lower = await is_marked_for_deletion(lower, db)
+        assert not marked
 
+        # lower and middle have been updated, and need to be handled by the gc
         await gc.on_received_update(stored_middle)
         await gc.on_received_update(stored_lower)
 
-        assert gc.queue.size() == 1  # Only middle in queue
+        assert gc.queue.size() == 1  # Only middle in queue, as lower is not marked
 
+        ##
         # Second step: Update direct dependents of middle
 
         key, stored_middle = await gc.queue.get()
         await gc.resource_received(stored_middle)
         await gc.queue.done(key)
 
-        stored_lower = await db.get(
-            Cluster, namespace=lower.metadata.namespace, name=lower.metadata.name
-        )
-        assert stored_lower.metadata.deleted is not None
+        # lower, as direct dependent of middle, is marked as deletion also.
+        marked, stored_lower = await is_marked_for_deletion(lower, db)
+        assert marked
 
         await gc.on_received_update(stored_lower)
-
         assert gc.queue.size() == 1  # Only lower in queue
 
-        # Third step: lower is to be deleted
+        ##
+        # Third step: lower has been put just before into the queue,
+        # as direct dependency. It will be finally deleted
 
-        key, stored_lower = await gc.queue.get()
-        await gc.resource_received(stored_lower)
-        await gc.queue.done(key)
+        await ensure_dependency_to_delete(gc, to_be_deleted=lower, dependency_number=1)
 
-        await gc.on_received_deleted(stored_lower)
+        ##
+        # Fourth step: middle has been put just before into the queue,
+        # as direct dependency. It will be finally deleted
 
-        assert gc.queue.size() == 1  # middle should be in queue
+        await ensure_dependency_to_delete(gc, to_be_deleted=middle, dependency_number=1)
 
-        # Fourth step: middle is to be deleted
+        #
+        # Fifth step: upper has been put just before into the queue,
+        # as direct dependency. It will be finally deleted
 
-        key, stored_middle = await gc.queue.get()
-        await gc.resource_received(stored_middle)
-        await gc.queue.done(key)
+        await ensure_dependency_to_delete(gc, to_be_deleted=upper, dependency_number=0)
 
-        await gc.on_received_deleted(stored_middle)
-
-        assert gc.queue.size() == 1  # upper should be in queue
-
-        # Fifth step: upper is to be deleted
-
-        key, stored_upper = await gc.queue.get()
-        await gc.resource_received(stored_upper)
-        await gc.queue.done(key)
-
-        await gc.on_received_deleted(stored_upper)
-
-        assert gc.queue.size() == 0
-
+        ##
         # Last checks: all resources are deleted
 
-        stored_lower = await db.get(
-            Cluster, namespace=lower.metadata.namespace, name=lower.metadata.name
-        )
-        assert stored_lower is None
-
-        stored_middle = await db.get(
-            Cluster, namespace=middle.metadata.namespace, name=middle.metadata.name
-        )
-        assert stored_middle is None
-
-        stored_upper = await db.get(
-            Cluster, namespace=upper.metadata.namespace, name=upper.metadata.name
-        )
-        assert stored_upper is None
+        assert await is_completely_deleted(lower, db)
+        assert await is_completely_deleted(middle, db)
+        assert await is_completely_deleted(upper, db)
 
         assert not gc.graph._resources
