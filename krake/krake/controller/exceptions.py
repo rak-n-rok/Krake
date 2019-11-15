@@ -83,7 +83,7 @@ def application_error_mapping(previous_state, previous_reason, error=None):
         error (Exception): the exception raised
 
     Returns:
-        Reason: a Reason with RESOURCE_NOT_DELETED code if the Application was in a
+        Reason: a Reason with DELETE_FAILED code if the Application was in a
         FAILED State, the code of the Exception if it has one, or INTERNAL_ERROR code
         by default.
 
@@ -94,7 +94,7 @@ def application_error_mapping(previous_state, previous_reason, error=None):
     #  Check moved first because the error may not have an error code when the
     #  application failed to delete
     if previous_state == ApplicationState.FAILED or previous_reason:
-        return Reason(code=ReasonCode.RESOURCE_NOT_DELETED, message=message)
+        return Reason(code=ReasonCode.DELETE_FAILED, message=message)
 
     if error is None or not hasattr(error, "code"):
         return Reason(code=ReasonCode.INTERNAL_ERROR, message="Internal Error")

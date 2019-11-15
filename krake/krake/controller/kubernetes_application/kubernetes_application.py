@@ -644,7 +644,7 @@ class KubernetesController(Controller):
         app.status.reason = reason
 
         # If an important error occurred, simply delete the Application
-        if reason.code.value >= 100:
+        if reason.code.value >= ReasonCode.WILL_DELETE_RESOURCE:
             app.status.state = ApplicationState.DELETING
         else:
             app.status.state = ApplicationState.FAILED
