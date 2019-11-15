@@ -5,6 +5,7 @@ define when the hook will be executed.
 """
 import logging
 import os
+from collections import defaultdict
 from functools import reduce
 from operator import getitem
 from enum import Enum, auto
@@ -77,7 +78,7 @@ class HookDispatcher(object):
     """
 
     def __init__(self):
-        self.registry = {}
+        self.registry = defaultdict(list)
 
     def on(self, hook):
         """Decorator function to add a new handler to the registry.
@@ -92,10 +93,7 @@ class HookDispatcher(object):
         """
 
         def decorator(handler):
-            if hook not in self.registry:
-                self.registry[hook] = [handler]
-            else:
-                self.registry[hook].append(handler)
+            self.registry[hook].append(handler)
 
             return handler
 
@@ -150,7 +148,7 @@ async def register_service(app, cluster, resource, response):
         node_port = response.spec.ports[0].node_port
 
     # If the service does not have a node port, remove a potential reference
-    # end return.
+    # and return.
     if node_port is None:
         try:
             del app.status.services[service_name]
@@ -279,12 +277,12 @@ class Complete(object):
         self.env_complete = env_complete
 
     def mangle_app(self, name, namespace, token, mangling):
-        """Mangle given application and injects complete hook variables into mangling
-        object.
+        """Mangle given application and injects complete hook resources and
+        sub-resources into mangling object by :meth:`mangle`.
 
         Mangling object is created as a deep copy of desired application resources,
-        defined by user. This object can be updated by custom Krake resources
-        or modified by custom Krake sub-resources. It is used as a desired state for the
+        defined by user. This object can be updated by custom hook resources
+        or modified by custom hook sub-resources. It is used as a desired state for the
         Krake deployment process.
 
         Args:
@@ -302,79 +300,173 @@ class Complete(object):
             else None
         )
 
-        resources = [*self.configmap(cfg_name, ca_certs)]
-        sub_resources = [
+        hook_resources = [*self.configmap(cfg_name, ca_certs)]
+        hook_sub_resources = [
             *self.env_vars(name, namespace, self.api_endpoint, token),
             *self.volumes(cfg_name, volume_name, ca_certs),
         ]
 
-        self.mangle(resources, mangling)
-        self.mangle(sub_resources, mangling, sub_resource=True)
+        self.mangle(hook_resources, mangling)
+        self.mangle(hook_sub_resources, mangling, sub_resource=True)
 
     @staticmethod
     def attribute_map(obj):
+        """Convert Kubernetes object to dict based on its attribute mapping
+
+        Example:
+            .. code:: python
+
+            from kubernetes_asyncio.client import V1VolumeMount
+
+            d = attribute_map(
+                    V1VolumeMount(name="name", mount_path="path")
+            )
+            assert d == {'mountPath': 'path', 'name': 'name'}
+
+        Args:
+            obj (object): Kubernetes object
+
+        Returns:
+            dict: Converted Kubernetes object
+
+        """
         return {
             obj.attribute_map[attr]: getattr(obj, attr)
             for attr, _ in obj.to_dict().items()
             if getattr(obj, attr) is not None
         }
 
-    def mangle(self, elements, mangling, sub_resource=False):
-        """Mangle application desired state with custom Krake elements
+    def mangle(self, items, mangling, sub_resource=False):
+        """Mangle application desired state with custom hook resources or
+        sub-resources
+
+        Example:
+            .. code:: python
+
+            mangling = [
+                {
+                    'apiVersion': 'v1',
+                    'kind': 'Pod',
+                    'metadata': {'name': 'test'},
+                    'spec': {'containers': [{'name': 'test'}]}
+                }
+            ]
+            hook_resources = [
+                {
+                    'apiVersion': 'v1',
+                    'kind': 'ConfigMap',
+                    'metadata': {'name': 'cfg'}
+                }
+            ]
+            hook_sub_resources = [
+                SubResource(
+                    group='env', name='env', body={'name': 'test', 'value': 'test'},
+                    path=(('spec', 'containers'),)
+                )
+            ]
+
+            mangle(hook_resources, mangling)
+            mangle(hook_sub_resources, mangling, sub_resource=True)
+
+            assert mangling == [
+                {
+                    "apiVersion": "v1",
+                    "kind": "Pod",
+                    "metadata": {"name": "test"},
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": "test",
+                                "env": [{"name": "test", "value": "test"}]
+                            }
+                        ]
+                    },
+                },
+                {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "cfg"}},
+            ]
+
 
         Args:
-            elements (dict): Custom Krake elements
+            items (list): Custom hook resources or sub-resources
             mangling (list): Application resources
-            sub_resource (bool, optional): if False, the function only append
-                given element to the mangling list as a Kuberentes resource.
-                Otherwise, continue to inject each new sub-resource into the mangling
-                object. Defaults to False
+            sub_resource (bool, optional): if False, the function only extend
+                the mangling list of Kuberentes resources by new hook resources.
+                Otherwise, continue to inject each new hook sub-resource into the
+                mangling object sub-resources. Defaults to False
 
         """
 
-        if not elements:
+        if not items:
             return
 
         if not sub_resource:
-            mangling.extend(elements)
+            mangling.extend(items)
             return
 
-        def update_or_append(element, section):
-            if element.group not in section:
-                section.update({element.group: []})
+        def inject(sub_resource, sub_resources_to_mangle):
+            """Inject hook defined sub-resources into mangle sub-resources
 
-            if element.name in [g["name"] for g in section[element.group]]:
-                for idx, item in enumerate(section[element.group]):
-                    if element.name == item["name"]:
-                        section[element.group][idx] = element.body
+            Args:
+                sub_resource (SubResource): Hook sub-resource that needs to be injected
+                    into desired mangling state
+                sub_resources_to_mangle (object): Sub-resource from the Mangling state
+                    which needs to be processed
 
+            """
+
+            # Create sub-resource group if not present in the mangle sub-resources
+            if sub_resource.group not in sub_resources_to_mangle:
+                sub_resources_to_mangle.update({sub_resource.group: []})
+
+            # Inject sub-resource
+            # If sub-resource name is already there update it, if not, append it
+            if sub_resource.name in [
+                g["name"] for g in sub_resources_to_mangle[sub_resource.group]
+            ]:
+                for idx, item in enumerate(sub_resources_to_mangle[sub_resource.group]):
+
+                    if item.name == item["name"]:
+                        sub_resources_to_mangle[item.group][idx] = item.body
             else:
-                section[element.group].append(element.body)
+                sub_resources_to_mangle[sub_resource.group].append(sub_resource.body)
 
         for resource in mangling:
+            # Complete hook is applied only on defined Kubernetes resources
             if resource["kind"] not in self.complete_resources:
                 continue
 
-            for element in elements:
-                section = None
-                for keys in element.path:
+            for sub_resource in items:
+                sub_resources_to_mangle = None
+                for keys in sub_resource.path:
                     try:
-                        section = reduce(getitem, keys, resource)
+                        sub_resources_to_mangle = reduce(getitem, keys, resource)
                     except KeyError:
                         continue
                     break
 
-                if isinstance(section, list):
-                    for item in section:
-                        update_or_append(element, item)
+                if isinstance(sub_resources_to_mangle, list):
+                    for sub_resource_to_mangle in sub_resources_to_mangle:
+                        inject(sub_resource, sub_resource_to_mangle)
 
-                elif isinstance(section, dict):
-                    update_or_append(element, section)
+                elif isinstance(sub_resources_to_mangle, dict):
+                    inject(sub_resource, sub_resources_to_mangle)
 
                 else:
                     raise InvalidResourceError
 
     def configmap(self, cfg_name, ca_certs=None):
+        """Create complete hook configmap resource
+
+        Complete hook configmap stores Krake CAs to communicate with the Krake API
+
+        Args:
+            cfg_name (str): Configmap name
+            ca_certs (list): Krake CA list
+
+        Returns:
+            list: List of complete hook configmaps resources
+
+        """
         if not ca_certs:
             return []
 
@@ -401,6 +493,20 @@ class Complete(object):
         ]
 
     def volumes(self, cfg_name, volume_name, ca_certs=None):
+        """Create complete hook volume and volume mount sub-resources
+
+        Complete hook volume gives access to configmap which stores Krake CAs
+        Complete hook volume mount mounts volume into application
+
+        Args:
+            cfg_name (str): Configmap name
+            volume_name (str): Volume name
+            ca_certs (list): Krake CA list
+
+        Returns:
+            list: List of complete hook volume and volume mount sub-resources
+
+        """
         if not ca_certs:
             return []
 
@@ -433,7 +539,7 @@ class Complete(object):
         Args:
             name (str): Application name
             namespace (str): Application namespace
-            api_endpoint (str): the given API endpoint.
+            api_endpoint (str): Krake API endpoint
 
         Returns:
             str: Application complete url
@@ -455,6 +561,22 @@ class Complete(object):
         )
 
     def env_vars(self, name, namespace, api_endpoint, token):
+        """Create complete hook environment variables sub-resources
+
+        Create complete hook environment variables store Krake authentication token
+        and complete hook URL for given application.
+
+        Args:
+            name (str): Application name
+            namespace (str): Application namespace
+            token (str): Complete hook authentication token
+            api_endpoint (str): Krake API endpoint
+            token (str): Complete hook authentication token
+
+        Returns:
+            list: List of complete hook environment variables sub-resources
+
+        """
         sub_resources = []
         complete_url = self.create_complete_url(name, namespace, api_endpoint)
 
