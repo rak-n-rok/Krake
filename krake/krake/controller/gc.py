@@ -317,7 +317,8 @@ class GarbageCollector(Controller):
 
         """
         for dependency in self.graph.get_owners(resource):
-            await self.queue.put(dependency.metadata.uid, dependency)
+            if self.is_in_deletion(dependency):
+                await self.queue.put(dependency.metadata.uid, dependency)
 
         self.graph.remove_resource(resource)
 

@@ -297,7 +297,7 @@ async def test_delete_event_reception(aiohttp_server, config, db, loop):
 
         await gc.on_received_deleted(cluster)
         assert resource_ref(cluster) not in gc.graph._resources
-        assert gc.queue.size() == 2
+        assert gc.queue.size() == 0
 
 
 async def is_marked_for_deletion(resource, db):
@@ -343,7 +343,7 @@ async def is_completely_deleted(resource, db):
     return stored is None
 
 
-async def test_several_dependents_deletion(aiohttp_server, config, db, loop):
+async def test_cascade_deletion(aiohttp_server, config, db, loop):
     # Test the deletion of a resource that holds several dependents. The resource and
     # all its dependents should be deleted.
     server = await aiohttp_server(create_app(config))
@@ -363,7 +363,7 @@ async def test_several_dependents_deletion(aiohttp_server, config, db, loop):
             status__state=ApplicationState.RUNNING,
             status__scheduled_to=cluster_ref,
         )
-        for _ in range(0, 3)
+        for _ in range(3)
     ]
 
     await db.put(cluster)
@@ -402,6 +402,100 @@ async def test_several_dependents_deletion(aiohttp_server, config, db, loop):
 
         assert not gc.graph._resources
         assert not gc.graph._relationships
+
+
+async def test_several_dependents_one_deleted(db, aiohttp_server, config, loop):
+    """Test the deletion of one object that is owned by an upper, which itself owns
+    other dependents:
+
+            A
+           / \
+          B  C
+          |  |
+          D  E
+
+    If B is deleted, only B and D needs to be deleted
+    """
+    server = await aiohttp_server(create_app(config))
+    gc = GarbageCollector(server_endpoint(server))
+
+    cluster_a = ClusterFactory()
+    cluster_a_ref = resource_ref(cluster_a)
+
+    cluster_b = ClusterFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__finalizers=["cascade_deletion"],
+        metadata__owners=[cluster_a_ref],
+    )
+    cluster_b_ref = resource_ref(cluster_b)
+
+    cluster_c = ClusterFactory(metadata__owners=[cluster_a_ref])
+    cluster_c_ref = resource_ref(cluster_c)
+
+    app_d = ApplicationFactory(
+        metadata__finalizers=["kubernetes_resources_deletion"],
+        metadata__owners=[cluster_b_ref],
+        status__state=ApplicationState.RUNNING,
+        status__scheduled_to=cluster_b_ref,
+    )
+
+    app_e = ApplicationFactory(
+        metadata__finalizers=["kubernetes_resources_deletion"],
+        metadata__owners=[cluster_c_ref],
+        status__state=ApplicationState.RUNNING,
+        status__scheduled_to=cluster_c_ref,
+    )
+
+    all_resources = (cluster_a, cluster_b, cluster_c, app_d, app_e)
+    for resource in all_resources:
+        await db.put(resource)
+        gc.graph.add_resource(resource)
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        await gc.prepare(client)
+
+        await gc.resource_received(cluster_b)
+
+        # Ensure that "Application D" and "Cluster B" are marked as deleted
+        stored_app_d = None
+        for resource in all_resources:
+            marked, stored = await is_marked_for_deletion(resource, db)
+            if stored.metadata.name not in (
+                app_d.metadata.name,
+                cluster_b.metadata.name,
+            ):
+                assert not marked
+            else:
+                assert marked
+
+            if stored.metadata.name == app_d.metadata.name:
+                # Mark the "Application D" as being "cleaned up"
+                stored.metadata.finalizers.remove("kubernetes_resources_deletion")
+                await db.put(stored)
+                stored_app_d = stored
+
+        await gc.resource_received(stored_app_d)
+
+        assert await is_completely_deleted(stored_app_d, db)
+
+        # Simulate DELETED event
+        await gc.on_received_deleted(stored_app_d)
+        assert gc.queue.size() == 1  # Only "Cluster B" should be in the queue
+
+        key, new_cluster_b = await gc.queue.get()
+        await gc.resource_received(new_cluster_b)
+        await gc.queue.done(key)
+
+        # Ensure that the Cluster is deleted from the database
+        assert await is_completely_deleted(new_cluster_b, db)
+
+        # Simulate DELETED event
+        await gc.on_received_deleted(new_cluster_b)
+        assert gc.queue.size() == 0  # No other resources should be put in the queue
+
+        assert len(gc.graph._resources) == 3
+        assert len(gc.graph._relationships) == 3
+        assert len(gc.graph._relationships[resource_ref(app_e)]) == 0
 
 
 async def ensure_dependency_to_delete(gc, to_be_deleted, dependency_number):
