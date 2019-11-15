@@ -208,18 +208,14 @@ async def complete(app, api_endpoint, ssl_context, config):
     if "complete" not in app.spec.hooks:
         return
 
-    complete_config = config.get("complete")
-    if complete_config is None:
-        return
-
     app.status.token = app.status.token if app.status.token else token_urlsafe()
 
     hook = Complete(
         api_endpoint,
         ssl_context,
-        ca_dest=complete_config["ca_dest"],
-        env_token=complete_config["env_token"],
-        env_complete=complete_config["env_complete"],
+        ca_dest=config["complete"]["ca_dest"],
+        env_token=config["complete"]["env_token"],
+        env_complete=config["complete"]["env_complete"],
     )
     hook.mangle_app(
         app.metadata.name, app.metadata.namespace, app.status.token, app.status.mangling
