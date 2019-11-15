@@ -1,0 +1,116 @@
+heat_template_version: queens
+
+description: >
+  Provision network and common security group rules for Krake development
+  environment
+
+parameters:
+
+  private_network_name:
+    type: string
+    default: krake-network
+    description: >
+      Name of the private network used for Krake and DevStack instances
+
+  private_subnet_name:
+    type: string
+    default: krake-subnet
+    description: Name of the private subnetwork for the compute server
+
+  private_subnet_cidr:
+    type: string
+    default: 192.168.0.0/24
+    description: CIDR of the private Krake subnetwork
+
+  public_network_name:
+    type: string
+    default: shared-public-IPv4
+    description: Name of the underlying public network
+
+  router_name:
+    type: string
+    default: krake-router
+    description: Name of the krake subnet router
+
+  common_ports_secgroup_name:
+    type: string
+    default: krake-ports-commonsecgroup
+    description: Name of common security group
+
+  common_icmp_secgroup_name:
+    type: string
+    default: krake-icmp-commonsecgroup
+    description: Name of common security group
+
+  secrule_ports:
+    type: comma_delimited_list
+    default: "22"
+    description: List of port to open on all hosts
+
+  secrule_protocols:
+    type: comma_delimited_list
+    default: "tcp"
+    description: List of corresponding protocol
+
+resources:
+
+  network:
+    type: OS::Neutron::Net
+    properties:
+      name: { get_param: private_network_name }
+
+  subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      network_id: { get_resource: network }
+      name: { get_param: private_subnet_name }
+      cidr: { get_param: private_subnet_cidr }
+
+  router:
+    type: OS::Neutron::Router
+    properties:
+      name: { get_param: router_name }
+      external_gateway_info:
+        network: { get_param: public_network_name }
+
+  router_interface:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router_id: { get_resource: router }
+      subnet_id: { get_resource: subnet }
+
+  common_ports_secgroup:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      description: >
+        Common security group for the whole environment
+      name: { get_param: common_ports_secgroup_name }
+      rules:
+        repeat:
+          for_each:
+            <%port%>: { get_param: secrule_ports }
+            <%protocol%>: { get_param: secrule_protocols }
+          template:
+            protocol: <%protocol%>
+            port_range_min: <%port%>
+            port_range_max: <%port%>
+          permutations: false
+
+  common_icmp_secgroup:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      description: >
+        Common security group for the whole environment for ICMP. This
+        security group is always created, but only attached to the host port
+        if the "allow_icmp" boolean is set to True.
+      name: { get_param: common_icmp_secgroup_name }
+      rules:
+        - protocol: icmp
+
+outputs:
+  router_uuid:
+    description: UUID of the Krake subnet router
+    value: { get_resource: router }
+
+conditions:
+  is_icmp_protocol: {equals : [{get_param: allow_icmp}, "icmp"]}

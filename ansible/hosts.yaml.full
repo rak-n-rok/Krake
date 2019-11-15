@@ -1,0 +1,26 @@
+all:
+  children:
+    gateway:
+      children:
+        gateway_myenv: {}
+    gateway_myenv:
+      hosts:
+        gateway_myenv_01: {}
+    krake:
+      children:
+        krake_myenv: {}
+    krake_myenv:
+      hosts:
+        krake_myenv_01: {}
+    minikube:
+      children:
+        minikube_myenv: {}
+    minikube_myenv:
+      hosts:
+        minikube_myenv_01: {}
+        minikube_myenv_02: {}
+    myenv:
+      children:
+        gateway_myenv: {}
+        krake_myenv: {}
+        minikube_myenv: {}

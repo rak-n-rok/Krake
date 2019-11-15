@@ -1,0 +1,25 @@
+all: # keys must be unique, i.e. only one 'hosts' per group
+    children:   # key order does not matter, indentation does
+        krake:
+            children:
+                abc:
+                krake_abc:
+
+        gateway:
+            children:
+
+        abc:
+            children:
+                krake_abc:
+
+        krake_abc:
+            hosts:
+                krake_abc_01:
+                    ansible_host: "185.128.118.248"
+                    ansible_python_interpreter: "python3"
+                    ansible_ssh_common_args: "-o StrictHostKeyChecking=No -o UserKnownHostsFile=/dev/null\n"
+                    ansible_ssh_private_key_file: null
+                    ansible_user: "ubuntu"
+                    private_ip: "192.168.0.16"
+                    public_ip: "185.128.118.248"
+

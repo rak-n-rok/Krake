@@ -1,0 +1,9 @@
+[krake: children]
+myenv
+krake-myenv
+
+[myenv:children]
+krake-myenv
+
+[krake-myenv]
+myhost

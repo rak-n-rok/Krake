@@ -1,0 +1,169 @@
+heat_template_version: queens
+
+description: Provision an instance in a private network
+
+parameters:
+
+  instance_name:
+    type: string
+    description: Name of the instance
+
+  #key:
+  #  type: string
+  #  description: Name of a keypair to enable SSH access to the instance
+
+  public_keys:
+    type: comma_delimited_list
+    description: Public keys to authorize
+
+  private_network_name:
+    type: string
+    default: krake-network
+    description: Name of the private network within which instances are deployed
+
+  private_subnet_name:
+    type: string
+    default: krake-subnet
+    description: Name of the private subnet
+
+  public_network_name:
+    type: string
+    default: shared-public-IPv4
+    description: Name of the public network on which to associate a floating IP
+
+  flavor:
+    type: string
+    description: Name or ID of the flavor to use for the instance
+    default: XS
+
+  image:
+    type: string
+    description: Name or ID of the image to use for the instance
+    default: 3763d928-2ebd-11e9-a3fe-4b7ceb61b0b3 # Ubuntu 18.04 LTS x64
+
+  create_floating_ip:
+    type: boolean
+    default: true
+    description: Whether to create a floating IP or not
+
+  use_config_drive:
+    type: boolean
+    default: false
+    description: >
+      Control if a config Drive should be used to pass the Metadata
+      to the server
+
+  common_ports_secgroup_name:
+    type: string
+    default: krake-common-secgroup
+    description: Name of the environment wide security group
+
+  common_icmp_secgroup_name:
+    type: string
+    default: krake-common-icmp-secgroup
+    description: Name of common security group
+
+  secrule_ports:
+    type: comma_delimited_list
+    default: "22"
+    description: List of port to open on all hosts
+
+  secrule_protocols:
+    type: comma_delimited_list
+    default: "tcp"
+    description: List of corresponding protocol
+
+  allow_icmp:
+    type: boolean
+    default: false
+    description: Control if ICMP protocol should be authorize for this host
+
+resources:
+
+  instance:
+    type: OS::Nova::Server
+    properties:
+      name: { get_param: instance_name }
+      flavor: { get_param: flavor }
+      image: { get_param: image }
+      config_drive: { get_param: use_config_drive }
+#      key_name: matthiasgoerens
+      networks:
+        - port: { get_resource: port }
+      user_data_format: RAW
+      user_data:
+        str_replace:
+          template: |
+            #cloud-config
+            # add each entry to ~/.ssh/authorized_keys for the configured user or the
+            # first user defined in the user definition directive.
+            ssh_authorized_keys: $public_keys
+          params:
+            $public_keys: { get_param: public_keys }
+
+  port:
+    type: OS::Neutron::Port
+    properties:
+      name:
+        str_replace:
+          template: $NAME-port
+          params:
+            $NAME: { get_param: instance_name }
+      network_id: { get_param: private_network_name }
+      fixed_ips:
+        - subnet_id: { get_param: private_subnet_name }
+      security_groups:
+        if:
+        - "allow_icmp"
+        - - default
+          - { get_param: common_ports_secgroup_name }
+          - { get_resource: security_group }
+          - { get_param: common_icmp_secgroup_name }
+        - - default
+          - { get_param: common_ports_secgroup_name }
+          - { get_resource: security_group }
+
+  floating_ip:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network_id: { get_param: public_network_name }
+      port_id: { get_resource: port }
+    condition:
+      equals:
+        - get_param: create_floating_ip
+        - true
+
+  security_group:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      name:
+        str_replace:
+          template: $NAME-secgroup
+          params:
+            $NAME: { get_param: instance_name }
+      rules:
+        repeat:
+          for_each:
+            <%port%>: { get_param: secrule_ports }
+            <%protocol%>: { get_param: secrule_protocols }
+          template:
+            protocol: <%protocol%>
+            port_range_min: <%port%>
+            port_range_max: <%port%>
+          permutations: false
+
+outputs:
+  private_ip:
+    description: IP address of the instance in private network
+    value: { get_attr: [instance, first_address] }
+
+  public_ip:
+    description: Floating IP address of the instance
+    value: { get_attr: [floating_ip, floating_ip_address] }
+    condition:
+      equals:
+        - get_param: create_floating_ip
+        - true
+
+conditions:
+  allow_icmp: {equals : [{get_param: allow_icmp}, True]}

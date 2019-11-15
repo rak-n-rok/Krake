@@ -1,0 +1,19 @@
+---
+
+# Infra
+#############
+
+create_floating_ip: True
+
+flavor: XS
+
+secrules:
+  # OpenVPN
+  - port: 1194
+    protocol: udp
+
+
+# App
+############
+
+vpn_cidr: 10.9.0.0/24

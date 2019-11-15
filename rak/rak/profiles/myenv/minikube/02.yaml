@@ -1,0 +1,10 @@
+---
+
+#flavor: XS
+
+allow_icmp: True
+
+# App
+##########
+
+name: minikube2

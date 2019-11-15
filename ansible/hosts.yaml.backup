@@ -1,0 +1,10 @@
+all: # keys must be unique, i.e. only one 'hosts' per group
+    children:   # key order does not matter, indentation does
+        krake:
+            children: {}
+
+        gateway:
+            children: {}
+
+        minikube:
+            children: {}

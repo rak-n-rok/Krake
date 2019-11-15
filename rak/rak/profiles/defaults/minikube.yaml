@@ -1,7 +1,24 @@
-# OpenStack Heat template parameters
-api_port: 9443
-floating_ip: false
+---
+
 flavor: M.mem+
+
+minikube_api_port: &minikube_api_port
+  9443
+
+secrules:
+  # Minikube
+  - port: *minikube_api_port
+    protocol: tcp
+
+allow_icmp: False
+
+# App
+#######
+
+
+use_keystone: false
+
+prometheus_port: 31000
 
 # Minikube and kubectl configuration parameters
 minikube_install_dir: /usr/local/bin

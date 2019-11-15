@@ -14,21 +14,6 @@ parameters:
     type: string
     description: Name of the key pair for gateway instance
 
-  flavor:
-    type: string
-    description: Name of the flavor to use for the gateway instance
-    default: XS
-
-  gateway_secgroup:
-    type: string
-    default: krake-gateway-secgroup
-    description: Name of gateway security group
-
-  public_network:
-    type: string
-    description: >
-      Name of public network for which floating IP addresses will be allocated
-
   network:
     type: string
     default: krake-network
@@ -40,10 +25,33 @@ parameters:
     default: krake-subnet
     description: Name of the private subnetwork for gateway instance
 
+  public_network:
+    type: string
+    description: >
+      Name of public network for which floating IP addresses will be allocated
+
   common_secgroup:
     type: string
     default: krake-common-secgroup
     description: Name of common Krake security group
+
+  flavor:
+    type: string
+    description: Name of the flavor to use for the gateway instance
+    default: XS
+
+  create_floating_ip:
+    type: boolean
+    default: true
+    description: >
+      Whether to create a floating IP for Krake application instance or not
+
+  api_port:
+    type: number
+    default: 8080
+    description: >
+      TCP port of the API. A security group will be added allowing public
+      communication over this port.
 
   use_config_drive:
     type: boolean
@@ -77,7 +85,11 @@ resources:
   security_group:
     type: OS::Neutron::SecurityGroup
     properties:
-      name: { get_param: gateway_secgroup }
+      name:
+        str_replace:
+          template: $NAME-secgroup
+          params:
+            $NAME: { get_param: instance_name }
       description: Allow ingress on UDP port 1194 (OpenVPN)
       rules:
         - protocol: udp

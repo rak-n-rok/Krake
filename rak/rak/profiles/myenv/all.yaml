@@ -1,0 +1,16 @@
+---
+
+# Limit the authorized key
+# public_keys:
+# - matthias_pubkey
+
+# Specific variable for OpenStack deployments.
+OS_use_config_drive: True
+
+
+
+
+# App
+###########
+
+keypair: matthiasgoerens

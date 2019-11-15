@@ -1,46 +1,47 @@
-- name: Launch network gateway instances
-  hosts: gateways
-  gather_facts: false
-  tasks:
-
-    - name: Create Heat stack for gateway
-      delegate_to: localhost
-      os_stack:
-        name: "{{ inventory_hostname }}"
-        state: present
-        template:  "{{ playbook_dir }}/files/gateway/stack.yml"
-        parameters:
-          instance_name: "{{ inventory_hostname }}"
-          key: "{{ keypair }}"
-          flavor: "{{ flavor }}"
-          gateway_secgroup: "{{ inventory_hostname }}-secgroup"
-          public_network: "{{  hostvars[network]['public_network'] }}"
-          network: "{{ hostvars[network]['inventory_hostname'] }}"
-          subnet: "{{ hostvars[network]['subnet_name'] }}"
-          common_secgroup: "{{ hostvars[network]['common_secgroup_name'] }}"
-          use_config_drive: "{{ use_config_drive }}"
-      register: stack
-
-    - name: Update host variables of gateway
-      vars:
-        outputs: "{{ stack | stack_outputs }}"
-      update_host:
-        hostname: "{{ inventory_hostname }}"
-        ansible_host: "{{ outputs.public_ip | mandatory }}"
-        ansible_ssh_private_key_file: "{{ key_file }}"
-        ansible_ssh_common_args: >
-          -o StrictHostKeyChecking=No
-          -o UserKnownHostsFile=/dev/null
-        ansible_user: ubuntu
-        ansible_python_interpreter: python3
-        private_ip: "{{ outputs.private_ip }}"
-        public_ip: "{{ outputs.public_ip | mandatory }}"
+# - name: Launch network gateway instances
+#   hosts: gateway
+#   gather_facts: false
+#   tasks:
+#
+#     - name: Create Heat stack for gateway
+#       delegate_to: localhost
+#       os_stack:
+#         name: "{{ inventory_hostname }}"
+#         state: present
+#         template:  "{{ playbook_dir }}/files/gateway/stack.yml"
+#         parameters:
+#           instance_name: "{{ inventory_hostname }}"
+#           key: "{{ keypair }}"
+#           flavor: "{{ flavor }}"
+#           gateway_secgroup: "{{ inventory_hostname }}-secgroup"
+#           public_network: "{{  hostvars[network]['public_network'] }}"
+#           network: "{{ hostvars[network]['inventory_hostname'] }}"
+#           subnet: "{{ hostvars[network]['subnet_name'] }}"
+#           common_secgroup: "{{ hostvars[network]['common_secgroup_name'] }}"
+#           use_config_drive: "{{ use_config_drive }}"
+#       register: stack
+#
+#     - name: Update host variables of gateway
+#       vars:
+#         outputs: "{{ stack | stack_outputs }}"
+#       update_host:
+#         hostname: "{{ inventory_hostname }}"
+#         ansible_host: "{{ outputs.public_ip | mandatory }}"
+#         ansible_ssh_private_key_file: "{{ key_file }}"
+#         ansible_ssh_common_args: >
+#           -o StrictHostKeyChecking=No
+#           -o UserKnownHostsFile=/dev/null
+#         ansible_user: ubuntu
+#         ansible_python_interpreter: python3
+#         private_ip: "{{ outputs.private_ip }}"
+#         public_ip: "{{ outputs.public_ip | mandatory }}"
 
 - name: Setup network gateway instances
-  hosts: gateways
+  hosts: gateway
   # Run gather_facts (setup) manually to avoid a timing problem if the VM is
   # not booted yet
-  gather_facts: false
+  #gather_facts: false
+  gather_facts: true
   become: yes
   tags:
     - setup
@@ -99,8 +100,8 @@
         vpn_netmask: "{{ vpn_cidr | netmask }}"
 
         # OpenStack subnet
-        private_network_address: "{{ hostvars[network]['subnet_cidr'] | network_address }}"
-        private_netmask: "{{ hostvars[network]['subnet_cidr'] | netmask }}"
+        private_network_address: "{{ private_subnet_cidr | network_address }}"
+        private_netmask: "{{ private_subnet_cidr | netmask }}"
 
         # DevStack subnet
         devstack_network_address: "{{ devstack_cidr | network_address }}"
@@ -129,7 +130,7 @@
           O: CLOUD&HEAT Technology GmbH
           CN: "{{ inventory_hostname }}-ca"
         basic_constraints:
-          - CA:true
+          - CA:TRUE
 
     - name: Generate OpenSSL CA certificate
       openssl_certificate:
@@ -154,7 +155,7 @@
           O: CLOUD&HEAT Technology GmbH
           CN: "{{ inventory_hostname }}"
         basic_constraints:
-          - CA:false
+          - CA:FALSE
         key_usage:
           - digitalSignature
           - keyEncipherment
@@ -201,8 +202,8 @@
         reload: true
 
     - name: Create ferm (iptables) configuration
-      vars:
-        private_subnet_cidr: "{{ hostvars[network]['subnet_cidr'] }}"
+#      vars:
+#        private_subnet_cidr: "{{ private_subnet_cidr }}"
       template:
         src: "{{ playbook_dir }}/files/gateway/ferm.conf.j2"
         dest: /etc/ferm/ferm.d/krake-gateway.conf

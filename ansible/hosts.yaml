@@ -1,0 +1,8 @@
+all:
+  children:
+    gateway:
+      children: {}
+    krake:
+      children: {}
+    minikube:
+      children: {}

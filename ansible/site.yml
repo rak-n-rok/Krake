@@ -7,7 +7,8 @@
 #
 #   ansible-playbook -i hosts site.yml
 #
-- import_playbook: network.yml
+# - import_playbook: network.yml
+
 - import_playbook: gateway.yml
 # FIXME Temporary disabled playbooks. They need to be adapt to the new architecture.
 #- import_playbook: central_idp.yml

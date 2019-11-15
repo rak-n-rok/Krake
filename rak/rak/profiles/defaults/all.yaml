@@ -1,0 +1,67 @@
+---
+
+# Redefining a hash = Overiding it !
+
+
+# INFRASTRUCTURE VARIABLES
+##############################################################################
+
+##############################################################################
+# Following variables are defaults for the whole environment. They can be    #
+# overwritten on host_type specific profiles                                 #
+##############################################################################
+
+# The list of public keys to authorize
+public_keys:
+# mgoerens:
+- ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCYMJJjdHwWeYjS4fUQw18Bj2zHzcKPO3d5r+o3N/3zR7dE4hy0jH3xegXQjjf7ddSf4xE+1n3l/E+o9YrDPDARUxu067MlnBCdw8I9NqDD48o0JfpnQ4bk89eTN3eQue4G7sE6Sfefr2Hmq7ltMDF3pnkX3d5GDf4sdDunfZx1OlNBcSdhrZpX7Pwnb1AFwCoOLi3OmFDfEjLrQ2r3mkNSMCvtOxdgme3iYAgVQEKrnQxoZujKPZw8uGz7EZFIB6sqWcmyn/pFa+cVrJ01eEm7iERLWuixpYLAqNmfa8iociAgyEfvBFMVM2dF7HwF4Yb37DAncBgyqY27EQAZ8O65pGcPN4OBkdzn0BtPgMjJq+1fbAZTYSJ7LC6SNaa14lfuXgRWOV+kVUXZRKB5Hc7qYoOYGgFcuq9PRceERRJ6Y3y79QZTZz+imNstL+OLy1AlQGBf/7JoiZwQv4cBn0rxXDmhYsTj016+JSCLFX2LEOlyw3o8IkC3cnlQRLN/7Yrdzqlk0X6OrciqTsAwdtVMSJiRhJ+zSWhLaxY2FUh7rVxxNBFIzFXP/woj8VjOrD3+D/eLSSPgeQA7pjXGjG/z9bl2chnUMrT/blarROUMEW2flysaoEzmJ9FozpO7pfzXXmToBgdiR1up7xUBgeKdWSugEC9W+poqwKzX/3Xc5w== mg@630-361
+
+# The default image to use (name or ID)
+# Note: There exist multiple Ubuntu 18.04 in f1a, hence the default value uses
+# unique ID instead of name.
+image: 3763d928-2ebd-11e9-a3fe-4b7ceb61b0b3 # Ubuntu 18.04 LTS x64
+
+create_floating_ip: False
+
+allow_icmp: True
+
+##############################################################################
+# Following variables should remain on the environment level. They should    #
+# never diverge from one host to another within an environment               #
+##############################################################################
+
+# Rak automatically creates a private network for spawning the Krake
+# infrastructure. Those variables controls which network to use as external
+# public network, and what subnet CIDR to use for the created private network.
+public_network_name: "shared-public-IPv4"
+private_subnet_cidr: 192.168.0.0/24
+
+# Ports to be open on all hosts
+common_port_list:
+  # SSH
+  - protocol: tcp # Protocol to use: tcp / udp
+    port: 22      # Port number
+
+##############################################################################
+# Following variables are specific to the virtualization technology used to  #
+# deploy the Krake infrastructure:                                           #
+# - "OS_" prefixed variables are specific to OpenStack deployments.          #
+##############################################################################
+
+# Specific variable for OpenStack deployments.
+OS_use_config_drive: False
+
+# APPLICATION VARIABLES
+##############################################################################
+
+etc_dir: "{{ playbook_dir }}/.etc"
+key_file: "~/.ssh/id_rsa"
+
+# SSH jump host that is used to access the OpenStack instances. By
+# default, no OpenStack server has a floating IP assigned except hosts in
+# the "gateways" group. All other hosts use the "gateway" host variable to
+# define a SSH jump host.
+
+# If set to True, the first host from type "gateway" will be used as SSH jump
+# host to access the Krake infrastructure
+use_gateway: True

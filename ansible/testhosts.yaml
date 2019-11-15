@@ -1,0 +1,28 @@
+all:
+  children:
+    gateway:
+      children:
+        gateway_myenv: null
+        myenv: null
+    gateway_myenv:
+      hosts:
+        gateway_myenv_01: null
+    krake:
+      children:
+        krake_myenv: null
+        myenv: null
+    krake_myenv:
+      hosts:
+        krake_myenv_01: null
+    minikube:
+      children:
+        minikube_myenv: null
+        myenv: null
+    minikube_myenv:
+      hosts:
+        minikube_myenv_02: null
+    myenv:
+      children:
+        gateway_myenv: null
+        krake_myenv: null
+        minikube_myenv: null

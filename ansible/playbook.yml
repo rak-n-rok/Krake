@@ -1,0 +1,26 @@
+- name: Test playbook
+  become: yes
+  become_user: krake
+  hosts: krake_apps
+  vars:
+    api_host: localhost
+    api_port: 8080
+    git_dir: /home/krake
+    toto:
+      "Qu'il est beau": "Qu'il est laid"
+      "le lavabo": "le bidet"
+
+  tasks:
+    - debug: msg="{{ api_host }}:{{ api_port }}"
+
+    - name: Create Krake rok configuration file
+      vars:
+        file_content:
+          "api_url": "{{ api_host }}:{{ api_port }}"
+          "user": "system"
+      copy:
+        dest: "{{ git_dir }}/toto.yaml"
+        content: |
+          {{ file_content | to_json }}
+
+    - debug: msg={{ toto | to_json }}
