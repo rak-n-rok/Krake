@@ -53,6 +53,13 @@ class ReasonCode(IntEnum):
 
     KUBERNETES_ERROR = 60
 
+    CREATE_FAILED = 70
+    RECONCILE_FAILED = 71
+    DELETE_FAILED = 72
+
+    OPENSTACK_ERROR = 80
+    INVALID_CLUSTER_TEMPLATE = 81
+
 
 class Reason(Serializable):
     code: ReasonCode

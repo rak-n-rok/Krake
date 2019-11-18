@@ -1,9 +1,5 @@
 from operator import attrgetter
-from factories.openstack import (
-    ProjectFactory,
-    ApplicationCredentialFactory,
-    MagnumClusterFactory,
-)
+from factories.openstack import ProjectFactory, AuthMethodFactory, MagnumClusterFactory
 
 from krake.data.openstack import Project, ProjectList, MagnumCluster, MagnumClusterList
 from krake.api.app import create_app
@@ -56,7 +52,8 @@ async def test_list_all_projects(aiohttp_client, config, db):
 
 
 async def test_list_projects_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
 
     resp = await client.get("/openstack/namespaces/testing/projects")
     assert resp.status == 403
@@ -72,7 +69,7 @@ async def test_create_project(aiohttp_client, config, db):
 
     resp = await client.post(
         "/openstack/namespaces/testing/projects",
-        json=data.serialize(subresources=False),
+        json=data.serialize(),
     )
     body = await resp.json()
     assert resp.status == 200
@@ -91,7 +88,8 @@ async def test_create_project(aiohttp_client, config, db):
 
 
 async def test_create_project_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
 
     resp = await client.post("/openstack/namespaces/testing/projects")
     assert resp.status == 403
@@ -109,7 +107,7 @@ async def test_create_project_with_existing_name(aiohttp_client, config, db):
 
     resp = await client.post(
         "/openstack/namespaces/testing/projects",
-        json=existing.serialize(subresources=False),
+        json=existing.serialize(),
     )
     assert resp.status == 409
 
@@ -127,7 +125,8 @@ async def test_get_project(aiohttp_client, config, db):
 
 
 async def test_get_project_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
 
     resp = await client.get("/openstack/namespaces/testing/projects/my-project")
     assert resp.status == 403
@@ -140,23 +139,23 @@ async def test_get_project_rbac(rbac_allow, config, aiohttp_client):
 async def test_update_project(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
-    new_credential = ApplicationCredentialFactory()
+    auth = AuthMethodFactory(type="password")
     labels = {"my-label": "my-value"}
 
     data = ProjectFactory()
     await db.put(data)
-    data.spec.application_credential = new_credential
+    data.spec.auth = auth
     data.metadata.labels = labels
 
     resp = await client.put(
         f"/openstack/namespaces/{data.metadata.namespace}"
         f"/projects/{data.metadata.name}",
-        json=data.serialize(subresources=False),
+        json=data.serialize(),
     )
     assert resp.status == 200
     project = Project.deserialize(await resp.json())
     assert project.metadata.labels == labels
-    assert project.spec.application_credential == new_credential
+    assert project.spec.auth == auth
 
     stored = await db.get(
         Project, namespace=data.metadata.namespace, name=project.metadata.name
@@ -165,7 +164,8 @@ async def test_update_project(aiohttp_client, config, db):
 
 
 async def test_update_project_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
 
     resp = await client.put("/openstack/namespaces/testing/projects/my-project")
     assert resp.status == 403
@@ -197,7 +197,8 @@ async def test_delete_project(aiohttp_client, config, db):
 
 
 async def test_delete_project_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
 
     resp = await client.delete("/openstack/namespaces/testing/projects/my-project")
     assert resp.status == 403
@@ -254,7 +255,8 @@ async def test_list_all_magnum_clusters(aiohttp_client, config, db):
 
 
 async def test_list_magnum_clusters_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
 
     resp = await client.get("/openstack/namespaces/testing/magnumclusters")
     assert resp.status == 403
@@ -270,7 +272,7 @@ async def test_create_magnum_cluster(aiohttp_client, config, db):
 
     resp = await client.post(
         "/openstack/namespaces/testing/magnumclusters",
-        json=data.serialize(subresources=False),
+        json=data.serialize(),
     )
     body = await resp.json()
     assert resp.status == 200
@@ -289,7 +291,8 @@ async def test_create_magnum_cluster(aiohttp_client, config, db):
 
 
 async def test_create_magnum_cluster_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
 
     resp = await client.post("/openstack/namespaces/testing/magnumclusters")
     assert resp.status == 403
@@ -307,7 +310,7 @@ async def test_create_magnum_cluster_with_existing_name(aiohttp_client, config, 
 
     resp = await client.post(
         "/openstack/namespaces/testing/magnumclusters",
-        json=existing.serialize(subresources=False),
+        json=existing.serialize(),
     )
     assert resp.status == 409
 
@@ -325,7 +328,8 @@ async def test_get_magnum_cluster(aiohttp_client, config, db):
 
 
 async def test_get_magnum_cluster_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
 
     resp = await client.get("/openstack/namespaces/testing/magnumclusters/my-cluster")
     assert resp.status == 403
@@ -342,26 +346,28 @@ async def test_magnum_cluster_update(aiohttp_client, config, db):
 
     data = MagnumClusterFactory(spec__node_count=5, spec__master_count=1)
     await db.put(data)
-    data.spec.node_count = 10
     data.spec.master_count = 2
+    data.spec.node_count = 10
 
     resp = await client.put(
         f"/openstack/namespaces/{data.metadata.namespace}"
         f"/magnumclusters/{data.metadata.name}",
-        json=data.serialize(subresources=False),
+        json=data.serialize(),
     )
     assert resp.status == 200
     cluster = MagnumCluster.deserialize(await resp.json())
-    assert cluster.spec == data.spec
+    assert cluster.spec.master_count == 1
+    assert cluster.spec.node_count == 10
 
     stored = await db.get(
         cluster, namespace=data.metadata.namespace, name=cluster.metadata.name
     )
-    assert stored.spec == data.spec
+    assert stored.spec == cluster.spec
 
 
 async def test_update_magnum_cluster_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
 
     resp = await client.put("/openstack/namespaces/testing/magnumclusters/my-cluster")
     assert resp.status == 403
@@ -383,7 +389,7 @@ async def test_magnum_cluster_template_immutable(aiohttp_client, config, db):
     resp = await client.put(
         f"/openstack/namespaces/{data.metadata.namespace}"
         f"/magnumclusters/{data.metadata.name}",
-        json=data.serialize(subresources=False),
+        json=data.serialize(),
     )
     assert resp.status == 200
     cluster = MagnumCluster.deserialize(await resp.json())
@@ -417,7 +423,8 @@ async def test_delete_magnum_cluster(aiohttp_client, config, db):
 
 
 async def test_delete_magnum_cluster_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
 
     resp = await client.delete(
         "/openstack/namespaces/testing/magnumclusters/my-cluster"

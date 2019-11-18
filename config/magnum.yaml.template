@@ -1,0 +1,46 @@
+## Configuration file for the Krake OpenStack Magnum Controller
+
+# Example:
+# api_endpoint: localhost:8443
+# worker_count: 5
+# debounce: 1.5
+# poll_interval: 30
+# tls:
+#   enabled: true
+#   client_ca: tmp/pki/ca.pem
+#   client_cert: tmp/pki/<resource>_cert.pem
+#   client_key: tmp/pki/<resource>_cert-key.pem
+# If the 'enabled' element is not true, the controller will not use TLS
+
+api_endpoint: $api_endpoint
+worker_count: $worker_count
+debounce: $debounce
+poll_interval: 30
+tls:
+  enabled: $tls_enabled
+  client_ca: $cert_dir/ca.pem
+  client_cert: $cert_dir/system:magnum.pem
+  client_key: $cert_dir/system:magnum-key.pem
+
+log:
+  version: 1
+  level: INFO
+  disable_existing_loggers: false
+  formatters:
+    krake:
+      format: "%(asctime)s - [%(name)s] - [%(levelname)-5s] - %(message)s"
+  handlers:
+    console:
+      class: logging.StreamHandler
+      formatter: krake
+      stream: ext://sys.stdout
+    file:
+      class: logging.handlers.WatchedFileHandler
+      formatter: krake
+      filename: krake.log
+  root: # Configuring the default (root) logger is highly recommended
+    handlers: [console]
+  loggers:
+    krake:
+      handlers: [console]
+      propagate: no

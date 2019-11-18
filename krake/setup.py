@@ -19,6 +19,7 @@ install_requires = [
     "cached-property",
     "keystoneauth1",
     "python-magnumclient",
+    "pyopenssl",
 ]
 
 # dataclasses backport

@@ -311,7 +311,7 @@ async def test_create_magnum_cluster(aiohttp_server, config, db, loop):
 
 
 async def test_update_magnum_cluster(aiohttp_server, config, db, loop):
-    cluster = MagnumClusterFactory()
+    cluster = MagnumClusterFactory(spec__master_count=1)
     await db.put(cluster)
     cluster.spec.master_count = 3
     cluster.spec.node_count = 7
@@ -326,7 +326,8 @@ async def test_update_magnum_cluster(aiohttp_server, config, db, loop):
             body=cluster,
         )
 
-    assert received.spec == cluster.spec
+    assert received.spec.master_count == 1
+    assert received.spec.node_count == 7
     assert received.metadata.created == cluster.metadata.created
     assert received.metadata.modified
 

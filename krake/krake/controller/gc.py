@@ -38,11 +38,15 @@ from krake import (
     ConfigurationOptionMapper,
 )
 from krake.apidefs.kubernetes import ApplicationResource, ClusterResource
+from krake.apidefs.openstack import ProjectResource, MagnumClusterResource
+from krake.client.openstack import OpenStackApi
 from krake.controller import Controller, run, Reflector, create_ssl_context
 from krake.data.config import ControllerConfiguration
 from krake.data.core import resource_ref
 from krake.client.kubernetes import KubernetesApi
 from krake.data.kubernetes import Application, Cluster
+from krake.data.openstack import Project, MagnumCluster
+from krake.utils import camel_to_snake_case
 
 logger = logging.getLogger("krake.controller.garbage_collector")
 
@@ -281,7 +285,11 @@ class GarbageCollector(Controller):
             KubernetesApi: [
                 (Application, ApplicationResource),
                 (Cluster, ClusterResource),
-            ]
+            ],
+            OpenStackApi: [
+                (Project, ProjectResource),
+                (MagnumCluster, MagnumClusterResource),
+            ],
         }
         self.graph = DependencyGraph()
 
@@ -300,7 +308,7 @@ class GarbageCollector(Controller):
             for kind, client_resource in kind_list:
                 self.apis[kind] = api
 
-                resource_plural = client_resource.plural.lower()
+                resource_plural = camel_to_snake_case(client_resource.plural)
                 list_resources = getattr(api, f"list_all_{resource_plural}")
                 watch_resources = getattr(api, f"watch_all_{resource_plural}")
 
@@ -448,7 +456,7 @@ class GarbageCollector(Controller):
         """
         for dependent in dependents:
             api = self.apis[type(dependent)]
-            kind = dependent.kind.lower()
+            kind = camel_to_snake_case(dependent.kind)
             delete_resource = getattr(api, f"delete_{kind}")
 
             logger.info("Mark dependent as deleted: %s", resource_ref(dependent))
@@ -466,7 +474,7 @@ class GarbageCollector(Controller):
 
         """
         api = self.apis[type(resource)]
-        kind = resource.kind.lower()
+        kind = camel_to_snake_case(resource.kind)
         update_resource = getattr(api, f"update_{kind}")
 
         finalizer = resource.metadata.finalizers.pop(-1)

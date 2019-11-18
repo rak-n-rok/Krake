@@ -76,3 +76,13 @@ services:
     command: python3 -m krake.controller.scheduler
     volumes:
       - /etc/krake:/etc/krake:ro
+
+  krake-ctrl-magnum:
+    image: krake:latest
+    restart: always
+    tty: true
+    depends_on:
+      - krake-api
+    command: python3 -m krake.controller.magnum
+    volumes:
+      - /etc/krake:/etc/krake:ro

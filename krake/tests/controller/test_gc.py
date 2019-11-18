@@ -20,6 +20,7 @@ from krake.controller.gc import (
 from factories.core import MetadataFactory
 from factories.fake import fake
 from factories.kubernetes import ApplicationFactory, ClusterFactory
+from factories.openstack import ProjectFactory
 from krake.data.serializable import Serializable
 from krake.test_utils import server_endpoint
 
@@ -215,11 +216,20 @@ async def test_resources_reception(aiohttp_server, config, db, loop):
         metadata__finalizers=["cascade_deletion"],
     )
 
+    project_alive = ProjectFactory()
+    project_deleting = ProjectFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__finalizers=["cascade_deletion"],
+    )
+
     await db.put(app_migrating)
     await db.put(app_deleting)
 
     await db.put(cluster_alive)
     await db.put(cluster_deleting)
+
+    await db.put(project_alive)
+    await db.put(project_deleting)
 
     server = await aiohttp_server(create_app(config))
 
@@ -229,13 +239,20 @@ async def test_resources_reception(aiohttp_server, config, db, loop):
         for reflector in gc.reflectors:
             await reflector.list_resource()
 
-    assert gc.queue.size() == 2
+    assert gc.queue.size() == 3
     key_1, value_1 = await gc.queue.get()
     key_2, value_2 = await gc.queue.get()
+    key_3, value_3 = await gc.queue.get()
 
-    assert key_1 in (app_deleting.metadata.uid, cluster_deleting.metadata.uid)
-    assert key_2 in (app_deleting.metadata.uid, cluster_deleting.metadata.uid)
-    assert key_1 != key_2
+    deleting_resources = {
+        res.metadata.uid for res in (app_deleting, cluster_deleting, project_deleting)
+    }
+    # Assert that all resources to delete are in the queue,
+    # and that the keys are all different.
+    assert key_1 in deleting_resources
+    assert key_2 in deleting_resources
+    assert key_3 in deleting_resources
+    assert len(deleting_resources) == len({key_1, key_2, key_3})
 
     await gc.queue.done(key_1)
     await gc.queue.done(key_2)
