@@ -21,15 +21,14 @@ from kubernetes_asyncio.client import (
 from kubernetes_asyncio.client.rest import ApiException
 from typing import NamedTuple, Tuple
 
-from ..exceptions import ControllerError, application_error_mapping
 from .hooks import listen, Hook
 from krake.client.kubernetes import KubernetesApi
-from krake.controller import Controller, Reflector
+from krake.controller import Controller, Reflector, ControllerError
 from krake.controller.kubernetes_application.hooks import (
     register_observer,
     unregister_observer,
 )
-from krake.data.core import ReasonCode, resource_ref
+from krake.data.core import ReasonCode, resource_ref, Reason
 from krake.data.kubernetes import ApplicationState
 from krake.utils import camel_to_snake_case
 
@@ -45,6 +44,8 @@ class InvalidResourceError(ControllerError):
 
 class InvalidStateError(ControllerError):
     """Kubernetes application is in an invalid state"""
+
+    code = ReasonCode.INTERNAL_ERROR
 
 
 class ResourceID(NamedTuple):
@@ -298,8 +299,22 @@ class KubernetesController(Controller):
             try:
                 logger.debug("Handling application %r", app)
                 await self.resource_received(app)
-            except ControllerError as err:
-                await self.error_handler(app, error=err)
+            except ApiException as error:
+                app.status.reason = Reason(
+                    code=ReasonCode.KUBERNETES_ERROR, message=str(error)
+                )
+                app.status.state = ApplicationState.FAILED
+
+                await self.kubernetes_api.update_application_status(
+                    namespace=app.metadata.namespace, name=app.metadata.name, body=app
+                )
+            except ControllerError as error:
+                app.status.reason = Reason(code=error.code, message=error.message)
+                app.status.state = ApplicationState.FAILED
+
+                await self.kubernetes_api.update_application_status(
+                    namespace=app.metadata.namespace, name=app.metadata.name, body=app
+                )
             finally:
                 await self.queue.done(key)
             if run_once:
@@ -627,32 +642,6 @@ class KubernetesController(Controller):
                 namespace=app.metadata.namespace, name=app.metadata.name, body=app
             )
 
-    async def error_handler(self, app, error=None):
-        """Asynchronous callback executed whenever an error occurs during
-        :meth:`resource_received`.
-
-        Callback updates kubernetes application status to the failed state and
-        describes the reason of the failure.
-
-        Args:
-            app (krake.data.kubernetes.Application): Application object processed
-                when the error occurred
-            error (Exception, optional): The exception whose reason will be propagated
-                to the end-user. Defaults to None.
-        """
-        reason = application_error_mapping(app.status.state, app.status.reason, error)
-        app.status.reason = reason
-
-        # If an important error occurred, simply delete the Application
-        if reason.code.value >= ReasonCode.WILL_DELETE_RESOURCE:
-            app.status.state = ApplicationState.DELETING
-        else:
-            app.status.state = ApplicationState.FAILED
-
-        await self.kubernetes_api.update_application_status(
-            namespace=app.metadata.namespace, name=app.metadata.name, body=app
-        )
-
 
 class ApiAdapter(object):
     """An adapter that provides functionality for calling
@@ -900,10 +889,9 @@ class KubernetesClient(object):
         try:
             resp = await resource_api.read(kind, name=name, namespace=namespace)
         except ApiException as err:
-            if err.status == 404:
-                resp = None
-            else:
-                raise InvalidResourceError(err_resp=err)
+            if err.status != 404:
+                raise
+            resp = None
 
         if resp is None:
             resp = await resource_api.create(kind, body=resource, namespace=namespace)
@@ -935,7 +923,7 @@ class KubernetesClient(object):
             if err.status == 404:
                 logger.debug("%s already deleted", kind)
                 return
-            raise InvalidResourceError(err_resp=err)
+            raise
 
         self.log_resp(resp, kind, action="deleted")
 

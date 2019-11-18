@@ -17,7 +17,7 @@ from typing import NamedTuple
 
 import OpenSSL
 import yarl
-from krake.controller import Observer
+from krake.controller import Observer, ControllerError
 from kubernetes_asyncio.client.rest import ApiException
 from yarl import URL
 from secrets import token_urlsafe
@@ -32,8 +32,6 @@ from kubernetes_asyncio.client import (
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 
 from krake.data.core import ReasonCode
-
-from ..exceptions import ControllerError
 
 
 logger = logging.getLogger(__name__)

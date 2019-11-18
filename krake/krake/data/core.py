@@ -51,10 +51,7 @@ class ReasonCode(IntEnum):
     CLUSTER_NOT_REACHABLE = 11  # Connectivity issue with the Kubernetes deployment
     NO_SUITABLE_RESOURCE = 50  # Scheduler issue
 
-    # Codes over 100 will cause the controller to delete the resource directly
-    WILL_DELETE_RESOURCE = 100
-
-    DELETE_FAILED = 100
+    KUBERNETES_ERROR = 60
 
 
 class Reason(Serializable):

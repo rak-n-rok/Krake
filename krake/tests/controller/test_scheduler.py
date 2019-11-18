@@ -617,7 +617,7 @@ async def test_kubernetes_scheduling(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        await scheduler.resource_received(app)
+        await scheduler.kubernetes_application_received(app)
 
         stored = await db.get(Application, namespace="testing", name=app.metadata.name)
 
@@ -696,7 +696,7 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        await scheduler.resource_received(app)
+        await scheduler.kubernetes_application_received(app)
 
         stored1 = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -705,7 +705,7 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
         assert stored1.status.state == ApplicationState.PENDING
 
         # Schedule a second time the scheduled resource
-        await scheduler.resource_received(stored1)
+        await scheduler.kubernetes_application_received(stored1)
 
         stored2 = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name

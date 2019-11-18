@@ -7,12 +7,11 @@ from aiohttp import ClientError
 
 from krake.client.core import CoreApi
 from krake.client.kubernetes import KubernetesApi
-from krake.data.core import ReasonCode, resource_ref
+from krake.data.core import ReasonCode, resource_ref, Reason
 from krake.data.kubernetes import ApplicationState, Cluster, ClusterBinding
 
-from .. import Controller, Reflector
-from ..exceptions import ControllerError, application_error_mapping
 from .constraints import match_cluster_constraints
+from .. import Controller, ControllerError, Reflector
 from .metrics import MetricError, fetch_query
 
 logger = logging.getLogger(__name__)
@@ -172,19 +171,23 @@ class Scheduler(Controller):
         while True:
             key, app = await self.queue.get()
             try:
-                logger.debug("Handling resource %r", app)
-                await self.resource_received(app)
-            except ControllerError as err:
-                await self.error_handler(app, error=err)
+                # TODO: API for supporting different application types
+                logger.debug("Handling %r", app)
+                await self.kubernetes_application_received(app)
+            except ControllerError as error:
+                app.status.reason = Reason(code=error.code, message=error.message)
+                app.status.state = ApplicationState.FAILED
+
+                await self.kubernetes_api.update_application_status(
+                    namespace=app.metadata.namespace, name=app.metadata.name, body=app
+                )
             finally:
                 await self.queue.done(key)
             if run_once:
                 break  # TODO: should we keep this? Only useful for tests
 
-    async def resource_received(self, app):
-        # TODO: API for supporting different application types
+    async def kubernetes_application_received(self, app):
         # TODO: Evaluate spawning a new cluster
-
         await self.schedule_kubernetes_application(app)
         await self.reschedule_kubernetes_application(app)
 
@@ -375,30 +378,3 @@ class Scheduler(Controller):
             return Stickiness(weight=0, value=0)
 
         return Stickiness(weight=self.stickiness, value=1.0)
-
-    async def error_handler(self, app, error=None):
-        """Asynchronous callback executed whenever an error occurs during
-        :meth:`resource_received`.
-
-        Callback updates kubernetes application status to the failed state and
-        describes the reason of the failure.
-
-        Args:
-            app (krake.data.kubernetes.Application): Application object processed
-                when the error occurred
-            error (Exception, optional): The exception whose reason will be propagated
-                to the end-user. Defaults to None.
-        """
-        reason = application_error_mapping(app.status.state, app.status.reason, error)
-        app.status.reason = reason
-
-        # If an important error occurred, simply delete the Application
-        if reason.code.value >= 100:
-            app.status.state = ApplicationState.DELETING
-        else:
-            app.status.state = ApplicationState.FAILED
-
-        kubernetes_api = KubernetesApi(self.client)
-        await kubernetes_api.update_application_status(
-            namespace=app.metadata.namespace, name=app.metadata.name, body=app
-        )
