@@ -405,3 +405,21 @@ async def test_observer(loop):
     # Ensure that the on_res_update function is called
     assert is_res_updated.done()
     await is_res_updated
+
+
+async def test_multiple_puts(loop):
+    queue = WorkQueue(loop=loop, debounce=0)
+
+    await queue.put("key", 1)
+    await queue.put("key", 2)
+
+    key, value = await queue.get()
+    assert value == 2
+
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(queue.get(), loop=loop, timeout=0)
+
+    await queue.done(key)
+
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(queue.get(), loop=loop, timeout=0)
