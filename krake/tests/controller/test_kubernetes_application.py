@@ -741,7 +741,6 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
                 "status": {"load_balancer": {}},
             }
         )
-        return web.Response(status=404)
 
     @routes.delete("/api/v1/namespaces/default/services/nginx-demo")
     async def _(request):
