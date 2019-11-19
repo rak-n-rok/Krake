@@ -1,3 +1,7 @@
+import asyncio
+from contextlib import suppress
+from itertools import count
+
 import pytest
 import pytz
 from factory import Factory, SubFactory
@@ -5,8 +9,13 @@ from krake.api.app import create_app
 
 from krake.client import Client
 from krake.data.core import resource_ref, Metadata
-from krake.data.kubernetes import ApplicationState
-from krake.controller.gc import DependencyGraph, GarbageCollector
+from krake.data.kubernetes import ApplicationState, Cluster
+from krake.controller.gc import (
+    DependencyGraph,
+    GarbageCollector,
+    ResourceWithDependentsException,
+    DependencyCycleException,
+)
 
 from factories.core import MetadataFactory
 from factories.fake import fake
@@ -66,8 +75,7 @@ def test_dependency_graph():
     for app in apps:
         assert len(graph.get_direct_dependents(app)) == 0
 
-    error_message = "Cannot remove a resource which holds dependents"
-    with pytest.raises(ValueError, match=error_message):
+    with pytest.raises(ResourceWithDependentsException):
         graph.remove_resource(up)
 
 
@@ -132,7 +140,7 @@ def test_error_on_cycle_in_dependency_graph():
         graph.add_resource(app)
 
     # Add resource with cycle
-    with pytest.raises(RuntimeError, match=apps[0].metadata.name):
+    with pytest.raises(DependencyCycleException):
         graph.add_resource(apps[0])
 
 
@@ -616,3 +624,174 @@ async def test_three_layers_deletion(aiohttp_server, config, db, loop):
         assert await is_completely_deleted(upper, db)
 
         assert not gc.graph._resources
+
+
+async def test_gc_handling_of_cycles(caplog, loop):
+    """In case of cycle in the dependency graph, the Garbage Collector removes the
+    resources that constitute the cycle, but keeps the others.
+    """
+    endpoint = "http://localhost:1234"
+    gc = GarbageCollector(endpoint)
+
+    uppest = ClusterFactory()
+    upper = ClusterFactory(metadata__owners=[resource_ref(uppest)])
+    middle = ClusterFactory(metadata__owners=[resource_ref(upper)])
+    other = ClusterFactory(metadata__owners=[resource_ref(upper), resource_ref(uppest)])
+    lower = ClusterFactory(metadata__owners=[resource_ref(middle)])
+
+    # Create a cycle between upper, middle and lower
+    upper.metadata.owners = [resource_ref(lower)]
+
+    async with Client(url=endpoint, loop=loop) as client:
+        await gc.prepare(client)
+
+        # Let the gc handle all resources. The cycle should be detected,
+        # and all the resources that constitutes it should be removed.
+        await gc.on_received_new(uppest)
+        await gc.on_received_new(upper)
+        await gc.on_received_new(middle)
+        await gc.on_received_new(other)
+        await gc.on_received_new(lower)
+
+        # The other relationships should be kept
+        assert len(gc.graph._resources) == 2
+        assert len(gc.graph._relationships) == 2
+
+        uppest_dependents = gc.graph._relationships[resource_ref(uppest)]
+        assert len(uppest_dependents) == 1
+        other_dependents = gc.graph._relationships[resource_ref(other)]
+        assert len(other_dependents) == 0
+
+    assert upper.metadata.name in caplog.text
+    assert middle.metadata.name in caplog.text
+    assert lower.metadata.name in caplog.text
+
+    # No issues with other and uppest
+    assert other.metadata.name not in caplog.text
+    assert uppest.metadata.name not in caplog.text
+
+
+async def test_gc_handling_of_resource_with_dependent(loop, caplog):
+    """If resources are deleted by the API, but have still dependents on the dependency
+    graph, the garbage collector issues a warning message.
+    """
+    endpoint = "http://localhost:1234"
+    gc = GarbageCollector(endpoint)
+
+    upper = ClusterFactory()
+    misc = ClusterFactory(metadata__owners=[resource_ref(upper)])
+    other = ClusterFactory(metadata__owners=[resource_ref(upper)])
+
+    async with Client(url=endpoint, loop=loop) as client:
+        await gc.prepare(client)
+
+        await gc.on_received_new(upper)
+        await gc.on_received_new(misc)
+        await gc.on_received_new(other)
+
+        # Receive upper as deleted, even if it has still dependents on the graph
+        await gc.on_received_deleted(upper)
+
+    assert upper.metadata.name in caplog.text
+    assert misc.metadata.name in caplog.text
+    assert other.metadata.name in caplog.text
+
+
+async def wait_for_resource(resource, graph, present=True, max_retry=10):
+    """Verify the presence or absence of a resource in a dependency graph. If the
+    resource is not in the wanted state (present or absent), the lookup will be retried
+    the given number of times.
+
+    Args:
+        resource (krake.data.serializable.ApiObject): the resource to look for.
+        graph (DependencyGraph): the graph in which the resource should be looked for.
+        present (bool, optional): if True, wait for the resource to be present.
+            Otherwise, wait for the resource to be absent.
+        max_retry (int, optional): maximum number of times the check needs to be
+            performed.
+
+    Raises:
+        AssertionError: if the resource is not in the wanted state after the given
+            number of retries.
+
+    """
+    res_ref = resource_ref(resource)
+    for i in count():
+        if (res_ref in graph._resources) == present:
+            return
+        await asyncio.sleep(0.1)
+
+        if i == max_retry:
+            assert False
+
+
+async def test_gc_error_handling(aiohttp_server, config, db, loop, caplog):
+    """Test the resilience of the garbage collector after an issue occurred with the
+    dependency graph. The gc should not stop and continue its work.
+    """
+    server = await aiohttp_server(create_app(config))
+    gc = GarbageCollector(server_endpoint(server), worker_count=1)
+
+    upper = ClusterFactory()
+    middle = ClusterFactory(metadata__owners=[resource_ref(upper)])
+    lower = ClusterFactory(metadata__owners=[resource_ref(middle)])
+
+    misc = ClusterFactory()
+    other = ClusterFactory(metadata__owners=[resource_ref(misc)])
+
+    await db.put(upper)
+    await db.put(middle)
+    await db.put(lower)
+
+    after_cycle = loop.create_future()
+
+    async def add_cycle(gc):
+        # Add the dependency cycle
+        stored = await db.get(
+            Cluster, namespace=upper.metadata.namespace, name=upper.metadata.name
+        )
+        stored.metadata.owners = [resource_ref(lower)]
+        await db.put(stored)
+
+        # Add resources to the gc, to test if it did not crash after the cycle detection
+        await db.put(misc)
+        await db.put(other)
+
+        # Wait for the gc to receive and handle the new resources
+        await wait_for_resource(other, gc.graph)
+        await wait_for_resource(misc, gc.graph)
+        after_cycle.set_result(None)
+
+    async def stop_controller():
+        # Wait for the gc to finish removing the cycle
+        await after_cycle
+        await wait_for_resource(lower, gc.graph, present=False)
+        await wait_for_resource(middle, gc.graph, present=False)
+        await wait_for_resource(upper, gc.graph, present=False)
+
+        # Stop the gc
+        run_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await run_task
+
+    # Graph is deleted at the end of run() on the gc
+    graph_copy = gc.graph
+
+    run_task = loop.create_task(gc.run())
+
+    with suppress(asyncio.CancelledError):
+        await asyncio.gather(run_task, add_cycle(gc), stop_controller())
+
+    assert after_cycle.done()
+
+    assert upper.metadata.name in caplog.text
+    assert middle.metadata.name in caplog.text
+    assert lower.metadata.name in caplog.text
+
+    # Even with a cycle, the gc continue working
+    assert resource_ref(other) in graph_copy._resources
+    assert resource_ref(misc) in graph_copy._resources
+
+    assert resource_ref(upper) not in graph_copy._resources
+    assert resource_ref(middle) not in graph_copy._resources
+    assert resource_ref(lower) not in graph_copy._resources

@@ -37,6 +37,46 @@ from krake.data.kubernetes import Application, Cluster
 logger = logging.getLogger("krake.controller.garbage_collector")
 
 
+class DependencyException(Exception):
+    """Base class for dependency exceptions.
+    """
+
+
+class DependencyCycleException(DependencyException):
+    """Raised in case a cycle in the dependencies has been discovered while adding or
+    updating a resource.
+
+    Args:
+        resource (krake.data.core.ResourceRef): the resource added or updated that
+            triggered the exception.
+        cycle (list): the cycle of dependency relationships that has been discovered.
+
+    """
+
+    def __init__(self, resource, cycle, *args, **kwargs):
+        message = f"Cycle in dependency graph for resource {str(resource)}"
+        super().__init__(message, *args, **kwargs)
+        self.cycle = cycle
+
+
+class ResourceWithDependentsException(DependencyException):
+    """Raise when an attempt to remove a resource from the dependency graph implies
+    removing a resource that has still dependents, and thus should not be removed if
+    the integrity of the dependency graph needs to be kept.
+
+    For instance: If B depends on A, A should be removed.
+
+    Args:
+        dependents (list): The list of dependents that are now orphaned.
+
+    """
+
+    def __init__(self, dependents, *args, **kwargs):
+        message = "Cannot remove a resource which holds dependents"
+        super().__init__(message, *args, **kwargs)
+        self.dependents = dependents
+
+
 class DependencyGraph(object):
     """Representation of the dependencies of all Krake resources by an acyclic
     directed graph. This graph can be used to get the dependents of any resource that
@@ -95,8 +135,11 @@ class DependencyGraph(object):
         # No need to add the value explicitly here,
         # as it is lazy created in the cycles check
 
+        # For each owner of the current resource,
+        # add the resource in its dependent list if not present yet.
         for owner in resource.metadata.owners:
-            self._relationships[owner].append(res_ref)
+            if res_ref not in self._relationships[owner]:
+                self._relationships[owner].append(res_ref)
 
         self._check_for_cycles(res_ref)
 
@@ -111,15 +154,16 @@ class DependencyGraph(object):
                  dependents.
 
         Raises:
-            ValueError: if the resource to remove has dependents.
+            ResourceWithDependentsException: if the resource to remove has dependents.
 
         """
         res_ref = resource_ref(resource)
+
+        existing_relationships = self._relationships[res_ref]
+        if check_dependents and existing_relationships:
+            raise ResourceWithDependentsException(existing_relationships)
+
         del self._resources[res_ref]
-
-        if check_dependents and self._relationships[res_ref]:
-            raise ValueError("Cannot remove a resource which holds dependents")
-
         del self._relationships[res_ref]
 
         # Remove "pointers" to the resources from any dependency
@@ -166,14 +210,15 @@ class DependencyGraph(object):
                 when calling the function.
 
         Raises:
-            RuntimeError: raised if a cycle has been discovered.
+            DependencyCycleException: raised if a cycle has been discovered.
 
         """
         if not visited:
             visited = set()
 
         if reference in visited:
-            raise RuntimeError(f"Cycle in dependency graph for resource {reference}")
+            resources_visited = [self._resources[reference] for reference in visited]
+            raise DependencyCycleException(reference, resources_visited)
 
         visited.add(reference)
         # Empty relationships are lazy created here
@@ -290,23 +335,35 @@ class GarbageCollector(Controller):
         collector. Add the resource to the dependency graph and handle the resource if
         accepted.
 
+        If a cycle is detected when adding the resource, all resources of the cycle are
+        removed.
+
         Args:
             resource (krake.data.serializable.Serializable): the newly added resource.
 
         """
-        self.graph.add_resource(resource)
-        await self.simple_on_receive(resource, condition=self.is_in_deletion)
+        try:
+            self.graph.add_resource(resource)
+            await self.simple_on_receive(resource, condition=self.is_in_deletion)
+        except DependencyCycleException as err:
+            self._clean_cycle(err.cycle)
 
     async def on_received_update(self, resource):
         """To be called when a resource is updated on the API. Update the resource on
         the dependency graph and handle the resource if accepted.
 
+        If a cycle is detected when adding the resource, all resources of the cycle are
+        removed.
+
         Args:
             resource (krake.data.serializable.Serializable): the updated resource.
 
         """
-        self.graph.update_resource(resource)
-        await self.simple_on_receive(resource, condition=self.is_in_deletion)
+        try:
+            self.graph.update_resource(resource)
+            await self.simple_on_receive(resource, condition=self.is_in_deletion)
+        except DependencyCycleException as err:
+            self._clean_cycle(err.cycle)
 
     async def on_received_deleted(self, resource):
         """To be called when a resource is deleted on the API. Remove the resource
@@ -320,7 +377,21 @@ class GarbageCollector(Controller):
             if self.is_in_deletion(dependency):
                 await self.queue.put(dependency.metadata.uid, dependency)
 
-        self.graph.remove_resource(resource)
+        try:
+            self.graph.remove_resource(resource)
+        except ResourceWithDependentsException as err:
+            # This case can only happen if a resource with dependent has been deleted on
+            # the database, but its dependent where not handled by the Garbage
+            # Collector, and are thus potentially still present on the API database or
+            # have actual corresponding resources on a machine.
+            logger.warning(
+                (
+                    "Resource %s has been deleted by the API,"
+                    " but it still holds several dependents: %r"
+                ),
+                resource_ref(resource),
+                ",".join(map(str, err.dependents)),
+            )
 
     async def cleanup(self):
         self.reflectors = []
@@ -396,6 +467,26 @@ class GarbageCollector(Controller):
             name=resource.metadata.name,
             body=resource,
         )
+
+    def _clean_cycle(self, cycle):
+        """Remove all resources that belong to a dependency cycle from the dependency
+        graph.
+
+        Args:
+            cycle (list): list of resources that are present on the dependency graph,
+                with a dependency cycle between them.
+
+        """
+        logger.warning(
+            "Some resources hold a dependency circle: %s.",
+            ",".join(str(resource_ref(resource)) for resource in cycle),
+        )
+        for resource in cycle:
+            self.graph.remove_resource(resource, check_dependents=False)
+            logger.warning(
+                "Resource %s will not be handled by the Garbage Collector anymore.",
+                resource,
+            )
 
 
 def main(config):
