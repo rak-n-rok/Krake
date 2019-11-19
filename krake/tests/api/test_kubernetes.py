@@ -2,6 +2,8 @@ import asyncio
 import json
 from itertools import count
 from operator import attrgetter
+from secrets import token_urlsafe
+
 import yaml
 import pytest
 
@@ -18,6 +20,7 @@ from krake.data.kubernetes import (
     NotEqualConstraint,
     InConstraint,
     NotInConstraint,
+    ApplicationComplete,
 )
 from krake.api.app import create_app
 from krake.api.database import revision
@@ -584,6 +587,43 @@ async def test_watch_app_from_all_namespaces(aiohttp_client, config, db, loop):
     modifying = loop.create_task(modify(created))
 
     await asyncio.wait_for(asyncio.gather(modifying, watching), timeout=3)
+
+
+async def test_complete_hook(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+    token = token_urlsafe()
+
+    # Create application
+    app = ApplicationFactory(status__token=token)
+    await db.put(app)
+
+    # Complete application
+    resp = await client.put(
+        f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/complete",
+        json=ApplicationComplete(token=token).serialize(),
+    )
+    assert resp.status == 200
+    data = Application.deserialize(await resp.json())
+    assert resource_ref(data) == resource_ref(app)
+
+    completed = await db.get(Application, namespace="testing", name=app.metadata.name)
+    assert completed.metadata.deleted is not None
+
+
+async def test_complete_hook_unauthorized(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+    token = token_urlsafe()
+
+    # Create application
+    app = ApplicationFactory(status__token=token)
+    await db.put(app)
+
+    # Complete application
+    resp = await client.put(
+        f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/complete",
+        json=ApplicationComplete().serialize(),
+    )
+    assert resp.status == 401
 
 
 async def test_list_clusters(aiohttp_client, config, db):

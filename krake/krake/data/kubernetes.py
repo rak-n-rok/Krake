@@ -309,6 +309,7 @@ class Constraints(Serializable):
 class ApplicationSpec(Serializable):
     manifest: List[dict]
     constraints: Constraints = None
+    hooks: List[str] = field(default_factory=list)
 
 
 class ApplicationState(Enum):
@@ -345,6 +346,8 @@ class ApplicationStatus(Status):
     running_on: ResourceRef = None
     services: dict = field(default_factory=dict)
     manifest: List[dict] = None
+    mangling: List[dict] = None
+    token: str = None
 
 
 @persistent("/kubernetes/applications/{namespace}/{name}")
@@ -361,6 +364,12 @@ class ApplicationList(ApiObject):
     kind: str = "ApplicationList"
     metadata: ListMetadata
     items: List[Application]
+
+
+class ApplicationComplete(ApiObject):
+    api: str = "kubernetes"
+    kind: str = "Complete"
+    token: str = None
 
 
 class ClusterBinding(ApiObject):

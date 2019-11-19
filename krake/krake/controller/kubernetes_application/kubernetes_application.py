@@ -1,46 +1,22 @@
-"""Module for Krake controller responsible for
-:class:`krake.data.kubernetes.Application` resources and entry point of
-Kubernetes controller.
-
-.. code:: bash
-
-    python -m krake.controller.kubernetes.application --help
-
-Configuration is loaded from the ``controllers.kubernetes.application`` section:
-
-.. code:: yaml
-
-    controllers:
-      kubernetes:
-        application:
-          api_endpoint: http://localhost:8080
-          worker_count: 5
-
-"""
 import logging
 import re
 from copy import deepcopy
 from functools import partial
-
-import yarl
-from argparse import ArgumentParser
-from inspect import iscoroutinefunction
 
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 from kubernetes_asyncio.client import ApiClient, CoreV1Api, AppsV1Api, Configuration
 from kubernetes_asyncio.client.rest import ApiException
 from typing import NamedTuple, Tuple
 
-from krake import load_config, search_config, setup_logging
 from krake.data.core import ReasonCode
 from krake.data.kubernetes import ApplicationState
 from krake.client.kubernetes import KubernetesApi
 
-from .exceptions import ControllerError, application_error_mapping
-from . import Controller, create_ssl_context, run, Reflector
+from ..exceptions import ControllerError, application_error_mapping
+from .. import Controller, Reflector
+from .hooks import listen, Hook
 
-
-logger = logging.getLogger("krake.controller.kubernetes")
+logger = logging.getLogger(__name__)
 
 
 class InvalidResourceError(ControllerError):
@@ -51,83 +27,6 @@ class InvalidResourceError(ControllerError):
 
 class InvalidStateError(ControllerError):
     """Kubernetes application is in an invalid state"""
-
-
-class Event(NamedTuple):
-    kind: str
-    action: str
-
-
-class EventDispatcher(object):
-    """Simple wrapper around a registry of handlers associated to Events
-
-    Events are characterized by a "kind" and an "action" (see :class:`Event`).
-    Listeners for certain events can be registered via :meth:`on`. Registered
-    listeners are executed if an event gets emitted via :meth:`emit`.
-
-    Example:
-        .. code:: python
-
-        listen = EventDispatcher()
-
-        @listen.on(Event("Deployment","delete"))
-        def to_perform_on_deployment_delete(app, cluster, resp):
-            # Do Stuff
-
-        @listen.on(Event("Deployment","delete"))
-        def another_to_perform_on_deployment_delete(app, cluster, resp):
-            # Do Stuff
-
-        @listen.on(Event("Service","apply"))
-        def to_perform_on_service_apply(app, cluster, resp):
-            # Do Stuff
-
-    """
-
-    def __init__(self):
-        self.registry = {}
-
-    def on(self, event):
-        """Decorator function to add a new handler to the registry.
-
-        Args:
-            event (Event): Event for which to register the handler.
-
-        Returns:
-            callable: Decorator for registering listeners for the specified
-            events.
-
-        """
-
-        def decorator(handler):
-            if not (event.kind, event.action) in self.registry:
-                self.registry[(event.kind, event.action)] = [handler]
-            else:
-                self.registry[(event.kind, event.action)].append(handler)
-            return handler
-
-        return decorator
-
-    async def emit(self, event, **kwargs):
-        """ Execute the list of handlers associated to the provided Event.
-
-        Args:
-            event (Event): Event for which to execute handlers.
-
-        """
-        try:
-            handlers = self.registry[(event.kind, event.action)]
-        except KeyError:
-            pass
-        else:
-            for handler in handlers:
-                if iscoroutinefunction(handler):
-                    await handler(**kwargs)
-                else:
-                    handler(**kwargs)
-
-
-listen = EventDispatcher()
 
 
 class ResourceID(NamedTuple):
@@ -193,7 +92,7 @@ class ResourceDelta(NamedTuple):
         """
         desired = {
             ResourceID.from_resource(resource): resource
-            for resource in app.spec.manifest
+            for resource in app.status.mangling
         }
         current = {
             ResourceID.from_resource(resource): resource
@@ -227,7 +126,13 @@ class ApplicationController(Controller):
     """
 
     def __init__(
-        self, api_endpoint, worker_count=10, loop=None, ssl_context=None, debounce=0
+        self,
+        api_endpoint,
+        worker_count=10,
+        loop=None,
+        ssl_context=None,
+        debounce=0,
+        hooks=None,
     ):
         super().__init__(
             api_endpoint, loop=loop, ssl_context=ssl_context, debounce=debounce
@@ -235,6 +140,7 @@ class ApplicationController(Controller):
         self.kubernetes_api = None
         self.reflector = None
         self.worker_count = worker_count
+        self.hooks = hooks
 
     async def prepare(self, client):
         assert client is not None
@@ -362,9 +268,16 @@ class ApplicationController(Controller):
             )
             async with KubernetesClient(cluster.spec.kubeconfig) as kube:
                 for resource in app.status.manifest:
+                    await listen.hook(
+                        Hook.PreDelete,
+                        app=app,
+                        cluster=cluster,
+                        resource=resource,
+                        controller=self,
+                    )
                     resp = await kube.delete(resource)
-                    await listen.emit(
-                        Event(resource["kind"], "delete"),
+                    await listen.hook(
+                        Hook.PostDelete,
                         app=app,
                         cluster=cluster,
                         resource=resource,
@@ -376,6 +289,7 @@ class ApplicationController(Controller):
 
         # Clear manifest in status
         app.status.manifest = None
+        app.status.mangling = None
         app.status.running_on = None
 
     async def _reconcile_application(self, app):
@@ -383,6 +297,16 @@ class ApplicationController(Controller):
             raise InvalidStateError(
                 "Application is scheduled but no cluster is assigned"
             )
+
+        # Mangle desired spec resource by Mangling hook
+        app.status.mangling = deepcopy(app.spec.manifest)
+        await listen.hook(
+            Hook.Mangling,
+            app=app,
+            api_endpoint=self.api_endpoint,
+            ssl_context=self.ssl_context,
+            config=self.hooks,
+        )
 
         delta = ResourceDelta.calculate(app)
 
@@ -439,9 +363,16 @@ class ApplicationController(Controller):
         async with KubernetesClient(cluster.spec.kubeconfig) as kube:
             # Delete all resources that are no longer in the spec
             for deleted in delta.deleted:
+                await listen.hook(
+                    Hook.PreDelete,
+                    app=app,
+                    cluster=cluster,
+                    resource=deleted,
+                    controller=self,
+                )
                 resp = await kube.delete(deleted)
-                await listen.emit(
-                    Event(deleted["kind"], "delete"),
+                await listen.hook(
+                    Hook.PostDelete,
                     app=app,
                     cluster=cluster,
                     resource=deleted,
@@ -450,9 +381,16 @@ class ApplicationController(Controller):
 
             # Create new resource
             for new in delta.new:
+                await listen.hook(
+                    Hook.PreCreate,
+                    app=app,
+                    cluster=cluster,
+                    resource=new,
+                    controller=self,
+                )
                 resp = await kube.apply(new)
-                await listen.emit(
-                    Event(new["kind"], "create"),
+                await listen.hook(
+                    Hook.PostCreate,
                     app=app,
                     cluster=cluster,
                     resource=new,
@@ -461,9 +399,16 @@ class ApplicationController(Controller):
 
             # Update modified resource
             for modified in delta.modified:
+                await listen.hook(
+                    Hook.PreUpdate,
+                    app=app,
+                    cluster=cluster,
+                    resource=modified,
+                    controller=self,
+                )
                 resp = await kube.apply(modified)
-                await listen.emit(
-                    Event(modified["kind"], "update"),
+                await listen.hook(
+                    Hook.PostUpdate,
                     app=app,
                     cluster=cluster,
                     resource=modified,
@@ -471,7 +416,7 @@ class ApplicationController(Controller):
                 )
 
         # Update resource in application status
-        app.status.manifest = app.spec.manifest.copy()  # TODO: Do we need to copy here?
+        app.status.manifest = deepcopy(app.status.mangling)
 
         # Application is now running on the scheduled cluster
         app.status.running_on = app.status.scheduled_to
@@ -497,9 +442,21 @@ class ApplicationController(Controller):
         # Delete all resources currently running on the old cluster
         await self._delete_manifest(app)
 
+        # Mangle desired spec resource by Mangling hook
+        app.status.mangling = deepcopy(app.spec.manifest)
+        await listen.hook(
+            Hook.Mangling,
+            app=app,
+            api_endpoint=self.api_endpoint,
+            ssl_context=self.ssl_context,
+            config=self.hooks,
+        )
         # Create complete manifest on the new cluster
-        delta = ResourceDelta(new=tuple(app.spec.manifest), modified=(), deleted=())
+        delta = ResourceDelta(new=tuple(app.status.mangling), modified=(), deleted=())
         await self._apply_manifest(app, delta)
+
+        # Update resource in application status
+        app.status.manifest = deepcopy(app.status.mangling)
 
         # Transition into "RUNNING" state
         app.status.state = ApplicationState.RUNNING
@@ -550,67 +507,6 @@ class ApplicationController(Controller):
         )
 
 
-@listen.on(event=Event("Service", "create"))
-@listen.on(event=Event("Service", "update"))
-async def register_service(app, cluster, resource, response):
-    """Register endpoint of Kubernetes Service object on creation and update.
-
-    Args:
-        app (krake.data.kubernetes.Application): Application the service belongs to
-        cluster (krake.data.kubernetes.Cluster): The cluster on which the
-            application is running
-        resource (dict): Kubernetes object description as specified in the
-            specification of the application.
-        response (kubernetes_asyncio.client.V1Service): Response of the
-            Kubernetes API
-
-    """
-    service_name = resource["metadata"]["name"]
-    node_port = None
-
-    # Ensure that ports are specified
-    if response.spec and response.spec.ports:
-        node_port = response.spec.ports[0].node_port
-
-    # If the service does not have a node port, remove a potential reference
-    # end return.
-    if node_port is None:
-        try:
-            del app.status.services[service_name]
-        except KeyError:
-            pass
-        return
-
-    # Determine URL of Kubernetes cluster API
-    loader = KubeConfigLoader(cluster.spec.kubeconfig)
-    config = Configuration()
-    await loader.load_and_set(config)
-    cluster_url = yarl.URL(config.host)
-
-    app.status.services[service_name] = f"{cluster_url.host}:{node_port}"
-
-
-@listen.on(event=Event("Service", "delete"))
-async def unregister_service(app, cluster, resource, response):
-    """Unregister endpoint of Kubernetes Service object on deletion.
-
-    Args:
-        app (krake.data.kubernetes.Application): Application the service belongs to
-        cluster (krake.data.kubernetes.Cluster): The cluster on which the
-            application is running
-        resource (dict): Kubernetes object description as specified in the
-            specification of the application.
-        response (kubernetes_asyncio.client.V1Status): Response of the
-            Kubernetes API
-
-    """
-    service_name = resource["metadata"]["name"]
-    try:
-        del app.status.services[service_name]
-    except KeyError:
-        pass
-
-
 class KubernetesClient(object):
     def __init__(self, kubeconfig):
         self.kubeconfig = kubeconfig
@@ -652,6 +548,15 @@ class KubernetesClient(object):
 
     async def __aexit__(self, *exec):
         self.resource_apis = None
+
+    @staticmethod
+    def log_resp(resp, kind, action=None):
+        resp_log = (
+            f"status={resp.status!r}"
+            if hasattr(resp, "status")
+            else f"resource={resp!r}"
+        )
+        logger.debug(f"%s {action}. %r", kind, resp_log)
 
     async def _read(self, kind, name, namespace):
         api = self.resource_apis[kind]
@@ -697,12 +602,12 @@ class KubernetesClient(object):
 
         if resp is None:
             resp = await self._create(kind, body=resource, namespace=namespace)
-            logger.debug("%s created. status=%r", kind, resp.status)
+            self.log_resp(resp, kind, action="created")
         else:
             resp = await self._patch(
                 kind, name=name, body=resource, namespace=namespace
             )
-            logger.debug("%s patched. status=%r", kind, resp.status)
+            self.log_resp(resp, kind, action="patched")
 
         return resp
 
@@ -728,7 +633,7 @@ class KubernetesClient(object):
                 return
             raise InvalidResourceError(err_resp=err)
 
-        logger.debug("%s deleted. status=%r", kind, resp.status)
+        self.log_resp(resp, kind, action="deleted")
 
         return resp
 
@@ -745,33 +650,3 @@ def camel_to_snake_case(name):
     """
     cunder = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
     return re.sub("([a-z0-9])([A-Z])", r"\1_\2", cunder).lower()
-
-
-def main(config):
-    controller_config = load_config(config or search_config("kubernetes.yaml"))
-
-    setup_logging(controller_config["log"])
-
-    tls_config = controller_config.get("tls")
-    ssl_context = create_ssl_context(tls_config)
-    logger.debug("TLS is %s", "enabled" if ssl_context else "disabled")
-
-    controller = ApplicationController(
-        api_endpoint=controller_config["api_endpoint"],
-        worker_count=controller_config["worker_count"],
-        ssl_context=ssl_context,
-        debounce=controller_config.get("debounce", 0),
-    )
-    run(controller)
-
-
-parser = ArgumentParser(description="Kubernetes application controller")
-parser.add_argument("-c", "--config", help="Path to configuration YAML file")
-
-
-if __name__ == "__main__":
-    parser = ArgumentParser(description="Garbage Collector for Krake")
-    parser.add_argument("-c", "--config", help="Path to configuration YAML file")
-
-    args = parser.parse_args()
-    main(**vars(args))

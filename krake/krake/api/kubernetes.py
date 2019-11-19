@@ -1,9 +1,9 @@
 import logging
-from datetime import datetime
 from aiohttp import web
+from datetime import datetime
 
 from krake.apidefs.kubernetes import kubernetes
-from krake.data.kubernetes import Application, ClusterBinding
+from krake.data.kubernetes import Application, ClusterBinding, ApplicationComplete
 from .auth import protected
 from .helpers import use_schema, load, session
 from .generator import generate_api
@@ -27,5 +27,22 @@ class KubernetesApi:
         await session(request).put(app)
         logger.info(
             "Update binding of application %r (%s)", app.metadata.name, app.metadata.uid
+        )
+        return web.json_response(app.serialize())
+
+    @protected(api="kubernetes", resource="applications/complete", verb="update")
+    @load("app", Application)
+    @use_schema("body", ApplicationComplete.Schema)
+    async def update_application_complete(request, body, app):
+        if app.status.token != body.token:
+            raise web.HTTPUnauthorized()
+
+        # Resource marked as deletion, to be deleted by the Garbage Collector
+        app.metadata.deleted = datetime.now()
+        await session(request).put(app)
+        logger.info(
+            "Deleting of application %r (%s) by calling complete hook",
+            app.metadata.name,
+            app.metadata.uid,
         )
         return web.json_response(app.serialize())

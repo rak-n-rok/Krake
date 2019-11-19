@@ -4,6 +4,7 @@ from krake.data.kubernetes import (
     Cluster,
     ClusterList,
     ClusterBinding,
+    ApplicationComplete,
 )
 from .definitions import ApiDef, Scope, operation, subresource, ListQuery
 
@@ -73,6 +74,15 @@ class ApplicationResource:
             method = "PUT"
             path = "/kubernetes/namespaces/{namespace}/applications/{name}/binding"
             body = ClusterBinding
+            response = Application
+
+    @subresource
+    class Complete:
+        @operation
+        class Update:
+            method = "PUT"
+            path = "/kubernetes/namespaces/{namespace}/applications/{name}/complete"
+            body = ApplicationComplete
             response = Application
 
 
