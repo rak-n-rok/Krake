@@ -56,6 +56,10 @@ class ClusterConstraintsFactory(Factory):
 
     labels = Iterator(map(lambda constraint: [constraint], label_constraints))
 
+    @lazy_attribute
+    def custom_resources(self):
+        return [fuzzy_name() for _ in range(fake.pyint(1, 3))]
+
 
 class ConstraintsFactory(Factory):
     class Meta:
@@ -354,6 +358,10 @@ class ClusterSpecFactory(Factory):
     @lazy_attribute
     def metrics(self):
         return [ClusterMetricRefFactory() for _ in range(self.metric_count)]
+
+    @lazy_attribute
+    def custom_resources(self):
+        return [fuzzy_name() for _ in range(fake.pyint(1, 3))]
 
 
 class ClusterFactory(Factory):

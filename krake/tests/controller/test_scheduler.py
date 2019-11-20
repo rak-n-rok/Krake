@@ -10,6 +10,7 @@ from krake.data.kubernetes import (
     ClusterMetricRef,
 )
 from krake.controller.scheduler import Scheduler, metrics
+from krake.controller.scheduler.constraints import match_cluster_constraints
 
 from krake.client import Client
 from krake.data.core import resource_ref, ReasonCode
@@ -262,30 +263,54 @@ async def test_static_provider(aiohttp_server):
 def test_kubernetes_match_cluster_label_constraints():
     cluster = ClusterFactory(metadata__labels={"location": "IT"})
     app = ApplicationFactory(
-        spec__constraints__cluster__labels=[LabelConstraint.parse("location is IT")]
+        spec__constraints__cluster__labels=[LabelConstraint.parse("location is IT")],
+        spec__constraints__cluster__custom_resources=[],
     )
-
-    assert Scheduler.match_cluster_constraints(app, cluster)
-
-
-def test_kubernetes_match_empty_cluster_label_constraints():
-    cluster = ClusterFactory(metadata__labels=[])
-    app1 = ApplicationFactory(spec__constraints=None)
-    app2 = ApplicationFactory(spec__constraints__cluster=None)
-    app3 = ApplicationFactory(spec__constraints__cluster__labels=None)
-
-    assert Scheduler.match_cluster_constraints(app1, cluster)
-    assert Scheduler.match_cluster_constraints(app2, cluster)
-    assert Scheduler.match_cluster_constraints(app3, cluster)
+    assert match_cluster_constraints(app, cluster)
 
 
 def test_kubernetes_not_match_cluster_label_constraints():
     cluster = ClusterFactory()
     app = ApplicationFactory(
-        spec__constraints__cluster__labels=[LabelConstraint.parse("location is IT")]
+        spec__constraints__cluster__labels=[LabelConstraint.parse("location is IT")],
+        spec__constraints__cluster__custom_resources=[],
     )
 
-    assert not Scheduler.match_cluster_constraints(app, cluster)
+    assert not match_cluster_constraints(app, cluster)
+
+
+def test_kubernetes_match_cluster_custom_resources_constraints():
+    cluster = ClusterFactory(spec__custom_resources=["crontabs.stable.example.com"])
+    app = ApplicationFactory(
+        spec__constraints__cluster__custom_resources=["crontabs.stable.example.com"],
+        spec__constraints__cluster__labels=[],
+    )
+
+    assert match_cluster_constraints(app, cluster)
+
+
+def test_kubernetes_not_match_cluster_custom_resources_constraints():
+    cluster = ClusterFactory()
+    app = ApplicationFactory(
+        spec__constraints__cluster__custom_resources=["crontabs.stable.example.com"],
+        spec__constraints__cluster__labels=[],
+    )
+
+    assert not match_cluster_constraints(app, cluster)
+
+
+def test_kubernetes_match_empty_cluster_constraints():
+    cluster = ClusterFactory()
+    app1 = ApplicationFactory(spec__constraints=None)
+    app2 = ApplicationFactory(spec__constraints__cluster=None)
+    app3 = ApplicationFactory(
+        spec__constraints__cluster__labels=None,
+        spec__constraints__cluster__custom_resources=None,
+    )
+
+    assert match_cluster_constraints(app1, cluster)
+    assert match_cluster_constraints(app2, cluster)
+    assert match_cluster_constraints(app3, cluster)
 
 
 async def test_kubernetes_rank(aiohttp_server, config, db, loop):
@@ -566,6 +591,7 @@ async def test_kubernetes_scheduling(aiohttp_server, config, db, loop):
     )
     app = ApplicationFactory(
         spec__constraints__cluster__labels=[],
+        spec__constraints__cluster__custom_resources=[],
         status__state=ApplicationState.PENDING,
         status__is_scheduled=False,
     )
@@ -635,6 +661,7 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
     )
     app = ApplicationFactory(
         spec__constraints__cluster__labels=[],
+        spec__constraints__cluster__custom_resources=[],
         status__state=ApplicationState.PENDING,
         status__is_scheduled=False,
     )
