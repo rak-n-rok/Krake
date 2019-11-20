@@ -2,7 +2,6 @@ import logging
 import re
 from copy import deepcopy
 from functools import partial
-from collections import defaultdict
 from cached_property import cached_property
 
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
@@ -691,7 +690,7 @@ class KubernetesClient(object):
             dict: Custom resource apis
 
         """
-        custom_resource_apis = defaultdict()
+        custom_resource_apis = {}
 
         if not self.custom_resources:
             return custom_resource_apis

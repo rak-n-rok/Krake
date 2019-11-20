@@ -998,9 +998,7 @@ async def test_app_custom_resource_deletion(aiohttp_server, config, db, loop):
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.running_on is None
-    assert "kubernetes_resources_deletion" not in stored.metadata.finalizers
-    assert resource_ref(cluster) not in stored.metadata.owners
+    assert stored is None
 
 
 async def test_register_service():
@@ -1264,6 +1262,7 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
     assert stored.status.services == {}
+
 
 hooks_config = HooksConfiguration.deserialize(
     {

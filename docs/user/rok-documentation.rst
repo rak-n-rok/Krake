@@ -61,6 +61,9 @@ create
 	``-n | --namespace`` (optional):
 		The namespace to which the Cluster has to be added. If none is given, the user namespace is selected.
 
+	``-R | --custom-resource`` (optional):
+		The name of custom resources definition in form: ``<plural>.<group>`` which is supported by the cluster. Can be specified multiple times.
+
 list
 	List all Cluster of a namespace.
 
@@ -104,6 +107,9 @@ create
 	``-H | --hook`` (optional):
 		The Application hook which modify the creation or liveness of Application.
 
+	``-R | --cluster-resource-constraint`` (optional):
+		The name of custom resources definition constraint in form: ``<plural>.<group>``. The application will be deployed only on the clusters with given custom definition support. Can be specified multiple times.
+
 list
 	List all Applications of a namespace.
 
@@ -139,6 +145,9 @@ update
 
 	``-H | --hook`` (optional):
 		The Application hook which modify the creation or liveness of Application.
+
+	``-R | --cluster-resource-constraint`` (optional):
+		The name of custom resources definition constraint in form: ``<plural>.<group>``. The application will be deployed only on the clusters with given custom definition support. Can be specified multiple times.
 
 delete
 	Request the deletion of a specific Application from a namespace.
