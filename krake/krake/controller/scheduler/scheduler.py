@@ -149,6 +149,8 @@ class Scheduler(Controller):
             await self.queue.cancel(app.metadata.uid)
         elif app.status.scheduled and app.metadata.modified <= app.status.scheduled:
             await self.reschedule_kubernetes_application(app)
+        elif app.status.state == ApplicationState.FAILED:
+            logger.debug("Reject failed %r", app)
         else:
             logger.debug("Accept %r", app)
             await self.queue.put(app.metadata.uid, app)
@@ -437,7 +439,7 @@ class Scheduler(Controller):
 
         # If an important error occurred, simply delete the Application
         if reason.code.value >= 100:
-            app.status.state = ApplicationState.DELETED
+            app.status.state = ApplicationState.DELETING
         else:
             app.status.state = ApplicationState.FAILED
 

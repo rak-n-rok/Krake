@@ -30,6 +30,9 @@ async def test_kubernetes_reception(aiohttp_server, config, db, loop):
     pending = ApplicationFactory(
         status__state=ApplicationState.PENDING, status__is_scheduled=False
     )
+    failed = ApplicationFactory(
+        status__state=ApplicationState.FAILED, status__is_scheduled=False
+    )
     deleted = ApplicationFactory(
         metadata__deleted=datetime.now(),
         status__state=ApplicationState.RUNNING,
@@ -43,6 +46,7 @@ async def test_kubernetes_reception(aiohttp_server, config, db, loop):
     await db.put(scheduled)
     await db.put(updated)
     await db.put(pending)
+    await db.put(failed)
     await db.put(deleted)
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
@@ -54,6 +58,7 @@ async def test_kubernetes_reception(aiohttp_server, config, db, loop):
     assert scheduled.metadata.uid not in scheduler.queue.dirty
     assert updated.metadata.uid in scheduler.queue.dirty
     assert pending.metadata.uid in scheduler.queue.dirty
+    assert failed.metadata.uid not in scheduler.queue.dirty
     assert deleted.metadata.uid not in scheduler.queue.dirty
 
     assert scheduled.metadata.uid in scheduler.queue.timers

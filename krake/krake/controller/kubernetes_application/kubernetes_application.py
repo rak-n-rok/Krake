@@ -497,7 +497,7 @@ class ApplicationController(Controller):
 
         # If an important error occurred, simply delete the Application
         if reason.code.value >= 100:
-            app.status.state = ApplicationState.DELETED
+            app.status.state = ApplicationState.DELETING
         else:
             app.status.state = ApplicationState.FAILED
 
