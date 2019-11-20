@@ -300,6 +300,7 @@ class NotInConstraint(InConstraint):
 
 class ClusterConstraints(Serializable):
     labels: List[LabelConstraint] = None
+    custom_resources: List[str] = field(default_factory=list)
 
 
 class Constraints(Serializable):
@@ -403,6 +404,7 @@ class ClusterMetricRef(Serializable):
 
 class ClusterSpec(Serializable):
     kubeconfig: dict = field(metadata={"validate": _validate_kubeconfig})
+    custom_resources: List[str] = field(default_factory=list)
     # FIXME needs further discussion how to register stand-alone kubernetes cluster as
     #  a cluster which should be processed by krake.controller.scheduler
     metrics: List[ClusterMetricRef] = field(default_factory=list)

@@ -2,17 +2,18 @@ import asyncio
 import logging
 import random
 from typing import NamedTuple
+
 from aiohttp import ClientError
 
-from krake.data.core import resource_ref, ReasonCode
-from krake.data.kubernetes import ApplicationState, Cluster, ClusterBinding
-from krake.client.kubernetes import KubernetesApi
 from krake.client.core import CoreApi
+from krake.client.kubernetes import KubernetesApi
+from krake.data.core import ReasonCode, resource_ref
+from krake.data.kubernetes import ApplicationState, Cluster, ClusterBinding
 
-from ..exceptions import ControllerError, application_error_mapping
 from .. import Controller, Reflector
+from ..exceptions import ControllerError, application_error_mapping
+from .constraints import match_cluster_constraints
 from .metrics import MetricError, fetch_query
-
 
 logger = logging.getLogger(__name__)
 
@@ -226,50 +227,6 @@ class Scheduler(Controller):
             logger.debug("Reschedule %r in %s secs", app, self.reschedule_after)
             await self.queue.put(app.metadata.uid, app, delay=self.reschedule_after)
 
-    @staticmethod
-    def match_cluster_constraints(app, cluster):
-        """Evaluate if all application constraints labels match cluster labels.
-
-        Args:
-            app (krake.data.kubernetes.Application): Application that should be
-                bound.
-            cluster (krake.data.kubernetes.Cluster): Cluster to which the
-                application should be bound.
-
-        Returns:
-            bool: True if the cluster fulfills all application cluster constraints
-
-        """
-        if not app.spec.constraints:
-            return True
-
-        # Cluster constraints
-        if app.spec.constraints.cluster:
-            # Label constraints for the cluster
-            if app.spec.constraints.cluster.labels:
-                for constraint in app.spec.constraints.cluster.labels:
-                    if constraint.match(cluster.metadata.labels or {}):
-                        logger.debug(
-                            "Cluster %s matches constraint %r",
-                            resource_ref(cluster),
-                            constraint,
-                        )
-                    else:
-                        logger.debug(
-                            "Cluster %s does not match constraint %r",
-                            resource_ref(cluster),
-                            constraint,
-                        )
-                        return False
-
-        logger.debug(
-            "Cluster %s fulfills constraints of application %r",
-            resource_ref(cluster),
-            resource_ref(app),
-        )
-
-        return True
-
     async def select_kubernetes_cluster(self, app, clusters):
         """Select suitable kubernetes cluster for application binding.
 
@@ -283,9 +240,7 @@ class Scheduler(Controller):
 
         """
         matching = [
-            cluster
-            for cluster in clusters
-            if self.match_cluster_constraints(app, cluster)
+            cluster for cluster in clusters if match_cluster_constraints(app, cluster)
         ]
 
         if not matching:
