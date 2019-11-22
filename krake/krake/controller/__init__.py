@@ -368,7 +368,7 @@ class Controller(object):
     watching and enqueuing API resources.
 
     The basic workflow is as follows: the controller holds several background
-    tasks. The API resources are watched by an Reflector, which calls a handler
+    tasks. The API resources are watched by a Reflector, which calls a handler
     on each received state of a resource. Any received new state is put into a
     :class:`WorkQueue`. Multiple workers consume this queue. Workers are
     responsible for doing the actual state transitions. The work queue ensures
