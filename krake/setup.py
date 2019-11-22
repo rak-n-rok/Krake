@@ -19,8 +19,8 @@ install_requires = [
 ]
 
 # dataclasses backport
-if sys.version_info >= (3, 7):
-    install_requires = ["dataclasses"]
+if sys.version_info < (3, 7):
+    install_requires.append("dataclasses")
 
 setup(
     name="krake",
