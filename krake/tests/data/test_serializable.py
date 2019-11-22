@@ -1,10 +1,18 @@
 from datetime import datetime
-from typing import List
+from typing import List, Dict, Union
 from dataclasses import field
 import pytest
 from marshmallow import ValidationError
 
-from krake.data.serializable import Serializable, ApiObject, PolymorphicContainer
+from krake.data.serializable import (
+    Serializable,
+    ApiObject,
+    PolymorphicContainer,
+    is_generic,
+    is_base_generic,
+    is_qualified_generic,
+    is_generic_subtype,
+)
 
 
 class Person(Serializable):
@@ -242,3 +250,46 @@ def test_polymorphic_update():
     assert spec.type == "bool"
     assert spec.bool == update.bool
     assert spec.bool is update.bool
+
+
+def test_is_generic():
+    assert is_generic(List)
+    assert is_generic(List[int])
+    assert is_generic(Union)
+    assert is_generic(Union[int, None])
+    assert is_generic(Dict)
+    assert is_generic(Dict[str, int])
+
+    assert not is_generic(str)
+    assert not is_generic(int)
+    assert not is_generic(object)
+
+
+def test_is_base_generic():
+    assert is_base_generic(List)
+    assert is_base_generic(Dict)
+    assert is_base_generic(Union)
+
+    assert not is_base_generic(List[int])
+    assert not is_base_generic(Union[int, None])
+    assert not is_base_generic(Dict[int, str])
+
+
+def test_is_qualified_generic():
+    assert is_qualified_generic(List[int])
+    assert is_qualified_generic(Union[int, None])
+    assert is_qualified_generic(Dict[int, str])
+
+    assert not is_qualified_generic(List)
+    assert not is_qualified_generic(Dict)
+    assert not is_qualified_generic(Union)
+
+
+def test_is_generic_subtype():
+    assert is_generic_subtype(List[int], List)
+    assert is_generic_subtype(List[int], List[int])
+    assert is_generic_subtype(List, List)
+
+    assert not is_generic_subtype(List[int], Dict)
+    assert not is_generic_subtype(List[int], List[str])
+    assert not is_generic_subtype(List, List[int])
