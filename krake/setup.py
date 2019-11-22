@@ -25,6 +25,7 @@ if sys.version_info < (3, 7):
 setup(
     name="krake",
     version="1.0.0",
+    python_requires=">=3.6",
     packages=find_packages(),
     install_requires=install_requires,
     extras_require={
