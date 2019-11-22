@@ -30,6 +30,7 @@ setup(
     install_requires=install_requires,
     extras_require={
         "dev": {
+            "tox",
             "pytest",
             "pytest-aiohttp",
             "factory-boy",
