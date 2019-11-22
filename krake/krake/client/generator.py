@@ -530,7 +530,7 @@ class Watcher(object):
         self.url = url
         self.model = model
         self.response = None
-        self.timeout = ClientTimeout(sock_read=float("inf"))
+        self.timeout = ClientTimeout(sock_read=None)
 
     async def __aenter__(self):
         self.response = await self.session.get(self.url, timeout=self.timeout)
