@@ -33,6 +33,8 @@ from typing import NamedTuple
 from enum import Enum, auto
 from etcd3 import Txn
 from etcd3.aio_client import AioClient
+from semantic_version import Version
+import requests
 
 
 class DatabaseError(Exception):
@@ -103,6 +105,35 @@ class Event(NamedTuple):
     rev: Revision
 
 
+class EtcdClient(AioClient):
+    """Async etcd v3 client based on :class:`etcd3.aio_client.AioClient` with
+    some minor patches.
+    """
+
+    def _retrieve_version(self):
+        # FIXME: The base implementation swallows every exception and just
+        #   emits a warning. We want to retrieve the whole exception.
+        #
+        #   The current implementation is synchronous because it is executed
+        #   in the constructor which is very ugly! Because we consider moving
+        #   to an gRPC-based etcd client, we should not invest too much effort
+        #   into fixing this problem.
+        resp = requests.get(
+            self._url("/version", prefix=False),
+            cert=self.cert,
+            verify=self.verify,
+            timeout=0.3,  # 300ms will do
+            headers=self.headers,
+        )
+        resp.raise_for_status()
+        version = resp.json()
+        self.server_version = version["etcdserver"]
+        self.cluster_version = version["etcdcluster"]
+
+        self.cluster_version_sem = Version(self.cluster_version)
+        self.server_version_sem = Version(self.server_version)
+
+
 class Session(object):
     """Database session for managing
     :class:`krake.data.serializable.Serializable` objects in an etcd database.
@@ -149,7 +180,7 @@ class Session(object):
 
     async def __aenter__(self):
         # FIXME: AioClient does not take "loop" as argument
-        self.client = AioClient(host=self.host, port=self.port)
+        self.client = EtcdClient(host=self.host, port=self.port)
         return self
 
     async def __aexit__(self, *exc):

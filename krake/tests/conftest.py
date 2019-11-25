@@ -15,7 +15,6 @@ import pytest
 import aiohttp
 import shutil
 from aiohttp import web
-from etcd3.aio_client import AioClient
 from prometheus_async import aio
 from prometheus_client import Gauge, CollectorRegistry, CONTENT_TYPE_LATEST
 
@@ -142,15 +141,17 @@ def etcd_server():
                 wait_for_url(f"http://{etcd_host}:{etcd_port}/version")
                 yield etcd_host, etcd_port
             finally:
-                time.sleep(1)
                 proc.terminate()
 
 
 @pytest.fixture
 async def etcd_client(etcd_server, loop):
+    # Use the patched etcd3 client (see #293)
+    from krake.api.database import EtcdClient
+
     host, port = etcd_server
 
-    async with AioClient(host=host, port=port) as client:
+    async with EtcdClient(host=host, port=port) as client:
         yield client
         await client.delete_range(all=True)
 
