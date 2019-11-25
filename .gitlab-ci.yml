@@ -33,9 +33,8 @@ cache:
 # https://gitlab.com/gitlab-org/gitlab/merge_requests/18130), we have to work
 # with duplicated pipelines on merge requests.
 
-unittests-krake:
+.unittests-krake-template: &unittests-krake
   stage: test
-  image: python:3.6
   only:
     - tags
     - branches
@@ -58,11 +57,31 @@ unittests-krake:
     - rm -rf /tmp/prometheus-download /tmp/prometheus.tar.gz
     - prometheus --version
 
-    - pip install krake/[dev]
-    - pip install keystone
-    - pytest --runslow krake/tests
+    - pip install tox
+    - tox -- --runslow krake/tests
   tags:
     - docker
+
+
+unittests-krake-3.6:
+  <<: *unittests-krake
+  image: python:3.6
+  variables:
+    TOXENV: py36
+
+
+unittests-krake-3.7:
+  <<: *unittests-krake
+  image: python:3.7
+  variables:
+    TOXENV: py37
+
+
+unittests-krake-3.8:
+  <<: *unittests-krake
+  image: python:3.8
+  variables:
+    TOXENV: py38
 
 
 flake8-krake:
