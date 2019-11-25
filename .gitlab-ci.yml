@@ -10,6 +10,7 @@ stages:
 variables:
   ETCD_VER: v3.3.13
   PROMETHEUS_VER: 2.12.0
+  CFSSL_VER: 1.4.1
 
   # Change pip's cache directory to be inside the project directory since we
   # can only cache local items.
@@ -60,6 +61,13 @@ cache:
     - mv /tmp/prometheus-download/prometheus /usr/local/bin
     - rm -rf /tmp/prometheus-download /tmp/prometheus.tar.gz
     - prometheus --version
+
+    # Download cfssl
+    - curl -s -L https://github.com/cloudflare/cfssl/releases/download/v${CFSSL_VER}/cfssl_${CFSSL_VER}_linux_amd64 -o /usr/local/bin/cfssl
+    - curl -s -L https://github.com/cloudflare/cfssl/releases/download/v${CFSSL_VER}/cfssljson_${CFSSL_VER}_linux_amd64 -o /usr/local/bin/cfssljson
+    - chmod +x /usr/local/bin/cfssl /usr/local/bin/cfssljson
+    - cfssl version
+    - cfssljson --version
 
     - pip install tox
     - tox -- --cov krake/krake --no-cov-on-fail --cov-report= --runslow krake/tests
