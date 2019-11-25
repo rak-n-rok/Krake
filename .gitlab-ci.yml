@@ -1,5 +1,6 @@
 stages:
   - test
+  - coverage
   - provision
   - smoke test
   - integration test
@@ -35,6 +36,9 @@ cache:
 
 .unittests-krake-template: &unittests-krake
   stage: test
+  artifacts:
+    paths:
+      - krake/.coverage.*
   only:
     - tags
     - branches
@@ -58,7 +62,7 @@ cache:
     - prometheus --version
 
     - pip install tox
-    - tox -- --runslow krake/tests
+    - tox -- --cov krake/krake --no-cov-on-fail --cov-report= --runslow krake/tests
   tags:
     - docker
 
@@ -68,6 +72,7 @@ unittests-krake-3.6:
   image: python:3.6
   variables:
     TOXENV: py36
+    COVERAGE_FILE: krake/.coverage.py36
 
 
 unittests-krake-3.7:
@@ -75,6 +80,7 @@ unittests-krake-3.7:
   image: python:3.7
   variables:
     TOXENV: py37
+    COVERAGE_FILE: krake/.coverage.py37
 
 
 unittests-krake-3.8:
@@ -82,6 +88,7 @@ unittests-krake-3.8:
   image: python:3.8
   variables:
     TOXENV: py38
+    COVERAGE_FILE: krake/.coverage.py38
 
 
 flake8-krake:
@@ -112,6 +119,23 @@ flake8-rok:
     - flake8 rok/rok
   tags:
     - docker
+
+
+# Combine code coverage reports from previous tox runs for all different
+# Python environments. Report code coverage for Krake Python package and exit
+# with non-zero if the code coverage ratio is under 85%.
+coverage-krake:
+  stage: coverage
+  image: python:3.6
+  script:
+    - pip install coverage
+    - coverage combine krake/.coverage.*
+    - coverage report --fail-under 85
+  only:
+    - tags
+    - branches
+    - merge_requests
+    - schedules
 
 
 # Following jobs are for end to end testing. We provisioning the staging
