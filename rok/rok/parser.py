@@ -172,8 +172,8 @@ class StoreDict(Action):
             parser.add_argument(
                 '--foo', action=StoreDict
             )
-            args = parser.parse_args('--foo label=test'.split())
-            assert argparse.Namespace(foo={'label': 'test'}) == args
+            args = parser.parse_args('--foo label=test --foo lorem=ipsum')
+            assert argparse.Namespace(foo={'label': 'test', 'lorem': 'ipsum'}) == args
 
     """
 
@@ -183,11 +183,6 @@ class StoreDict(Action):
         super().__init__(option_strings, dest, metavar=metavar, **kwargs)
 
     def __call__(self, parser, namespace, values, option_string=None):
-        if "=" not in values:
-            raise ArgumentError(self, "Must be of form 'key=value'")
-
-        if hasattr(namespace, self.dest):
-            setattr(namespace, self.dest, {})
         items = getattr(namespace, self.dest)
 
         key, value = values.split("=", 1)

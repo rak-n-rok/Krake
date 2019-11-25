@@ -353,7 +353,7 @@ class ClusterSpecFactory(Factory):
 
     @lazy_attribute
     def kubeconfig(self):
-        return local_kubeconfig
+        return deepcopy(local_kubeconfig)
 
     @lazy_attribute
     def metrics(self):
