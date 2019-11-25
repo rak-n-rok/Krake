@@ -1,9 +1,6 @@
 stages:
   - test
-  - provision
-  - smoke test
-  - integration test
-  - cleanup
+  - E2E
 
 
 variables:
@@ -96,102 +93,67 @@ flake8-rok:
 
 
 # Following jobs are for end to end testing. We provisioning the staging
-# infrastructure, run the smoke tests and the functional tests, and cleanup
+# infrastructure, run the smoke tests and the end-to-end tests, and cleanup
 # the staging infrastructure. They are run only on the master branch, on merge
 # requests, and on scheduled pipeline (night runs)
 
-provision-staging-infra:
-  stage: provision
+E2E-tests:
+  stage: E2E
   image: python:3.6
   artifacts:
     paths:
       - .ssh/id_rsa
       - ansible/.etc # Absolute path: /builds/ragnarok/krake/ansible/.etc
-      - ansible/hosts-CI
+      - ansible/hosts
     expire_in: 1 day
     when: always
   only:
     - master
     - merge_requests
     - schedules
+  variables:
+    ANSIBLE_CONFIG: ansible/ansible.cfg
+    ANSIBLE_INVENTORY: ansible/hosts
   script:
-    # Pre-requisites: openstack, ansible and pytest
-    - pip install python-openstackclient openstacksdk ansible==2.7.10 pytest
-    - apt-get update -y && apt-get install openssh-client rsync -y
+    - apt-get update -y
+    - apt-get install -y openssh-client rsync
+
+    - pip install python-openstackclient
+    - pip install --editable rak/[test]
 
     # Create SSH keys for to use during the whole pipeline
     - mkdir .ssh/
-    - openstack keypair delete --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD my_runner_key_$CI_PIPELINE_ID || true
-    - openstack keypair create --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD my_runner_key_$CI_PIPELINE_ID > .ssh/id_rsa
+    - openstack keypair delete my_runner_key_$CI_PIPELINE_ID || true
+    - openstack keypair create my_runner_key_$CI_PIPELINE_ID > .ssh/id_rsa
     - chmod 600 .ssh/id_rsa
 
     # Configure host-CI template with the CI Pipeline ID
-    - sed -i "s/\$CI_PIPELINE_ID/$CI_PIPELINE_ID/g" ansible/hosts-CI
+    - sed "s/\$CI_PIPELINE_ID/$CI_PIPELINE_ID/g" ansible/hosts-CI > ansible/hosts
 
     # Run Ansible to provision the staging infrastructure
-    - echo "=== provisioning staging infrastructure ==="
+    - echo "=== Provisioning staging infrastructure ==="
     # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
-    - cd ansible
-    - chmod -v 700 $(pwd)
-    - ansible-playbook -i hosts-CI site.yml
+    - chmod -v 700 ansible/
+    - ansible-playbook ansible/site.yml
 
+    - echo "=== Run smoke tests ==="
+    # FIXME: This does not work because rok is not installed globally but only
+    #   for the "krake" user. This makes the usage of "testinfra" really hard.
+    - pytest --connection ansible --hosts krake_apps krake rak/smoke/test_krake.py
+    - pytest --connection ansible --hosts minikube_clusters rak/smoke/test_minikube.py
 
-smoke-tests:
-  stage: smoke test
-  image: python:3.6
-  only:
-    - master
-    - merge_requests
-    - schedules
-  script:
-    # Pre-requisites: Ansible
-    - pip install ansible==2.7.10
-    - apt-get update -y && apt-get install openssh-client rsync -y
+    - echo "=== Run E2E tests ==="
+    - pytest --connection ansible --hosts krake_apps rak/functionals/
 
-    # Run Ansible playbook to execute smoke test on the staging infrastructure
-    # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
-    - cd ansible
-    - chmod -v 700 $(pwd)
-    - ansible-playbook -i hosts-CI smoke_tests.yml
-
-
-integration-tests:
-  stage: integration test
-  image: python:3.6
-  only:
-    - master
-    - merge_requests
-    - schedules
-  script:
-    # Pre-requisites: Ansible
-    - pip install ansible==2.7.10
-    - apt-get update -y && apt-get install openssh-client rsync -y
-
-    # Run Ansible to execute the integration tests
-    # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
-    - cd ansible
-    - chmod -v 700 $(pwd)
-    - ansible-playbook -i hosts-CI integration_tests.yml
-
-
-cleanup-staging-infra:
-  stage: cleanup
-  image: python:3.6
-  only:
-    - master
-    - merge_requests
-    - schedules
-  script:
-    # Pre-requisites: OpenStack and Ansible
+  after_script:
     - pip install python-openstackclient openstacksdk ansible==2.7.10
-    - apt-get update -y && apt-get install openssh-client rsync -y
+
+    - apt-get update -y
+    - apt-get install -y openssh-client rsync
 
     # Delete the runner SSH keys
-    - openstack keypair delete --os-auth-url $OS_AUTH_URL --os-username $OS_USERNAME --os-project-name $OS_PROJECT_NAME --os-domain-name $OS_DOMAIN_NAME --os-project-domain-id $OS_PROJECT_DOMAIN_ID --os-password $OS_PASSWORD my_runner_key_$CI_PIPELINE_ID || true
+    - openstack keypair delete my_runner_key_$CI_PIPELINE_ID || true
 
     # Delete staging infrastructure
-    # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
-    - cd ansible
-    - chmod -v 700 $(pwd)
-    - ansible-playbook -i hosts-CI unprovision.yml
-  when: always
+    - chmod -v 700 ansible/
+    - ansible-playbook ansible/unprovision.yml

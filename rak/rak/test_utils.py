@@ -1,7 +1,7 @@
 import json
 import logging
-import subprocess
 import time
+import subprocess
 from dataclasses import MISSING
 
 logger = logging.getLogger("krake.test_utils.run")
@@ -11,27 +11,34 @@ class Response(object):
     """The response of a command
 
     Attributes:
-        output (str): Output of the command
-        returncode (int): Return code of the command
+        result (testinfra.CommandResult): Result of the remove command
     """
 
-    def __init__(self, output, returncode):
-        self.output = output
-        self.returncode = returncode
+    def __init__(self, result):
+        self._result = result
         self._json = MISSING  # Cache parsed JSON output
+
+    def __getattr__(self, key):
+        return getattr(self._result, key)
 
     @property
     def json(self):
-        """str: Deserialized JSON of the command's output"""
+        """str: Deserialized JSON of the command's stdout"""
         if self._json is MISSING:
-            self._json = json.loads(self.output)
+            self._json = json.loads(self.stdout)
         return self._json
 
+    def __repr__(self):
+        return (
+            f"Response(command={self.command!r}, "
+            f"exit_status={self.exit_status}, "
+            f"stdout={self._stdout or self._stdout_bytes!r}, "
+            f"stderr={self._stderr or self._stderr_bytes!r})"
+        )
 
-def run(command, retry=0, interval=1, condition=None, error_message=""):
-    """Runs a subprocess
 
-    This function runs the provided ``command`` in a subprocess.
+def run(command, host, retry=0, interval=1, condition=None, error_message=""):
+    """Runs a command on a remote host
 
     Tests are typically subjects to race conditions. We frequently have to
     wait for an object to reach a certain state (RUNNING, DELETED, ...)
@@ -58,6 +65,7 @@ def run(command, retry=0, interval=1, condition=None, error_message=""):
 
     Args:
         command (str): The command to run
+        host (testinfra.Host): Host on which this command should be executed
         retry (int, optional): Number of retry to perform
         interval (int, optional): Interval in seconds between two retries
         condition (callable, optional): Condition that has to be met.
@@ -73,7 +81,7 @@ def run(command, retry=0, interval=1, condition=None, error_message=""):
     Example:
         .. code:: python
 
-            import util
+            from rak.test_utils import run
 
             # This condition will check if the command has a null return
             # value
@@ -85,8 +93,9 @@ def run(command, retry=0, interval=1, condition=None, error_message=""):
 
             # The command will be retried 10 time until the command is
             # successful or will raise an AssertionError
-            util.run(
+            run(
                 some_command,
+                host=host,
                 condition=check_return_code,
                 error_message="Unable to run the command successfully",
                 retry=10,
@@ -97,28 +106,28 @@ def run(command, retry=0, interval=1, condition=None, error_message=""):
     logger.debug(f"Running: {command}")
 
     while True:
-        process = subprocess.run(
-            command.split(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT
-        )
-
-        response = Response(process.stdout.decode(), process.returncode)
+        result = host.run(command, stderr=subprocess.STDOUT)
+        response = Response(result)
 
         # If no condition has been given to check, simply return the response
         if condition is None:
-            logger.debug(f"Response from the command: \n{response.output}")
+            logger.debug("%s", response)
+            assert (
+                response.rc == 0
+            ), f"Unexpected exit code {response.rc} for {response}"
             return response
 
         try:
             condition(response, error_message)
             # If condition is met, return the response
-            logger.debug(f"Response from the command: \n{response.output}")
+            logger.debug("%s", response)
             return response
         except AssertionError:
-            # If condition is not met, decrease the amount of retries and sleep
-            logger.debug("Provided condition is not met")
+            # If condition is not met, decrease the amount of retries and
+            # sleep
             retry -= 1
             if retry <= 0:
                 # All retries have failed
                 raise
-            logger.debug("Going to sleep... will retry")
+            logger.debug("Retry in %s seconds", interval)
             time.sleep(interval)
