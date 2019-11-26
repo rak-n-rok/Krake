@@ -25,6 +25,8 @@ from krake.data.kubernetes import (
     Cluster,
     Constraints,
     ClusterConstraints,
+)
+from krake.data.constraints import (
     EqualConstraint,
     NotEqualConstraint,
     InConstraint,
