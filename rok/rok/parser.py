@@ -207,3 +207,55 @@ arg_labels = argument(
 arg_namespace = argument(
     "-n", "--namespace", help="Namespace of the resource. Defaults to user"
 )
+
+
+class MetricAction(Action):
+    """argparse action for metric values
+
+    A metric argument requires two arguments. The first argument is the name
+    of a metric (:class:`str`). The second argument is the weight of the
+    argument as float.
+
+    Example:
+        .. code:: bash
+
+            cli --metric-argument my-metric 1.2
+
+    The action will populate the namespace with a list of dictionaries:
+
+    .. code:: python
+
+        [
+            {"name": "my-metric", "weight": 1.2},
+            ...
+        ]
+
+    """
+
+    def __init__(self, *args, nargs=None, default=None, **kwargs):
+        if nargs is not None:
+            raise ValueError("nargs is not allowed for MetricAction")
+        if default is None:
+            default = []
+        super().__init__(*args, default=default, nargs=2, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        name = values[0]
+        try:
+            weight = float(values[1])
+        except ValueError as err:
+            raise ArgumentError(self, f"invalid weight {values[1]!r}") from err
+
+        getattr(namespace, self.dest).append(({"name": name, "weight": weight}))
+
+
+arg_metric = argument(
+    "--metric",
+    "-m",
+    dest="metrics",
+    action=MetricAction,
+    help=(
+        "Metric name and its weight that should be used for this cluster. "
+        "Can be specified multiple times"
+    ),
+)

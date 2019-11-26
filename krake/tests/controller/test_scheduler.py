@@ -3,20 +3,20 @@ from datetime import datetime
 from aiohttp import web, ClientSession, ClientConnectorError, ClientResponseError
 
 from krake.api.app import create_app
-from krake.data.kubernetes import (
-    Application,
-    ApplicationState,
-    LabelConstraint,
-    ClusterMetricRef,
-)
+from krake.data.core import ResourceRef, MetricRef
+from krake.data.constraints import LabelConstraint
+from krake.data.kubernetes import Application, ApplicationState
+from krake.data.openstack import MagnumCluster, MagnumClusterState
 from krake.controller.scheduler import Scheduler, metrics
 from krake.controller.scheduler.constraints import match_cluster_constraints
 
 from krake.client import Client
 from krake.data.core import resource_ref, ReasonCode
 from krake.test_utils import server_endpoint, make_prometheus
+
 from factories.core import MetricsProviderFactory, MetricFactory
 from factories.kubernetes import ApplicationFactory, ClusterFactory
+from factories.openstack import MagnumClusterFactory, ProjectFactory
 
 
 async def test_kubernetes_reception(aiohttp_server, config, db, loop):
@@ -54,7 +54,7 @@ async def test_kubernetes_reception(aiohttp_server, config, db, loop):
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         # Update the client, to be used by the background tasks
         await scheduler.prepare(client)  # need to be called explicitly
-        await scheduler.reflector.list_resource()
+        await scheduler.kubernetes_reflector.list_resource()
 
     assert scheduled.metadata.uid not in scheduler.queue.dirty
     assert updated.metadata.uid in scheduler.queue.dirty
@@ -64,6 +64,43 @@ async def test_kubernetes_reception(aiohttp_server, config, db, loop):
 
     assert scheduled.metadata.uid in scheduler.queue.timers
     assert deleted.metadata.uid not in scheduler.queue.timers
+
+
+async def test_openstack_reception(aiohttp_server, config, db, loop):
+    """Test that the reflector present on the Scheduler actually put the right
+    received Applications into the work queue.
+    """
+    pending = MagnumClusterFactory(status__state=MagnumClusterState.PENDING)
+    scheduled = MagnumClusterFactory(
+        status__state=MagnumClusterState.PENDING,
+        status__project=ResourceRef(
+            api="openstack", kind="Project", namespace="testing", name="test-project"
+        ),
+    )
+    running = MagnumClusterFactory(status__state=MagnumClusterState.RUNNING)
+    deleted = MagnumClusterFactory(
+        metadata__deleted=datetime.now(), status__state=MagnumClusterState.RUNNING
+    )
+
+    assert pending.status.project is None
+    assert scheduled.status.project is not None
+
+    server = await aiohttp_server(create_app(config))
+
+    await db.put(pending)
+    await db.put(scheduled)
+    await db.put(running)
+    await db.put(deleted)
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        await scheduler.openstack_reflector.list_resource()
+
+    assert pending.metadata.uid in scheduler.magnum_queue.dirty
+    assert scheduled.metadata.uid not in scheduler.magnum_queue.dirty
+    assert running.metadata.uid not in scheduler.magnum_queue.dirty
+    assert deleted.metadata.uid not in scheduler.magnum_queue.dirty
 
 
 @pytest.mark.slow
@@ -318,12 +355,8 @@ async def test_kubernetes_rank(aiohttp_server, config, db, loop):
 
     app = ApplicationFactory(status__is_scheduled=False)
     clusters = [
-        ClusterFactory(
-            spec__metrics=[ClusterMetricRef(name="test-metric-1", weight=1.0)]
-        ),
-        ClusterFactory(
-            spec__metrics=[ClusterMetricRef(name="test-metric-2", weight=1.0)]
-        ),
+        ClusterFactory(spec__metrics=[MetricRef(name="test-metric-1", weight=1.0)]),
+        ClusterFactory(spec__metrics=[MetricRef(name="test-metric-2", weight=1.0)]),
     ]
     metrics = [
         MetricFactory(
@@ -368,12 +401,10 @@ async def test_kubernetes_rank(aiohttp_server, config, db, loop):
 
 async def test_kubernetes_rank_sticky(aiohttp_server, config, db, loop):
     cluster_A = ClusterFactory(
-        metadata__name="A",
-        spec__metrics=[ClusterMetricRef(name="metric-1", weight=1.0)],
+        metadata__name="A", spec__metrics=[MetricRef(name="metric-1", weight=1.0)]
     )
     cluster_B = ClusterFactory(
-        metadata__name="B",
-        spec__metrics=[ClusterMetricRef(name="metric-1", weight=1.0)],
+        metadata__name="B", spec__metrics=[MetricRef(name="metric-1", weight=1.0)]
     )
 
     scheduled_app = ApplicationFactory(
@@ -429,19 +460,14 @@ async def test_kubernetes_rank_with_metrics_only():
 
     with pytest.raises(AssertionError):
         scheduler = Scheduler("http://localhost:8080", worker_count=0)
-        # need to be called explicitly
         await scheduler.rank_kubernetes_clusters(app, clusters)
 
 
 async def test_kubernetes_rank_missing_metric(aiohttp_server, config, loop):
     app = ApplicationFactory(status__is_scheduled=False)
     clusters = [
-        ClusterFactory(
-            spec__metrics=[ClusterMetricRef(name="non-existent-metric", weight=1)]
-        ),
-        ClusterFactory(
-            spec__metrics=[ClusterMetricRef(name="also-not-existing", weight=1)]
-        ),
+        ClusterFactory(spec__metrics=[MetricRef(name="non-existent-metric", weight=1)]),
+        ClusterFactory(spec__metrics=[MetricRef(name="also-not-existing", weight=1)]),
     ]
 
     server = await aiohttp_server(create_app(config))
@@ -458,9 +484,7 @@ async def test_kubernetes_rank_missing_metrics_provider(
     aiohttp_server, config, db, loop
 ):
     app = ApplicationFactory(status__is_scheduled=False)
-    clusters = [
-        ClusterFactory(spec__metrics=[ClusterMetricRef(name="my-metric", weight=1)])
-    ]
+    clusters = [ClusterFactory(spec__metrics=[MetricRef(name="my-metric", weight=1)])]
     metric = MetricFactory(
         metadata__name="my-metric",
         spec__min=0,
@@ -495,9 +519,7 @@ async def test_kubernetes_rank_failing_metrics_provider(
     prometheus = await aiohttp_server(prometheus_app)
 
     app = ApplicationFactory(status__is_scheduled=False)
-    clusters = [
-        ClusterFactory(spec__metrics=[ClusterMetricRef(name="my-metric", weight=1)])
-    ]
+    clusters = [ClusterFactory(spec__metrics=[MetricRef(name="my-metric", weight=1)])]
     metric = MetricFactory(
         metadata__name="my-metric",
         spec__min=0,
@@ -527,9 +549,7 @@ async def test_kubernetes_prefer_cluster_with_metrics(aiohttp_server, config, db
     prometheus = await aiohttp_server(make_prometheus({"my_metric": ["0.4"]}))
 
     cluster_miss = ClusterFactory(spec__metrics=[])
-    cluster = ClusterFactory(
-        spec__metrics=[ClusterMetricRef(name="heat-demand", weight=1)]
-    )
+    cluster = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand", weight=1)])
     metric = MetricFactory(
         metadata__name="heat-demand",
         spec__min=0,
@@ -586,9 +606,7 @@ async def test_kubernetes_select_cluster_sticky_without_metric():
 async def test_kubernetes_scheduling(aiohttp_server, config, db, loop):
     prometheus = await aiohttp_server(make_prometheus({"heat_demand_zone_1": ["0.25"]}))
 
-    cluster = ClusterFactory(
-        spec__metrics=[ClusterMetricRef(name="heat-demand", weight=1)]
-    )
+    cluster = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand", weight=1)])
     app = ApplicationFactory(
         spec__constraints__cluster__labels=[],
         spec__constraints__cluster__custom_resources=[],
@@ -640,7 +658,7 @@ async def test_kubernetes_scheduling_error(aiohttp_server, config, db, loop):
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
         await scheduler.queue.put(app.metadata.uid, app)
-        await scheduler.handle_resource(run_once=True)
+        await scheduler.handle_kubernetes_applications(run_once=True)
 
     stored = await db.get(Application, namespace="testing", name=app.metadata.name)
     assert stored.status.reason.code == ReasonCode.NO_SUITABLE_RESOURCE
@@ -653,12 +671,8 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
         )
     )
 
-    cluster1 = ClusterFactory(
-        spec__metrics=[ClusterMetricRef(name="heat-demand-1", weight=1)]
-    )
-    cluster2 = ClusterFactory(
-        spec__metrics=[ClusterMetricRef(name="heat-demand-2", weight=1)]
-    )
+    cluster1 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-1", weight=1)])
+    cluster2 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-2", weight=1)])
     app = ApplicationFactory(
         spec__constraints__cluster__labels=[],
         spec__constraints__cluster__custom_resources=[],
@@ -713,3 +727,280 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
         assert stored2.status.scheduled_to == resource_ref(cluster2)
         assert stored2.status.state == ApplicationState.PENDING
         assert stored2.status.scheduled > stored1.status.scheduled
+
+
+def test_openstack_match_project_label_constraints():
+    project = ProjectFactory(metadata__labels={"location": "IT"})
+    cluster = MagnumClusterFactory(
+        spec__constraints__project__labels=[LabelConstraint.parse("location is IT")]
+    )
+    assert Scheduler.match_project_constraints(cluster, project)
+
+
+def test_openstack_match_empty_project_label_constraints():
+    project = ProjectFactory(metadata__labels=[])
+    cluster1 = MagnumClusterFactory(spec__constraints=None)
+    cluster2 = MagnumClusterFactory(spec__constraints__project=None)
+    cluster3 = MagnumClusterFactory(spec__constraints__project__labels=None)
+
+    assert Scheduler.match_project_constraints(cluster1, project)
+    assert Scheduler.match_project_constraints(cluster2, project)
+    assert Scheduler.match_project_constraints(cluster3, project)
+
+
+def test_openstack_not_match_project_label_constraints():
+    project = ProjectFactory()
+    cluster = MagnumClusterFactory(
+        spec__constraints__project__labels=[LabelConstraint.parse("location is IT")]
+    )
+
+    assert not Scheduler.match_project_constraints(cluster, project)
+
+
+async def test_openstack_rank(aiohttp_server, config, db, loop):
+    prometheus = await aiohttp_server(make_prometheus({"test_metric_1": ["0.42"]}))
+
+    cluster = MagnumClusterFactory(status__is_scheduled=False)
+    projects = [
+        ProjectFactory(spec__metrics=[MetricRef(name="test-metric-1", weight=1.0)]),
+        ProjectFactory(spec__metrics=[MetricRef(name="test-metric-2", weight=1.0)]),
+    ]
+    metrics = [
+        MetricFactory(
+            metadata__name="test-metric-1",
+            spec__provider__name="test-prometheus",
+            spec__provider__metric="test_metric_1",
+        ),
+        MetricFactory(
+            metadata__name="test-metric-2",
+            spec__provider__name="test-static",
+            spec__provider__metric="test_metric_2",
+        ),
+    ]
+    prometheus_provider = MetricsProviderFactory(
+        metadata__name="test-prometheus",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+    static_provider = MetricsProviderFactory(
+        metadata__name="test-static",
+        spec__type="static",
+        spec__static__metrics={"test_metric_2": 0.5},
+    )
+
+    for metric in metrics:
+        await db.put(metric)
+
+    await db.put(prometheus_provider)
+    await db.put(static_provider)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        ranked_projects = await scheduler.rank_openstack_projects(cluster, projects)
+
+    for ranked, project in zip(ranked_projects, projects):
+        assert ranked.rank is not None
+        assert ranked.project == project
+
+
+async def test_openstack_rank_with_metrics_only():
+    cluster = MagnumClusterFactory(status__is_scheduled=False)
+    projects = [ProjectFactory(spec__metrics=[]), ProjectFactory(spec__metrics=[])]
+
+    with pytest.raises(AssertionError):
+        scheduler = Scheduler("http://localhost:8080", worker_count=0)
+        await scheduler.rank_openstack_projects(cluster, projects)
+
+
+async def test_openstack_rank_missing_metric(aiohttp_server, config, loop):
+    cluster = MagnumClusterFactory(status__is_scheduled=False)
+    projects = [
+        ProjectFactory(spec__metrics=[MetricRef(name="non-existent-metric", weight=1)]),
+        ProjectFactory(spec__metrics=[MetricRef(name="also-not-existing", weight=1)]),
+    ]
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        ranked = await scheduler.rank_openstack_projects(cluster, projects)
+
+    assert len(ranked) == 0
+
+
+async def test_openstack_rank_missing_metrics_provider(
+    aiohttp_server, config, db, loop
+):
+    cluster = MagnumClusterFactory(status__is_scheduled=False)
+    projects = [ProjectFactory(spec__metrics=[MetricRef(name="my-metric", weight=1)])]
+    metric = MetricFactory(
+        metadata__name="my-metric",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="non-existent-provider",
+        spec__provider__metric="non-existent-metric",
+    )
+    await db.put(metric)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        ranked = await scheduler.rank_openstack_projects(cluster, projects)
+
+    assert len(ranked) == 0
+
+
+async def test_openstack_rank_failing_metrics_provider(
+    aiohttp_server, config, db, loop
+):
+    routes = web.RouteTableDef()
+
+    @routes.get("/api/v1/query")
+    async def _(request):
+        raise web.HTTPServiceUnavailable()
+
+    prometheus_app = web.Application()
+    prometheus_app.add_routes(routes)
+
+    prometheus = await aiohttp_server(prometheus_app)
+
+    cluster = MagnumClusterFactory(status__is_scheduled=False)
+    projects = [ProjectFactory(spec__metrics=[MetricRef(name="my-metric", weight=1)])]
+    metric = MetricFactory(
+        metadata__name="my-metric",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="my-provider",
+        spec__provider__metric="my-metric",
+    )
+    provider = MetricsProviderFactory(
+        metadata__name="my-provider",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+    await db.put(metric)
+    await db.put(provider)
+
+    api = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(api), worker_count=0)
+        await scheduler.prepare(client)
+        ranked = await scheduler.rank_openstack_projects(cluster, projects)
+
+    assert len(ranked) == 0
+
+
+async def test_prefer_projects_with_metrics(aiohttp_server, config, db, loop):
+    prometheus = await aiohttp_server(make_prometheus({"my_metric": ["0.4"]}))
+
+    project_miss = ProjectFactory(spec__metrics=[])
+    project = ProjectFactory(spec__metrics=[MetricRef(name="heat-demand", weight=1)])
+    metric = MetricFactory(
+        metadata__name="heat-demand",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus-zone-1",
+        spec__provider__metric="my_metric",
+    )
+    metrics_provider = MetricsProviderFactory(
+        metadata__name="prometheus-zone-1",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+    cluster = MagnumClusterFactory(
+        status__state=MagnumClusterState.PENDING,
+        status__is_scheduled=False,
+        spec__constraints=None,
+    )
+    await db.put(metric)
+    await db.put(metrics_provider)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        selected = await scheduler.select_openstack_project(
+            cluster, (project_miss, project)
+        )
+
+    assert selected == project
+
+
+async def test_select_project_without_metric():
+    projects = (ProjectFactory(spec__metrics=[]), ProjectFactory(spec__metrics=[]))
+    cluster = MagnumClusterFactory(spec__constraints=None)
+
+    scheduler = Scheduler("http://localhost:8080", worker_count=0)
+    selected = await scheduler.select_openstack_project(cluster, projects)
+    assert selected in projects
+
+
+async def test_openstack_scheduling(aiohttp_server, config, db, loop):
+    prometheus = await aiohttp_server(make_prometheus({"heat_demand_zone_1": ["0.25"]}))
+
+    project = ProjectFactory(spec__metrics=[MetricRef(name="heat-demand", weight=1)])
+    cluster = MagnumClusterFactory(
+        spec__constraints__project__labels=[],
+        status__state=MagnumClusterState.PENDING,
+        status__is_scheduled=False,
+    )
+    metric = MetricFactory(
+        metadata__name="heat-demand",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus-zone-1",
+        spec__provider__metric="heat_demand_zone_1",
+    )
+    metrics_provider = MetricsProviderFactory(
+        metadata__name="prometheus-zone-1",
+        spec__type="prometheus",
+        spec__prometheus__url=f"http://{prometheus.host}:{prometheus.port}",
+    )
+    await db.put(metric)
+    await db.put(metrics_provider)
+    await db.put(project)
+    await db.put(cluster)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        await scheduler.schedule_magnum_cluster(cluster)
+
+        stored = await db.get(
+            MagnumCluster,
+            namespace=cluster.metadata.namespace,
+            name=cluster.metadata.name,
+        )
+        assert stored.status.project == resource_ref(project)
+        assert stored.status.template == project.spec.template
+
+
+async def test_openstack_scheduling_error(aiohttp_server, config, db, loop):
+    cluster = MagnumClusterFactory(
+        status__state=MagnumClusterState.RUNNING, status__is_scheduled=False
+    )
+
+    await db.put(cluster)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        await scheduler.magnum_queue.put(cluster.metadata.uid, cluster)
+        await scheduler.handle_magnum_clusters(run_once=True)
+
+    stored = await db.get(
+        MagnumCluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+    )
+    assert stored.status.reason.code == ReasonCode.NO_SUITABLE_RESOURCE

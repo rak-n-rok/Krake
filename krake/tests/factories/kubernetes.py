@@ -13,14 +13,13 @@ import yaml
 import pytz
 
 from .fake import fake
-from .core import MetadataFactory, ReasonFactory
+from .core import MetadataFactory, ReasonFactory, MetricRefFactory
 from krake.data.core import ResourceRef
 from krake.data.kubernetes import (
     ApplicationSpec,
     ApplicationStatus,
     ApplicationState,
     Application,
-    ClusterMetricRef,
     ClusterSpec,
     Cluster,
     Constraints,
@@ -338,14 +337,6 @@ def make_kubeconfig(server):
     }
 
 
-class ClusterMetricRefFactory(Factory):
-    class Meta:
-        model = ClusterMetricRef
-
-    weight = fuzzy.FuzzyFloat(0, 1.0)
-    name = fuzzy.FuzzyAttribute(fake.name)
-
-
 class ClusterSpecFactory(Factory):
     class Meta:
         model = ClusterSpec
@@ -359,7 +350,7 @@ class ClusterSpecFactory(Factory):
 
     @lazy_attribute
     def metrics(self):
-        return [ClusterMetricRefFactory() for _ in range(self.metric_count)]
+        return [MetricRefFactory() for _ in range(self.metric_count)]
 
     @lazy_attribute
     def custom_resources(self):

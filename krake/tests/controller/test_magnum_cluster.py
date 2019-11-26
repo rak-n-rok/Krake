@@ -343,15 +343,16 @@ async def test_magnum_cluster_create(aiohttp_server, config, db, loop):
     openstack_server = await aiohttp_server(openstack_app)
 
     project = ProjectFactory(
-        spec__url=f"{server_endpoint(openstack_server)}/identity/v3"
+        spec__url=f"{server_endpoint(openstack_server)}/identity/v3",
+        spec__template="b2339833-8916-454a-86bd-06b450f69210",
     )
     cluster = MagnumClusterFactory(
         metadata__name="my-cluster",
         status__state=MagnumClusterState.PENDING,
         status__project=resource_ref(project),
+        status__template="b2339833-8916-454a-86bd-06b450f69210",
         spec__master_count=None,
         spec__node_count=None,
-        spec__template="b2339833-8916-454a-86bd-06b450f69210",
     )
     await db.put(project)
     await db.put(cluster)
@@ -408,12 +409,13 @@ async def test_magnum_cluster_template_type(aiohttp_server, config, db, loop):
     openstack_server = await aiohttp_server(openstack_app)
 
     project = ProjectFactory(
-        spec__url=f"{server_endpoint(openstack_server)}/identity/v3"
+        spec__url=f"{server_endpoint(openstack_server)}/identity/v3",
+        spec__template="e37e99f5-5418-4fad-997f-761207ff2e2e",
     )
     cluster = MagnumClusterFactory(
-        spec__template="e37e99f5-5418-4fad-997f-761207ff2e2e",
         status__state=MagnumClusterState.PENDING,
         status__project=resource_ref(project),
+        status__template="e37e99f5-5418-4fad-997f-761207ff2e2e",
     )
     assert cluster.status.cluster_id is None
 

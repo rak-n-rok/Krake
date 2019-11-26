@@ -7,7 +7,14 @@
 """
 import os
 
-from .parser import ParserSpec, argument, arg_formatting, arg_labels, arg_namespace
+from .parser import (
+    ParserSpec,
+    argument,
+    arg_formatting,
+    arg_labels,
+    arg_namespace,
+    arg_metric,
+)
 from .fixtures import depends
 from .formatters import BaseTable, Cell, printer
 
@@ -17,8 +24,9 @@ openstack = ParserSpec("openstack", aliases=["os"], help="Manage OpenStack resou
 project = openstack.subparser("project", help="Manage OpenStack projects")
 
 
-class ProjectListTable(BaseTable):
-    pass
+class ProjectTable(BaseTable):
+    url = Cell("spec.url")
+    template = Cell("spec.template")
 
 
 @project.command("list", help="List OpenStack projects")
@@ -28,7 +36,7 @@ class ProjectListTable(BaseTable):
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
-@printer(table=ProjectListTable(many=True))
+@printer(table=ProjectTable(many=True))
 def list_projects(config, session, namespace, all):
     if all:
         url = f"/openstack/projects"
@@ -41,10 +49,6 @@ def list_projects(config, session, namespace, all):
     return body["items"]
 
 
-class ProjectTable(BaseTable):
-    url = Cell("spec.url")
-
-
 @project.command("create", help="Create OpenStack project")
 @argument("--auth-url", help="URL to OpenStack identity service (Keystone)")
 @argument(
@@ -55,15 +59,18 @@ class ProjectTable(BaseTable):
 @argument("--user-id", help="UUID of OpenStack user")
 @argument("--password", help="Password of OpenStack user")
 @argument("--project-id", help="UUID of OpenStack project")
+@argument("--template", help="UUID of Magnum cluster template", required=True)
 @argument("name", help="Name of the project")
 @arg_formatting
 @arg_namespace
 @arg_labels
+@arg_metric
 @depends("config", "session")
 @printer(table=ProjectTable())
 def create_project(
     config,
     session,
+    template,
     auth_url,
     application_credential,
     user_id,
@@ -72,6 +79,7 @@ def create_project(
     name,
     namespace,
     labels,
+    metrics,
 ):
     if namespace is None:
         namespace = config["user"]
@@ -109,7 +117,12 @@ def create_project(
 
     project = {
         "metadata": {"name": name, "labels": labels},
-        "spec": {"url": auth_url, "auth": auth},
+        "spec": {
+            "url": auth_url,
+            "auth": auth,
+            "template": template,
+            "metrics": metrics,
+        },
     }
     resp = session.post(f"/openstack/namespaces/{namespace}/projects", json=project)
     return resp.json()
@@ -147,8 +160,10 @@ def get_project(config, session, namespace, name):
 @argument("--user-id", help="UUID of OpenStack user")
 @argument("--password", help="Password of OpenStack user")
 @argument("--project-id", help="UUID of OpenStack project")
+@argument("--template", help="UUID of Magnum cluster template")
 @arg_namespace
 @arg_labels
+@arg_metric
 @depends("config", "session")
 @printer(table=ProjectTable())
 def update_project(
@@ -161,7 +176,9 @@ def update_project(
     user_id,
     password,
     project_id,
+    template,
     labels,
+    metrics,
 ):
     if namespace is None:
         namespace = config["user"]
@@ -199,11 +216,17 @@ def update_project(
             },
         }
 
+    if template is not None:
+        project["spec"]["template"] = template
+
     if auth_url is not None:
         project["spec"]["url"] = auth_url
 
     if labels:
         project["metadata"]["labels"] = labels
+
+    if metrics:
+        project["spec"]["metrics"] = metrics
 
     resp = session.put(
         f"/openstack/namespaces/{namespace}/projects/{name}", json=project
@@ -230,36 +253,64 @@ def delete_project(config, session, namespace, name):
 cluster = openstack.subparser("cluster", help="Manage Magnum clusters")
 
 
+arg_project_label_constraints = argument(
+    "-L",
+    "--project-label-constraint",
+    dest="project_label_constraints",
+    default=[],
+    action="append",
+    help=(
+        "Constraint for labels of the OpenStack project. "
+        "Can be specified multiple times"
+    ),
+)
+
+
 class ClusterTable(BaseTable):
-    template = Cell("spec.template")
     project = Cell("status.project")
 
 
 @cluster.command("create", help="Create Magnum cluster")
 @argument("name", help="Name of the project")
+@arg_formatting
 @arg_namespace
 @arg_labels
-@argument("--template", help="UUID of Magnum cluster template", required=True)
+@arg_metric
+@arg_project_label_constraints
 @argument("--master-count", type=int, help="Number of master nodes")
 @argument("--node-count", type=int, help="Number of worker nodes")
 @depends("config", "session")
 @printer(table=ClusterTable())
 def create_cluster(
-    config, session, namespace, name, labels, template, master_count, node_count
+    config,
+    session,
+    namespace,
+    name,
+    labels,
+    metrics,
+    project_label_constraints,
+    master_count,
+    node_count,
 ):
     if namespace is None:
         namespace = config["user"]
 
     cluster = {
-        "metadata": {"name": name, "labels": labels},
+        "metadata": {
+            "name": name,
+            "labels": labels,
+            "constraints": {"project": {"labels": project_label_constraints}},
+        },
         "spec": {
-            "template": template,
             "master_count": master_count,
             "node_count": node_count,
+            "metrics": metrics,
         },
     }
     resp = session.post(
-        f"/openstack/namespaces/{namespace}/magnumclusters", json=cluster
+        f"/openstack/namespaces/{namespace}/magnumclusters",
+        json=cluster,
+        raise_for_status=False,
     )
     return resp.json()
 
@@ -310,10 +361,14 @@ def get_cluster(config, session, namespace, name):
 @argument("name", help="Magnum cluster name")
 @argument("--node-count", type=int, help="Number of worker nodes")
 @arg_namespace
+@arg_metric
+@arg_project_label_constraints
 @arg_formatting
 @depends("config", "session")
 @printer(table=ClusterTable())
-def update_cluster(config, session, namespace, name, node_count):
+def update_cluster(
+    config, session, namespace, name, metrics, project_label_constraints, node_count
+):
     if namespace is None:
         namespace = config["user"]
 
@@ -329,6 +384,16 @@ def update_cluster(config, session, namespace, name, node_count):
 
     if node_count is not None:
         cluster["spec"]["node_count"] = node_count
+
+    if metrics:
+        cluster["spec"]["metrics"] = metrics
+
+    if project_label_constraints:
+        if cluster["spec"]["constraints"] is None:
+            cluster["spec"]["constraints"] = {}
+        if cluster["spec"]["constraints"]["project"] is None:
+            cluster["spec"]["constraints"]["project"] = {}
+        cluster["spec"]["constraints"]["project"]["labels"] = project_label_constraints
 
     resp = session.put(
         f"/openstack/namespaces/{namespace}/magnumclusters/{name}", json=cluster

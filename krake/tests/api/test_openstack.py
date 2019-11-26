@@ -382,7 +382,7 @@ async def test_update_magnum_cluster_rbac(rbac_allow, config, aiohttp_client):
 async def test_magnum_cluster_template_immutable(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
-    data = MagnumClusterFactory(spec__template="template1")
+    data = MagnumClusterFactory(status__template="template1")
     await db.put(data)
     data.spec.template = "template2"
 
@@ -393,12 +393,12 @@ async def test_magnum_cluster_template_immutable(aiohttp_client, config, db):
     )
     assert resp.status == 200
     cluster = MagnumCluster.deserialize(await resp.json())
-    assert cluster.spec.template == "template1"
+    assert cluster.status.template == "template1"
 
     stored = await db.get(
         cluster, namespace=data.metadata.namespace, name=cluster.metadata.name
     )
-    assert stored.spec.template == "template1"
+    assert stored.status.template == "template1"
 
 
 async def test_delete_magnum_cluster(aiohttp_client, config, db):

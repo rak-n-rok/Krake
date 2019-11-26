@@ -1,8 +1,9 @@
 from dataclasses import MISSING
-from factory import Factory, SubFactory, lazy_attribute, fuzzy, Maybe
+from factory import Factory, SubFactory, lazy_attribute, fuzzy, Maybe, Iterator
+from itertools import cycle
 
 from .fake import fake
-from .core import MetadataFactory, ReasonFactory
+from .core import MetadataFactory, ReasonFactory, MetricRefFactory
 from krake.data.core import ResourceRef
 from krake.data.openstack import (
     UserReference,
@@ -16,6 +17,14 @@ from krake.data.openstack import (
     MagnumClusterStatus,
     MagnumClusterState,
     MagnumCluster,
+    Constraints,
+    ProjectConstraints,
+)
+from krake.data.constraints import (
+    EqualConstraint,
+    NotEqualConstraint,
+    InConstraint,
+    NotInConstraint,
 )
 
 
@@ -84,12 +93,44 @@ class AuthMethodFactory(Factory):
         return model_class(*args, **kwargs)
 
 
+label_constraints = cycle(
+    (
+        EqualConstraint(label="location", value="EU"),
+        NotEqualConstraint(label="location", value="DE"),
+        InConstraint(label="location", values=("SK", "DE")),
+        NotInConstraint(label="location", values=("SK", "DE")),
+    )
+)
+
+
+class ProjectConstraintsFactory(Factory):
+    class Meta:
+        model = ProjectConstraints
+
+    labels = Iterator(map(lambda constraint: [constraint], label_constraints))
+
+
+class ConstraintsFactory(Factory):
+    class Meta:
+        model = Constraints
+
+    project = SubFactory(ProjectConstraintsFactory)
+
+
 class ProjectSpecFactory(Factory):
     class Meta:
         model = ProjectSpec
 
+    class Params:
+        metric_count = 3
+
     url = "http://localhost:5000/v3"
     auth = SubFactory(AuthMethodFactory)
+    template = fuzzy.FuzzyAttribute(fake.uuid4)
+
+    @lazy_attribute
+    def metrics(self):
+        return [MetricRefFactory() for _ in range(self.metric_count)]
 
 
 class ProjectFactory(Factory):
@@ -104,9 +145,16 @@ class MagnumClusterSpecFactory(Factory):
     class Meta:
         model = MagnumClusterSpec
 
-    template = fuzzy.FuzzyAttribute(fake.uuid4)
+    class Params:
+        metric_count = 3
+
+    constraints = SubFactory(ConstraintsFactory)
     master_count = fuzzy.FuzzyChoice([None, 1, 2])
     node_count = fuzzy.FuzzyChoice([None, 2, 3])
+
+    @lazy_attribute
+    def metrics(self):
+        return [MetricRefFactory() for _ in range(self.metric_count)]
 
 
 class MagnumClusterStatusFactory(Factory):
@@ -128,6 +176,13 @@ class MagnumClusterStatusFactory(Factory):
         return ResourceRef(
             api="kubernetes", kind="Project", namespace=fake.name(), name=fake.name()
         )
+
+    @lazy_attribute
+    def template(self):
+        if not self.is_scheduled:
+            return None
+
+        return fake.uuid4()
 
     @lazy_attribute
     def cluster_id(self):

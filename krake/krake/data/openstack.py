@@ -4,7 +4,8 @@ from typing import List
 
 from . import persistent
 from .serializable import PolymorphicContainer, Serializable, ApiObject
-from .core import Metadata, ListMetadata, Status, ResourceRef
+from .core import Metadata, ListMetadata, Status, ResourceRef, MetricRef
+from .constraints import LabelConstraint
 
 
 class AuthMethod(PolymorphicContainer):
@@ -76,8 +77,19 @@ class ApplicationCredential(Serializable):
 
 
 class ProjectSpec(Serializable):
+    """Specification of OpenStack projects
+
+    Attributes:
+        url (str): URL to OpenStack identity service (Keystone)
+        auth (AuthMethod): Authentication method for this project
+        template (str): UUID of OpenStack Magnum cluster template
+
+    """
+
     url: str
     auth: AuthMethod
+    template: str
+    metrics: List[MetricRef] = field(default_factory=list)
 
 
 @persistent("/openstack/projects/{namespace}/{name}")
@@ -95,10 +107,37 @@ class ProjectList(ApiObject):
     items: List[Project]
 
 
+class ProjectConstraints(Serializable):
+    """Constraints for the :class:`Project` to which this cluster is
+    scheduled.
+    """
+
+    labels: List[LabelConstraint] = None
+
+
+class Constraints(Serializable):
+    """Constraints restricting the scheduling decision for a
+    :class:`MagnumCluster`.
+    """
+
+    project: ProjectConstraints = None
+
+
 class MagnumClusterSpec(Serializable):
-    template: str = field(metadata={"immutable": True})
+    """Specification of OpenStack Magnum clusters.
+
+    Attributes:
+        master_count (int, optional): Number of master nodes
+        node_count (int, optional): Number of worker nodes
+        metrics (List[MetricRef]): Metrics describing the state of the Magnum
+            cluster.
+
+    """
+
     master_count: int = field(default=None, metadata={"immutable": True})
     node_count: int = None
+    metrics: List[MetricRef] = field(default_factory=list)
+    constraints: Constraints = None
 
 
 class MagnumClusterState(Enum):
@@ -111,8 +150,28 @@ class MagnumClusterState(Enum):
 
 
 class MagnumClusterStatus(Status):
+    """Status of a OpenStack Magnum cluster
+
+    Attributes:
+        state (MagnumClusterState): State of the cluster
+        project (.core.ResourceRef): OpenStack project which hosts this
+            Magnum cluster.
+        template (str): UUID of the OpenStack Magnum cluster template that
+            is used to create the cluster.
+        cluster_id (str): UUID of the cluster inside the OpenStack
+            Magnum service.
+        node_count (int, optional): Current number of worker nodes
+        api_address (str): URL to access the API of the cluster
+        master_addresses (List[str]): IP addresses of the master nodes
+        node_addresses (List[str]): IP addresses of the worker nodes
+        cluster (.core.ResourceRef): Kubernetes cluster resource created
+            for this Magnum cluster.
+
+    """
+
     state: MagnumClusterState = MagnumClusterState.PENDING
     project: ResourceRef = None
+    template: str = None
     cluster_id: str = None
     node_count: int = None
     api_address: str = None

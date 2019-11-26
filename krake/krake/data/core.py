@@ -210,3 +210,8 @@ class MetricsProviderList(ApiObject):
     kind: str = "MetricsProviderList"
     metadata: ListMetadata
     items: List[MetricsProvider]
+
+
+class MetricRef(Serializable):
+    name: str
+    weight: float

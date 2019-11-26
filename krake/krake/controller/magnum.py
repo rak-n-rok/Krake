@@ -625,7 +625,7 @@ class MagnumClusterController(Controller):
 
         assert cluster.status.cluster, "Cluster reference not set"
         assert cluster.status.cluster_id, "Magnum cluster UUID not set"
-        assert cluster.spec.template, "Cluster template UUID not set"
+        assert cluster.status.template, "Cluster template UUID not set"
 
         kube = None
 
@@ -824,7 +824,7 @@ def create_magnum_cluster(client, cluster):
         extra["node_count"] = cluster.spec.node_count
 
     return client.clusters.create(
-        cluster_template_id=cluster.spec.template,
+        cluster_template_id=cluster.status.template,
         name=generate_magnum_cluster_name(cluster),
         create_timeout=60,  # Timeout for cluster creation in minutes
         **extra,
@@ -881,7 +881,7 @@ def read_magnum_cluster_template(client, cluster):
         magnumclient.v1.cluster_templates.ClusterTemplate
 
     """
-    return client.cluster_templates.get(cluster.spec.template)
+    return client.cluster_templates.get(cluster.status.template)
 
 
 def _encode_to_64(string):

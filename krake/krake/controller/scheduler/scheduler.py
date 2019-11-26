@@ -3,21 +3,24 @@ import logging
 import random
 from typing import NamedTuple
 
+from functools import total_ordering
 from aiohttp import ClientError
 
+from krake.data.openstack import Project, MagnumClusterState
+from krake.client.openstack import OpenStackApi
 from krake.client.core import CoreApi
 from krake.client.kubernetes import KubernetesApi
 from krake.data.core import ReasonCode, resource_ref, Reason
 from krake.data.kubernetes import ApplicationState, Cluster, ClusterBinding
 
 from .constraints import match_cluster_constraints
-from .. import Controller, ControllerError, Reflector
 from .metrics import MetricError, fetch_query
+from .. import Controller, ControllerError, Reflector, WorkQueue
 
 logger = logging.getLogger(__name__)
 
 
-class UnsuitableDeploymentError(ControllerError):
+class NoClusterFound(ControllerError):
     """Raised in case when there is not enough resources for spawning an application
     on any of the deployments.
     """
@@ -25,44 +28,66 @@ class UnsuitableDeploymentError(ControllerError):
     code = ReasonCode.NO_SUITABLE_RESOURCE
 
 
-# We cannot use @functools.total_ordering because tuple already implements
-# rich comparison operators preventing the decorator from generating the
-# comparators.
-class ClusterRank(NamedTuple):
-    """Named tuple for ordering clusters based on a rank"""
+class NoProjectFound(ControllerError):
+    code = ReasonCode.NO_SUITABLE_RESOURCE
 
-    rank: float
-    cluster: Cluster
+
+@total_ordering
+class RankMixin(object):
+    """Mixin class for ranking objects based on their ``rank`` attribute.
+
+    This mixin class is used by the :func:`ranked` decorator.
+    """
 
     def __lt__(self, o):
         if not hasattr(o, "rank"):
             return NotImplemented
         return self.rank < o.rank
 
-    def __le__(self, o):
-        if not hasattr(o, "rank"):
-            return NotImplemented
-        return self.rank <= o.rank
-
-    def __gt__(self, o):
-        if not hasattr(o, "rank"):
-            return NotImplemented
-        return self.rank > o.rank
-
-    def __ge__(self, o):
-        if not hasattr(o, "rank"):
-            return NotImplemented
-        return self.rank >= o.rank
-
     def __eq__(self, o):
         if not hasattr(o, "rank"):
             return NotImplemented
         return self.rank == o.rank
 
-    def __ne__(self, o):
-        if not hasattr(o, "rank"):
-            return NotImplemented
-        return self.rank != o.rank
+
+def order_by_rank(cls):
+    """Decorator for making a class orderable based on the ``rank`` attribute.
+
+    We cannot use :func:`functools.total_ordering` in
+    :class:`typing.NamedTuple` because tuple already implements rich
+    comparison operators preventing the decorator from generating the
+    comparators. Furthermore, mixins are also not respected by
+    :class:`typing.NamedTuple`.
+
+    Hence, this decorator injects :class:`RankMixin` as an additional base
+    class into the passed class.
+
+    Args:
+        cls (type): Class that should get :class:`RankMixin` as base class.
+
+    Returns:
+        type: Class with injected :class:`RankMixin` base class
+
+    """
+    if RankMixin not in cls.__mro__:
+        cls.__bases__ = (RankMixin,) + cls.__bases__
+    return cls
+
+
+@order_by_rank
+class ClusterRank(NamedTuple):
+    """Named tuple for ordering Kubernetes clusters based on a rank"""
+
+    rank: float
+    cluster: Cluster
+
+
+@order_by_rank
+class ProjectRank(NamedTuple):
+    """Named tuple for ordering OpenStack projects based on a rank"""
+
+    rank: float
+    project: Project
 
 
 class Stickiness(NamedTuple):
@@ -80,7 +105,7 @@ class Scheduler(Controller):
     Args:
         worker_count (int, optional): the amount of worker function that
             should be run as background tasks.
-        reschedule (float, optional): number of seconds after which a resource
+        reschedule_after (float, optional): number of seconds after which a resource
             should be rescheduled.
         ssl_context (ssl.SSLContext, optional): SSL context that should be
             used to communicate with the API server.
@@ -104,9 +129,12 @@ class Scheduler(Controller):
         super().__init__(
             api_endpoint, loop=loop, ssl_context=ssl_context, debounce=debounce
         )
+        self.magnum_queue = WorkQueue(loop=self.loop, debounce=debounce)
         self.kubernetes_api = None
+        self.openstack_api = None
         self.core_api = None
-        self.reflector = None
+        self.kubernetes_reflector = None
+        self.openstack_reflector = None
         self.worker_count = worker_count
         self.reschedule_after = reschedule_after
         self.stickiness = stickiness
@@ -115,12 +143,18 @@ class Scheduler(Controller):
         assert client is not None
         self.client = client
         self.kubernetes_api = KubernetesApi(self.client)
+        self.openstack_api = OpenStackApi(self.client)
         self.core_api = CoreApi(self.client)
 
         for i in range(self.worker_count):
-            self.register_task(self.handle_resource, name=f"worker_{i}")
+            self.register_task(
+                self.handle_kubernetes_applications, name=f"kubernetes_worker_{i}"
+            )
 
-        self.reflector = Reflector(
+        for i in range(self.worker_count):
+            self.register_task(self.handle_magnum_clusters, name=f"magnum_worker_{i}")
+
+        self.kubernetes_reflector = Reflector(
             listing=self.kubernetes_api.list_all_applications,
             watching=self.kubernetes_api.watch_all_applications,
             on_list=self.received_kubernetes_app,
@@ -128,10 +162,20 @@ class Scheduler(Controller):
             on_update=self.received_kubernetes_app,
             on_delete=self.received_kubernetes_app,
         )
-        self.register_task(self.reflector, name="Reflector")
+        self.openstack_reflector = Reflector(
+            listing=self.openstack_api.list_all_magnum_clusters,
+            watching=self.openstack_api.watch_all_magnum_clusters,
+            on_list=self.received_magnum_cluster,
+            on_add=self.received_magnum_cluster,
+            on_update=self.received_magnum_cluster,
+            on_delete=self.received_magnum_cluster,
+        )
+        self.register_task(self.kubernetes_reflector, name="Kubernetes reflector")
+        self.register_task(self.openstack_reflector, name="OpenStack reflector")
 
     async def cleanup(self):
-        self.reflector = None
+        self.kubernetes_reflector = None
+        self.openstack_reflector = None
         self.kubernetes_api = None
         self.core_api = None
 
@@ -155,9 +199,28 @@ class Scheduler(Controller):
             logger.debug("Accept %r", app)
             await self.queue.put(app.metadata.uid, app)
 
-    async def handle_resource(self, run_once=False):
-        """Infinite loop which fetches and hand over the resources to the right
-        coroutine. The specific exceptions and error handling have to be added here.
+    async def received_magnum_cluster(self, cluster):
+        """Handler for Kubernetes application reflector.
+
+        Args:
+            cluster (krake.data.openstack.MagnumCluster): MagnumCLuster received from
+                the API.
+
+        """
+        # For now, we do not reschedule Magnum clusters. Hence, not enqueuing
+        # for rescheduling and not "scheduled" timestamp.
+        if cluster.metadata.deleted:
+            logger.debug("Ignore deleted %r", cluster)
+        elif cluster.status.project is None:
+            logger.debug("Accept unbound %r", cluster)
+            await self.magnum_queue.put(cluster.metadata.uid, cluster)
+        else:
+            logger.debug("Ignore bound %r", cluster)
+
+    async def handle_kubernetes_applications(self, run_once=False):
+        """Infinite loop which fetches and hands over the Kubernetes Application
+        resources to the right coroutine. The specific exceptions and error handling
+        have to be added here.
 
         This function is meant to be run as background task. Lock the handling of a
         resource with the :attr:`lock` attribute.
@@ -186,20 +249,66 @@ class Scheduler(Controller):
             if run_once:
                 break  # TODO: should we keep this? Only useful for tests
 
+    async def handle_magnum_clusters(self, run_once=False):
+        """Infinite loop which fetches and hands over the MagnumCluster resources to the
+        right coroutine. The specific exceptions and error handling have to be added
+        here.
+
+        This function is meant to be run as background task. Lock the handling of a
+        resource with the :attr:`lock` attribute.
+
+        Args:
+            run_once (bool, optional): if True, the function only handles one resource,
+                then stops. Otherwise, continue to handle each new resource on the
+                queue indefinitely.
+
+        """
+        while True:
+            key, cluster = await self.magnum_queue.get()
+            try:
+                # TODO: API for supporting different application types
+                logger.debug("Handling %r", cluster)
+                await self.schedule_magnum_cluster(cluster)
+            except ControllerError as error:
+                cluster.status.reason = Reason(code=error.code, message=error.message)
+                cluster.status.state = MagnumClusterState.FAILED
+
+                await self.openstack_api.update_magnum_cluster_status(
+                    namespace=cluster.metadata.namespace,
+                    name=cluster.metadata.name,
+                    body=cluster,
+                )
+            finally:
+                await self.magnum_queue.done(key)
+
+            if run_once:
+                break
+
     async def kubernetes_application_received(self, app):
+        """Process a Kubernetes Application: schedule the Application on a Kubernetes
+        cluster and initiate its rescheduling.
+
+        Args:
+            app (krake.data.kubernetes.Application): the Application to process.
+
+        """
         # TODO: Evaluate spawning a new cluster
         await self.schedule_kubernetes_application(app)
         await self.reschedule_kubernetes_application(app)
 
     async def schedule_kubernetes_application(self, app):
+        """Choose a suitable Kubernetes cluster for the given Application and bound them
+        together.
+
+        Args:
+            app (krake.data.kubernetes.Application): the Application that needs to be
+                scheduled to a Cluster.
+
+        """
         logger.info("Schedule %r", app)
 
         clusters = await self.kubernetes_api.list_all_clusters()
         cluster = await self.select_kubernetes_cluster(app, clusters.items)
-
-        if cluster is None:
-            logger.info("Unable to schedule %r", app.metadata.name)
-            raise UnsuitableDeploymentError("No cluster available")
 
         scheduled_to = resource_ref(cluster)
 
@@ -220,7 +329,70 @@ class Scheduler(Controller):
             body=ClusterBinding(cluster=scheduled_to),
         )
 
+    async def schedule_magnum_cluster(self, cluster):
+        """Choose a suitable OpenStack Project for the given MagnumCluster and bound
+        them together.
+
+        Args:
+            cluster (krake.data.openstack.MagnumCluster): the MagnumCluster that needs
+                to be scheduled to a Project.
+        """
+        assert cluster.status.project is None, "Magnum cluster is already bound"
+
+        logger.info("Schedule %r", cluster)
+
+        projects = await self.openstack_api.list_all_projects()
+        project = await self.select_openstack_project(cluster, projects.items)
+
+        if project is None:
+            logger.info("No matching OpenStack project found for %r", cluster)
+            raise NoProjectFound("No matching OpenStack project found")
+
+        logger.info("Scheduled %r to %r", cluster, project)
+
+        cluster.status.project = resource_ref(project)
+        if cluster.status.project not in cluster.metadata.owners:
+            cluster.metadata.owners.append(cluster.status.project)
+
+        # TODO: How to support and compare different cluster templates?
+        cluster.status.template = project.spec.template
+
+        # TODO: Instead of copying labels and metrics, refactor the scheduler
+        #   to support transitive labels and metrics.
+        cluster.metadata.labels = {**project.metadata.labels, **cluster.metadata.labels}
+
+        # If a metric with the same name is already specified in the Magnum
+        # cluster spec, this takes precedence.
+        metric_names = set(metric.name for metric in cluster.spec.metrics)
+        for metric in project.spec.metrics:
+            if metric.name not in metric_names:
+                cluster.spec.metrics.append(metric)
+
+        # Update owners and status of Magnum cluster
+        #
+        # TODO: Should we introduce another operation of binding the Magnum
+        #   cluster to a project (like for Kubernetes applications)? This would
+        #   give us the possibility to execute this as one operation.
+        await self.openstack_api.update_magnum_cluster(
+            namespace=cluster.metadata.namespace,
+            name=cluster.metadata.name,
+            body=cluster,
+        )
+        await self.openstack_api.update_magnum_cluster_status(
+            namespace=cluster.metadata.namespace,
+            name=cluster.metadata.name,
+            body=cluster,
+        )
+
     async def reschedule_kubernetes_application(self, app):
+        """Ensure that the given Application will go through the scheduling process
+        after a certain interval. This allows an Application to be rescheduled to a
+        more suitable Cluster if a better one is found.
+
+        Args:
+            app (krake.data.kubernetes.Application): the Application to reschedule.
+
+        """
         # Put the application into the work queue with a certain delay. This
         # ensures the rescheduling of the application. Only put it if there is
         # not already another version of the resource in the queue. This check
@@ -229,6 +401,108 @@ class Scheduler(Controller):
         if app.metadata.uid not in self.queue.dirty:
             logger.debug("Reschedule %r in %s secs", app, self.reschedule_after)
             await self.queue.put(app.metadata.uid, app, delay=self.reschedule_after)
+
+    @staticmethod
+    def match_cluster_constraints(app, cluster):
+        """Evaluate if all application constraints labels match cluster labels.
+
+        Args:
+            app (krake.data.kubernetes.Application): Application that should be
+                bound.
+            cluster (krake.data.kubernetes.Cluster): Cluster to which the
+                application should be bound.
+
+        Returns:
+            bool: True if the cluster fulfills all application cluster constraints
+
+        """
+        if not app.spec.constraints:
+            return True
+
+        # Cluster constraints
+        if app.spec.constraints.cluster:
+            # Label constraints for the cluster
+            if app.spec.constraints.cluster.labels:
+                for constraint in app.spec.constraints.cluster.labels:
+                    if constraint.match(cluster.metadata.labels or {}):
+                        logger.debug(
+                            "Cluster %s matches constraint %r",
+                            resource_ref(cluster),
+                            constraint,
+                        )
+                    else:
+                        logger.debug(
+                            "Cluster %s does not match constraint %r",
+                            resource_ref(cluster),
+                            constraint,
+                        )
+                        return False
+
+        logger.debug(
+            "Cluster %s fulfills constraints of application %r",
+            resource_ref(cluster),
+            resource_ref(app),
+        )
+
+        return True
+
+    @staticmethod
+    def match_project_constraints(cluster, project):
+        """Evaluate if all application constraints labels match project labels.
+
+        Args:
+            cluster (krake.data.openstack.MagnumCluster): Cluster that is scheduled
+            project (krake.data.kubernetes.project): Project to which the
+                cluster should be bound.
+
+        Returns:
+            bool: True if the project fulfills all project constraints
+
+        """
+        if not cluster.spec.constraints:
+            return True
+
+        # project constraints
+        if cluster.spec.constraints.project:
+            # Label constraints for the project
+            if cluster.spec.constraints.project.labels:
+                for constraint in cluster.spec.constraints.project.labels:
+                    if constraint.match(project.metadata.labels or {}):
+                        logger.debug(
+                            "Project %s matches constraint %r",
+                            resource_ref(project),
+                            constraint,
+                        )
+                    else:
+                        logger.debug(
+                            "Project %s does not match constraint %r",
+                            resource_ref(project),
+                            constraint,
+                        )
+                        return False
+
+        logger.debug("Project %s fulfills constraints of %r", project, cluster)
+
+        return True
+
+    @staticmethod
+    def select_maximum(ranked):
+        """From a list of ClusterRank, get the one with the best rank. If several
+        ClusterRank have the same rank, one of them is chosen randomly.
+
+        Args:
+            ranked (List[ClusterRank]): the best rank will be taken from this list.
+
+        Returns:
+            ClusterRank: an element of the given list with the maximum rank.
+
+        """
+        # Find all maxima
+        best = max(ranked)
+        maximum = [rank for rank in ranked if rank == best]
+
+        # Select randomly between best projects
+        return random.choice(maximum)
 
     async def select_kubernetes_cluster(self, app, clusters):
         """Select suitable kubernetes cluster for application binding.
@@ -247,8 +521,8 @@ class Scheduler(Controller):
         ]
 
         if not matching:
-            logger.info("Unable to match application constraints to any cluster")
-            return None
+            logger.info("No matching Kubernetes cluster for %r found", app)
+            raise NoClusterFound("No matching Kubernetes cluster found")
 
         # Partition list if matching clusters into a list if clusters with
         # metrics and without metrics. Clusters with metrics are preferred
@@ -268,15 +542,56 @@ class Scheduler(Controller):
             ranked = await self.rank_kubernetes_clusters(app, with_metrics)
 
         if not ranked:
-            logger.info("Unable to rank any cluster")
-            return None
+            logger.info("Unable to rank any Kubernetes cluster")
+            raise NoClusterFound("No Kubernetes cluster available")
 
-        # Find all maximal ranked clusters
-        best = max(ranked)
-        maximum = [rank for rank in ranked if rank == best]
+        return self.select_maximum(ranked).cluster
 
-        # Select randomly between best clusters
-        return random.choice(maximum).cluster
+    async def select_openstack_project(self, cluster, projects):
+        """Select "best" OpenStack project for the Magnum cluster.
+
+        Args:
+            cluster (krake.data.openstack.MagnumCluster): Cluster that should
+                be bound to a project
+            projects (List[krake.data.openstack.Project]): Projects between the
+                "best" one is chosen.
+
+        Returns:
+            krake.data.openstack.Project, None: Best project matching the
+            constraints of the Magnum cluster. None if no project can be found.
+
+        """
+        matching = [
+            project
+            for project in projects
+            if self.match_project_constraints(cluster, project)
+        ]
+
+        if not matching:
+            logger.info("No matching OpenStack project found for %r", cluster)
+            raise NoProjectFound("No matching OpenStack project found")
+
+        # Filter projects with metrics which are preferred over projects
+        # without metrics.
+        with_metrics = [project for project in matching if project.spec.metrics]
+
+        # Only use projects without metrics when there are no projects with
+        # metrics.
+        if not with_metrics:
+            ranked = [
+                self.calculate_openstack_project_rank((), project)
+                for project in projects
+            ]
+        else:
+            # Rank the projects based on their metric and return the project with
+            # a minimal rank.
+            ranked = await self.rank_openstack_projects(cluster, with_metrics)
+
+        if not ranked:
+            logger.info("Unable to rank any project")
+            raise NoProjectFound("No OpenStack project available")
+
+        return self.select_maximum(ranked).project
 
     async def rank_kubernetes_clusters(self, app, clusters):
         """Rank kubernetes clusters based on metrics values and weights.
@@ -289,45 +604,84 @@ class Scheduler(Controller):
             List[ClusterRank]: Ranked list of clusters
 
         """
-        ranked_clusters = []
-        for cluster in clusters:
-            try:
-                metrics = await self._fetch_metrics(cluster)
-            except (MetricError, ClientError) as err:
-                # If there is any issue with a metric, skip this cluster for
-                # evaluation.
-                logger.error(err)
-                continue
+        return [
+            self.calculate_kubernetes_cluster_rank(metrics, cluster, app)
+            for cluster in clusters
+            async for metrics in self.fetch_metrics(cluster, cluster.spec.metrics)
+        ]
 
-            for metric, value, weight in metrics:
-                logger.debug(
-                    "Received metric %r with value %r for cluster %r",
-                    metric.metadata.name,
-                    value,
-                    cluster.metadata.name,
-                )
+    async def rank_openstack_projects(self, cluster, projects):
+        """Rank OpenStack projects based on metric values and weights.
 
-            rank = self.calculate_kubernetes_cluster_rank(metrics, cluster, app)
-            ranked_clusters.append(rank)
+        Args:
+            cluster (krake.data.openstack.MagnumCluster): Cluster that is scheduled
+            projects (List[krake.data.openstack.Project]): List of projects to rank
 
-        return ranked_clusters
+        Returns:
+            List[ProjectRank]: Ranked list of projects
+        """
+        return [
+            self.calculate_openstack_project_rank(metrics, project)
+            for project in projects
+            async for metrics in self.fetch_metrics(project, project.spec.metrics)
+        ]
 
-    async def _fetch_metrics(self, cluster):
-        assert cluster.spec.metrics, "Cluster does not have any metric assigned"
+    async def fetch_metrics(self, resource, metrics):
+        """Async generator for fetching metrics by the given list of metric
+        references.
+
+        If a :class:`MetricError` or `ClientError` occurs, the generator stops
+        which means resources where an error during metric fetching occurs can
+        be skipped by:
+
+        .. code:: python
+
+            ranked = [
+                self.rank_foo()
+                for foo in foos
+                async for metrics in self.fetch_metrics(foo, foo.spec.metrics)
+            ]
+
+        Args:
+            resource (krake.data.serializable.ApiObject): API resource to which
+                the metrics belong.
+            metrics (List[krake.data.core.MetricRef]): References to metrics
+                that should be fetched.
+
+        Yields:
+            List[Tuple[krake.core.Metric, float, float]]: List of fetched
+                metrics with their value and weight.
+
+        """
+        assert metrics, "Got empty list of metric references"
+
         fetching = []
-
-        for metric_spec in cluster.spec.metrics:
-            metric = await self.core_api.read_metric(name=metric_spec.name)
-            metrics_provider = await self.core_api.read_metrics_provider(
-                name=metric.spec.provider.name
-            )
-            fetching.append(
-                fetch_query(
-                    self.client.session, metric, metrics_provider, metric_spec.weight
+        try:
+            for metric_spec in metrics:
+                metric = await self.core_api.read_metric(name=metric_spec.name)
+                metrics_provider = await self.core_api.read_metrics_provider(
+                    name=metric.spec.provider.name
                 )
+                fetching.append(
+                    fetch_query(
+                        self.client.session,
+                        metric,
+                        metrics_provider,
+                        metric_spec.weight,
+                    )
+                )
+            fetched = await asyncio.gather(*fetching)
+        except (MetricError, ClientError) as err:
+            # If there is any issue with a metric, skip stop the generator.
+            logger.error(err)
+            return
+
+        for metric, value, weight in fetched:
+            logger.debug(
+                "Received metric %r with value %r for %r", metric, value, resource
             )
 
-        return await asyncio.gather(*fetching)
+        yield fetched
 
     def calculate_kubernetes_cluster_rank(self, metrics, cluster, app):
         """Calculate weighted sum of metrics values.
@@ -378,3 +732,24 @@ class Scheduler(Controller):
             return Stickiness(weight=0, value=0)
 
         return Stickiness(weight=self.stickiness, value=1.0)
+
+    def calculate_openstack_project_rank(self, metrics, project):
+        """Calculate rank of OpenStack project based on the given metrics.
+
+        Args:
+            metrics (List[krake.metrics.QueryResult]): List of metric query results
+            project (krake.data.openstack.Project): Project that is ranked
+
+        Returns:
+            ProjectRank: Rank of the passed project based on metrics and
+            Magnum cluster.
+
+        """
+        # Rank for a OpenStack project without any metrics
+        if not metrics:
+            return ProjectRank(rank=0, project=project)
+
+        norm = sum(metric.weight for metric in metrics)
+        rank = sum(metric.value * metric.weight for metric in metrics) / norm
+
+        return ProjectRank(rank=rank, project=project)
