@@ -672,8 +672,13 @@ class MagnumClusterController(Controller):
                     created=None,
                     modified=None,
                     owners=[resource_ref(cluster)],
+                    # TODO: There should be support for transitive labels and
+                    #   metrics in the scheduler. For now, we simply copy.
+                    labels=cluster.metadata.labels.copy(),
                 ),
-                spec=KubernetesClusterSpec(kubeconfig=kubeconfig),
+                spec=KubernetesClusterSpec(
+                    kubeconfig=kubeconfig, metrics=cluster.spec.metrics.copy()
+                ),
             )
             await self.kubernetes_api.create_cluster(
                 namespace=kube.metadata.namespace, body=kube
