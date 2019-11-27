@@ -1,10 +1,11 @@
 """This module defines a declarative API for defining data models that are
 JSON-serializable and JSON-deserializable.
 """
+import sys
 import dataclasses
 from enum import Enum
 from datetime import datetime, date
-from typing import List, Dict
+import typing
 from webargs import fields
 from marshmallow import (
     Schema,
@@ -49,6 +50,125 @@ class ModelizedSchema(Schema):
             excluded = {key: None for key in self.exclude}
             return self.__model__(**data, **excluded)
         return data
+
+
+def is_generic(cls):
+    """Detects any kind of generic, for example `List` or `List[int]`. This
+    includes "special" types like Union and Tuple - anything that's subscriptable,
+    basically.
+
+    Args:
+        cls: Type annotation that should be checked
+
+    Returns:
+        bool: True if the passed type annotation is a generic.
+
+    """
+    return _is_generic(cls)
+
+
+def is_base_generic(cls):
+    """Detects generic base classes, for example ``List`` but not
+    ``List[int]``.
+
+    Args:
+        cls: Type annotation that should be checked
+
+    Returns:
+        bool: True if the passed type annotation is a generic base.
+
+    """
+    return _is_base_generic(cls)
+
+
+def is_qualified_generic(cls):
+    """Detects generics with arguments, for example ``List[int]`` but not
+    ``List``
+
+    Args:
+        cls: Type annotation that should be checked
+
+    Returns:
+        bool: True if the passed type annotation is a qualified generic.
+    .
+    """
+    return is_generic(cls) and not is_base_generic(cls)
+
+
+def is_generic_subtype(cls, base):
+    """Check if a given generic class is a subtype of another generic class
+
+    If the base is a qualified generic, e.g. ``List[int]``, it is checked if
+    the types are equal. Otherwise, it is checked if the original type, e.g.
+    :class:`list` for :class:`typing.List`, of the class is a subclass of the
+    original type of the generic base class.
+
+    Args:
+        cls: Generic type
+        base: Generic type that should be the base of the given generic type.
+
+    Returns:
+        bool: True of the given generic type is a subtype of the given base
+        generic type.
+
+    """
+    if is_qualified_generic(base):
+        return cls == base
+
+    return issubclass(_get_origin(cls), _get_origin(base))
+
+
+if sys.version_info >= (3, 7):
+
+    def _is_generic(cls):
+        if isinstance(cls, typing._GenericAlias):
+            return True
+
+        if isinstance(cls, typing._SpecialForm):
+            return cls not in {typing.Any}
+
+        return False
+
+    def _is_base_generic(cls):
+        if isinstance(cls, typing._GenericAlias):
+            if cls.__origin__ == typing.Generic:
+                return False
+
+            if isinstance(cls, typing._VariadicGenericAlias):
+                return True
+
+            return len(cls.__parameters__) > 0
+
+        if isinstance(cls, typing._SpecialForm):
+            return cls._name in {"ClassVar", "Union", "Optional"}
+
+        return False
+
+    def _get_origin(cls):
+        return cls.__origin__
+
+
+else:  # Python 3.6
+
+    def _is_generic(cls):
+        if isinstance(
+            cls, (typing.GenericMeta, typing._Union, typing._Optional, typing._ClassVar)
+        ):
+            return True
+
+        return False
+
+    def _is_base_generic(cls):
+        if isinstance(cls, (typing.GenericMeta, typing._Union)):
+            return cls.__args__ in {None, ()}
+
+        if isinstance(cls, typing._Optional):
+            return True
+
+        return False
+
+    def _get_origin(cls):
+        return cls.__extra__
 
 
 _native_to_marshmallow = {
@@ -104,27 +224,28 @@ def field_for_schema(type_, default=dataclasses.MISSING, **metadata):
     if metadata.get("missing", missing) == missing:
         metadata.setdefault("required", True)
 
-    if type_ in _native_to_marshmallow:
-        return _native_to_marshmallow[type_](**metadata)
-
-    if issubclass(type_, Enum):
-        return EnumField(type_, **metadata)
-
-    if issubclass(type_, List):
-        inner_type = type_.__args__[0]
-        inner_serializer = field_for_schema(inner_type)
-        return fields.List(inner_serializer, **metadata)
-
-    if issubclass(type_, Dict):
-        keys_field = field_for_schema(type_.__args__[0])
-        values_field = field_for_schema(type_.__args__[1])
-        return fields.Dict(keys=keys_field, values=values_field, **metadata)
-
     if hasattr(type_, "Schema"):
         return fields.Nested(type_.Schema, **metadata)
 
     if hasattr(type_, "Field"):
         return type_.Field(**metadata)
+
+    if type_ in _native_to_marshmallow:
+        return _native_to_marshmallow[type_](**metadata)
+
+    if is_qualified_generic(type_):
+        if is_generic_subtype(type_, typing.List):
+            inner_type = type_.__args__[0]
+            inner_serializer = field_for_schema(inner_type)
+            return fields.List(inner_serializer, **metadata)
+
+        if is_generic_subtype(type_, typing.Dict):
+            keys_field = field_for_schema(type_.__args__[0])
+            values_field = field_for_schema(type_.__args__[1])
+            return fields.Dict(keys=keys_field, values=values_field, **metadata)
+
+    elif isinstance(type_, type) and issubclass(type_, Enum):
+        return EnumField(type_, **metadata)
 
     raise NotImplementedError(f"No serializer found for {type_!r}")
 
@@ -330,7 +451,9 @@ class Serializable(metaclass=SerializableMeta):
             if not immutable:
                 value = getattr(overwrite, field.name)
 
-                if issubclass(field.type, Serializable):
+                if isinstance(field.type, type) and issubclass(
+                    field.type, Serializable
+                ):
                     # Overwrite value is None, just set it directly
                     if value is None:
                         setattr(self, field.name, None)
