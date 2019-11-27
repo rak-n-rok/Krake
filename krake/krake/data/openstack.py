@@ -194,3 +194,23 @@ class MagnumClusterList(ApiObject):
     kind: str = "ProjectList"
     metadata: ListMetadata
     items: List[MagnumCluster]
+
+
+class MagnumClusterBinding(ApiObject):
+    """Binding object for Magnum clusters.
+
+    This resource is used to assign a :class:`Project` to
+    :attr:`MagnumCluster.status.project`.
+
+    Attributes:
+        project (.core.ResourceRef): Reference to the :class:`Project` to which
+            the Magnum cluster will be bound
+        template (str): UUID of the Magnum cluster template that should be used
+            to create the cluster
+
+    """
+
+    api: str = "openstack"
+    kind: str = "MagnumClusterBinding"
+    project: ResourceRef
+    template: str

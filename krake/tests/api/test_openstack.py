@@ -1,8 +1,19 @@
 from operator import attrgetter
-from factories.openstack import ProjectFactory, AuthMethodFactory, MagnumClusterFactory
 
-from krake.data.openstack import Project, ProjectList, MagnumCluster, MagnumClusterList
+from krake.data.core import resource_ref, ResourceRef
+from krake.data.openstack import (
+    Project,
+    ProjectList,
+    MagnumCluster,
+    MagnumClusterList,
+    MagnumClusterState,
+    MagnumClusterBinding,
+)
 from krake.api.app import create_app
+from krake.api.database import revision
+
+from factories.core import ReasonFactory
+from factories.openstack import ProjectFactory, AuthMethodFactory, MagnumClusterFactory
 
 
 async def test_list_projects(aiohttp_client, config, db):
@@ -399,6 +410,101 @@ async def test_magnum_cluster_template_immutable(aiohttp_client, config, db):
         cluster, namespace=data.metadata.namespace, name=cluster.metadata.name
     )
     assert stored.status.template == "template1"
+
+
+async def test_magnum_cluster_status_update(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+    cluster = MagnumClusterFactory(status__state=MagnumClusterState.PENDING)
+
+    await db.put(cluster)
+
+    cluster.status.state = MagnumClusterState.FAILED
+    cluster.status.reason = ReasonFactory()
+    cluster.status.project = ResourceRef(
+        api="openstack", kind="Project", namespace="testing", name="test-project"
+    )
+
+    resp = await client.put(
+        f"/openstack/namespaces/testing/magnumclusters/{cluster.metadata.name}/status",
+        json=cluster.serialize(),
+    )
+    assert resp.status == 200
+    received = MagnumCluster.deserialize(await resp.json())
+    assert received.metadata == cluster.metadata
+    assert received.status == cluster.status
+
+    stored = await db.get(
+        MagnumCluster, namespace="testing", name=cluster.metadata.name
+    )
+    assert stored.status == received.status
+    assert revision(stored).version == 2
+
+
+async def test_magnum_cluster_status_update_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
+
+    resp = await client.put(
+        "/openstack/namespaces/testing/magnumclusters/my-cluster/status"
+    )
+    assert resp.status == 403
+
+    async with rbac_allow("openstack", "magnumclusters/status", "update"):
+        resp = await client.put(
+            "/openstack/namespaces/testing/magnumclusters/my-cluster/status"
+        )
+        assert resp.status == 415
+
+
+async def test_magnum_cluster_binding_update(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+    cluster = MagnumClusterFactory(status__state=MagnumClusterState.PENDING)
+    project = ProjectFactory()
+
+    assert not cluster.metadata.owners, "Unexpected owners"
+    assert cluster.status.project is None
+
+    await db.put(cluster)
+    await db.put(project)
+
+    project_ref = resource_ref(project)
+    resp = await client.put(
+        f"/openstack/namespaces/testing/magnumclusters/{cluster.metadata.name}/binding",
+        json=MagnumClusterBinding(
+            project=project_ref, template=project.spec.template
+        ).serialize(),
+    )
+    assert resp.status == 200
+    body = await resp.json()
+    received = MagnumCluster.deserialize(body)
+    assert received.status.project == project_ref
+    assert received.status.template == project.spec.template
+    assert received.status.state == MagnumClusterState.PENDING
+    assert project_ref in received.metadata.owners
+
+    stored = await db.get(
+        MagnumCluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+    )
+    assert stored.status.project == project_ref
+    assert stored.status.template == project.spec.template
+    assert stored.status.state == MagnumClusterState.PENDING
+    assert project_ref in stored.metadata.owners
+
+
+async def test_magnum_cluster_binding_update_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
+
+    resp = await client.put(
+        "/openstack/namespaces/testing/magnumclusters/my-cluster/binding"
+    )
+    assert resp.status == 403
+
+    async with rbac_allow("openstack", "magnumclusters/binding", "update"):
+        resp = await client.put(
+            "/openstack/namespaces/testing/magnumclusters/my-cluster/binding"
+        )
+        assert resp.status == 404
 
 
 async def test_delete_magnum_cluster(aiohttp_client, config, db):

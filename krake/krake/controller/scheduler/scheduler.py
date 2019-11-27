@@ -6,7 +6,7 @@ from typing import NamedTuple
 from functools import total_ordering
 from aiohttp import ClientError
 
-from krake.data.openstack import Project, MagnumClusterState
+from krake.data.openstack import Project, MagnumClusterState, MagnumClusterBinding
 from krake.client.openstack import OpenStackApi
 from krake.client.core import CoreApi
 from krake.client.kubernetes import KubernetesApi
@@ -348,15 +348,6 @@ class Scheduler(Controller):
             logger.info("No matching OpenStack project found for %r", cluster)
             raise NoProjectFound("No matching OpenStack project found")
 
-        logger.info("Scheduled %r to %r", cluster, project)
-
-        cluster.status.project = resource_ref(project)
-        if cluster.status.project not in cluster.metadata.owners:
-            cluster.metadata.owners.append(cluster.status.project)
-
-        # TODO: How to support and compare different cluster templates?
-        cluster.status.template = project.spec.template
-
         # TODO: Instead of copying labels and metrics, refactor the scheduler
         #   to support transitive labels and metrics.
         cluster.metadata.labels = {**project.metadata.labels, **cluster.metadata.labels}
@@ -368,20 +359,20 @@ class Scheduler(Controller):
             if metric.name not in metric_names:
                 cluster.spec.metrics.append(metric)
 
-        # Update owners and status of Magnum cluster
-        #
-        # TODO: Should we introduce another operation of binding the Magnum
-        #   cluster to a project (like for Kubernetes applications)? This would
-        #   give us the possibility to execute this as one operation.
         await self.openstack_api.update_magnum_cluster(
             namespace=cluster.metadata.namespace,
             name=cluster.metadata.name,
             body=cluster,
         )
-        await self.openstack_api.update_magnum_cluster_status(
+
+        # TODO: How to support and compare different cluster templates?
+        logger.info("Scheduled %r to %r", cluster, project)
+        await self.openstack_api.update_magnum_cluster_binding(
             namespace=cluster.metadata.namespace,
             name=cluster.metadata.name,
-            body=cluster,
+            body=MagnumClusterBinding(
+                project=resource_ref(project), template=project.spec.template
+            ),
         )
 
     async def reschedule_kubernetes_application(self, app):

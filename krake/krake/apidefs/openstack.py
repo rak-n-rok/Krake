@@ -1,4 +1,10 @@
-from krake.data.openstack import Project, ProjectList, MagnumCluster, MagnumClusterList
+from krake.data.openstack import (
+    Project,
+    ProjectList,
+    MagnumCluster,
+    MagnumClusterList,
+    MagnumClusterBinding,
+)
 from .definitions import ApiDef, subresource, operation, Scope, ListQuery
 
 
@@ -110,4 +116,13 @@ class MagnumClusterResource:
             method = "PUT"
             path = "/openstack/namespaces/{namespace}/magnumclusters/{name}/status"
             body = MagnumCluster
+            response = MagnumCluster
+
+    @subresource
+    class Binding:
+        @operation
+        class Update:
+            method = "PUT"
+            path = "/openstack/namespaces/{namespace}/magnumclusters/{name}/binding"
+            body = MagnumClusterBinding
             response = MagnumCluster

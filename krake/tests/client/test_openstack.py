@@ -4,8 +4,8 @@ from operator import attrgetter
 from krake.api.app import create_app
 from krake.client import Client
 from krake.client.openstack import OpenStackApi
-from krake.data.core import ListMetadata, WatchEventType
-from krake.data.openstack import Project, MagnumCluster
+from krake.data.core import ListMetadata, WatchEventType, resource_ref
+from krake.data.openstack import Project, MagnumCluster, MagnumClusterBinding
 from krake.utils import aenumerate
 from krake.test_utils import with_timeout
 
@@ -349,6 +349,36 @@ async def test_read_magnum_cluster(aiohttp_server, config, db, loop):
             namespace=data.metadata.namespace, name=data.metadata.name
         )
         assert received == data
+
+
+async def test_update_magnum_cluster_binding(aiohttp_server, config, db, loop):
+    cluster = MagnumClusterFactory()
+    project = ProjectFactory()
+    await db.put(cluster)
+    await db.put(project)
+
+    project_ref = resource_ref(project)
+    binding = MagnumClusterBinding(project=project_ref, template=project.spec.template)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        openstack_api = OpenStackApi(client)
+        received = await openstack_api.update_magnum_cluster_binding(
+            namespace=cluster.metadata.namespace,
+            name=cluster.metadata.name,
+            body=binding,
+        )
+        assert received.status.project == project_ref
+        assert received.status.template == project.spec.template
+        assert project_ref in received.metadata.owners
+
+    stored = await db.get(
+        MagnumCluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+    )
+    assert stored.status.project == project_ref
+    assert stored.status.template == project.spec.template
+    assert project_ref in stored.metadata.owners
 
 
 async def test_delete_magnum_cluster(aiohttp_server, config, db, loop):

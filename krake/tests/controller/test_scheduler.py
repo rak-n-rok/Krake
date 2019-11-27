@@ -982,6 +982,7 @@ async def test_openstack_scheduling(aiohttp_server, config, db, loop):
             name=cluster.metadata.name,
         )
         assert stored.status.project == resource_ref(project)
+        assert resource_ref(project) in stored.metadata.owners
         assert stored.status.template == project.spec.template
 
 
