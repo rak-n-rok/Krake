@@ -27,10 +27,10 @@ class WorkQueue(object):
     """Simple asynchronous work queue.
 
     The key manages a set of key-value pairs. The queue guarantees strict
-    sequential processing of keys: If a key-value pair was retrieved via
-    :meth:`get`, the same key is not returned via :meth:`get` as long as
-    :meth:`done` with the same key is called again even if in the time of
-    processing a new key-value pair was put into the queue.
+    sequential processing of keys: A key-value pair retrieved via :meth:`get`
+    is not returned via :meth:`get` again until :meth:`done` with the
+    corresponding key is called, even if a new key-value pair with the
+    corresponding key was put into the queue in the meantime.
 
     Args:
         maxsize (int, optional): Maximal number of items in the queue before
@@ -158,7 +158,7 @@ class WorkQueue(object):
                 await timer
 
     def empty(self):
-        """Check of the queue is empty
+        """Check if the queue is empty
 
         Returns
             bool: True if there are no dirty keys
@@ -191,21 +191,19 @@ class Reflector(object):
 
     Args:
         listing (coroutine): the coroutine used to get the list of resources currently
-            stored by the API. Its signature is: ``() -> list``.
+            stored by the API. Its signature is: ``() -> ApplicationList``.
         watching (coroutine): the coroutine used to watch updates on the resources, as
             as sent by the API. Its signature is: ``() -> watching object``. This
             watching object should be able to be used as context manager, and as
             generator.
-        on_list (coroutine): the coroutine called when with the fetched resources
-            as parameter. Its signature is: ``(resource) -> None``.
+        on_list (coroutine): the coroutine called when listing all resources with the
+            fetched resources as parameter. Its signature is: ``(resource) -> None``.
         on_add (coroutine, optional): the coroutine called during watch, when an
             ADDED event has been received. Its signature is: ``(resource) -> None``.
         on_update (coroutine, optional): the coroutine called during watch, when a
-            MODIFIED event has been received.
-            Its signature is: ``(resource) -> None``.
+            MODIFIED event has been received. Its signature is: ``(resource) -> None``.
         on_delete (coroutine, optional): the coroutine called during watch, when a
-            DELETED event has been received.
-            Its signature is: ``(resource) -> None``.
+            DELETED event has been received. Its signature is: ``(resource) -> None``.
     """
 
     def __init__(
@@ -368,13 +366,13 @@ class Controller(object):
     watching and enqueuing API resources.
 
     The basic workflow is as follows: the controller holds several background
-    tasks. The API resources are watched by an Reflector, which calls a handler
+    tasks. The API resources are watched by a Reflector, which calls a handler
     on each received state of a resource. Any received new state is put into a
     :class:`WorkQueue`. Multiple workers consume this queue. Workers are
     responsible for doing the actual state transitions. The work queue ensures
-    that a resource is processed by one worker at the same time (strict
-    sequential). The status of the real world resources is monitored by an
-    Observer (another background task).
+    that a resource is processed by one worker at a time (strict sequential).
+    The status of the real world resources is monitored by an Observer (another
+    background task).
 
     However, this workflow is just a possibility. By modifying :meth:`__init__`
     (or other functions), it is possible to add other queues, change the
