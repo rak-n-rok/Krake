@@ -36,11 +36,18 @@ development setup. Advanced topics are covered in the
 
 ### Installation
 
-All dependencies can be installed via the corresponding `setup.py` scripts.
+All dependencies can be installed via the corresponding `setup.py` scripts,
+either with or without development dependencies. Installing them into a
+[Python virtualenv][virtualenv] is recommended.
+
+```bash
+# Install "krake" and "rok" without development dependencies
+pip install --editable "krake" --editable "rok"
+```
 
 ```bash
 # Install "krake" and "rok" with development dependencies
-pip install --editable krake/[dev] rok/[dev]
+pip install --editable "krake/[dev]" --editable "rok/[dev]"
 ```
 
 
@@ -218,3 +225,4 @@ transformed to an open source project in September 2019.
 [user-docs]: https://rak-n-rok.readthedocs.io/projects/krake/en/readthedocs/user/index.html
 [sphinx]: http://www.sphinx-doc.org/
 [krake-matrix]: https://riot.im/app/#/room/#krake:matrix.org
+[virtualenv]: https://virtualenv.pypa.io/en/stable
