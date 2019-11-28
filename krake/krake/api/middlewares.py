@@ -2,6 +2,7 @@
 import asyncio
 import json
 from aiohttp import web
+from krake.api.helpers import HttpReason, HttpReasonCode
 
 from .database import Session, TransactionError
 
@@ -38,9 +39,12 @@ def database(host, port, retry=1):
                 except TransactionError as err:
                     request.app.logger.warn("Transaction failed (%s)", err)
 
+            reason = HttpReason(
+                reason="Concurrent writes to database",
+                code=HttpReasonCode.TRANSACTION_ERROR,
+            )
             raise web.HTTPConflict(
-                text=json.dumps({"reason": "Concurrent writes to database"}),
-                content_type="application/json",
+                text=json.dumps(reason.serialize()), content_type="application/json"
             )
 
     return database_middleware

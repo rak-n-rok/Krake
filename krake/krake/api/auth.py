@@ -88,7 +88,7 @@ from inspect import isasyncgen
 from aiohttp import web
 
 from krake.data.core import Verb, Role, RoleBinding
-from .helpers import session, json_error
+from .helpers import session, json_error, HttpReason, HttpReasonCode
 
 
 def static_authentication(name):
@@ -171,8 +171,11 @@ def keystone_authentication(endpoint):
             headers={"X-Auth-Token": token, "X-Subject-Token": token},
         )
         if resp.status != 200:
-            reason = f"Invalid Keystone token " f"(HTTP {resp.status} {resp.reason})"
-            raise json_error(web.HTTPUnauthorized, {"reason": reason})
+            message = f"Invalid Keystone token " f"(HTTP {resp.status} {resp.reason})"
+            reason = HttpReason(
+                reason=message, code=HttpReasonCode.INVALID_KEYSTONE_TOKEN
+            )
+            raise json_error(web.HTTPUnauthorized, reason.serialize())
 
         data = await resp.json()
         return data["token"]["user"]["name"]

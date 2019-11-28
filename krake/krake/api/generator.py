@@ -13,7 +13,7 @@ from webargs.aiohttpparser import use_kwargs
 from krake.data.serializable import readonly_fields
 from krake.data.core import WatchEvent, WatchEventType, ListMetadata
 from ..utils import camel_to_snake_case, get_field
-from .helpers import load, session, Heartbeat, use_schema
+from .helpers import load, session, Heartbeat, use_schema, HttpReason, HttpReasonCode
 from .auth import protected
 from .database import EventType
 
@@ -288,17 +288,21 @@ def _make_create_handler(operation, logger):
 
         if existing is not None:
             if namespace:
-                reason = (
+                message = (
                     f"{operation.resource.singular} {body.metadata.name!r} already "
                     f"exists in namespace {namespace!r}"
                 )
             else:
-                reason = (
+                message = (
                     f"{operation.resource.singular} {body.metadata.name!r} "
                     "already exists"
                 )
+
+            reason = HttpReason(
+                reason=message, code=HttpReasonCode.RESOURCE_ALREADY_EXISTS
+            )
             raise web.HTTPConflict(
-                text=json.dumps({"reason": reason}), content_type="application/json"
+                text=json.dumps(reason.serialize()), content_type="application/json"
             )
 
         now = datetime.now()
