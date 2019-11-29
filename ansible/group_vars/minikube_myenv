@@ -1,0 +1,15 @@
+allow_icmp: false
+flavor: M.mem+
+kube_api_config: /etc/kubernetes/manifests/kube-apiserver.yaml
+kubectl_version: v1.16.2
+minikube_api_port: 9443
+minikube_install_dir: /usr/local/bin
+minikube_path: /var/lib/minikube/certs
+minikube_version: v1.4.0
+prometheus_port: 31000
+secrules:
+- port: 9443
+  protocol: tcp
+use_keystone: false
+user_project: demo
+user_role: _member_

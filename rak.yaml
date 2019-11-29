@@ -1,0 +1,3 @@
+ansible_directory: "/home/mg/gitlab/krake/ansible"
+profile_directory: "/home/mg/gitlab/krake/rak/rak/profiles"
+ansible_inventory_file: "hosts.yaml"

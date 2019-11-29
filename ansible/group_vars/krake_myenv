@@ -1,0 +1,6 @@
+docker_daemon_mtu: 1450
+flavor: S
+krake_api_port: 8080
+secrules:
+- port: 8080
+  protocol: tcp

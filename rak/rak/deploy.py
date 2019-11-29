@@ -6,8 +6,10 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.inventory.manager import InventoryManager
 from ansible.vars.manager import VariableManager
 
+import os
 
-def deploy_hosts(hosts):
+
+def make_executor(hosts, ansible_dir, ansible_inventory_file):
 
     loader = DataLoader()
 
@@ -35,7 +37,7 @@ def deploy_hosts(hosts):
     )
 
     inventory = InventoryManager(
-        loader=loader, sources=("/home/mg/gitlab/krake/ansible/hosts.yaml",)
+        loader=loader, sources=(os.path.join(ansible_dir, ansible_inventory_file))
     )
     inventory.subset(", ".join(hosts))
 
@@ -50,6 +52,16 @@ def deploy_hosts(hosts):
         loader=loader,
         passwords={},
     )
+
+    return pbex
+
+
+def deploy(config, hosts):
+
+    ansible_dir = config["ansible_dir"]
+    ansible_inventory_file = config["ansible_inventory_file"]
+
+    pbex = make_executor(hosts, ansible_dir, ansible_inventory_file)
 
     results = pbex.run()
 

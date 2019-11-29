@@ -8,10 +8,6 @@ parameters:
     type: string
     description: Name of the instance
 
-  #key:
-  #  type: string
-  #  description: Name of a keypair to enable SSH access to the instance
-
   public_keys:
     type: comma_delimited_list
     description: Public keys to authorize

@@ -1,0 +1,17 @@
+OS_use_config_drive: true
+allow_icmp: true
+common_port_list:
+- port: 22
+  protocol: tcp
+create_floating_ip: false
+etc_dir: '{{ playbook_dir }}/.etc'
+image: 3763d928-2ebd-11e9-a3fe-4b7ceb61b0b3
+key_file: ~/.ssh/id_rsa
+keypair: matthiasgoerens
+private_subnet_cidr: 192.168.0.0/24
+public_keys:
+- ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCYMJJjdHwWeYjS4fUQw18Bj2zHzcKPO3d5r+o3N/3zR7dE4hy0jH3xegXQjjf7ddSf4xE+1n3l/E+o9YrDPDARUxu067MlnBCdw8I9NqDD48o0JfpnQ4bk89eTN3eQue4G7sE6Sfefr2Hmq7ltMDF3pnkX3d5GDf4sdDunfZx1OlNBcSdhrZpX7Pwnb1AFwCoOLi3OmFDfEjLrQ2r3mkNSMCvtOxdgme3iYAgVQEKrnQxoZujKPZw8uGz7EZFIB6sqWcmyn/pFa+cVrJ01eEm7iERLWuixpYLAqNmfa8iociAgyEfvBFMVM2dF7HwF4Yb37DAncBgyqY27EQAZ8O65pGcPN4OBkdzn0BtPgMjJq+1fbAZTYSJ7LC6SNaa14lfuXgRWOV+kVUXZRKB5Hc7qYoOYGgFcuq9PRceERRJ6Y3y79QZTZz+imNstL+OLy1AlQGBf/7JoiZwQv4cBn0rxXDmhYsTj016+JSCLFX2LEOlyw3o8IkC3cnlQRLN/7Yrdzqlk0X6OrciqTsAwdtVMSJiRhJ+zSWhLaxY2FUh7rVxxNBFIzFXP/woj8VjOrD3+D/eLSSPgeQA7pjXGjG/z9bl2chnUMrT/blarROUMEW2flysaoEzmJ9FozpO7pfzXXmToBgdiR1up7xUBgeKdWSugEC9W+poqwKzX/3Xc5w==
+  mg@630-361
+public_network_name: shared-public-IPv4
+router_uuid: 6c8e7313-bde6-4208-a65e-ad714a915f08
+use_gateway: true

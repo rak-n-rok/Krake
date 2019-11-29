@@ -3,51 +3,55 @@ import yaml
 
 from dataclasses import MISSING
 
+from enum import Enum
+
 # from typing import NamedTuple
 
 # Directory structure definition
 # GIT_DIR = "/home/mg/gitlab/krake"
 # RAK_DIR = "rak/rak"
-PROFILE_DIRECTORY = "profiles"
-DEFAULT_PROFILES_DIRECTORY = "defaults"
-current_dir = os.path.dirname(os.path.realpath(__file__))
+# profile_directory = "profiles"
 
 
 class InvalidHostname(Exception):
     pass
 
 
+class InvalidGroupname(Exception):
+    pass
+
+
+class Host_Type(Enum):
+    krake = "krake"
+    gateway = "gateway"
+    minikube = "minikube"
+
+
 class SubProfile(object):
-    def __init__(self, name):
+    def __init__(self, name, profile_directory):
         self.name = name
-        self._variables = MISSING
+        self.profile_directory = profile_directory
+        self.variables = {}
 
-    @property
-    def variables(self):
-        if self._variables is not MISSING:
-            return self._variables
-
-        self._variables = {}
-        for file in self.files_to_load():
+    def load_variables(self):
+        for file in self.files_to_load(self.profile_directory):
             try:
                 with open(file) as f:
-                    # data = yaml.load(f, Loader=yaml.FullLoader)
-                    vars_to_add = yaml.load(f)
+                    vars_to_add = yaml.load(f, Loader=yaml.FullLoader)
             except FileNotFoundError:
                 print(f"File {file} couldn't be found")
                 pass
             else:
-                self._variables.update(vars_to_add)
+                self.variables.update(vars_to_add)
 
-        return self._variables
-
-    def files_to_load(self):
+    def files_to_load(self, profile_directory):
         raise NotImplementedError
 
 
 class Environment(SubProfile):
-    def __init__(self, name):
-        super().__init__(name)
+    def __init__(self, name, profile_directory):
+        super().__init__(name, profile_directory)
+        self.load_variables()
 
         self.private_network_name = f"krake-{self.name}-network"
         self.private_subnet_name = f"krake-{self.name}-subnet"
@@ -65,13 +69,11 @@ class Environment(SubProfile):
     def public_network_name(self):
         return self.variables["public_network_name"]
 
-    def files_to_load(self):
+    def files_to_load(self, profile_directory):
 
         files_to_load = [
-            os.path.join(
-                current_dir, PROFILE_DIRECTORY, DEFAULT_PROFILES_DIRECTORY, "all.yaml"
-            ),
-            os.path.join(current_dir, PROFILE_DIRECTORY, self.name, "all.yaml"),
+            os.path.join(profile_directory, "defaults", "all.yaml"),
+            os.path.join(profile_directory, self.name, "all.yaml"),
         ]
 
         return files_to_load
@@ -120,26 +122,33 @@ class Environment(SubProfile):
 
 
 class Group(SubProfile):
-    def __init__(self, name):
-        super().__init__(name)
-        (host_type, environment_name) = name.split("_")
-        self.host_type = host_type  # krake, minikube, gateway
-        self.environment_name = environment_name
+    def __init__(self, name, profile_directory):
+        super().__init__(name, profile_directory)
+        self.host_type, self.environment_name = self.parse_groupname(name)
+        self.load_variables()
+        self.environment = None
 
-    def files_to_load(self):
+    @staticmethod
+    def parse_groupname(groupname):
+        try:
+            # Use filter to remove empty string
+            (host_type, environment_name) = filter(None, groupname.split("_"))
+        except ValueError:
+            raise InvalidGroupname
+
+        try:
+            check_host_type = Host_Type(host_type)
+        except ValueError:
+            raise InvalidGroupname
+
+        return (check_host_type.value, environment_name)
+
+    def files_to_load(self, profile_directory):
 
         files_to_load = [
+            os.path.join(profile_directory, "defaults", f"{self.host_type}.yaml"),
             os.path.join(
-                current_dir,
-                PROFILE_DIRECTORY,
-                DEFAULT_PROFILES_DIRECTORY,
-                f"{self.host_type}.yaml",
-            ),
-            os.path.join(
-                current_dir,
-                PROFILE_DIRECTORY,
-                self.environment_name,
-                f"{self.host_type}.yaml",
+                profile_directory, self.environment_name, f"{self.host_type}.yaml"
             ),
         ]
 
@@ -149,18 +158,14 @@ class Group(SubProfile):
 class Host(SubProfile):
     """docstring for Host"""
 
-    def __init__(self, name):
-        super().__init__(name)
+    def __init__(self, name, profile_directory):
+        super().__init__(name, profile_directory)
 
-        try:
-            (host_type, environment_name, uid) = name.split("_")
-        except ValueError:
-            raise InvalidHostname
+        (self.host_type, self.environment_name, self.uid) = self.parse_hostname(name)
 
-        self.host_type = host_type
-        self.environment_name = environment_name
-        self.uid = uid
-        self.group_name = f"{host_type}_{environment_name}"
+        self.group_name = f"{self.host_type}_{self.environment_name}"
+
+        self.load_variables()
 
         self.group = None
         self.environment = None
@@ -168,6 +173,26 @@ class Host(SubProfile):
 
         self.stack_outputs = {}
         self.ansible_variables = {}
+
+    @staticmethod
+    def parse_hostname(hostname):
+        try:
+            # Use filter to remove empty string
+            (host_type, environment_name, uid) = filter(None, hostname.split("_"))
+        except ValueError:
+            raise InvalidHostname
+
+        try:
+            check_host_type = Host_Type(host_type)
+        except ValueError:
+            raise InvalidHostname
+
+        try:
+            int(uid)
+        except ValueError:
+            raise InvalidHostname
+
+        return (check_host_type.value, environment_name, uid)
 
     @property
     def full_profile(self):
@@ -179,16 +204,11 @@ class Host(SubProfile):
 
         return self._full_profile
 
-    @property
-    def host_vars(self):
-        return {**self.variables, **self.stack_outputs, **self.ansible_variables}
-
-    def files_to_load(self):
+    def files_to_load(self, profile_directory):
 
         files_to_load = [
             os.path.join(
-                current_dir,
-                PROFILE_DIRECTORY,
+                profile_directory,
                 self.environment_name,
                 self.host_type,
                 f"{self.uid}.yaml",
@@ -210,8 +230,6 @@ class Host(SubProfile):
             or update
 
         """
-
-        print(self.full_profile["create_floating_ip"])
 
         stack_parameters = {
             "instance_name": self.name,
@@ -243,8 +261,6 @@ class Host(SubProfile):
 
         stack_parameters["secrule_ports"] = ", ".join(map(str, port_list))
         stack_parameters["secrule_protocols"] = ", ".join(protocol_list)
-
-        print(stack_parameters)
 
         return stack_parameters
 

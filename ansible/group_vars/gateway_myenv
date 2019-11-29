@@ -1,0 +1,6 @@
+create_floating_ip: true
+flavor: XS
+secrules:
+- port: 1194
+  protocol: udp
+vpn_cidr: 10.9.0.0/24
