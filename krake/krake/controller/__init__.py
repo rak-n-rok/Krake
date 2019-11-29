@@ -8,8 +8,9 @@ import asyncio
 import logging
 import os.path
 import signal
+
 from copy import deepcopy
-from itertools import count
+from math import exp
 from statistics import mean
 from contextlib import suppress
 
@@ -280,25 +281,64 @@ class Reflector(object):
                 self.list_resource(), self.watch_resource(watcher), loop=self.loop
             )
 
-    async def __call__(self, max_retry=0):
-        """Start the Reflector. Encapsulate the connections with a retry logic.
+    async def __call__(self, min_interval=2):
+        """Start the Reflector. Encapsulate the connections with a retry logic, as
+        disconnections are expected. If any other kind of error occurs, they are not
+        swallowed.
+
+        Between two connection attempts, the connection will be retried later with a
+        delay. If the connection fails to fast, the delay will be increased, to wait for
+        the API to be ready. If the connection succeeded for a certain interval, the
+        value of the delay is reset.
 
         Args:
-            max_retry (int, optional): the number of times the connection should be
-            retried. If 0 is given, it means it should be retried indefinitely
+            min_interval (int, optional): if the connection was kept longer than this
+                value, the delay is reset to the base value, as it is considered that a
+                connection was possible.
 
         """
-        for i in count():
+        retries = 0
+        base_delay = sigmoid_delay(retries)
+        while True:
+            start = self.loop.time()
             try:
                 await self.list_and_watch()
             except ClientConnectorError as err:
                 logger.error(err)
-                await asyncio.sleep(1)
 
-            # This is never true when "max_retry" is None or 0 which leads
-            # to an infinite loop.
-            if i + 1 == max_retry:
-                break
+            elapsed = self.loop.time() - start
+
+            # Compute the delay until the next connection retry
+            if elapsed > min_interval:
+                # If the connection succeeded for at least a certain period,
+                # reset the delay
+                delay = base_delay
+                retries = 0
+            else:
+                # If the connection failed too often, compute a new delay.
+                delay = sigmoid_delay(retries)
+
+            await asyncio.sleep(delay)
+            retries += 1
+
+
+def sigmoid_delay(retries, maximum=60.0, steepness=0.75, midpoint=10.0, base=1.0):
+    """Compute a waiting time (delay) depending on the number of retries already
+    performed. The computing function is a sigmoid.
+
+    Args:
+        retries (int): the number of attempts that happened already.
+        maximum (float): the maximum delay that can be attained. Maximum of the sigmoid.
+        steepness (float): how fast the delay increases. Steepness of the sigmoid.
+        midpoint (float): number of retries to reach the delay between maximum and base.
+            Midpoint of the sigmoid.
+        base (float): minimum value for the delay.
+
+    Returns:
+        float: the computed next delay.
+
+    """
+    return base + (maximum - base) / (1 + exp(-steepness * (retries - midpoint)))
 
 
 async def joint(*aws, loop=None):
