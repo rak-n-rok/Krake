@@ -11,13 +11,14 @@ Prerequisites
 ===================
 
 - `Ansible 2.7.x <https://docs.ansible.com/ansible/latest/roadmap/ROADMAP_2_7.html>`_ using a Python 3 interpreter
+- `The full Openstack client <https://pypi.org/project/openstackclient/>`_ python module
 - `Docker <https://pypi.org/project/docker/>`_ Python module
 
 It is suggested that Ansible is installed inside the virtualenv of Krake.
 
 .. code::
 
-    pip install ansible~=2.7.0 docker
+    pip install ansible~=2.7.0 docker openstackclient
 
 Check the version and Python executable of the Ansible installation:
 
