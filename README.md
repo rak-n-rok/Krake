@@ -83,7 +83,7 @@ support/prometheus
 python -m krake.api
 
 # Run the Garbage Collector
-python -m krake.controller.garbage_collector
+python -m krake.controller.gc
 
 # Run the krake Scheduler
 python -m krake.controller.scheduler

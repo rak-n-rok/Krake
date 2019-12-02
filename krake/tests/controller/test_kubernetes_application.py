@@ -540,9 +540,7 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.running_on is None
-    assert "kubernetes_resources_deletion" not in stored.metadata.finalizers
-    assert resource_ref(cluster) not in stored.metadata.owners
+    assert stored is None
 
 
 async def test_register_service():

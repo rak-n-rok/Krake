@@ -363,13 +363,24 @@ def _make_update_handler(operation, logger):
         entity.update(body)
         entity.metadata.modified = datetime.now()
 
-        await session(request).put(entity)
-        logger.info(
-            "Update %s %r (%s)",
-            operation.resource.singular,
-            entity.metadata.name,
-            entity.metadata.uid,
-        )
+        # Resource is in "deletion in progress" state and all finalizers have
+        # been removed. Delete the resource from database.
+        if entity.metadata.deleted and not entity.metadata.finalizers:
+            await session(request).delete(entity)
+            logger.info(
+                "Delete %s %r (%s)",
+                operation.resource.singular,
+                entity.metadata.name,
+                entity.metadata.uid,
+            )
+        else:
+            await session(request).put(entity)
+            logger.info(
+                "Update %s %r (%s)",
+                operation.resource.singular,
+                entity.metadata.name,
+                entity.metadata.uid,
+            )
 
         return web.json_response(entity.serialize())
 
@@ -393,6 +404,7 @@ def _make_delete_handler(operation, logger):
         # TODO: Should be update "modified" here?
         # Resource marked as deletion, to be deleted by the Garbage Collector
         entity.metadata.deleted = datetime.now()
+        entity.metadata.finalizers.append("cascade_deletion")
 
         await session(request).put(entity)
         logger.info(

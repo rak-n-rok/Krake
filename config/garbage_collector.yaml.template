@@ -1,10 +1,13 @@
 ## Configuration file for the Krake Garbage Collector
 
-etcd:
-  host: $etcd_host
-  port: $etcd_port
+api_endpoint: $api_endpoint
 worker_count: $worker_count
 debounce: $debounce
+tls:
+  enabled: $tls_enabled
+  client_ca: $cert_dir/ca.pem
+  client_cert: $cert_dir/system:gc.pem
+  client_key: $cert_dir/system:gc-key.pem
 
 
 log:

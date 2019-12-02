@@ -204,6 +204,11 @@ class Reflector(object):
             MODIFIED event has been received. Its signature is: ``(resource) -> None``.
         on_delete (coroutine, optional): the coroutine called during watch, when a
             DELETED event has been received. Its signature is: ``(resource) -> None``.
+        resource_plural (str, optional): name of the resource that the reflector is
+            monitoring. For logging purpose. Default is ``"resources"``
+        loop (asyncio.AbstractEventLoop, optional): Event loop that should be
+            used.
+
     """
 
     def __init__(
@@ -214,6 +219,7 @@ class Reflector(object):
         on_add=None,
         on_update=None,
         on_delete=None,
+        resource_plural=None,
         loop=None,
     ):
         if not loop:
@@ -226,11 +232,15 @@ class Reflector(object):
         self.on_update = on_update
         self.on_delete = on_delete
 
+        if not resource_plural:
+            resource_plural = "resources"
+        self.resource_plural = resource_plural
+
     async def list_resource(self):
         """Pass each resource returned by the current instance's listing function
         as parameter to the receiving function.
         """
-        logger.info("Listing resources")
+        logger.info(f"Listing {self.resource_plural}")
         if self.on_list is None:
             return
 
@@ -248,7 +258,7 @@ class Reflector(object):
                 resource occurs
 
         """
-        logger.info("Watching resources")
+        logger.info(f"Watching {self.resource_plural}")
         async for event in watcher:
             logger.debug("Received %r", event)
             resource = event.object
