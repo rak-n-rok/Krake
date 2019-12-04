@@ -29,6 +29,8 @@
 *.pyc
 __pycache__/
 .pytest_cache/
+.tox/
+.coverage*
 
 # pip egg installation files
 *.egg-info/

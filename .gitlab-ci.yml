@@ -1,5 +1,6 @@
 stages:
   - test
+  - coverage
   - provision
   - smoke test
   - integration test
@@ -9,6 +10,7 @@ stages:
 variables:
   ETCD_VER: v3.3.13
   PROMETHEUS_VER: 2.12.0
+  CFSSL_VER: 1.4.1
 
   # Change pip's cache directory to be inside the project directory since we
   # can only cache local items.
@@ -33,9 +35,11 @@ cache:
 # https://gitlab.com/gitlab-org/gitlab/merge_requests/18130), we have to work
 # with duplicated pipelines on merge requests.
 
-unittests-krake:
+.unittests-krake-template: &unittests-krake
   stage: test
-  image: python:3.6
+  artifacts:
+    paths:
+      - krake/.coverage.*
   only:
     - tags
     - branches
@@ -58,11 +62,41 @@ unittests-krake:
     - rm -rf /tmp/prometheus-download /tmp/prometheus.tar.gz
     - prometheus --version
 
-    - pip install krake/[dev]
-    - pip install keystone
-    - pytest --runslow krake/tests
+    # Download cfssl
+    - curl -s -L https://github.com/cloudflare/cfssl/releases/download/v${CFSSL_VER}/cfssl_${CFSSL_VER}_linux_amd64 -o /usr/local/bin/cfssl
+    - curl -s -L https://github.com/cloudflare/cfssl/releases/download/v${CFSSL_VER}/cfssljson_${CFSSL_VER}_linux_amd64 -o /usr/local/bin/cfssljson
+    - chmod +x /usr/local/bin/cfssl /usr/local/bin/cfssljson
+    - cfssl version
+    - cfssljson --version
+
+    - pip install tox
+    - tox -- --cov krake/krake --no-cov-on-fail --cov-report= --runslow krake/tests
   tags:
     - docker
+
+
+unittests-krake-3.6:
+  <<: *unittests-krake
+  image: python:3.6
+  variables:
+    TOXENV: py36
+    COVERAGE_FILE: krake/.coverage.py36
+
+
+unittests-krake-3.7:
+  <<: *unittests-krake
+  image: python:3.7
+  variables:
+    TOXENV: py37
+    COVERAGE_FILE: krake/.coverage.py37
+
+
+unittests-krake-3.8:
+  <<: *unittests-krake
+  image: python:3.8
+  variables:
+    TOXENV: py38
+    COVERAGE_FILE: krake/.coverage.py38
 
 
 flake8-krake:
@@ -93,6 +127,23 @@ flake8-rok:
     - flake8 rok/rok
   tags:
     - docker
+
+
+# Combine code coverage reports from previous tox runs for all different
+# Python environments. Report code coverage for Krake Python package and exit
+# with non-zero if the code coverage ratio is under 85%.
+coverage-krake:
+  stage: coverage
+  image: python:3.6
+  script:
+    - pip install coverage
+    - coverage combine krake/.coverage.*
+    - coverage report --fail-under 85
+  only:
+    - tags
+    - branches
+    - merge_requests
+    - schedules
 
 
 # Following jobs are for end to end testing. We provisioning the staging
