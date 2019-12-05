@@ -28,7 +28,7 @@ class Response(object):
         return self._json
 
 
-def run(command, retry=0, interval=1, condition=None, error_message=""):
+def run(command, retry=10, interval=1, condition=None):
     """Runs a subprocess
 
     This function runs the provided ``command`` in a subprocess.
@@ -46,23 +46,19 @@ def run(command, retry=0, interval=1, condition=None, error_message=""):
 
     The signature of ``condition`` is:
 
-    .. function:: my_condition(response, error_message)
+    .. function:: my_condition(response)
 
         :param Response response: The command response.
-        :param string error_message: The error message to include in the
-            ``AssertionError`` if raised.
         :raises AssertionError: Raised when the condition is not met.
 
     Note that is doesn't make sense to provide a ``condition`` without a
     ``retry``. One should rather test this condition in the calling function.
 
     Args:
-        command (str): The command to run
-        retry (int, optional): Number of retry to perform
+        command (list): The command to run
+        retry (int, optional): Number of retry to perform. Defaults to 10
         interval (int, optional): Interval in seconds between two retries
         condition (callable, optional): Condition that has to be met.
-        error_message (str, optional): Error message to return if the
-            specified condition is not met
 
     Returns:
         Response: The output and return code of the provided command
@@ -77,8 +73,12 @@ def run(command, retry=0, interval=1, condition=None, error_message=""):
 
             # This condition will check if the command has a null return
             # value
-            def check_return_code(response, error_message):
-                assert response.returncode == 0, error_message
+            def check_return_code(error_message):
+
+                def validate(response):
+                    assert response.returncode == 0, error_message
+
+                return validate
 
             # This command has a risk of race condition
             some_command = "..."
@@ -87,18 +87,20 @@ def run(command, retry=0, interval=1, condition=None, error_message=""):
             # successful or will raise an AssertionError
             util.run(
                 some_command,
-                condition=check_return_code,
-                error_message="Unable to run the command successfully",
+                condition=check_return_code("error message"),
                 retry=10,
                 interval=1,
             )
 
     """
+    if isinstance(command, str):
+        command = command.split()
+
     logger.debug(f"Running: {command}")
 
     while True:
         process = subprocess.run(
-            command.split(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+            command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
         )
 
         response = Response(process.stdout.decode(), process.returncode)
@@ -109,7 +111,7 @@ def run(command, retry=0, interval=1, condition=None, error_message=""):
             return response
 
         try:
-            condition(response, error_message)
+            condition(response)
             # If condition is met, return the response
             logger.debug(f"Response from the command: \n{response.output}")
             return response
