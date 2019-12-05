@@ -53,10 +53,7 @@ mapper.add_arguments(parser)
 
 def main(config):
     setup_logging(config.log)
-    logger.debug(
-        "Krake Scheduler configuration settings:\n %s",
-        pprint.pformat(config)
-    )
+    logger.debug("Krake Scheduler configuration settings:\n %s", pprint.pformat(config))
 
     tls_config = config.tls
     ssl_context = create_ssl_context(tls_config)

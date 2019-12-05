@@ -511,8 +511,7 @@ mapper.add_arguments(parser)
 def main(config):
     setup_logging(config.log)
     logger.debug(
-        "Krake Garbage Collector configuration settings:\n %s",
-        pprint.pformat(config)
+        "Krake Garbage Collector configuration settings:\n %s", pprint.pformat(config)
     )
 
     tls_config = config.tls

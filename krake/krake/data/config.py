@@ -69,7 +69,7 @@ class CompleteHookConfiguration(Serializable):
         default="/etc/krake_ca/ca.pem",
         metadata={
             "help": "Environment variable to be used in the Kubernetes Application"
-        }
+        },
     )
     env_token: str = field(
         default="KRAKE_TOKEN",
@@ -78,18 +78,17 @@ class CompleteHookConfiguration(Serializable):
                 "Name of the environment variable to be used in the Kubernetes"
                 "Application to access the token to identify the Application."
             )
-        }
+        },
     )
     env_complete: str = field(
         default="KRAKE_COMPLETE_URL",
         metadata={
-            "help":
-                (
-                    "Name of the environment variable to be used in the Kubernetes"
-                    "Application to access the actual API endpoint of Krake to notify"
-                    "the end of job."
-                )
-        }
+            "help": (
+                "Name of the environment variable to be used in the Kubernetes"
+                "Application to access the actual API endpoint of Krake to notify"
+                "the end of job."
+            )
+        },
     )
 
 

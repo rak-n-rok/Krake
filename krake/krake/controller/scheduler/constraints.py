@@ -1,3 +1,8 @@
+"""This module evaluates if all application constraints match cluster.
+Only clusters that fulfills all application constraints could be considered by scheduler
+algorithm as a potential clusters for application deployment.
+
+"""
 import logging
 from typing import NamedTuple, Callable
 

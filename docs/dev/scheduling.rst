@@ -16,9 +16,9 @@ Constraints
 
 This section describes the application constraints definition used in Krake scheduling algorithm.
 
-Krake scheduler filters appropriate clusters based on defined application constraints.
-Cluster can be accepted by scheduler as a potential destination for given application only if
-match all defined application constraints.
+The Krake scheduler filters appropriate clusters based on defined application constraints.
+A Cluster can be accepted by scheduler as a potential destination for given application only if it matches
+all defined application constraints.
 
 .. note::
 
@@ -29,10 +29,10 @@ match all defined application constraints.
 Custom resources:
 -----------------
 
-- Krake allows the user to deploy an application made on Custom Resources (CR).
+- Krake allows the user to deploy an application made on the Custom Resources (CR).
 
-  The user can define which CRs are available on his cluster. CR is defined
-  by Custom Resource Definition (CRD) and Krake uses CRD name in format ``<plural>.<group>``
+  The user can define which CRs are available on his cluster. A CR is defined
+  by the Custom Resource Definition (CRD) and Krake uses CRD name in format ``<plural>.<group>``
   as a marker.
   The supported CRD names are defined by ``-R`` or ``--custom-resource`` option in rok CLI.
 
@@ -44,9 +44,9 @@ Custom resources:
 
     rok kube cluster create <kubeconfig> --custom-resource <plural>.<group>
 
-  The applications made on CR has to be explicitly labeled by ``cluster resource constraint``.
-  This explicit lablel is used in Krake decision algorithm to select an appropriate
-  cluster where the CR is supported. Cluster resource constraints are defined by CRD name
+  The applications made on the CR has to be explicitly labeled by ``cluster resource constraint``.
+  This explicit label is used in Krake decision algorithm to select an appropriate
+  cluster where the CR is supported. A Cluster resource constraints are defined by CRD name
   in format ``<plural>.<group>`` using ``-R`` or ``--cluster-resource-constraint`` option in rok CLI.
 
   See also :ref:`user/rok-documentation:Rok documentation`.
