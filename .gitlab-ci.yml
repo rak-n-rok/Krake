@@ -167,7 +167,7 @@ provision-staging-infra:
     - schedules
   script:
     # Pre-requisites: openstack, ansible and pytest
-    - pip install python-openstackclient openstacksdk ansible==2.7.10 pytest
+    - pip install python-openstackclient openstacksdk "ansible>=2.9" pytest
     - apt-get update -y && apt-get install openssh-client rsync -y
 
     # Create SSH keys for to use during the whole pipeline
@@ -196,7 +196,7 @@ smoke-tests:
     - schedules
   script:
     # Pre-requisites: Ansible
-    - pip install ansible==2.7.10
+    - pip install "ansible>=2.9"
     - apt-get update -y && apt-get install openssh-client rsync -y
 
     # Run Ansible playbook to execute smoke test on the staging infrastructure
@@ -215,7 +215,7 @@ integration-tests:
     - schedules
   script:
     # Pre-requisites: Ansible
-    - pip install ansible==2.7.10
+    - pip install "ansible>=2.9"
     - apt-get update -y && apt-get install openssh-client rsync -y
 
     # Run Ansible to execute the integration tests
@@ -234,7 +234,7 @@ cleanup-staging-infra:
     - schedules
   script:
     # Pre-requisites: OpenStack and Ansible
-    - pip install python-openstackclient openstacksdk ansible==2.7.10
+    - pip install python-openstackclient openstacksdk "ansible>=2.9"
     - apt-get update -y && apt-get install openssh-client rsync -y
 
     # Delete the runner SSH keys
