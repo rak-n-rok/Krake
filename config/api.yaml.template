@@ -39,21 +39,6 @@ authentication:
 #
 authorization: always-allow
 
-default-roles:
-- metadata:
-    name: system:admin
-  rules:
-  - api: ""           # Empty string refers to all APIs
-    namespaces: [""]  # Empty string refers to all namespaces
-    resources: [""]   # Empty string refers to all resources
-    verbs: ["create", "list", "get", "update", "delete"]
-
-default-role-bindings:
-- metadata:
-    name: system:admin
-  users: ["system:admin"]
-  roles: ["system:admin"]
-
 
 log:
   version: 1

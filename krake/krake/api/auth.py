@@ -84,7 +84,6 @@ Currently, there are three authorization implementations available:
 """
 from functools import wraps
 from typing import NamedTuple, Optional
-from inspect import isasyncgen
 from aiohttp import web
 
 from krake.data.core import Verb, Role, RoleBinding
@@ -252,12 +251,7 @@ async def rbac(request, auth_request):
         raise web.HTTPUnauthorized()
 
     # Load roles of the user
-    roles = _fetch_roles(
-        session(request),
-        request.app["default_roles"],
-        request.app["default_role_bindings"],
-        user,
-    )
+    roles = _fetch_roles(session(request), user)
 
     # Check if any role grants access
     async for role in roles:
@@ -329,15 +323,11 @@ def protected(api, resource, verb):
     return decorator
 
 
-async def _fetch_roles(db, default_roles, default_role_bindings, username):
+async def _fetch_roles(db, username):
     """Async generator for all roles associated with the given user.
 
     Args:
         db (krake.api.database.Session): Database session
-        default_roles (Dict[str, krake.data.core.Role]): Statically
-            configured system roles.
-        default_role_bindings (Dict[str, krake.data.core.RoleBinding]):
-            Statically configured system role bindings.
 
     Yields:
         krake.data.core.Role: Role associated with the user.
@@ -345,38 +335,15 @@ async def _fetch_roles(db, default_roles, default_role_bindings, username):
     """
     roles = set()
 
-    bindings = (binding async for binding in db.all(RoleBinding))
+    bindings = db.all(RoleBinding)
 
     # FIXME: Use a cache
-    async for binding in _chain(default_role_bindings, bindings):
+    async for binding in bindings:
         if username in binding.users:
             for name in binding.roles:
                 if name not in roles:
                     roles.add(name)
 
-                    try:
-                        role = default_roles[name]
-                    except KeyError:
-                        role = await db.get(Role, name=name)
-
+                    role = await db.get(Role, name=name)
                     if role is not None:
                         yield role
-
-
-async def _chain(*iterators):
-    """Chain asynchronous and synchronous iterables
-
-    Args:
-        *iterators: asynchronous and synchronous iterables
-
-    Yield:
-        Values of all passed iterables
-
-    """
-    for iterator in iterators:
-        if isasyncgen(iterator):
-            async for value in iterator:
-                yield value
-        else:
-            for value in iterator:
-                yield value

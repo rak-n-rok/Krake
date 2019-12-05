@@ -218,26 +218,6 @@ def config(etcd_server, user):
         },
         "authorization": "always-allow",
         "etcd": {"host": etcd_host, "port": etcd_port, "retry_transactions": 0},
-        "default_roles": [
-            {
-                "metadata": {"name": "system:admin"},
-                "rules": [
-                    {
-                        "api": "all",
-                        "namespaces": ["all"],
-                        "resources": ["all"],
-                        "verbs": ["create", "list", "get", "update", "delete"],
-                    }
-                ],
-            }
-        ],
-        "default_role_bindings": [
-            {
-                "metadata": {"name": "system:admin"},
-                "users": ["system:admin"],
-                "roles": ["system:admin"],
-            }
-        ],
         "log": {},
     }
     return ApiConfiguration.deserialize(config, creation_ignored=True)

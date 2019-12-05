@@ -52,6 +52,11 @@ async def me(request):
     return web.json_response({"user": user, "roles": sorted(roles)})
 
 
+@routes.get("/release")
+async def release(request):
+    return web.json_response("You released the Krake.", status=202)
+
+
 def create_app(config):
     """Create aiohttp application instance providing the Krake HTTP API
 
@@ -96,12 +101,6 @@ def create_app(config):
     app["config"] = config
     app["authorizer"] = authorizer
     app["ssl_context"] = ssl_context
-
-    # TODO: Default roles and role bindings should reside in the database as
-    #   well. This means the database needs to be populated with these roles and
-    #   bindings during the bootstrap process of Krake (with "rag" tool).
-    app["default_roles"] = {role.metadata.name: role for role in config.default_roles}
-    app["default_role_bindings"] = [binding for binding in config.default_role_bindings]
 
     # Cleanup contexts
     app.cleanup_ctx.append(http_session)
