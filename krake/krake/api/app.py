@@ -23,7 +23,7 @@ import logging
 import ssl
 from aiohttp import web, ClientSession
 
-from krake.data.core import Role, RoleBinding
+from krake.data.core import RoleBinding
 from . import __version__ as version
 from . import middlewares
 from . import auth
@@ -56,25 +56,25 @@ def create_app(config):
     """Create aiohttp application instance providing the Krake HTTP API
 
     Args:
-        config (dict): Application configuration
+        config (krake.data.config.ApiConfiguration): Application configuration object
 
     Returns:
         aiohttp.web.Application: Krake HTTP API
     """
     logger = logging.getLogger("krake.api")
 
-    if not config["tls"]["enabled"]:
+    if not config.tls.enabled:
         ssl_context = None
     else:
         ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
         ssl_context.verify_mode = ssl.CERT_OPTIONAL
 
         ssl_context.load_cert_chain(
-            certfile=config["tls"]["cert"], keyfile=config["tls"]["key"]
+            certfile=config.tls.client_cert, keyfile=config.tls.client_key
         )
 
         # Load authorities for client certificates.
-        client_ca = config["tls"]["client_ca"]
+        client_ca = config.tls.client_ca
         if client_ca:
             ssl_context.load_verify_locations(cafile=client_ca)
 
@@ -87,9 +87,9 @@ def create_app(config):
             middlewares.error_log(),
             authentication,
             middlewares.database(
-                host=config["etcd"]["host"],
-                port=config["etcd"]["port"],
-                retry=config["etcd"].get("retry_transactions", 1),
+                host=config.etcd.host,
+                port=config.etcd.port,
+                retry=config.etcd.retry_transactions,
             ),
         ],
     )
@@ -100,22 +100,8 @@ def create_app(config):
     # TODO: Default roles and role bindings should reside in the database as
     #   well. This means the database needs to be populated with these roles and
     #   bindings during the bootstrap process of Krake (with "rag" tool).
-    app["default_roles"] = (
-        {}
-        if not config.get("default-roles")
-        else {
-            role.metadata.name: role
-            for role in (Role.deserialize(role) for role in config["default-roles"])
-        }
-    )
-    app["default_role_bindings"] = (
-        []
-        if not config.get("default-role-bindings")
-        else [
-            RoleBinding.deserialize(binding)
-            for binding in config["default-role-bindings"]
-        ]
-    )
+    app["default_roles"] = {role.metadata.name: role for role in config.default_roles}
+    app["default_role_bindings"] = [binding for binding in config.default_role_bindings]
 
     # Cleanup contexts
     app.cleanup_ctx.append(http_session)
@@ -154,7 +140,7 @@ def load_authentication(config):
     strategy.
 
     Args:
-        config (dict): Application configuration
+        config (krake.data.config.ApiConfiguration): Application configuration object
 
     Returns:
         aiohttp middleware handling request authentication
@@ -162,22 +148,20 @@ def load_authentication(config):
     """
     authenticators = []
 
-    allow_anonymous = config["authentication"].get("allow_anonymous", False)
-    strategy = config["authentication"]["strategy"]
+    allow_anonymous = config.authentication.allow_anonymous
+    strategy = config.authentication.strategy
 
-    if strategy["static"]["enabled"]:
-        authenticators.append(
-            auth.static_authentication(name=strategy["static"]["name"])
-        )
+    if strategy.static.enabled:
+        authenticators.append(auth.static_authentication(name=strategy.static.name))
 
-    elif strategy["keystone"]["enabled"]:
+    elif strategy.keystone.enabled:
         authenticators.append(
-            auth.keystone_authentication(endpoint=strategy["keystone"]["endpoint"])
+            auth.keystone_authentication(endpoint=strategy.keystone.endpoint)
         )
 
     # If the "client_ca" TLS configuration parameter is given, enable client
     # certificate authentication.
-    if config["tls"]["enabled"] and config["tls"]["client_ca"]:
+    if config.tls.enabled and config.tls.client_ca:
         authenticators.append(auth.client_certificate_authentication())
 
     return middlewares.authentication(authenticators, allow_anonymous)
@@ -187,7 +171,7 @@ def load_authorizer(config):
     """Load authorization function from configuration.
 
     Args:
-        config (dict): Application configuration
+        config (krake.data.config.ApiConfiguration): Application configuration object
 
     Raises:
         ValueError: If an unknown authorization strategy is configured
@@ -196,13 +180,13 @@ def load_authorizer(config):
         Coroutine function for authorizing resource requests
 
     """
-    if config["authorization"] == "always-allow":
+    if config.authorization == "always-allow":
         return auth.always_allow
 
-    if config["authorization"] == "always-deny":
+    if config.authorization == "always-deny":
         return auth.always_deny
 
-    if config["authorization"] == "RBAC":
+    if config.authorization == "RBAC":
         return auth.rbac
 
-    raise ValueError(f"Unknown authorization strategy {config['authorization']!r}")
+    raise ValueError(f"Unknown authorization strategy {config.authorization!r}")

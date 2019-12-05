@@ -10,17 +10,37 @@ Configuration is loaded from the ``controllers.kubernetes.application`` section:
 
 .. code:: yaml
 
-    controllers:
-      kubernetes:
-        application:
-          api_endpoint: http://localhost:8080
-          worker_count: 5
+    api_endpoint: http://localhost:8080
+    worker_count: 5
+    debounce: 1.0
+    hooks:
+      complete:
+        ca_dest: /etc/krake_ca/ca.pem
+        env_token: KRAKE_TOKEN
+        env_complete: KRAKE_COMPLETE_URL
+
+    tls:
+      enabled: false
+      client_ca: tmp/pki/ca.pem
+      client_cert: tmp/pki/system:kubernetes.pem
+      client_key: tmp/pki/system:kubernetes-key.pem
+
+
+    log:
+      ...
 
 """
 import logging
-from argparse import ArgumentParser
+import pprint
+from argparse import ArgumentParser, MetavarTypeHelpFormatter
 
-from krake import load_config, setup_logging, search_config
+from krake import (
+    setup_logging,
+    search_config,
+    ConfigurationOptionMapper,
+    load_yaml_config,
+)
+from krake.data.config import KubernetesConfiguration
 
 from ...controller import create_ssl_context, run
 from .kubernetes_application import ApplicationController
@@ -29,26 +49,40 @@ from .kubernetes_application import ApplicationController
 logger = logging.getLogger("krake.controller.kubernetes")
 
 
+parser = ArgumentParser(
+    description="Kubernetes application controller",
+    formatter_class=MetavarTypeHelpFormatter,
+)
+parser.add_argument("-c", "--config", type=str, help="Path to configuration YAML file")
+
+mapper = ConfigurationOptionMapper(KubernetesConfiguration)
+mapper.add_arguments(parser)
+
+
 def main(config):
-    controller_config = load_config(config or search_config("kubernetes.yaml"))
+    setup_logging(config.log)
+    logger.debug(
+        "Krake Kubernetes Controller configuration settings:\n %s",
+        pprint.pformat(config.serialize()),
+    )
 
-    setup_logging(controller_config["log"])
-
-    tls_config = controller_config.get("tls")
+    tls_config = config.tls
     ssl_context = create_ssl_context(tls_config)
     logger.debug("TLS is %s", "enabled" if ssl_context else "disabled")
 
     controller = ApplicationController(
-        api_endpoint=controller_config["api_endpoint"],
-        worker_count=controller_config["worker_count"],
+        api_endpoint=config.api_endpoint,
+        worker_count=config.worker_count,
         ssl_context=ssl_context,
-        debounce=controller_config.get("debounce", 0),
-        hooks=controller_config["hooks"],
+        debounce=config.debounce,
     )
     run(controller)
 
 
 if __name__ == "__main__":
-    parser = ArgumentParser(description="Kubernetes application controller")
-    parser.add_argument("-c", "--config", help="Path to configuration YAML file")
-    main(**vars(parser.parse_args()))
+    args = vars(parser.parse_args())
+
+    config = load_yaml_config(args["config"] or search_config("kubernetes.yaml"))
+    kubernetes_config = mapper.merge(config, args)
+
+    main(kubernetes_config)

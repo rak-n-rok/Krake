@@ -6,28 +6,41 @@
 
 """
 import logging
-from argparse import ArgumentParser
+import pprint
+from argparse import ArgumentParser, MetavarTypeHelpFormatter
 from aiohttp import web
+from krake.data.config import ApiConfiguration
 
-from .. import load_config, search_config, setup_logging
+from .. import load_yaml_config, setup_logging, ConfigurationOptionMapper, search_config
 from .app import create_app
 
 
 logger = logging.getLogger(__name__)
 
 
-def main(config):
-    api_config = load_config(config or search_config("api.yaml"))
-    setup_logging(api_config["log"])
+parser = ArgumentParser(
+    description="Krake API server", formatter_class=MetavarTypeHelpFormatter
+)
+parser.add_argument("--config", "-c", type=str, help="Path to configuration file")
 
-    app = create_app(api_config)
+mapper = ConfigurationOptionMapper(ApiConfiguration)
+mapper.add_arguments(parser)
+
+
+def main(config):
+    setup_logging(config.log)
+    logger.debug(
+        "Krake configuration settings:\n %s", pprint.pformat(config.serialize())
+    )
+
+    app = create_app(config)
     web.run_app(app, ssl_context=app["ssl_context"])
 
 
-parser = ArgumentParser(description="Krake API server")
-parser.add_argument("--config", "-c", help="Path to configuration file")
-
-
 if __name__ == "__main__":
-    args = parser.parse_args()
-    main(**vars(args))
+    args = vars(parser.parse_args())
+
+    config = load_yaml_config(args["config"] or search_config("api.yaml"))
+    api_config = mapper.merge(config, args)
+
+    main(api_config)

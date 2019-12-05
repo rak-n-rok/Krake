@@ -5,6 +5,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer as Server
 import pytz
 import yaml
+from krake.data.config import HooksConfiguration, TLSConfiguration
 from kubernetes_asyncio.client import V1Status, V1Service, V1ServiceSpec, V1ServicePort
 
 from krake.api.app import create_app
@@ -805,16 +806,19 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
     )
     assert stored.status.services == {}
 
-
-async def test_complete_hook(aiohttp_server, config, db, loop):
-    routes = web.RouteTableDef()
-    hooks_config = dict(
-        complete={
+hooks_config = HooksConfiguration.deserialize(
+    {
+        "complete": {
             "ca_dest": "/etc/krake_ca/ca.pem",
             "env_token": "KRAKE_TOKEN",
             "env_complete": "KRAKE_COMPLETE_URL",
         }
-    )
+    }
+)
+
+
+async def test_complete_hook(aiohttp_server, config, db, loop):
+    routes = web.RouteTableDef()
 
     @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
     async def _(request):
@@ -888,13 +892,6 @@ async def test_complete_hook(aiohttp_server, config, db, loop):
 
 async def test_complete_hook_disable_by_user(aiohttp_server, config, db, loop):
     routes = web.RouteTableDef()
-    hooks_config = dict(
-        complete={
-            "ca_dest": "/etc/krake_ca/ca.pem",
-            "env_token": "KRAKE_TOKEN",
-            "env_complete": "KRAKE_COMPLETE_URL",
-        }
-    )
 
     @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
     async def _(request):
@@ -967,30 +964,21 @@ async def test_complete_hook_disable_by_user(aiohttp_server, config, db, loop):
 
 async def test_complete_hook_tls(aiohttp_server, config, pki, db, loop):
     routes = web.RouteTableDef()
-    hooks_config = dict(
-        complete={
-            "ca_dest": "/etc/krake_ca/ca.pem",
-            "env_token": "KRAKE_TOKEN",
-            "env_complete": "KRAKE_COMPLETE_URL",
-        }
-    )
+
     server_cert = pki.gencert("api-server")
     client_cert = pki.gencert("client")
-    client_tls = {
-        "enabled": True,
-        "client_ca": pki.ca.cert,
-        "client_cert": client_cert.cert,
-        "client_key": client_cert.key,
-    }
+    client_tls = TLSConfiguration(
+        enabled=True,
+        client_ca=pki.ca.cert,
+        client_cert=client_cert.cert,
+        client_key=client_cert.key,
+    )
     ssl_context = create_ssl_context(client_tls)
-    config = dict(
-        config,
-        tls={
-            "enabled": True,
-            "client_ca": pki.ca.cert,
-            "cert": server_cert.cert,
-            "key": server_cert.key,
-        },
+    config.tls = TLSConfiguration(
+        enabled=True,
+        client_ca=pki.ca.cert,
+        client_cert=server_cert.cert,
+        client_key=server_cert.key,
     )
 
     @routes.get("/api/v1/namespaces/default/configmaps/ca.pem")

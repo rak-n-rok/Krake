@@ -182,7 +182,8 @@ async def test_list_apps_from_all_namespaces(aiohttp_client, config, db):
 
 
 async def test_list_apps_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
 
     resp = await client.get("/kubernetes/namespaces/testing/applications")
     assert resp.status == 403
@@ -213,7 +214,8 @@ async def test_create_app(aiohttp_client, config, db):
 
 
 async def test_create_app_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
 
     resp = await client.post("/kubernetes/namespaces/testing/applications")
     assert resp.status == 403
@@ -248,7 +250,8 @@ async def test_get_app(aiohttp_client, config, db):
 
 
 async def test_get_app_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
 
     resp = await client.get("/kubernetes/namespaces/testing/applications/myapp")
     assert resp.status == 403
@@ -314,7 +317,8 @@ async def test_update_app(aiohttp_client, config, db):
 
 
 async def test_update_app_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
 
     resp = await client.put("/kubernetes/namespaces/testing/applications/myapp")
     assert resp.status == 403
@@ -352,7 +356,8 @@ async def test_update_app_status(aiohttp_client, config, db):
 
 
 async def test_update_app_status_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
 
     resp = await client.put("/kubernetes/namespaces/testing/applications/myapp/status")
     assert resp.status == 403
@@ -462,7 +467,8 @@ async def test_add_finializer_in_deleted_app(aiohttp_client, config, db):
 
 
 async def test_delete_app_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
 
     resp = await client.delete("/kubernetes/namespaces/testing/applications/myapp")
     assert resp.status == 403
@@ -648,7 +654,8 @@ async def test_list_clusters(aiohttp_client, config, db):
 
 
 async def test_list_clusters_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
 
     resp = await client.get("/kubernetes/namespaces/testing/clusters")
     assert resp.status == 403
@@ -678,7 +685,8 @@ async def test_create_cluster(aiohttp_client, config, db):
 
 
 async def test_create_clusters_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
 
     resp = await client.post("/kubernetes/namespaces/testing/clusters")
     assert resp.status == 403
@@ -754,7 +762,8 @@ async def test_delete_cluster_already_deleting(aiohttp_client, config, db):
 
 
 async def test_delete_cluster_rbac(rbac_allow, config, aiohttp_client):
-    client = await aiohttp_client(create_app(config=dict(config, authorization="RBAC")))
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
 
     resp = await client.delete("/kubernetes/namespaces/testing/clusters/my-cluster")
     assert resp.status == 403

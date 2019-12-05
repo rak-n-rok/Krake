@@ -20,16 +20,26 @@ The configuration should have the following structure:
       client_cert: tmp/pki/system:gc.pem
       client_key: tmp/pki/system:gc-key.pem
 
+    log:
+      ...
+
 """
 
 import logging
-from argparse import ArgumentParser
+import pprint
+from argparse import ArgumentParser, MetavarTypeHelpFormatter
 from collections import defaultdict
 from copy import deepcopy
 
-from krake import setup_logging, load_config, search_config
+from krake import (
+    setup_logging,
+    search_config,
+    load_yaml_config,
+    ConfigurationOptionMapper,
+)
 from krake.apidefs.kubernetes import ApplicationResource, ClusterResource
 from krake.controller import Controller, run, Reflector, create_ssl_context
+from krake.data.config import ControllerConfiguration
 from krake.data.core import resource_ref
 from krake.client.kubernetes import KubernetesApi
 from krake.data.kubernetes import Application, Cluster
@@ -489,28 +499,39 @@ class GarbageCollector(Controller):
             )
 
 
+parser = ArgumentParser(
+    description="Garbage Collector for Krake", formatter_class=MetavarTypeHelpFormatter
+)
+parser.add_argument("-c", "--config", type=str, help="Path to configuration YAML file")
+
+mapper = ConfigurationOptionMapper(ControllerConfiguration)
+mapper.add_arguments(parser)
+
+
 def main(config):
-    gc_config = load_config(config or search_config("garbage_collector.yaml"))
+    setup_logging(config.log)
+    logger.debug(
+        "Krake Garbage Collector configuration settings:\n %s",
+        pprint.pformat(config)
+    )
 
-    setup_logging(gc_config["log"])
-
-    tls_config = gc_config.get("tls")
+    tls_config = config.tls
     ssl_context = create_ssl_context(tls_config)
     logger.debug("TLS is %s", "enabled" if ssl_context else "disabled")
 
     controller = GarbageCollector(
-        api_endpoint=gc_config["api_endpoint"],
-        worker_count=gc_config["worker_count"],
+        api_endpoint=config.api_endpoint,
+        worker_count=config.worker_count,
         ssl_context=ssl_context,
-        debounce=gc_config.get("debounce", 0),
+        debounce=config.debounce,
     )
-    setup_logging(gc_config["log"])
     run(controller)
 
 
 if __name__ == "__main__":
-    parser = ArgumentParser(description="Garbage Collector for Krake")
-    parser.add_argument("-c", "--config", help="Path to configuration YAML file")
+    args = vars(parser.parse_args())
 
-    args = parser.parse_args()
-    main(**vars(args))
+    config = load_yaml_config(args["config"] or search_config("garbage_collector.yaml"))
+    gc_config = mapper.merge(config, args)
+
+    main(gc_config)

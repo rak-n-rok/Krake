@@ -1,25 +1,23 @@
 import ssl
+
 import pytest
 from aiohttp import ClientSession
 from aiohttp.test_utils import TestServer as Server
 from krake.api.app import create_app
+from krake.data.config import AuthenticationConfiguration, TLSConfiguration
 
 
 async def test_static_auth(aiohttp_client, config):
-    client = await aiohttp_client(
-        create_app(
-            config=dict(
-                config,
-                authentication={
-                    "allow_anonymous": True,
-                    "strategy": {
-                        "keystone": {"enabled": False, "endpoint": "localhost"},
-                        "static": {"enabled": True, "name": "test-user"},
-                    },
-                },
-            )
-        )
-    )
+    authentication = {
+        "allow_anonymous": True,
+        "strategy": {
+            "keystone": {"enabled": False, "endpoint": "localhost"},
+            "static": {"enabled": True, "name": "test-user"},
+        },
+    }
+    config.authentication = AuthenticationConfiguration.deserialize(authentication)
+
+    client = await aiohttp_client(create_app(config=config))
     resp = await client.get("/me")
     assert resp.status == 200
 
@@ -106,20 +104,16 @@ async def test_keystone_auth(keystone, aiohttp_client, config):
         token = resp.headers.get("X-Subject-Token")
 
     # Use the issued token to access Krake API
-    client = await aiohttp_client(
-        create_app(
-            config=dict(
-                config,
-                authentication={
-                    "allow_anonymous": True,
-                    "strategy": {
-                        "keystone": {"enabled": True, "endpoint": keystone.auth_url},
-                        "static": {"enabled": False, "name": "test-user"},
-                    },
-                },
-            )
-        )
-    )
+    authentication = {
+        "allow_anonymous": True,
+        "strategy": {
+            "keystone": {"enabled": True, "endpoint": keystone.auth_url},
+            "static": {"enabled": False, "name": "test-user"},
+        },
+    }
+    config.authentication = AuthenticationConfiguration.deserialize(authentication)
+
+    client = await aiohttp_client(create_app(config=config))
     resp = await client.get("/me", headers={"Authorization": token})
     assert resp.status == 200
 
@@ -128,20 +122,16 @@ async def test_keystone_auth(keystone, aiohttp_client, config):
 
 
 async def test_deny_anonymous_requests(aiohttp_client, config):
-    client = await aiohttp_client(
-        create_app(
-            config=dict(
-                config,
-                authentication={
-                    "allow_anonymous": False,
-                    "strategy": {
-                        "keystone": {"enabled": False, "endpoint": "localhost"},
-                        "static": {"enabled": False, "name": "test-user"},
-                    },
-                },
-            )
-        )
-    )
+    authentication = {
+        "allow_anonymous": False,
+        "strategy": {
+            "keystone": {"enabled": False, "endpoint": "localhost"},
+            "static": {"enabled": False, "name": "test-user"},
+        },
+    }
+    config.authentication = AuthenticationConfiguration.deserialize(authentication)
+
+    client = await aiohttp_client(create_app(config=config))
     resp = await client.get("/me")
     assert resp.status == 401
 
@@ -149,24 +139,24 @@ async def test_deny_anonymous_requests(aiohttp_client, config):
 async def test_client_anonymous_cert_auth(aiohttp_client, config, pki):
     server_cert = pki.gencert("api-server")
 
-    app = create_app(
-        config=dict(
-            config,
-            authentication={
-                "allow_anonymous": True,
-                "strategy": {
-                    "keystone": {"enabled": False, "endpoint": "localhost"},
-                    "static": {"enabled": False, "name": "test-user"},
-                },
-            },
-            tls={
-                "enabled": True,
-                "client_ca": pki.ca.cert,
-                "cert": server_cert.cert,
-                "key": server_cert.key,
-            },
-        )
-    )
+    authentication = {
+        "allow_anonymous": True,
+        "strategy": {
+            "keystone": {"enabled": False, "endpoint": "localhost"},
+            "static": {"enabled": False, "name": "test-user"},
+        },
+    }
+    config.authentication = AuthenticationConfiguration.deserialize(authentication)
+
+    tls_config = {
+        "enabled": True,
+        "client_ca": pki.ca.cert,
+        "client_cert": server_cert.cert,
+        "client_key": server_cert.key,
+    }
+    config.tls = TLSConfiguration.deserialize(tls_config)
+
+    app = create_app(config=config)
     server = Server(app)
     try:
         await server.start_server(ssl=app["ssl_context"])
@@ -184,24 +174,24 @@ async def test_client_anonymous_cert_auth(aiohttp_client, config, pki):
 async def test_client_cert_auth(aiohttp_client, config, pki):
     server_cert = pki.gencert("api-server")
     client_cert = pki.gencert("test-user")
-    app = create_app(
-        config=dict(
-            config,
-            authentication={
-                "allow_anonymous": True,
-                "strategy": {
-                    "keystone": {"enabled": False, "endpoint": "localhost"},
-                    "static": {"enabled": False, "name": "test-user"},
-                },
-            },
-            tls={
-                "enabled": True,
-                "client_ca": pki.ca.cert,
-                "cert": server_cert.cert,
-                "key": server_cert.key,
-            },
-        )
-    )
+    authentication = {
+        "allow_anonymous": True,
+        "strategy": {
+            "keystone": {"enabled": False, "endpoint": "localhost"},
+            "static": {"enabled": False, "name": "test-user"},
+        },
+    }
+    config.authentication = AuthenticationConfiguration.deserialize(authentication)
+
+    tls_config = {
+        "enabled": True,
+        "client_ca": pki.ca.cert,
+        "client_cert": server_cert.cert,
+        "client_key": server_cert.key,
+    }
+    config.tls = TLSConfiguration.deserialize(tls_config)
+
+    app = create_app(config=config)
     server = Server(app)
     try:
         await server.start_server(ssl=app["ssl_context"])

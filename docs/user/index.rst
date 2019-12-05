@@ -6,4 +6,4 @@ User Documentation
     :maxdepth: 1
 
     rok-documentation
-    configuration-files
+    configuration
