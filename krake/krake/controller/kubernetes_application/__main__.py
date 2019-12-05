@@ -75,6 +75,7 @@ def main(config):
         worker_count=config.worker_count,
         ssl_context=ssl_context,
         debounce=config.debounce,
+        hooks=config.hooks,
     )
     run(controller)
 
