@@ -74,9 +74,7 @@ def create_app(config):
         ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
         ssl_context.verify_mode = ssl.CERT_OPTIONAL
 
-        ssl_context.load_cert_chain(
-            certfile=config.tls.client_cert, keyfile=config.tls.client_key
-        )
+        ssl_context.load_cert_chain(certfile=config.tls.cert, keyfile=config.tls.key)
 
         # Load authorities for client certificates.
         client_ca = config.tls.client_ca

@@ -4,7 +4,7 @@ import pytest
 from aiohttp import ClientSession
 from aiohttp.test_utils import TestServer as Server
 from krake.api.app import create_app
-from krake.data.config import AuthenticationConfiguration, TLSConfiguration
+from krake.data.config import AuthenticationConfiguration, TlsServerConfiguration
 
 
 async def test_static_auth(aiohttp_client, config):
@@ -151,10 +151,10 @@ async def test_client_anonymous_cert_auth(aiohttp_client, config, pki):
     tls_config = {
         "enabled": True,
         "client_ca": pki.ca.cert,
-        "client_cert": server_cert.cert,
-        "client_key": server_cert.key,
+        "cert": server_cert.cert,
+        "key": server_cert.key,
     }
-    config.tls = TLSConfiguration.deserialize(tls_config)
+    config.tls = TlsServerConfiguration.deserialize(tls_config)
 
     app = create_app(config=config)
     server = Server(app)
@@ -186,10 +186,10 @@ async def test_client_cert_auth(aiohttp_client, config, pki):
     tls_config = {
         "enabled": True,
         "client_ca": pki.ca.cert,
-        "client_cert": server_cert.cert,
-        "client_key": server_cert.key,
+        "cert": server_cert.cert,
+        "key": server_cert.key,
     }
-    config.tls = TLSConfiguration.deserialize(tls_config)
+    config.tls = TlsServerConfiguration.deserialize(tls_config)
 
     app = create_app(config=config)
     server = Server(app)

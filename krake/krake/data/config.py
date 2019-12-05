@@ -5,13 +5,21 @@ from krake.data.core import Role, RoleBinding
 from krake.data.serializable import Serializable
 
 
-class TLSConfiguration(Serializable):
+class TlsConfiguration(Serializable):
     enabled: bool = field(
         default=False, metadata={"help": "Enable TLS client certificate authentication"}
     )
     client_ca: str = field(metadata={"help": "Path to the CA certificate."})
+
+
+class TlsClientConfiguration(TlsConfiguration):
     client_cert: str = field(metadata={"help": "Path to the client certificate."})
     client_key: str = field(metadata={"help": "Path to the client certificate key."})
+
+
+class TlsServerConfiguration(TlsConfiguration):
+    cert: str = field(metadata={"help": "Path to the server certificate."})
+    key: str = field(metadata={"help": "Path to the server certificate key."})
 
 
 class EtcdConfiguration(Serializable):
@@ -114,7 +122,7 @@ class ControllerConfiguration(Serializable):
         default=1.0,
         metadata={"help": "Number of seconds to wait until a state change is handled"},
     )
-    tls: TLSConfiguration
+    tls: TlsClientConfiguration
     # FIXME: this dict should be replaced by a fixed set of well-defined options.
     #  see issue #282
     log: dict
@@ -140,7 +148,7 @@ class KubernetesConfiguration(ControllerConfiguration):
 
 class ApiConfiguration(Serializable):
     etcd: EtcdConfiguration
-    tls: TLSConfiguration
+    tls: TlsServerConfiguration
     authentication: AuthenticationConfiguration
     authorization: str = field(metadata={"help": "Authorization mode"})
     default_roles: List[Role] = field(default_factory=list)

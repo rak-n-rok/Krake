@@ -205,8 +205,8 @@ def config(etcd_server, user):
     config = {
         "tls": {
             "enabled": False,
-            "client_cert": "cert_path",
-            "client_key": "key_path",
+            "cert": "cert_path",
+            "key": "key_path",
             "client_ca": "client_ca_path",
         },
         "authentication": {

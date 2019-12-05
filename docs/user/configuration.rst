@@ -164,9 +164,9 @@ tls
 
     enabled (boolean)
         Activate or deactivate the TLS support. Example: ``false``
-    client_cert (path)
+    cert (path)
         Set the path to the client certificate authority. Example: ``tmp/pki/system:api-server.pem``
-    client_key (path)
+    key (path)
         Set the path to the client certificate. Example: ``tmp/pki/system:api-server-key.pem``
     client_ca (path)
         Set the path to the client key. Example: ``tmp/pki/ca.pem``
