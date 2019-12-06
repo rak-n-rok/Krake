@@ -17,6 +17,7 @@ import shutil
 from aiohttp import web
 from prometheus_async import aio
 from prometheus_client import Gauge, CollectorRegistry, CONTENT_TYPE_LATEST
+from contextlib import suppress
 
 # Prepend package directory for working imports
 from krake.data.config import ApiConfiguration
@@ -77,12 +78,24 @@ def pytest_collection_modifyitems(config, items):
                 item.add_marker(skip_slow)
 
 
-def wait_for_url(url, timeout=5):
+def wait_for_url(url, timeout=5, condition=None):
     """Wait until an URL endpoint is reachable.
+
+    The ``condition`` callable takes the HTTP response as argument and checks if it
+    suits a certain format.
+
+    The signature of ``condition`` is:
+
+    .. function:: my_condition(response)
+
+        :param requests.Response response: the Response object of the HTTP request
+        :return: true if the condition is met
+        :rtype: bool
 
     Args:
         url (str): URL endpoint
         timeout (int, optional): Timeout. Defaults to 5s
+        condition (callable, optional): Condition that has to be met.
 
     Raises:
         TimeoutError: When timeout is reached
@@ -94,6 +107,8 @@ def wait_for_url(url, timeout=5):
         try:
             resp = requests.get(url)
             assert resp.status_code == 200
+            if condition:
+                assert condition(resp)
         except (requests.ConnectionError, AssertionError):
             time.sleep(0.1)
             if time.time() - start > timeout:
@@ -119,6 +134,13 @@ async def await_for_url(url, loop, timeout=5):
 
 @pytest.fixture("session")
 def etcd_server():
+    def check_etcd_health(response):
+        with suppress(json.decoder.JSONDecodeError):
+            jresp = response.json()
+            with suppress(KeyError):
+                return jresp["health"] == "true"
+        return False
+
     etcd_host = "127.0.0.1"
     etcd_port = 3379
 
@@ -140,7 +162,10 @@ def etcd_server():
         ]
         with subprocess.Popen(command) as proc:
             try:
-                wait_for_url(f"http://{etcd_host}:{etcd_port}/version")
+                wait_for_url(
+                    f"http://{etcd_host}:{etcd_port}/health",
+                    condition=check_etcd_health,
+                )
                 yield etcd_host, etcd_port
             finally:
                 proc.terminate()
