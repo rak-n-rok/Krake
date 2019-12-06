@@ -244,7 +244,7 @@
             group: krake
 
         - name: Remove Krake infrastructure
-          docker_service:
+          docker_compose:
             project_src: "{{ git_dir }}/docker/krake"
             state: absent
 
@@ -287,12 +287,15 @@
         - name: Build Krake image
           docker_image:
             name: krake:latest
-            dockerfile: "{{ git_dir }}/docker/krake/Dockerfile"
-            path: "{{ git_dir }}"
-            nocache: yes
+            source: build
+            build:
+              dockerfile: "{{ git_dir }}/docker/krake/Dockerfile"
+              pull: yes
+              path: "{{ git_dir }}"
+              nocache: yes
 
         - name: Start Krake infrastructure
-          docker_service:
+          docker_compose:
             project_src: "{{ git_dir }}/docker/krake"
             state: present
             build: no

@@ -10,7 +10,7 @@ This sections describes prerequisites and deployment of a Krake infrastructure w
 Prerequisites
 ===================
 
-- `Ansible 2.7.x <https://docs.ansible.com/ansible/latest/roadmap/ROADMAP_2_7.html>`_ using a Python 3 interpreter
+- `Ansible 2.9.x <https://docs.ansible.com/ansible/latest/roadmap/ROADMAP_2_9.html>`_ or superior using a Python 3 interpreter
 - `The full Openstack client <https://pypi.org/project/openstackclient/>`_ python module
 - `Docker <https://pypi.org/project/docker/>`_ Python module
 
@@ -18,7 +18,7 @@ It is suggested that Ansible is installed inside the virtualenv of Krake.
 
 .. code::
 
-    pip install ansible~=2.7.0 docker openstackclient
+    pip install "ansible>=2.9" docker openstackclient
 
 Check the version and Python executable of the Ansible installation:
 
@@ -28,12 +28,12 @@ Check the version and Python executable of the Ansible installation:
 
 .. code::
 
-  ansible 2.7.10
+  ansible 2.9.2
     config file = None
     configured module search path = ['/path/to/home/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']
     ansible python module location = /path/to/virtualenv/lib/python3.6/site-packages/ansible
     executable location = /path/to/virtualenv/bin/ansible
-    python version = 3.6.7 (default, Oct 22 2018, 11:32:17) [GCC 8.2.0]
+    python version = 3.6.8 (default, Oct  7 2019, 12:59:55) [GCC 8.3.0]
 
 
 Krake infrastructure deployment
