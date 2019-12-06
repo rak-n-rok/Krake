@@ -238,6 +238,21 @@ if __name__ == "__main__":
         "Debounce time for the worker queue (seconds).",
         default=1.0,
     )
+    add_option(
+        parser,
+        "--reschedule-after",
+        "Time in seconds after which a resource will be rescheduled.",
+        default=60,
+    )
+    add_option(
+        parser,
+        "--stickiness",
+        (
+            '"Stickiness" weight to express migration overhead'
+            " in the normalized ranking computation."
+        ),
+        default=0.1,
+    )
 
     args = vars(parser.parse_args())
     sys.exit(main(**args))
