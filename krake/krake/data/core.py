@@ -94,7 +94,7 @@ class RoleRule(Serializable):
 @persistent("/roles/{name}")
 class Role(ApiObject):
     api: str = "core"
-    kind: str = "ApiObject"
+    kind: str = "Role"
     metadata: Metadata
     rules: List[RoleRule]
 
