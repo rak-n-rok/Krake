@@ -1,0 +1,341 @@
+#!/usr/bin/env python
+
+"""This script can be used to insert previously defined resource in the Krake database,
+without having to start Krake components.
+
+It can be used as follows:
+
+.. code:: bash
+
+    bootstrap [OPTIONS] <file_1> <file_2> ... <file_n>
+
+The definition of the resources must be written in YAML files, with the following
+structure:
+
+ * several resources can be put in files, with separation ("---");
+ * the API and kind need to be specified;
+ * the object name needs to be specified in the metadata;
+ * if not given, the UID, created and modified timestamp will be set automatically by
+   the script;
+ * the rest of the resource needs to follow the structure of the resource to insert,
+   with attribute names as keys, and values as actual value of the attributes.
+
+This example will insert two objects in the database:
+
+    .. code:: yaml
+
+        api: my-api
+        kind: MyKind
+        metadata:
+          name: my-object
+        attr_1: <specific-value>
+        attr_2:
+          attr_2_1:
+          - <elt_1>
+          - <elt_2>
+          attr_2_2: <specific-value>
+        ---
+
+        api: my-api
+        kind: MyOtherKind
+        metadata:
+          name: my-other-object
+        attr: <value>
+
+Every resource will be first validated before being inserted in the database.
+
+A resource will not be inserted in the database if this resource already exists, even if
+the content is different. This behavior can be overridden by using the ``--force``
+argument. In this case, the resource present is completely removed, and the newly
+defined one is added.
+
+The script needs Krake to be installed to be launched.
+"""
+
+import asyncio
+import os.path
+import sys
+import yaml
+from datetime import datetime
+from uuid import uuid4
+from argparse import ArgumentParser
+
+from krake.data.core import Role, RoleBinding, Metric, MetricsProvider, resource_ref
+from krake.api.database import Session
+from marshmallow import ValidationError
+
+
+"""For each API, this stores the resources handled, with a
+"<resource_class_name>: <resource_class>" match.
+"""
+_handled_resources = {
+    "core": {
+        "Role": Role,
+        "RoleBinding": RoleBinding,
+        "Metric": Metric,
+        "MetricsProvider": MetricsProvider,
+    }
+}
+
+
+class ResourcePresentException(BaseException):
+    """Custom exception for the case of trying to insert a resource in the database
+    which is already present.
+    """
+
+    def __init__(self):
+        default_message = "Resource already present in database"
+        super().__init__(default_message)
+
+
+def _create_identification_message(resource):
+    """From a resource, attempt to get all information to identify it, in order to
+    create a message that can be used to locate the resource for investigation.
+
+    Args:
+        resource (dict): the resource for which a message should be created.
+
+    Returns:
+        str: the message created for identification purposes.
+
+    """
+    kind = resource.get("kind", "MISSING")
+    api = resource.get("api", "MISSING")
+
+    metadata = resource.get("metadata")
+    name = "MISSING"
+    namespace = "MISSING"
+    if metadata:
+        name = metadata.get("name", "MISSING")
+        namespace = metadata.get("namespace", "MISSING")
+
+    return f"kind: {kind!r}, api: {api!r}, namespace: {namespace!r}, name: {name!r}"
+
+
+async def insert_resource(resource, db_host, db_port, force=False):
+    """Attempt to add the given resource to the database. If no UID, ``created`` or
+    ``modified`` timestamp are defined, they will be set automatically.
+
+    If not specified, a resource that is already present will prevent adding it again.
+    Otherwise, the resource will be completely overwritten with the newly added one.
+
+    Args:
+        resource (dict): the dictionary that represents a resource to add.
+        db_host (str): the host of the database to connect to.
+        db_port (int): the port of the database to connect to.
+        force (bool): if True, a resource already present in the database will be
+            deleted and replaced by the given one. Otherwise, it is not added, and a
+            ResourcePresentException is returned.
+
+    Returns:
+        tuple: if an error occurred, a message and the corresponding exceptions are
+            returned, as: (<message>, <exception>). Otherwise, return None.
+
+    """
+    api = resource["api"]
+    kind = resource["kind"]
+    try:
+        name_cls_mapping = _handled_resources[api]
+    except KeyError as err:
+        message = _create_identification_message(resource)
+        return message, ValueError(f"The api '{err.args[0]}' could not be found.")
+
+    try:
+        cls = name_cls_mapping[kind]
+    except KeyError as err:
+        message = _create_identification_message(resource)
+        return message, ValueError(f"The kind '{err.args[0]}' could not be found.")
+
+    # Validation of the resource's structure.
+    try:
+        instance = cls.deserialize(resource)
+    except ValidationError as err:
+        message = _create_identification_message(resource)
+        return message, err
+
+    async with Session(host=db_host, port=db_port) as session:
+        stored = await session.get(cls, name=instance.metadata.name)
+
+        to_store = instance
+        if stored:
+            # If the resource is present in the database
+            if not force:
+                # If it should not be replaced, quit
+                return resource_ref(instance), ResourcePresentException()
+
+            await session.delete(stored)
+
+        now = datetime.now()
+        if not to_store.metadata.uid:
+            to_store.metadata.uid = str(uuid4())
+        if not to_store.metadata.created:
+            to_store.metadata.created = now
+        if not to_store.metadata.modified:
+            to_store.metadata.modified = now
+
+        await session.put(to_store)
+
+    print(f" * {resource_ref(to_store)}")
+    return
+
+
+async def insert_from_file(src_path, db_host, db_port, force=False):
+    """Read the content of the given file and attempt to add each resource defined in
+    it to the database.
+
+    Args:
+        src_path (str): the path of the file to read.
+        db_host (str): the host of the database to connect to.
+        db_port (int): the port of the database to connect to.
+        force (bool): if True, resources already present in the database will be deleted
+            and replaced by the ones read from the file. Otherwise, they are not added.
+
+    Returns:
+        list: return a list of tuples. For each resource read from the file, an element
+            is present in the list. If the resource could be inserted without problem,
+            this element is None. Otherwise, a tuple (<message>, <exception>) is
+            present.
+
+    """
+    if not os.path.isfile(src_path):
+        return f"The given path '{src_path}' should be a file"
+
+    with open(src_path, "r") as file:
+        resources = yaml.safe_load_all(file)
+
+        result = await asyncio.gather(
+            *(
+                insert_resource(resource, db_host, db_port, force)
+                for resource in resources
+            )
+        )
+    return result
+
+
+async def process_resources(src_files, db_host, db_port, force):
+    """For each file path given, insert the resources defined in it to a database.
+
+    Args:
+        src_files (list): the list of all files to read to get the resources.
+        db_host (str): the host of the database in which the resources will be inserted.
+        db_port (int): the port of the database in which the resources will be inserted.
+        force (bool): if True, resources already present in the database will be deleted
+            and replaced by the ones read from the files. Otherwise, they are not added.
+
+    Returns:
+        str: if an error occurred for at least a resource, a message is returned
+            explaining the issue for each faulty resource.
+
+    """
+    print("Resources added to database:")
+
+    # Return, for each file, the list of gathered result for inserting in the database.
+    # The results is a list of list, with the latter storing "None" if no error occurred
+    # for the resource, a tuple (resource, Exception) otherwise.
+    # Example: with two files, "A.yaml" and "B.yaml", both with respective resources:
+    # A_1, A_2 and B_1, B_2. If an error occurred for A_1 and B_2, the result will look
+    # like (the ordering of read files and resources is kept):
+    # assert result == [[(<A_1>, <exception>), None], [None, (<B_2>, <exception>)]]
+    results = await asyncio.gather(
+        *(insert_from_file(src_path, db_host, db_port, force) for src_path in src_files)
+    )
+
+    # If, for each file, no task returned a value, there was no error
+    if not any(any(resources) for resources in results):
+        return None
+
+    message = ["#############", "The following could not be added:"]
+    # For each resource in each file for which inserting it led to an error,
+    # print it along with its error.
+    for i, src_file in enumerate(src_files):
+        message.append(f"In file {src_file}:")
+        # results follows the same order for the resources as the one read.
+        for resource_error_tuple in results[i]:
+            if resource_error_tuple:
+                resource, error = resource_error_tuple
+                message.append(f" * {resource}, with error: {error!r}")
+
+    return "\n".join(message)
+
+
+def main(src_files, db_host, db_port, force):
+    """Start the script as an asyncio coroutine.
+
+    Returns:
+        src_files (list): the list of all files to read to get the resources.
+        db_host (str): the host of the database in which the resources will be inserted.
+        db_port (int): the port of the database in which the resources will be inserted.
+        force (bool): if True, resources already present in the database will be deleted
+            and replaced by the ones read from the files. Otherwise, they are not added.
+        str: if error occurred in the coroutine, a message is returned. Otherwise,
+            return None.
+
+    """
+    loop = asyncio.get_event_loop()
+    try:
+        result = loop.run_until_complete(
+            process_resources(src_files, db_host, db_port, force)
+        )
+        return result
+    except asyncio.CancelledError:
+        pass
+    finally:
+        loop.close()
+
+
+def add_option(parser, name, help, short=None, default=None, action=None, **kwargs):
+    """Define a new option that is accepted by the parser. One of default or action
+    parameter has to be given.
+
+    Args:
+        parser (ArgumentParser): argument parser on which the new option will be added
+        name (str): the name of the newly added option.
+        help (str): what will be printed in the help. The default value, if given,
+            will be printed along.
+        default (Any, optional): the default value that will be given to the option.
+        action (str, optional): the argparse action to apply.
+        kwargs (dict, optional): additional options given to the parser.
+
+    """
+    if not default and not action:
+        sys.exit(f"For option {name}, both default and action cannot be empty")
+
+    option = name.replace("_", "-")
+
+    if default:
+        help = f"{help} Default: '{default}'"
+        # Prevent "None" to be added as default value if no default value is wanted
+        kwargs["default"] = default
+
+    if short:
+        parser.add_argument(short, option, action=action, help=help, **kwargs)
+    else:
+        parser.add_argument(option, action=action, help=help, **kwargs)
+
+
+if __name__ == "__main__":
+    parser = ArgumentParser(
+        description=(
+            "Insert Krake resources into the database directly, without using the API."
+        )
+    )
+    parser.add_argument(
+        "src_files",
+        nargs="+",
+        help="List of YAML files to read the resources definitions from.",
+    )
+
+    add_option(
+        parser,
+        "--force",
+        "Insert the resources in the database even if they are already present.",
+        short="-f",
+        action="store_true",
+    )
+    add_option(
+        parser, "--db-host", "Host for the database endpoint.", default="localhost"
+    )
+    add_option(parser, "--db-port", "Port for the database endpoint.", default=2379)
+
+    arguments = vars(parser.parse_args())
+    sys.exit(main(**arguments))

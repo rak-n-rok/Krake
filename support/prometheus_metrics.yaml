@@ -1,0 +1,92 @@
+# This bootstrap file adds the Prometheus metrics used by the ``support/prometheus``
+# script (used in tests), as well as a provider to connect to the Prometheus server
+# locally.
+#
+# These resources can be loaded using the ``bootstrapping/bootstrap`` script.
+
+##########################
+### Prometheus Metrics ###
+##########################
+
+api: core
+kind: Metric
+metadata:
+  name: heat_demand_zone_1
+spec:
+  max: 1.0
+  min: 0.0
+  provider:
+    metric: heat_demand_zone_1
+    name: prometheus
+
+---
+
+
+api: core
+kind: Metric
+metadata:
+  name: heat_demand_zone_2
+spec:
+  max: 2.0
+  min: 1.0
+  provider:
+    metric: heat_demand_zone_2
+    name: prometheus
+
+---
+
+
+api: core
+kind: Metric
+metadata:
+  name: heat_demand_zone_3
+spec:
+  max: 3.0
+  min: 2.0
+  provider:
+    metric: heat_demand_zone_3
+    name: prometheus
+
+---
+
+
+api: core
+kind: Metric
+metadata:
+  name: heat_demand_zone_4
+spec:
+  max: 4.0
+  min: 3.0
+  provider:
+    metric: heat_demand_zone_4
+    name: prometheus
+
+---
+
+
+api: core
+kind: Metric
+metadata:
+  name: heat_demand_zone_5
+spec:
+  max: 5.0
+  min: 4.0
+  provider:
+    metric: heat_demand_zone_5
+    name: prometheus
+
+---
+
+
+####################################
+### Prometheus Metrics Providers ###
+####################################
+
+api: core
+kind: MetricsProvider
+metadata:
+  name: prometheus
+spec:
+  type: prometheus
+  prometheus:
+    url: http://localhost:9090

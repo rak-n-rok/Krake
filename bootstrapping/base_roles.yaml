@@ -1,0 +1,162 @@
+# This bootstrap file adds a role for each Controller of Krake, as well as an
+# administrator role, called ``system:admin``.
+# The Controller are given minimal access to only the resources and the actions they
+# require to perform.
+#
+# These resources can be loaded using the ``bootstrapping/bootstrap`` script.
+
+###########################
+### "system:admin" user ###
+###########################
+
+api: core
+kind: Role
+metadata:
+  name: role:system
+rules:
+- api: ''
+  namespaces:
+  - ''
+  resources:
+  - ''
+  verbs:
+  - create
+  - list
+  - get
+  - update
+  - delete
+---
+
+api: core
+kind: RoleBinding
+metadata:
+  name: rolebinding:system
+roles:
+- role:system
+users:
+  - system:admin
+---
+
+
+#########################
+### Garbage Collector ###
+#########################
+
+api: core
+kind: Role
+metadata:
+  name: role:system:gc
+rules:
+- api: ''
+  namespaces:
+  - ''
+  resources:
+  - "applications"
+  - "clusters"
+  verbs:
+  - list
+  - update
+  - delete
+---
+
+api: core
+kind: RoleBinding
+metadata:
+  name: rolebinding:system:gc
+roles:
+- role:system:gc
+users:
+  - system:gc
+---
+
+
+#################
+### Scheduler ###
+#################
+
+api: core
+kind: Role
+metadata:
+  name: role:system:scheduler
+rules:
+- api: 'core'
+  namespaces:
+  - ''
+  resources:
+    - "metrics"
+    - "metricProviders"
+  verbs:
+  - get
+
+- api: 'kubernetes'
+  namespaces:
+    - ''
+  resources:
+    - "applications"
+    - "clusters"
+  verbs:
+    - list
+
+- api: 'kubernetes'
+  namespaces:
+    - ''
+  resources:
+    - "applications/binding"
+  verbs:
+    - update
+---
+
+api: core
+kind: RoleBinding
+metadata:
+  name: rolebinding:system:scheduler
+roles:
+- role:system:scheduler
+users:
+  - system:scheduler
+---
+
+
+#############################
+### Kubernetes Controller ###
+#############################
+
+api: core
+kind: Role
+metadata:
+  name: role:system:kubernetes
+rules:
+- api: 'kubernetes'
+  namespaces:
+  - ''
+  resources:
+  - "applications"
+  verbs:
+  - list
+  - update
+
+- api: 'kubernetes'
+  namespaces:
+  - ''
+  resources:
+  - "applications/status"
+  verbs:
+  - update
+
+- api: 'kubernetes'
+  namespaces:
+  - ''
+  resources:
+  - "clusters"
+  verbs:
+  - get
+---
+
+api: core
+kind: RoleBinding
+metadata:
+  name: rolebinding:system:kubernetes
+roles:
+- role:system:kubernetes
+users:
+  - system:kubernetes

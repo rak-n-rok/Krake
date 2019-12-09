@@ -29,7 +29,7 @@ authentication:
   # Static authentication (every request is authenticated as this user-name)
     static:
       enabled: true
-      name: system
+      name: system:admin
 
 # Authorization mode
 #
