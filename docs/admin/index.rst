@@ -12,3 +12,4 @@ This chapter presents the installation of Krake using Ansible.
     setup
     variables
     inventory
+    bootstrapping
