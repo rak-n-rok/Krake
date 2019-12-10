@@ -2,9 +2,18 @@ import logging
 import re
 from copy import deepcopy
 from functools import partial
+from cached_property import cached_property
 
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
-from kubernetes_asyncio.client import ApiClient, CoreV1Api, AppsV1Api, Configuration
+from kubernetes_asyncio.client import (
+    ApiClient,
+    CoreV1Api,
+    AppsV1Api,
+    Configuration,
+    ApiextensionsV1beta1Api,
+    CustomObjectsApi,
+    V1DeleteOptions,
+)
 from kubernetes_asyncio.client.rest import ApiException
 from typing import NamedTuple, Tuple
 
@@ -265,7 +274,9 @@ class ApplicationController(Controller):
                 namespace=app.status.running_on.namespace,
                 name=app.status.running_on.name,
             )
-            async with KubernetesClient(cluster.spec.kubeconfig) as kube:
+            async with KubernetesClient(
+                cluster.spec.kubeconfig, cluster.spec.custom_resources
+            ) as kube:
                 for resource in app.status.manifest:
                     await listen.hook(
                         Hook.PreDelete,
@@ -359,7 +370,9 @@ class ApplicationController(Controller):
             namespace=app.status.scheduled_to.namespace,
             name=app.status.scheduled_to.name,
         )
-        async with KubernetesClient(cluster.spec.kubeconfig) as kube:
+        async with KubernetesClient(
+            cluster.spec.kubeconfig, cluster.spec.custom_resources
+        ) as kube:
             # Delete all resources that are no longer in the spec
             for deleted in delta.deleted:
                 await listen.hook(
@@ -497,7 +510,7 @@ class ApplicationController(Controller):
 
         # If an important error occurred, simply delete the Application
         if reason.code.value >= 100:
-            app.status.state = ApplicationState.DELETED
+            app.status.state = ApplicationState.DELETING
         else:
             app.status.state = ApplicationState.FAILED
 
@@ -506,10 +519,118 @@ class ApplicationController(Controller):
         )
 
 
+class ApiAdapter(object):
+    """An adapter that provides functionality for calling
+    CRUD on multiple Kubernetes resources.
+
+    An appropriate method from Kubernetes api client is selected
+    based on resource kind definition.
+
+    Args:
+        api (object): Kubernetes api client
+
+    """
+
+    def __init__(self, api):
+        self.api = api
+
+    async def read(self, kind, name=None, namespace=None):
+        fn = getattr(self.api, f"read_namespaced_{camel_to_snake_case(kind)}")
+        return await fn(name=name, namespace=namespace)
+
+    async def create(self, kind, body=None, namespace=None):
+        fn = getattr(self.api, f"create_namespaced_{camel_to_snake_case(kind)}")
+        return await fn(body=body, namespace=namespace)
+
+    async def patch(self, kind, name=None, body=None, namespace=None):
+        fn = getattr(self.api, f"patch_namespaced_{camel_to_snake_case(kind)}")
+        return await fn(name=name, body=body, namespace=namespace)
+
+    async def delete(self, kind, name=None, namespace=None):
+        fn = getattr(self.api, f"delete_namespaced_{camel_to_snake_case(kind)}")
+        return await fn(name=name, namespace=namespace)
+
+
+class ApiAdapterCustom(object):
+    """An adapter that provides functionality for calling
+    CRUD on multiple Kubernetes custom resources.
+
+    An appropriate method from Kubernetes custom resources
+    api client is selected based on custom resource kind
+    and resource scope which is determined from custome resource
+    definition.
+
+    Args:
+        api (object): Kubernetes custom resources api client
+        scope (str): Scope indicates whether the custom resource
+            is cluster or namespace scoped
+        group (str): Group the custom resource belongs in
+        version (str): Api version the clustom resource belongs in
+        plural (str):  Plural name of the custom resource
+
+    """
+
+    def __init__(self, api, scope, group, version, plural):
+        self.api = api
+        self.scope = scope
+        self.group = group
+        self.version = version
+        self.plural = plural
+
+    async def read(self, kind, name=None, namespace=None):
+        if self.scope == "Namespaced":
+            return await self.api.get_namespaced_custom_object(
+                self.group, self.version, namespace, self.plural, name
+            )
+        return await self.api.get_cluster_custom_object(
+            self.group, self.version, self.plural, name
+        )
+
+    async def create(self, kind, body=None, namespace=None):
+        if self.scope == "Namespaced":
+            return await self.api.create_namespaced_custom_object(
+                self.group, self.version, namespace, self.plural, body
+            )
+        return await self.api.create_cluster_custom_object(
+            self.group, self.version, self.plural, body
+        )
+
+    async def patch(self, kind, name=None, body=None, namespace=None):
+        if self.scope == "Namespaced":
+            return await self.api.patch_namespaced_custom_object(
+                self.group, self.version, namespace, self.plural, name, body
+            )
+        return await self.api.patch_cluster_custom_object(
+            self.group, self.version, self.plural, name, body
+        )
+
+    async def delete(self, kind, name=None, namespace=None):
+        body = V1DeleteOptions()
+
+        if self.scope == "Namespaced":
+            return await self.api.delete_namespaced_custom_object(
+                self.group, self.version, namespace, self.plural, name, body
+            )
+        return await self.api.delete_cluster_custom_object(
+            self.group, self.version, self.plural, name, body
+        )
+
+
 class KubernetesClient(object):
-    def __init__(self, kubeconfig):
+    def __init__(self, kubeconfig, custom_resources=None):
         self.kubeconfig = kubeconfig
+        self.custom_resources = custom_resources
         self.resource_apis = None
+        self.api_client = None
+
+    @staticmethod
+    def log_resp(resp, kind, action=None):
+        resp_log = (
+            f"status={resp.status!r}"
+            if hasattr(resp, "status")
+            else f"resource={resp!r}"
+        )
+        logger.debug(f"%s {action}. %r", kind, resp_log)
 
     async def __aenter__(self):
         # Load Kubernetes configuration
@@ -517,9 +638,9 @@ class KubernetesClient(object):
         config = Configuration()
         await loader.load_and_set(config)
 
-        api_client = ApiClient(config)
-        core_v1_api = CoreV1Api(api_client)
-        apps_v1_api = AppsV1Api(api_client)
+        self.api_client = ApiClient(config)
+        core_v1_api = ApiAdapter(CoreV1Api(self.api_client))
+        apps_v1_api = ApiAdapter(AppsV1Api(self.api_client))
 
         self.resource_apis = {
             "ConfigMap": core_v1_api,
@@ -543,39 +664,62 @@ class KubernetesClient(object):
             "ServiceAccount": core_v1_api,
             "ServiceStatus": core_v1_api,
         }
+
         return self
 
     async def __aexit__(self, *exec):
         self.resource_apis = None
+        self.api_client = None
 
-    @staticmethod
-    def log_resp(resp, kind, action=None):
-        resp_log = (
-            f"status={resp.status!r}"
-            if hasattr(resp, "status")
-            else f"resource={resp!r}"
-        )
-        logger.debug(f"%s {action}. %r", kind, resp_log)
+    @cached_property
+    async def custom_resource_apis(self):
+        """Determine custom resource apis for given cluster.
 
-    async def _read(self, kind, name, namespace):
-        api = self.resource_apis[kind]
-        fn = getattr(api, f"read_namespaced_{camel_to_snake_case(kind)}")
-        return await fn(name=name, namespace=namespace)
+        If given cluster supports custom resources, Krake determines
+        apis from custom resource definitions.
 
-    async def _create(self, kind, body, namespace):
-        api = self.resource_apis[kind]
-        fn = getattr(api, f"create_namespaced_{camel_to_snake_case(kind)}")
-        return await fn(body=body, namespace=namespace)
+        The custom resources apis are requested only once and then
+        are cached by cached property decorator. This is an advantage in
+        case of multiple Kubernetes custom resources.
 
-    async def _patch(self, kind, name, body, namespace):
-        api = self.resource_apis[kind]
-        fn = getattr(api, f"patch_namespaced_{camel_to_snake_case(kind)}")
-        return await fn(name=name, body=body, namespace=namespace)
+        Raises:
+            InvalidResourceError: If the request for the custom resource
+            definition failed.
 
-    async def _delete(self, kind, name, namespace):
-        api = self.resource_apis[kind]
-        fn = getattr(api, f"delete_namespaced_{camel_to_snake_case(kind)}")
-        return await fn(name=name, namespace=namespace)
+        Returns:
+            dict: Custom resource apis
+
+        """
+        custom_resource_apis = {}
+
+        if not self.custom_resources:
+            return custom_resource_apis
+
+        extensions_v1_api = ApiextensionsV1beta1Api(self.api_client)
+        for custom_resource in self.custom_resources:
+
+            try:
+                # Determine scope, version, group and plural of custome resource
+                # definition
+                resp = await extensions_v1_api.read_custom_resource_definition(
+                    custom_resource
+                )
+            except ApiException as err:
+                raise InvalidResourceError(err_resp=err)
+
+            # Custom resource api version should be always first item in versions
+            # field
+            version = resp.spec.versions[0].name
+            kind = resp.spec.names.kind
+
+            custom_resource_apis[kind] = ApiAdapterCustom(
+                CustomObjectsApi(self.api_client),
+                resp.spec.scope,
+                resp.spec.group,
+                version,
+                resp.spec.names.plural,
+            )
+        return custom_resource_apis
 
     async def apply(self, resource, namespace="default"):
         try:
@@ -583,8 +727,14 @@ class KubernetesClient(object):
         except KeyError:
             raise InvalidResourceError('Resource must define "kind"')
 
-        if kind not in self.resource_apis:
-            raise InvalidResourceError(f"{kind} resources are not supported")
+        try:
+            resource_api = self.resource_apis[kind]
+        except KeyError:
+            try:
+                custom_resource_apis = await self.custom_resource_apis
+                resource_api = custom_resource_apis[kind]
+            except KeyError:
+                raise InvalidResourceError(f"{kind} resources are not supported")
 
         try:
             name = resource["metadata"]["name"]
@@ -592,7 +742,7 @@ class KubernetesClient(object):
             raise InvalidResourceError('Resource must define "metadata.name"')
 
         try:
-            resp = await self._read(kind, name=name, namespace=namespace)
+            resp = await resource_api.read(kind, name=name, namespace=namespace)
         except ApiException as err:
             if err.status == 404:
                 resp = None
@@ -600,10 +750,10 @@ class KubernetesClient(object):
                 raise InvalidResourceError(err_resp=err)
 
         if resp is None:
-            resp = await self._create(kind, body=resource, namespace=namespace)
+            resp = await resource_api.create(kind, body=resource, namespace=namespace)
             self.log_resp(resp, kind, action="created")
         else:
-            resp = await self._patch(
+            resp = await resource_api.patch(
                 kind, name=name, body=resource, namespace=namespace
             )
             self.log_resp(resp, kind, action="patched")
@@ -616,8 +766,14 @@ class KubernetesClient(object):
         except KeyError:
             raise InvalidResourceError('Resource must define "kind"')
 
-        if kind not in self.resource_apis:
-            raise InvalidResourceError(f"{kind} resources are not supported")
+        try:
+            resource_api = self.resource_apis[kind]
+        except KeyError:
+            try:
+                custom_resource_apis = await self.custom_resource_apis
+                resource_api = custom_resource_apis[kind]
+            except KeyError:
+                raise InvalidResourceError(f"{kind} resources are not supported")
 
         try:
             name = resource["metadata"]["name"]
@@ -625,7 +781,7 @@ class KubernetesClient(object):
             raise InvalidResourceError('Resource must define "metadata.name"')
 
         try:
-            resp = await self._delete(kind, name=name, namespace=namespace)
+            resp = await resource_api.delete(kind, name=name, namespace=namespace)
         except ApiException as err:
             if err.status == 404:
                 logger.debug("%s already deleted", kind)

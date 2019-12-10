@@ -16,6 +16,7 @@ install_requires = [
     "kubernetes_asyncio",
     "makefun",
     "lark-parser",
+    "cached-property",
 ]
 
 # dataclasses backport

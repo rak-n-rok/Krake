@@ -41,6 +41,26 @@ arg_hooks = argument(
     help="Application hook. Can be specified multiple times",
 )
 
+arg_cluster_resource_constraints = argument(
+    "-R",
+    "--cluster-resource-constraint",
+    dest="cluster_resource_constraints",
+    default=[],
+    action="append",
+    help="Custom resources definition constraint of the cluster. "
+    "Can be specified multiple times",
+)
+
+arg_custom_resources = argument(
+    "-R",
+    "--custom-resource",
+    dest="custom_resources",
+    default=[],
+    action="append",
+    help="Custom resources definition of the cluster. "
+    "Can be specified multiple times",
+)
+
 
 class ApplicationListTable(BaseTable):
     state = Cell("status.state")
@@ -72,12 +92,21 @@ def list_applications(config, session, namespace, all):
 )
 @argument("name", help="Name of the application")
 @arg_cluster_label_constraints
+@arg_cluster_resource_constraints
 @arg_namespace
 @arg_labels
 @arg_hooks
 @depends("config", "session")
 def create_application(
-    config, session, file, name, namespace, cluster_label_constraints, labels, hooks
+    config,
+    session,
+    file,
+    name,
+    namespace,
+    cluster_label_constraints,
+    labels,
+    cluster_resource_constraints,
+    hooks,
 ):
     if namespace is None:
         namespace = config["user"]
@@ -88,7 +117,12 @@ def create_application(
         "spec": {
             "hooks": hooks,
             "manifest": manifest,
-            "constraints": {"cluster": {"labels": cluster_label_constraints}},
+            "constraints": {
+                "cluster": {
+                    "labels": cluster_label_constraints,
+                    "custom_resources": cluster_resource_constraints,
+                }
+            },
         },
     }
     resp = session.post(f"/kubernetes/namespaces/{namespace}/applications", json=app)
@@ -130,12 +164,21 @@ def get_application(config, session, namespace, name):
     "-f", "--file", type=FileType(), required=True, help="Kubernetes manifest file"
 )
 @arg_cluster_label_constraints
+@arg_cluster_resource_constraints
 @arg_namespace
 @arg_labels
 @arg_hooks
 @depends("config", "session")
 def update_application(
-    config, session, namespace, name, file, labels, cluster_label_constraints, hooks
+    config,
+    session,
+    namespace,
+    name,
+    file,
+    labels,
+    cluster_label_constraints,
+    cluster_resource_constraints,
+    hooks,
 ):
     if namespace is None:
         namespace = config["user"]
@@ -146,7 +189,12 @@ def update_application(
         "spec": {
             "hooks": hooks,
             "manifest": manifest,
-            "constraints": {"cluster": {"labels": cluster_label_constraints}},
+            "constraints": {
+                "cluster": {
+                    "labels": cluster_label_constraints,
+                    "custom_resources": cluster_resource_constraints,
+                }
+            },
         },
     }
     session.put(f"/kubernetes/namespaces/{namespace}/applications/{name}", json=app)
@@ -232,11 +280,14 @@ class ClusterTable(BaseTable):
     type=FileType(),
     help="Kubeconfig file that should be used to control this cluster",
 )
+@arg_custom_resources
 @arg_metric
 @arg_namespace
 @arg_labels
 @depends("config", "session")
-def create_cluster(config, session, namespace, kubeconfig, contexts, metrics, labels):
+def create_cluster(
+    config, session, namespace, kubeconfig, contexts, metrics, labels, custom_resources
+):
     if namespace is None:
         namespace = config["user"]
 
@@ -289,7 +340,11 @@ def create_cluster(config, session, namespace, kubeconfig, contexts, metrics, la
         cluster_config["current-context"] = context["name"]
         cluster = {
             "metadata": {"name": cluster["name"], "labels": labels},
-            "spec": {"kubeconfig": cluster_config, "metrics": metrics},
+            "spec": {
+                "kubeconfig": cluster_config,
+                "metrics": metrics,
+                "custom_resources": custom_resources,
+            },
         }
         resp = session.post(
             f"/kubernetes/namespaces/{namespace}/clusters", json=cluster
