@@ -9,6 +9,7 @@ from kubernetes_asyncio.client import (
     ApiClient,
     CoreV1Api,
     AppsV1Api,
+    BatchV1Api,
     Configuration,
     ApiextensionsV1beta1Api,
     CustomObjectsApi,
@@ -641,12 +642,14 @@ class KubernetesClient(object):
         self.api_client = ApiClient(config)
         core_v1_api = ApiAdapter(CoreV1Api(self.api_client))
         apps_v1_api = ApiAdapter(AppsV1Api(self.api_client))
+        batch_v1_api = ApiAdapter(BatchV1Api(self.api_client))
 
         self.resource_apis = {
             "ConfigMap": core_v1_api,
             "Deployment": apps_v1_api,
             "Endpoints": core_v1_api,
             "Event": core_v1_api,
+            "Job": batch_v1_api,
             "LimitRange": core_v1_api,
             "PersistentVolumeClaim": core_v1_api,
             "PersistentVolumeClaimStatus": core_v1_api,
