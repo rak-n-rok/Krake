@@ -2,6 +2,8 @@ import logging
 import re
 from copy import deepcopy
 from functools import partial
+
+from aiohttp import ClientResponseError
 from cached_property import cached_property
 
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
@@ -242,13 +244,24 @@ class ApplicationController(Controller):
             await self._reconcile_application(copy)
 
     async def _delete_application(self, app):
-        logger.info("Delete %r (%s)", app.metadata.name, app.metadata.namespace)
+        # FIXME: during its deletion, an Application is updated, and thus put into the
+        #  queue again on the controller to be deleted. After deletion, the Application
+        #  is released from the active resources of the queue, and the updated resource
+        #  is handled again. However, there are no actual resource anymore, as they have
+        #  been deleted. To prevent this, the worker verifies that the Application is
+        #  not deleted yet before attempting to delete it.
+        try:
+            # Transition into "DELETING" state
+            app.status.state = ApplicationState.DELETING
+            await self.kubernetes_api.update_application_status(
+                namespace=app.metadata.namespace, name=app.metadata.name, body=app
+            )
+        except ClientResponseError as err:
+            if err.status == 404:
+                return
+            raise
 
-        # Transition into "DELETING" state
-        app.status.state = ApplicationState.DELETING
-        await self.kubernetes_api.update_application_status(
-            namespace=app.metadata.namespace, name=app.metadata.name, body=app
-        )
+        logger.info("Delete %r (%s)", app.metadata.name, app.metadata.namespace)
 
         await self._delete_manifest(app)
 
