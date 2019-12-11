@@ -334,6 +334,7 @@
   hosts: krake_apps
   vars:
     - krake_homedir: /home/krake
+    - cert_dir: "{{ krake_homedir }}/clusters/certs/"
   tags:
     - cluster_certs
   tasks:
@@ -347,7 +348,7 @@
       - name: Upload certificates directory
         copy:
           src: cluster_certs/
-          dest: "{{ krake_homedir }}/clusters/certs/"
+          dest: "{{ cert_dir }}"
           mode: preserve
 
       - name: Generate kube config file

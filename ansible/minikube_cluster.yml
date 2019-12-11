@@ -26,6 +26,7 @@
           create_floating_ip: "{{ floating_ip }}"
           flavor: "{{ flavor }}"
           use_config_drive: "{{ use_config_drive }}"
+          api_port: "{{ api_port }}"
       register: stack
 
     - name: Update host variables of Minikube VM
@@ -203,6 +204,7 @@
       become: yes
       command: >
         minikube start
+          {{ '--apiserver-ips ' + public_ip if public_ip != "" else '' }}
           --vm-driver=none
           --apiserver-port "{{ api_port }}"
       environment:
@@ -269,3 +271,14 @@
         - .minikube/ca.crt
         - .minikube/client.crt
         - .minikube/client.key
+
+    - name: Generate kube config file
+      delegate_to: localhost
+      template:
+        src: files/krake/kube_config.j2
+        dest: "cluster_certs/{{ inventory_hostname }}/kube_config"
+      vars:
+        cert_dir: "{{ playbook_dir }}/cluster_certs"
+        cluster_name: "{{ inventory_hostname }}"
+        cluster_ip: "{{ public_ip|default(private_ip, true) }}"
+        cluster_api_port: "{{ api_port }}"
