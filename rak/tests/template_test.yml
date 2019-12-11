@@ -1,0 +1,22 @@
+heat_template_version: queens
+
+description: Basic dummy template
+
+parameters:
+  flavor:
+    type: string
+    label: Instance Type
+    description: Type of instance (flavor) to be used
+
+resources:
+  my_instance:
+    type: OS::Nova::Server
+    properties:
+      key_name: my_key
+      image: my_image
+      flavor: { get_param: flavor }
+
+outputs:
+  private_ip:
+    description: Private IP of the server
+    value: { get_attr: [my_instance, first_address] }

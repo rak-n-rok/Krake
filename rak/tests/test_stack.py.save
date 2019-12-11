@@ -1,0 +1,177 @@
+import asyncio
+import pytest
+
+from aiohttp import web
+from faker import Faker
+
+fake = Faker()
+
+def make_openstack_app(stack_responses):
+    token = "unittest-token"
+    routes = web.RouteTableDef()
+    stack_responses_iter = iter(stack_responses)
+
+    @routes.post("/orchstration/v1/{tenant_id}/stacks")
+    async def create_heat_stack(request):
+        stack = await request.json()
+
+        print(stack)
+
+        #         if "node_count" in cluster:
+        #             assert cluster["node_count"] is not None
+        #         else:
+        #             cluster["node_count"] = 3
+        #
+        #         if "master_count" in cluster:
+        #             assert cluster["master_count"] is not None
+        #         else:
+        #             cluster["master_count"] = 1
+
+        stack["uuid"] = fake.uuid4()
+        request.app["stacks"][stack["uuid"]] = stack
+
+        response_body = {
+            "stack": {
+                "id": stack["uuid"],
+                "links": [{"href": "someurl", "rel": "self"}],
+            }
+        }
+
+        return web.json_response(response_body)  # 200
+
+    @routes.get("/orchstration/v1/{tenant_id}/stacks/{ident}")
+    async def read_heat_stack(request):
+        stack = request.app["stacks"].get(request.match_info["ident"])
+        if stack is None:
+            raise web.HTTPNotFound()
+
+        try:
+            response = next(stack_responses_iter)
+        except StopIteration as err:
+            raise web.HTTPNotFound() from err
+
+        return web.json_response(dict(stack, **response))
+
+    @routes.delete("/orchstration/v1/{tenant_id}/stacks/{stack_name}/{stack_id}")
+    async def delete_heat_stack(request):
+        stack = request.app["stacks"].get(request.match_info["stack_id"])
+        if stack is None:
+            raise web.HTTPNotFound()
+
+        return web.json_response(status=204)  # No Content
+
+    @routes.post("/orchstration/v1/{tenant_id}/stacks/{stack_name}/{stack_id}")
+    async def update_heat_stack(request):
+        stack = request.app["stacks"].get(request.match_info["stack_id"])
+
+        stack_update = await request.json()
+
+        print(stack)
+        print(stack_update)
+
+        request.app["stacks"][stack["uuid"]] = {**stack, **stack_update}
+
+        response_body = {
+            "code": "202 Accepted",
+            "message": "The request is accepted for processing.<br /><br />\n\n\n",
+            "title": "Accepted",
+        }
+        return web.json_response(response_body, status=202)
+
+    @routes.post("/identity/v3/auth/tokens")
+    async def create_token(request):
+        return web.json_response(
+            {
+                "token": {
+                    "expires_at": "2099-01-01T00:00:00.000000Z",
+                    "catalog": [
+                        {
+                            "endpoints": [
+                                {
+                                    "region_id": "eu1",
+                                    "url": str(
+                                        request.url.with_path("/container-infra/v1")
+                                    ),
+                                    "region": "eu1",
+                                    "interface": "public",
+                                    "id": "a9f41ae4edab46f2899bf8360b639d3c",
+                                    "name": "public container-infra",
+                                }
+                            ],
+                            "type": "container-infra",
+                            "id": "6e2656ea3a724505ab3a8166c1bafa64",
+                            "name": "magnum",
+                        }
+                    ],
+                }
+            },
+            headers={"X-Subject-Token": token},
+        )
+
+
+#    async def create_token(request):
+#        return web.json_response(
+#            {
+#                "token": {
+#                    "expires_at": "2099-01-01T00:00:00.000000Z",
+#                    "catalog": [
+#                        {
+#                            "endpoints": [
+#                                {
+#                                    "region_id": "eu1",
+#                                    "url": str(
+#                                        request.url.with_path("/orchstration/v1")
+#                                    ),
+#                                    "region": "eu1",
+#                                    "interface": "public",
+#                                    "id": "a9f41ae4edab46f2899bf8360b639d3c",
+#                                    "name": "public orchestration",
+#                                }
+#                            ],
+#                            "type": "orchstration",
+#                            "id": "6e2656ea3a724505ab3a8166c1bafa64",
+#                            "name": "heat",
+#                        }
+#                    ],
+#                }
+#            },
+#            headers={"X-Subject-Token": token},
+#        )
+#
+    # app = web.Application(logger=logging.getLogger(), middlewares=[error_log()])
+    app = web.Application()
+    app.add_routes(routes)
+    app["stacks"] = {}
+
+    return app
+
+
+import os
+
+os.environ["OS_AUTH_URL"] = "http://localhost:8080/identity/v3/"
+from rak.stacks import create_stack
+
+async def test_create_stack(aiohttp_server):
+    openstack_app = make_openstack_app([])
+    openstack_server = await aiohttp_server(openstack_app)
+
+#    stack_parameters = {
+#        "instance_name": "krake_myenv_01",
+#        "public_keys": ["MySSHKey1", "MySSHKey2"],
+#        "private_network_name": "krake-myenv-network",
+#        "private_subnet_name": "krake-myenv-subnet",
+#        "public_network_name": "public-network",
+#        "flavor": "MyFlavor",
+#        "image": "MyImage",
+#        "create_floating_ip": "True",
+#        "use_config_drive": "False",
+#        "common_ports_secgroup_name": "krake-myenv-ports-commonsecgroup",
+#        "common_icmp_secgroup_name": "krake-myenv-icmp-commonsecgroup",
+#        "secrule_ports": "42, 99",
+#        "secrule_protocols": "tcp, udp",
+#        "allow_icmp": "False",
+#    }
+#
+#    create_stack("krake_myenv_01", "/home/mg/gitlab/krake/rak/rak/stacks/virtualmachine", stack_parameters)
+
+    assert False

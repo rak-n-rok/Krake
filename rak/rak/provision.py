@@ -3,7 +3,9 @@ from .stacks import (
     make_heat_client,
     create_or_update_stack,
     get_stack_outputs,
-    delete_stack_by_name,
+    delete_stack,
+    get_stack_by_name,
+    StackNotFound,
 )
 from .inventory import (
     add_group_to_inventory,
@@ -311,6 +313,7 @@ def unprovision(config, hostnames):
     ansible_dir = config["ansible_directory"]
     profile_directory = config["profile_directory"]
     inventory_file = config["ansible_inventory_file"]
+    strict_stack_deletion = config["strict_stack_deletion"]
 
     # Load hosts profiles
     print("1. Load hosts profiles")
@@ -324,11 +327,20 @@ def unprovision(config, hostnames):
         # data = yaml.load(f, Loader=yaml.FullLoader)
         inventory = yaml.load(f)
 
+    heat_client = make_heat_client()
+
     for host in hosts:
         print("Unprovision host")
         print(host.name)
         # Delete Stacks
-        delete_stack_by_name(host.name, allow_notfound=True)
+
+        try:
+            stack = get_stack_by_name(heat_client, host.name)
+        except StackNotFound:
+            if strict_stack_deletion:
+                raise
+        else:
+            delete_stack(stack.id)
 
         # Remove hosts from groups
         remove_host_from_group(host.name, host.host_type, inventory)
@@ -357,7 +369,13 @@ def unprovision(config, hostnames):
         print("Clean environment")
         print(environment.name)
 
-        delete_stack_by_name(environment.name, allow_notfound=True)
+        try:
+            stack = get_stack_by_name(heat_client, environment.name)
+        except StackNotFound:
+            if strict_stack_deletion:
+                raise
+        else:
+            delete_stack(stack.id, allow_notfound=True)
 
         if is_group_empty(environment.name, inventory):
             print("environment found empty")

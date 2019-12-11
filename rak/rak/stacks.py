@@ -89,7 +89,7 @@ def create_or_update_stack(
         stack = get_stack_by_name(heat_client, stack_name)
     except StackNotFound:
         print("Creating Stack")
-        stack = create_stack(heat_client, stack_name, stack_filename, parameters)
+        create_stack(heat_client, stack_name, stack_filename, parameters)
     else:
         print("Stack already exists, updating")
         update_stack(heat_client, stack, stack_filename, parameters)
@@ -133,6 +133,7 @@ def get_stack_status(heat_client, stack_id):
     - DELETE_FAILED
 
     Args:
+        heat_client (heatclient.client.Client): Heat Client
         stack_id (uuid): The OpenStack UUID of the Heat stack to check
 
     Returns:
@@ -147,58 +148,50 @@ def create_stack(heat_client, stack_name, stack_file_path, parameters=None):
     """Create a new Heat Stack
 
     Args:
+        heat_client (heatclient.client.Client): Heat Client
         stack_name (str): The name of the Heat stack to create. This is also a
             unique identifier for Heat stacks
-        stack_filename (str): Path to the Heat template
+        stack_file_path (str): Path to the Heat template
         parameters (dict, optional): Heat template parameters
 
     """
 
-    #    current_dir = os.path.dirname(os.path.realpath(__file__))
-    # stack_file_path = os.path.join(current_dir, STACK_DIR, f"{stack_filename}.yml")
-    #    stack_file_path = os.path.join(current_dir, STACK_DIR, f"{stack_filename}.yml")
-
-    template = open(f"{stack_file_path}.yml")
-    if parameters:
-        heat_client.stacks.create(
-            stack_name=stack_name, template=template.read(), parameters=parameters
-        )
-    else:
-        heat_client.stacks.create(stack_name=stack_name, template=template.read())
-    template.close()
+    with open(stack_file_path) as template:
+        if parameters:
+            heat_client.stacks.create(
+                stack_name=stack_name, template=template.read(), parameters=parameters
+            )
+        else:
+            heat_client.stacks.create(stack_name=stack_name, template=template.read())
 
 
-def update_stack(heat_client, stack, stack_filename, parameters=None):
+def update_stack(heat_client, stack_uuid, stack_file_path, parameters=None):
     """Update an existing Heat Stack
 
     Args:
-        stack_name (str): The name of the Heat stack to create. This is also a
-            unique identifier for Heat stacks
-        stack_filename (str): Path to the Heat template
+        heat_client (heatclient.client.Client): Heat Client
+        stack_uuid (uuid): The OpenStack UUID of the Heat stack to update
+        stack_file_path (str): Path to the Heat template
         parameters (dict, optional): Heat template parameters
     """
-    current_dir = os.path.dirname(os.path.realpath(__file__))
-    stack_file_path = os.path.join(current_dir, STACK_DIR, f"{stack_filename}.yml")
 
-    template = open(stack_file_path)
-    if parameters:
-        heat_client.stacks.update(
-            stack_id=stack.id, template=template.read(), parameters=parameters
-        )
-    else:
-        heat_client.stacks.update(stack_id=stack.id, template=template.read())
-    template.close()
+    with open(stack_file_path) as template:
+        if parameters:
+            heat_client.stacks.update(
+                stack_id=stack_uuid, template=template.read(), parameters=parameters
+            )
+        else:
+            heat_client.stacks.update(stack_id=stack_uuid, template=template.read())
 
 
-def delete_stack_by_name(
-    heat_client, stack_name, wait=False, retry=10, interval=1, allow_notfound=False
+def delete_stack(
+    heat_client, stack_uuid, wait=False, retry=10, interval=1, allow_notfound=False
 ):
     """Create a Heat Stack
 
     Args:
-
-        stack_name (str): The name of the Heat stack to create. This is also a
-            unique identifier for Heat stacks
+        heat_client (heatclient.client.Client): Heat Client
+        stack_uuid (uuid): The OpenStack UUID of the Heat stack to update
         wait (bool, optional): Controls if we should wait for the Heat Stack
             to be deleted before returning.
         retry (int, optional): Maximum number of retries before  raising a
@@ -212,22 +205,15 @@ def delete_stack_by_name(
         heatclient.v1.stacks.Stack: the created Heat stack
     """
 
-    try:
-        stack = get_stack_by_name(heat_client, stack_name)
-    except StackNotFound:
-        if not allow_notfound:
-            raise
-        return
-
-    heat_client.stacks.delete(stack.id)
+    heat_client.stacks.delete(stack_uuid)
 
     if not wait:
         return
 
-    # TODO: Implement retry limit
+    # TODO: Implement retry limit + tests
     while True:
         try:
-            get_stack_by_name(heat_client, stack.stack_name)
+            heat_client.stacks.get(stack_uuid)
         except StackNotFound:
             print("Finally gone")
             return
@@ -238,6 +224,9 @@ def delete_stack_by_name(
 
 def list_stacks(heat_client):
     """List Heat Stack
+
+    Args:
+        heat_client (heatclient.client.Client): Heat Client
 
     Returns:
         list: List of Heat Stack objects
@@ -253,6 +242,7 @@ def get_stack_by_name(heat_client, stack_name):
     for a stack by name.
 
     Args:
+        heat_client (heatclient.client.Client): Heat Client
         stack_name (str): The name of the Stack
 
     Returns:

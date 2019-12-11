@@ -2,48 +2,106 @@ import os
 import yaml
 
 
-def add_group_to_inventory(groupname, inventory):
-    """Add a group into the Ansible inventory by adding it as a child of the
-    "all" group
+class Inventory(object):
+    """Thin wrapper around a dictionnary representing the Ansible inventory"""
 
-    Args:
-        groupname (str): Name of the group
-        inventory (dict): JSON representation of the Ansible inventory
-    """
+    def __init__(self, inventory_path):
+        self.inventory_path = inventory_path
 
-    if groupname not in inventory["all"]["children"]:
-        inventory["all"]["children"][groupname] = {}
+        with open(inventory_path) as f:
+            self.inventory = yaml.load(f, Loader=yaml.FullLoader)
 
+    def __getitem__(self, x):
+        return self.inventory[x]
 
-def add_child_to_group(child, groupname, inventory):
-    """Add a child to an existing group in the Ansible inventory
+    def add_group_to_inventory(self, groupname):
+        """Add a group into the Ansible inventory by adding it as a child of the
+        "all" group
 
-    Args:
-        child (str): Name of the child group
-        groupname (str): Name of the parent group
-        inventory (dict): JSON representation of the Ansible inventory
+        Args:
+            groupname (str): Name of the group
+            inventory (dict): JSON representation of the Ansible inventory
+        """
 
-    """
-    if "children" not in inventory["all"]["children"][groupname]:
-        inventory["all"]["children"][groupname]["children"] = {child: {}}
-    elif child not in inventory["all"]["children"][groupname]["children"]:
-        inventory["all"]["children"][groupname]["children"][child] = {}
+        if groupname not in self.inventory["all"]["children"]:
+            self.inventory["all"]["children"][groupname] = {}
 
+    def remove_group_from_inventory(self, groupname):
+        """Remove a group from the Ansible inventory by removing it from the "all"
+        group children
 
-def add_host_to_group(hostname, groupname, inventory):
-    """Add a host to a group in the Ansible inventory
+        Args:
+            groupname (str): Name of the group
+            inventory (dict): JSON representation of the Ansible inventory
+        """
 
-    Args:
-        hostname (str): Name of the host
-        groupname (str): Name of the group
-        inventory (dict): JSON representation of the Ansible inventory
-    """
+        try:
+            del self.inventory["all"]["children"][groupname]
+        except KeyError:
+            print("group not found in inventory")
+            # Allow group to have been already deleted
+            pass
 
-    # First "child"
-    if "hosts" not in inventory["all"]["children"][groupname]:
-        inventory["all"]["children"][groupname]["hosts"] = {hostname: {}}
-    elif hostname not in inventory["all"]["children"][groupname]["hosts"]:
-        inventory["all"]["children"][groupname]["hosts"][hostname] = {}
+    def add_child_to_group(self, groupname, child):
+        """Add a child to an existing group in the Ansible inventory
+
+        Args:
+            child (str): Name of the child group
+            groupname (str): Name of the parent group
+            inventory (dict): JSON representation of the Ansible inventory
+        """
+        if "children" not in self.inventory["all"]["children"][groupname]:
+            self.inventory["all"]["children"][groupname]["children"] = {child: {}}
+        elif child not in self.inventory["all"]["children"][groupname]["children"]:
+            self.inventory["all"]["children"][groupname]["children"][child] = {}
+
+    def remove_child_from_group(self, groupname, child):
+        """Add a child group from a parent group in the Ansible inventory
+
+        Args:
+            child (str): Name of the child group
+            groupname (str): Name of the parent group
+            inventory (dict): JSON representation of the Ansible inventory
+        """
+        print("remove_child_from_group")
+        print(child, groupname)
+
+        try:
+            del self.inventory["all"]["children"][groupname]["children"][child]
+        except KeyError:
+            print("child not present in group")
+            # Allow host to have been already deleted
+            pass
+
+    def add_host_to_group(self, groupname, hostname):
+        """Add a host to a group in the Ansible inventory
+
+        Args:
+            hostname (str): Name of the host
+            groupname (str): Name of the group
+            inventory (dict): JSON representation of the Ansible inventory
+        """
+
+        # First "child"
+        if "hosts" not in self.inventory["all"]["children"][groupname]:
+            self.inventory["all"]["children"][groupname]["hosts"] = {hostname: {}}
+        elif hostname not in self.inventory["all"]["children"][groupname]["hosts"]:
+            self.inventory["all"]["children"][groupname]["hosts"][hostname] = {}
+
+    def remove_host_from_group(self, groupname, hostname):
+        """Remove a host from a group in the Ansible inventory
+
+        Args:
+            hostname (str): Name of the host
+            groupname (str): Name of the group
+            inventory (dict): JSON representation of the Ansible inventory
+        """
+        try:
+            del self.inventory["all"]["children"][groupname]["hosts"][hostname]
+        except KeyError:
+            print("host not present in group")
+            # Allow host to have been already deleted
+            pass
 
 
 def add_group_vars(groupname, group_vars, ansible_dir):
@@ -72,41 +130,6 @@ def add_host_vars(hostname, host_vars, ansible_dir):
         host_vars_path = os.path.join(ansible_dir, "host_vars", hostname)
         with open(host_vars_path, "w") as f:
             yaml.dump(host_vars, f)
-
-
-def remove_host_from_group(hostname, groupname, inventory):
-    """Remove a host from a group in the Ansible inventory
-
-    Args:
-        hostname (str): Name of the host
-        groupname (str): Name of the group
-        inventory (dict): JSON representation of the Ansible inventory
-    """
-    try:
-        del inventory["all"]["children"][groupname]["hosts"][hostname]
-    except KeyError:
-        print("host not present in group")
-        # Allow host to have been already deleted
-        pass
-
-
-def remove_child_from_group(child, groupname, inventory):
-    """Add a child group from a parent group in the Ansible inventory
-
-    Args:
-        child (str): Name of the child group
-        groupname (str): Name of the parent group
-        inventory (dict): JSON representation of the Ansible inventory
-    """
-    print("remove_child_from_group")
-    print(child, groupname)
-
-    try:
-        del inventory["all"]["children"][groupname]["children"][child]
-    except KeyError:
-        print("child not present in group")
-        # Allow host to have been already deleted
-        pass
 
 
 def remove_group_vars(groupname, ansible_dir):
@@ -143,23 +166,6 @@ def remove_host_vars(hostname, ansible_dir):
     try:
         os.remove(host_vars_path)
     except FileNotFoundError:
-        pass
-
-
-def remove_group_from_inventory(groupname, inventory):
-    """Remove a group from the Ansible inventory by removing it from the "all"
-    group children
-
-    Args:
-        groupname (str): Name of the group
-        inventory (dict): JSON representation of the Ansible inventory
-    """
-
-    try:
-        del inventory["all"]["children"][groupname]
-    except KeyError:
-        print("group not found in inventory")
-        # Allow group to have been already deleted
         pass
 
 
