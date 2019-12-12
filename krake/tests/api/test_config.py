@@ -21,7 +21,7 @@ def load_config(config):
             yaml.dump(config.serialize(), stream=fd)
         raw_config = load_yaml_config(base_config_path)
 
-    return ApiConfiguration.deserialize(raw_config)
+    return ApiConfiguration.deserialize(raw_config, creation_ignored=True)
 
 
 def test_config_load_base(config):

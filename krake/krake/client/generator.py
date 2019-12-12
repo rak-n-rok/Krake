@@ -381,9 +381,7 @@ def make_create_handler(operation, doc):
         url = self.client.url.with_path(path)
 
         resp = await self.client.session.request(
-            operation.method,
-            url,
-            json=body.serialize(subresources=set(), readonly=False),
+            operation.method, url, json=body.serialize()
         )
         data = await resp.json()
         return operation.response.deserialize(data)
@@ -482,9 +480,7 @@ def make_update_handler(operation, doc):
         url = self.client.url.with_path(path)
 
         resp = await self.client.session.request(
-            operation.method,
-            url,
-            json=body.serialize(subresources=set(), readonly=False),
+            operation.method, url, json=body.serialize()
         )
         data = await resp.json()
         return operation.response.deserialize(data)

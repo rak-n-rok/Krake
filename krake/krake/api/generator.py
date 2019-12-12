@@ -10,7 +10,6 @@ from uuid import uuid4
 from aiohttp import web
 from webargs.aiohttpparser import use_kwargs
 
-from krake.data.serializable import readonly_fields
 from krake.data.core import WatchEvent, WatchEventType, ListMetadata
 from ..utils import camel_to_snake_case, get_field
 from .helpers import load, session, Heartbeat, use_schema, HttpReason, HttpReasonCode
@@ -101,24 +100,17 @@ def generate_api(apidef):
     return decorator
 
 
-def make_request_schema(cls, include=set()):
-    """Create a :class:`marshmallow.Schema` excluding subresources.
+def make_create_request_schema(cls):
+    """Create a :class:`marshmallow.Schema` excluding subresources and readonly.
 
     Args:
         cls (type): Data class with ``Schema`` attribute
-        include (set, optional): Set of subresource attributes that
-            should not be excluded.
 
     Returns:
         marshmallow.Schema: Schema instance with excluded subresources
 
     """
-    exclude = readonly_fields(cls) | set(
-        field.name
-        for field in dataclasses.fields(cls)
-        if field.metadata.get("subresource", False) and field.name not in include
-    )
-
+    exclude = cls.fields_ignored_by_creation()
     return cls.Schema(exclude=exclude)
 
 
@@ -274,7 +266,7 @@ def _make_create_handler(operation, logger):
         resource=operation.resource.plural.lower(),
         verb="create",
     )
-    @use_schema("body", make_request_schema(operation.body))
+    @use_schema("body", schema=make_create_request_schema(operation.body))
     async def create(request, body):
         namespace = request.match_info.get("namespace")
 
@@ -339,7 +331,7 @@ def _make_update_handler(operation, logger):
         resource=operation.resource.plural.lower(),
         verb="update",
     )
-    @use_schema("body", make_request_schema(operation.body))
+    @use_schema("body", schema=operation.body.Schema)
     @load("entity", operation.response)
     async def update(request, body, entity):
         # Once a resource is in the "deletion in progress" state, finalizers
@@ -431,7 +423,7 @@ def _make_update_subresource_handler(operation, logger):
     @protected(
         api=operation.subresource.resource.api, resource=resource_name, verb="update"
     )
-    @use_schema("body", make_request_schema(operation.body, include={attr_name}))
+    @use_schema("body", operation.body.Schema)
     @load("entity", operation.response)
     async def update_subresource(request, body, entity):
         source = getattr(body, attr_name)

@@ -334,7 +334,7 @@ class ConfigurationOptionMapper(object):
         merged = self._replace_from_cli(processed_config, args)
 
         try:
-            config_obj = self.config_cls.deserialize(merged)
+            config_obj = self.config_cls.deserialize(merged, creation_ignored=True)
         except ValidationError as err:
             sys.exit(self._create_error_message(err))
 

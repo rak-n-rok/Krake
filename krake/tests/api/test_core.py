@@ -44,7 +44,7 @@ async def test_create_role(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
     data = RoleFactory()
 
-    resp = await client.post("/core/roles", json=data.serialize(readonly=False))
+    resp = await client.post("/core/roles", json=data.serialize())
     assert resp.status == 200
     role = Role.deserialize(await resp.json())
 
@@ -74,7 +74,7 @@ async def test_create_role_with_existing_name(aiohttp_client, config, db):
 
     client = await aiohttp_client(create_app(config=config))
 
-    resp = await client.post("/core/roles", json=existing.serialize(readonly=False))
+    resp = await client.post("/core/roles", json=existing.serialize())
     assert resp.status == 409
 
     json = await resp.json()
@@ -170,7 +170,7 @@ async def test_create_role_binding(aiohttp_client, config, db):
     data = RoleBindingFactory()
     client = await aiohttp_client(create_app(config=config))
 
-    resp = await client.post("/core/rolebindings", json=data.serialize(readonly=False))
+    resp = await client.post("/core/rolebindings", json=data.serialize())
     assert resp.status == 200
     binding = RoleBinding.deserialize(await resp.json())
 
@@ -201,9 +201,7 @@ async def test_create_role_binding_with_existing_name(aiohttp_client, config, db
 
     client = await aiohttp_client(create_app(config=config))
 
-    resp = await client.post(
-        "/core/rolebindings", json=existing.serialize(readonly=False)
-    )
+    resp = await client.post("/core/rolebindings", json=existing.serialize())
     assert resp.status == 409
 
 

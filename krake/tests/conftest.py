@@ -240,7 +240,7 @@ def config(etcd_server, user):
         ],
         "log": {},
     }
-    return ApiConfiguration.deserialize(config)
+    return ApiConfiguration.deserialize(config, creation_ignored=True)
 
 
 class KeystoneInfo(NamedTuple):
