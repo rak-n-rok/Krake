@@ -45,23 +45,36 @@ This example will insert two objects in the database:
 Every resource will be first validated before being inserted in the database.
 
 A resource will not be inserted in the database if this resource already exists, even if
-the content is different. This behavior can be overridden by using the ``--force``
-argument. In this case, the resource present is completely removed, and the newly
-defined one is added.
+the content is different. This will be considered as an error. This behavior can be
+overridden by using the ``--force`` argument. In this case, the resource present is
+completely removed, and the newly defined one is added.
+
+If any issue arises during insertion, the newly inserted values will be removed, and if
+previous values were present and have been replaced, they will be added again. Issues
+can happen in different cases:
+
+ * a validation error if the resource could not be deserialized. That means the resource
+   as written in the file has errors in it;
+ * the resource already present in the database. This can only happen if the ``--force``
+   argument is not used;
+ * the API or kind of the resource is not supported by the script. In this case, either
+   a typo is the cause, or the API and kind need to be added to the handled resources
+   dictionary. This needs to be done with care.
 
 The script needs Krake to be installed to be launched.
 """
 
 import asyncio
-import os.path
 import sys
-import yaml
-from datetime import datetime
-from uuid import uuid4
 from argparse import ArgumentParser
+from datetime import datetime
+from typing import NamedTuple
+from uuid import uuid4
 
-from krake.data.core import Role, RoleBinding, Metric, MetricsProvider, resource_ref
+import yaml
 from krake.api.database import Session
+from krake.data.core import Role, RoleBinding, Metric, MetricsProvider, resource_ref
+from krake.data.serializable import Serializable
 from marshmallow import ValidationError
 
 
@@ -86,6 +99,27 @@ class ResourcePresentException(BaseException):
     def __init__(self):
         default_message = "Resource already present in database"
         super().__init__(default_message)
+
+
+class InsertionResult(NamedTuple):
+    """Keep the important elements of an attempt to insert a resource into the database.
+    This is used in both cases: failure or success.
+
+    Attributes:
+        previous (Serializable): the resource that was stored in the database before
+            attempting to add an updated value. None if no resource was present.
+        to_insert (Serializable): the resource that was added to the database. None if
+            no resource was actually added.
+        error (BaseException): the error that occurred during pre-processing or during
+            insertion. None if no error occurred.
+        message (str): a message to display in case of errors. None if no error
+            occurred.
+    """
+
+    previous: Serializable = None
+    to_insert: Serializable = None
+    error: BaseException = None
+    message: str = None
 
 
 def _create_identification_message(resource):
@@ -128,30 +162,33 @@ async def insert_resource(resource, db_host, db_port, force=False):
             ResourcePresentException is returned.
 
     Returns:
-        tuple: if an error occurred, a message and the corresponding exceptions are
-            returned, as: (<message>, <exception>). Otherwise, return None.
+        InsertionResult: the summary of the attempt to insert. It can be used for
+            logging and rollback purposes.
 
     """
+
     api = resource["api"]
     kind = resource["kind"]
     try:
         name_cls_mapping = _handled_resources[api]
     except KeyError as err:
         message = _create_identification_message(resource)
-        return message, ValueError(f"The api '{err.args[0]}' could not be found.")
+        error = ValueError(f"The api '{err.args[0]}' could not be found.")
+        return InsertionResult(error=error, message=message)
 
     try:
         cls = name_cls_mapping[kind]
     except KeyError as err:
         message = _create_identification_message(resource)
-        return message, ValueError(f"The kind '{err.args[0]}' could not be found.")
+        error = ValueError(f"The kind '{err.args[0]}' could not be found.")
+        return InsertionResult(error=error, message=message)
 
     # Validation of the resource's structure.
     try:
         instance = cls.deserialize(resource)
     except ValidationError as err:
         message = _create_identification_message(resource)
-        return message, err
+        return InsertionResult(error=err, message=message)
 
     async with Session(host=db_host, port=db_port) as session:
         stored = await session.get(cls, name=instance.metadata.name)
@@ -161,7 +198,11 @@ async def insert_resource(resource, db_host, db_port, force=False):
             # If the resource is present in the database
             if not force:
                 # If it should not be replaced, quit
-                return resource_ref(instance), ResourcePresentException()
+                return InsertionResult(
+                    previous=stored,
+                    error=ResourcePresentException(),
+                    message=str(resource_ref(stored)),
+                )
 
             await session.delete(stored)
 
@@ -176,7 +217,7 @@ async def insert_resource(resource, db_host, db_port, force=False):
         await session.put(to_store)
 
     print(f" * {resource_ref(to_store)}")
-    return
+    return InsertionResult(previous=stored, to_insert=to_store)
 
 
 async def insert_from_file(src_path, db_host, db_port, force=False):
@@ -191,15 +232,10 @@ async def insert_from_file(src_path, db_host, db_port, force=False):
             and replaced by the ones read from the file. Otherwise, they are not added.
 
     Returns:
-        list: return a list of tuples. For each resource read from the file, an element
-            is present in the list. If the resource could be inserted without problem,
-            this element is None. Otherwise, a tuple (<message>, <exception>) is
-            present.
+        list: list of :class:`InsertionResult`. For each resource read from the file,
+            an element is present in the list.
 
     """
-    if not os.path.isfile(src_path):
-        return f"The given path '{src_path}' should be a file"
-
     with open(src_path, "r") as file:
         resources = yaml.safe_load_all(file)
 
@@ -210,6 +246,52 @@ async def insert_from_file(src_path, db_host, db_port, force=False):
             )
         )
     return result
+
+
+async def rollback(results, db_host, db_port):
+    """Restore the database to state as it was prior to starting inserting the
+    resources.
+
+    If a resource was present and has been replaced, restore it to its previous state.
+    If a resource was not present, remove it.
+
+    Args:
+        results (list): the list of list of :class:`InsertionResult` that were created
+            after the attempts to insert resources to the database.
+        db_host (str): the host of the database to connect to.
+        db_port (int): the port of the database to connect to.
+
+    Returns:
+        list: a list of string, one element per line to be printed out as log for the
+            rollback.
+
+    """
+    message = ["#############", "Rollback to previous state has been performed:"]
+    async with Session(host=db_host, port=db_port) as session:
+        for results_per_file in results:
+            for result in results_per_file:
+                # If result.to_insert is None, then nothing was added to the database,
+                # nor removed.
+
+                # If there was a resource before, and a new one replaced it,
+                # roll it back to the previous version of it.
+                if result.previous and result.to_insert:
+                    await session.delete(result.to_insert)
+                    await session.put(result.previous)
+                    message.append(
+                        f" * Resource {resource_ref(result.previous)} has been restored"
+                        f" to previous state."
+                    )
+
+                # If there was no resource before, but adding a new one was added,
+                # remove it.
+                if not result.previous and result.to_insert:
+                    await session.delete(result.to_insert)
+                    message.append(
+                        f" * Resource {resource_ref(result.to_insert)} added has been"
+                        f" removed."
+                    )
+    return message
 
 
 async def process_resources(src_files, db_host, db_port, force):
@@ -237,23 +319,34 @@ async def process_resources(src_files, db_host, db_port, force):
     # like (the ordering of read files and resources is kept):
     # assert result == [[(<A_1>, <exception>), None], [None, (<B_2>, <exception>)]]
     results = await asyncio.gather(
-        *(insert_from_file(src_path, db_host, db_port, force) for src_path in src_files)
+        *(
+            insert_from_file(src_path, db_host, db_port, force)
+            for src_path in src_files
+        ),
+        return_exceptions=False,
     )
 
-    # If, for each file, no task returned a value, there was no error
-    if not any(any(resources) for resources in results):
+    # If, for each file, no task returned an error, there was no error
+    if not any(any(result.error for result in resources) for resources in results):
         return None
 
-    message = ["#############", "The following could not be added:"]
     # For each resource in each file for which inserting it led to an error,
     # print it along with its error.
+    message = ["#############", "The following could not be added:"]
     for i, src_file in enumerate(src_files):
         message.append(f"In file {src_file}:")
+
         # results follows the same order for the resources as the one read.
-        for resource_error_tuple in results[i]:
-            if resource_error_tuple:
-                resource, error = resource_error_tuple
-                message.append(f" * {resource}, with error: {error!r}")
+        for insertion_result in results[i]:
+            # If an error occurred during insertion of this resource:
+            insertion_error = insertion_result.error
+            if insertion_error:
+                message.append(
+                    f" * {insertion_result.message}, with error: {insertion_error!r}"
+                )
+
+    rollback_messages = await rollback(results, db_host, db_port)
+    message.extend(rollback_messages)
 
     return "\n".join(message)
 
