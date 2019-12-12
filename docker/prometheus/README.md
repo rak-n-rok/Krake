@@ -57,15 +57,15 @@ $ docker run --detach --tty --interactive \
 - Compose file defines and runs docker containers for provisioning of the Krake Api,
 Krake Controllers and Krake DB infrastructure.
 - Pre-built krake image is a prerequisite for this compose file.
-- Generate `.env` file (from `.env.j2` template) to set up configuration setting.
-Insert custom variables, if any (optional), see more in `.env.j2`.
+- Use `--env` option or generate custom `.env` file (from `.env.j2` template)
+ to overwrite default Krake configuration setting, see more in Environment Variables Explanations
 
 ```bash
 $ cd docker/krake
 
-# Generate `.env` file from `.env.j2` template.
+# Generate custom `.env` file from `.env.j2` template (optional)
 $ pip install jinja2_standalone_compiler
-$ vim jinja2_standalone_config  # Insert custom variables, if any (optional)
+$ vim jinja2_standalone_config  # Insert custom Krake variables, if any
 $ jinja2_standalone_compiler -s jinja2_standalone_config --path .env.j2
 
 # Run docker compose
