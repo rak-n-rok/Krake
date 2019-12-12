@@ -68,6 +68,9 @@ $ pip install jinja2_standalone_compiler
 $ vim jinja2_standalone_config  # Insert custom Krake variables, if any
 $ jinja2_standalone_compiler -s jinja2_standalone_config --path .env.j2
 
+# Create minimal configuration for the Krake components
+$ config/generate --dst /etc/krake/ config/*template --host krake-api --etcd-host krake-db
+
 # Run docker compose
 $ docker-compose up --detach
 ```
