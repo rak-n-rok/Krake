@@ -19,7 +19,7 @@ from krake.controller import create_ssl_context
 from krake.data.core import resource_ref, ReasonCode
 from krake.data.kubernetes import Application, ApplicationState
 from krake.controller.kubernetes_application import (
-    ApplicationController,
+    KubernetesController,
     register_service,
     unregister_service,
 )
@@ -28,7 +28,7 @@ from krake.test_utils import server_endpoint
 
 from factories.fake import fake
 from factories.kubernetes import ApplicationFactory, ClusterFactory, make_kubeconfig
-from tests.controller.kubernetes import nginx_manifest, hooks_config
+from controller.kubernetes import nginx_manifest, hooks_config
 
 
 async def test_app_reception(aiohttp_server, config, db, loop):
@@ -97,7 +97,7 @@ async def test_app_reception(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
         # Update the client, to be used by the background tasks
         await controller.prepare(client)  # need to be called explicitly
         await controller.reflector.list_resource()
@@ -164,7 +164,7 @@ async def test_app_creation(aiohttp_server, config, db, loop):
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = ApplicationController(server_endpoint(api_server), worker_count=0)
+        controller = KubernetesController(server_endpoint(api_server), worker_count=0)
         await controller.prepare(client)
 
         await controller.resource_received(app, start_observer=False)
@@ -333,7 +333,7 @@ async def test_app_update(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         await controller.resource_received(app, start_observer=False)
@@ -460,7 +460,7 @@ async def test_app_migration(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         await controller.resource_received(app, start_observer=False)
@@ -513,7 +513,7 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         reflector_task = loop.create_task(controller.reflector())
@@ -609,7 +609,7 @@ async def test_app_custom_resource_creation(aiohttp_server, config, db, loop):
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = ApplicationController(server_endpoint(api_server), worker_count=0)
+        controller = KubernetesController(server_endpoint(api_server), worker_count=0)
         await controller.prepare(client)
 
         await controller.resource_received(app)
@@ -750,7 +750,7 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         await controller.resource_received(app)
@@ -894,7 +894,7 @@ async def test_app_custom_resource_migration(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         await controller.resource_received(app)
@@ -982,7 +982,7 @@ async def test_app_custom_resource_deletion(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         await controller.resource_received(app, start_observer=False)
@@ -1124,7 +1124,7 @@ async def test_service_registration(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
         await controller.resource_received(app)
 
@@ -1246,7 +1246,7 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
         await controller.resource_received(app)
 
@@ -1308,7 +1308,7 @@ async def test_complete_hook(aiohttp_server, config, db, loop):
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = ApplicationController(
+        controller = KubernetesController(
             server_endpoint(api_server), worker_count=0, hooks=deepcopy(hooks_config)
         )
         await controller.prepare(client)
@@ -1380,7 +1380,7 @@ async def test_complete_hook_disable_by_user(aiohttp_server, config, db, loop):
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = ApplicationController(
+        controller = KubernetesController(
             server_endpoint(api_server), worker_count=0, hooks=deepcopy(hooks_config)
         )
         await controller.prepare(client)
@@ -1480,7 +1480,7 @@ async def test_complete_hook_tls(aiohttp_server, config, pki, db, loop):
     async with Client(
         url=server_endpoint(api_server), loop=loop, ssl_context=ssl_context
     ) as client:
-        controller = ApplicationController(
+        controller = KubernetesController(
             server_endpoint(api_server),
             worker_count=0,
             ssl_context=ssl_context,
@@ -1525,7 +1525,7 @@ async def test_kubernetes_error_handling(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         await controller.queue.put(app.metadata.uid, app)

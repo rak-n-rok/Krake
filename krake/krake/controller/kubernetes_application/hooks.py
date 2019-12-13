@@ -41,13 +41,19 @@ class InvalidResourceError(ControllerError):
 
 
 class Hook(Enum):
-    PreCreate = auto()
-    PostCreate = auto()
-    PreUpdate = auto()
-    PostUpdate = auto()
-    PreDelete = auto()
-    PostDelete = auto()
-    Mangling = auto()
+    ResourcePreCreate = auto()
+    ResourcePostCreate = auto()
+    ResourcePreUpdate = auto()
+    ResourcePostUpdate = auto()
+    ResourcePreDelete = auto()
+    ResourcePostDelete = auto()
+    ApplicationMangling = auto()
+    ApplicationPreMigrate = auto()
+    ApplicationPostMigrate = auto()
+    ApplicationPreReconcile = auto()
+    ApplicationPostReconcile = auto()
+    ApplicationPreDelete = auto()
+    ApplicationPostDelete = auto()
 
 
 class HookDispatcher(object):
@@ -122,8 +128,8 @@ class HookDispatcher(object):
 listen = HookDispatcher()
 
 
-@listen.on(Hook.PostCreate)
-@listen.on(Hook.PostUpdate)
+@listen.on(Hook.ResourcePostCreate)
+@listen.on(Hook.ResourcePostUpdate)
 async def register_service(app, cluster, resource, response):
     """Register endpoint of Kubernetes Service object on creation and update.
 
@@ -165,7 +171,7 @@ async def register_service(app, cluster, resource, response):
     app.status.services[service_name] = f"{cluster_url.host}:{node_port}"
 
 
-@listen.on(Hook.PostDelete)
+@listen.on(Hook.ResourcePostDelete)
 async def unregister_service(app, cluster, resource, response):
     """Unregister endpoint of Kubernetes Service object on deletion.
 
@@ -189,7 +195,7 @@ async def unregister_service(app, cluster, resource, response):
         pass
 
 
-@listen.on(Hook.Mangling)
+@listen.on(Hook.ApplicationMangling)
 async def complete(app, api_endpoint, ssl_context, config):
     """Execute application complete hook defined by :class:`Complete`.
     Hook mangles given application and injects complete hooks variables.

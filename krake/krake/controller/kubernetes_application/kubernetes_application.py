@@ -256,7 +256,7 @@ def merge_status(orig, new):
     return result
 
 
-class ApplicationController(Controller):
+class KubernetesController(Controller):
     """Controller responsible for :class:`krake.data.kubernetes.Application`
     resources in "SCHEDULED" and "DELETING" state.
 
@@ -338,9 +338,9 @@ class ApplicationController(Controller):
         if app.status.running_on:
             if app.metadata.uid in self.observers:
                 # If an observer was started before, stop it
-                await self.unregister_observer(app)
+                await unregister_observer(self, app)
             # Start an observer only if an actual resource exists on a cluster
-            await self.register_observer(app)
+            await register_observer(self, app)
 
         await self.simple_on_receive(app, self.scheduled_or_deleting)
 
@@ -403,51 +403,6 @@ class ApplicationController(Controller):
         )
         return app
 
-    async def register_observer(self, app, start=True):
-        """Create an observer for the given Application, and start it as background
-        task if wanted.
-
-        If an observer already existed for this Application, it is stopped and deleted.
-
-        Args:
-            app (krake.data.kubernetes.Application): the Application to observe
-            start (bool, optional): if False, does not start the observer as background
-                task.
-
-        """
-        cluster = await self.kubernetes_api.read_cluster(
-            namespace=app.status.running_on.namespace, name=app.status.running_on.name
-        )
-        observer = KubernetesObserver(
-            cluster, app, self.on_status_update, time_step=self.observer_time_step
-        )
-
-        logger.debug("Start observer for %r", app)
-        task = None
-        if start:
-            task = self.loop.create_task(observer.run())
-
-        self.observers[app.metadata.uid] = (observer, task)
-
-    async def unregister_observer(self, app):
-        """Stop and delete the observer for the given Application. If no observer is
-        started, do nothing.
-
-        Args:
-            app (krake.data.kubernetes.Application): the Application whose observer will
-                be stopped.
-
-        """
-        if app.metadata.uid not in self.observers:
-            return
-
-        logger.debug("Stop observer for %r", app)
-        _, task = self.observers.pop(app.metadata.uid)
-        task.cancel()
-
-        with suppress(asyncio.CancelledError):
-            await task
-
     async def handle_resource(self, run_once=False):
         """Infinite loop which fetches and hand over the resources to the right
         coroutine. The specific exceptions and error handling have to be added here.
@@ -476,23 +431,56 @@ class ApplicationController(Controller):
     async def resource_received(self, app, start_observer=True):
         logger.debug("Handle %r", app)
 
-        await self.unregister_observer(app)
-        need_to_register = True
         copy = deepcopy(app)
 
         if app.metadata.deleted:
+            # Delete the Application
+            await listen.hook(
+                Hook.ApplicationPreDelete,
+                controller=self,
+                app=copy,
+                start=start_observer,
+            )
             await self._delete_application(copy)
-            need_to_register = False
+            await listen.hook(
+                Hook.ApplicationPostDelete,
+                controller=self,
+                app=copy,
+                start=start_observer,
+            )
         elif (
             copy.status.running_on
             and copy.status.running_on != copy.status.scheduled_to
         ):
+            # Migrate the Application
+            await listen.hook(
+                Hook.ApplicationPreMigrate,
+                controller=self,
+                app=copy,
+                start=start_observer,
+            )
             await self._migrate_application(copy)
+            await listen.hook(
+                Hook.ApplicationPostMigrate,
+                controller=self,
+                app=copy,
+                start=start_observer,
+            )
         else:
+            # Reconcile the Application
+            await listen.hook(
+                Hook.ApplicationPreReconcile,
+                controller=self,
+                app=copy,
+                start=start_observer,
+            )
             await self._reconcile_application(copy)
-
-        if need_to_register:
-            await self.register_observer(copy, start=start_observer)
+            await listen.hook(
+                Hook.ApplicationPostReconcile,
+                controller=self,
+                app=copy,
+                start=start_observer,
+            )
 
     async def _delete_application(self, app):
         # FIXME: during its deletion, an Application is updated, and thus put into the
@@ -543,7 +531,7 @@ class ApplicationController(Controller):
             ) as kube:
                 for resource in app.status.manifest:
                     await listen.hook(
-                        Hook.PreDelete,
+                        Hook.ResourcePreDelete,
                         app=app,
                         cluster=cluster,
                         resource=resource,
@@ -551,7 +539,7 @@ class ApplicationController(Controller):
                     )
                     resp = await kube.delete(resource)
                     await listen.hook(
-                        Hook.PostDelete,
+                        Hook.ResourcePostDelete,
                         app=app,
                         cluster=cluster,
                         resource=resource,
@@ -575,7 +563,7 @@ class ApplicationController(Controller):
         # Mangle desired spec resource by Mangling hook
         app.status.mangling = deepcopy(app.spec.manifest)
         await listen.hook(
-            Hook.Mangling,
+            Hook.ApplicationMangling,
             app=app,
             api_endpoint=self.api_endpoint,
             ssl_context=self.ssl_context,
@@ -640,7 +628,7 @@ class ApplicationController(Controller):
             # Delete all resources that are no longer in the spec
             for deleted in delta.deleted:
                 await listen.hook(
-                    Hook.PreDelete,
+                    Hook.ResourcePreDelete,
                     app=app,
                     cluster=cluster,
                     resource=deleted,
@@ -648,7 +636,7 @@ class ApplicationController(Controller):
                 )
                 resp = await kube.delete(deleted)
                 await listen.hook(
-                    Hook.PostDelete,
+                    Hook.ResourcePostDelete,
                     app=app,
                     cluster=cluster,
                     resource=deleted,
@@ -658,7 +646,7 @@ class ApplicationController(Controller):
             # Create new resource
             for new in delta.new:
                 await listen.hook(
-                    Hook.PreCreate,
+                    Hook.ResourcePreCreate,
                     app=app,
                     cluster=cluster,
                     resource=new,
@@ -666,7 +654,7 @@ class ApplicationController(Controller):
                 )
                 resp = await kube.apply(new)
                 await listen.hook(
-                    Hook.PostCreate,
+                    Hook.ResourcePostCreate,
                     app=app,
                     cluster=cluster,
                     resource=new,
@@ -676,7 +664,7 @@ class ApplicationController(Controller):
             # Update modified resource
             for modified in delta.modified:
                 await listen.hook(
-                    Hook.PreUpdate,
+                    Hook.ResourcePreUpdate,
                     app=app,
                     cluster=cluster,
                     resource=modified,
@@ -684,7 +672,7 @@ class ApplicationController(Controller):
                 )
                 resp = await kube.apply(modified)
                 await listen.hook(
-                    Hook.PostUpdate,
+                    Hook.ResourcePostUpdate,
                     app=app,
                     cluster=cluster,
                     resource=modified,
@@ -721,7 +709,7 @@ class ApplicationController(Controller):
         # Mangle desired spec resource by Mangling hook
         app.status.mangling = deepcopy(app.spec.manifest)
         await listen.hook(
-            Hook.Mangling,
+            Hook.ApplicationMangling,
             app=app,
             api_endpoint=self.api_endpoint,
             ssl_context=self.ssl_context,
@@ -781,6 +769,65 @@ class ApplicationController(Controller):
         await self.kubernetes_api.update_application_status(
             namespace=app.metadata.namespace, name=app.metadata.name, body=app
         )
+
+
+@listen.on(Hook.ApplicationPostReconcile)
+@listen.on(Hook.ApplicationPostMigrate)
+async def register_observer(controller, app, start=True):
+    """Create an observer for the given Application, and start it as background
+    task if wanted.
+
+    If an observer already existed for this Application, it is stopped and deleted.
+
+    Args:
+        controller (KubernetesController): the controller for which the observer will be
+            added in the list of working observers.
+        app (krake.data.kubernetes.Application): the Application to observe
+        start (bool, optional): if False, does not start the observer as background
+            task.
+
+    """
+    cluster = await controller.kubernetes_api.read_cluster(
+        namespace=app.status.running_on.namespace, name=app.status.running_on.name
+    )
+    observer = KubernetesObserver(
+        cluster,
+        app,
+        controller.on_status_update,
+        time_step=controller.observer_time_step,
+    )
+
+    logger.debug("Start observer for %r", app)
+    task = None
+    if start:
+        task = controller.loop.create_task(observer.run())
+
+    controller.observers[app.metadata.uid] = (observer, task)
+
+
+@listen.on(Hook.ApplicationPreReconcile)
+@listen.on(Hook.ApplicationPreMigrate)
+@listen.on(Hook.ApplicationPreDelete)
+async def unregister_observer(controller, app, **kwargs):
+    """Stop and delete the observer for the given Application. If no observer is
+    started, do nothing.
+
+    Args:
+        controller (KubernetesController): the controller for which the observer will be
+            removed from the list of working observers.
+        app (krake.data.kubernetes.Application): the Application whose observer will
+            be stopped.
+
+    """
+    if app.metadata.uid not in controller.observers:
+        return
+
+    logger.debug("Stop observer for %r", app)
+    _, task = controller.observers.pop(app.metadata.uid)
+    task.cancel()
+
+    with suppress(asyncio.CancelledError):
+        await task
 
 
 class ApiAdapter(object):

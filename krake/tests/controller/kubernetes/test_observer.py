@@ -5,10 +5,13 @@ from aiohttp import web
 import yaml
 
 from krake.api.app import create_app
+from krake.controller.kubernetes_application.kubernetes_application import (
+    register_observer,
+)
 from krake.data.core import resource_ref
 from krake.data.kubernetes import Application, ApplicationState
 from krake.controller.kubernetes_application import (
-    ApplicationController,
+    KubernetesController,
     KubernetesObserver,
     merge_status,
 )
@@ -38,7 +41,7 @@ async def test_reception_for_observer(aiohttp_server, config, db, loop):
     await db.put(running)
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
         # Update the client, to be used by the background tasks
         await controller.prepare(client)  # need to be called explicitly
         await controller.reflector.list_resource()
@@ -258,7 +261,7 @@ async def test_observer_on_status_update(aiohttp_server, db, config, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         observer = KubernetesObserver(
@@ -420,7 +423,7 @@ async def test_observer_on_status_update_mangled(aiohttp_server, db, config, loo
         return on_res_update
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = ApplicationController(
+        controller = KubernetesController(
             server_endpoint(server), worker_count=0, hooks=deepcopy(hooks_config)
         )
         controller.on_status_update = update_decorator(controller.on_status_update)
@@ -572,7 +575,7 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
         await asyncio.sleep(1)
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = ApplicationController(server_endpoint(server), worker_count=0)
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
         controller.on_status_update = update_decorator(controller.on_status_update)
 
         await controller.prepare(client)
@@ -677,13 +680,13 @@ async def test_observer_on_delete(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = ApplicationController(
+        controller = KubernetesController(
             server_endpoint(server), worker_count=0, time_step=100
         )
         await controller.prepare(client)
 
         # Start the observer, which will not observe due to time step
-        await controller.register_observer(app)
+        await register_observer(controller, app)
         observer, _ = controller.observers[app.metadata.uid]
 
         # Observe a resource actually in deletion.

@@ -2,13 +2,13 @@
 """
 from .hooks import register_service, unregister_service
 from .kubernetes_application import (
-    ApplicationController,
+    KubernetesController,
     KubernetesObserver,
     merge_status,
 )
 
 __all__ = [
-    "ApplicationController",
+    "KubernetesController",
     "register_service",
     "unregister_service",
     "KubernetesObserver",

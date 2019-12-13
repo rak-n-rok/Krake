@@ -43,7 +43,7 @@ from krake import (
 from krake.data.config import KubernetesConfiguration
 
 from ...controller import create_ssl_context, run
-from .kubernetes_application import ApplicationController
+from .kubernetes_application import KubernetesController
 
 
 logger = logging.getLogger("krake.controller.kubernetes")
@@ -70,7 +70,7 @@ def main(config):
     ssl_context = create_ssl_context(tls_config)
     logger.debug("TLS is %s", "enabled" if ssl_context else "disabled")
 
-    controller = ApplicationController(
+    controller = KubernetesController(
         api_endpoint=config.api_endpoint,
         worker_count=config.worker_count,
         ssl_context=ssl_context,
