@@ -1,3 +1,5 @@
+import asyncio
+from contextlib import suppress
 from copy import deepcopy
 from textwrap import dedent
 
@@ -541,7 +543,20 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
         controller = ApplicationController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
-        await controller.resource_received(app)
+        reflector_task = loop.create_task(controller.reflector())
+
+        await controller.handle_resource(run_once=True)
+        # During deletion, the Application is updated, thus reenqueued
+        assert controller.queue.size() == 1
+
+        # The reenqueued Application is ignored, as not present on the database anymore.
+        await controller.handle_resource(run_once=True)
+        assert controller.queue.size() == 0
+
+        reflector_task.cancel()
+
+        with suppress(asyncio.CancelledError):
+            await reflector_task
 
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
