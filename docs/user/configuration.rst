@@ -164,16 +164,16 @@ tls
 
     enabled (boolean)
         Activate or deactivate the TLS support. Example: ``false``
-    client_cert (path)
+    cert (path)
         Set the path to the client certificate authority. Example: ``tmp/pki/system:api-server.pem``
-    client_key (path)
+    key (path)
         Set the path to the client certificate. Example: ``tmp/pki/system:api-server-key.pem``
     client_ca (path)
         Set the path to the client key. Example: ``tmp/pki/ca.pem``
 
 
-Authentication:
----------------
+Authentication and authorization:
+---------------------------------
 
 authentication
     This section defines the method for authenticating users that connect to the API. Two methods are available: keystone_ and static_. A user not recognized can still send request if anonymous_ are allowed.
@@ -206,54 +206,8 @@ authentication
             name (string)
                 This is the name of the user that will be set as sending all requests. Example: ``system``
 
-
-Authorization
--------------
-
 authorization (enumeration)
     This parameter defines the mode for allowing users to perform specific actions (e.g. "create" or "delete" a resource). Three modes are available: ``RBAC``, ``always-allow``, ``always-deny``.
-
-default-roles (list)
-    This section is a list of all the roles that have to be added to the database when starting the API.
-
-    The syntax for each role is described in the following:
-
-    metadata
-        Here we define the metadata of the current role.
-
-        name (string)
-            .. _default-roles.metadata.name:
-
-            The name of the role to add. Example: ``system:admin``
-
-    rules (list)
-        This section is a list of all rules that apply to the current role.
-
-        api (string)
-            The name of the API the current role is authorized to access. For all APIs to be accessible, the syntax: ``"all"`` must be used.
-        namespaces (list of strings)
-            The list of all namespaces the current role is authorized to access. For all namespaces to be accessible, the syntax: ``["all"]`` must be used.
-        resources (list of strings)
-            The list of all resources the current role is authorized to access. For all resources to be accessible, the syntax: ``["all"]`` must be used.
-        verbs (list of strings)
-            The list of verbs that corresponds to the operations this role is allowed to execute. Example: ``["create", "list", "get", "update", "delete"]``
-
-
-default-role-bindings (list)
-    This section is a list of all bindings between the defined users and roles. The syntax for each binding is described in the following:
-
-    metadata
-        Here we define the metadata of the current role binding.
-
-        name (string)
-            Name of the current binding. Example: ``system:admin``
-
-    users (list of strings)
-        List of users concerned by this binding. They will be given the roles listed in default-role-bindings.roles_. Example: ``["system:admin"]``
-    roles (list of strings)
-        .. _default-role-bindings.roles:
-
-        List of roles concerned by this binding. The names listed have to correspond to the name of the roles, as defined in default-roles.metadata.name_. Example: ``["system:admin"]``.
 
 
 Controllers configuration

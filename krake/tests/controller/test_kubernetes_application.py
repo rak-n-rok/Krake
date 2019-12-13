@@ -6,7 +6,11 @@ from aiohttp.test_utils import TestServer as Server
 import json
 import pytz
 import yaml
-from krake.data.config import HooksConfiguration, TLSConfiguration
+from krake.data.config import (
+    HooksConfiguration,
+    TlsClientConfiguration,
+    TlsServerConfiguration,
+)
 from kubernetes_asyncio.client import V1Status, V1Service, V1ServiceSpec, V1ServicePort
 
 from krake.api.app import create_app
@@ -1425,18 +1429,15 @@ async def test_complete_hook_tls(aiohttp_server, config, pki, db, loop):
 
     server_cert = pki.gencert("api-server")
     client_cert = pki.gencert("client")
-    client_tls = TLSConfiguration(
+    client_tls = TlsClientConfiguration(
         enabled=True,
         client_ca=pki.ca.cert,
         client_cert=client_cert.cert,
         client_key=client_cert.key,
     )
     ssl_context = create_ssl_context(client_tls)
-    config.tls = TLSConfiguration(
-        enabled=True,
-        client_ca=pki.ca.cert,
-        client_cert=server_cert.cert,
-        client_key=server_cert.key,
+    config.tls = TlsServerConfiguration(
+        enabled=True, client_ca=pki.ca.cert, cert=server_cert.cert, key=server_cert.key
     )
 
     @routes.get("/api/v1/namespaces/default/configmaps/ca.pem")

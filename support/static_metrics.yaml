@@ -1,0 +1,51 @@
+# This bootstrap file adds two static metrics and their metric provider, to be used
+# in tests.
+#
+# These resources can be loaded using the ``bootstrapping/bootstrap`` script.
+
+################################
+### Static Metrics Providers ###
+################################
+
+
+api: core
+kind: MetricsProvider
+metadata:
+  name: static_provider
+spec:
+  static:
+    metrics:
+      electricity_cost_1: 0.9
+      latency_1: 0.1
+  type: static
+
+---
+
+
+######################
+### Static Metrics ###
+######################
+
+api: core
+kind: Metric
+metadata:
+  name: electricity_cost_1
+spec:
+  max: 1.0
+  min: 0.0
+  provider:
+    metric: electricity_cost_1
+    name: static_provider
+
+---
+
+api: core
+kind: Metric
+metadata:
+  name: latency_1
+spec:
+  max: 1.0
+  min: 0.0
+  provider:
+    metric: latency_1
+    name: static_provider

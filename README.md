@@ -69,6 +69,17 @@ config/generate rok.yaml.template
 config/generate config/*.template rok.yaml.template
 ```
 
+The database can be bootstrapped, by adding resources in the database before starting Krake:
+
+```bash
+# Create roles for the RBAC authorization mode.
+bootstrapping/bootstrap bootstrapping/base_roles.yaml
+
+# Create Metrics and MetricsProviders, for development purposes.
+bootstrapping/bootstrap support/prometheus_metrics.yaml support/static_metrics.yaml
+```
+
+
 All services can be run as Python modules with the `-m` option of the Python
 interpreter:
 

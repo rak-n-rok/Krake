@@ -700,8 +700,8 @@ def create_ssl_context(tls_config):
     for communicating with a Server.
 
     Args:
-        tls_config (krake.data.config.TLSConfiguration): the "tls" configuration part
-            of a controller.
+        tls_config (krake.data.config.TlsClientConfiguration): the "tls" configuration
+            part of a controller.
 
     Returns:
         ssl.SSLContext: a default SSL Context tweaked with the given certificate
@@ -730,8 +730,8 @@ def _extract_ssl_config(tls_config):
     controller, if it is present
 
     Args:
-        tls_config (krake.data.config.TLSConfiguration): the "tls" configuration part
-            of a controller.
+        tls_config (krake.data.config.TlsClientConfiguration): the "tls" configuration
+            part of a controller.
 
     Returns:
         tuple: a three-element tuple containing: the path of the certificate, its key
