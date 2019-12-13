@@ -1,7 +1,8 @@
-# Custom Krake variables should be stored in :dict:``EXTRA_VARIABLES`` as follows:
+# Custom Prometheus and metrics exporter variables should be overwritten
+# by :dict:``EXTRA_VARIABLES`` as follows:
 #
 #     EXTRA_VARIABLES = {
-#         'etcd_host': 'etcd-db-host',
+#         'prometheus_port': '5050',
 #         ...
 #     }
 #
