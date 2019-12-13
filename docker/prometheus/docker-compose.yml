@@ -1,78 +1,34 @@
-# Compose file defines and runs docker containers for provisioning of the Krake Api,
-# Krake Controllers and Krake DB infrastructure.
-# Pre-built krake image is a prerequisite for this compose file.
-#
-# .. code:: bash
-#
-#     cd docker/krake
-#     docker-compose up --detach
+# Compose file defines and runs docker container for provisioning of the Prometheus
+# server and metrics exporter server.
 
 version: "3"
 
 services:
 
-  krake-etcd:
-    container_name: ${ETCD_HOST}
-    image: quay.io/coreos/etcd:${etcd_version:-v3.3.13}
-    restart: always
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
     tty: true
+    restart: always
     volumes:
-      - ./certs/:/srv/
-      - /srv/docker/etcd:/etcd-data
-    environment:
-      ETCD_NAME: ${ETCD_HOST}
-      ETCD_DATA_DIR: /etcd-data/${ETCD_HOST}
-      ETCDCTL_API: 3
-      ETCD_ADVERTISE_CLIENT_URLS: http://${ETCD_HOST}:${ETCD_PORT}
-      ETCD_INITIAL_ADVERTISE_PEER_URLS: http://${ETCD_HOST}:${ETCD_PEER_PORT}
-      ETCD_INITIAL_CLUSTER: ${ETCD_HOST}=http://${ETCD_HOST}:${ETCD_PEER_PORT}
-      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:${ETCD_PORT}
-      ETCD_LISTEN_PEER_URLS: http://0.0.0.0:${ETCD_PEER_PORT}
-
-  krake-api:
-    container_name: ${API_HOST}
-    image: krake:latest
-    restart: always
-    tty: true
+      - ./config:/etc/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/etc/prometheus
+      - --storage.tsdb.retention=48h
+      - --query.lookback-delta=2m
+      - --web.listen-address=${PROMETHEUS_PORT}
     ports:
-      - ${API_PORT}:${API_PORT}
-    depends_on:
-      - krake-etcd
-    command: python3 -m krake.api
-    volumes:
-      - /etc/krake:/etc/krake:ro
+      - ${PROMETHEUS_PORT}:${PROMETHEUS_PORT}
 
-  krake-ctrl-garbage-collector:
-    image: krake:latest
-    restart: always
+  metric-exporter:
+    image: metric_exporter
+    container_name: metric_exporter
     tty: true
-    depends_on:
-      - krake-api
-    command: python3 -m krake.controller.garbage_collector
-    volumes:
-      - /etc/krake:/etc/krake:ro
-
-  krake-ctrl-kubernetes-application:
-    image: krake:latest
     restart: always
-    tty: true
-    depends_on:
-      - krake-api
-    command: python3 -m krake.controller.kubernetes_application
-    environment:
-      # FIXME: Krake hostname is temporary loaded from
-      # environment variable "KRAKE_HOST", if present. This should
-      # be removed when DNS service takes place.
-      KRAKE_HOST: ${KRAKE_HOST}
-    volumes:
-      - /etc/krake:/etc/krake:ro
-
-  krake-ctrl-scheduler:
-    image: krake:latest
-    restart: always
-    tty: true
-    depends_on:
-      - krake-api
-    command: python3 -m krake.controller.scheduler
-    volumes:
-      - /etc/krake:/etc/krake:ro
+    build:
+      context: metric_exporter
+    command:
+      - python3 metric_exporter.py --port ${METRIC_EXPORTER_PORT}
+    ports:
+      - ${METRIC_EXPORTER_PORT}:${METRIC_EXPORTER_PORT}
