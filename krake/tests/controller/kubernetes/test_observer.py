@@ -5,8 +5,9 @@ from aiohttp import web
 import yaml
 
 from krake.api.app import create_app
+from krake.controller.kubernetes_application.hooks import register_observer
 from krake.controller.kubernetes_application.kubernetes_application import (
-    register_observer,
+    KubernetesClient,
 )
 from krake.data.core import resource_ref
 from krake.data.kubernetes import Application, ApplicationState
@@ -214,7 +215,9 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
         spec_image = get_first_container(resource.spec.manifest[0])["image"]
         assert spec_image == "nginx:1.7.9"
 
-    observer = KubernetesObserver(cluster, app, on_res_update, time_step=-1)
+    observer = KubernetesObserver(
+        cluster, app, on_res_update, KubernetesClient, time_step=-1
+    )
 
     # Observe an unmodified resource
     actual_state = [0]
@@ -265,7 +268,7 @@ async def test_observer_on_status_update(aiohttp_server, db, config, loop):
         await controller.prepare(client)
 
         observer = KubernetesObserver(
-            cluster, app, controller.on_status_update, time_step=-1
+            cluster, app, controller.on_status_update, KubernetesClient, time_step=-1
         )
 
         await observer.observe_resource()
@@ -686,7 +689,7 @@ async def test_observer_on_delete(aiohttp_server, config, db, loop):
         await controller.prepare(client)
 
         # Start the observer, which will not observe due to time step
-        await register_observer(controller, app)
+        await register_observer(controller, app, KubernetesClient)
         observer, _ = controller.observers[app.metadata.uid]
 
         # Observe a resource actually in deletion.

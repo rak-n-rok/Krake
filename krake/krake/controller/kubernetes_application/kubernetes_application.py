@@ -9,7 +9,11 @@ from functools import partial
 from aiohttp import ClientResponseError
 from cached_property import cached_property
 
-from krake.controller import Observer, Controller, Reflector
+from krake.controller import Controller, Reflector
+from krake.controller.kubernetes_application.hooks import (
+    register_observer,
+    unregister_observer,
+)
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 from kubernetes_asyncio.client import (
     ApiClient,
@@ -129,133 +133,6 @@ class ResourceDelta(NamedTuple):
         return any([self.new, self.deleted, self.modified])
 
 
-class KubernetesObserver(Observer):
-    """Observer specific for Kubernetes Applications. One observer is created for each
-    Application managed by the Controller, but not one per Kubernetes resource
-    (Deployment, Service...). If several resources are defined by an Application, they
-    are all monitored by the same observer.
-
-    The observer gets the actual status of the resources on the cluster using the
-    Kubernetes API, and compare it to the status stored in the API.
-
-    The observer is:
-     * started at initial Krake resource creation;
-
-     * deleted when a resource needs to be updated, then started again when it is done;
-
-     * simply deleted on resource deletion.
-
-    Args:
-        cluster (krake.data.kubernetes.Cluster): the cluster on which the observed
-            Application is created.
-        resource (krake.data.kubernetes.Application): the application that will be
-            observed
-        on_res_update (coroutine): a coroutine called when a resource's actual status
-            differs from the status sent by the database. Its signature is:
-            ``(resource) -> updated_resource``. ``updated_resource`` is the instance of
-            the resource that is up-to-date with the API. The Observer internal instance
-            of the resource to observe will be updated. If the API cannot be contacted,
-            ``None`` can be returned. In this case the internal instance of the Observer
-            will not be updated.
-        time_step (int, optional): how frequently the Observer should watch the actual
-            status of the resources.
-
-    """
-
-    def __init__(self, cluster, resource, on_res_update, time_step=2):
-        super().__init__(resource, on_res_update, time_step)
-        self.cluster = cluster
-
-    async def poll_resource(self):
-        """Fetch the current status of the Application monitored by the Observer.
-
-        Returns:
-            krake.data.core.Status: the status object created using information from the
-                real world Applications resource.
-
-        """
-        app = self.resource
-
-        status = deepcopy(app.status)
-        status.manifest = []
-
-        # For each kubernetes resource of the Application,
-        # get its current status on the cluster.
-        for resource in app.status.manifest:
-            async with KubernetesClient(self.cluster.spec.kubeconfig) as kube:
-                try:
-                    resource_api = await kube.get_resource_api(resource["kind"])
-                    resp = await resource_api.read(
-                        resource["kind"], resource["metadata"]["name"], "default"
-                    )
-                except ApiException as err:
-                    if err.status == 404:
-                        # Resource does not exist
-                        continue
-                    # Otherwise, log the unexpected errors
-                    logger.error(err)
-
-            # Update the status with the information taken from the resource on the
-            # cluster
-            actual_manifest = merge_status(resource, resp.to_dict())
-            status.manifest.append(actual_manifest)
-
-        return status
-
-
-def merge_status(orig, new):
-    """Update recursively all elements not present in an original dictionary from a
-    newer one. It does not modify the two given dictionaries, but creates a new one.
-
-    If the new dictionary has keys not present in the original, they will not be copied.
-
-    List elements are replaced by the newer if the length differ. Otherwise, all element
-    of the list will be compared recursively.
-
-    Args:
-        orig (dict): the dictionary that will be updated.
-        new (dict): the dictionary that contains the new values, used to update
-            :attr:`orig`.
-
-    Returns:
-        dict: newly created dictionary that is the merge of the new dictionary in the
-            original.
-
-    """
-    # If the value to merge is a simple variable (str, int...),
-    # just return the updated value.
-    if type(orig) is not dict:
-        return new
-
-    result = {}
-    for key, value in orig.items():
-        # Go through dictionaries recursively
-        if type(value) is dict:
-            new_value = new.get(key, {})
-            assert type(new_value) is dict
-            result[key] = merge_status(value, new_value)
-
-        elif type(value) is list:
-            new_value = new.get(key, [])
-            # Replace the list with the newest if the length is different
-            if len(value) != len(new_value):
-                result[key] = new_value
-            else:
-                # Otherwise, update elements of the list with the new values
-                new_list = []
-                for orig_elt, new_elt in zip(value, new_value):
-                    merged_elt = merge_status(orig_elt, new_elt)
-                    new_list.append(merged_elt)
-
-                result[key] = new_list
-
-        else:
-            # Update with value from new dictionary, or use original as default
-            result[key] = new.get(key, value)
-
-    return result
-
-
 class KubernetesController(Controller):
     """Controller responsible for :class:`krake.data.kubernetes.Application`
     resources in "SCHEDULED" and "DELETING" state.
@@ -340,7 +217,7 @@ class KubernetesController(Controller):
                 # If an observer was started before, stop it
                 await unregister_observer(self, app)
             # Start an observer only if an actual resource exists on a cluster
-            await register_observer(self, app)
+            await register_observer(self, app, KubernetesClient)
 
         await self.simple_on_receive(app, self.scheduled_or_deleting)
 
@@ -439,6 +316,7 @@ class KubernetesController(Controller):
                 Hook.ApplicationPreDelete,
                 controller=self,
                 app=copy,
+                kubernetes_client=KubernetesClient,
                 start=start_observer,
             )
             await self._delete_application(copy)
@@ -446,6 +324,7 @@ class KubernetesController(Controller):
                 Hook.ApplicationPostDelete,
                 controller=self,
                 app=copy,
+                kubernetes_client=KubernetesClient,
                 start=start_observer,
             )
         elif (
@@ -457,6 +336,7 @@ class KubernetesController(Controller):
                 Hook.ApplicationPreMigrate,
                 controller=self,
                 app=copy,
+                kubernetes_client=KubernetesClient,
                 start=start_observer,
             )
             await self._migrate_application(copy)
@@ -464,6 +344,7 @@ class KubernetesController(Controller):
                 Hook.ApplicationPostMigrate,
                 controller=self,
                 app=copy,
+                kubernetes_client=KubernetesClient,
                 start=start_observer,
             )
         else:
@@ -472,6 +353,7 @@ class KubernetesController(Controller):
                 Hook.ApplicationPreReconcile,
                 controller=self,
                 app=copy,
+                kubernetes_client=KubernetesClient,
                 start=start_observer,
             )
             await self._reconcile_application(copy)
@@ -479,6 +361,7 @@ class KubernetesController(Controller):
                 Hook.ApplicationPostReconcile,
                 controller=self,
                 app=copy,
+                kubernetes_client=KubernetesClient,
                 start=start_observer,
             )
 
@@ -769,65 +652,6 @@ class KubernetesController(Controller):
         await self.kubernetes_api.update_application_status(
             namespace=app.metadata.namespace, name=app.metadata.name, body=app
         )
-
-
-@listen.on(Hook.ApplicationPostReconcile)
-@listen.on(Hook.ApplicationPostMigrate)
-async def register_observer(controller, app, start=True):
-    """Create an observer for the given Application, and start it as background
-    task if wanted.
-
-    If an observer already existed for this Application, it is stopped and deleted.
-
-    Args:
-        controller (KubernetesController): the controller for which the observer will be
-            added in the list of working observers.
-        app (krake.data.kubernetes.Application): the Application to observe
-        start (bool, optional): if False, does not start the observer as background
-            task.
-
-    """
-    cluster = await controller.kubernetes_api.read_cluster(
-        namespace=app.status.running_on.namespace, name=app.status.running_on.name
-    )
-    observer = KubernetesObserver(
-        cluster,
-        app,
-        controller.on_status_update,
-        time_step=controller.observer_time_step,
-    )
-
-    logger.debug("Start observer for %r", app)
-    task = None
-    if start:
-        task = controller.loop.create_task(observer.run())
-
-    controller.observers[app.metadata.uid] = (observer, task)
-
-
-@listen.on(Hook.ApplicationPreReconcile)
-@listen.on(Hook.ApplicationPreMigrate)
-@listen.on(Hook.ApplicationPreDelete)
-async def unregister_observer(controller, app, **kwargs):
-    """Stop and delete the observer for the given Application. If no observer is
-    started, do nothing.
-
-    Args:
-        controller (KubernetesController): the controller for which the observer will be
-            removed from the list of working observers.
-        app (krake.data.kubernetes.Application): the Application whose observer will
-            be stopped.
-
-    """
-    if app.metadata.uid not in controller.observers:
-        return
-
-    logger.debug("Stop observer for %r", app)
-    _, task = controller.observers.pop(app.metadata.uid)
-    task.cancel()
-
-    with suppress(asyncio.CancelledError):
-        await task
 
 
 class ApiAdapter(object):
