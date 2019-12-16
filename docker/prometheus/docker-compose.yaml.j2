@@ -1,0 +1,41 @@
+# Compose jinja2 template defines and runs docker container for provisioning of the Prometheus
+# server and metrics exporter server.
+# This compose jinja2 template can be configured by corresponding Ansible playbook
+# or by `generate.sh` script in case of standalone installation.
+#
+# .. code:: bash
+#
+#     $ cd docker
+#     $ ./generate.sh --config docker.yaml --prometheus
+#     $ docker-compose --file prometheus/docker-compose.yaml up --detach
+
+version: "3"
+
+services:
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: {{ prometheus.host }}
+    tty: true
+    restart: always
+    volumes:
+      - {{ prometheus.path }}/prometheus.yaml:/etc/prometheus/prometheus.yaml
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --storage.tsdb.path=/etc/prometheus
+      - --storage.tsdb.retention=48h
+      - --query.lookback-delta=2m
+      - --web.listen-address={{ prometheus.host }}:{{ prometheus.port }}
+    ports:
+      - {{ prometheus.port }}:{{ prometheus.port }}
+
+  exporter:
+    image: exporter
+    container_name: {{ exporter.host }}
+    tty: true
+    restart: always
+    build:
+      context: {{ prometheus.path }}/exporter
+    command: python3 exporter.py --host {{ exporter.host }} --port {{ exporter.port }}
+    ports:
+      - {{ exporter.port }}:{{ exporter.port }}

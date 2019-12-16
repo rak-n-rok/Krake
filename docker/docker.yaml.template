@@ -1,0 +1,33 @@
+## Configuration file for the docker infrastructure bundles
+##
+## - Krake
+## - Prometheus
+
+# Krake configuration directory
+krake:
+  config:
+    path: /etc/krake
+
+# Krake ETCD database
+etcd:
+  version: v3.3.13
+  host: $etcd_host
+  port: $etcd_port
+  peer_port: 2380
+
+# Krake API
+api:
+  ip: $api_ip
+  host: $api_host
+  port: $api_port
+
+# Prometheus
+prometheus:
+  path: ../prometheus
+  host: prometheus
+  port: 9090
+
+# Metric exporter
+exporter:
+  host: exporter
+  port: 9095
