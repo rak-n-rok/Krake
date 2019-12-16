@@ -185,7 +185,7 @@ async def insert_resource(resource, db_host, db_port, force=False):
 
     # Validation of the resource's structure.
     try:
-        instance = cls.deserialize(resource)
+        instance = cls.deserialize(resource, creation_ignored=True)
     except ValidationError as err:
         message = _create_identification_message(resource)
         return InsertionResult(error=err, message=message)
