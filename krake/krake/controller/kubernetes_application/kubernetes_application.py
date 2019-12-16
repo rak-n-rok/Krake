@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import re
 from contextlib import suppress
 from copy import deepcopy
 from datetime import datetime
@@ -9,11 +8,6 @@ from functools import partial
 from aiohttp import ClientResponseError
 from cached_property import cached_property
 
-from krake.controller import Controller, Reflector
-from krake.controller.kubernetes_application.hooks import (
-    register_observer,
-    unregister_observer,
-)
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 from kubernetes_asyncio.client import (
     ApiClient,
@@ -29,9 +23,15 @@ from typing import NamedTuple, Tuple
 
 from ..exceptions import ControllerError, application_error_mapping
 from .hooks import listen, Hook
+from krake.client.kubernetes import KubernetesApi
+from krake.controller import Controller, Reflector
+from krake.controller.kubernetes_application.hooks import (
+    register_observer,
+    unregister_observer,
+)
 from krake.data.core import ReasonCode, resource_ref
 from krake.data.kubernetes import ApplicationState
-from krake.client.kubernetes import KubernetesApi
+from krake.utils import camel_to_snake_case
 
 
 logger = logging.getLogger(__name__)
@@ -940,17 +940,3 @@ class KubernetesClient(object):
         self.log_resp(resp, kind, action="deleted")
 
         return resp
-
-
-def camel_to_snake_case(name):
-    """Converts camelCase to the snake_case
-
-    Args:
-        name (str): Camel case name
-
-    Returns:
-        str: Name in snake case
-
-    """
-    cunder = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
-    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", cunder).lower()
