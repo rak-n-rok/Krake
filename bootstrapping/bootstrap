@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """This script can be used to insert previously defined resource in the Krake database,
 without having to start Krake components.
