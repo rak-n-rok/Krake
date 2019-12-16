@@ -6,20 +6,74 @@ Bootstrapping
 
 After Krake has been installed and runs, the database is still empty. To allow easy
 insertion of resources during initialisation, a bootstrap script is present, namely:
-``krake_bootstrap_db``. It can be used along with YAML files in which the
-resources are defined.
+``krake_bootstrap_db``. It is used along with YAML files in which the resources
+are defined.
 
-Example:
+Requirements for bootstrapping:
+
+ * Krake should be installed;
+ * the database should be started.
+
+
+Usage
+=====
+
+Workflow
+--------
+
+The script is given several files, each with one or several resource definitions.
+These definitions should follow the structure of the data defined in ``krake.data``.
+See :ref:`admin/bootstrapping:Structure`.
+
+If the insertion of at least one resource fails, all previous insertions are rolled
+back. This ensures that the database remains in a clean state in all cases.
+
+The insertion will be rolled back in the following cases:
+
+ * the structure of a resource was invalid and its deserialization failed;
+ * a resource belongs to an API or a kind not supported by the bootstrapping script;
+ * a resource is already present in the database. This can be overridden using the
+   ``--force`` flag (see the force_ argument). In this case, a resource already present
+   will be replaced in the database with the currently read definition. In case of
+   rollback, the previous version of the resource will be put back in the database.
+
+
+Command line
+------------
+
+The simplest command is to give one or several files as input, for example:
 
 .. code:: bash
 
     $ krake_bootstrap_db file_1.yaml file_2.yaml
 
 
+Other arguments can be used:
+
+``--db-host`` (address):
+    If the database is not present locally, the host or address can be specified
+    explicitly. Default: ``localhost``.
+
+``--db-port`` (integer):
+    If the database is not present locally, the port can be specified explicitly.
+    Default: ``2379``.
+
+``--force``:
+    .. _force:
+
+    If set, when the script attempts to insert a resource that is already in the
+    database, the resource will be replaced with its new definition. If not, an error
+    occurs, and a rollback is performed.
+
+
 Structure
 =========
 
-Each file must have a YAML format, with each resources separated with the ``---``
+Only resources defined in ``krake.data`` that are augmented with the
+``krake.data.persistent`` decorator should be inserted with the
+``bootstrapping/bootstrap`` script.
+
+Each file must have a YAML format, with each resource separated with the ``---``
 separator. The API name, the resource kind and its name must be specified (in the
 ``metadata`` for the name).
 

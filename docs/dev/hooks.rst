@@ -31,7 +31,7 @@ volume as a file (default: `/etc/krake_ca/ca.pem`) in given application.
       Names of environment variables and CA certificate filename are defined
       in the application controller configuration file.
 
-See also :ref:`user/configuration-files:Krake configuration`.
+See also :ref:`user/configuration:Krake configuration`.
 
 Application signals job completion by calling ``complete`` hook URL.
 Token is used for authentication and should be sent in the PUT request body.
