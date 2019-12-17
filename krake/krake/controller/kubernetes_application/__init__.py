@@ -1,6 +1,17 @@
 """Module comprises Krake Kubernetes application controller logic.
 """
-from .hooks import register_service, unregister_service
-from .kubernetes_application import ApplicationController
+from .hooks import (
+    register_service,
+    unregister_service,
+    KubernetesObserver,
+    merge_status,
+)
+from .kubernetes_application import KubernetesController
 
-__all__ = ["ApplicationController", "register_service", "unregister_service"]
+__all__ = [
+    "KubernetesController",
+    "register_service",
+    "unregister_service",
+    "KubernetesObserver",
+    "merge_status",
+]

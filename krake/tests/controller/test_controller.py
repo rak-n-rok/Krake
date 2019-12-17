@@ -16,7 +16,7 @@ from krake.controller import (
 )
 from krake.data.core import WatchEvent, WatchEventType
 from krake.data.kubernetes import ApplicationState
-from tests.controller import SimpleWorker
+from controller import SimpleWorker
 
 
 async def test_put_get_done():
@@ -389,7 +389,8 @@ async def test_observer(loop):
     real_world_status = ApplicationStatusFactory(state=ApplicationState.RUNNING)
 
     async def on_res_update(resource):
-        assert resource == app
+        assert resource != app
+        assert resource.status == real_world_status
         is_res_updated.set_result(resource)
 
     async def new_poll_resources():
@@ -404,7 +405,3 @@ async def test_observer(loop):
     # Ensure that the on_res_update function is called
     assert is_res_updated.done()
     await is_res_updated
-
-    # Ensure that the Application that have been modified on the real world
-    # is the second one
-    assert is_res_updated.result() == app

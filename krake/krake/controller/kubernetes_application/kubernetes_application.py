@@ -1,6 +1,8 @@
+import asyncio
 import logging
-import re
+from contextlib import suppress
 from copy import deepcopy
+from datetime import datetime
 from functools import partial
 
 from aiohttp import ClientResponseError
@@ -19,13 +21,18 @@ from kubernetes_asyncio.client import (
 from kubernetes_asyncio.client.rest import ApiException
 from typing import NamedTuple, Tuple
 
-from krake.data.core import ReasonCode
-from krake.data.kubernetes import ApplicationState
-from krake.client.kubernetes import KubernetesApi
-
 from ..exceptions import ControllerError, application_error_mapping
-from .. import Controller, Reflector
 from .hooks import listen, Hook
+from krake.client.kubernetes import KubernetesApi
+from krake.controller import Controller, Reflector
+from krake.controller.kubernetes_application.hooks import (
+    register_observer,
+    unregister_observer,
+)
+from krake.data.core import ReasonCode, resource_ref
+from krake.data.kubernetes import ApplicationState
+from krake.utils import camel_to_snake_case
+
 
 logger = logging.getLogger(__name__)
 
@@ -126,13 +133,15 @@ class ResourceDelta(NamedTuple):
         return any([self.new, self.deleted, self.modified])
 
 
-class ApplicationController(Controller):
+class KubernetesController(Controller):
     """Controller responsible for :class:`krake.data.kubernetes.Application`
     resources in "SCHEDULED" and "DELETING" state.
 
     Args:
         worker_count (int, optional): the amount of worker function that should be
             run as background tasks.
+        time_step (float, optional): for the Observers: the number of seconds between
+            two observations of the actual resource.
 
     """
 
@@ -144,14 +153,73 @@ class ApplicationController(Controller):
         ssl_context=None,
         debounce=0,
         hooks=None,
+        time_step=2,
     ):
         super().__init__(
             api_endpoint, loop=loop, ssl_context=ssl_context, debounce=debounce
         )
         self.kubernetes_api = None
         self.reflector = None
+
         self.worker_count = worker_count
         self.hooks = hooks
+
+        self.observer_time_step = time_step
+        self.observers = {}
+
+    @staticmethod
+    def scheduled_or_deleting(app):
+        """Check if a resource should be accepted or not by the Controller to be
+        handled.
+
+        Args:
+            app (krake.data.kubernetes.Application): the Application to check.
+
+        Returns:
+            bool: True if the Application should be handled, False otherwise.
+
+        """
+        # Always cleanup deleted applications even if they are in FAILED state.
+        if app.metadata.deleted:
+            if (
+                app.metadata.finalizers
+                and app.metadata.finalizers[-1] == "kubernetes_resources_deletion"
+            ):
+                logger.debug("Accept deleted %r", app)
+                return True
+
+            logger.debug("Reject deleted %r without finalizer", app)
+            return False
+
+        # Ignore all other failed application
+        if app.status.state == ApplicationState.FAILED:
+            logger.debug("Reject failed %r", app)
+            return False
+
+        # Accept scheduled applications
+        if app.status.scheduled and app.status.scheduled >= app.metadata.modified:
+            logger.debug("Accept scheduled %r", app)
+            return True
+
+        logger.debug("Reject %r", app)
+        return False
+
+    async def list_app(self, app):
+        """Accept the Applications that need to be managed by the Controller on listing
+        them at startup. Starts the observer for the Applications with actual resources.
+
+        Args:
+            app (krake.data.kubernetes.Application): the Application to accept or not.
+
+        """
+        if app.status.running_on:
+            if app.metadata.uid in self.observers:
+                # If an observer was started before, stop it
+                await unregister_observer(self, app)
+            # Start an observer only if an actual resource exists on a cluster
+            await register_observer(self, app, KubernetesClient)
+
+        await self.simple_on_receive(app, self.scheduled_or_deleting)
 
     async def prepare(self, client):
         assert client is not None
@@ -161,39 +229,14 @@ class ApplicationController(Controller):
         for i in range(self.worker_count):
             self.register_task(self.handle_resource, name=f"worker_{i}")
 
-        def scheduled_or_deleting(app):
-            # Always cleanup deleted applications even if they are in FAILED
-            # state.
-            if app.metadata.deleted:
-                if (
-                    app.metadata.finalizers
-                    and app.metadata.finalizers[-1] == "kubernetes_resources_deletion"
-                ):
-                    logger.debug("Accept deleted %r", app)
-                    return True
-
-                logger.debug("Reject deleted %r without finalizer", app)
-                return False
-
-            # Ignore all other failed application
-            if app.status.state == ApplicationState.FAILED:
-                logger.debug("Reject failed %r", app)
-                return False
-
-            # Accept scheduled applications
-            if app.status.scheduled and app.status.scheduled >= app.metadata.modified:
-                logger.debug("Accept scheduled %r", app)
-                return True
-
-            logger.debug("Reject %r", app)
-            return False
-
-        receive_app = partial(self.simple_on_receive, condition=scheduled_or_deleting)
+        receive_app = partial(
+            self.simple_on_receive, condition=self.scheduled_or_deleting
+        )
 
         self.reflector = Reflector(
             listing=self.kubernetes_api.list_all_applications,
             watching=self.kubernetes_api.watch_all_applications,
-            on_list=receive_app,
+            on_list=self.list_app,
             on_add=receive_app,
             on_update=receive_app,
         )
@@ -202,6 +245,40 @@ class ApplicationController(Controller):
     async def cleanup(self):
         self.reflector = None
         self.kubernetes_api = None
+
+        # Stop the observers
+        for _, task in self.observers.values():
+            task.cancel()
+
+        for _, task in self.observers.values():
+            with suppress(asyncio.CancelledError):
+                await task
+
+        self.observers = {}
+
+    async def on_status_update(self, app):
+        """Called when an Observer noticed a difference of the status of an Application.
+        Request an update of the status on the API.
+
+        Args:
+            app (krake.data.kubernetes.Application): the Application whose status has
+                been updated.
+
+        Returns:
+            krake.data.kubernetes.Application: the updated Application sent by the API.
+
+        """
+        logger.error("resource %s is different", resource_ref(app))
+
+        # The Application needs to be processed (thus accepted) by the Kubernetes
+        # Controller
+        app.status.scheduled = datetime.now()
+        assert app.metadata.modified is not None
+
+        app = await self.kubernetes_api.update_application_status(
+            namespace=app.metadata.namespace, name=app.metadata.name, body=app
+        )
+        return app
 
     async def handle_resource(self, run_once=False):
         """Infinite loop which fetches and hand over the resources to the right
@@ -228,20 +305,65 @@ class ApplicationController(Controller):
             if run_once:
                 break  # TODO: should we keep this? Only useful for tests
 
-    async def resource_received(self, app):
+    async def resource_received(self, app, start_observer=True):
         logger.debug("Handle %r", app)
 
         copy = deepcopy(app)
 
         if app.metadata.deleted:
+            # Delete the Application
+            await listen.hook(
+                Hook.ApplicationPreDelete,
+                controller=self,
+                app=copy,
+                kubernetes_client=KubernetesClient,
+                start=start_observer,
+            )
             await self._delete_application(copy)
+            await listen.hook(
+                Hook.ApplicationPostDelete,
+                controller=self,
+                app=copy,
+                kubernetes_client=KubernetesClient,
+                start=start_observer,
+            )
         elif (
             copy.status.running_on
             and copy.status.running_on != copy.status.scheduled_to
         ):
+            # Migrate the Application
+            await listen.hook(
+                Hook.ApplicationPreMigrate,
+                controller=self,
+                app=copy,
+                kubernetes_client=KubernetesClient,
+                start=start_observer,
+            )
             await self._migrate_application(copy)
+            await listen.hook(
+                Hook.ApplicationPostMigrate,
+                controller=self,
+                app=copy,
+                kubernetes_client=KubernetesClient,
+                start=start_observer,
+            )
         else:
+            # Reconcile the Application
+            await listen.hook(
+                Hook.ApplicationPreReconcile,
+                controller=self,
+                app=copy,
+                kubernetes_client=KubernetesClient,
+                start=start_observer,
+            )
             await self._reconcile_application(copy)
+            await listen.hook(
+                Hook.ApplicationPostReconcile,
+                controller=self,
+                app=copy,
+                kubernetes_client=KubernetesClient,
+                start=start_observer,
+            )
 
     async def _delete_application(self, app):
         # FIXME: during its deletion, an Application is updated, and thus put into the
@@ -281,7 +403,7 @@ class ApplicationController(Controller):
 
     async def _delete_manifest(self, app):
         # Delete Kubernetes resources if the application was bound to a
-        # cluster and there Kubernetes resources were created.
+        # cluster and there were Kubernetes resources created.
         if app.status.running_on and app.status.manifest:
             cluster = await self.kubernetes_api.read_cluster(
                 namespace=app.status.running_on.namespace,
@@ -292,7 +414,7 @@ class ApplicationController(Controller):
             ) as kube:
                 for resource in app.status.manifest:
                     await listen.hook(
-                        Hook.PreDelete,
+                        Hook.ResourcePreDelete,
                         app=app,
                         cluster=cluster,
                         resource=resource,
@@ -300,7 +422,7 @@ class ApplicationController(Controller):
                     )
                     resp = await kube.delete(resource)
                     await listen.hook(
-                        Hook.PostDelete,
+                        Hook.ResourcePostDelete,
                         app=app,
                         cluster=cluster,
                         resource=resource,
@@ -324,7 +446,7 @@ class ApplicationController(Controller):
         # Mangle desired spec resource by Mangling hook
         app.status.mangling = deepcopy(app.spec.manifest)
         await listen.hook(
-            Hook.Mangling,
+            Hook.ApplicationMangling,
             app=app,
             api_endpoint=self.api_endpoint,
             ssl_context=self.ssl_context,
@@ -371,7 +493,7 @@ class ApplicationController(Controller):
 
     async def _apply_manifest(self, app, delta):
         # Append "kubernetes_resources_deletion" finalizer if not already present.
-        # This will prevent the API from deleting the resource without remove the
+        # This will prevent the API from deleting the resource without removing the
         # Kubernetes resources.
         if "kubernetes_resources_deletion" not in app.metadata.finalizers:
             app.metadata.finalizers.append("kubernetes_resources_deletion")
@@ -389,7 +511,7 @@ class ApplicationController(Controller):
             # Delete all resources that are no longer in the spec
             for deleted in delta.deleted:
                 await listen.hook(
-                    Hook.PreDelete,
+                    Hook.ResourcePreDelete,
                     app=app,
                     cluster=cluster,
                     resource=deleted,
@@ -397,7 +519,7 @@ class ApplicationController(Controller):
                 )
                 resp = await kube.delete(deleted)
                 await listen.hook(
-                    Hook.PostDelete,
+                    Hook.ResourcePostDelete,
                     app=app,
                     cluster=cluster,
                     resource=deleted,
@@ -407,7 +529,7 @@ class ApplicationController(Controller):
             # Create new resource
             for new in delta.new:
                 await listen.hook(
-                    Hook.PreCreate,
+                    Hook.ResourcePreCreate,
                     app=app,
                     cluster=cluster,
                     resource=new,
@@ -415,7 +537,7 @@ class ApplicationController(Controller):
                 )
                 resp = await kube.apply(new)
                 await listen.hook(
-                    Hook.PostCreate,
+                    Hook.ResourcePostCreate,
                     app=app,
                     cluster=cluster,
                     resource=new,
@@ -425,7 +547,7 @@ class ApplicationController(Controller):
             # Update modified resource
             for modified in delta.modified:
                 await listen.hook(
-                    Hook.PreUpdate,
+                    Hook.ResourcePreUpdate,
                     app=app,
                     cluster=cluster,
                     resource=modified,
@@ -433,7 +555,7 @@ class ApplicationController(Controller):
                 )
                 resp = await kube.apply(modified)
                 await listen.hook(
-                    Hook.PostUpdate,
+                    Hook.ResourcePostUpdate,
                     app=app,
                     cluster=cluster,
                     resource=modified,
@@ -470,7 +592,7 @@ class ApplicationController(Controller):
         # Mangle desired spec resource by Mangling hook
         app.status.mangling = deepcopy(app.spec.manifest)
         await listen.hook(
-            Hook.Mangling,
+            Hook.ApplicationMangling,
             app=app,
             api_endpoint=self.api_endpoint,
             ssl_context=self.ssl_context,
@@ -570,15 +692,15 @@ class ApiAdapterCustom(object):
 
     An appropriate method from Kubernetes custom resources
     api client is selected based on custom resource kind
-    and resource scope which is determined from custome resource
+    and resource scope which is determined from custom resource
     definition.
 
     Args:
-        api (object): Kubernetes custom resources api client
+        api (CustomObjectsApi): Kubernetes custom resources api client
         scope (str): Scope indicates whether the custom resource
             is cluster or namespace scoped
         group (str): Group the custom resource belongs in
-        version (str): Api version the clustom resource belongs in
+        version (str): Api version the custom resource belongs in
         plural (str):  Plural name of the custom resource
 
     """
@@ -712,7 +834,7 @@ class KubernetesClient(object):
         for custom_resource in self.custom_resources:
 
             try:
-                # Determine scope, version, group and plural of custome resource
+                # Determine scope, version, group and plural of custom resource
                 # definition
                 resp = await extensions_v1_api.read_custom_resource_definition(
                     custom_resource
@@ -734,12 +856,23 @@ class KubernetesClient(object):
             )
         return custom_resource_apis
 
-    async def apply(self, resource, namespace="default"):
-        try:
-            kind = resource["kind"]
-        except KeyError:
-            raise InvalidResourceError('Resource must define "kind"')
+    async def get_resource_api(self, kind):
+        """Get the Kubernetes API corresponding to the given kind from the supported
+        Kubernetes resources. If not found, look for it into the supported custom
+        resources for the cluster.
 
+        Args:
+            kind (str): name of the Kubernetes resource, for which the Kubernetes API
+                should be retrieved.
+
+        Returns:
+            ApiAdapter: the API adapter to use for this resource.
+
+        Raises:
+            InvalidResourceError: if the kind given is not supported by the Controller,
+                and is not a supported custom resource.
+
+        """
         try:
             resource_api = self.resource_apis[kind]
         except KeyError:
@@ -748,6 +881,16 @@ class KubernetesClient(object):
                 resource_api = custom_resource_apis[kind]
             except KeyError:
                 raise InvalidResourceError(f"{kind} resources are not supported")
+
+        return resource_api
+
+    async def apply(self, resource, namespace="default"):
+        try:
+            kind = resource["kind"]
+        except KeyError:
+            raise InvalidResourceError('Resource must define "kind"')
+
+        resource_api = await self.get_resource_api(kind)
 
         try:
             name = resource["metadata"]["name"]
@@ -779,14 +922,7 @@ class KubernetesClient(object):
         except KeyError:
             raise InvalidResourceError('Resource must define "kind"')
 
-        try:
-            resource_api = self.resource_apis[kind]
-        except KeyError:
-            try:
-                custom_resource_apis = await self.custom_resource_apis
-                resource_api = custom_resource_apis[kind]
-            except KeyError:
-                raise InvalidResourceError(f"{kind} resources are not supported")
+        resource_api = await self.get_resource_api(kind)
 
         try:
             name = resource["metadata"]["name"]
@@ -804,17 +940,3 @@ class KubernetesClient(object):
         self.log_resp(resp, kind, action="deleted")
 
         return resp
-
-
-def camel_to_snake_case(name):
-    """Converts camelCase to the snake_case
-
-    Args:
-        name (str): Camel case name
-
-    Returns:
-        str: Name in snake case
-
-    """
-    cunder = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
-    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", cunder).lower()

@@ -4,6 +4,7 @@ import pytest
 import pytz
 import yaml
 
+from copy import deepcopy
 from itertools import count
 from operator import attrgetter
 from secrets import token_urlsafe
@@ -346,8 +347,12 @@ async def test_update_app_status(aiohttp_client, config, db):
     )
     assert resp.status == 200
     received = Application.deserialize(await resp.json())
-    assert received.metadata == app.metadata
     assert received.status == app.status
+
+    # Only the "modified" attribute of the metadata should be modified
+    received_copy = deepcopy(received)
+    received_copy.metadata.modified = app.metadata.modified
+    assert received_copy.metadata == app.metadata
 
     stored = await db.get(Application, namespace="testing", name=app.metadata.name)
     assert stored.status == received.status
