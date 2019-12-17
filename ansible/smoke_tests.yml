@@ -10,6 +10,10 @@
       pip:
         name: "{{ git_dir }}/rak/[test]"
         state: present
+        executable: pip3
+        extra_args: --user
+      environment:
+        PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
 
     # pytest and rok are installed locally in /home/krake/.local/bin which
     # isn't in the default PATH
@@ -34,6 +38,10 @@
       pip:
         name: "{{ home_dir }}/rak/[test]"
         state: present
+        executable: pip3
+        extra_args: --user
+      environment:
+        PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
 
     # pytest and rok are installed locally in /home/ubuntu/.local/bin which
     # isn't in the default PATH

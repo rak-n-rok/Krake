@@ -13,7 +13,7 @@ etcd:
   version: v3.3.13
   host: $etcd_host
   port: $etcd_port
-  peer_port: 2380
+  peer_port: $etcd_peer_port
 
 # Krake API
 api:

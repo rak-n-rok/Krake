@@ -14,7 +14,7 @@ function fail () {
 }
 
 function usage () {
-  echo "usage: ./generate.sh --config docker.yaml [--krake] [--prometheus]"
+  echo "usage: ./generate.sh --config docker.yaml [--src /home/krake/docker] [--krake] [--prometheus]"
   exit 1
 }
 
@@ -24,6 +24,11 @@ while [[ $# -gt 0 ]]; do
   case $key in
     -c|--config)
     CONFIG="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    -s|--src)
+    SOURCE_DIR="$2"
     shift # past argument
     shift # past value
     ;;
@@ -51,14 +56,20 @@ if [[ -z ${KRAKE+x} && -z ${PROMETHEUS+x} ]]; then
   fail "Define at least one infrastructure bundle to be configured."
 fi
 
+if [[ -z ${SOURCE_DIR+x} ]]; then
+  SOURCE_DIR=.
+fi
+
 if [[ "$KRAKE" = true ]] ; then
-  j2 -f yaml "./krake/docker-compose.yaml.j2" $CONFIG -o "./krake/docker-compose.yaml" || fail "j2cli failed."
+  KRAKE_PATH="$SOURCE_DIR/krake"
+  j2 -f yaml "$KRAKE_PATH/docker-compose.yaml.j2" $CONFIG -o "$KRAKE_PATH/docker-compose.yaml" || fail "j2cli failed."
   echo "Krake infrastructure bundle is configured."
 fi
 
 if [[ "$PROMETHEUS" = true ]] ; then
-  j2 -f yaml "./prometheus/docker-compose.yaml.j2" $CONFIG -o "./prometheus/docker-compose.yaml" || fail "j2cli failed."
-  j2 -f yaml "./prometheus/prometheus.yaml.j2" $CONFIG -o "./prometheus/prometheus.yaml" || fail "j2cli failed."
-  j2 -f yaml "./prometheus/bootstrap.yaml.j2" $CONFIG -o "./prometheus/bootstrap.yaml" || fail "j2cli failed."
+  PROM_PATH="$SOURCE_DIR/prometheus"
+  j2 -f yaml "$PROM_PATH/docker-compose.yaml.j2" $CONFIG -o "$PROM_PATH/docker-compose.yaml" || fail "j2cli failed."
+  j2 -f yaml "$PROM_PATH/prometheus.yaml.j2" $CONFIG -o "$PROM_PATH/prometheus.yaml" || fail "j2cli failed."
+  j2 -f yaml "$PROM_PATH/bootstrap.yaml.j2" $CONFIG -o "$PROM_PATH/bootstrap.yaml" || fail "j2cli failed."
   echo "Prometheus infrastructure bundle is configured."
 fi

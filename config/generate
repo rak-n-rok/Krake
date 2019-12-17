@@ -226,13 +226,18 @@ if __name__ == "__main__":
         parser, "--api-host", "API endpoint host for the controllers.",
         default="localhost"
     )
-    add_option(parser, "--api-port", "API endpoint port for the controllers.",
-               default=8080
+    add_option(
+        parser, "--api-port", "API endpoint port for the controllers.",
+        default=8080,
     )
     add_option(
         parser, "--etcd-host", "Host for the etcd endpoint.", default="127.0.0.1"
     )
     add_option(parser, "--etcd-port", "Port for the etcd endpoint.", default=2379)
+    add_option(
+        parser, "--etcd-peer-port", "Peer port for the etcd endpoint.",
+        default=2380,
+    )
     add_option(
         parser,
         "--worker-count",
