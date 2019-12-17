@@ -206,29 +206,9 @@ def test_cluster_metric_provider(minikubeclusters):
     defined in `docker/prometheus/bootstrap.yaml.j2`.
     Basic template defines 5 metrics and one metrics provider as follows:
         metrics:
-            heat_demand_zone_1:
-                max: 1.0
-                min: 0.0
-                provider:
-                    prometheus
-            heat_demand_zone_2
-                max: 2.0
-                min: 1.0
-                provider:
-                    prometheus
-            heat_demand_zone_3
-                max: 3.0
-                min: 2.0
-                provider:
-                    prometheus
-            heat_demand_zone_4
-                max: 4.0
-                min: 3.0
-                provider:
-                    prometheus
-            heat_demand_zone_5
+            heat_demand_zone_[1, 2, 3, 4, 5]:
                 max: 5.0
-                min: 4.0
+                min: 0.0
                 provider:
                     prometheus
 
