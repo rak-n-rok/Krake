@@ -71,7 +71,7 @@ Structure
 
 Only resources defined in ``krake.data`` that are augmented with the
 ``krake.data.persistent`` decorator should be inserted with the
-``bootstrapping/bootstrap`` script.
+``krake_bootstrap_db`` script.
 
 Each file must have a YAML format, with each resource separated with the ``---``
 separator. The API name, the resource kind and its name must be specified (in the

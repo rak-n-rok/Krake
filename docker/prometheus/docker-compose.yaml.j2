@@ -1,12 +1,12 @@
 # Compose jinja2 template defines and runs docker container for provisioning of the Prometheus
 # server and metrics exporter server.
-# This compose jinja2 template can be configured by corresponding Ansible playbook
-# or by `generate.sh` script in case of standalone installation.
+# This compose jinja2 template can be configured by the corresponding Ansible playbook
+# or by the script `docker/generate` in case of standalone installation.
 #
 # .. code:: bash
 #
 #     $ cd docker
-#     $ ./generate.sh --config docker.yaml --prometheus
+#     $ docker/generate --config docker.yaml docker/prometheus
 #     $ docker-compose --file prometheus/docker-compose.yaml up --detach
 
 version: "3"
@@ -39,3 +39,11 @@ services:
     command: python3 exporter.py --host {{ exporter.host }} --port {{ exporter.port }}
     ports:
       - {{ exporter.port }}:{{ exporter.port }}
+
+{% if docker_daemon_mtu is defined %}
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: {{ docker_daemon_mtu }}
+{% endif %}

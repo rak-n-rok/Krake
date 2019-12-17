@@ -511,7 +511,7 @@ components and the administrator are defined already in
 
 .. code:: bash
 
-    $ bootstrapping/bootstrap bootstrapping/base_roles.yaml
+    $ krake_bootstrap_db bootstrapping/base_roles.yaml
 
 
 When using the ``base_roles.yaml``, the usernames in the ``RoleBinding`` for the

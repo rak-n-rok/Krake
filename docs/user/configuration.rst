@@ -58,13 +58,19 @@ command-line options. The arguments and available options are:
     Set the directory in which the certificates for the TLS communication
     should be stored. Default: ``"tmp/pki"``.
 
-``--host <host>`` (Address)
+``--api-ip <api_ip>`` (Address)
+    Host IP address of the API for the controllers. Default: ``"127.0.0.1"``.
+
+``--api-host <api_host>`` (Address)
     Host that will be used to create the endpoint of the API for the
     controllers. Default: ``"localhost"``.
 
-``--port <port>`` (integer)
+``--api-port <api_port>`` (integer)
     Port that will be used to create the endpoint of the API for the
     controllers.. Default: ``8080``.
+
+``--etcd-version <etcd_version>`` (string)
+    The etcd database version. Default: ``v3.3.13``.
 
 ``--etcd-host <etcd_host>`` (Address)
     Host for the API to use to connect to the etcd database. Default:
@@ -83,6 +89,9 @@ command-line options. The arguments and available options are:
     the timer. If a resource is updated a few times in one second, this
     mechanism prevents having to handle it each time by another component, and
     wait for the latest value. Default: ``1.0``.
+
+``--docker-daemon-mtu <docker_daemon_mtu>`` (integer)
+    The Docker daemon MTU. Default: ``1450``.
 
 ``-h, --help``
     Display the help message and exit the script.

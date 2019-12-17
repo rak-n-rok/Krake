@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+
+"""This script can be used to generate compose and configuration files from jinja2
+templates for Krake and Prometheus docker infrastructure bundles.
+
+The mandatory variables source file for templating is defined by `--config` argument.
+You can find the template file `docker/docker.yaml.template` which defines all
+needed variables for the Krake and Prometheus docker infrastructure bundles.
+
+Source directories of jinja2 templates are defined by positional arguments of script.
+Script looks for jinja2 templates with the `.j2` suffix recursively and generates
+corresponding files into the directory where the jinja2 template is located.
+
+Jinja2 (https://pypi.org/project/Jinja2/) is a prerequisite.
+"""
+
+import sys
+from pathlib import Path
+
+import yaml
+
+from argparse import ArgumentParser
+from jinja2 import Environment, FileSystemLoader
+
+
+parser = ArgumentParser(
+    description="Generate compose and configuration files from jinja2"
+    " templates for Krake and Prometheus docker infrastructure bundles."
+)
+parser.add_argument("--config", "-c", required=True, help="The variables source file.")
+parser.add_argument(
+    "src_dirs",
+    nargs="+",
+    help="Source directories of docker templates."
+    " Multiple directories paths can be given",
+)
+
+
+def main(config, src_dirs):
+
+    with open(config, "r") as fd:
+        variables = yaml.safe_load(fd)
+
+    for src_dir in src_dirs:
+
+        file_loader = FileSystemLoader(src_dir)
+        template_env = Environment(loader=file_loader)
+
+        for file in Path(src_dir).rglob("*.j2"):
+            template = template_env.get_template(file.name, file.parent)
+
+            with file.with_suffix("").open("w") as fd:
+                fd.write(template.render(variables))
+
+
+if __name__ == "__main__":
+    args = vars(parser.parse_args())
+    sys.exit(main(**args))

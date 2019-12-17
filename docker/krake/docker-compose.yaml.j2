@@ -2,12 +2,12 @@
 # Krake Controllers and Krake DB infrastructure.
 # Pre-built krake image is a prerequisite for this compose template.
 # This compose jinja2 template can be configured by corresponding Ansible playbook
-# or by `generate.sh` script in case of standalone installation.
+# or by `docker/generate` script in case of standalone installation.
 #
 # .. code:: bash
 #
 #     $ cd docker
-#     $ ./generate.sh --config docker.yaml --krake
+#     $ docker/generate --config docker.yaml docker/krake
 #     $ docker-compose --file krake/docker-compose.yaml up --detach
 
 version: "3"
@@ -91,3 +91,11 @@ services:
     command: python3 -m krake.controller.magnum
     volumes:
       - {{ krake.config.path }}:/etc/krake:ro
+
+{% if docker_daemon_mtu is defined %}
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: {{ docker_daemon_mtu }}
+{% endif %}

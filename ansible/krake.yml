@@ -72,8 +72,8 @@
       vars:
         packages:
           - jq
-          - python3-pip
           - haveged
+          - python3-distutils
 
           # Docker dependencies
           - apt-transport-https
@@ -93,10 +93,6 @@
       apt:
         name: docker-ce
 
-    - name: Install Docker-Compose
-      pip:
-        name: docker-compose
-
     - name: Add GPG key for kubectl
       apt_key:
         url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
@@ -105,7 +101,7 @@
       apt_repository:
         repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
 
-    - name: Install Docker CE
+    - name: Install kubectl
       apt:
         name: kubectl
 
@@ -235,29 +231,57 @@
             owner: krake
             group: krake
 
+    - name: Install pip and dependencies
+      tags:
+        - pip
+      block:
+
+        - name: Get pip installer
+          uri:
+            url: https://bootstrap.pypa.io/get-pip.py
+            dest: /home/krake/get-pip.py
+
+        - name: Install latest pip
+          command: python3 /home/krake/get-pip.py --user --no-warn-script-location
+
+        - name: Install Krake docker dependencies
+          pip:
+            name:
+              - Jinja2
+              - docker-compose
+            executable: pip3
+            extra_args: --user
+          environment:
+            PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
+
     - name: Krake infrastructure deployment
       tags:
         - krake-deployment
       block:
 
-        # The docker-compose.override only contains the network definition and
-        # will automatically be merged with docker-compose.yml when
-        # "docker-compose up" is run.
-        - name: Configure krake_default bridge MTU
-          template:
-            src: files/krake/docker-compose.override.yml.j2
-            dest: "{{ git_dir }}/docker/krake/docker-compose.override.yml"
+        # The files generated overwrite the ones created
+        - name: Generate the docker configuration file
+          script: |
+            {{ repo_dir }}/krake/scripts/krake_generate_config --dst {{ git_dir }}/docker \
+            --api-ip {{ ansible_host }} \
+            {% if api_host is defined %} --api-host {{ api_host }} {% endif %} \
+            {% if api_port is defined %} --api-port {{ api_port }} {% endif %} \
+            {% if etcd_host is defined %} --etcd-host {{ etcd_host }} {% endif %} \
+            {% if etcd_port is defined %} --etcd-port {{ etcd_port }} {% endif %} \
+            {% if etcd_peer_port is defined %} --etcd-peer-port {{ etcd_peer_port }} {% endif %} \
+            {{ git_dir }}/docker/docker.yaml.template
 
-        - name: Generate dot env configuration file
-          template:
-            src: "{{ repo_dir }}/docker/krake/.env.j2"
-            dest: "{{ git_dir }}/docker/krake/.env"
-            owner: krake
-            group: krake
+        - name: Configure docker infrastructure bundles
+          command: "{{ git_dir }}/docker/generate --config {{ git_dir }}/docker/docker.yaml {{ git_dir }}/docker/krake {{ git_dir }}/docker/prometheus"
+          environment:
+            PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
 
         - name: Remove Krake infrastructure
           docker_compose:
-            project_src: "{{ git_dir }}/docker/krake"
+            project_src: "{{ git_dir }}/docker"
+            files:
+              - "{{ git_dir }}/docker/krake/docker-compose.yaml"
+              - "{{ git_dir }}/docker/prometheus/docker-compose.yaml"
             state: absent
 
         - name: Remove Krake image
@@ -281,15 +305,14 @@
             owner: krake
             group: krake
 
-
         # The files generated overwrite the ones created
         - name: Generate the configuration files
           script: |
             {{ repo_dir }}/krake/scripts/krake_generate_config --dst {{ configuration_dir }}\
             {% if enable_tls is defined and enable_tls %} --tls-enabled {% endif %} \
             {% if enable_tls is defined and enable_tls %} --cert-dir /etc/krake/certs {% endif %} \
-            {% if api_host is defined %} --host {{ api_host }} {% endif %} \
-            {% if api_port is defined %} --port {{ api_port }} {% endif %} \
+            {% if api_host is defined %} --api-host {{ api_host }} {% endif %} \
+            {% if api_port is defined %} --api-port {{ api_port }} {% endif %} \
             {% if etcd_host is defined %} --etcd-host {{ etcd_host }} {% endif %} \
             {% if etcd_port is defined %} --etcd-port {{ etcd_port }} {% endif %} \
             {% if worker_count is defined %} --worker-count {{ worker_count }} {% endif %} \
@@ -308,9 +331,22 @@
 
         - name: Start Krake infrastructure
           docker_compose:
-            project_src: "{{ git_dir }}/docker/krake"
+            project_src: "{{ git_dir }}/docker"
+            files:
+              - "{{ git_dir }}/docker/krake/docker-compose.yaml"
+              - "{{ git_dir }}/docker/prometheus/docker-compose.yaml"
             state: present
             build: no
+
+        - name: Copy bootsrap file
+          command: "docker cp {{ git_dir }}/docker/prometheus/bootstrap.yaml krake-api:/tmp"
+
+        - name: Bootsrap etcd database
+          command: |
+            docker exec -it {{ api_host }} krake_bootstrap_db /tmp/bootstrap.yaml \
+            {% if etcd_host is defined %} --db-host {{ etcd_host }} {% endif %} \
+            {% if etcd_port is defined %} --db-port {{ etcd_port }} {% endif %} \
+            --force
 
     - name: Krake rok deployment
       tags:
@@ -330,14 +366,18 @@
             - pip
           pip:
             name: "{{ git_dir }}/rok"
+            executable: pip3
+            extra_args: --user
+          environment:
+            PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
 
         - name: Create Krake rok configuration file
           script: |
             {{ repo_dir }}/krake/scripts/krake_generate_config --dst {{ git_dir }} \
             {% if enable_tls is defined and enable_tls %} --tls-enabled {% endif %} \
             {% if enable_tls is defined and enable_tls %} --cert-dir /etc/krake/certs {% endif %} \
-            --host localhost \
-            {% if api_port is defined %} --port {{ api_port }} {% endif %} \
+            --api-port localhost \
+            {% if api_port is defined %} --api-port {{ api_port }} {% endif %} \
             {{ git_dir }}/rok.yaml.template
 
 - name: Generate cluster config

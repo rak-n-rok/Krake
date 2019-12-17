@@ -748,7 +748,7 @@ class Complete(object):
         """
         api_url = URL(api_endpoint)
 
-        # FIXME: Krake hostname is temporary loaded from environment
+        # FIXME: Krake host IP address is temporary loaded from environment
         #  variable "KRAKE_HOST", if present. This should be removed when
         #  DNS service takes place.
         api_host = os.environ.get("KRAKE_HOST")

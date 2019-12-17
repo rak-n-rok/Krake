@@ -1,11 +1,11 @@
 # Prometheus config jinja2 template.
-# This compose jinja2 template can be configured by corresponding Ansible playbook
-# or by `config.sh` script in case of standalone installation.
+# This compose jinja2 template can be configured by the corresponding Ansible playbook
+# or by the script `docker/generate` in case of standalone installation.
 #
 # .. code:: bash
 #
 #     $ cd docker
-#     $ ./config.sh --prometheus
+#     $ docker/generate --config docker.yaml docker/prometheus
 
 global:
     scrape_interval: 10s
