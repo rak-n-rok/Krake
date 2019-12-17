@@ -13,7 +13,7 @@ kind: Metric
 metadata:
   name: heat_demand_zone_1
 spec:
-  max: 1.0
+  max: 5.0
   min: 0.0
   provider:
     metric: heat_demand_zone_1
@@ -27,8 +27,8 @@ kind: Metric
 metadata:
   name: heat_demand_zone_2
 spec:
-  max: 2.0
-  min: 1.0
+  max: 5.0
+  min: 0.0
   provider:
     metric: heat_demand_zone_2
     name: prometheus
@@ -41,8 +41,8 @@ kind: Metric
 metadata:
   name: heat_demand_zone_3
 spec:
-  max: 3.0
-  min: 2.0
+  max: 5.0
+  min: 0.0
   provider:
     metric: heat_demand_zone_3
     name: prometheus
@@ -55,8 +55,8 @@ kind: Metric
 metadata:
   name: heat_demand_zone_4
 spec:
-  max: 4.0
-  min: 3.0
+  max: 5.0
+  min: 0.0
   provider:
     metric: heat_demand_zone_4
     name: prometheus
@@ -70,7 +70,7 @@ metadata:
   name: heat_demand_zone_5
 spec:
   max: 5.0
-  min: 4.0
+  min: 0.0
   provider:
     metric: heat_demand_zone_5
     name: prometheus
