@@ -6,10 +6,11 @@ from .hooks import (
     KubernetesObserver,
     merge_status,
 )
-from .kubernetes_application import KubernetesController
+from .kubernetes_application import KubernetesController, KubernetesClient
 
 __all__ = [
     "KubernetesController",
+    "KubernetesClient",
     "register_service",
     "unregister_service",
     "KubernetesObserver",
