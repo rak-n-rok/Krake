@@ -172,8 +172,8 @@ tls
         Set the path to the client key. Example: ``tmp/pki/ca.pem``
 
 
-Authentication and authorization:
----------------------------------
+Authentication and authorization
+--------------------------------
 
 authentication
     This section defines the method for authenticating users that connect to the API. Two methods are available: keystone_ and static_. A user not recognized can still send request if anonymous_ are allowed.
