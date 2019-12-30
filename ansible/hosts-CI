@@ -24,7 +24,7 @@ all:
     # If key_file is set to null, the default SSH identity
     # (~/.ssh/id_rsa) will be used.
     keypair: my_runner_key_$CI_PIPELINE_ID
-    key_file: ../.ssh/id_rsa
+    key_file: "{{ inventory_dir }}/../.ssh/id_rsa"
 
     # SSH jump host that is used to access the OpenStack instances. By
     # default, no OpenStack server has a floating IP assigned except hosts in
