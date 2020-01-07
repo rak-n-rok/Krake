@@ -3,7 +3,7 @@
 Welcome to the Krake repository! :octopus:
 
 Krake [ˈkʀaːkə] is an orchestrator engine for containerized and virtualized
-workloads accross distributed and heterogeneous cloud platforms. It creates a
+workloads across distributed and heterogeneous cloud platforms. It creates a
 thin layer of aggregation on top of the different platforms (such as OpenStack,
 Kubernetes or OpenShift) and presents them through a single interface to the
 cloud user. The user's workloads are scheduled depending on both user
