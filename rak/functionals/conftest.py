@@ -23,8 +23,38 @@ def pytest_addoption(parser):
         action="store",
         help="minikube cluster to use for integration tests",
     )
+    parser.addoption(
+        "--krake_container",
+        action="store",
+        help="krake container name to use for scripts integration tests",
+    )
+    parser.addoption(
+        "--etcd_container",
+        action="store",
+        help="etcd container name to use for scripts integration tests",
+    )
+    parser.addoption(
+        "--etcd_container_port",
+        action="store",
+        help="etcd container port to use for scripts integration tests",
+    )
 
 
 @pytest.fixture
 def minikubecluster(request):
     return request.config.getoption("--minikubecluster", skip=True)
+
+
+@pytest.fixture
+def krake_container(request):
+    return request.config.getoption("--krake_container", skip=True)
+
+
+@pytest.fixture
+def etcd_container(request):
+    return request.config.getoption("--etcd_container", skip=True)
+
+
+@pytest.fixture
+def etcd_container_port(request):
+    return request.config.getoption("--etcd_container_port", skip=True)
