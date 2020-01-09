@@ -273,7 +273,7 @@
         # The files generated overwrite the ones created
         - name: Generate the configuration files
           script: |
-            {{ repo_dir }}/config/generate --dst {{ configuration_dir }}\
+            {{ repo_dir }}/krake/scripts/krake_generate_config --dst {{ configuration_dir }}\
             {% if enable_tls is defined and enable_tls %} --tls-enabled {% endif %} \
             {% if enable_tls is defined and enable_tls %} --cert-dir /etc/krake/certs {% endif %} \
             {% if api_host is defined %} --host {{ api_host }} {% endif %} \
@@ -321,7 +321,7 @@
 
         - name: Create Krake rok configuration file
           script: |
-            {{ repo_dir }}/config/generate --dst {{ git_dir }} \
+            {{ repo_dir }}/krake/scripts/krake_generate_config --dst {{ git_dir }} \
             {% if enable_tls is defined and enable_tls %} --tls-enabled {% endif %} \
             {% if enable_tls is defined and enable_tls %} --cert-dir /etc/krake/certs {% endif %} \
             --host localhost \

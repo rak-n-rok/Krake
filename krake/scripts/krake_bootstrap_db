@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """This script can be used to insert previously defined resource in the Krake database,
 without having to start Krake components.
@@ -7,7 +7,7 @@ It can be used as follows:
 
 .. code:: bash
 
-    bootstrap [OPTIONS] <file_1> <file_2> ... <file_n>
+    krake_bootstrap_db [OPTIONS] <file_1> <file_2> ... <file_n>
 
 The definition of the resources must be written in YAML files, with the following
 structure:

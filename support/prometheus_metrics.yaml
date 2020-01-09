@@ -2,7 +2,7 @@
 # script (used in tests), as well as a provider to connect to the Prometheus server
 # locally.
 #
-# These resources can be loaded using the ``bootstrapping/bootstrap`` script.
+# These resources can be loaded using the ``bootstrap`` script.
 
 ##########################
 ### Prometheus Metrics ###

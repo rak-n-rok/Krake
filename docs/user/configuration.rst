@@ -38,7 +38,7 @@ template configuration file is in the main directory of Krake.
 Generate configuration
 ~~~~~~~~~~~~~~~~~~~~~~
 From the templates, actual configuration files can be generated using the
-``config/generate`` script. The templates have parameters that can be
+``krake_generate_config`` script. The templates have parameters that can be
 overwritten by the script. It allows setting some parameters using
 command-line options. The arguments and available options are:
 
@@ -97,7 +97,7 @@ used in the main directory:
 
 .. code:: bash
 
-    config/generate config/*template
+    krake_generate_config config/*template
 
 This will create all Krake configuration files in the main directory of Krake.
 
@@ -106,7 +106,7 @@ used in the main directory:
 
 .. code:: bash
 
-    config/generate rok.yaml.template
+    krake_generate_config rok.yaml.template
 
 This will create the Rok configuration file in the main directory of Krake.
 
@@ -115,7 +115,7 @@ Krake configuration files at the same time:
 
 .. code:: bash
 
-    config/generate config/*template rok.yaml.template
+    krake_generate_config config/*template rok.yaml.template
 
 This will create Krake and Rok configuration files in the main directory of
 Krake.
@@ -125,7 +125,7 @@ different etcd database endpoint, the following can be used:
 
 .. code:: bash
 
-    config/generate --dst /tmp config/api.yaml.template --etcd-host newhost.org --etcd-port 1234
+    krake_generate_config --dst /tmp config/api.yaml.template --etcd-host newhost.org --etcd-port 1234
 
 
 Command-line options

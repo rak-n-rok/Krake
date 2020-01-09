@@ -6,14 +6,14 @@ Bootstrapping
 
 After Krake has been installed and runs, the database is still empty. To allow easy
 insertion of resources during initialisation, a bootstrap script is present, namely:
-``bootstrapping/bootstrap``. It can be used along with YAML files in which the
+``krake_bootstrap_db``. It can be used along with YAML files in which the
 resources are defined.
 
 Example:
 
 .. code:: bash
 
-    $ bootstrapping/bootstrap file_1.yaml file_2.yaml
+    $ krake_bootstrap_db file_1.yaml file_2.yaml
 
 
 Structure
@@ -82,7 +82,7 @@ API, or with the bootstrapping:
 
 .. code:: bash
 
-    $ bootstrapping/bootstrap bootstrapping/base_roles.yaml
+    $ krake_bootstrap_db bootstrapping/base_roles.yaml
 
 
 Development and tests
@@ -98,4 +98,4 @@ They can be easily processed using:
 
 .. code:: bash
 
-    $ bootstrapping/bootstrap support/prometheus_metrics.yaml support/static_metrics.yaml
+    $ krake_bootstrap_db support/prometheus_metrics.yaml support/static_metrics.yaml

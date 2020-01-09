@@ -1,7 +1,7 @@
 # This bootstrap file adds two static metrics and their metric provider, to be used
 # in tests.
 #
-# These resources can be loaded using the ``bootstrapping/bootstrap`` script.
+# These resources can be loaded using the ``krake_bootstrap_db`` script.
 
 ################################
 ### Static Metrics Providers ###
