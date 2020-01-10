@@ -36,20 +36,30 @@ development setup. Advanced topics are covered in the
 
 ### Installation
 
+As Krake is not yet on the Python Package Index (PyPI), the repository first
+has to be cloned.
+
+```bash
+$ git clone https://gitlab.com/rak-n-rok/krake.git
+$ cd krake
+```
+
 All dependencies can be installed via the corresponding `setup.py` scripts,
 either with or without development dependencies. Installing them into a
 [Python virtualenv][virtualenv] is recommended.
 
+
 ```bash
 # Install "krake" and "rok" without development dependencies
-pip install --editable "krake" --editable "rok"
+$ pip install --editable rok/
+$ pip install --editable krake/
 ```
 
 ```bash
 # Install "krake" and "rok" with development dependencies
-pip install --editable "krake/[dev]" --editable "rok/[dev]"
+$ pip install --editable rok/[dev]
+$ pip install --editable krake/[dev]
 ```
-
 
 ### Running
 
@@ -69,7 +79,8 @@ config/generate rok.yaml.template
 config/generate config/*.template rok.yaml.template
 ```
 
-The database can be bootstrapped, by adding resources in the database before starting Krake:
+The database can be bootstrapped, by adding resources in the database before
+starting Krake:
 
 ```bash
 # Create roles for the RBAC authorization mode.
@@ -136,7 +147,7 @@ deploy an `echoserver` application.
 $ rok kube cluster create cluster_certs/config
 
 # Run an application on Krake
-$ rok kube app create -f tests/echo-demo.yaml echo-demo
+$ rok kube app create -f rak/functionals/echo-demo.yaml echo-demo
 
 # Check the status of the application
 $ rok kube app get echo-demo
