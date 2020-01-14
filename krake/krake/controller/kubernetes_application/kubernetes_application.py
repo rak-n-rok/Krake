@@ -240,6 +240,7 @@ class KubernetesController(Controller):
             on_list=self.list_app,
             on_add=receive_app,
             on_update=receive_app,
+            resource_plural="Kubernetes Clusters",
         )
         self.register_task(self.reflector, name="Reflector")
 

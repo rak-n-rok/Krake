@@ -161,6 +161,7 @@ class Scheduler(Controller):
             on_add=self.received_kubernetes_app,
             on_update=self.received_kubernetes_app,
             on_delete=self.received_kubernetes_app,
+            resource_plural="Kubernetes Clusters",
         )
         self.openstack_reflector = Reflector(
             listing=self.openstack_api.list_all_magnum_clusters,
@@ -169,6 +170,7 @@ class Scheduler(Controller):
             on_add=self.received_magnum_cluster,
             on_update=self.received_magnum_cluster,
             on_delete=self.received_magnum_cluster,
+            resource_plural="Magnum Clusters",
         )
         self.register_task(self.kubernetes_reflector, name="Kubernetes reflector")
         self.register_task(self.openstack_reflector, name="OpenStack reflector")

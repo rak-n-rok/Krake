@@ -214,6 +214,7 @@ class MagnumClusterController(Controller):
             on_add=enqueue,
             on_update=enqueue,
             on_delete=enqueue,
+            resource_plural="Magnum Clusters",
         )
         self.register_task(self.reflector, name="Reflector")
 
