@@ -51,6 +51,8 @@ rules:
   namespaces:
   - ''
   resources:
+  - "projects"
+  - "magnumclusters"
   - "applications"
   - "clusters"
   verbs:
@@ -84,7 +86,7 @@ rules:
   - ''
   resources:
     - "metrics"
-    - "metricProviders"
+    - "metricproviders"
   verbs:
   - get
 
@@ -104,6 +106,47 @@ rules:
     - "applications/binding"
   verbs:
     - update
+
+- api: 'kubernetes'
+  namespaces:
+  - ''
+  resources:
+  - "applications/status"
+  verbs:
+  - update
+
+- api: 'openstack'
+  namespaces:
+    - ''
+  resources:
+    - "projects"
+  verbs:
+    - list
+
+- api: 'openstack'
+  namespaces:
+    - ''
+  resources:
+    - "magnumclusters"
+  verbs:
+    - list
+    - update
+
+- api: 'openstack'
+  namespaces:
+    - ''
+  resources:
+    - "magnumclusters/binding"
+  verbs:
+    - update
+
+- api: 'openstack'
+  namespaces:
+  - ''
+  resources:
+  - "magnumclusters/status"
+  verbs:
+  - update
 ---
 
 api: core
@@ -160,3 +203,59 @@ roles:
 - role:system:kubernetes
 users:
   - system:kubernetes
+---
+
+#########################
+### Magnum Controller ###
+#########################
+
+api: core
+kind: Role
+metadata:
+  name: role:system:magnum
+rules:
+- api: 'openstack'
+  namespaces:
+  - ''
+  resources:
+  - "magnumclusters"
+  verbs:
+  - get
+  - list
+  - update
+
+- api: 'openstack'
+  namespaces:
+  - ''
+  resources:
+  - "magnumclusters/status"
+  verbs:
+  - update
+
+- api: 'openstack'
+  namespaces:
+  - ''
+  resources:
+  - "projects"
+  verbs:
+  - get
+
+- api: 'kubernetes'
+  namespaces:
+  - ''
+  resources:
+  - "clusters"
+  verbs:
+  - create
+  - get
+  - update
+---
+
+api: core
+kind: RoleBinding
+metadata:
+  name: rolebinding:system:magnum
+roles:
+- role:system:magnum
+users:
+  - system:magnum
