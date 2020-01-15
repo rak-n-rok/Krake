@@ -146,6 +146,16 @@ class KubernetesConfiguration(ControllerConfiguration):
     hooks: HooksConfiguration
 
 
+class MagnumConfiguration(ControllerConfiguration):
+    poll_interval: float = field(
+        default=30,
+        metadata={
+            "help": "Time in seconds to wait between two requests to the Magnum "
+                    "client, to get a Magnum cluster new state after modification."
+        },
+    )
+
+
 class ApiConfiguration(Serializable):
     etcd: EtcdConfiguration
     tls: TlsServerConfiguration

@@ -253,6 +253,15 @@ if __name__ == "__main__":
         ),
         default=0.1,
     )
+    add_option(
+        parser,
+        "--poll-interval",
+        (
+            "Time in seconds for the Magnum Controller to ask the Magnum client again"
+            "after a modification of a cluster."
+        ),
+        default=0.1,
+    )
 
     args = vars(parser.parse_args())
     sys.exit(main(**args))

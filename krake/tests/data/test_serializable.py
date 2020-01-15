@@ -353,3 +353,18 @@ def test_is_generic_subtype():
     assert not is_generic_subtype(List[int], Dict)
     assert not is_generic_subtype(List[int], List[str])
     assert not is_generic_subtype(List, List[int])
+
+
+def test_schema_validation():
+    class Interval(Serializable):
+        max: int
+        min: int
+
+        def __post_init__(self):
+            if self.min > self.max:
+                raise ValidationError("'min' must not be greater than 'max'")
+
+    with pytest.raises(ValidationError) as excinfo:
+        Interval.deserialize({"min": 72, "max": 42})
+
+    assert "_schema" in excinfo.value.messages

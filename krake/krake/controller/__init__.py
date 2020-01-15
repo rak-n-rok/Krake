@@ -31,7 +31,7 @@ class WorkQueue(object):
     sequential processing of keys: A key-value pair retrieved via :meth:`get`
     is not returned via :meth:`get` again until :meth:`done` with the
     corresponding key is called, even if a new key-value pair with the
-    corresponding key was put into the queue in the meantime.
+    corresponding key was put into the queue during the time of processing.
 
     Args:
         maxsize (int, optional): Maximal number of items in the queue before
@@ -53,7 +53,7 @@ class WorkQueue(object):
 
         self.dirty = dict()
         self.timers = dict()
-        self.processing = set()
+        self.active = set()
         self.debounce = debounce
         self.loop = loop
         self.queue = asyncio.Queue(maxsize=maxsize, loop=loop)
@@ -79,7 +79,8 @@ class WorkQueue(object):
         async def put_key():
             self.dirty[key] = value
 
-            if key not in self.processing:
+            if key not in self.active:
+                self.active.add(key)
                 await self.queue.put(key)
 
         def remove_timer(_):
@@ -129,13 +130,12 @@ class WorkQueue(object):
         """
         key = await self.queue.get()
         value = self.dirty.pop(key)
-        self.processing.add(key)
         return key, value
 
     async def done(self, key):
         """
         """
-        self.processing.discard(key)
+        self.active.discard(key)
 
         if key in self.dirty:
             await self.queue.put(key)
@@ -386,6 +386,21 @@ class Observer(object):
             await asyncio.sleep(self.time_step)
             logger.debug("Observing registered resource: %s", self.resource)
             await self.observe_resource()
+
+
+class ControllerError(Exception):
+    """Base class for exceptions during handling of a resource."""
+
+    def __init__(self, message):
+        super().__init__(message)
+        self.message = message
+
+    def __str__(self):
+        """Custom error message for exception"""
+        message = self.message or ""
+        code = f"[{str(self.code)}]" if self.code is not None else ""
+
+        return f"{self.__class__.__name__}{code}: {message}"
 
 
 class Controller(object):

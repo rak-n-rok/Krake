@@ -38,12 +38,14 @@ __pycache__/
 # Sphinx build directory
 /docs/_build
 
-# Configuration file templates
+# Configuration files from templates
 rok.yaml
 api.yaml
 garbage_collector.yaml
 kubernetes.yaml
 scheduler.yaml
+magnum.yaml
+
 ansible/hosts.yml
 
 # Krake dot env configuration variables file

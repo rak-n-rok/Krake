@@ -152,6 +152,10 @@ Client APIs
     :members:
     :show-inheritance:
 
+.. automodule:: krake.client.openstack
+    :members:
+    :show-inheritance:
+
 Controllers
 -----------
 

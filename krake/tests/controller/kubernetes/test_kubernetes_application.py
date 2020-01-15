@@ -1505,7 +1505,9 @@ async def test_complete_hook_tls(aiohttp_server, config, pki, db, loop):
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
 
-async def test_kubernetes_error_handling(aiohttp_server, config, db, loop):
+async def test_kubernetes_controller_error_handling(aiohttp_server, config, db, loop):
+    """Test the behavior of the Controller in case of a ControllerError.
+    """
     failed_manifest = deepcopy(nginx_manifest)
     for resource in failed_manifest:
         resource["kind"] = "Unsupported"
@@ -1536,3 +1538,39 @@ async def test_kubernetes_error_handling(aiohttp_server, config, db, loop):
     )
     assert stored.status.state == ApplicationState.FAILED
     assert stored.status.reason.code == ReasonCode.INVALID_RESOURCE
+
+
+async def test_kubernetes_api_error_handling(aiohttp_server, config, db, loop):
+    """Test the behavior of the Controller in case of a Kubernetes error.
+    """
+    # Create an actual "kubernetes cluster" with no route, so it responds wrongly
+    # to the requests of the Controller.
+    kubernetes_app = web.Application()
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    app = ApplicationFactory(
+        spec__manifest=nginx_manifest,
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=True,
+        status__scheduled_to=resource_ref(cluster),
+        status__manifest=[],
+    )
+
+    await db.put(cluster)
+    await db.put(app)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        await controller.prepare(client)
+
+        await controller.queue.put(app.metadata.uid, app)
+        await controller.handle_resource(run_once=True)
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored.status.state == ApplicationState.FAILED
+    assert stored.status.reason.code == ReasonCode.KUBERNETES_ERROR

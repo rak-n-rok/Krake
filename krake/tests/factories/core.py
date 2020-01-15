@@ -20,6 +20,7 @@ from krake.data.core import (
     MetricsProviderSpec,
     PrometheusSpec,
     StaticSpec,
+    MetricRef,
 )
 
 
@@ -208,3 +209,11 @@ class MetricsProviderFactory(Factory):
 
     metadata = SubFactory(MetadataFactory)
     spec = SubFactory(MetricsProviderSpecFactory)
+
+
+class MetricRefFactory(Factory):
+    class Meta:
+        model = MetricRef
+
+    weight = fuzzy.FuzzyFloat(0, 1.0)
+    name = fuzzy.FuzzyAttribute(fake.word)

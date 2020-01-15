@@ -1,4 +1,4 @@
-from enum import Enum, auto
+from enum import Enum, IntEnum, auto
 from datetime import datetime
 from dataclasses import field
 from typing import List, Dict
@@ -44,15 +44,21 @@ class ListMetadata(Serializable):
     pass  # TODO
 
 
-class ReasonCode(Enum):
+class ReasonCode(IntEnum):
     INTERNAL_ERROR = 1  # Default error
 
     INVALID_RESOURCE = 10  # Invalid values in the Manifest
     CLUSTER_NOT_REACHABLE = 11  # Connectivity issue with the Kubernetes deployment
     NO_SUITABLE_RESOURCE = 50  # Scheduler issue
 
-    # Codes over 100 will cause the controller to delete the resource directly
-    RESOURCE_NOT_DELETED = 100
+    KUBERNETES_ERROR = 60
+
+    CREATE_FAILED = 70
+    RECONCILE_FAILED = 71
+    DELETE_FAILED = 72
+
+    OPENSTACK_ERROR = 80
+    INVALID_CLUSTER_TEMPLATE = 81
 
 
 class Reason(Serializable):
@@ -204,3 +210,8 @@ class MetricsProviderList(ApiObject):
     kind: str = "MetricsProviderList"
     metadata: ListMetadata
     items: List[MetricsProvider]
+
+
+class MetricRef(Serializable):
+    name: str
+    weight: float

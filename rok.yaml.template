@@ -1,10 +1,10 @@
 ## Configuration file for the Rok utility
 
 api_url: $api_endpoint
-user: system
+user: system:admin
 
 tls:
   enabled: $tls_enabled
   client_ca: $cert_dir/ca.pem
-  client_cert: $cert_dir/rok.pem
-  client_key: $cert_dir/rok-key.pem
+  client_cert: $cert_dir/system:admin.pem
+  client_key: $cert_dir/system:admin-key.pem
