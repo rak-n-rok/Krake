@@ -527,7 +527,7 @@ class Scheduler(Controller):
         if not with_metrics:
             ranked = [
                 self.calculate_kubernetes_cluster_rank((), cluster, app)
-                for cluster in clusters
+                for cluster in matching
             ]
         else:
             # Rank the clusters based on their metric and return the cluster with
@@ -573,7 +573,7 @@ class Scheduler(Controller):
         if not with_metrics:
             ranked = [
                 self.calculate_openstack_project_rank((), project)
-                for project in projects
+                for project in matching
             ]
         else:
             # Rank the projects based on their metric and return the project with

@@ -17,6 +17,7 @@ from krake.test_utils import server_endpoint, make_prometheus
 from factories.core import MetricsProviderFactory, MetricFactory
 from factories.kubernetes import ApplicationFactory, ClusterFactory
 from factories.openstack import MagnumClusterFactory, ProjectFactory
+from tests.factories import fake
 
 
 async def test_kubernetes_reception(aiohttp_server, config, db, loop):
@@ -591,6 +592,28 @@ async def test_kubernetes_select_cluster_without_metric():
     assert selected in clusters
 
 
+async def test_kubernetes_select_cluster_with_constraints_without_metric():
+    # Because the selection of clusters is done randomly between the matching clusters,
+    # if an error was present, the right cluster could have been randomly picked,
+    # and the test would pass even if it should not.
+    # Thus many cluster that should not match are created, which reduces the chances
+    # that the expected cluster is chosen, even in case of failures.
+    countries = ["IT"] + fake.words(99)
+    clusters = [
+        ClusterFactory(spec__metrics=[], metadata__labels={"location": country})
+        for country in countries
+    ]
+
+    app = ApplicationFactory(
+        spec__constraints__cluster__labels=[LabelConstraint.parse("location is IT")],
+        spec__constraints__cluster__custom_resources=[],
+    )
+
+    scheduler = Scheduler("http://localhost:8080", worker_count=0)
+    selected = await scheduler.select_kubernetes_cluster(app, clusters)
+    assert selected == clusters[0]
+
+
 async def test_kubernetes_select_cluster_sticky_without_metric():
     cluster_A = ClusterFactory(spec__metrics=[])
     cluster_B = ClusterFactory(spec__metrics=[])
@@ -941,6 +964,27 @@ async def test_select_project_without_metric():
     scheduler = Scheduler("http://localhost:8080", worker_count=0)
     selected = await scheduler.select_openstack_project(cluster, projects)
     assert selected in projects
+
+
+async def test_select_project_with_constraints_without_metric():
+    # Because the selection of projects is done randomly between the matching projects,
+    # if an error was present, the right project could have been randomly picked,
+    # and the test would pass even if it should not.
+    # Thus many project that should not match are created, which reduces the chances
+    # that the expected project is chosen, even in case of failures.
+    countries = ["IT"] + fake.words(99)
+    projects = [
+        ProjectFactory(spec__metrics=[], metadata__labels={"location": country})
+        for country in countries
+    ]
+
+    cluster = MagnumClusterFactory(
+        spec__constraints__project__labels=[LabelConstraint.parse("location is IT")]
+    )
+
+    scheduler = Scheduler("http://localhost:8080", worker_count=0)
+    selected = await scheduler.select_openstack_project(cluster, projects)
+    assert selected == projects[0]
 
 
 async def test_openstack_scheduling(aiohttp_server, config, db, loop):
