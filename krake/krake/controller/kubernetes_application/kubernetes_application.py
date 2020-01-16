@@ -6,7 +6,6 @@ from datetime import datetime
 from functools import partial
 
 from aiohttp import ClientResponseError
-from cached_property import cached_property
 
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 from kubernetes_asyncio.client import (
@@ -30,7 +29,7 @@ from krake.controller.kubernetes_application.hooks import (
 )
 from krake.data.core import ReasonCode, resource_ref, Reason
 from krake.data.kubernetes import ApplicationState
-from krake.utils import camel_to_snake_case
+from krake.utils import camel_to_snake_case, cached_property
 
 
 logger = logging.getLogger(__name__)
@@ -691,15 +690,17 @@ class ApiAdapterCustom(object):
         group (str): Group the custom resource belongs in
         version (str): Api version the custom resource belongs in
         plural (str):  Plural name of the custom resource
+        metadata (dict): Custom resource metadata
 
     """
 
-    def __init__(self, api, scope, group, version, plural):
+    def __init__(self, api, scope, group, version, plural, metadata):
         self.api = api
         self.scope = scope
         self.group = group
         self.version = version
         self.plural = plural
+        self.metadata = metadata
 
     async def read(self, kind, name=None, namespace=None):
         if self.scope == "Namespaced":
@@ -804,7 +805,27 @@ class KubernetesClient(object):
 
         The custom resources apis are requested only once and then
         are cached by cached property decorator. This is an advantage in
-        case of multiple Kubernetes custom resources.
+        case of the application contains multiple Kubernetes custom resources
+        with the same kind, but with the different content, see example.
+
+        Example:
+
+        .. code:: yaml
+
+            ---
+            apiVersion: stable.example.com/v1
+            kind: CRD
+            metadata:
+                name: cdr_1
+            spec:
+                crdSpec: spec_1
+            ---
+            apiVersion: stable.example.com/v1
+            kind: CRD
+            metadata:
+                name: cdr_2
+            spec:
+                crdSpec: spec_2
 
         Raises:
             InvalidResourceError: If the request for the custom resource
@@ -842,6 +863,7 @@ class KubernetesClient(object):
                 resp.spec.group,
                 version,
                 resp.spec.names.plural,
+                resp.metadata,
             )
         return custom_resource_apis
 
