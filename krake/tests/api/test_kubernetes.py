@@ -16,7 +16,7 @@ from krake.data.kubernetes import (
     ClusterBinding,
     Cluster,
     ClusterList,
-    ApplicationComplete
+    ApplicationComplete,
 )
 from krake.api.app import create_app
 from krake.api.database import revision
@@ -603,6 +603,67 @@ async def test_create_invalid_cluster(aiohttp_client, config):
         "/kubernetes/namespaces/testing/clusters", json=data.serialize()
     )
     assert resp.status == 422
+
+
+async def test_get_cluster(aiohttp_client, config, db):
+    cluster = ClusterFactory()
+    await db.put(cluster)
+    client = await aiohttp_client(create_app(config=config))
+    resp = await client.get(
+        f"/kubernetes/namespaces/testing/clusters/{cluster.metadata.name}"
+    )
+    assert resp.status == 200
+    data = Cluster.deserialize(await resp.json())
+    assert cluster == data
+
+
+async def test_get_cluster_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.get("/kubernetes/namespaces/testing/clusters/mycluster")
+    assert resp.status == 403
+
+    async with rbac_allow("kubernetes", "clusters", "get"):
+        resp = await client.get("/kubernetes/namespaces/testing/clusters/mycluster")
+        assert resp.status == 404
+
+
+async def test_update_cluster(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = ClusterFactory(spec__custom_resources=[])
+    await db.put(data)
+    new_custom_resources = ["crontabs.stable.example.com"]
+    data.spec.custom_resources = new_custom_resources
+
+    resp = await client.put(
+        f"/kubernetes/namespaces/{data.metadata.namespace}"
+        f"/clusters/{data.metadata.name}",
+        json=data.serialize(),
+    )
+    assert resp.status == 200
+    cluster = Cluster.deserialize(await resp.json())
+
+    assert cluster.spec.kubeconfig == data.spec.kubeconfig
+    assert cluster.spec.custom_resources == new_custom_resources
+
+    stored = await db.get(
+        Cluster, namespace=data.metadata.namespace, name=cluster.metadata.name
+    )
+    assert stored == cluster
+
+
+async def test_update_cluster_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.put("/kubernetes/namespaces/testing/clusters/mycluster")
+    assert resp.status == 403
+
+    async with rbac_allow("kubernetes", "clusters", "update"):
+        resp = await client.put("/kubernetes/namespaces/testing/clusters/mycluster")
+        assert resp.status == 415
 
 
 async def test_delete_cluster(aiohttp_client, config, db):
