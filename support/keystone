@@ -1,5 +1,64 @@
 #!/usr/bin/env python3
-"""Simple helper script for starting a Keystone server for development purpose"""
+"""Simple helper script for starting a Keystone server for development purpose
+
+Use the following to get a Keystone token:
+
+.. code:: bash
+
+    $ curl -sD - -o /dev/null -H "Content-Type: application/json" \
+        http://localhost:5000/v3/auth/tokens \
+        -d '{
+          "auth": {
+            "identity": {
+              "methods": [
+                "password"
+              ],
+              "password": {
+                "user": {
+                  "domain": {
+                    "name": "Default"
+                  },
+                  "name": "system:admin",
+                  "password": "admin"
+                }
+              }
+            },
+            "scope": {
+              "project": {
+                "domain": {
+                  "name": "Default"
+                },
+                "name": "system:admin"
+              }
+            }
+          }
+        }'
+
+
+This returns an output close to the following, with the needed token displayed:
+
+.. code::
+
+   HTTP/1.0 201 CREATED
+   Date: Tue, 17 Dec 2019 10:02:11 GMT
+   Server: WSGIServer/0.2 CPython/3.6.8
+   Content-Type: application/json
+   Content-Length: 1231
+   X-Subject-Token: XXXXXXXXXXXXXXXXXXXXXX   <--- this is the token
+   Vary: X-Auth-Token
+   x-openstack-request-id: req-db21405b-26bc-43dd-8264-d08de5d0f268
+
+
+You can now use it with the Krake API. Put it into a variable or copy it and add it to
+the requests you send to the Krake API.
+
+.. code:: bash
+
+    $ TOKEN=XXXXXXXXXXXXXXXXXXXXXX
+    $ curl -k -H "Accept: application/json" -H "Authorization: $TOKEN" \
+        http://localhost:8080/me
+
+"""
 from argparse import ArgumentParser
 from pathlib import Path
 import logging
