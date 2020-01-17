@@ -69,14 +69,14 @@ then be modified at will.
 ```bash
 # Start by copying the templates of the configuration files for all components.
 # You can then modify each file at your preference.
-config/generate config/api.yaml.template
+krake_generate_config config/api.yaml.template
 
 # Optional: you can use the rok configuration template as you prefer. It can also be generated.
 #   Otherwise rok will use the default configuration
-config/generate rok.yaml.template
+krake_generate_config rok.yaml.template
 
 # Multiple files can be generated at the same time:
-config/generate config/*.template rok.yaml.template
+krake_generate_config config/*.template rok.yaml.template
 ```
 
 The database can be bootstrapped, by adding resources in the database before
@@ -84,10 +84,10 @@ starting Krake:
 
 ```bash
 # Create roles for the RBAC authorization mode.
-bootstrapping/bootstrap bootstrapping/base_roles.yaml
+krake_bootstrap_db bootstrapping/base_roles.yaml
 
 # Create Metrics and MetricsProviders, for development purposes.
-bootstrapping/bootstrap support/prometheus_metrics.yaml support/static_metrics.yaml
+krake_bootstrap_db support/prometheus_metrics.yaml support/static_metrics.yaml
 ```
 
 

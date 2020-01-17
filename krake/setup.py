@@ -41,4 +41,5 @@ setup(
             "prometheus-async",
         }
     },
+    scripts=["scripts/krake_bootstrap_db", "scripts/krake_generate_config"]
 )

@@ -29,12 +29,12 @@ RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY ./krake /krake
-
 COPY ./config /tmp/config
-RUN mkdir -p /etc/krake && \
-  /tmp/config/generate --dst /etc/krake /tmp/config/*template
 
 RUN pip3 install /krake
+
+RUN mkdir -p /etc/krake && \
+  krake_generate_config --dst /etc/krake /tmp/config/*template
 
 FROM base as runner
 

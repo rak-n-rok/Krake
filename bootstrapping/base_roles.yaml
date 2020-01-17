@@ -3,7 +3,7 @@
 # The Controller are given minimal access to only the resources and the actions they
 # require to perform.
 #
-# These resources can be loaded using the ``bootstrapping/bootstrap`` script.
+# These resources can be loaded using the ``krake_bootstrap_db`` script.
 
 ###########################
 ### "system:admin" user ###
