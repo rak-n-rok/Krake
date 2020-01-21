@@ -167,9 +167,7 @@ def get_application(config, session, namespace, name):
 
 @application.command("update", help="Update Kubernetes application")
 @argument("name", help="Kubernetes application name")
-@argument(
-    "-f", "--file", type=FileType(), required=True, help="Kubernetes manifest file"
-)
+@argument("-f", "--file", type=FileType(), help="Kubernetes manifest file")
 @arg_cluster_label_constraints
 @arg_cluster_resource_constraints
 @arg_namespace
@@ -190,21 +188,35 @@ def update_application(
     if namespace is None:
         namespace = config["user"]
 
-    manifest = list(yaml.safe_load_all(file))
-    app = {
-        "metadata": {"name": name, "labels": labels},
-        "spec": {
-            "hooks": hooks,
-            "manifest": manifest,
-            "constraints": {
-                "cluster": {
-                    "labels": cluster_label_constraints,
-                    "custom_resources": cluster_resource_constraints,
-                }
-            },
-        },
-    }
-    session.put(f"/kubernetes/namespaces/{namespace}/applications/{name}", json=app)
+    resp = session.get(
+        f"/kubernetes/namespaces/{namespace}/applications/{name}",
+        raise_for_status=False,
+    )
+    if resp.status_code == 404:
+        raise SystemExit(f"Error: Magnum cluster {name!r} not found")
+    resp.raise_for_status()
+    app = resp.json()
+
+    if file:
+        manifest = list(yaml.safe_load_all(file))
+        app["spec"]["manifest"] = manifest
+
+    if labels:
+        app["metadata"]["labels"] = labels
+    if hooks:
+        app["spec"]["hooks"] = hooks
+
+    app_constraints = app["spec"]["constraints"]
+    if cluster_label_constraints:
+        app_constraints["cluster"]["labels"] = cluster_label_constraints
+    if cluster_resource_constraints:
+        app_constraints["cluster"]["custom_resources"] = cluster_resource_constraints
+
+    resp = session.put(
+        f"/kubernetes/namespaces/{namespace}/applications/{name}", json=app
+    )
+
+    return resp.json()
 
 
 @application.command("delete", help="Delete Kubernetes application")
