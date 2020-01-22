@@ -391,7 +391,7 @@ def update_cluster(
     if project_label_constraints:
         if cluster["spec"]["constraints"] is None:
             cluster["spec"]["constraints"] = {}
-        if cluster["spec"]["constraints"]["project"] is None:
+        if cluster["spec"]["constraints"].get("project") is None:
             cluster["spec"]["constraints"]["project"] = {}
         cluster["spec"]["constraints"]["project"]["labels"] = project_label_constraints
 
