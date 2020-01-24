@@ -16,8 +16,7 @@ from .parser import (
     arg_metric,
 )
 from .fixtures import depends
-from .formatters import BaseTable, Cell, printer
-
+from .formatters import BaseTable, Cell, printer, dict_formatter
 
 openstack = ParserSpec("openstack", aliases=["os"], help="Manage OpenStack resources")
 
@@ -266,8 +265,15 @@ arg_project_label_constraints = argument(
 )
 
 
-class ClusterTable(BaseTable):
-    project = Cell("status.project")
+class ClusterListTable(BaseTable):
+    state = Cell("status.state")
+
+
+class ClusterTable(ClusterListTable):
+    reason = Cell("status.reason", formatter=dict_formatter)
+    master = Cell("status.master_addresses")
+    nodes = Cell("status.node_addresses")
+    project = Cell("status.project.name")
 
 
 @cluster.command("create", help="Create Magnum cluster")
@@ -322,7 +328,7 @@ def create_cluster(
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
-@printer(table=ClusterTable(many=True))
+@printer(table=ClusterListTable(many=True))
 def list_clusters(config, session, namespace, all):
     if all:
         url = "/openstack/magnumclusters"

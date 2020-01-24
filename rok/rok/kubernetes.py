@@ -137,7 +137,7 @@ def create_application(
     yaml.dump(data, default_flow_style=False, stream=sys.stdout)
 
 
-class ApplicationTable(BaseTable):
+class ApplicationTable(ApplicationListTable):
     reason = Cell("status.reason", formatter=dict_formatter)
     services = Cell("status.services", formatter=dict_formatter)
     constraints = Cell("spec.constraints", formatter=dict_formatter)
