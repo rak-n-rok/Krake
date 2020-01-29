@@ -487,6 +487,7 @@ class MagnumClusterController(Controller):
 
         if (
             cluster.status.project
+            and cluster.status.cluster_id
             and cluster.status.state != MagnumClusterState.PENDING
         ):
             magnum = await self.create_magnum_client(cluster)
