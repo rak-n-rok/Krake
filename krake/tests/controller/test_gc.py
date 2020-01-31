@@ -23,6 +23,7 @@ from factories.kubernetes import ApplicationFactory, ClusterFactory
 from factories.openstack import ProjectFactory
 from krake.data.serializable import Serializable
 from krake.test_utils import server_endpoint
+from factories.openstack import MagnumClusterFactory
 
 
 class UpperResource(Serializable):
@@ -42,12 +43,12 @@ def test_dependency_graph():
     graph = DependencyGraph()
 
     up = UpperResourceFactory()
-    graph.add_resource(up)
+    up_ref = resource_ref(up)
+    graph.add_resource(up_ref, up.metadata.owners)
 
     cluster = ClusterFactory(metadata__owners=[resource_ref(up)])
-    graph.add_resource(cluster)
-
     cluster_ref = resource_ref(cluster)
+    graph.add_resource(cluster_ref, cluster.metadata.owners)
 
     apps = [
         ApplicationFactory(
@@ -59,31 +60,36 @@ def test_dependency_graph():
     ]
 
     for app in apps:
-        graph.add_resource(app)
+        graph.add_resource(resource_ref(app), app.metadata.owners)
 
     assert len(graph._relationships) == 5
-    assert graph.get_direct_dependents(up) == [cluster]
-    assert graph.get_direct_dependents(cluster) == apps
+    assert graph.get_direct_dependents(up_ref) == [cluster_ref]
+    assert graph.get_direct_dependents(cluster_ref) == [
+        resource_ref(app) for app in apps
+    ]
 
     for app in apps:
-        assert len(graph.get_direct_dependents(app)) == 0
+        assert len(graph.get_direct_dependents(resource_ref(app))) == 0
 
-    graph.remove_resource(apps[0])
+    graph.remove_resource(resource_ref(apps[0]))
     assert len(graph._relationships) == 4
-    assert graph.get_direct_dependents(up) == [cluster]
-    assert graph.get_direct_dependents(cluster) == apps[1:]
+    assert graph.get_direct_dependents(up_ref) == [cluster_ref]
+    assert graph.get_direct_dependents(cluster_ref) == [
+        resource_ref(app) for app in apps[1:]
+    ]
 
     for app in apps:
-        assert len(graph.get_direct_dependents(app)) == 0
+        assert len(graph.get_direct_dependents(resource_ref(app))) == 0
 
     with pytest.raises(ResourceWithDependentsException):
-        graph.remove_resource(up)
+        graph.remove_resource(up_ref)
 
 
 def test_dependency_graph_wrong_order():
     up = UpperResourceFactory()
-    cluster = ClusterFactory(metadata__owners=[resource_ref(up)])
+    up_ref = resource_ref(up)
 
+    cluster = ClusterFactory(metadata__owners=[resource_ref(up)])
     cluster_ref = resource_ref(cluster)
 
     app = ApplicationFactory(
@@ -92,33 +98,36 @@ def test_dependency_graph_wrong_order():
         status__state=ApplicationState.RUNNING,
     )
 
+    app_ref = resource_ref(app)
+
     graph = DependencyGraph()
-    graph.add_resource(app)
-    graph.add_resource(cluster)
-    graph.add_resource(up)
+    graph.add_resource(app_ref, app.metadata.owners)
+    graph.add_resource(cluster_ref, cluster.metadata.owners)
+    graph.add_resource(up_ref, up.metadata.owners)
 
     assert len(graph._relationships) == 3
-    assert graph.get_direct_dependents(up) == [cluster]
-    assert graph.get_direct_dependents(cluster) == [app]
-    assert graph.get_direct_dependents(app) == []
+    assert graph.get_direct_dependents(up_ref) == [cluster_ref]
+    assert graph.get_direct_dependents(cluster_ref) == [app_ref]
+    assert graph.get_direct_dependents(app_ref) == []
 
     # Verify that adding objects in any order does not change the result.
     right_order_graph = DependencyGraph()
-    right_order_graph.add_resource(up)
-    right_order_graph.add_resource(cluster)
-    right_order_graph.add_resource(app)
+    right_order_graph.add_resource(up_ref, up.metadata.owners)
+    right_order_graph.add_resource(cluster_ref, cluster.metadata.owners)
+    right_order_graph.add_resource(app_ref, app.metadata.owners)
 
-    assert right_order_graph._resources == graph._resources
     assert right_order_graph._relationships == graph._relationships
 
     # check that the graph only copied the resources
-    for key in right_order_graph._resources:
-        assert right_order_graph._resources[key] is not graph._resources[key]
+    for key in right_order_graph._relationships:
+        assert right_order_graph._relationships[key] is not graph._relationships[key]
 
 
 def test_error_on_cycle_in_dependency_graph():
     # Create a cycle in dependency
     up = UpperResourceFactory()
+    up_ref = resource_ref(up)
+
     cluster = ClusterFactory(metadata__owners=[resource_ref(up)])
     cluster_ref = resource_ref(cluster)
 
@@ -133,73 +142,64 @@ def test_error_on_cycle_in_dependency_graph():
     up.metadata.owners.append(resource_ref(apps[0]))
 
     graph = DependencyGraph()
-    graph.add_resource(up)
-    graph.add_resource(cluster)
+    graph.add_resource(up_ref, up.metadata.owners)
+    graph.add_resource(cluster_ref, cluster.metadata.owners)
 
     # Add resources without cycle
     for app in apps[1:]:
-        graph.add_resource(app)
+        graph.add_resource(resource_ref(app), app.metadata.owners)
 
     # Add resource with cycle
     with pytest.raises(DependencyCycleException):
-        graph.add_resource(apps[0])
+        graph.add_resource(resource_ref(apps[0]), apps[0].metadata.owners)
 
 
 def test_update_resource_dependency_graph():
     up_1 = UpperResourceFactory()
+    up_1_ref = resource_ref(up_1)
+
     cluster_1 = ClusterFactory(metadata__owners=[resource_ref(up_1)])
     cluster_2 = ClusterFactory(metadata__owners=[resource_ref(up_1)])
     cluster_1_ref = resource_ref(cluster_1)
+    cluster_2_ref = resource_ref(cluster_2)
 
     app_1 = ApplicationFactory(
         metadata__owners=[cluster_1_ref],
         status__scheduled_to=cluster_1_ref,
         status__state=ApplicationState.RUNNING,
     )
+    app_1_ref = resource_ref(app_1)
 
     graph = DependencyGraph()
-    graph.add_resource(up_1)
-    graph.add_resource(cluster_1)
-    graph.add_resource(cluster_2)
-    graph.add_resource(app_1)
+    graph.add_resource(up_1_ref, up_1.metadata.owners)
+    graph.add_resource(cluster_1_ref, cluster_1.metadata.owners)
+    graph.add_resource(cluster_2_ref, cluster_2.metadata.owners)
+    graph.add_resource(app_1_ref, app_1.metadata.owners)
 
     # Replace ownership
-    app_1.metadata.owners = [resource_ref(cluster_2)]
-    graph.update_resource(app_1)
+    app_1.metadata.owners = [cluster_2_ref]
+    graph.update_resource(app_1_ref, app_1.metadata.owners)
 
-    assert graph.get_direct_dependents(cluster_2) == [app_1]
-    assert graph.get_direct_dependents(cluster_1) == []
+    assert graph.get_direct_dependents(cluster_2_ref) == [app_1_ref]
+    assert graph.get_direct_dependents(cluster_1_ref) == []
 
     # Remove ownership
     cluster_2.metadata.owners = []
-    graph.update_resource(cluster_2)
+    graph.update_resource(cluster_2_ref, cluster_2.metadata.owners)
 
-    assert graph.get_direct_dependents(cluster_2) == [app_1]
-    assert graph.get_direct_dependents(up_1) == [cluster_1]
+    assert graph.get_direct_dependents(cluster_2_ref) == [app_1_ref]
+    assert graph.get_direct_dependents(up_1_ref) == [cluster_1_ref]
 
     # Add new ownership
     up_2 = UpperResourceFactory()
-    graph.add_resource(up_2)
+    up_2_ref = resource_ref(up_2)
+    graph.add_resource(up_2_ref, up_2.metadata.owners)
 
-    cluster_2.metadata.owners = [resource_ref(up_2)]
-    graph.update_resource(cluster_2)
+    cluster_2.metadata.owners = [up_2_ref]
+    graph.update_resource(cluster_2_ref, cluster_2.metadata.owners)
 
-    assert graph.get_direct_dependents(cluster_2) == [app_1]
-    assert graph.get_direct_dependents(up_2) == [cluster_2]
-
-
-def test_dependency_owners():
-    ups = [UpperResourceFactory() for _ in range(2)]
-    cluster = ClusterFactory(metadata__owners=[resource_ref(up) for up in ups])
-
-    graph = DependencyGraph()
-    for up in ups:
-        graph.add_resource(up)
-    graph.add_resource(cluster)
-
-    owners = graph.get_owners(cluster)
-
-    assert owners == ups
+    assert graph.get_direct_dependents(cluster_2_ref) == [app_1_ref]
+    assert graph.get_direct_dependents(up_2_ref) == [cluster_2_ref]
 
 
 async def test_resources_reception(aiohttp_server, config, db, loop):
@@ -272,11 +272,11 @@ async def test_new_event_reception(aiohttp_server, config, db, loop):
         await gc.prepare(client)
 
         await gc.on_received_new(cluster_added)
-        assert resource_ref(cluster_added) in gc.graph._resources
+        assert resource_ref(cluster_added) in gc.graph._relationships
         assert gc.queue.size() == 0
 
         await gc.on_received_new(cluster_deleting)
-        assert resource_ref(cluster_deleting) in gc.graph._resources
+        assert resource_ref(cluster_deleting) in gc.graph._relationships
         assert gc.queue.size() == 1
 
 
@@ -290,14 +290,14 @@ async def test_update_event_reception(aiohttp_server, config, db, loop):
         await gc.prepare(client)
 
         await gc.on_received_new(cluster)
-        assert resource_ref(cluster) in gc.graph._resources
+        assert resource_ref(cluster) in gc.graph._relationships
         assert gc.queue.size() == 0
 
         cluster.metadata.deleted = fake.date_time(tzinfo=pytz.utc)
         cluster.metadata.finalizers.append("cascade_deletion")
 
         await gc.on_received_update(cluster)
-        assert resource_ref(cluster) in gc.graph._resources
+        assert resource_ref(cluster) in gc.graph._relationships
         assert gc.queue.size() == 1
 
 
@@ -305,12 +305,16 @@ async def test_delete_event_reception(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
     gc = GarbageCollector(server_endpoint(server))
 
-    ups = [UpperResourceFactory() for _ in range(2)]
+    ups = [MagnumClusterFactory() for _ in range(2)]
 
     cluster = ClusterFactory(
         metadata__deleted=fake.date_time(tzinfo=pytz.utc),
         metadata__owners=[resource_ref(up) for up in ups],
     )
+
+    for up in ups:
+        await db.put(up)
+    await db.put(cluster)
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         await gc.prepare(client)
@@ -321,7 +325,7 @@ async def test_delete_event_reception(aiohttp_server, config, db, loop):
         await gc.on_received_new(cluster)
 
         await gc.on_received_deleted(cluster)
-        assert resource_ref(cluster) not in gc.graph._resources
+        assert resource_ref(cluster) not in gc.graph._relationships
         assert gc.queue.size() == 0
 
 
@@ -378,9 +382,9 @@ async def test_cascade_deletion(aiohttp_server, config, db, loop):
         metadata__deleted=fake.date_time(tzinfo=pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
-    gc.graph.add_resource(cluster)
-
     cluster_ref = resource_ref(cluster)
+    gc.graph.add_resource(cluster_ref, cluster.metadata.owners)
+
     apps = [
         ApplicationFactory(
             metadata__finalizers=["kubernetes_resources_deletion"],
@@ -393,7 +397,7 @@ async def test_cascade_deletion(aiohttp_server, config, db, loop):
 
     await db.put(cluster)
     for app in apps:
-        gc.graph.add_resource(app)
+        gc.graph.add_resource(resource_ref(app), app.metadata.owners)
         await db.put(app)
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
@@ -425,7 +429,6 @@ async def test_cascade_deletion(aiohttp_server, config, db, loop):
         assert await is_completely_deleted(cluster, db)
         await gc.on_received_deleted(cluster)  # Simulate DELETED event
 
-        assert not gc.graph._resources
         assert not gc.graph._relationships
 
 
@@ -474,7 +477,7 @@ async def test_several_dependents_one_deleted(db, aiohttp_server, config, loop):
     all_resources = (cluster_a, cluster_b, cluster_c, app_d, app_e)
     for resource in all_resources:
         await db.put(resource)
-        gc.graph.add_resource(resource)
+        gc.graph.add_resource(resource_ref(resource), resource.metadata.owners)
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         await gc.prepare(client)
@@ -518,7 +521,6 @@ async def test_several_dependents_one_deleted(db, aiohttp_server, config, loop):
         await gc.on_received_deleted(new_cluster_b)
         assert gc.queue.size() == 0  # No other resources should be put in the queue
 
-        assert len(gc.graph._resources) == 3
         assert len(gc.graph._relationships) == 3
         assert len(gc.graph._relationships[resource_ref(app_e)]) == 0
 
@@ -575,9 +577,9 @@ async def test_three_layers_deletion(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
     gc = GarbageCollector(server_endpoint(server))
 
-    gc.graph.add_resource(upper)
-    gc.graph.add_resource(middle)
-    gc.graph.add_resource(lower)
+    gc.graph.add_resource(resource_ref(upper), upper.metadata.owners)
+    gc.graph.add_resource(resource_ref(middle), middle.metadata.owners)
+    gc.graph.add_resource(resource_ref(lower), lower.metadata.owners)
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         await gc.prepare(client)
@@ -640,8 +642,6 @@ async def test_three_layers_deletion(aiohttp_server, config, db, loop):
         assert await is_completely_deleted(middle, db)
         assert await is_completely_deleted(upper, db)
 
-        assert not gc.graph._resources
-
 
 async def test_gc_handling_of_cycles(caplog, loop):
     """In case of cycle in the dependency graph, the Garbage Collector removes the
@@ -671,7 +671,6 @@ async def test_gc_handling_of_cycles(caplog, loop):
         await gc.on_received_new(lower)
 
         # The other relationships should be kept
-        assert len(gc.graph._resources) == 2
         assert len(gc.graph._relationships) == 2
 
         uppest_dependents = gc.graph._relationships[resource_ref(uppest)]
@@ -734,7 +733,7 @@ async def wait_for_resource(resource, graph, present=True, max_retry=10):
     """
     res_ref = resource_ref(resource)
     for i in count():
-        if (res_ref in graph._resources) == present:
+        if (res_ref in graph._relationships) == present:
             return
         await asyncio.sleep(0.1)
 
@@ -806,9 +805,9 @@ async def test_gc_error_handling(aiohttp_server, config, db, loop, caplog):
     assert lower.metadata.name in caplog.text
 
     # Even with a cycle, the gc continue working
-    assert resource_ref(other) in graph_copy._resources
-    assert resource_ref(misc) in graph_copy._resources
+    assert resource_ref(other) in graph_copy._relationships
+    assert resource_ref(misc) in graph_copy._relationships
 
-    assert resource_ref(upper) not in graph_copy._resources
-    assert resource_ref(middle) not in graph_copy._resources
-    assert resource_ref(lower) not in graph_copy._resources
+    assert resource_ref(upper) not in graph_copy._relationships
+    assert resource_ref(middle) not in graph_copy._relationships
+    assert resource_ref(lower) not in graph_copy._relationships

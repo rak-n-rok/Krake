@@ -63,7 +63,7 @@ class DependencyCycleException(DependencyException):
     Args:
         resource (krake.data.core.ResourceRef): the resource added or updated that
             triggered the exception.
-        cycle (list): the cycle of dependency relationships that has been discovered.
+        cycle (set): the cycle of dependency relationships that has been discovered.
 
     """
 
@@ -115,54 +115,49 @@ class DependencyGraph(object):
     """
 
     def __init__(self):
+        # Mapping "ResourceRef": "List[ResourceRef]"
         self._relationships = defaultdict(list)
-        self._resources = {}
 
     def get_direct_dependents(self, resource):
         """Get the dependents of a resource, but only the ones directly dependent, no
         recursion is performed.
 
         Args:
-            resource (krake.data.serializable.Serializable): the resource for which#
-                the search will be performed.
+            resource (krake.data.core.ResourceRef): the resource for which the search
+                will be performed.
 
         Returns:
             list: the list of :class:`krake.data.core.ResourceRef` to the dependents
                 of the given resource (=that depends on the resource).
 
         """
-        references = self._relationships[resource_ref(resource)]
-        return [self._resources[reference] for reference in references]
+        return self._relationships[resource]
 
-    def add_resource(self, resource):
+    def add_resource(self, resource, owners):
         """Add a resource and its dependencies relationships to the graph.
 
         Args:
-            resource (krake.data.serializable.Serializable): the resource to add to
-                the graph.
+            resource (krake.data.core.ResourceRef): the resource to add to the graph.
+            owners (list): list of owners (dependencies) of the resource.
 
         """
-        resource = deepcopy(resource)
-        res_ref = resource_ref(resource)
-        self._resources[res_ref] = resource
-
         # No need to add the value explicitly here,
         # as it is lazy created in the cycles check
 
         # For each owner of the current resource,
         # add the resource in its dependent list if not present yet.
-        for owner in resource.metadata.owners:
-            if res_ref not in self._relationships[owner]:
-                self._relationships[owner].append(res_ref)
+        for owner in owners:
+            if resource not in self._relationships[owner]:
+                self._relationships[owner].append(resource)
 
-        self._check_for_cycles(res_ref)
+        self._check_for_cycles(resource)
 
     def remove_resource(self, resource, check_dependents=True):
         """If a resource has no dependent, remove it from the dependency graph,
         and from the dependents of other resources.
 
         Args:
-            resource (krake.data.serializable.Serializable): the resource to remove.
+            resource (krake.data.core.ResourceRef): the resource to remove.
             check_dependents (bool, optional): if False, does not check if the resource
                 to remove has dependents, and simply remove it along with the
                 dependents.
@@ -171,48 +166,37 @@ class DependencyGraph(object):
             ResourceWithDependentsException: if the resource to remove has dependents.
 
         """
-        res_ref = resource_ref(resource)
-
-        existing_relationships = self._relationships[res_ref]
+        existing_relationships = self._relationships[resource]
         if check_dependents and existing_relationships:
             raise ResourceWithDependentsException(existing_relationships)
 
-        del self._resources[res_ref]
-        del self._relationships[res_ref]
+        del self._relationships[resource]
 
         # Remove "pointers" to the resources from any dependency
         # All dependents need to be checked because the owners
         # may not be consistent anymore (e.g with migration).
         for dependents in self._relationships.values():
-            if res_ref in dependents:
-                dependents.remove(res_ref)
+            if resource in dependents:
+                dependents.remove(resource)
 
-    def update_resource(self, resource):
+    def update_resource(self, resource, owners):
         """Update the dependency relationships of a resource on the graph.
 
         Args:
-            resource (krake.data.serializable.Serializable): the resource whose
-                ownership may need to be modified.
+            resource (krake.data.core.ResourceRef): the resource whose ownership may
+                need to be modified.
+            owners (list): list of owners (dependencies) of the resource.
 
         """
         resource = deepcopy(resource)
-        stored = self._resources[resource_ref(resource)]
-
-        # If no update has been done on the dependency relations of the resource,
-        # simply update its reference.
-        if resource.metadata.owners == stored.metadata.owners:
-            self._resources[resource_ref(resource)] = resource
-            return
-
         dependents = self.get_direct_dependents(resource)
 
         # This action removes the dependents entirely,
         # that is why they need to be stored beforehand.
         self.remove_resource(resource, check_dependents=False)
-        self.add_resource(resource)
+        self.add_resource(resource, owners)
 
-        dependents_references = [resource_ref(resource) for resource in dependents]
-        self._relationships[resource_ref(resource)] = dependents_references
+        self._relationships[resource] = dependents
 
     def _check_for_cycles(self, reference, visited=None):
         """Verify if a cycle exists in the graph.
@@ -231,27 +215,12 @@ class DependencyGraph(object):
             visited = set()
 
         if reference in visited:
-            resources_visited = [self._resources[reference] for reference in visited]
-            raise DependencyCycleException(reference, resources_visited)
+            raise DependencyCycleException(reference, visited)
 
         visited.add(reference)
         # Empty relationships are lazy created here
         for dependent in self._relationships[reference]:
             self._check_for_cycles(dependent, visited)
-
-    def get_owners(self, resource):
-        """Retrieve the actual owners (not references) of a resource.
-
-        Args:
-            resource (krake.data.serializable.Serializable): the instances of the
-                owners of this resource will be retrieved.
-
-        Returns:
-            list: the list of owners of the given resource.
-
-        """
-        owners_refs = resource.metadata.owners
-        return [self._resources[owner_ref] for owner_ref in owners_refs]
 
 
 class GarbageCollector(Controller):
@@ -306,7 +275,7 @@ class GarbageCollector(Controller):
 
             # For each selected resource of the current API
             for kind, client_resource in kind_list:
-                self.apis[kind] = api
+                self.apis[(kind.api, kind.kind)] = api
 
                 resource_plural = camel_to_snake_case(client_resource.plural)
                 list_resources = getattr(api, f"list_all_{resource_plural}")
@@ -332,7 +301,7 @@ class GarbageCollector(Controller):
         """Check if a resource needs to be deleted or not.
 
         Args:
-            resource (krake.data.serializable.Serializable): the resource to check.
+            resource (krake.data.serializable.ApiObject): the resource to check.
 
         Returns:
             bool: True if the given resource is in deletion state, False otherwise.
@@ -357,11 +326,11 @@ class GarbageCollector(Controller):
         removed.
 
         Args:
-            resource (krake.data.serializable.Serializable): the newly added resource.
+            resource (krake.data.serializable.ApiObject): the newly added resource.
 
         """
         try:
-            self.graph.add_resource(resource)
+            self.graph.add_resource(resource_ref(resource), resource.metadata.owners)
             await self.simple_on_receive(resource, condition=self.is_in_deletion)
         except DependencyCycleException as err:
             self._clean_cycle(err.cycle)
@@ -374,11 +343,11 @@ class GarbageCollector(Controller):
         removed.
 
         Args:
-            resource (krake.data.serializable.Serializable): the updated resource.
+            resource (krake.data.serializable.ApiObject): the updated resource.
 
         """
         try:
-            self.graph.update_resource(resource)
+            self.graph.update_resource(resource_ref(resource), resource.metadata.owners)
             await self.simple_on_receive(resource, condition=self.is_in_deletion)
         except DependencyCycleException as err:
             self._clean_cycle(err.cycle)
@@ -388,15 +357,19 @@ class GarbageCollector(Controller):
         from the dependency graph and add its dependencies to the Worker queue.
 
         Args:
-            resource (krake.data.serializable.Serializable): the deleted resource.
+            resource (krake.data.serializable.ApiObject): the deleted resource.
 
         """
-        for dependency in self.graph.get_owners(resource):
+        for dependency_ref in resource.metadata.owners:
+            get_resource = self.get_api_method(dependency_ref, "read")
+            dependency = await get_resource(
+                namespace=dependency_ref.namespace, name=dependency_ref.name
+            )
             if self.is_in_deletion(dependency):
                 await self.queue.put(dependency.metadata.uid, dependency)
 
         try:
-            self.graph.remove_resource(resource)
+            self.graph.remove_resource(resource_ref(resource))
         except ResourceWithDependentsException as err:
             # This case can only happen if a resource with dependent has been deleted on
             # the database, but its dependent where not handled by the Garbage
@@ -410,6 +383,25 @@ class GarbageCollector(Controller):
                 resource_ref(resource),
                 ",".join(map(str, err.dependents)),
             )
+
+    def get_api_method(self, reference, verb):
+        """Retrieve the client method of the API of the given resource to do the given
+        action.
+
+        Args:
+            reference (any): a resource or reference to a resource for which a method
+                of its API needs to be selected.
+            verb (str): the verb describing the action for which the method should be
+                returned.
+
+        Returns:
+            callable: a method to perform the given action on the given resource
+                (through its client).
+
+        """
+        api = self.apis[(reference.api, reference.kind)]
+        kind = camel_to_snake_case(reference.kind)
+        return getattr(api, f"{verb}_{kind}")
 
     async def cleanup(self):
         self.reflectors = []
@@ -434,13 +426,14 @@ class GarbageCollector(Controller):
         resource has no dependent.
 
         Args:
-            resource (krake.data.serializable.Serializable): a resource in deletion
+            resource (krake.data.serializable.ApiObject): a resource in deletion
                 state.
 
         """
-        logger.debug("Received %r", resource_ref(resource))
+        res_ref = resource_ref(resource)
+        logger.debug("Received %r", res_ref)
 
-        dependents = self.graph.get_direct_dependents(resource)
+        dependents = self.graph.get_direct_dependents(res_ref)
         if dependents:
             await self._mark_dependents(dependents)
         else:
@@ -455,27 +448,21 @@ class GarbageCollector(Controller):
 
         """
         for dependent in dependents:
-            api = self.apis[type(dependent)]
-            kind = camel_to_snake_case(dependent.kind)
-            delete_resource = getattr(api, f"delete_{kind}")
+            delete_resource = self.get_api_method(dependent, "delete")
 
-            logger.info("Mark dependent as deleted: %s", resource_ref(dependent))
-            await delete_resource(
-                namespace=dependent.metadata.namespace, name=dependent.metadata.name
-            )
+            logger.info("Mark dependent as deleted: %s", dependent)
+            await delete_resource(namespace=dependent.namespace, name=dependent.name)
 
     async def _remove_cascade_deletion_finalizer(self, resource):
         """Update the given resource to remove its garbage-collector-specific
         finalizer.
 
         Args:
-            resource (krake.data.serializable.Serializable): the finalizer will be
+            resource (krake.data.serializable.ApiObject): the finalizer will be
                 removed from this resource.
 
         """
-        api = self.apis[type(resource)]
-        kind = camel_to_snake_case(resource.kind)
-        update_resource = getattr(api, f"update_{kind}")
+        update_resource = self.get_api_method(resource, "update")
 
         finalizer = resource.metadata.finalizers.pop(-1)
         assert finalizer == "cascade_deletion"
@@ -491,13 +478,13 @@ class GarbageCollector(Controller):
         graph.
 
         Args:
-            cycle (list): list of resources that are present on the dependency graph,
+            cycle (set): list of resources that are present on the dependency graph,
                 with a dependency cycle between them.
 
         """
         logger.warning(
             "Some resources hold a dependency circle: %s.",
-            ",".join(str(resource_ref(resource)) for resource in cycle),
+            ",".join(str(resource) for resource in cycle),
         )
         for resource in cycle:
             self.graph.remove_resource(resource, check_dependents=False)
