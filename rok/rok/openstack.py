@@ -6,6 +6,9 @@
 
 """
 import os
+import sys
+
+import yaml
 
 from .parser import (
     ParserSpec,
@@ -318,7 +321,8 @@ def create_cluster(
         json=cluster,
         raise_for_status=False,
     )
-    return resp.json()
+    data = resp.json()
+    yaml.dump(data, default_flow_style=False, stream=sys.stdout)
 
 
 @cluster.command("list", help="List Magnum clusters")
