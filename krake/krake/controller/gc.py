@@ -98,9 +98,9 @@ class DependencyGraph(object):
 
     If an instance of a resource A depends on a resource B, A will have B in its owner
     list. In this case,
-     * A depends on B
-     * B is a dependency of A
-     * A is a dependent of B
+    * A depends on B
+    * B is a dependency of A
+    * A is a dependent of B
 
     The nodes of the graph are :class:`krake.data.core.ResourceRef`, created from the
     actual resources. The edges are directed links from a dependency to its dependents.
@@ -163,9 +163,9 @@ class DependencyGraph(object):
 
         Args:
             resource (krake.data.serializable.Serializable): the resource to remove.
-            check_dependents (bool, optional): if False, does not check if the
-                resource to remove has dependents, and simply remove it along with the
-                 dependents.
+            check_dependents (bool, optional): if False, does not check if the resource
+                to remove has dependents, and simply remove it along with the
+                dependents.
 
         Raises:
             ResourceWithDependentsException: if the resource to remove has dependents.

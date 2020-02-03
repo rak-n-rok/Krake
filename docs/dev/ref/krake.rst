@@ -49,9 +49,23 @@ krake.controller
 
     All new controller should be added in this module.
 
-    krake.controller.kubernetes
-        This sub-module contains the definition of the controllers specialized
+    krake.controller.kubernetes_application
+        This sub-module contains the definition of the controller specialized
         for the Kubernetes clusters and applications handling.
+
+    krake.controller.scheduler
+        This sub-module defines the Scheduler controller, responsible for binding
+        the Krake applications and magnum clusters to the specific backends.
+
+    krake.controller.gc
+        This sub-module defines the Garbage Collector controller, responsible for
+        handling the dependencies during the deletion of a resource. It marks as
+        deleted all dependents of a resource marked as deleted, thus triggering their
+        deletion.
+
+    krake.controller.magnum
+        This sub-module defines the Magnum controller, responsible for managing
+        Magnum cluster resources and creating their respective Kubernetes cluster.
 
 krake.data
     .. _krake.data:
@@ -160,6 +174,34 @@ Controllers
 -----------
 
 .. automodule:: krake.controller
+    :members:
+    :show-inheritance:
+
+Controller Kubernetes Application
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: krake.controller.kubernetes_application
+    :members:
+    :show-inheritance:
+
+Controller Scheduler
+~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: krake.controller.scheduler
+    :members:
+    :show-inheritance:
+
+Controller Garbage Collector
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: krake.controller.gc
+    :members:
+    :show-inheritance:
+
+Controller Magnum
+~~~~~~~~~~~~~~~~~
+
+.. automodule:: krake.controller.magnum
     :members:
     :show-inheritance:
 
