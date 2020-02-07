@@ -92,7 +92,7 @@ def main(name):
     client_cert_file = temp_dir / f"{name}.pem"
     client_key_file = temp_dir / f"{name}-key.pem"
 
-    temp_dir.mkdir(exist_ok=True, mode=0o700)
+    temp_dir.mkdir(exist_ok=True, mode=0o700, parents=True)
 
     if client_key_file.exists():
         print(f"Error: client key {client_key_file} already exists", file=sys.stderr)

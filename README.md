@@ -57,8 +57,8 @@ $ pip install --editable krake/
 
 ```bash
 # Install "krake" and "rok" with development dependencies
-$ pip install --editable rok/[dev]
-$ pip install --editable krake/[dev]
+$ pip install --editable "rok/[dev]"
+$ pip install --editable "krake/[dev]"
 ```
 
 ### Running
