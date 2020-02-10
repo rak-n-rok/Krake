@@ -97,6 +97,18 @@
       pip:
         name: docker-compose
 
+    - name: Add GPG key for kubectl
+      apt_key:
+        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+
+    - name: Add APT repository for kubectl
+      apt_repository:
+        repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+
+    - name: Install Docker CE
+      apt:
+        name: kubectl
+
     # Inspired from https://stackoverflow.com/questions/37333305/ansible-create-a-user-with-sudo-privileges
     - name: Create 'wheel' group
       group:
