@@ -119,6 +119,17 @@ Krake ``Role`` and ``RoleBinding`` definitions:
       - me
 
 
+.. danger::
+
+  The structure of a resource added in the database is checked against the definition
+  of this resource kind. This means that the attributes' name and kind are checked.
+  However, the bootstrapping script does not ensure that the relationships between the
+  resources are valid.
+
+  For instance, the ``RoleBinding`` ``my-rolebinding`` refers to the ``Role``
+  ``my-role``. If this role is not in the database, or its name has been misspelled,
+  the bootstrapping script will not detect it, and the database will be inconsistent.
+
 
 Existing definitions
 ====================
