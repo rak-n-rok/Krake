@@ -366,20 +366,95 @@ async def test_reflector_watch(loop):
 
 @pytest.mark.slow
 async def test_reflector_retry(loop):
-    # Simulate a disconnection of the Reflector to the API.
-    error_count = []
+    """This test is intended to test the retry() mechanism of the Reflector, which
+    attempts to reconnect to the API when disconnections occur.
 
-    connection_key = Mock()
-    connection_key.host = "http://localhost:8080"
+    Four steps are present during the test:
+    1. Simulate a disconnection of the Reflector to the API, to trigger the retry
+    mechanism of the Reflector.
 
-    def client_error():
-        error_count.append(1)
-        raise ClientConnectorError(connection_key=connection_key, os_error=OSError())
+    2. Then, a connection is possible, which should reset the delay.
 
-    reflector = Reflector(client_error, client_error)
+    3. After that, a disconnection happens again.
 
-    await reflector(max_retry=2)  # Only retry the connection twice
-    assert len(error_count) == 2
+    4. Finally, trigger an unexpected error to ensure that the reflector is stopped.
+    """
+    start_time = 0
+    # Amount of time in seconds a connection was possible between the Reflector and the
+    # API without interruption (during step 2).
+    error_free_time = 0
+    # Store the amounts of time in seconds between two entries in the watcher.
+    delays = []
+
+    connect_key = Mock()
+    connect_key.host = "http://dummy_host:8080"
+
+    mock_event = Mock()
+    mock_event.object = Mock()
+
+    class WatcherMock(object):
+        async def __aenter__(self):
+            return self.watch()
+
+        async def __aexit__(self, *exc):
+            pass
+
+        async def watch(self):
+            while True:
+                yield await client_handler()
+
+    async def client_handler():
+        # This function is called every time the Reflector attempts to connect to the
+        # API. When this function creates a disconnection, the Reflector tries to
+        # connect again, and the interval between two attempts grows.
+
+        nonlocal error_free_time
+        # Timestamp since the last error
+        since_error = loop.time() - error_free_time
+        delays.append(since_error)
+
+        # Timestamp since the beginning of the Reflector run
+        from_start = loop.time() - start_time
+        if from_start < 3:
+            # Step 1: 3 disconnections are expected.
+            raise ClientConnectorError(connection_key=connect_key, os_error=OSError())
+        elif from_start < 5:
+            # Step 2: Connection starts again: 1 connection is possible
+            await asyncio.sleep(2)
+            error_free_time = loop.time()
+            return mock_event
+        elif from_start < 8:
+            # Step 3: 3 disconnections are expected, the delay is reset.
+            raise ClientConnectorError(connection_key=connect_key, os_error=OSError())
+        else:
+            # Step 4: Error not handled by the Reflector
+            raise RuntimeError("Unexpected error")
+
+    reflector = Reflector(None, WatcherMock)
+
+    start_time = loop.time()
+    error_free_time = loop.time()
+    with pytest.raises(RuntimeError, match="Unexpected error"):
+        await reflector(min_interval=1)
+
+    # Delay is computed when entering the watcher!!!
+    #  * A first delay when entering the function the first time;
+    #  * then 3 connection exceptions,
+    #  * then have a connection that reset the delay after it to a small value;
+    #  * then 3 connection exceptions.
+    # Finally an error (no delay computed).
+    # That makes 8 delays.
+    assert len(delays) == 8
+
+    # When the connection was possible, the growth of the delay was reset. It means
+    # the first half of the delays is increasing from ~0 to a higher value, then on the
+    # second half, the delays are reset, and the delays are again increasing from ~0 to
+    # a higher value. The value computed should be close on both half, respectively the
+    # 1st and 5th values, then the 2nd and 6th, and so on...
+    for i in range(0, 4):
+        # As we deal with floating values, and computation times, the values are close
+        # but not equal, hence the use of approx().
+        assert delays[i + 4] == pytest.approx(delays[i], rel=0.005, abs=0.005)
 
 
 async def test_observer(loop):
