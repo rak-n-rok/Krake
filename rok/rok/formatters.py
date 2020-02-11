@@ -433,7 +433,7 @@ class BaseTable(Table):
 
     name = Cell("metadata.name")
     namespace = Cell("metadata.namespace")
-    labels = Cell("metadata.labels", formatter=list_formatter)
+    labels = Cell("metadata.labels", formatter=dict_formatter)
     created = Cell("metadata.created", formatter=format_datetime)
     modified = Cell("metadata.modified", formatter=format_datetime)
     deleted = Cell("metadata.deleted", formatter=format_datetime)

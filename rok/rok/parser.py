@@ -214,12 +214,12 @@ class MetricAction(Action):
 
     A metric argument requires two arguments. The first argument is the name
     of a metric (:class:`str`). The second argument is the weight of the
-    argument as float.
+    argument as float. The option can be called several times.
 
     Example:
         .. code:: bash
 
-            cli --metric-argument my-metric 1.2
+            cli --metric-argument my-metric 1.2 --metric-argument my-other-metric 4.5
 
     The action will populate the namespace with a list of dictionaries:
 
@@ -227,17 +227,22 @@ class MetricAction(Action):
 
         [
             {"name": "my-metric", "weight": 1.2},
+            {"name": "my-other-metric", "weight": 4.5},
             ...
         ]
 
     """
 
-    def __init__(self, *args, nargs=None, default=None, **kwargs):
+    def __init__(self, *args, nargs=None, default=None, metavar=None, **kwargs):
         if nargs is not None:
             raise ValueError("nargs is not allowed for MetricAction")
+        if metavar is not None:
+            raise ValueError("metavar is not allowed for MetricAction")
         if default is None:
             default = []
-        super().__init__(*args, default=default, nargs=2, **kwargs)
+        super().__init__(
+            *args, default=default, nargs=2, metavar=("METRIC", "WEIGHT"), **kwargs
+        )
 
     def __call__(self, parser, namespace, values, option_string=None):
         name = values[0]

@@ -6,6 +6,9 @@
 
 """
 import os
+import sys
+
+import yaml
 
 from .parser import (
     ParserSpec,
@@ -16,8 +19,7 @@ from .parser import (
     arg_metric,
 )
 from .fixtures import depends
-from .formatters import BaseTable, Cell, printer
-
+from .formatters import BaseTable, Cell, printer, dict_formatter
 
 openstack = ParserSpec("openstack", aliases=["os"], help="Manage OpenStack resources")
 
@@ -266,8 +268,15 @@ arg_project_label_constraints = argument(
 )
 
 
-class ClusterTable(BaseTable):
-    project = Cell("status.project")
+class ClusterListTable(BaseTable):
+    state = Cell("status.state")
+
+
+class ClusterTable(ClusterListTable):
+    reason = Cell("status.reason", formatter=dict_formatter)
+    master = Cell("status.master_addresses")
+    nodes = Cell("status.node_addresses")
+    project = Cell("status.project.name")
 
 
 @cluster.command("create", help="Create Magnum cluster")
@@ -312,7 +321,8 @@ def create_cluster(
         json=cluster,
         raise_for_status=False,
     )
-    return resp.json()
+    data = resp.json()
+    yaml.dump(data, default_flow_style=False, stream=sys.stdout)
 
 
 @cluster.command("list", help="List Magnum clusters")
@@ -322,7 +332,7 @@ def create_cluster(
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
-@printer(table=ClusterTable(many=True))
+@printer(table=ClusterListTable(many=True))
 def list_clusters(config, session, namespace, all):
     if all:
         url = "/openstack/magnumclusters"
@@ -391,7 +401,7 @@ def update_cluster(
     if project_label_constraints:
         if cluster["spec"]["constraints"] is None:
             cluster["spec"]["constraints"] = {}
-        if cluster["spec"]["constraints"]["project"] is None:
+        if cluster["spec"]["constraints"].get("project") is None:
             cluster["spec"]["constraints"]["project"] = {}
         cluster["spec"]["constraints"]["project"]["labels"] = project_label_constraints
 

@@ -137,7 +137,7 @@ def create_application(
     yaml.dump(data, default_flow_style=False, stream=sys.stdout)
 
 
-class ApplicationTable(BaseTable):
+class ApplicationTable(ApplicationListTable):
     reason = Cell("status.reason", formatter=dict_formatter)
     services = Cell("status.services", formatter=dict_formatter)
     constraints = Cell("spec.constraints", formatter=dict_formatter)
@@ -328,6 +328,69 @@ def list_clusters(config, session, namespace, all):
     resp = session.get(url)
     body = resp.json()
     return body["items"]
+
+
+@cluster.command("get", help="Get Kubernetes cluster")
+@argument("name", help="Kubernetes cluster name")
+@arg_namespace
+@arg_formatting
+@depends("config", "session")
+@printer(table=ClusterTable())
+def get_cluster(config, session, namespace, name):
+    if namespace is None:
+        namespace = config["user"]
+
+    resp = session.get(
+        f"/kubernetes/namespaces/{namespace}/clusters/{name}", raise_for_status=False
+    )
+    if resp.status_code == 404:
+        print(f"Error: Kubernetes cluster {name!r} not found")
+        raise SystemExit(1)
+
+    resp.raise_for_status()
+    return resp.json()
+
+
+@cluster.command("update", help="Update Kubernetes cluster")
+@argument("name", help="Kubernetes cluster name")
+@argument("-f", "--file", type=FileType(), help="Kubernetes kubeconfig file")
+@arg_custom_resources
+@arg_metric
+@arg_namespace
+@arg_labels
+@depends("config", "session")
+def update_cluster(
+    config, session, name, namespace, file, metrics, labels, custom_resources
+):
+    if namespace is None:
+        namespace = config["user"]
+
+    resp = session.get(
+        f"/kubernetes/namespaces/{namespace}/clusters/{name}", raise_for_status=False
+    )
+    if resp.status_code == 404:
+        raise SystemExit(f"Error: Magnum cluster {name!r} not found")
+    resp.raise_for_status()
+    cluster = resp.json()
+
+    if file:
+        kubeconfig = yaml.safe_load(file)
+        cluster["spec"]["kubeconfig"] = kubeconfig
+
+    if labels:
+        cluster["metadata"]["labels"] = labels
+    if metrics:
+        cluster["spec"]["metrics"] = metrics
+    if custom_resources:
+        cluster["spec"]["custom_resources"] = custom_resources
+
+    resp = session.put(
+        f"/kubernetes/namespaces/{namespace}/clusters/{name}", json=cluster
+    )
+
+    print("---")
+    data = resp.json()
+    yaml.dump(data, default_flow_style=False, stream=sys.stdout)
 
 
 @cluster.command("delete", help="Delete Kubernetes cluster")
