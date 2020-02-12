@@ -148,6 +148,8 @@ def execute_tests(tests):
         if expected_cluster:
             response = run(
                 f"rok kube app get {test.application.name} -f json",
+                retry=5,
+                interval=10,
                 condition=check_app_state(
                     "RUNNING", "Unable to observe the application in a RUNNING state"
                 ),
