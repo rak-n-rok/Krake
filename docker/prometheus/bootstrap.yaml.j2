@@ -1,8 +1,16 @@
-# This bootstrap file adds the Prometheus metrics used by the ``support/prometheus``
-# script (used in tests), as well as a provider to connect to the Prometheus server
-# locally.
+# This bootstrap jinja2 template adds the Prometheus metrics used by the `prometheus`
+# container and exported by simple metrics exporter server as well as a provider
+# definition to connect to the Prometheus docker server.
 #
-# These resources can be loaded using the ``bootstrap`` script.
+# This bootstrap jinja2 template can be configured by the corresponding Ansible playbook
+# or by the script `docker/generate` in case of standalone installation.
+# These resources can be loaded using the `krake_bootstrap_db` script.
+#
+# .. code:: bash
+#
+#     $ cd docker
+#     $ docker/generate --config docker.yaml docker/prometheus
+#     $ krake_bootstrap_db docker/prometheus/bootstrap.yaml
 
 ##########################
 ### Prometheus Metrics ###
@@ -78,6 +86,20 @@ spec:
 ---
 
 
+api: core
+kind: Metric
+metadata:
+  name: heat_demand_zone_unreachable
+spec:
+  max: 5.0
+  min: 0.0
+  provider:
+    metric: heat_demand_zone_unreachable
+    name: prometheus-unreachable
+
+---
+
+
 ####################################
 ### Prometheus Metrics Providers ###
 ####################################
@@ -89,4 +111,16 @@ metadata:
 spec:
   type: prometheus
   prometheus:
-    url: http://localhost:9090
+    url: http://{{ prometheus.host }}:{{ prometheus.port }}
+
+---
+
+
+api: core
+kind: MetricsProvider
+metadata:
+  name: prometheus-unreachable
+spec:
+  type: prometheus
+  prometheus:
+    url: http://1.2.3.4:9090

@@ -29,8 +29,9 @@ Abstraction is provided by :class:`Provider`.
     assert isinstance(provider, Prometheus)
 
 """
+import asyncio
 from typing import NamedTuple
-from aiohttp import ClientSession, ClientError
+from aiohttp import ClientSession, ClientError, ClientTimeout
 
 from krake.data.core import MetricsProvider, Metric
 from yarl import URL
@@ -164,10 +165,17 @@ class Prometheus(Provider):
         ).with_query({"query": metric_name})
 
         try:
-            async with self.session.get(url) as resp:
+            # The value of 20 is only here to prevent a long timeout of 5 minutes
+            # by default with aiohttp.
+            # TODO: The mechanism of fetching metrics will be changed with the issue
+            #  #326, so this timeout should be modified at this moment. This timeout
+            #  allows the integration tests to last not too long.
+            wait_time = 20
+            timeout = ClientTimeout(total=wait_time)
+            async with self.session.get(url, timeout=timeout) as resp:
                 resp.raise_for_status()
                 body = await resp.json()
-        except ClientError as err:
+        except (ClientError, asyncio.TimeoutError) as err:
             raise MetricError("Failed to query Prometheus") from err
 
         # @see https://prometheus.io/docs/prometheus/latest/querying/api/

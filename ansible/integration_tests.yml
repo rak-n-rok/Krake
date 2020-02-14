@@ -10,16 +10,22 @@
       pip:
         name: "{{ git_dir }}/rak/[test]"
         state: present
+        executable: pip3
+        extra_args: --user
+      environment:
+        PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
 
     # We need one Minikube cluster in order to run the integration tests
-    - name: Check if a Minikube cluster has been spawned
+    - name: Check if a Minikube clusters have been spawned
       assert:
-        that: "groups['minikube_clusters'][0] is defined"
+        that:
+          - "groups['minikube_clusters'][0] is defined"
+          - "groups['minikube_clusters'][1] is defined"
 
     # pytest and rok are installed locally in /home/krake/.local/bin which
     # isn't in the default PATH
     - name: Run integration tests for krake client
-      command: "pytest {{ git_dir }}/{{test_dir}}/test_integration.py --minikubecluster {{groups['minikube_clusters'][0]}}"
+      command: "pytest {{ git_dir }}/{{test_dir}}/test_integration.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
       environment:
         PATH: "{{ ansible_env.PATH }}:{{ansible_env.HOME}}/.local/bin"
 

@@ -235,7 +235,7 @@ def config():
             pass
 
     # No config file was found. Use defaults
-    return {"api_url": "http://localhost:8080", "user": "system"}
+    return {"api_url": "http://localhost:8080", "user": "system:admin"}
 
 
 class BaseUrlSession(requests.Session):

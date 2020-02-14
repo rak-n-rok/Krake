@@ -51,12 +51,12 @@ register.option_handlers = {}
 
 
 @register("api_endpoint")
-def create_api_endpoint(host=None, port=None, tls_enabled=None, **kwargs):
+def create_api_endpoint(api_host=None, api_port=None, tls_enabled=None, **kwargs):
     """Generate the API endpoint from arguments.
 
     Args:
-        host (str): The URL host of the API endpoint.
-        port (int): The URL port of the API endpoint.
+        api_host (str): The URL host of the API endpoint.
+        api_port (int): The URL port of the API endpoint.
         tls_enabled (bool): True if TLS support should be enabled for the components
 
     Returns:
@@ -64,7 +64,7 @@ def create_api_endpoint(host=None, port=None, tls_enabled=None, **kwargs):
 
     """
     scheme = "https" if tls_enabled else "http"
-    return f"{scheme}://{host}:{port}"
+    return f"{scheme}://{api_host}:{api_port}"
 
 
 @register("tls_enabled")
@@ -218,14 +218,32 @@ if __name__ == "__main__":
     add_option(
         parser, "--cert-dir", "Directory for generated files.", default="tmp/pki"
     )
+    # FIXME: Krake host IP address is temporary loaded from environment
+    #  variable "KRAKE_HOST" in the application controller.
+    #  This should be removed when DNS service takes place.
     add_option(
-        parser, "--host", "API endpoint host for the controllers.", default="localhost"
+        parser, "--api-ip", "API host IP address for the controllers.",
+        default="127.0.0.1"
     )
-    add_option(parser, "--port", "API endpoint port for the controllers.", default=8080)
+    add_option(
+        parser, "--api-host", "API endpoint host for the controllers.",
+        default="localhost"
+    )
+    add_option(
+        parser, "--api-port", "API endpoint port for the controllers.",
+        default=8080,
+    )
+    add_option(
+        parser, "--etcd-version", "The etcd database version.", default="v3.3.13"
+    )
     add_option(
         parser, "--etcd-host", "Host for the etcd endpoint.", default="127.0.0.1"
     )
     add_option(parser, "--etcd-port", "Port for the etcd endpoint.", default=2379)
+    add_option(
+        parser, "--etcd-peer-port", "Peer port for the etcd endpoint.",
+        default=2380,
+    )
     add_option(
         parser,
         "--worker-count",
@@ -261,6 +279,9 @@ if __name__ == "__main__":
             "after a modification of a cluster."
         ),
         default=0.1,
+    )
+    add_option(
+        parser, "--docker-daemon-mtu", "The Docker daemon MTU.", default=1450
     )
 
     args = vars(parser.parse_args())

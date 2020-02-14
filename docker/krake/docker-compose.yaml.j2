@@ -1,0 +1,101 @@
+# Compose jinja2 template defines and runs docker containers for provisioning of the Krake Api,
+# Krake Controllers and Krake DB infrastructure.
+# Pre-built krake image is a prerequisite for this compose template.
+# This compose jinja2 template can be configured by corresponding Ansible playbook
+# or by `docker/generate` script in case of standalone installation.
+#
+# .. code:: bash
+#
+#     $ cd docker
+#     $ docker/generate --config docker.yaml docker/krake
+#     $ docker-compose --file krake/docker-compose.yaml up --detach
+
+version: "3"
+
+services:
+
+  krake-etcd:
+    container_name: {{ etcd.host }}
+    image: quay.io/coreos/etcd:{{ etcd.version }}
+    restart: always
+    tty: true
+    ports:
+      - {{ etcd.port }}:{{ etcd.port }}
+    volumes:
+      - ./certs/:/srv/
+      - /srv/docker/etcd:/etcd-data
+    environment:
+      ETCD_NAME: {{ etcd.host }}
+      ETCD_DATA_DIR: /etcd-data/{{ etcd.host }}
+      ETCDCTL_API: 3
+      ETCD_ADVERTISE_CLIENT_URLS: http://{{ etcd.host }}:{{ etcd.port }}
+      ETCD_INITIAL_ADVERTISE_PEER_URLS: http://{{ etcd.host }}:{{ etcd.peer_port }}
+      ETCD_INITIAL_CLUSTER: {{ etcd.host }}=http://{{ etcd.host }}:{{ etcd.peer_port }}
+      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:{{ etcd.port }}
+      ETCD_LISTEN_PEER_URLS: http://0.0.0.0:{{ etcd.peer_port }}
+
+  krake-api:
+    container_name: {{ api.host }}
+    image: krake:latest
+    restart: always
+    tty: true
+    ports:
+      - {{ api.port }}:{{ api.port }}
+    depends_on:
+      - krake-etcd
+    command: python3 -m krake.api
+    volumes:
+      - {{ krake.config.path }}:/etc/krake:ro
+
+  krake-ctrl-garbage-collector:
+    image: krake:latest
+    restart: always
+    tty: true
+    depends_on:
+      - krake-api
+    command: python3 -m krake.controller.gc
+    volumes:
+      - {{ krake.config.path }}:/etc/krake:ro
+
+  krake-ctrl-kubernetes-application:
+    image: krake:latest
+    restart: always
+    tty: true
+    depends_on:
+      - krake-api
+    command: python3 -m krake.controller.kubernetes_application
+    environment:
+      # FIXME: Krake ip address is temporary loaded from
+      # environment variable "KRAKE_HOST", if present. This should
+      # be removed when DNS service takes place.
+      KRAKE_HOST: {{ api.ip }}
+    volumes:
+      - {{ krake.config.path }}:/etc/krake:ro
+
+  krake-ctrl-scheduler:
+    image: krake:latest
+    restart: always
+    tty: true
+    depends_on:
+      - krake-api
+    command: python3 -m krake.controller.scheduler
+    volumes:
+      - {{ krake.config.path }}:/etc/krake:ro
+
+  krake-ctrl-magnum:
+    image: krake:latest
+    restart: always
+    tty: true
+    depends_on:
+      - krake-api
+    command: python3 -m krake.controller.magnum
+    volumes:
+      - {{ krake.config.path }}:/etc/krake:ro
+
+{% if docker_daemon_mtu is defined %}
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: {{ docker_daemon_mtu }}
+{% endif %}
