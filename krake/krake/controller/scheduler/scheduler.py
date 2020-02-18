@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import random
+from datetime import datetime
 from typing import NamedTuple
 
 from functools import total_ordering
@@ -190,11 +191,16 @@ class Scheduler(Controller):
         """
         if app.metadata.deleted:
             # TODO: If an application is deleted, the scheduling of other
-            #   applications should potentially revised.
+            #   applications should potentially be revised.
             logger.debug("Cancel rescheduling of deleted %r", app)
             await self.queue.cancel(app.metadata.uid)
+
+        # The application is already scheduled and no change has been made to the specs
+        # since then. Nevertheless, we should perform a periodic rescheduling to handle
+        # changes in the cluster metric values.
         elif app.status.scheduled and app.metadata.modified <= app.status.scheduled:
             await self.reschedule_kubernetes_application(app)
+
         elif app.status.state == ApplicationState.FAILED:
             logger.debug("Reject failed %r", app)
         else:
@@ -317,6 +323,15 @@ class Scheduler(Controller):
         # Check if the scheduling decision changed
         if app.status.scheduled_to == scheduled_to:
             logger.debug("No change for %r", app)
+
+            # The timestamp is updated anyway because the KubernetesController is
+            # waiting for the Scheduler to take a decision before handling the update on
+            # an Application. By updating this, the KubernetesController can start
+            # working on the current Application.
+            app.status.scheduled = datetime.now()
+            await self.kubernetes_api.update_application_status(
+                namespace=app.metadata.namespace, name=app.metadata.name, body=app
+            )
             return
 
         if app.status.scheduled_to:
