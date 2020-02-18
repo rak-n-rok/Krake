@@ -1,4 +1,4 @@
-"""This module defines E2e integration tests for the Krake client.
+"""This module defines E2e integration tests for the scheduling algorithm of Krake.
 
 Module covers various test scenarios including constraints and metrics.
 Test constraints, metrics and metrics providers are globally defined as follows:
@@ -38,8 +38,7 @@ Test constraints, metrics and metrics providers are globally defined as follows:
 import itertools
 from typing import NamedTuple, List
 
-from utils import run
-import json
+from utils import run, check_app_state, check_empty_list
 import random
 
 KRAKE_HOMEDIR = "/home/krake"
@@ -62,36 +61,6 @@ CONSTRAINT_EXPRESSIONS = {
     ],
     False: ["location is not DE", "location != DE", "location not in (DE,)"],
 }
-
-
-def check_app_state(state, error_message, reason=None):
-    def validate(response):
-        try:
-            app_details = response.json
-            assert app_details["status"]["state"] == state, error_message
-            if reason:
-                assert app_details["status"]["reason"]["code"] == reason, error_message
-        except (KeyError, json.JSONDecodeError):
-            raise AssertionError(error_message)
-
-    return validate
-
-
-def check_return_code(error_message):
-    def validate(response):
-        assert response.returncode == 0, error_message
-
-    return validate
-
-
-def check_empty_list(error_message):
-    def validate(response):
-        try:
-            assert response.json == [], error_message
-        except json.JSONDecodeError:
-            raise AssertionError(error_message)
-
-    return validate
 
 
 def execute_tests(tests):
@@ -201,7 +170,7 @@ class Test(NamedTuple):
     clusters: List[Cluster]
 
 
-def test_create_cluster_and_app(minikubeclusters):
+def test_create_cluster_and_app(minikube_clusters):
     """Basic end to end testing
 
     We run a basic workflow in 5 steps:
@@ -212,10 +181,10 @@ def test_create_cluster_and_app(minikubeclusters):
     5. Delete the cluster
 
     Args:
-        minikubeclusters (list): Names of the Minikube backend.
+        minikube_clusters (list): Names of the Minikube backend.
 
     """
-    cluster = random.choice(minikubeclusters)
+    cluster = random.choice(minikube_clusters)
     execute_tests(
         [
             Test(
@@ -226,7 +195,7 @@ def test_create_cluster_and_app(minikubeclusters):
     )
 
 
-def test_scheduler_cluster_label_constraints(minikubeclusters):
+def test_scheduler_cluster_label_constraints(minikube_clusters):
     """Basic end to end testing of application cluster label constraints
 
     Test iterates over the `CONSTRAINT_EXPRESSIONS` and applies workflow as follows:
@@ -241,14 +210,14 @@ def test_scheduler_cluster_label_constraints(minikubeclusters):
         5. Delete the clusters
 
     Args:
-        minikubeclusters (list): Names of the Minikube backend.
+        minikube_clusters (list): Names of the Minikube backend.
 
     """
     tests = []
     for match, constraints in CONSTRAINT_EXPRESSIONS.items():
         for constraint in constraints:
 
-            random.shuffle(minikubeclusters)
+            random.shuffle(minikube_clusters)
 
             tests.append(
                 Test(
@@ -257,12 +226,12 @@ def test_scheduler_cluster_label_constraints(minikubeclusters):
                     ),
                     clusters=[
                         Cluster(
-                            name=minikubeclusters[0],
+                            name=minikube_clusters[0],
                             labels=["location=DE"],
                             scheduled_to=match,
                         ),
                         Cluster(
-                            name=minikubeclusters[1],
+                            name=minikube_clusters[1],
                             labels=["location=IT"],
                             scheduled_to=not match,
                         ),
@@ -272,7 +241,7 @@ def test_scheduler_cluster_label_constraints(minikubeclusters):
     execute_tests(tests)
 
 
-def test_scheduler_clusters_with_metrics(minikubeclusters):
+def test_scheduler_clusters_with_metrics(minikube_clusters):
     """Basic end to end testing of clusters metrics
 
     Cluster metrics and metrics provider are tested multiple times (3) as follows:
@@ -287,13 +256,13 @@ def test_scheduler_clusters_with_metrics(minikubeclusters):
         5. Delete the clusters
 
     Args:
-        minikubeclusters (list): Names of the Minikube backend.
+        minikube_clusters (list): Names of the Minikube backend.
 
     """
     tests = []
     for _ in range(3):
 
-        random.shuffle(minikubeclusters)
+        random.shuffle(minikube_clusters)
         metric_clusters = random.sample(set(METRICS), 2)
         metric_max = max(metric_clusters, key=lambda x: int(x[-1]))
 
@@ -302,12 +271,12 @@ def test_scheduler_clusters_with_metrics(minikubeclusters):
                 application=Application(name="app-test"),
                 clusters=[
                     Cluster(
-                        name=minikubeclusters[0],
+                        name=minikube_clusters[0],
                         metrics=[metric_clusters[0]],
                         scheduled_to=metric_clusters[0] == metric_max,
                     ),
                     Cluster(
-                        name=minikubeclusters[1],
+                        name=minikube_clusters[1],
                         metrics=[metric_clusters[1]],
                         scheduled_to=metric_clusters[1] == metric_max,
                     ),
@@ -317,7 +286,7 @@ def test_scheduler_clusters_with_metrics(minikubeclusters):
     execute_tests(tests)
 
 
-def test_scheduler_clusters_one_with_metrics(minikubeclusters):
+def test_scheduler_clusters_one_with_metrics(minikube_clusters):
     """Basic end to end testing of clusters metrics
 
     Cluster metrics and metrics provider are tested multiple times (3) as follows:
@@ -332,13 +301,13 @@ def test_scheduler_clusters_one_with_metrics(minikubeclusters):
         5. Delete the clusters
 
     Args:
-        minikubeclusters (list): Names of the Minikube backend.
+        minikube_clusters (list): Names of the Minikube backend.
 
     """
     tests = []
     for _ in range(3):
 
-        random.shuffle(minikubeclusters)
+        random.shuffle(minikube_clusters)
         metric = random.choice(METRICS)
 
         tests.append(
@@ -346,16 +315,16 @@ def test_scheduler_clusters_one_with_metrics(minikubeclusters):
                 application=Application(name="app-test"),
                 clusters=[
                     Cluster(
-                        name=minikubeclusters[0], metrics=[metric], scheduled_to=True
+                        name=minikube_clusters[0], metrics=[metric], scheduled_to=True
                     ),
-                    Cluster(name=minikubeclusters[1], metrics=[], scheduled_to=False),
+                    Cluster(name=minikube_clusters[1], metrics=[], scheduled_to=False),
                 ],
             )
         )
     execute_tests(tests)
 
 
-def test_scheduler_cluster_label_constraints_with_metrics(minikubeclusters):
+def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
     """Basic end to end testing of application cluster label constraints with
     metrics
 
@@ -371,14 +340,14 @@ def test_scheduler_cluster_label_constraints_with_metrics(minikubeclusters):
         5. Delete the clusters
 
     Args:
-        minikubeclusters (list): Names of the Minikube backend.
+        minikube_clusters (list): Names of the Minikube backend.
 
     """
     tests = []
     for match, constraints in CONSTRAINT_EXPRESSIONS.items():
         for constraint in constraints:
 
-            random.shuffle(minikubeclusters)
+            random.shuffle(minikube_clusters)
             metric_clusters = random.sample(set(METRICS), 2)
 
             tests.append(
@@ -388,13 +357,13 @@ def test_scheduler_cluster_label_constraints_with_metrics(minikubeclusters):
                     ),
                     clusters=[
                         Cluster(
-                            name=minikubeclusters[0],
+                            name=minikube_clusters[0],
                             labels=["location=DE"],
                             metrics=[metric_clusters[0]],
                             scheduled_to=match,
                         ),
                         Cluster(
-                            name=minikubeclusters[1],
+                            name=minikube_clusters[1],
                             labels=["location=IT"],
                             metrics=[metric_clusters[1]],
                             scheduled_to=not match,
@@ -405,7 +374,7 @@ def test_scheduler_cluster_label_constraints_with_metrics(minikubeclusters):
     execute_tests(tests)
 
 
-def test_unreachable_metrics_provider(minikubeclusters):
+def test_unreachable_metrics_provider(minikube_clusters):
     """Basic end to end testing of unreachable metrics provider
 
     Test applies workflow as follows:
@@ -420,22 +389,22 @@ def test_unreachable_metrics_provider(minikubeclusters):
         5. Delete the clusters
 
     Args:
-        minikubeclusters (list): Names of the Minikube backend.
+        minikube_clusters (list): Names of the Minikube backend.
 
     """
-    random.shuffle(minikubeclusters)
+    random.shuffle(minikube_clusters)
     execute_tests(
         [
             Test(
                 application=Application(name="app-test"),
                 clusters=[
                     Cluster(
-                        name=minikubeclusters[0],
+                        name=minikube_clusters[0],
                         metrics=["heat_demand_zone_unreachable"],
                         scheduled_to=False,
                     ),
                     Cluster(
-                        name=minikubeclusters[1],
+                        name=minikube_clusters[1],
                         metrics=[random.choice(METRICS)],
                         scheduled_to=True,
                     ),
