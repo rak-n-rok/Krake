@@ -5,7 +5,6 @@ from unittest.mock import Mock
 import pytest
 from aiohttp import ClientConnectorError
 from factories.kubernetes import ApplicationFactory, ApplicationStatusFactory
-from krake.client import Client
 from krake.controller import (
     WorkQueue,
     Executor,
@@ -216,10 +215,22 @@ async def test_controller_background_tasks(loop):
 
 
 async def test_controller_run(loop):
-    # Test the retry() function of the Controller, which restart any task by default.
+    # Test the retry() function of the Controller, which restart any task a certain
+    # amount of time, 3 by default.
     values_gathered = set()
 
     class SimpleController(Controller):
+        async def infinite_task(self):
+            # Create a task that runs indefinitely to simulate other background tasks
+            # that run on a Controller.
+            while True:
+                # Ensure this does not throw any GeneratorExit exception.
+                key, cluster = await self.queue.get()
+                try:
+                    await asyncio.sleep(0)
+                finally:
+                    await self.queue.done(key)
+
         async def prepare(self, client):
             self.client = client
             self.task_1 = BackgroundTask(1, values_gathered)
@@ -227,19 +238,28 @@ async def test_controller_run(loop):
             self.task_2 = BackgroundTask(2, values_gathered)
             self.register_task(self.task_2.run)
 
+            self.register_task(self.infinite_task)
+
         async def cleanup(self):
             self.task_1, self.task_2 = None, None
 
     endpoint = "http://localhost:8080"
-    controller = SimpleController(api_endpoint=endpoint)
+    controller = SimpleController(api_endpoint=endpoint, loop=loop)
 
-    async with Client(url=endpoint, loop=loop) as client:
-        await controller.prepare(client)  # need to be called explicitly
-        with pytest.raises(RuntimeError):
-            await controller.run()
+    with pytest.raises(RuntimeError, match="Task run failed 3 times in a row"):
+        await controller.run()
 
     assert values_gathered == {1, 2, 3, 4, 5, 6}  # Each task is restarted 3 times.
     assert controller.task_1 is None
+
+    # Ensure that all remaining tasks of the retry mechanism of the Controller
+    # ("gathered" in the run method) are cancelled because of the errors that occurred
+    # in background tasks "task_1" and "task_2".
+    for task in asyncio.Task.all_tasks():
+        # Choose only the task with a waiter, otherwise we also choose the current test
+        # coroutine
+        if not task.done() and task._fut_waiter is not None:
+            assert task._fut_waiter._state == "CANCELLED"
 
 
 @pytest.mark.slow
