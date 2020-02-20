@@ -101,6 +101,39 @@ The following figure gives an overview about the application handler of Krake sc
 .. figure:: /img/scheduler_app_handler.png
 
 
+Special note on updates:
+------------------------
+
+A special case appears when a user updates manually an ``Application``.
+
+The ``Application`` resources all have a ``scheduled`` timestamp to indicate when was
+the last time that it has been handled by the Scheduler. It is updated whether the
+chosen ``Cluster`` has changed or not. This timestamp is used to force an
+``Application`` that has been updated by a user to be rescheduled before the changes are
+applied by the Kubernetes Controller. If not, the ``Application`` may be updated, but
+rescheduled somewhere else afterwards.
+
+The actual workflow is the same as the one explained in the schema above. However, there
+is an additional interaction with the Kubernetes Controller:
+
+- The user updates the ``Application`` ``my-app`` on the API:
+
+   ``my-app``'s ``modified`` timestamp is **higher** than the ``scheduled`` timestamp;
+
+- The Kubernetes Controller rejects the update on ``my-app`` in this case;
+- The Scheduler accepts the update on ``my-app`` and chooses a cluster for the updated
+  ``my-app``;
+- whether the cluster changed or not, the ``scheduled`` timestamp is updated;
+
+   ``my-app``'s ``modified`` timestamp is **lower** than the ``scheduled`` timestamp;
+
+- the updated ``my-app`` is rejected by the Scheduler because of this comparison;
+- the updated ``my-app`` is accepted by the Kubernetes Controller;
+- the actual updates of the ``Application`` are performed by the Kubernetes Controller
+  if needed.
+
+
+
 Magnum cluster handler
 ======================
 
