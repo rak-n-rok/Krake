@@ -242,9 +242,9 @@ transformed to an open source project in September 2019.
 [prometheus]: https://prometheus.io/download/
 [python]: https://www.python.org/downloads/
 [rtfd]: https://rak-n-rok.readthedocs.io/
-[dev-docs]: https://rak-n-rok.readthedocs.io/projects/krake/en/readthedocs/dev/index.html
-[admin-docs]: https://rak-n-rok.readthedocs.io/projects/krake/en/readthedocs/admin/index.html
-[user-docs]: https://rak-n-rok.readthedocs.io/projects/krake/en/readthedocs/user/index.html
+[dev-docs]: https://rak-n-rok.readthedocs.io/projects/krake/en/latest/dev/index.html
+[admin-docs]: https://rak-n-rok.readthedocs.io/projects/krake/en/latest/admin/index.html
+[user-docs]: https://rak-n-rok.readthedocs.io/projects/krake/en/latest/user/index.html
 [sphinx]: http://www.sphinx-doc.org/
 [krake-matrix]: https://riot.im/app/#/room/#krake:matrix.org
 [virtualenv]: https://virtualenv.pypa.io/en/stable
