@@ -101,7 +101,7 @@ class ApplicationStatusFactory(Factory):
         created = self.factory_parent.metadata.created
         modified = self.factory_parent.metadata.modified
 
-        assert created < modified
+        assert created <= modified
 
         if self.is_scheduled:
             return fake.date_time_between(start_date=modified, tzinfo=pytz.utc)
