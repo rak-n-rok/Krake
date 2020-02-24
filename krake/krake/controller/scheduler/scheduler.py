@@ -509,6 +509,8 @@ class Scheduler(Controller):
             Cluster: Cluster suitable for application binding
 
         """
+        # Reject clusters marked as deleted
+        clusters = (cluster for cluster in clusters if cluster.metadata.deleted is None)
         matching = [
             cluster for cluster in clusters if match_cluster_constraints(app, cluster)
         ]
@@ -554,6 +556,8 @@ class Scheduler(Controller):
             constraints of the Magnum cluster. None if no project can be found.
 
         """
+        # Reject projects marked as deleted
+        projects = (project for project in projects if project.metadata.deleted is None)
         matching = [
             project
             for project in projects
