@@ -345,6 +345,10 @@ async def joint(*aws, loop=None):
     """Start several coroutines together. Ensure that if one stops, all others
     are cancelled as well.
 
+    FIXME: using asyncio.gather, if an error occurs in one of the "gathered" task, all
+     the tasks are not necessarily stopped.
+     @see https://stackoverflow.com/questions/59073556/how-to-cancel-all-remaining-tasks-in-gather-if-one-fails # noqa
+
     Args:
         aws (Awaitable): a list of awaitables to start concurrently.
         loop (asyncio.AbstractEventLoop, optional): Event loop that should be
@@ -592,7 +596,15 @@ class Controller(object):
         try:
             await self.prepare(client)
             await self.client.open()
-            await asyncio.gather(*(self.retry(task, name) for task, name in self.tasks))
+
+            # FIXME: :func:`joint` is used here instead of func:`asyncio.gather` because
+            #  all tasks created here are working indefinitely and each one of them
+            #  needs to  be stopped It must be done manually, otherwise the workers
+            #  continue their job and try to fetch a value from the queue, which is
+            #  closed afterwards. This leads to a :class:`GeneratorExit` exceptions on
+            #  each worker not stopped due to an error. See :func:`joint` documentation.
+            retry_tasks = (self.retry(task, name) for task, name in self.tasks)
+            await joint(*retry_tasks, loop=self.loop)
         finally:
             await client.close()
             await self.queue.close()
