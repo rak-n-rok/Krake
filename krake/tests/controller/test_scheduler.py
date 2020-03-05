@@ -1,3 +1,5 @@
+import random
+
 import pytest
 from datetime import datetime
 from aiohttp import web, ClientSession, ClientConnectorError, ClientResponseError
@@ -592,6 +594,25 @@ async def test_kubernetes_select_cluster_without_metric():
     assert selected in clusters
 
 
+async def test_kubernetes_select_cluster_not_deleted():
+    # As the finally selected cluster is chosen randomly, perform the test several times
+    # to ensure that the cluster has really been chosen the right way, not by chance.
+    for _ in range(10):
+        index = random.randint(0, 9)
+        clusters = [
+            ClusterFactory(metadata__deleted=datetime.now(), spec__metrics=[])
+            for _ in range(10)
+        ]
+        clusters[index].metadata.deleted = None
+
+        app = ApplicationFactory(spec__constraints=None)
+
+        scheduler = Scheduler("http://localhost:8080", worker_count=0)
+        selected = await scheduler.select_kubernetes_cluster(app, clusters)
+
+        assert selected == clusters[index]
+
+
 async def test_kubernetes_select_cluster_with_constraints_without_metric():
     # Because the selection of clusters is done randomly between the matching clusters,
     # if an error was present, the right cluster could have been randomly picked,
@@ -964,6 +985,25 @@ async def test_select_project_without_metric():
     scheduler = Scheduler("http://localhost:8080", worker_count=0)
     selected = await scheduler.select_openstack_project(cluster, projects)
     assert selected in projects
+
+
+async def test_select_project_not_deleted():
+    # As the finally selected project is chosen randomly, perform the test several times
+    # to ensure that the project has really been chosen the right way, not by chance.
+    for _ in range(10):
+        index = random.randint(0, 9)
+        projects = [
+            ProjectFactory(metadata__deleted=datetime.now(), spec__metrics=[])
+            for _ in range(10)
+        ]
+        projects[index].metadata.deleted = None
+
+        cluster = MagnumClusterFactory(spec__constraints=None)
+
+        scheduler = Scheduler("http://localhost:8080", worker_count=0)
+        selected = await scheduler.select_openstack_project(cluster, projects)
+
+        assert selected == projects[index]
 
 
 async def test_select_project_with_constraints_without_metric():
