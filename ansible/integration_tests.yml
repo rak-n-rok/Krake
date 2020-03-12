@@ -34,6 +34,11 @@
       environment:
         PATH: "{{ ansible_env.PATH }}:{{ansible_env.HOME}}/.local/bin"
 
+    - name: Run integration tests for the Kubernetes Observer
+      command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_kubernetes_observer.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
+      environment:
+        PATH: "{{ ansible_env.PATH }}:{{ansible_env.HOME}}/.local/bin"
+
     - name: Run integration tests for krake scripts
       command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_scripts.py --krake_container {{ api_host }} --etcd_container {{ etcd_host }} --etcd_container_port {{ etcd_port }}"
       environment:
