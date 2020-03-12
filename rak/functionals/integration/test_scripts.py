@@ -435,7 +435,8 @@ def test_bootstrap_rollback_present(
     # 5. Modify the content of bootstrap_present.yaml
     test_bootstrap_present_updated = copy.deepcopy(TEST_BOOTSTRAP_PRESENT)
     test_bootstrap_present_updated["spec"]["provider"] = {
-        "metric": "test_present_updated", "name": "test_present_updated"
+        "metric": "test_present_updated",
+        "name": "test_present_updated",
     }
     with TemporaryDirectory() as tempdir:
         bootstrap_present_file = Path(tempdir) / "bootstrap_present.yaml"

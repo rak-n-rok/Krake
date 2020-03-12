@@ -1,8 +1,9 @@
-import random
-
 import pytest
-from datetime import datetime
+import pytz
+import random
 from aiohttp import web, ClientSession, ClientConnectorError, ClientResponseError
+from copy import deepcopy
+from datetime import datetime
 
 from krake.api.app import create_app
 from krake.data.core import ResourceRef, MetricRef
@@ -19,7 +20,7 @@ from krake.test_utils import server_endpoint, make_prometheus
 from factories.core import MetricsProviderFactory, MetricFactory
 from factories.kubernetes import ApplicationFactory, ClusterFactory
 from factories.openstack import MagnumClusterFactory, ProjectFactory
-from tests.factories import fake
+from factories import fake
 
 
 async def test_kubernetes_reception(aiohttp_server, config, db, loop):
@@ -709,6 +710,8 @@ async def test_kubernetes_scheduling_error(aiohttp_server, config, db, loop):
 
 
 async def test_kubernetes_migration(aiohttp_server, config, db, loop):
+    utc = pytz.UTC
+
     prometheus = await aiohttp_server(
         make_prometheus(
             {"heat_demand_1": ("0.5", "0.25"), "heat_demand_2": ("0.25", "0.5")}
@@ -718,6 +721,7 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
     cluster1 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-1", weight=1)])
     cluster2 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-2", weight=1)])
     app = ApplicationFactory(
+        metadata__modified=utc.localize(datetime.now()),
         spec__constraints__cluster__labels=[],
         spec__constraints__cluster__custom_resources=[],
         status__state=ApplicationState.PENDING,
@@ -761,6 +765,7 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
         )
         assert stored1.status.scheduled_to == resource_ref(cluster1)
         assert stored1.status.state == ApplicationState.PENDING
+        assert stored1.metadata.modified <= utc.localize(stored1.status.scheduled)
 
         # Schedule a second time the scheduled resource
         await scheduler.kubernetes_application_received(stored1)
@@ -771,6 +776,83 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
         assert stored2.status.scheduled_to == resource_ref(cluster2)
         assert stored2.status.state == ApplicationState.PENDING
         assert stored2.status.scheduled > stored1.status.scheduled
+        assert stored2.metadata.modified <= utc.localize(stored2.status.scheduled)
+
+
+async def test_kubernetes_application_update(aiohttp_server, config, db, loop):
+    # Schedule the application, then handle the application again (could be in the case
+    # of an update of the Application). As the metrics did not change, the cluster
+    # scheduled should be the same, but the scheduled timestamp should be updated to
+    # allow the KubernetesController to handle the Application afterwards.
+    utc = pytz.UTC
+
+    prometheus = await aiohttp_server(
+        make_prometheus(
+            {"heat_demand_1": ("0.5", "0.5"), "heat_demand_2": ("0.25", "0.25")}
+        )
+    )
+
+    cluster1 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-1", weight=1)])
+    cluster2 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-2", weight=1)])
+    app = ApplicationFactory(
+        metadata__modified=utc.localize(datetime.now()),
+        spec__constraints__cluster__labels=[],
+        spec__constraints__cluster__custom_resources=[],
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=False,
+    )
+    metric1 = MetricFactory(
+        metadata__name="heat-demand-1",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus",
+        spec__provider__metric="heat_demand_1",
+    )
+    metric2 = MetricFactory(
+        metadata__name="heat-demand-2",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus",
+        spec__provider__metric="heat_demand_2",
+    )
+    metrics_provider = MetricsProviderFactory(
+        metadata__name="prometheus",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+    await db.put(metric1)
+    await db.put(metric2)
+    await db.put(metrics_provider)
+    await db.put(cluster1)
+    await db.put(cluster2)
+    await db.put(app)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        await scheduler.kubernetes_application_received(app)
+
+        stored1 = await db.get(
+            Application, namespace=app.metadata.namespace, name=app.metadata.name
+        )
+        assert stored1.status.scheduled_to == resource_ref(cluster1)
+        assert stored1.status.state == ApplicationState.PENDING
+        assert stored1.metadata.modified <= utc.localize(stored1.status.scheduled)
+
+        # Schedule a second time the scheduled resource
+        updated_app = deepcopy(stored1)
+        await scheduler.kubernetes_application_received(updated_app)
+
+        stored2 = await db.get(
+            Application, namespace=app.metadata.namespace, name=app.metadata.name
+        )
+        assert stored2.status.scheduled_to == resource_ref(cluster1)
+        assert stored2.status.state == ApplicationState.PENDING
+        # Even if the scheduled cluster did not change, the timestamp should be updated
+        assert stored2.status.scheduled > stored1.status.scheduled
+        assert stored2.metadata.modified <= utc.localize(stored2.status.scheduled)
 
 
 def test_openstack_match_project_label_constraints():

@@ -196,7 +196,9 @@ class KubernetesController(Controller):
             logger.debug("Reject failed %r", app)
             return False
 
-        # Accept scheduled applications
+        # Accept only scheduled applications. Forces the Applications to be first
+        # handled by the Scheduler, before the KubernetesController applies its
+        # decision.
         if app.status.scheduled and app.status.scheduled >= app.metadata.modified:
             logger.debug("Accept scheduled %r", app)
             return True
@@ -239,7 +241,7 @@ class KubernetesController(Controller):
             on_list=self.list_app,
             on_add=receive_app,
             on_update=receive_app,
-            resource_plural="Kubernetes Clusters",
+            resource_plural="Kubernetes Applications",
         )
         self.register_task(self.reflector, name="Reflector")
 

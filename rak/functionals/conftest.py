@@ -21,7 +21,7 @@ def pytest_addoption(parser):
     parser.addoption(
         "--minikubeclusters",
         action="store",
-        nargs='+',
+        nargs="+",
         help="minikube clusters to use for integration tests",
     )
     parser.addoption(
@@ -42,7 +42,7 @@ def pytest_addoption(parser):
 
 
 @pytest.fixture
-def minikubeclusters(request):
+def minikube_clusters(request):
     return request.config.getoption("--minikubeclusters", skip=True)
 
 
