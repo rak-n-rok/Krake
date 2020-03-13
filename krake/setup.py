@@ -34,7 +34,7 @@ setup(
             "factory-boy==2.*",
             "prometheus-async",
             "prometheus-client==0.7.*",
-            "pytest",
+            "pytest<5.4.*",
             "pytest-aiohttp==0.3.*",
             "pytz",
             "tox==3.*",
