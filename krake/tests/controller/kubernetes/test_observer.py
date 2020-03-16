@@ -156,31 +156,45 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
         a Deployment and a Service are present, the Deployment has an nginx
         image with version "1.7.9"
     State (1):
+        both resources are still present, but the Deployment replicas count
+        was increased from 1 to 2.
+    State (2):
         both resources are still present, but the Deployment image version
         changed to "1.6"
-    State (2):
+    State (3):
         only the Deployment is present, with the version "1.6"
+
+    In state 1, we test the addition of a field which was not present in the original
+    spec file (When not specified, the replicas count is default to 1).
+    In state 2, we test the manual update of a field already present in the original
+    manifest file.
     """
     routes = web.RouteTableDef()
 
     # Actual resource, with container image changed
-    updated_app = deepcopy(app_response)
-    first_container = get_first_container(updated_app)
+    updated_app_image = deepcopy(app_response)
+    first_container = get_first_container(updated_app_image)
     first_container["image"] = "nginx:1.6"
+
+    # Actual resource, with replicas count incremented changed
+    updated_app_replicas = deepcopy(app_response)
+    updated_app_replicas["spec"]["replicas"] = 2
 
     @routes.get("/api/v1/namespaces/default/services/nginx-demo")
     async def _(request):
-        if actual_state[0] in (0, 1):
+        if actual_state[0] in (0, 1, 2):
             return web.json_response(service_response)
-        elif actual_state[0] == 2:
+        elif actual_state[0] == 3:
             return web.Response(status=404)
 
     @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
     async def _(request):
         if actual_state[0] == 0:
             return web.json_response(app_response)
-        elif actual_state[0] >= 1:
-            return web.json_response(updated_app)
+        elif actual_state[0] == 1:
+            return web.json_response(updated_app_replicas)
+        elif actual_state[0] >= 2:
+            return web.json_response(updated_app_image)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -195,19 +209,28 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
         status__manifest=nginx_manifest,
     )
 
+    calls_to_res_update = 0
+
     async def on_res_update(resource):
         assert resource.metadata.name == app.metadata.name
 
-        status_image = get_first_container(resource.status.manifest[0])["image"]
+        nonlocal calls_to_res_update
+        calls_to_res_update += 1
+
+        manifests = resource.status.manifest
+        status_image = get_first_container(manifests[0])["image"]
         if actual_state[0] == 0:
-            assert status_image == "nginx:1.7.9"
-            assert len(resource.status.manifest) == 2
+            # As no changes are noticed by the Observer, the res_update function will
+            # not be called.
+            pass
         elif actual_state[0] == 1:
-            assert status_image == "nginx:1.6"
-            assert len(resource.status.manifest) == 2
+            assert manifests[0]["spec"]["replicas"] == 2
+            assert len(manifests) == 2
         elif actual_state[0] == 2:
             assert status_image == "nginx:1.6"
-            manifests = resource.status.manifest
+            assert len(manifests) == 2
+        elif actual_state[0] == 3:
+            assert status_image == "nginx:1.6"
             assert len(manifests) == 1
             assert manifests[0]["kind"] == "Deployment"
 
@@ -220,16 +243,26 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
     )
 
     # Observe an unmodified resource
+    # As no changes are noticed by the Observer, the res_update function will not be
+    # called.
     actual_state = [0]
     await observer.observe_resource()
+    assert calls_to_res_update == 0
 
-    # Modify the actual resource "externally", and observe
+    # Increase replicas count "externally"
     actual_state = [1]
     await observer.observe_resource()
+    assert calls_to_res_update == 1
 
-    # Delete the service "externally"
+    # Modify the actual resource "externally"
     actual_state = [2]
     await observer.observe_resource()
+    assert calls_to_res_update == 2
+
+    # Delete the service "externally"
+    actual_state = [3]
+    await observer.observe_resource()
+    assert calls_to_res_update == 3
 
 
 async def test_observer_on_status_update(aiohttp_server, db, config, loop):
