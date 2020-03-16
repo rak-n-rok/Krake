@@ -27,6 +27,7 @@ from utils import (
     check_resource_deleted,
     check_return_code,
     check_spec_container_image,
+    check_spec_replicas_count,
 )
 
 KRAKE_HOMEDIR = "/home/krake"
@@ -101,7 +102,7 @@ def test_kubernetes_observer_update_on_cluster(minikube_clusters):
     )
 
     with Environment(environment):
-        # 1. Update a resource on the cluster
+        # 1a. Update a resource on the cluster
         patch = {
             "spec": {
                 "template": {
@@ -119,7 +120,7 @@ def test_kubernetes_observer_update_on_cluster(minikube_clusters):
         error_message = "The echo-demo Application could not be patched."
         run(command, condition=check_return_code(error_message))
 
-        # 2. Check if the resource updated has been reverted to its previous state
+        # 2a. Check if the resource updated has been reverted to its previous state
         expected_image = "k8s.gcr.io/echoserver:1.10"
         error_message = (
             "The Observer did not revert the deployment to its previous state."
@@ -127,6 +128,24 @@ def test_kubernetes_observer_update_on_cluster(minikube_clusters):
         run(
             f"{kubectl_cmd(kubeconfig_path)} get deployment echo-demo -o json",
             condition=check_spec_container_image(expected_image, error_message),
+        )
+
+        # 1b. Update a resource on the cluster
+        patch = {"spec": {"replicas": 2}}
+        # A list of "words" split between spaces is needed.
+        command = kubectl_cmd(kubeconfig_path).split()
+        command += ["patch", "deployment", "echo-demo", "--patch", json.dumps(patch)]
+        error_message = "The echo-demo Application could not be patched."
+        run(command, condition=check_return_code(error_message))
+
+        # 2b. Check if the resource updated has been reverted to its previous state
+        expected_replicas_count = 1
+        error_message = (
+            "The Observer did not revert the deployment to its previous state."
+        )
+        run(
+            f"{kubectl_cmd(kubeconfig_path)} get deployment echo-demo -o json",
+            condition=check_spec_replicas_count(expected_replicas_count, error_message),
         )
 
 
