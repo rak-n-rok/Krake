@@ -474,7 +474,7 @@ async def test_reflector_retry(loop):
     for i in range(0, 4):
         # As we deal with floating values, and computation times, the values are close
         # but not equal, hence the use of approx().
-        assert delays[i + 4] == pytest.approx(delays[i], rel=0.005, abs=0.005)
+        assert delays[i + 4] == pytest.approx(delays[i], rel=0.007, abs=0.007)
 
 
 async def test_observer(loop):
