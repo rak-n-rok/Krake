@@ -20,8 +20,9 @@ API reference of all modules is provided.
     concepts
     packages
     principles
-    garbage-collection
     scheduling
     hooks
+    observers
+    garbage-collection
     ref/krake
     ref/rok
