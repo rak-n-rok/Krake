@@ -110,7 +110,7 @@ class HookDispatcher(object):
         return decorator
 
     async def hook(self, hook, **kwargs):
-        """ Execute the list of handlers associated to the provided :class:`Hook`
+        """Execute the list of handlers associated to the provided :class:`Hook`
         attribute.
 
         Args:

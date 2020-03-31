@@ -573,7 +573,7 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
     def update_decorator(func):
         async def on_res_update(resource):
             # As the update on resources is performed by the API, the Observer should
-            # never see an difference on the actual resource, and thus, the current
+            # never see a difference on the actual resource, and thus, the current
             # function should never be called
             assert False
 
