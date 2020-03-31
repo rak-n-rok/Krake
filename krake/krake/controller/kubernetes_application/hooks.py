@@ -33,6 +33,7 @@ from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 
 from krake.data.core import ReasonCode
 
+from krake.data.kubernetes import ResourceVersion
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +199,62 @@ async def unregister_service(app, cluster, resource, response):
         pass
 
 
+@listen.on(Hook.ResourcePostCreate)
+@listen.on(Hook.ResourcePostUpdate)
+async def register_resource_version(app, response, **kwargs):
+    """Register or update the resource version of a Kubernetes resource
+
+    Args:
+        app (krake.data.kubernetes.Application): Application the service belongs to
+        response (object): Response of the Kubernetes API
+    """
+
+    for resource_version in app.status.resource_versions:
+        if (
+            resource_version.kind,
+            resource_version.api_version,
+            resource_version.name,
+        ) == (response.kind, response.api_version, response.metadata.name):
+            resource_version.last_applied_resource_version = int(
+                response.metadata.resource_version
+            )
+            resource_version.observed_resource_version = int(
+                response.metadata.resource_version
+            )
+            return
+
+    app.status.resource_versions.append(
+        ResourceVersion(
+            kind=response.kind,
+            api_version=response.api_version,
+            name=response.metadata.name,
+            last_applied_resource_version=int(response.metadata.resource_version),
+            observed_resource_version=int(response.metadata.resource_version),
+        )
+    )
+
+
+@listen.on(Hook.ResourcePostDelete)
+async def unregister_resource_version(app, resource, **kwargs):
+    """Unregister the resource version of a Kubernetes resource
+
+    Args:
+        app (krake.data.kubernetes.Application): Application the service belongs to
+        resource (dict): Kubernetes object description as specified in the
+            specification of the application.
+
+    """
+
+    for index, resource_version in enumerate(app.status.resource_versions):
+        if (
+            resource_version.kind,
+            resource_version.api_version,
+            resource_version.name,
+        ) == (resource["kind"], resource["apiVersion"], resource["metadata"]["name"]):
+            del app.status.resource_versions[index]
+            return
+
+
 class KubernetesObserver(Observer):
     """Observer specific for Kubernetes Applications. One observer is created for each
     Application managed by the Controller, but not one per Kubernetes resource
@@ -269,9 +326,25 @@ class KubernetesObserver(Observer):
                     # Otherwise, log the unexpected errors
                     logger.error(err)
 
+            observed_resource = resp.to_dict()
+
+            for resource_version in status.resource_versions:
+                if (
+                    resource_version.kind,
+                    resource_version.api_version,
+                    resource_version.name,
+                ) == (
+                    observed_resource["kind"],
+                    observed_resource["api_version"],
+                    observed_resource["metadata"]["name"],
+                ):
+                    resource_version.observed_resource_version = int(
+                        observed_resource["metadata"]["resource_version"]
+                    )
+
             # Update the status with the information taken from the resource on the
             # cluster
-            actual_manifest = merge_status(resource, resp.to_dict())
+            actual_manifest = merge_status(resource, observed_resource)
             status.manifest.append(actual_manifest)
 
         return status

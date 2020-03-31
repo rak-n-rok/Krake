@@ -5,6 +5,8 @@ from functools import wraps
 from time import time
 from aiohttp import web
 
+from krake.controller.kubernetes_application import listen
+
 
 def with_timeout(timeout):
     """Decorator function for coroutines
@@ -159,3 +161,15 @@ def make_prometheus(metrics):
     app["series"] = {name: iter(value) for name, value in metrics.items()}
 
     return app
+
+
+class HandlerDeactivator(object):
+    def __init__(self, hook, handler):
+        self.hook = hook
+        self.handler = handler
+
+    def __enter__(self):
+        listen.registry[self.hook].remove(self.handler)
+
+    def __exit__(self, *exc):
+        listen.registry[self.hook].append(self.handler)

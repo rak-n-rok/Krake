@@ -8,7 +8,14 @@ from aiohttp.test_utils import TestServer as Server
 import pytz
 import yaml
 from krake.data.config import TlsClientConfiguration, TlsServerConfiguration
-from kubernetes_asyncio.client import V1Status, V1Service, V1ServiceSpec, V1ServicePort
+from kubernetes_asyncio.client import (
+    V1Status,
+    V1Service,
+    V1ServiceSpec,
+    V1ServicePort,
+    V1Deployment,
+    V1ObjectMeta,
+)
 
 from krake.api.app import create_app
 from krake.controller import create_ssl_context
@@ -18,12 +25,20 @@ from krake.controller.kubernetes_application import (
     KubernetesController,
     register_service,
     unregister_service,
+    register_resource_version,
+    unregister_resource_version,
+    Hook,
 )
 from krake.client import Client
-from krake.test_utils import server_endpoint
+from krake.test_utils import server_endpoint, HandlerDeactivator
 
 from factories.fake import fake
-from factories.kubernetes import ApplicationFactory, ClusterFactory, make_kubeconfig
+from factories.kubernetes import (
+    ApplicationFactory,
+    ResourceVersionFactory,
+    ClusterFactory,
+    make_kubeconfig,
+)
 from controller.kubernetes import nginx_manifest, hooks_config
 
 
@@ -163,7 +178,8 @@ async def test_app_creation(aiohttp_server, config, db, loop):
         controller = KubernetesController(server_endpoint(api_server), worker_count=0)
         await controller.prepare(client)
 
-        await controller.resource_received(app, start_observer=False)
+        with HandlerDeactivator(Hook.ResourcePostCreate, register_resource_version):
+            await controller.resource_received(app, start_observer=False)
 
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -174,6 +190,16 @@ async def test_app_creation(aiohttp_server, config, db, loop):
 
 
 async def test_app_update(aiohttp_server, config, db, loop):
+    """Test the behavior of the controller on update.
+
+    The controller receives one application, composed of four Deployment:
+    - nginx-demo-1 is present in the status but removed from the spec;
+    - nginx-demo-2 is unchanged;
+    - nginx-demo-3 is present in the status and updated in the spec;
+    - nginx-demo-4 has similar spec and status, but its observed resource version has
+    changed
+    """
+
     routes = web.RouteTableDef()
 
     deleted = set()
@@ -191,7 +217,7 @@ async def test_app_update(aiohttp_server, config, db, loop):
 
     @routes.get("/apis/apps/v1/namespaces/default/deployments/{name}")
     async def _(request):
-        deployments = ("nginx-demo-1", "nginx-demo-2", "nginx-demo-3")
+        deployments = ("nginx-demo-1", "nginx-demo-2", "nginx-demo-3", "nginx-demo-4")
         if request.match_info["name"] in deployments:
             return web.Response(status=200)
         return web.Response(status=404)
@@ -208,6 +234,36 @@ async def test_app_update(aiohttp_server, config, db, loop):
         status__is_scheduled=True,
         status__running_on=resource_ref(cluster),
         status__scheduled_to=resource_ref(cluster),
+        status__resource_versions=[
+            ResourceVersionFactory(
+                api_version="apps/v1",
+                kind="Deployment",
+                name="nginx-demo-1",
+                last_applied_resource_version="41",
+                observed_resource_version="41",
+            ),
+            ResourceVersionFactory(
+                api_version="apps/v1",
+                kind="Deployment",
+                name="nginx-demo-2",
+                last_applied_resource_version="42",
+                observed_resource_version="42",
+            ),
+            ResourceVersionFactory(
+                api_version="apps/v1",
+                kind="Deployment",
+                name="nginx-demo-3",
+                last_applied_resource_version="43",
+                observed_resource_version="43",
+            ),
+            ResourceVersionFactory(
+                api_version="apps/v1",
+                kind="Deployment",
+                name="nginx-demo-4",
+                last_applied_resource_version="44",
+                observed_resource_version="54",  # Updated resource version
+            ),
+        ],
         status__manifest=list(
             yaml.safe_load_all(
                 dedent(
@@ -269,6 +325,25 @@ async def test_app_update(aiohttp_server, config, db, loop):
                             image: nginx:1.7.9
                             ports:
                             - containerPort: 8080
+                    ---
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nginx-demo-4
+                    spec:
+                      selector:
+                        matchLabels:
+                          app: nginx
+                      template:
+                        metadata:
+                          labels:
+                            app: nginx
+                        spec:
+                          containers:
+                          - name: nginx
+                            image: nginx:1.7.9
+                            ports:
+                            - containerPort: 8081
                     """
                 )
             )
@@ -317,6 +392,25 @@ async def test_app_update(aiohttp_server, config, db, loop):
                             image: nginx:1.7.10  # updated image version
                             ports:
                             - containerPort: 8080
+                    ---
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: nginx-demo-4
+                    spec:
+                      selector:
+                        matchLabels:
+                          app: nginx
+                      template:
+                        metadata:
+                          labels:
+                            app: nginx
+                        spec:
+                          containers:
+                          - name: nginx
+                            image: nginx:1.7.9
+                            ports:
+                            - containerPort: 8081
                     """
                 )
             )
@@ -331,11 +425,12 @@ async def test_app_update(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
-
-        await controller.resource_received(app, start_observer=False)
+        with HandlerDeactivator(Hook.ResourcePostUpdate, register_resource_version):
+            await controller.resource_received(app, start_observer=False)
 
     assert "nginx-demo-1" in deleted
     assert "nginx-demo-3" in patched
+    assert "nginx-demo-4" in patched
 
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -458,8 +553,8 @@ async def test_app_migration(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
-
-        await controller.resource_received(app, start_observer=False)
+        with HandlerDeactivator(Hook.ResourcePostCreate, register_resource_version):
+            await controller.resource_received(app, start_observer=False)
 
     assert "nginx-demo" in kubernetes_server_A.app["deleted"]
     assert "echoserver" in kubernetes_server_B.app["created"]
@@ -581,7 +676,9 @@ async def test_register_service_without_node_port():
     resource = {"kind": "Service", "metadata": {"name": "nginx"}}
     cluster = ClusterFactory()
     app = ApplicationFactory(status__services={"nginx": "127.0.0.1:1234"})
-    response = V1Service(spec=V1ServiceSpec(ports=[]))
+    response = V1Service(
+        spec=V1ServiceSpec(ports=[V1ServicePort(port=80, target_port=80)])
+    )
     await register_service(app, cluster, resource, response)
     assert app.status.services == {}
 
@@ -796,6 +893,288 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
     assert stored.status.services == {}
 
 
+async def test_register_resource_version():
+    app = ApplicationFactory(status__resource_versions=[])
+    response = V1Deployment(
+        api_version="apps/v1",
+        kind="Deployment",
+        metadata=V1ObjectMeta(name="echo-demo", resource_version=42),
+    )
+    await register_resource_version(app, response)
+
+    assert len(app.status.resource_versions) == 1
+    assert app.status.resource_versions[0].api_version == "apps/v1"
+    assert app.status.resource_versions[0].kind == "Deployment"
+    assert app.status.resource_versions[0].name == "echo-demo"
+    assert app.status.resource_versions[0].last_applied_resource_version == 42
+    assert app.status.resource_versions[0].observed_resource_version == 42
+
+
+async def test_resource_version_registration_on_create(
+    aiohttp_server, config, db, loop
+):
+    """Test the registration of resources version on the creation of an application.
+    """
+
+    # Setup Kubernetes API mock server
+    routes = web.RouteTableDef()
+
+    @routes.get("/apis/apps/v1/namespaces/default/deployments/echo-demo")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    async def _(request):
+        self_link = "/apis/apps/v1/namespaces/default/deployments/echo-demo"
+        return web.json_response(
+            {
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "metadata": {
+                    "name": "echo-demo",
+                    "namespace": "default",
+                    "selfLink": self_link,
+                    "uid": "266728ad-090a-4282-8185-9328eb673cd3",
+                    "resourceVersion": "42",
+                    "creationTimestamp": "2019-07-30T15:11:15Z",
+                },
+                "spec": {
+                    "selector": {"matchLabels": {"app": "echo-demo"}},
+                    "template": {"metadata": {"labels": {"app": "echo-demo"}}},
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": "echo-demo",
+                                "image": "echo-demo:1.10",
+                                "ports": [{"containerPort": "80"}],
+                            }
+                        ]
+                    },
+                },
+            }
+        )
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    # Setup API Server
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=True,
+        status__scheduled_to=resource_ref(cluster),
+        spec__manifest=list(
+            yaml.safe_load_all(
+                """---
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: echo-demo
+                spec:
+                  selector:
+                    matchLabels:
+                      app: echo-demo
+                  template:
+                    metadata:
+                      labels:
+                        app: echo-demo
+                    spec:
+                      containers:
+                      - name: echo-demo
+                        image: echo-demo:1.10
+                        ports:
+                        - containerPort: 80
+            """
+            )
+        ),
+    )
+
+    await db.put(cluster)
+    await db.put(app)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        await controller.prepare(client)
+        await controller.resource_received(app)
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+
+    assert len(stored.status.resource_versions) == 1
+    assert stored.status.resource_versions[0].api_version == "apps/v1"
+    assert stored.status.resource_versions[0].kind == "Deployment"
+    assert stored.status.resource_versions[0].name == "echo-demo"
+    assert stored.status.resource_versions[0].last_applied_resource_version == 42
+    assert stored.status.resource_versions[0].observed_resource_version == 42
+
+
+async def test_resource_version_registration_on_update(
+    aiohttp_server, config, db, loop
+):
+    """Test the registration of resources version on the update of an application.
+    """
+
+    # Setup Kubernetes API mock server
+    routes = web.RouteTableDef()
+
+    @routes.patch("/apis/apps/v1/namespaces/default/deployments/{name}")
+    async def patch_deployment(request):
+        self_link = "/apis/apps/v1/namespaces/default/deployments/echo-demo"
+        return web.json_response(
+            {
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "metadata": {
+                    "name": "echo-demo",
+                    "namespace": "default",
+                    "selfLink": self_link,
+                    "uid": "266728ad-090a-4282-8185-9328eb673cd3",
+                    "resourceVersion": "43",
+                    "creationTimestamp": "2019-07-30T15:11:15Z",
+                },
+                "spec": {
+                    "selector": {"matchLabels": {"app": "echo-demo"}},
+                    "template": {"metadata": {"labels": {"app": "echo-demo"}}},
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": "echo-demo",
+                                "image": "echo-demo:1.9",
+                                "ports": [{"containerPort": "80"}],
+                            }
+                        ]
+                    },
+                },
+            }
+        )
+
+    @routes.get("/apis/apps/v1/namespaces/default/deployments/echo-demo")
+    async def _(request):
+        return web.Response(status=200)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    # Setup API Server
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    app = ApplicationFactory(
+        status__state=ApplicationState.RUNNING,
+        status__is_scheduled=True,
+        status__scheduled_to=resource_ref(cluster),
+        status__running_on=resource_ref(cluster),
+        status__resource_versions=[
+            ResourceVersionFactory(
+                api_version="apps/v1",
+                kind="Deployment",
+                name="echo-demo",
+                last_applied_resource_version="42",
+                observed_resource_version="42",
+            )
+        ],
+        spec__manifest=list(
+            yaml.safe_load_all(
+                """---
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: echo-demo
+                spec:
+                  selector:
+                    matchLabels:
+                      app: echo-demo
+                  template:
+                    metadata:
+                      labels:
+                        app: echo-demo
+                    spec:
+                      containers:
+                      - name: echo-demo
+                        image: echo-demo:1.9
+                        ports:
+                        - containerPort: 80
+            """
+            )
+        ),
+        status__manifest=list(
+            yaml.safe_load_all(
+                """---
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: echo-demo
+                spec:
+                  selector:
+                    matchLabels:
+                      app: echo-demo
+                  template:
+                    metadata:
+                      labels:
+                        app: echo-demo
+                    spec:
+                      containers:
+                      - name: echo-demo
+                        image: echo-demo:1.9
+                        ports:
+                        - containerPort: 8080 # Tigger an updated
+            """
+            )
+        ),
+    )
+
+    await db.put(cluster)
+    await db.put(app)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        await controller.prepare(client)
+        await controller.resource_received(app)
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+
+    assert len(stored.status.resource_versions) == 1
+    assert stored.status.resource_versions[0].api_version == "apps/v1"
+    assert stored.status.resource_versions[0].kind == "Deployment"
+    assert stored.status.resource_versions[0].name == "echo-demo"
+    assert stored.status.resource_versions[0].last_applied_resource_version == 43
+    assert stored.status.resource_versions[0].observed_resource_version == 43
+
+
+async def test_unregister_resource_version():
+    """Test the behavior of the unregister_resource function
+    """
+    app = ApplicationFactory(
+        status__resource_versions=[
+            ResourceVersionFactory(
+                api_version="apps/v1",
+                kind="Deployment",
+                name="echo-demo",
+                last_applied_resource_version="42",
+                observed_resource_version="42",
+            )
+        ]
+    )
+
+    resource = {
+        "kind": "Deployment",
+        "apiVersion": "apps/v1",
+        "metadata": {"name": "echo-demo"},
+    }
+    await unregister_resource_version(app, resource)
+
+    assert app.status.resource_versions == []
+
+
 async def test_complete_hook(aiohttp_server, config, db, loop):
     routes = web.RouteTableDef()
 
@@ -852,7 +1231,8 @@ async def test_complete_hook(aiohttp_server, config, db, loop):
             server_endpoint(api_server), worker_count=0, hooks=deepcopy(hooks_config)
         )
         await controller.prepare(client)
-        await controller.resource_received(app)
+        with HandlerDeactivator(Hook.ResourcePostCreate, register_resource_version):
+            await controller.resource_received(app)
 
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -924,7 +1304,8 @@ async def test_complete_hook_disable_by_user(aiohttp_server, config, db, loop):
             server_endpoint(api_server), worker_count=0, hooks=deepcopy(hooks_config)
         )
         await controller.prepare(client)
-        await controller.resource_received(app)
+        with HandlerDeactivator(Hook.ResourcePostCreate, register_resource_version):
+            await controller.resource_received(app)
 
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -1027,7 +1408,8 @@ async def test_complete_hook_tls(aiohttp_server, config, pki, db, loop):
             hooks=deepcopy(hooks_config),
         )
         await controller.prepare(client)
-        await controller.resource_received(app, start_observer=False)
+        with HandlerDeactivator(Hook.ResourcePostCreate, register_resource_version):
+            await controller.resource_received(app, start_observer=False)
 
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name

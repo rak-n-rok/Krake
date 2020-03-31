@@ -15,12 +15,19 @@ from krake.controller.kubernetes_application import (
     KubernetesController,
     KubernetesObserver,
     merge_status,
+    Hook,
+    register_resource_version,
 )
 from krake.client import Client
-from krake.test_utils import server_endpoint
+from krake.test_utils import server_endpoint, HandlerDeactivator
 
 from factories.fake import fake
-from factories.kubernetes import ApplicationFactory, ClusterFactory, make_kubeconfig
+from factories.kubernetes import (
+    ApplicationFactory,
+    ResourceVersionFactory,
+    ClusterFactory,
+    make_kubeconfig,
+)
 from controller.kubernetes import nginx_manifest, hooks_config
 
 
@@ -59,7 +66,7 @@ service_response = yaml.safe_load(
       creationTimestamp: "2019-11-11T12:01:05Z"
       name: nginx-demo
       namespace: default
-      resourceVersion: "8080020"
+      resourceVersion: "42"
       selfLink: /api/v1/namespaces/default/services/nginx-demo
       uid: e2b789b0-19a1-493d-9f23-3f2a63fade52
     spec:
@@ -81,7 +88,7 @@ service_response = yaml.safe_load(
 
 app_response = yaml.safe_load(
     """
-    apiVersion: extensions/v1beta1
+    apiVersion: apps/v1
     kind: Deployment
     metadata:
       annotations:
@@ -90,8 +97,8 @@ app_response = yaml.safe_load(
       generation: 1
       name: nginx-demo
       namespace: default
-      resourceVersion: "8080030"
-      selfLink: /apis/extensions/v1beta1/namespaces/default/deployments/nginx-demo
+      resourceVersion: "43"
+      selfLink: /apis/apps/v1/namespaces/default/deployments/nginx-demo
       uid: 047686e4-af52-4264-b2a4-2f82b890e809
     spec:
       progressDeadlineSeconds: 600
@@ -175,10 +182,12 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
     updated_app_image = deepcopy(app_response)
     first_container = get_first_container(updated_app_image)
     first_container["image"] = "nginx:1.6"
+    updated_app_image["metadata"]["resourceVersion"] = 52
 
     # Actual resource, with replicas count incremented changed
     updated_app_replicas = deepcopy(app_response)
     updated_app_replicas["spec"]["replicas"] = 2
+    updated_app_replicas["metadata"]["resourceVersion"] = 53
 
     @routes.get("/api/v1/namespaces/default/services/nginx-demo")
     async def _(request):
@@ -207,6 +216,22 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
         status__running_on=resource_ref(cluster),
         spec__manifest=nginx_manifest,
         status__manifest=nginx_manifest,
+        status__resource_versions=[
+            ResourceVersionFactory(
+                api_version="v1",
+                kind="Service",
+                name="nginx-demo",
+                last_applied_resource_version=42,
+                observed_resource_version=42,
+            ),
+            ResourceVersionFactory(
+                api_version="apps/v1",
+                kind="Deployment",
+                name="nginx-demo",
+                last_applied_resource_version=43,
+                observed_resource_version=43,
+            ),
+        ],
     )
 
     calls_to_res_update = 0
@@ -222,9 +247,9 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
         if actual_state[0] == 0:
             # As no changes are noticed by the Observer, the res_update function will
             # not be called.
+            assert False
             pass
         elif actual_state[0] == 1:
-            assert manifests[0]["spec"]["replicas"] == 2
             assert len(manifests) == 2
         elif actual_state[0] == 2:
             assert status_image == "nginx:1.6"
@@ -274,6 +299,7 @@ async def test_observer_on_status_update(aiohttp_server, db, config, loop):
     updated_app = deepcopy(app_response)
     first_container = get_first_container(updated_app)
     first_container["image"] = "nginx:1.6"
+    updated_app["metadata"]["resourceVersion"] = 52
 
     @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
     async def _(request):
@@ -316,7 +342,7 @@ async def test_observer_on_status_update(aiohttp_server, db, config, loop):
 
 deploy_mangled_response = yaml.safe_load(
     """
-    apiVersion: extensions/v1beta1
+    apiVersion: apps/v1
     kind: Deployment
     metadata:
       annotations:
@@ -325,8 +351,8 @@ deploy_mangled_response = yaml.safe_load(
       generation: 1
       name: nginx-demo
       namespace: default
-      resourceVersion: "10373629"
-      selfLink: /apis/extensions/v1beta1/namespaces/default/deployments/nginx-demo
+      resourceVersion: "44"
+      selfLink: /apis/apps/v1/namespaces/default/deployments/nginx-demo
       uid: 5ee5cbe8-6b18-4b2c-9691-3c9517748fe1
     spec:
       progressDeadlineSeconds: 600
@@ -442,6 +468,7 @@ async def test_observer_on_status_update_mangled(aiohttp_server, db, config, loo
         status__scheduled_to=resource_ref(cluster),
         spec__manifest=nginx_manifest,
         status__manifest=nginx_manifest,
+        status__resource_versions=[],
         spec__hooks=["complete"],
     )
     await db.put(cluster)
@@ -452,6 +479,7 @@ async def test_observer_on_status_update_mangled(aiohttp_server, db, config, loo
     def update_decorator(func):
         async def on_res_update(resource):
             if actual_state[0] == 1:
+                # Ensure that the Observer is not notifying the Controller
                 assert False
             if actual_state[0] == 2:
                 await func(resource)
@@ -465,7 +493,9 @@ async def test_observer_on_status_update_mangled(aiohttp_server, db, config, loo
         controller.on_status_update = update_decorator(controller.on_status_update)
         await controller.prepare(client)
 
-        await controller.resource_received(app, start_observer=False)
+        with HandlerDeactivator(Hook.ResourcePostCreate, register_resource_version):
+            with HandlerDeactivator(Hook.ResourcePostUpdate, register_resource_version):
+                await controller.resource_received(app, start_observer=False)
         # Remove from dict to prevent cancellation in KubernetesController.stop_observer
         observer, _ = controller.observers.pop(app.metadata.uid)
 
@@ -551,6 +581,7 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
     updated_app = deepcopy(app_response)
     first_container = get_first_container(updated_app)
     first_container["image"] = "nginx:1.6"
+    updated_app["metadata"]["resourceVersion"] = "52"
 
     @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
     async def _(request):
@@ -587,6 +618,22 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
         status__running_on=cluster_ref,
         status__scheduled_to=cluster_ref,
         status__manifest=deepcopy(nginx_manifest),
+        status__resource_versions=[
+            ResourceVersionFactory(
+                api_version="v1",
+                kind="Service",
+                name="nginx-demo",
+                last_applied_resource_version=42,
+                observed_resource_version=42,
+            ),
+            ResourceVersionFactory(
+                api_version="apps/v1",
+                kind="Deployment",
+                name="nginx-demo",
+                last_applied_resource_version=43,
+                observed_resource_version=43,
+            ),
+        ],
         spec__manifest=deepcopy(nginx_manifest),
         metadata__finalizers=["kubernetes_resources_deletion"],
     )
@@ -707,6 +754,22 @@ async def test_observer_on_delete(aiohttp_server, config, db, loop):
         status__state=ApplicationState.RUNNING,
         status__manifest=nginx_manifest,
         status__running_on=resource_ref(cluster),
+        status__resource_versions=[
+            ResourceVersionFactory(
+                api_version="v1",
+                kind="Service",
+                name="nginx-demo",
+                last_applied_resource_version=42,
+                observed_resource_version=42,
+            ),
+            ResourceVersionFactory(
+                api_version="apps/v1",
+                kind="Deployment",
+                name="nginx-demo",
+                last_applied_resource_version=43,
+                observed_resource_version=43,
+            ),
+        ],
         spec__manifest=nginx_manifest,
         metadata__finalizers=["kubernetes_resources_deletion"],
     )

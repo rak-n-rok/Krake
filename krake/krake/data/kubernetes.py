@@ -38,6 +38,36 @@ class ApplicationState(Enum):
     FAILED = auto()
 
 
+class ResourceVersion(Serializable):
+    """Holds information about the resource version of a Kubernetes Resource.
+
+    The resource version is used by the Kubernetes Observer to detect changes in the
+    real-world resource by comparing the :attr:`last_applied_resource_version` and the
+    :attr:`observed_resource_version`.
+
+    The three attributes :attr:`api_version`, :attr:`kind`, and :attr:`name` are used
+    to identify a resource uniquely by crafting a :class:`ResourceID` when needed. We
+    don't store the corresponding :class:`ResourceID` as it is not human readable.
+
+    Attributes:
+        api_version (str): API Version of the resource as defined in the Kubernetes
+            manifest file
+        kind (str): kind of the resource as defined in the Kubernetes manifest file
+        name (str): Name of the resource as defined in the Kubernetes manifest file
+        last_applied_resource_version (int): Resource version of the Kubernetes
+            resource after the last application of the desired manifest file (create
+            or update of the resource).
+        observed_resource_version (int): Current resource version of the Kubernetes
+            resource as observed bu the KubernetesObserver.
+    """
+
+    api_version: str
+    kind: str
+    name: str
+    last_applied_resource_version: int
+    observed_resource_version: int
+
+
 class ApplicationStatus(Status):
     """Status subresource of :class:`Application`.
 
@@ -53,6 +83,8 @@ class ApplicationStatus(Status):
             endpoints.
         manifest (list[dict]): List of Kubernetes objects currently currently
             existing
+        resource_versions (list[ResourceVersion]): List of resource versions of
+            each resources created by Krake.
 
     """
 
@@ -64,6 +96,7 @@ class ApplicationStatus(Status):
     manifest: List[dict] = None
     mangling: List[dict] = None
     token: str = None
+    resource_versions: List[ResourceVersion] = field(default_factory=list)
 
 
 @persistent("/kubernetes/applications/{namespace}/{name}")

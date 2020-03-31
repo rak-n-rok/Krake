@@ -24,6 +24,7 @@ from krake.data.kubernetes import (
     Cluster,
     Constraints,
     ClusterConstraints,
+    ResourceVersion,
 )
 from krake.data.constraints import (
     EqualConstraint,
@@ -67,6 +68,31 @@ class ConstraintsFactory(Factory):
         model = Constraints
 
     cluster = SubFactory(ClusterConstraintsFactory)
+
+
+class ResourceVersionFactory(Factory):
+    class Meta:
+        model = ResourceVersion
+
+    @lazy_attribute
+    def api_version(self):
+        return fuzzy_name()
+
+    @lazy_attribute
+    def kind(self):
+        return fuzzy_name()
+
+    @lazy_attribute
+    def name(self):
+        return fuzzy_name()
+
+    @lazy_attribute
+    def last_applied_resource_version(self):
+        return fake.pyint(1)
+
+    @lazy_attribute
+    def observed_resource_version(self):
+        return self.last_applied_resource_version + fake.pyint(0)
 
 
 class ApplicationStatusFactory(Factory):
@@ -158,6 +184,21 @@ class ApplicationStatusFactory(Factory):
 
             return deepcopy(sample)
         return None
+
+    @lazy_attribute
+    def resource_versions(self):
+
+        if self.state in (ApplicationState.PENDING, ApplicationState.CREATING):
+            return list()
+
+        return [
+            ResourceVersionFactory(
+                api_version=resource["apiVersion"],
+                kind=resource["kind"],
+                name=resource["metadata"]["name"],
+            )
+            for resource in self.manifest or []
+        ]
 
 
 kubernetes_manifest = list(

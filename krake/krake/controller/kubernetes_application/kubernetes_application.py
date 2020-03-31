@@ -127,6 +127,20 @@ class ResourceDelta(NamedTuple):
             if desired[rid]["spec"] != current[rid]["spec"]
         ]
 
+        # Check each resource_versions and expand the "modified" directory accordingly
+        for resource_version in app.status.resource_versions:
+            if (
+                resource_version.last_applied_resource_version
+                != resource_version.observed_resource_version
+            ):
+                rid = ResourceID(
+                    api_version=resource_version.api_version,
+                    kind=resource_version.kind,
+                    name=resource_version.name,
+                )
+                if rid in desired and desired[rid] not in modified:
+                    modified.append(desired[rid])
+
         return cls(new=tuple(new), deleted=tuple(deleted), modified=tuple(modified))
 
     def __bool__(self):
