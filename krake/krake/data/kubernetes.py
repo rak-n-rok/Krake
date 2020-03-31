@@ -83,6 +83,10 @@ class ApplicationStatus(Status):
             endpoints.
         manifest (list[dict]): List of Kubernetes objects currently currently
             existing
+        mangling (list[dict]): manifest augmented by additional resources
+            needed to be created for the functioning of internal mechanisms,
+            such as the "Complete Hook".
+        token (str): Token for the identification of the "Complete Hook" request
         resource_versions (list[ResourceVersion]): List of resource versions of
             each resources created by Krake.
 
