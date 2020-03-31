@@ -100,6 +100,12 @@ class ClusterResource:
         response = Cluster
 
     @operation
+    class Read:
+        method = "GET"
+        path = "/kubernetes/namespaces/{namespace}/clusters/{name}"
+        response = Cluster
+
+    @operation
     class List(ListQuery):
         number = "plural"
         method = "GET"
@@ -112,12 +118,6 @@ class ClusterResource:
         method = "GET"
         path = "/kubernetes/clusters"
         response = ClusterList
-
-    @operation
-    class Read:
-        method = "GET"
-        path = "/kubernetes/namespaces/{namespace}/clusters/{name}"
-        response = Cluster
 
     @operation
     class Update:

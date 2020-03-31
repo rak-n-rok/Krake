@@ -7,19 +7,9 @@
 """
 from enum import Enum
 
-from .parser import (
-    ParserSpec,
-    argument,
-    arg_formatting,
-    MetricAction,
-)
+from .parser import ParserSpec, argument, arg_formatting, MetricAction
 from .fixtures import depends
-from .formatters import (
-    BaseTable,
-    Cell,
-    printer,
-    dict_formatter,
-)
+from .formatters import BaseTable, Cell, printer, dict_formatter
 
 GLOBAL_METRICS_PROVIDER_BASE_URL = "/core/globalmetricsproviders"
 GLOBAL_METRIC_BASE_URL = "/core/globalmetrics"
