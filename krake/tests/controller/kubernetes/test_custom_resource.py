@@ -25,16 +25,17 @@ async def test_custom_resource_cached_property_called_once(
     but different content
 
     """
-    only_once = [True]
+    only_once = True
 
     routes = web.RouteTableDef()
 
     # Determine scope, version, group and plural of custom resource definition
     @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
     async def _(request):
-        assert only_once[0], "Function should only be called only once"
-        if only_once[0]:
-            only_once[0] = False
+        nonlocal only_once
+        assert only_once, "Function should only be called only once"
+        if only_once:
+            only_once = False
 
         if request.match_info["name"] == "crontabs.stable.example.com":
             return web.Response(
