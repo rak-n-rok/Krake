@@ -176,17 +176,13 @@ async def register_service(app, cluster, resource, response):
 
 
 @listen.on(Hook.ResourcePostDelete)
-async def unregister_service(app, cluster, resource, response):
+async def unregister_service(app, resource, **kwargs):
     """Unregister endpoint of Kubernetes Service object on deletion.
 
     Args:
         app (krake.data.kubernetes.Application): Application the service belongs to
-        cluster (krake.data.kubernetes.Cluster): The cluster on which the
-            application is running
         resource (dict): Kubernetes object description as specified in the
             specification of the application.
-        response (kubernetes_asyncio.client.V1Status): Response of the
-            Kubernetes API
 
     """
     if resource["kind"] != "Service":
