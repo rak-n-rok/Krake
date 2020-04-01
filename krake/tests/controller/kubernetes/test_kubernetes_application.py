@@ -9,7 +9,6 @@ import pytz
 import yaml
 from krake.data.config import TlsClientConfiguration, TlsServerConfiguration
 from kubernetes_asyncio.client import (
-    V1Status,
     V1Service,
     V1ServiceSpec,
     V1ServicePort,
@@ -774,19 +773,15 @@ async def test_service_registration(aiohttp_server, config, db, loop):
 
 async def test_unregister_service():
     resource = {"kind": "Service", "metadata": {"name": "nginx"}}
-    cluster = ClusterFactory()
     app = ApplicationFactory(status__services={"nginx": "127.0.0.1:1234"})
-    response = V1Status()
-    await unregister_service(app, cluster, resource, response)
+    await unregister_service(app, resource)
     assert app.status.services == {}
 
 
 async def test_unregister_service_without_previous_service():
     resource = {"kind": "Service", "metadata": {"name": "nginx"}}
-    cluster = ClusterFactory()
     app = ApplicationFactory(status__services={})
-    response = V1Status()
-    await unregister_service(app, cluster, resource, response)
+    await unregister_service(app, resource)
     assert app.status.services == {}
 
 
@@ -829,19 +824,7 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
 
     @routes.delete("/api/v1/namespaces/default/services/nginx-demo")
     async def _(request):
-        return web.json_response(
-            {
-                "apiVersion": "v1",
-                "details": {
-                    "kind": "services",
-                    "name": "nginx-demo",
-                    "uid": "4da165e0-e58f-4058-be44-fa393a58c2c8",
-                },
-                "kind": "Status",
-                "metadata": {},
-                "status": "Success",
-            }
-        )
+        return web.Response(status=200)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
