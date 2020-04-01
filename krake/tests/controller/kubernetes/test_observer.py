@@ -191,18 +191,20 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
 
     @routes.get("/api/v1/namespaces/default/services/nginx-demo")
     async def _(request):
-        if actual_state[0] in (0, 1, 2):
+        nonlocal actual_state
+        if actual_state in (0, 1, 2):
             return web.json_response(service_response)
-        elif actual_state[0] == 3:
+        elif actual_state == 3:
             return web.Response(status=404)
 
     @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
     async def _(request):
-        if actual_state[0] == 0:
+        nonlocal actual_state
+        if actual_state == 0:
             return web.json_response(app_response)
-        elif actual_state[0] == 1:
+        elif actual_state == 1:
             return web.json_response(updated_app_replicas)
-        elif actual_state[0] >= 2:
+        elif actual_state >= 2:
             return web.json_response(updated_app_image)
 
     kubernetes_app = web.Application()
@@ -239,22 +241,22 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
     async def on_res_update(resource):
         assert resource.metadata.name == app.metadata.name
 
-        nonlocal calls_to_res_update
+        nonlocal calls_to_res_update, actual_state
         calls_to_res_update += 1
 
         manifests = resource.status.manifest
         status_image = get_first_container(manifests[0])["image"]
-        if actual_state[0] == 0:
+        if actual_state == 0:
             # As no changes are noticed by the Observer, the res_update function will
             # not be called.
             assert False
             pass
-        elif actual_state[0] == 1:
+        elif actual_state == 1:
             assert len(manifests) == 2
-        elif actual_state[0] == 2:
+        elif actual_state == 2:
             assert status_image == "nginx:1.6"
             assert len(manifests) == 2
-        elif actual_state[0] == 3:
+        elif actual_state == 3:
             assert status_image == "nginx:1.6"
             assert len(manifests) == 1
             assert manifests[0]["kind"] == "Deployment"
@@ -270,22 +272,22 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
     # Observe an unmodified resource
     # As no changes are noticed by the Observer, the res_update function will not be
     # called.
-    actual_state = [0]
+    actual_state = 0
     await observer.observe_resource()
     assert calls_to_res_update == 0
 
     # Increase replicas count "externally"
-    actual_state = [1]
+    actual_state = 1
     await observer.observe_resource()
     assert calls_to_res_update == 1
 
     # Modify the actual resource "externally"
-    actual_state = [2]
+    actual_state = 2
     await observer.observe_resource()
     assert calls_to_res_update == 2
 
     # Delete the service "externally"
-    actual_state = [3]
+    actual_state = 3
     await observer.observe_resource()
     assert calls_to_res_update == 3
 
@@ -429,16 +431,17 @@ async def test_observer_on_status_update_mangled(aiohttp_server, db, config, loo
     """
     routes = web.RouteTableDef()
 
-    actual_state = [0]
+    actual_state = 0
     copy_deploy_mangled_response = deepcopy(deploy_mangled_response)
 
     @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
     async def _(request):
-        if actual_state[0] == 0:
+        nonlocal actual_state
+        if actual_state == 0:
             return web.Response(status=404)
-        if actual_state[0] == 1:
+        if actual_state == 1:
             return web.json_response(copy_deploy_mangled_response)
-        if actual_state[0] == 2:
+        if actual_state == 2:
             return web.json_response(updated_app)
 
     @routes.post("/apis/apps/v1/namespaces/default/deployments")
@@ -451,9 +454,10 @@ async def test_observer_on_status_update_mangled(aiohttp_server, db, config, loo
 
     @routes.get("/api/v1/namespaces/default/services/nginx-demo")
     async def _(request):
-        if actual_state[0] == 0:
+        nonlocal actual_state
+        if actual_state == 0:
             return web.Response(status=404)
-        elif actual_state[0] >= 1:
+        elif actual_state >= 1:
             return web.json_response(service_response)
 
     kubernetes_app = web.Application()
@@ -478,10 +482,11 @@ async def test_observer_on_status_update_mangled(aiohttp_server, db, config, loo
 
     def update_decorator(func):
         async def on_res_update(resource):
-            if actual_state[0] == 1:
+            nonlocal actual_state
+            if actual_state == 1:
                 # Ensure that the Observer is not notifying the Controller
                 assert False
-            if actual_state[0] == 2:
+            if actual_state == 2:
                 await func(resource)
 
         return on_res_update
@@ -506,12 +511,12 @@ async def test_observer_on_status_update_mangled(aiohttp_server, db, config, loo
         app_container = get_first_container(observer.resource.status.manifest[0])
         first_container["env"][1]["value"] = app_container["env"][1]["value"]
 
-        actual_state = [1]
+        actual_state = 1
 
         # The observer should not call on_res_update
         await observer.observe_resource()
 
-        actual_state = [2]
+        actual_state = 2
 
         # Actual resource, with container image changed
         updated_app = deepcopy(copy_deploy_mangled_response)
@@ -569,13 +574,14 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
     """
     routes = web.RouteTableDef()
 
-    actual_state = [0]
+    actual_state = 0
 
     @routes.get("/api/v1/namespaces/default/services/nginx-demo")
     async def _(request):
-        if actual_state[0] in (0, 1):
+        nonlocal actual_state
+        if actual_state in (0, 1):
             return web.json_response(service_response)
-        elif actual_state[0] == 2:
+        elif actual_state == 2:
             return web.Response(status=404)
 
     updated_app = deepcopy(app_response)
@@ -585,24 +591,27 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
 
     @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
     async def _(request):
-        if actual_state[0] == 0:
+        nonlocal actual_state
+        if actual_state == 0:
             return web.json_response(app_response)
-        elif actual_state[0] >= 1:
+        elif actual_state >= 1:
             return web.json_response(updated_app)
 
     @routes.patch("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
     async def _(request):
-        assert actual_state[0] in (0, 1)
+        nonlocal actual_state
+        assert actual_state in (0, 1)
         return web.json_response(updated_app)
 
     @routes.patch("/api/v1/namespaces/default/services/nginx-demo")
     async def _(request):
-        assert actual_state[0] in (0, 2)
+        assert actual_state in (0, 2)
         return web.json_response(service_response)
 
     @routes.delete("/api/v1/namespaces/default/services/nginx-demo")
     async def _(request):
-        assert actual_state[0] == 2
+        nonlocal actual_state
+        assert actual_state == 2
         return web.Response(status=200)
 
     kubernetes_app = web.Application()
@@ -681,7 +690,7 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
         # Modify the image version on the API, and observe --> go into state 1
         ##
 
-        actual_state = [1]
+        actual_state = 1
         # Modify the manifest of the Application
         first_container = get_first_container(after_0.spec.manifest[0])
         first_container["image"] = "nginx:1.6"
@@ -704,7 +713,7 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
         # Remove the service on the API, and observe--> go into state 2
         ##
 
-        actual_state = [2]
+        actual_state = 2
         # Modify the manifest of the Application
         after_1.spec.manifest = after_1.spec.manifest[:1]
         after_1.status.state = ApplicationState.RUNNING

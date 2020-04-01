@@ -798,32 +798,32 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
     async def _(request):
         return web.json_response(
             {
-                "api_version": "v1",
+                "apiVersion": "v1",
                 "kind": "Service",
                 "metadata": {
-                    "creation_timestamp": "2019-11-12 08:44:02+00:00",
+                    "creationTimestamp": "2019-11-12 08:44:02+00:00",
                     "name": "nginx-demo",
                     "namespace": "default",
-                    "resource_version": "2075568",
-                    "self_link": "/api/v1/namespaces/default/services/nginx-demo",
+                    "resourceVersion": "2075568",
+                    "selfLink": "/api/v1/namespaces/default/services/nginx-demo",
                     "uid": "4da165e0-e58f-4058-be44-fa393a58c2c8",
                 },
                 "spec": {
-                    "cluster_ip": "10.98.197.124",
-                    "external_traffic_policy": "Cluster",
+                    "clusterIp": "10.98.197.124",
+                    "externalTrafficPolicy": "Cluster",
                     "ports": [
                         {
-                            "node_port": 30704,
+                            "nodePort": 30704,
                             "port": 8080,
                             "protocol": "TCP",
-                            "target_port": 8080,
+                            "targetPort": 8080,
                         }
                     ],
                     "selector": {"app": "echo"},
-                    "session_affinity": "None",
+                    "sessionAffinity": "None",
                     "type": "NodePort",
                 },
-                "status": {"load_balancer": {}},
+                "status": {"loadBalancer": {}},
             }
         )
 
@@ -831,7 +831,7 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
     async def _(request):
         return web.json_response(
             {
-                "api_version": "v1",
+                "apiVersion": "v1",
                 "details": {
                     "kind": "services",
                     "name": "nginx-demo",
