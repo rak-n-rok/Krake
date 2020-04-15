@@ -25,6 +25,7 @@ from krake.api_generator.utils import (
     get_data_classes,
     get_default_template_dir,
     render_and_print,
+    add_no_black_formatting,
 )
 from krake.apidefs.definitions import ApiDef
 
@@ -43,7 +44,7 @@ def is_api_def(obj):
     return isinstance(obj, ApiDef)
 
 
-def generate_api_client(data_path, templates_dir, template_path="main.jinja"):
+def generate_api_client(data_path, templates_dir, no_black, template_path="main.jinja"):
     """From a given Krake API definition path, print a Python file that contains the
     code of an implementation of the client for this API definition, to be included in
     Krake.
@@ -52,6 +53,7 @@ def generate_api_client(data_path, templates_dir, template_path="main.jinja"):
         data_path (str): The Python module path to the data structures. For example:
             "krake.data.my_api".
         templates_dir (str): path of the directory in which the template is stored.
+        no_black (bool): if True, the black formatting will not be used.
         template_path (str): name of the template.
 
     """
@@ -60,7 +62,7 @@ def generate_api_client(data_path, templates_dir, template_path="main.jinja"):
     api_definition = api_definitions[0]
 
     parameters = {"api_def": api_definition}
-    render_and_print(templates_dir, template_path, parameters)
+    render_and_print(templates_dir, template_path, parameters, no_black=no_black)
 
 
 def add_apidef_subparser(subparsers):
@@ -85,5 +87,7 @@ def add_apidef_subparser(subparsers):
     )
     default = os.path.join(get_default_template_dir(), "api_client")
     add_templates_dir(parser=parser, default=default)
+
+    add_no_black_formatting(parser=parser)
 
     parser.set_defaults(generator=generate_api_client)
