@@ -143,6 +143,24 @@ def add_template_path(parser, default=None, **kwargs):
     )
 
 
+def add_no_black_formatting(parser, **kwargs):
+    """Add a generic "--no-black" option for the given parser, as an optional argument.
+    Specifying this option will set this variable to True.
+
+    Args:
+        parser (argparse.ArgumentParser): parser to which the option will be added.
+        **kwargs (dict): additional arguments to give to the parser.
+
+    """
+    add_option(
+        parser,
+        name="--no-black",
+        help="If set, the black formatting will not be applied to the output.",
+        action="store_true",
+        **kwargs,
+    )
+
+
 def get_default_template_dir():
     """Generate the complete path to the template directory for the API generator
 
@@ -179,7 +197,7 @@ def get_template(templates_dir, template_path):
     return template
 
 
-def render_and_print(templates_dir, template_path, parameters):
+def render_and_print(templates_dir, template_path, parameters, no_black=False):
     """Apply the given parameters to the given template and display the formatted
     result.
 
@@ -187,10 +205,14 @@ def render_and_print(templates_dir, template_path, parameters):
         templates_dir (str): path of the directory in which the template is stored.
         template_path (str): name of the template.
         parameters (dict): values to give to the template for rendering.
+        no_black (bool): if False, format the output of the template rendering using
+            the black utility. Otherwise, just print the raw rendering.
 
     """
     template = get_template(templates_dir, template_path)
-    raw_output = template.render(**parameters)
+    output = template.render(**parameters)
 
-    formatted_output = black.format_str(raw_output, mode=black.FileMode())
-    print(formatted_output)
+    if not no_black:
+        output = black.format_str(output, mode=black.FileMode())
+
+    print(output)
