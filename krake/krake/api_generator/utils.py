@@ -1,6 +1,44 @@
+import importlib
+import inspect
 import os
 import sys
 from argparse import Action
+
+import black
+from jinja2 import FileSystemLoader, Environment, TemplateNotFound
+
+
+def get_data_classes(data_path, condition=None):
+    """Get a list of references to the objects defined in the given module. The classes
+    are filtered using the given condition.
+
+    Args:
+        condition (callable): a function with signature "object -> bool". If the
+            condition is True, the object from the module is filtered and given in the
+            output list. Default: all objects are returned.
+        data_path (str): The Python module path to the data structures. For example:
+            "krake.data.my_api".
+
+    Returns:
+        list[type]: the list of references to the objects extracted from the module at
+            the given path.
+
+    Raises:
+        SystemExit: if the given module path is not valid.
+
+    """
+    if not condition:
+
+        def condition(x):
+            return True
+
+    try:
+        api_module = importlib.import_module(data_path)
+    except ModuleNotFoundError:
+        sys.exit(f"ERROR: Module {data_path!r} cannot be found.")
+
+    # Get all objects defined in the module and keep only the persisted classes.
+    return [obj for name, obj in inspect.getmembers(api_module, condition)]
 
 
 def add_option(parser, name, help, short=None, default=None, action=None, **kwargs):
@@ -112,5 +150,47 @@ def get_default_template_dir():
         str: the absolute path to the default template directory.
 
     """
-    dir = os.path.dirname(__file__)
-    return os.path.join(dir, "templates")
+    directory = os.path.dirname(__file__)
+    return os.path.join(directory, "templates")
+
+
+def get_template(templates_dir, template_path):
+    """Retrieve the template object associated with the file with the given name in the
+    given directory.
+
+    Args:
+        templates_dir (str): path of the directory in which the template is stored.
+        template_path (str): name of the template.
+
+    Returns:
+        jinja2.Template: the template, as managed by Jinja2.
+
+    Raises:
+        SystemExit: if the template cannot be found.
+
+    """
+    file_loader = FileSystemLoader(templates_dir)
+    env = Environment(loader=file_loader)
+
+    try:
+        template = env.get_template(template_path)
+    except TemplateNotFound:
+        sys.exit(f"ERROR: Template {template_path!r} not found in {templates_dir!r}.")
+    return template
+
+
+def render_and_print(templates_dir, template_path, parameters):
+    """Apply the given parameters to the given template and display the formatted
+    result.
+
+    Args:
+        templates_dir (str): path of the directory in which the template is stored.
+        template_path (str): name of the template.
+        parameters (dict): values to give to the template for rendering.
+
+    """
+    template = get_template(templates_dir, template_path)
+    raw_output = template.render(**parameters)
+
+    formatted_output = black.format_str(raw_output, mode=black.FileMode())
+    print(formatted_output)

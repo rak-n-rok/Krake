@@ -1,7 +1,421 @@
-from krake.apidefs.kubernetes import kubernetes
-from .generator import generate_client
+from krake.client import Watcher, ApiClient
+from krake.data.kubernetes import Cluster, ClusterList, ApplicationList, Application
 
 
-@generate_client(kubernetes)
-class KubernetesApi:
-    pass
+class KubernetesApi(ApiClient):
+    """Kubernetes API client
+
+    Example:
+        .. code:: python
+
+            from krake.client import Client
+
+            with Client(url="http://localhost:8080") as client:
+                kubernetes_api = KubernetesApi(client)
+
+    Args:
+        client (krake.client.Client): API client for accessing the Krake HTTP API
+
+    """
+
+    async def create_application(self, body, namespace):
+        """Create the specified Application.
+
+        Args:
+            body (Application): Body of the HTTP request.
+            namespace (str): namespace in which the Application will be updated.
+
+        Returns:
+            Application: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/namespaces/{namespace}/applications".format(
+            namespace=namespace
+        )
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("POST", url, json=body.serialize())
+        data = await resp.json()
+        return Application.deserialize(data)
+
+    async def delete_application(self, namespace, name):
+        """Delete the specified Application.
+
+        Args:
+            namespace (str): namespace in which the Application will be updated.
+            name (str): name of the Application.
+
+        Returns:
+            Application: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/namespaces/{namespace}/applications/{name}".format(
+            namespace=namespace, name=name
+        )
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("DELETE", url)
+        if resp.status == 204:
+            return None
+        data = await resp.json()
+        return Application.deserialize(data)
+
+    async def list_applications(self, namespace):
+        """List the Applications in the namespace.
+
+        Args:
+            namespace (str): namespace in which the Application will be updated.
+
+        Returns:
+            ApplicationList: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/namespaces/{namespace}/applications".format(
+            namespace=namespace
+        )
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("GET", url)
+        data = await resp.json()
+        return ApplicationList.deserialize(data)
+
+    def watch_applications(self, namespace, heartbeat=None):
+        """Generate a watcher for the Applications in the namespace.
+
+        Args:
+            namespace (str): namespace in which the Application will be updated.
+            heartbeat (int): Number of seconds after which the server sends a heartbeat
+                in form a an empty newline. Passing 0 disables the heartbeat. Default:
+                10 seconds.
+
+        Returns:
+            ApplicationList: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/namespaces/{namespace}/applications".format(
+            namespace=namespace
+        )
+
+        query = {"watch": ""}
+        if heartbeat is not None:
+            query["heartbeat"] = heartbeat
+
+        url = self.client.url.with_path(path).with_query(query)
+
+        return Watcher(self.client.session, url, Application)
+
+    async def list_all_applications(self):
+        """List all Applications.
+
+        Returns:
+            ApplicationList: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/applications"
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("GET", url)
+        data = await resp.json()
+        return ApplicationList.deserialize(data)
+
+    def watch_all_applications(self, heartbeat=None):
+        """Generate a watcher for all Applications.
+
+        Args:
+            heartbeat (int): Number of seconds after which the server sends a heartbeat
+                in form a an empty newline. Passing 0 disables the heartbeat. Default:
+                10 seconds.
+
+        Returns:
+            ApplicationList: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/applications"
+
+        query = {"watch": ""}
+        if heartbeat is not None:
+            query["heartbeat"] = heartbeat
+        url = self.client.url.with_path(path).with_query(query)
+
+        return Watcher(self.client.session, url, Application)
+
+    async def read_application(self, namespace, name):
+        """Read the specified Application.
+
+        Args:
+            namespace (str): namespace in which the Application will be updated.
+            name (str): name of the Application.
+
+        Returns:
+            Application: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/namespaces/{namespace}/applications/{name}".format(
+            namespace=namespace, name=name
+        )
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("GET", url)
+        data = await resp.json()
+        return Application.deserialize(data)
+
+    async def update_application(self, body, namespace, name):
+        """Update the specified Application.
+
+        Args:
+            body (Application): Body of the HTTP request.
+            namespace (str): namespace in which the Application will be updated.
+            name (str): name of the Application.
+
+        Returns:
+            Application: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/namespaces/{namespace}/applications/{name}".format(
+            namespace=namespace, name=name
+        )
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("PUT", url, json=body.serialize())
+        data = await resp.json()
+        return Application.deserialize(data)
+
+    async def update_application_binding(self, body, namespace, name):
+        """Update the specified Application.
+
+        Args:
+            body (ClusterBinding): Body of the HTTP request.
+            namespace (str): namespace in which the Application will be updated.
+            name (str): name of the Application.
+
+        Returns:
+            Application: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/namespaces/{namespace}/applications/{name}/binding".format(
+            namespace=namespace, name=name
+        )
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("PUT", url, json=body.serialize())
+        data = await resp.json()
+        return Application.deserialize(data)
+
+    async def update_application_complete(self, body, namespace, name):
+        """Update the specified Application.
+
+        Args:
+            body (ApplicationComplete): Body of the HTTP request.
+            namespace (str): namespace in which the Application will be updated.
+            name (str): name of the Application.
+
+        Returns:
+            Application: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/namespaces/{namespace}/applications/{name}/complete".format(
+            namespace=namespace, name=name
+        )
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("PUT", url, json=body.serialize())
+        data = await resp.json()
+        return Application.deserialize(data)
+
+    async def update_application_status(self, body, namespace, name):
+        """Update the specified Application.
+
+        Args:
+            body (Application): Body of the HTTP request.
+            namespace (str): namespace in which the Application will be updated.
+            name (str): name of the Application.
+
+        Returns:
+            Application: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/namespaces/{namespace}/applications/{name}/status".format(
+            namespace=namespace, name=name
+        )
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("PUT", url, json=body.serialize())
+        data = await resp.json()
+        return Application.deserialize(data)
+
+    async def create_cluster(self, body, namespace):
+        """Create the specified Cluster.
+
+        Args:
+            body (Cluster): Body of the HTTP request.
+            namespace (str): namespace in which the Cluster will be updated.
+
+        Returns:
+            Cluster: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/namespaces/{namespace}/clusters".format(namespace=namespace)
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("POST", url, json=body.serialize())
+        data = await resp.json()
+        return Cluster.deserialize(data)
+
+    async def delete_cluster(self, namespace, name):
+        """Delete the specified Cluster.
+
+        Args:
+            namespace (str): namespace in which the Cluster will be updated.
+            name (str): name of the Cluster.
+
+        Returns:
+            Cluster: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/namespaces/{namespace}/clusters/{name}".format(
+            namespace=namespace, name=name
+        )
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("DELETE", url)
+        if resp.status == 204:
+            return None
+        data = await resp.json()
+        return Cluster.deserialize(data)
+
+    async def list_clusters(self, namespace):
+        """List the Clusters in the namespace.
+
+        Args:
+            namespace (str): namespace in which the Cluster will be updated.
+
+        Returns:
+            ClusterList: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/namespaces/{namespace}/clusters".format(namespace=namespace)
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("GET", url)
+        data = await resp.json()
+        return ClusterList.deserialize(data)
+
+    def watch_clusters(self, namespace, heartbeat=None):
+        """Generate a watcher for the Clusters in the namespace.
+
+        Args:
+            namespace (str): namespace in which the Cluster will be updated.
+            heartbeat (int): Number of seconds after which the server sends a heartbeat
+                in form a an empty newline. Passing 0 disables the heartbeat. Default:
+                10 seconds.
+
+        Returns:
+            ClusterList: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/namespaces/{namespace}/clusters".format(namespace=namespace)
+
+        query = {"watch": ""}
+        if heartbeat is not None:
+            query["heartbeat"] = heartbeat
+
+        url = self.client.url.with_path(path).with_query(query)
+
+        return Watcher(self.client.session, url, Cluster)
+
+    async def list_all_clusters(self):
+        """List all Clusters.
+
+        Returns:
+            ClusterList: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/clusters"
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("GET", url)
+        data = await resp.json()
+        return ClusterList.deserialize(data)
+
+    def watch_all_clusters(self, heartbeat=None):
+        """Generate a watcher for all Clusters.
+
+        Args:
+            heartbeat (int): Number of seconds after which the server sends a heartbeat
+                in form a an empty newline. Passing 0 disables the heartbeat. Default:
+                10 seconds.
+
+        Returns:
+            ClusterList: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/clusters"
+
+        query = {"watch": ""}
+        if heartbeat is not None:
+            query["heartbeat"] = heartbeat
+        url = self.client.url.with_path(path).with_query(query)
+
+        return Watcher(self.client.session, url, Cluster)
+
+    async def read_cluster(self, namespace, name):
+        """Read the specified Cluster.
+
+        Args:
+            namespace (str): namespace in which the Cluster will be updated.
+            name (str): name of the Cluster.
+
+        Returns:
+            Cluster: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/namespaces/{namespace}/clusters/{name}".format(
+            namespace=namespace, name=name
+        )
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("GET", url)
+        data = await resp.json()
+        return Cluster.deserialize(data)
+
+    async def update_cluster(self, body, namespace, name):
+        """Update the specified Cluster.
+
+        Args:
+            body (Cluster): Body of the HTTP request.
+            namespace (str): namespace in which the Cluster will be updated.
+            name (str): name of the Cluster.
+
+        Returns:
+            Cluster: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/namespaces/{namespace}/clusters/{name}".format(
+            namespace=namespace, name=name
+        )
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("PUT", url, json=body.serialize())
+        data = await resp.json()
+        return Cluster.deserialize(data)
+
+    async def update_cluster_status(self, body, namespace, name):
+        """Update the specified Cluster.
+
+        Args:
+            body (Cluster): Body of the HTTP request.
+            namespace (str): namespace in which the Cluster will be updated.
+            name (str): name of the Cluster.
+
+        Returns:
+            Cluster: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/namespaces/{namespace}/clusters/{name}/status".format(
+            namespace=namespace, name=name
+        )
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("PUT", url, json=body.serialize())
+        data = await resp.json()
+        return Cluster.deserialize(data)

@@ -40,8 +40,13 @@ Example:
                 response = BookList
 
 """
+from collections import defaultdict
 from inspect import getmembers
 from enum import Enum, auto
+from string import Formatter
+from typing import NamedTuple
+
+from krake.utils import camel_to_snake_case
 from marshmallow import fields, missing
 from marshmallow.validate import Range
 
@@ -66,6 +71,29 @@ class ApiDef(object):
     def __init__(self, name):
         self.name = name
         self.resources = []
+        self._import_classes = None
+
+    @property
+    def import_classes(self):
+        """Get the reference of all classes needed to be imported by the current ApiDef
+        from the class:`Resource` defined in it.
+
+        Returns:
+            dict: all classes needed for the current ApiDef, separated by a different
+                list for each module: "<module_path>: <list_of_classes>".
+
+        """
+        if self._import_classes:
+            return self._import_classes
+
+        classes = set()
+        for resource in self.resources:
+            classes.update(resource.import_classes)
+
+        self._import_classes = defaultdict(list)
+        for cls in classes:
+            self._import_classes[cls.__module__].append(cls)
+        return self._import_classes
 
     def resource(self, template):
         """Decorator method that is used to transform a given class into a
@@ -138,6 +166,7 @@ class Resource(object):
         self.scope = scope
         self.singular = singular
         self.plural = plural
+        self._import_classes = None
 
         for name, op in operations:
             op.resource = self
@@ -146,6 +175,47 @@ class Resource(object):
         for name, sub in subresources:
             sub.resource = self
         self.subresources = [sub for _, sub in subresources]
+
+    @property
+    def snake_case_singular(self):
+        return camel_to_snake_case(self.singular)
+
+    @property
+    def snake_case_plural(self):
+        return camel_to_snake_case(self.plural)
+
+    @property
+    def import_classes(self):
+        """Get all the references to the classes that need to be imported to use the
+        current Resource from the operations defined in it.
+
+        Returns:
+            set: the set of all classes that the operations in the current Resource
+                need.
+
+        """
+        if self._import_classes:
+            return self._import_classes
+        classes = set()
+
+        for operation in self.operations:
+            if operation.body:
+                classes.add(operation.body)
+            if operation.response:
+                classes.add(operation.response)
+
+        self._import_classes = classes
+        return self._import_classes
+
+    @property
+    def namespaced(self):
+        """Compute if a resource is namespaced or not.
+
+        Returns:
+            bool: True if the resource is namespaced, False otherwise.
+
+        """
+        return self.scope == Scope.NAMESPACED
 
     def __repr__(self):
         return f"<Resource {self.api}.{self.singular} scope={self.scope.name}>"
@@ -233,6 +303,7 @@ class operation(object):
         self.name = template.__name__
         self._resource = None
         self._subresource = None
+        self._arguments = None
 
         # Only API objects are allowed in HTTP bodies
         if self.body:
@@ -280,6 +351,63 @@ class operation(object):
             raise RuntimeError(f"Operation already bound to {self._subresource}")
         self._subresource = value
 
+    @property
+    def signature_name(self):
+        """Generate the base name of an API or client handler for the current operation.
+        Snake case is used, as well as the number of the operation (singular or plural).
+
+        Returns:
+            str: the generated name, as "<name_singular_or_plural>" or
+                "<name_singular_or_plural>_<subresource_name>" if the operation belongs
+                to a subresource.
+
+        """
+        if self.number == "singular":
+            name = camel_to_snake_case(self.resource.singular)
+        else:
+            name = camel_to_snake_case(self.resource.plural)
+
+        if self.subresource:
+            subresource_name = camel_to_snake_case(self.subresource.name)
+            name = f"{name}_{subresource_name}"
+        return name
+
+    @property
+    def arguments(self):
+        """Get all arguments that should be added in the docstring of the handlers for
+        the current operation.
+
+        Returns:
+            list[Argument]: the list of all docstring arguments of the operation.
+
+        """
+        if self._arguments:
+            return self._arguments
+
+        arguments = []
+
+        if self.body:
+            # TODO: Should the documentation be here or in the template?
+            body_arg = Argument(name="body")
+            arguments.append(body_arg)
+
+        # Create an entry for all parameters in the path of the operation
+        for _, name, _, _ in Formatter().parse(self.path):
+            if name is not None:
+                # TODO: Should the documentation be here or in the template?
+                namespace_arg = Argument(name=name, kind="str")
+                arguments.append(namespace_arg)
+
+        # Create an entry for all parameters in the query of the operation
+        if self.query:
+            for name, field in self.query.items():
+                kind = getattr(field, "num_type", str).__name__
+                field_arg = Argument(name, kind=kind, doc=field.metadata["doc"])
+                arguments.append(field_arg)
+
+        self._arguments = arguments
+        return self._arguments
+
     def __repr__(self):
         if self.subresource:
             return (
@@ -294,6 +422,21 @@ class operation(object):
             )
         else:
             return f"<operation {self.name} unbound>"
+
+
+class Argument(NamedTuple):
+    """Stores a docstring argument entry, corresponding to a parameter.
+
+    Attributes:
+        name (str): name of the parameter.
+        kind (str): kind of the parameter.
+        doc (str): description of the parameter.
+
+    """
+
+    name: str
+    kind: str = None
+    doc: str = None
 
 
 class subresource(object):
