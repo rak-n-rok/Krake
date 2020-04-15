@@ -8,13 +8,14 @@ The following syntax should be used:
 
 .. code:: bash
 
-    python -m krake.api_generator apidef <module_path> [<other_opts>...] > <module.path>
+    python -m krake.api_generator api_definition <module_path> [<other_opts>...] > \
+        <module.path>
 
 For example:
 
 .. code:: bash
 
-    python -m krake.api_generator apidef krake.data.core
+    python -m krake.api_generator api_definition krake.data.core
 
 """
 import sys
@@ -38,7 +39,7 @@ from krake.data.serializable import ApiObject
 
 default_scope = Scope.NAMESPACED
 
-default_apidef_template = "apidef.jinja"
+default_apidef_template = "api_definition.jinja"
 
 
 class ResourceDef(NamedTuple):
@@ -313,7 +314,7 @@ def add_apidef_subparser(subparsers):
 
     """
     parser = subparsers.add_parser(
-        "apidef",
+        "api_definition",
         help="Generation of the API definitions, to be used as base for the Krake API.",
     )
 

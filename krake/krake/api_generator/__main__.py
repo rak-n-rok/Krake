@@ -28,7 +28,7 @@ To use a specific generator:
 """
 import argparse
 
-import krake.api_generator.apidef as apidef
+import krake.api_generator.api_definition as api_definition
 import krake.api_generator.api_client as api_client
 import krake.api_generator.api_server as api_server
 
@@ -37,7 +37,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Code generator for the Krake API.")
     subparsers = parser.add_subparsers()
 
-    apidef.add_apidef_subparser(subparsers)
+    api_definition.add_apidef_subparser(subparsers)
     api_client.add_apidef_subparser(subparsers)
     api_server.add_apidef_subparser(subparsers)
 
