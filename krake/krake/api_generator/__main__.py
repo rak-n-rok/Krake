@@ -29,6 +29,7 @@ To use a specific generator:
 import argparse
 
 import krake.api_generator.apidef as apidef
+import krake.api_generator.api_client as api_client
 
 
 if __name__ == "__main__":
@@ -36,6 +37,7 @@ if __name__ == "__main__":
     subparsers = parser.add_subparsers()
 
     apidef.add_apidef_subparser(subparsers)
+    api_client.add_apidef_subparser(subparsers)
 
     args = parser.parse_args()
 

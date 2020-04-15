@@ -8,7 +8,7 @@ The following syntax should be used:
 
 .. code:: bash
 
-    python -m krake.api_generator apidef <module_path> [<other_opts>...] > <module.py>
+    python -m krake.api_generator apidef <module_path> [<other_opts>...] > <module.path>
 
 For example:
 
@@ -20,12 +20,15 @@ For example:
 import sys
 from functools import partial
 
-import black
-import importlib
 import inspect
 
-from krake.api_generator.parser import add_templates_dir, add_template_path, StoreDict
-from jinja2 import Environment, FileSystemLoader, TemplateNotFound
+from krake.api_generator.utils import (
+    add_templates_dir,
+    add_template_path,
+    StoreDict,
+    get_data_classes,
+    render_and_print,
+)
 from typing import NamedTuple, List
 
 from krake.apidefs.definitions import Scope
@@ -124,6 +127,20 @@ class ResourceDef(NamedTuple):
         )
 
 
+def is_persistent_class(obj):
+    """Check if an object is a class that is persisted in the Krake database.
+
+    Args:
+        obj: the given object to check.
+
+    Returns:
+        bool: True if the object given is a class persisted in the Krake database, False
+            otherwise
+
+    """
+    return inspect.isclass(obj) and hasattr(obj, "__etcd_key__")
+
+
 class Api(NamedTuple):
     """Represent an API object that will be put into the template.
 
@@ -143,37 +160,6 @@ class Api(NamedTuple):
     module_path: str
     import_classes: List[str] = None
     resources: List[ResourceDef] = None
-
-    @classmethod
-    def get_data_classes(cls, data_path):
-        """Get a list of references to the classes defined in the given Krake module.
-        The classes filtered are the ones that are persisted in the Krake database.
-
-        Args:
-            data_path (str): The Python module path to the data structures. For example:
-                "krake.data.my_api".
-
-        Returns:
-            list[type]: the list of references to classes extracted from the module at
-                the given path.
-
-        Raises:
-            SystemExit: if the given module path is not valid.
-
-        """
-        # Return True if an object is a class that is persisted in the Krake database.
-        def is_persistent_class(obj):
-            return inspect.isclass(obj) and hasattr(obj, "__etcd_key__")
-
-        try:
-            api_module = importlib.import_module(data_path)
-        except ModuleNotFoundError:
-            sys.exit(f"ERROR: Module {data_path!r} cannot be found.")
-
-        # Get all objects defined in the module and keep only the persisted classes.
-        return [
-            obj for name, obj in inspect.getmembers(api_module, is_persistent_class)
-        ]
 
     @classmethod
     def create_resource_definitions(cls, api_name, data_classes, scopes):
@@ -244,7 +230,7 @@ class Api(NamedTuple):
             name = module_path.split(".")[-1]
 
         # Get all ApiObject classes for which a resource definition will be created.
-        data_classes = cls.get_data_classes(module_path)
+        data_classes = get_data_classes(module_path, condition=is_persistent_class)
 
         if not scopes:
             scopes = {}
@@ -263,31 +249,6 @@ class Api(NamedTuple):
             import_classes=import_classes,
             resources=resource_definitions,
         )
-
-
-def get_template(templates_dir, template_path):
-    """Retrieve the template object associated with the file with the given name in the
-    given directory.
-
-    Args:
-        templates_dir (str): path of the directory in which the template is stored.
-        template_path (str): name of the template.
-
-    Returns:
-        jinja2.Template: the template, as managed by Jinja2.
-
-    Raises:
-        SystemExit: if the template cannot be found.
-
-    """
-    file_loader = FileSystemLoader(templates_dir)
-    env = Environment(loader=file_loader)
-
-    try:
-        template = env.get_template(template_path)
-    except TemplateNotFound:
-        sys.exit(f"ERROR: Template {template_path!r} not found in {templates_dir!r}.")
-    return template
 
 
 def process_classes_scopes(scopes, data_classes):
@@ -335,13 +296,10 @@ def generate_apidef(data_path, templates_dir, template_path, scopes=None):
     if scopes is None:
         scopes = {}
 
-    template = get_template(templates_dir, template_path)
     api_def = Api.from_path(data_path, scopes=scopes)
 
-    raw_output = template.render(api_def=api_def)
-
-    formatted_output = black.format_str(raw_output, mode=black.FileMode())
-    print(formatted_output)
+    parameters = {"api_def": api_def}
+    render_and_print(templates_dir, template_path, parameters)
 
 
 def add_apidef_subparser(subparsers):
