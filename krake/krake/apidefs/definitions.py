@@ -486,6 +486,10 @@ class subresource(object):
             raise RuntimeError(f"Subresource already bound to {self._resource!r}")
         self._resource = value
 
+    @property
+    def resource_name(self):
+        return f"{self.resource.plural.lower()}/{self.name.lower()}"
+
     def __repr__(self):
         return (
             f"<subresource {self.name} for "
