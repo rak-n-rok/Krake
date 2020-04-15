@@ -1,0 +1,53 @@
+{% import "macros.jinja" as macros %}
+import dataclasses
+import json
+import logging
+from aiohttp import web
+from uuid import uuid4
+from webargs.aiohttpparser import use_kwargs
+
+from krake import utils
+from krake.api.auth import protected
+from krake.api.database import EventType
+from krake.api.helpers import (
+    load,
+    session,
+    Heartbeat,
+    use_schema,
+    HttpReason,
+    HttpReasonCode,
+    make_create_request_schema,
+    json_error,
+)
+from krake.apidefs.definitions import ListQuery
+from krake.data.core import WatchEvent, WatchEventType, ListMetadata
+{% for module_path, classes in api_def.import_classes.items() -%}
+    from {{ module_path }} import {% for cls_name in classes -%}
+        {{ cls_name.__name__ }}{{ ", " if not loop.last }}
+    {%- endfor -%}
+{% endfor %}
+
+logger = logging.getLogger(__name__)
+
+
+class {{ api_def.name|title }}Api(object):
+    """Contains all handlers for the resources of the "{{ api_def.name }}" API.
+    These handlers will be added to the Krake API components.
+    """
+
+    routes = web.RouteTableDef()
+
+    {% for resource in api_def.resources %}
+    {% for operation in resource.operations %}
+        {#- The macro is used to be able to apply the "indent" filter -#}
+        {{ macros.include_operation(operation)|indent }}
+    {% endfor %}
+
+    {% for subresource in resource.subresources -%}
+        {% for operation in subresource.operations -%}
+            {#- The macro is used to be able to apply the "indent" filter -#}
+            {{ macros.include_operation(operation)|indent }}
+        {% endfor %}
+    {% endfor %}
+
+    {%- endfor %}

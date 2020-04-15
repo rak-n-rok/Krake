@@ -1,0 +1,74 @@
+{% for operation in operation.resource.operations -%}
+{% if operation.name == "ListAll" -%}
+@routes.route(
+    "{{ operation.method }}", "{{ operation.path }}",
+)
+{%- endif %}
+{%- endfor %}
+@routes.route(
+    "{{ operation.method }}", "{{ operation.path }}",
+)
+@protected(
+    api="{{ operation.resource.api }}", resource="{{ operation.resource.plural|lower }}", verb="list",
+)
+@use_kwargs(ListQuery.query, location="query")
+async def list_or_watch_{{ operation.signature_name }}(request, heartbeat, watch, **query):
+    {# TODO: this uses the assumption that singular is the right resource -#}
+    resource_class = {{ operation.resource.singular }}
+
+    {% if operation.resource.namespaced -%}
+    # If the ListAll operation
+    namespace = request.match_info.get("namespace", None)
+    {%- endif %}
+
+    # Return the list of resources
+    if not watch:
+        {% if operation.resource.namespaced -%}
+        if namespace is None:
+            objs = [obj async for obj in session(request).all(resource_class)]
+        else:
+            objs = [
+                obj
+                async for obj in session(request).all(
+                    resource_class, namespace=namespace
+                )
+            ]
+        {%- else -%}
+        objs = [obj async for obj in session(request).all(resource_class)]
+        {%- endif %}
+
+        body = {{ operation.response.__name__ }}(
+            metadata=ListMetadata(), items=objs
+        )
+        return web.json_response(body.serialize())
+
+    # Watching resources
+    kwargs = {}
+    {% if operation.resource.namespaced -%}
+    if namespace is not None:
+        kwargs["namespace"] = namespace
+    {% endif %}
+    async with session(request).watch(resource_class, **kwargs) as watcher:
+        resp = web.StreamResponse(headers={"Content-Type": "application/x-ndjson"})
+        resp.enable_chunked_encoding()
+
+        await resp.prepare(request)
+
+        async with Heartbeat(resp, interval=heartbeat):
+            async for event, obj, rev in watcher:
+                # Key was deleted. Stop update stream
+                if event == EventType.PUT:
+                    if rev.created == rev.modified:
+                        event_type = WatchEventType.ADDED
+                    else:
+                        event_type = WatchEventType.MODIFIED
+                else:
+                    event_type = WatchEventType.DELETED
+                    obj = await session(request).get_by_key(
+                        resource_class, key=rev.key, revision=rev.modified - 1
+                    )
+
+                watch_event = WatchEvent(type=event_type, object=obj.serialize())
+
+                await resp.write(json.dumps(watch_event.serialize()).encode())
+                await resp.write(b"\n")

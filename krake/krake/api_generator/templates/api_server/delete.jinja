@@ -1,0 +1,26 @@
+@routes.route(
+    "{{ operation.method }}", "{{ operation.path }}",
+)
+@protected(
+    api="{{ operation.resource.api }}", resource="{{ operation.resource.plural|lower }}", verb="delete",
+)
+@load("entity", {{ operation.response.__name__ }})
+async def delete_{{ operation.signature_name }}(request, entity):
+    # Resource is already deleting
+    if entity.metadata.deleted:
+        return web.json_response(entity.serialize())
+
+    # TODO: Should be update "modified" here?
+    # Resource marked as deletion, to be deleted by the Garbage Collector
+    entity.metadata.deleted = utils.now()
+    entity.metadata.finalizers.append("cascade_deletion")
+
+    await session(request).put(entity)
+    logger.info(
+        "Deleting %s %r (%s)",
+        "{{ operation.resource.singular }}",
+        entity.metadata.name,
+        entity.metadata.uid,
+    )
+
+    return web.json_response(entity.serialize())

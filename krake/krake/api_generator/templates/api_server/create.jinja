@@ -1,0 +1,63 @@
+@routes.route(
+    "{{ operation.method }}", "{{ operation.path }}",
+)
+@protected(
+    api="{{ operation.resource.api }}", resource="{{ operation.resource.plural|lower }}", verb="create",
+)
+@use_schema(
+    "body", schema=make_create_request_schema({{ operation.body.__name__ }})
+)
+async def create_{{ operation.signature_name }}(request, body):
+    kwargs = {"name": body.metadata.name}
+
+    {% if operation.resource.namespaced -%}
+    namespace = request.match_info.get("namespace")
+    kwargs["namespace"] = namespace
+    {%- endif %}
+
+    # Ensure that a resource with the same name does not already
+    # exists.
+    existing = await session(request).get(body.__class__, **kwargs)
+
+    if existing is not None:
+        {% if operation.resource.namespaced -%}
+        message = (
+            f"{{ operation.resource.singular }} {body.metadata.name!r} already "
+            f"exists in namespace {namespace!r}"
+        )
+        {%- else -%}
+        message = f"{{ operation.resource.singular }} {body.metadata.name!r} already exists"
+        {%- endif %}
+        reason = HttpReason(
+            reason=message, code=HttpReasonCode.RESOURCE_ALREADY_EXISTS
+        )
+        raise web.HTTPConflict(
+            text=json.dumps(reason.serialize()), content_type="application/json"
+        )
+
+    now = utils.now()
+
+    {% if operation.resource.namespaced -%}
+    body.metadata.namespace = namespace
+    {%- endif %}
+    body.metadata.uid = str(uuid4())
+    body.metadata.created = now
+    body.metadata.modified = now
+
+    {% if operation.resource.subresources -%}
+    # Initialize subresource fields
+    for field in dataclasses.fields(body):
+        if field.metadata.get("subresource", False):
+            value = field.type()
+            setattr(body, field.name, value)
+    {%- endif %}
+
+    await session(request).put(body)
+    logger.info(
+        "Created %s %r (%s)",
+        "{{ operation.resource.singular }}",
+        body.metadata.name,
+        body.metadata.uid,
+    )
+
+    return web.json_response(body.serialize())

@@ -1,0 +1,9 @@
+@routes.route(
+    "{{ operation.method }}", "{{ operation.path }}",
+)
+@protected(
+    api="{{ operation.resource.api }}", resource="{{ operation.resource.plural|lower }}", verb="get",
+)
+@load("entity", {{ operation.response.__name__ }})
+async def read_{{ operation.signature_name }}(request, entity):
+    return web.json_response(entity.serialize())

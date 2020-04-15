@@ -226,3 +226,17 @@ def use_schema(argname, schema):
         return wrapper
 
     return decorator
+
+
+def make_create_request_schema(cls):
+    """Create a :class:`marshmallow.Schema` excluding subresources and readonly.
+
+    Args:
+        cls (type): Data class with ``Schema`` attribute
+
+    Returns:
+        marshmallow.Schema: Schema instance with excluded subresources
+
+    """
+    exclude = cls.fields_ignored_by_creation()
+    return cls.Schema(exclude=exclude)
