@@ -5,7 +5,13 @@ from aiohttp import ClientSession
 from aiohttp.test_utils import TestServer as Server
 from krake.api.app import create_app
 from krake.api.helpers import HttpReasonCode
-from krake.data.config import AuthenticationConfiguration, TlsServerConfiguration
+from krake.client import Client
+from krake.controller import create_ssl_context
+from krake.data.config import (
+    AuthenticationConfiguration,
+    TlsServerConfiguration,
+    TlsClientConfiguration,
+)
 
 
 async def test_static_auth(aiohttp_client, config):
@@ -292,6 +298,48 @@ async def test_deny_anonymous_requests(aiohttp_client, config):
     client = await aiohttp_client(create_app(config=config))
     resp = await client.get("/me")
     assert resp.status == 401
+
+
+async def test_client_connect_ssl(config, loop, pki):
+    server_cert = pki.gencert("api-server")
+    client_cert = pki.gencert("client")
+
+    authentication = {
+        "allow_anonymous": True,
+        "strategy": {
+            "keystone": {"enabled": False, "endpoint": "localhost"},
+            "keycloak": {"enabled": False, "endpoint": "endpoint", "realm": "krake"},
+            "static": {"enabled": False, "name": "test-user"},
+        },
+    }
+    config.authentication = AuthenticationConfiguration.deserialize(authentication)
+
+    tls_config = {
+        "enabled": True,
+        "client_ca": pki.ca.cert,
+        "cert": server_cert.cert,
+        "key": server_cert.key,
+    }
+    config.tls = TlsServerConfiguration.deserialize(tls_config)
+    app = create_app(config=config)
+
+    server = Server(app)
+    await server.start_server(ssl=app["ssl_context"])
+    assert server.scheme == "https"
+
+    client_tls = {
+        "enabled": True,
+        "client_ca": pki.ca.cert,
+        "client_cert": client_cert.cert,
+        "client_key": client_cert.key,
+    }
+    ssl_context = create_ssl_context(TlsClientConfiguration.deserialize(client_tls))
+
+    url = f"https://{server.host}:{server.port}"
+    async with Client(url=url, loop=loop, ssl_context=ssl_context) as client:
+        resp = await client.session.get(f"{url}/me")
+        data = await resp.json()
+        assert data["user"] == "client"
 
 
 async def test_client_anonymous_cert_auth(aiohttp_client, config, pki):

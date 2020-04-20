@@ -1,289 +1,22 @@
-import asyncio
 from operator import attrgetter
 
 from krake.api.app import create_app
 from krake.client import Client
 from krake.client.openstack import OpenStackApi
-from krake.data.core import ListMetadata, WatchEventType, resource_ref
-from krake.data.openstack import Project, MagnumCluster, MagnumClusterBinding
+from krake.data.core import resource_ref, ResourceRef, WatchEventType
+from krake.data.openstack import (
+    Project,
+    MagnumCluster,
+    MagnumClusterBinding,
+    MagnumClusterState,
+)
 from krake.test_utils import with_timeout, aenumerate
 
-from tests.factories.openstack import ProjectFactory, MagnumClusterFactory
-
-
-async def test_list_projects(aiohttp_server, config, db, loop):
-    # Populate database
-    data = [ProjectFactory(), ProjectFactory()]
-    for project in data:
-        await db.put(project)
-
-    # Start API server
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
-        projects = await openstack_api.list_projects(namespace="testing")
-
-    assert projects.api == "openstack"
-    assert projects.kind == "ProjectList"
-    assert isinstance(projects.metadata, ListMetadata)
-
-    key = attrgetter("metadata.name")
-    assert sorted(projects.items, key=key) == sorted(data, key=key)
-
-
-@with_timeout(3)
-async def test_watch_projects(aiohttp_server, config, loop):
-    data = [ProjectFactory() for _ in range(10)]
-
-    async def modify(openstack_api):
-        for project in data:
-            await openstack_api.create_project(
-                namespace=project.metadata.namespace,
-                name=project.metadata.name,
-                body=project,
-            )
-
-    async def watch(watcher):
-        async for i, event in aenumerate(watcher):
-            expected = data[i]
-            assert event.type == WatchEventType.ADDED
-            assert event.object == expected
-
-            if i == len(data) - 1:
-                break
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
-
-        async with openstack_api.watch_projects(namespace="testing") as watcher:
-            watching = loop.create_task(watch(watcher))
-            modifying = loop.create_task(modify(openstack_api))
-
-            await asyncio.wait(
-                [watching, modifying], return_when=asyncio.FIRST_EXCEPTION
-            )
-
-
-@with_timeout(3)
-async def test_watch_all_projects(aiohttp_server, config, loop):
-    data = [
-        ProjectFactory(metadata__namespace="testing"),
-        ProjectFactory(metadata__namespace="default"),
-        ProjectFactory(metadata__namespace="testing"),
-        ProjectFactory(metadata__namespace="system"),
-        ProjectFactory(metadata__namespace="testing"),
-    ]
-
-    async def modify(openstack_api):
-        for project in data:
-            await openstack_api.create_project(
-                namespace=project.metadata.namespace,
-                name=project.metadata.name,
-                body=project,
-            )
-
-    async def watch(watcher):
-        async for i, event in aenumerate(watcher):
-            expected = data[i]
-            assert event.type == WatchEventType.ADDED
-            assert event.object == expected
-
-            if i == len(data) - 1:
-                break
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
-
-        async with openstack_api.watch_all_projects() as watcher:
-            watching = loop.create_task(watch(watcher))
-            modifying = loop.create_task(modify(openstack_api))
-
-            await asyncio.wait(
-                [watching, modifying], return_when=asyncio.FIRST_EXCEPTION
-            )
-
-
-async def test_create_project(aiohttp_server, config, db, loop):
-    data = ProjectFactory()
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
-        received = await openstack_api.create_project(
-            namespace=data.metadata.namespace, body=data
-        )
-
-    assert received.metadata.name == data.metadata.name
-    assert received.metadata.namespace
-    assert received.metadata.created
-    assert received.metadata.modified
-    assert received.spec == data.spec
-
-    stored = await db.get(
-        Project, namespace=data.metadata.namespace, name=data.metadata.name
-    )
-    assert stored == received
-
-
-async def test_update_project(aiohttp_server, config, db, loop):
-    project = ProjectFactory()
-    await db.put(project)
-    project.spec = ProjectFactory().spec
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
-        received = await openstack_api.update_project(
-            namespace=project.metadata.namespace,
-            name=project.metadata.name,
-            body=project,
-        )
-
-    assert received.spec == project.spec
-    assert received.metadata.created == project.metadata.created
-    assert received.metadata.modified
-
-    stored = await db.get(
-        Project, namespace=project.metadata.namespace, name=project.metadata.name
-    )
-    assert stored == received
-
-
-async def test_read_project(aiohttp_server, config, db, loop):
-    data = ProjectFactory()
-    await db.put(data)
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
-        received = await openstack_api.read_project(
-            namespace=data.metadata.namespace, name=data.metadata.name
-        )
-        assert received == data
-
-
-async def test_delete_project(aiohttp_server, config, db, loop):
-    data = ProjectFactory()
-    await db.put(data)
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
-        received = await openstack_api.delete_project(
-            namespace=data.metadata.namespace, name=data.metadata.name
-        )
-        assert received.metadata.deleted is not None
-
-    stored = await db.get(
-        Project, namespace=data.metadata.namespace, name=data.metadata.name
-    )
-    assert stored.metadata.deleted is not None
-
-
-async def test_list_magnum_clusters(aiohttp_server, config, db, loop):
-    # Populate database
-    data = [MagnumClusterFactory(), MagnumClusterFactory()]
-    for cluster in data:
-        await db.put(cluster)
-
-    # Start API server
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
-        projects = await openstack_api.list_magnum_clusters(namespace="testing")
-
-    assert projects.api == "openstack"
-    assert projects.kind == "ProjectList"
-    assert isinstance(projects.metadata, ListMetadata)
-
-    key = attrgetter("metadata.name")
-    assert sorted(projects.items, key=key) == sorted(data, key=key)
-
-
-@with_timeout(3)
-async def test_watch_magnum_clusters(aiohttp_server, config, loop):
-    data = [MagnumClusterFactory() for _ in range(10)]
-
-    async def modify(openstack_api):
-        for cluster in data:
-            await openstack_api.create_project(
-                namespace=cluster.metadata.namespace,
-                name=cluster.metadata.name,
-                body=cluster,
-            )
-
-    async def watch(watcher):
-        async for i, event in aenumerate(watcher):
-            expected = data[i]
-            assert event.type == WatchEventType.ADDED
-            assert event.object == expected
-
-            if i == len(data) - 1:
-                break
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
-
-        async with openstack_api.watch_magnum_clusters(namespace="testing") as watcher:
-            watching = loop.create_task(watch(watcher))
-            modifying = loop.create_task(modify(openstack_api))
-
-            await asyncio.wait(
-                [watching, modifying], return_when=asyncio.FIRST_EXCEPTION
-            )
-
-
-@with_timeout(3)
-async def test_watch_all_magnum_clusters(aiohttp_server, config, loop):
-    data = [
-        MagnumClusterFactory(metadata__namespace="testing"),
-        MagnumClusterFactory(metadata__namespace="default"),
-        MagnumClusterFactory(metadata__namespace="testing"),
-        MagnumClusterFactory(metadata__namespace="system"),
-        MagnumClusterFactory(metadata__namespace="testing"),
-    ]
-
-    async def modify(openstack_api):
-        for cluster in data:
-            await openstack_api.create_project(
-                namespace=cluster.metadata.namespace,
-                name=cluster.metadata.name,
-                body=cluster,
-            )
-
-    async def watch(watcher):
-        async for i, event in aenumerate(watcher):
-            expected = data[i]
-            assert event.type == WatchEventType.ADDED
-            assert event.object == expected
-
-            if i == len(data) - 1:
-                break
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
-
-        async with openstack_api.watch_all_magnum_clusters() as watcher:
-            watching = loop.create_task(watch(watcher))
-            modifying = loop.create_task(modify(openstack_api))
-
-            await asyncio.wait(
-                [watching, modifying], return_when=asyncio.FIRST_EXCEPTION
-            )
+from tests.factories.openstack import (
+    MagnumClusterFactory,
+    ProjectFactory,
+    ReasonFactory,
+)
 
 
 async def test_create_magnum_cluster(aiohttp_server, config, db, loop):
@@ -297,8 +30,10 @@ async def test_create_magnum_cluster(aiohttp_server, config, db, loop):
             namespace=data.metadata.namespace, body=data
         )
 
+    assert received.api == "openstack"
+    assert received.kind == "MagnumCluster"
     assert received.metadata.name == data.metadata.name
-    assert received.metadata.namespace
+    assert received.metadata.namespace == "testing"
     assert received.metadata.created
     assert received.metadata.modified
     assert received.spec == data.spec
@@ -309,31 +44,142 @@ async def test_create_magnum_cluster(aiohttp_server, config, db, loop):
     assert stored == received
 
 
-async def test_update_magnum_cluster(aiohttp_server, config, db, loop):
-    cluster = MagnumClusterFactory(spec__master_count=1)
-    await db.put(cluster)
-    cluster.spec.master_count = 3
-    cluster.spec.node_count = 7
+async def test_delete_magnum_cluster(aiohttp_server, config, db, loop):
+    data = MagnumClusterFactory(metadata__finalizers="keep-me")
+    await db.put(data)
 
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         openstack_api = OpenStackApi(client)
-        received = await openstack_api.update_magnum_cluster(
-            namespace=cluster.metadata.namespace,
-            name=cluster.metadata.name,
-            body=cluster,
+        received = await openstack_api.delete_magnum_cluster(
+            namespace=data.metadata.namespace, name=data.metadata.name
         )
 
-    assert received.spec.master_count == 1
-    assert received.spec.node_count == 7
-    assert received.metadata.created == cluster.metadata.created
-    assert received.metadata.modified
+    assert received.api == "openstack"
+    assert received.kind == "MagnumCluster"
+    assert received.metadata.deleted is not None
 
     stored = await db.get(
-        MagnumCluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        MagnumCluster, namespace=data.metadata.namespace, name=data.metadata.name
     )
     assert stored == received
+
+
+async def test_list_magnum_clusters(aiohttp_server, config, db, loop):
+    # Populate database
+    data = [
+        MagnumClusterFactory(),
+        MagnumClusterFactory(),
+        MagnumClusterFactory(),
+        MagnumClusterFactory(),
+        MagnumClusterFactory(),
+        MagnumClusterFactory(metadata__namespace="other"),
+    ]
+    for elt in data:
+        await db.put(elt)
+
+    # Start API server
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        openstack_api = OpenStackApi(client)
+        received = await openstack_api.list_magnum_clusters(namespace="testing")
+
+    assert received.api == "openstack"
+    assert received.kind == "MagnumClusterList"
+
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(data[:-1], key=key)
+
+
+@with_timeout(3)
+async def test_watch_magnum_clusters(aiohttp_server, config, db, loop):
+    data = [
+        MagnumClusterFactory(),
+        MagnumClusterFactory(),
+        MagnumClusterFactory(),
+        MagnumClusterFactory(metadata__namespace="other"),
+    ]
+
+    async def modify():
+        for elt in data:
+            await db.put(elt)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        openstack_api = OpenStackApi(client)
+        async with openstack_api.watch_magnum_clusters(namespace="testing") as watcher:
+            modifying = loop.create_task(modify())
+
+            async for i, event in aenumerate(watcher):
+                expected = data[i]
+                assert event.type == WatchEventType.ADDED
+                assert event.object == expected
+
+                # '1' because of the offset length-index and '1' for the resource in
+                # another namespace
+                if i == len(data) - 2:
+                    break
+
+            await modifying
+
+
+async def test_list_all_magnum_clusters(aiohttp_server, config, db, loop):
+    # Populate database
+    data = [
+        MagnumClusterFactory(),
+        MagnumClusterFactory(),
+        MagnumClusterFactory(),
+        MagnumClusterFactory(),
+        MagnumClusterFactory(),
+        MagnumClusterFactory(metadata__namespace="other"),
+    ]
+    for elt in data:
+        await db.put(elt)
+
+    # Start API server
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        openstack_api = OpenStackApi(client)
+        received = await openstack_api.list_all_magnum_clusters()
+
+    assert received.api == "openstack"
+    assert received.kind == "MagnumClusterList"
+
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(data, key=key)
+
+
+@with_timeout(3)
+async def test_watch_all_magnum_clusters(aiohttp_server, config, db, loop):
+    data = [
+        MagnumClusterFactory(metadata__namespace="testing"),
+        MagnumClusterFactory(metadata__namespace="default"),
+    ]
+
+    async def modify():
+        for elt in data:
+            await db.put(elt)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        openstack_api = OpenStackApi(client)
+        async with openstack_api.watch_all_magnum_clusters() as watcher:
+            modifying = loop.create_task(modify())
+
+            async for i, event in aenumerate(watcher):
+                expected = data[i]
+                assert event.type == WatchEventType.ADDED
+                assert event.object == expected
+
+                if i == len(data) - 1:
+                    break
+
+            await modifying
 
 
 async def test_read_magnum_cluster(aiohttp_server, config, db, loop):
@@ -350,10 +196,36 @@ async def test_read_magnum_cluster(aiohttp_server, config, db, loop):
         assert received == data
 
 
+async def test_update_magnum_cluster(aiohttp_server, config, db, loop):
+    data = MagnumClusterFactory(spec__master_count=1)
+    await db.put(data)
+    data.spec.master_count = 3
+    data.spec.node_count = 7
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        openstack_api = OpenStackApi(client)
+        received = await openstack_api.update_magnum_cluster(
+            namespace=data.metadata.namespace, name=data.metadata.name, body=data
+        )
+
+    assert received.api == "openstack"
+    assert received.kind == "MagnumCluster"
+    assert data.metadata.modified < received.metadata.modified
+    assert received.spec.master_count == 1
+    assert received.spec.node_count == 7
+
+    stored = await db.get(
+        MagnumCluster, namespace=data.metadata.namespace, name=data.metadata.name
+    )
+    assert stored == received
+
+
 async def test_update_magnum_cluster_binding(aiohttp_server, config, db, loop):
-    cluster = MagnumClusterFactory()
+    data = MagnumClusterFactory()
     project = ProjectFactory()
-    await db.put(cluster)
+    await db.put(data)
     await db.put(project)
 
     project_ref = resource_ref(project)
@@ -364,36 +236,246 @@ async def test_update_magnum_cluster_binding(aiohttp_server, config, db, loop):
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         openstack_api = OpenStackApi(client)
         received = await openstack_api.update_magnum_cluster_binding(
-            namespace=cluster.metadata.namespace,
-            name=cluster.metadata.name,
-            body=binding,
+            namespace=data.metadata.namespace, name=data.metadata.name, body=binding
         )
-        assert received.status.project == project_ref
-        assert received.status.template == project.spec.template
-        assert project_ref in received.metadata.owners
+
+    assert received.api == "openstack"
+    assert received.kind == "MagnumCluster"
+    assert received.status.project == project_ref
+    assert received.status.template == project.spec.template
+    assert project_ref in received.metadata.owners
 
     stored = await db.get(
-        MagnumCluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        MagnumCluster, namespace=data.metadata.namespace, name=data.metadata.name
     )
-    assert stored.status.project == project_ref
-    assert stored.status.template == project.spec.template
-    assert project_ref in stored.metadata.owners
+    assert stored == received
 
 
-async def test_delete_magnum_cluster(aiohttp_server, config, db, loop):
-    data = MagnumClusterFactory()
+async def test_update_magnum_cluster_status(aiohttp_server, config, db, loop):
+    data = MagnumClusterFactory(status__state=MagnumClusterState.PENDING)
+    await db.put(data)
+
+    data.status.state = MagnumClusterState.FAILED
+    data.status.reason = ReasonFactory()
+    data.status.project = ResourceRef(
+        api="openstack", kind="Project", namespace="testing", name="test-project"
+    )
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        openstack_api = OpenStackApi(client)
+        received = await openstack_api.update_magnum_cluster_status(
+            namespace=data.metadata.namespace, name=data.metadata.name, body=data
+        )
+
+    assert received.api == "openstack"
+    assert received.kind == "MagnumCluster"
+    assert received.metadata == data.metadata
+    assert received.status == data.status
+
+    stored = await db.get(
+        MagnumCluster, namespace=data.metadata.namespace, name=data.metadata.name
+    )
+    assert stored == received
+
+
+async def test_create_project(aiohttp_server, config, db, loop):
+    data = ProjectFactory()
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        openstack_api = OpenStackApi(client)
+        received = await openstack_api.create_project(
+            namespace=data.metadata.namespace, body=data
+        )
+
+    assert received.api == "openstack"
+    assert received.kind == "Project"
+    assert received.metadata.name == data.metadata.name
+    assert received.metadata.namespace == "testing"
+    assert received.metadata.created
+    assert received.metadata.modified
+    assert received.spec == data.spec
+
+    stored = await db.get(
+        Project, namespace=data.metadata.namespace, name=data.metadata.name
+    )
+    assert stored == received
+
+
+async def test_delete_project(aiohttp_server, config, db, loop):
+    data = ProjectFactory(metadata__finalizers="keep-me")
     await db.put(data)
 
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         openstack_api = OpenStackApi(client)
-        received = await openstack_api.delete_magnum_cluster(
+        received = await openstack_api.delete_project(
             namespace=data.metadata.namespace, name=data.metadata.name
         )
-        assert received.metadata.deleted is not None
+
+    assert received.api == "openstack"
+    assert received.kind == "Project"
+    assert received.metadata.deleted is not None
 
     stored = await db.get(
-        MagnumCluster, namespace=data.metadata.namespace, name=data.metadata.name
+        Project, namespace=data.metadata.namespace, name=data.metadata.name
     )
-    assert stored.metadata.deleted is not None
+    assert stored == received
+
+
+async def test_list_projects(aiohttp_server, config, db, loop):
+    # Populate database
+    data = [
+        ProjectFactory(),
+        ProjectFactory(),
+        ProjectFactory(),
+        ProjectFactory(),
+        ProjectFactory(),
+        ProjectFactory(metadata__namespace="other"),
+    ]
+    for elt in data:
+        await db.put(elt)
+
+    # Start API server
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        openstack_api = OpenStackApi(client)
+        received = await openstack_api.list_projects(namespace="testing")
+
+    assert received.api == "openstack"
+    assert received.kind == "ProjectList"
+
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(data[:-1], key=key)
+
+
+@with_timeout(3)
+async def test_watch_projects(aiohttp_server, config, db, loop):
+    data = [
+        ProjectFactory(),
+        ProjectFactory(),
+        ProjectFactory(),
+        ProjectFactory(metadata__namespace="other"),
+    ]
+
+    async def modify():
+        for elt in data:
+            await db.put(elt)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        openstack_api = OpenStackApi(client)
+        async with openstack_api.watch_projects(namespace="testing") as watcher:
+            modifying = loop.create_task(modify())
+
+            async for i, event in aenumerate(watcher):
+                expected = data[i]
+                assert event.type == WatchEventType.ADDED
+                assert event.object == expected
+
+                # '1' because of the offset length-index and '1' for the resource in
+                # another namespace
+                if i == len(data) - 2:
+                    break
+
+            await modifying
+
+
+async def test_list_all_projects(aiohttp_server, config, db, loop):
+    # Populate database
+    data = [
+        ProjectFactory(),
+        ProjectFactory(),
+        ProjectFactory(),
+        ProjectFactory(),
+        ProjectFactory(),
+        ProjectFactory(metadata__namespace="other"),
+    ]
+    for elt in data:
+        await db.put(elt)
+
+    # Start API server
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        openstack_api = OpenStackApi(client)
+        received = await openstack_api.list_all_projects()
+
+    assert received.api == "openstack"
+    assert received.kind == "ProjectList"
+
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(data, key=key)
+
+
+@with_timeout(3)
+async def test_watch_all_projects(aiohttp_server, config, db, loop):
+    data = [
+        ProjectFactory(metadata__namespace="testing"),
+        ProjectFactory(metadata__namespace="default"),
+    ]
+
+    async def modify():
+        for elt in data:
+            await db.put(elt)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        openstack_api = OpenStackApi(client)
+        async with openstack_api.watch_all_projects() as watcher:
+            modifying = loop.create_task(modify())
+
+            async for i, event in aenumerate(watcher):
+                expected = data[i]
+                assert event.type == WatchEventType.ADDED
+                assert event.object == expected
+
+                if i == len(data) - 1:
+                    break
+
+            await modifying
+
+
+async def test_read_project(aiohttp_server, config, db, loop):
+    data = ProjectFactory()
+    await db.put(data)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        openstack_api = OpenStackApi(client)
+        received = await openstack_api.read_project(
+            namespace=data.metadata.namespace, name=data.metadata.name
+        )
+        assert received == data
+
+
+async def test_update_project(aiohttp_server, config, db, loop):
+    data = ProjectFactory()
+    await db.put(data)
+    data.spec = ProjectFactory().spec
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        openstack_api = OpenStackApi(client)
+        received = await openstack_api.update_project(
+            namespace=data.metadata.namespace, name=data.metadata.name, body=data
+        )
+
+    assert received.api == "openstack"
+    assert received.kind == "Project"
+    assert data.metadata.modified < received.metadata.modified
+    assert received.spec == data.spec
+
+    stored = await db.get(
+        Project, namespace=data.metadata.namespace, name=data.metadata.name
+    )
+    assert stored == received

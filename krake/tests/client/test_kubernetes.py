@@ -1,57 +1,20 @@
-from operator import attrgetter
 import yaml
+from operator import attrgetter
 
 from krake.api.app import create_app
 from krake.client import Client
 from krake.client.kubernetes import KubernetesApi
+from krake.data.core import resource_ref, ResourceRef, WatchEventType
 from krake.data.kubernetes import (
     Application,
-    ApplicationList,
-    ApplicationState,
-    ClusterList,
     Cluster,
+    ApplicationState,
+    ClusterBinding,
+    ApplicationComplete,
 )
 from krake.test_utils import with_timeout, aenumerate
 
-from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
-
-manifest = list(
-    yaml.safe_load_all(
-        """---
-apiVersion: v1
-kind: Service
-metadata:
-  name: wordpress-mysql
-  labels:
-    app: wordpress
-spec:
-  ports:
-    - port: 3306
-  selector:
-    app: wordpress
-    tier: mysql
-  clusterIP: None
-"""
-    )
-)
-
-
-async def test_list_applications(aiohttp_server, config, db, loop):
-    # Populate database
-    data = [ApplicationFactory(), ApplicationFactory()]
-    for app in data:
-        await db.put(app)
-
-    # Start API server
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        kubernetes_api = KubernetesApi(client)
-        apps = await kubernetes_api.list_applications(namespace="testing")
-        assert isinstance(apps, ApplicationList)
-
-    key = attrgetter("metadata.name")
-    assert sorted(apps.items, key=key) == sorted(data, key=key)
+from tests.factories.kubernetes import ApplicationFactory, ClusterFactory, ReasonFactory
 
 
 async def test_create_application(aiohttp_server, config, db, loop):
@@ -65,13 +28,171 @@ async def test_create_application(aiohttp_server, config, db, loop):
             namespace=data.metadata.namespace, body=data
         )
 
+    assert received.api == "kubernetes"
+    assert received.kind == "Application"
+    assert received.metadata.name == data.metadata.name
+    assert received.metadata.namespace == "testing"
+    assert received.metadata.created
+    assert received.metadata.modified
     assert received.spec == data.spec
-    assert received.status.state == ApplicationState.PENDING
 
     stored = await db.get(
         Application, namespace=data.metadata.namespace, name=data.metadata.name
     )
     assert stored == received
+    assert stored.spec == data.spec
+
+
+async def test_delete_application(aiohttp_server, config, db, loop):
+    data = ApplicationFactory(metadata__finalizers="keep-me")
+    await db.put(data)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        kubernetes_api = KubernetesApi(client)
+        received = await kubernetes_api.delete_application(
+            namespace=data.metadata.namespace, name=data.metadata.name
+        )
+
+    assert received.api == "kubernetes"
+    assert received.kind == "Application"
+    assert received.metadata.deleted is not None
+
+    stored = await db.get(
+        Application, namespace=data.metadata.namespace, name=data.metadata.name
+    )
+    assert stored == received
+
+
+async def test_list_applications(aiohttp_server, config, db, loop):
+    # Populate database
+    data = [
+        ApplicationFactory(),
+        ApplicationFactory(),
+        ApplicationFactory(),
+        ApplicationFactory(),
+        ApplicationFactory(),
+        ApplicationFactory(metadata__namespace="other"),
+    ]
+    for elt in data:
+        await db.put(elt)
+
+    # Start API server
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        kubernetes_api = KubernetesApi(client)
+        received = await kubernetes_api.list_applications(namespace="testing")
+
+    assert received.api == "kubernetes"
+    assert received.kind == "ApplicationList"
+
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(data[:-1], key=key)
+
+
+@with_timeout(3)
+async def test_watch_applications(aiohttp_server, config, db, loop):
+    data = [
+        ApplicationFactory(),
+        ApplicationFactory(),
+        ApplicationFactory(),
+        ApplicationFactory(metadata__namespace="other"),
+    ]
+
+    async def modify():
+        for elt in data:
+            await db.put(elt)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        kubernetes_api = KubernetesApi(client)
+        async with kubernetes_api.watch_applications(namespace="testing") as watcher:
+            modifying = loop.create_task(modify())
+
+            async for i, event in aenumerate(watcher):
+                expected = data[i]
+                assert event.type == WatchEventType.ADDED
+                assert event.object == expected
+
+                # '1' because of the offset length-index and '1' for the resource in
+                # another namespace
+                if i == len(data) - 2:
+                    break
+
+            await modifying
+
+
+async def test_list_all_applications(aiohttp_server, config, db, loop):
+    # Populate database
+    data = [
+        ApplicationFactory(),
+        ApplicationFactory(),
+        ApplicationFactory(),
+        ApplicationFactory(),
+        ApplicationFactory(),
+        ApplicationFactory(metadata__namespace="other"),
+    ]
+    for elt in data:
+        await db.put(elt)
+
+    # Start API server
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        kubernetes_api = KubernetesApi(client)
+        received = await kubernetes_api.list_all_applications()
+
+    assert received.api == "kubernetes"
+    assert received.kind == "ApplicationList"
+
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(data, key=key)
+
+
+@with_timeout(3)
+async def test_watch_all_applications(aiohttp_server, config, db, loop):
+    data = [
+        ApplicationFactory(metadata__namespace="testing"),
+        ApplicationFactory(metadata__namespace="default"),
+    ]
+
+    async def modify():
+        for elt in data:
+            await db.put(elt)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        kubernetes_api = KubernetesApi(client)
+        async with kubernetes_api.watch_all_applications() as watcher:
+            modifying = loop.create_task(modify())
+
+            async for i, event in aenumerate(watcher):
+                expected = data[i]
+                assert event.type == WatchEventType.ADDED
+                assert event.object == expected
+
+                if i == len(data) - 1:
+                    break
+
+            await modifying
+
+
+async def test_read_application(aiohttp_server, config, db, loop):
+    data = ApplicationFactory()
+    await db.put(data)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        kubernetes_api = KubernetesApi(client)
+        received = await kubernetes_api.read_application(
+            namespace=data.metadata.namespace, name=data.metadata.name
+        )
+        assert received == data
 
 
 updated_manifest = list(
@@ -115,114 +236,116 @@ metadata:
 
 
 async def test_update_application(aiohttp_server, config, db, loop):
-    app = ApplicationFactory(status__state=ApplicationState.RUNNING)
-    await db.put(app)
-    app.spec.manifest = updated_manifest
-    app.spec.observer_schema = updated_observer_schema
+    data = ApplicationFactory(status__state=ApplicationState.RUNNING)
+    await db.put(data)
+    data.spec.manifest = updated_manifest
+    data.spec.observer_schema = updated_observer_schema
 
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         kubernetes_api = KubernetesApi(client)
         received = await kubernetes_api.update_application(
-            namespace=app.metadata.namespace, name=app.metadata.name, body=app
+            namespace=data.metadata.namespace, name=data.metadata.name, body=data
         )
 
-    # State is changed through an update
+    assert received.api == "kubernetes"
+    assert received.kind == "Application"
+    assert data.metadata.modified < received.metadata.modified
     assert received.spec.manifest == updated_manifest
-    assert received.status.state == app.status.state
+    assert received.status.state == data.status.state
 
     stored = await db.get(
-        Application, namespace=app.metadata.namespace, name=app.metadata.name
+        Application, namespace=data.metadata.namespace, name=data.metadata.name
     )
     assert stored.spec.manifest == updated_manifest
     assert stored.spec.observer_schema == updated_observer_schema
-    assert stored.status.state == app.status.state
+    assert stored.status.state == data.status.state
 
 
-async def test_read_application(aiohttp_server, config, db, loop):
-    data = ApplicationFactory()
+async def test_update_application_binding(aiohttp_server, config, db, loop):
+    data = ApplicationFactory(status__state=ApplicationState.PENDING)
+    await db.put(data)
+    cluster = ClusterFactory()
+    await db.put(cluster)
+
+    cluster_ref = resource_ref(cluster)
+    binding = ClusterBinding(cluster=cluster_ref)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        kubernetes_api = KubernetesApi(client)
+        received = await kubernetes_api.update_application_binding(
+            namespace=data.metadata.namespace, name=data.metadata.name, body=binding
+        )
+
+    assert received.api == "kubernetes"
+    assert received.kind == "Application"
+    assert received.status.scheduled_to == cluster_ref
+    assert received.status.running_on is None
+    assert received.status.state == ApplicationState.PENDING
+    assert cluster_ref in received.metadata.owners
+
+    stored = await db.get(
+        Application, namespace=data.metadata.namespace, name=data.metadata.name
+    )
+    assert stored.status.scheduled_to == cluster_ref
+    assert stored.status.running_on is None
+    assert stored.status.state == ApplicationState.PENDING
+    assert cluster_ref in stored.metadata.owners
+
+
+async def test_update_application_complete(aiohttp_server, config, db, loop):
+    token = "a_random_token"
+    data = ApplicationFactory(status__token=token)
     await db.put(data)
 
+    complete = ApplicationComplete(token=token)
+
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         kubernetes_api = KubernetesApi(client)
-        received = await kubernetes_api.read_application(
-            namespace=data.metadata.namespace, name=data.metadata.name
+        received = await kubernetes_api.update_application_complete(
+            namespace=data.metadata.namespace, name=data.metadata.name, body=complete
         )
-        assert received == data
+
+    assert received.api == "kubernetes"
+    assert received.kind == "Application"
+    assert received.metadata.deleted
+
+    stored = await db.get(
+        Application, namespace=data.metadata.namespace, name=data.metadata.name
+    )
+    assert stored.metadata.deleted
 
 
-@with_timeout(3)
-async def test_watch_applications_in_namespace(aiohttp_server, config, db, loop):
-    data = [ApplicationFactory(), ApplicationFactory(), ApplicationFactory()]
-
-    async def modify():
-        for app in data:
-            await db.put(app)
-
+async def test_update_application_status(aiohttp_server, config, db, loop):
+    data = ApplicationFactory()
+    await db.put(data)
+    data.status.state = ApplicationState.FAILED
+    data.status.reason = ReasonFactory()
+    data.status.cluster = ResourceRef(
+        api="kubernetes", kind="Cluster", namespace="testing", name="test-cluster"
+    )
+    data.status.services = {"service1": "127.0.0.1:38531"}
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         kubernetes_api = KubernetesApi(client)
-        async with kubernetes_api.watch_applications(namespace="testing") as watcher:
-            modifying = loop.create_task(modify())
+        received = await kubernetes_api.update_application_status(
+            namespace=data.metadata.namespace, name=data.metadata.name, body=data
+        )
 
-            async for i, event in aenumerate(watcher):
-                expected = data[i]
-                assert event.object == expected
+    assert received.api == "kubernetes"
+    assert received.kind == "Application"
+    assert received.status == data.status
 
-                if i == len(data) - 1:
-                    break
-
-            await modifying
-
-
-@with_timeout(3)
-async def test_watch_applications_all_namespaces(aiohttp_server, config, db, loop):
-    data = [
-        ApplicationFactory(metadata__namespace="testing"),
-        ApplicationFactory(metadata__namespace="default"),
-    ]
-
-    async def modify():
-        for app in data:
-            await db.put(app)
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        kubernetes_api = KubernetesApi(client)
-        async with kubernetes_api.watch_all_applications() as watcher:
-            modifying = loop.create_task(modify())
-
-            async for i, event in aenumerate(watcher):
-                expected = data[i]
-                assert event.object == expected
-
-                if i == len(data) - 1:
-                    break
-
-            await modifying
-
-
-async def test_list_clusters(aiohttp_server, config, db, loop):
-    # Populate database
-    data = [ClusterFactory(), ClusterFactory()]
-    for cluster in data:
-        await db.put(cluster)
-
-    # Start API server
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        kubernetes_api = KubernetesApi(client)
-        clusters = await kubernetes_api.list_clusters(namespace="testing")
-        assert isinstance(clusters, ClusterList)
-
-    key = attrgetter("metadata.name")
-    assert sorted(clusters.items, key=key) == sorted(data, key=key)
+    stored = await db.get(
+        Application, namespace=data.metadata.namespace, name=data.metadata.name
+    )
+    assert stored == received
 
 
 async def test_create_cluster(aiohttp_server, config, db, loop):
@@ -236,12 +359,157 @@ async def test_create_cluster(aiohttp_server, config, db, loop):
             namespace=data.metadata.namespace, body=data
         )
 
+    assert received.api == "kubernetes"
+    assert received.kind == "Cluster"
+    assert received.metadata.name == data.metadata.name
+    assert received.metadata.namespace == "testing"
+    assert received.metadata.created
+    assert received.metadata.modified
     assert received.spec == data.spec
 
     stored = await db.get(
         Cluster, namespace=data.metadata.namespace, name=data.metadata.name
     )
     assert stored == received
+
+
+async def test_delete_cluster(aiohttp_server, config, db, loop):
+    data = ClusterFactory(metadata__finalizers="keep-me")
+    await db.put(data)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        kubernetes_api = KubernetesApi(client)
+        received = await kubernetes_api.delete_cluster(
+            namespace=data.metadata.namespace, name=data.metadata.name
+        )
+
+    assert received.api == "kubernetes"
+    assert received.kind == "Cluster"
+    assert received.metadata.deleted is not None
+    assert received.spec == data.spec
+
+    stored = await db.get(
+        Cluster, namespace=data.metadata.namespace, name=data.metadata.name
+    )
+    assert stored == received
+
+
+async def test_list_clusters(aiohttp_server, config, db, loop):
+    # Populate database
+    data = [
+        ClusterFactory(),
+        ClusterFactory(),
+        ClusterFactory(),
+        ClusterFactory(),
+        ClusterFactory(),
+        ClusterFactory(metadata__namespace="other"),
+    ]
+    for elt in data:
+        await db.put(elt)
+
+    # Start API server
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        kubernetes_api = KubernetesApi(client)
+        received = await kubernetes_api.list_clusters(namespace="testing")
+
+    assert received.api == "kubernetes"
+    assert received.kind == "ClusterList"
+
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(data[:-1], key=key)
+
+
+@with_timeout(3)
+async def test_watch_clusters(aiohttp_server, config, db, loop):
+    data = [
+        ClusterFactory(),
+        ClusterFactory(),
+        ClusterFactory(),
+        ClusterFactory(metadata__namespace="other"),
+    ]
+
+    async def modify():
+        for elt in data:
+            await db.put(elt)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        kubernetes_api = KubernetesApi(client)
+        async with kubernetes_api.watch_clusters(namespace="testing") as watcher:
+            modifying = loop.create_task(modify())
+
+            async for i, event in aenumerate(watcher):
+                expected = data[i]
+                assert event.type == WatchEventType.ADDED
+                assert event.object == expected
+
+                # '1' because of the offset length-index and '1' for the resource in
+                # another namespace
+                if i == len(data) - 2:
+                    break
+
+            await modifying
+
+
+async def test_list_all_clusters(aiohttp_server, config, db, loop):
+    # Populate database
+    data = [
+        ClusterFactory(),
+        ClusterFactory(),
+        ClusterFactory(),
+        ClusterFactory(),
+        ClusterFactory(),
+        ClusterFactory(metadata__namespace="other"),
+    ]
+    for elt in data:
+        await db.put(elt)
+
+    # Start API server
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        kubernetes_api = KubernetesApi(client)
+        received = await kubernetes_api.list_all_clusters()
+
+    assert received.api == "kubernetes"
+    assert received.kind == "ClusterList"
+
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(data, key=key)
+
+
+@with_timeout(3)
+async def test_watch_all_clusters(aiohttp_server, config, db, loop):
+    data = [
+        ClusterFactory(metadata__namespace="testing"),
+        ClusterFactory(metadata__namespace="default"),
+    ]
+
+    async def modify():
+        for elt in data:
+            await db.put(elt)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        kubernetes_api = KubernetesApi(client)
+        async with kubernetes_api.watch_all_clusters() as watcher:
+            modifying = loop.create_task(modify())
+
+            async for i, event in aenumerate(watcher):
+                expected = data[i]
+                assert event.type == WatchEventType.ADDED
+                assert event.object == expected
+
+                if i == len(data) - 1:
+                    break
+
+            await modifying
 
 
 async def test_read_cluster(aiohttp_server, config, db, loop):
@@ -258,75 +526,25 @@ async def test_read_cluster(aiohttp_server, config, db, loop):
         assert received == data
 
 
-@with_timeout(3)
-async def test_watch_clusters_in_namespace(aiohttp_server, config, db, loop):
-    data = [ClusterFactory(), ClusterFactory(), ClusterFactory()]
-
-    async def modify():
-        for cluster in data:
-            await db.put(cluster)
+async def test_update_cluster(aiohttp_server, config, db, loop):
+    data = ClusterFactory(spec__custom_resources=[])
+    await db.put(data)
+    data.spec.custom_resources = ["A", "B"]
 
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         kubernetes_api = KubernetesApi(client)
-        async with kubernetes_api.watch_clusters(namespace="testing") as watcher:
-            modifying = loop.create_task(modify())
-
-            async for i, event in aenumerate(watcher):
-                expected = data[i]
-                assert event.object == expected
-
-                if i == len(data) - 1:
-                    break
-
-            await modifying
-
-
-@with_timeout(3)
-async def test_watch_clusters_all_namespaces(aiohttp_server, config, db, loop):
-    data = [
-        ClusterFactory(metadata__namespace="testing"),
-        ClusterFactory(metadata__namespace="default"),
-    ]
-
-    async def modify():
-        for cluster in data:
-            await db.put(cluster)
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        kubernetes_api = KubernetesApi(client)
-        async with kubernetes_api.watch_all_clusters() as watcher:
-            modifying = loop.create_task(modify())
-
-            async for i, event in aenumerate(watcher):
-                expected = data[i]
-                assert event.object == expected
-
-                if i == len(data) - 1:
-                    break
-
-            await modifying
-
-
-async def test_delete_cluster(aiohttp_server, config, db, loop):
-    cluster = ClusterFactory(metadata__finalizers="keep-me")
-    await db.put(cluster)
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        kubernetes_api = KubernetesApi(client)
-        received = await kubernetes_api.delete_cluster(
-            namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        received = await kubernetes_api.update_cluster(
+            namespace=data.metadata.namespace, name=data.metadata.name, body=data
         )
 
-    assert received.spec == cluster.spec
-    assert received.metadata.deleted
+    assert received.api == "kubernetes"
+    assert received.kind == "Cluster"
+    assert data.metadata.modified < received.metadata.modified
+    assert received.spec.custom_resources == data.spec.custom_resources
 
     stored = await db.get(
-        Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        Cluster, namespace=data.metadata.namespace, name=data.metadata.name
     )
     assert stored == received

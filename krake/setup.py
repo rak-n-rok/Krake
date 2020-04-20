@@ -9,7 +9,6 @@ install_requires = [
     "keystoneauth1==4.*",
     "kubernetes-asyncio==12.*",
     "lark-parser==0.11.*",
-    "makefun==1.*",
     "marshmallow==3.*",
     "marshmallow-enum",
     "marshmallow-oneofschema",

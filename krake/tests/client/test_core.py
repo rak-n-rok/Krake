@@ -1,278 +1,26 @@
 from operator import attrgetter
-from aiohttp.test_utils import TestServer as Server
 
 from krake.api.app import create_app
 from krake.client import Client
-from krake.controller import create_ssl_context
 from krake.client.core import CoreApi
-from krake.data.config import (
-    TlsServerConfiguration,
-    AuthenticationConfiguration,
-    TlsClientConfiguration,
-)
 from krake.data.core import (
-    ListMetadata,
-    Role,
-    RoleBinding,
-    resource_ref,
     GlobalMetric,
     GlobalMetricsProvider,
+    RoleBinding,
+    Role,
+    WatchEventType,
 )
-
-from tests.factories.core import RoleFactory, RoleBindingFactory, RoleRuleFactory
+from krake.test_utils import with_timeout, aenumerate
 
 from tests.factories.core import (
     GlobalMetricFactory,
-    MetricSpecProviderFactory,
     GlobalMetricsProviderFactory,
     MetricsProviderSpecFactory,
+    MetricSpecProviderFactory,
+    RoleBindingFactory,
+    RoleFactory,
+    RoleRuleFactory,
 )
-
-
-async def test_list_roles(aiohttp_server, config, db, loop):
-    # Populate database
-    data = [RoleFactory(), RoleFactory()]
-    for role in data:
-        await db.put(role)
-
-    # Start API server
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        core_api = CoreApi(client)
-        roles = await core_api.list_roles()
-
-    assert roles.api == "core"
-    assert roles.kind == "RoleList"
-    assert isinstance(roles.metadata, ListMetadata)
-
-    key = attrgetter("metadata.name")
-    assert sorted(roles.items, key=key) == sorted(data, key=key)
-
-
-async def test_create_role(aiohttp_server, config, db, loop):
-    data = RoleFactory()
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        core_api = CoreApi(client)
-        received = await core_api.create_role(data)
-
-    assert received.metadata.name == data.metadata.name
-    assert received.metadata.namespace is None
-    assert received.metadata.created
-    assert received.metadata.modified
-    assert received.rules == data.rules
-
-    stored = await db.get(Role, name=data.metadata.name)
-    assert stored == received
-
-
-async def test_update_role(aiohttp_server, config, db, loop):
-    role = RoleFactory()
-    await db.put(role)
-    role.rules.append(RoleRuleFactory())
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        core_api = CoreApi(client)
-        received = await core_api.update_role(name=role.metadata.name, body=role)
-
-    assert received.rules == role.rules
-    assert received.metadata.created == role.metadata.created
-    assert received.metadata.modified
-
-    stored = await db.get(Role, name=role.metadata.name)
-    assert stored.rules == role.rules
-    assert stored.metadata.created == role.metadata.created
-    assert stored.metadata.modified
-
-
-async def test_read_role(aiohttp_server, config, db, loop):
-    data = RoleFactory()
-    await db.put(data)
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        core_api = CoreApi(client)
-        received = await core_api.read_role(name=data.metadata.name)
-        assert received == data
-
-
-async def test_delete_role(aiohttp_server, config, db, loop):
-    data = RoleFactory()
-    await db.put(data)
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        core_api = CoreApi(client)
-        received = await core_api.delete_role(name=data.metadata.name)
-
-        assert resource_ref(received) == resource_ref(data)
-
-    stored = await db.get(Role, name=data.metadata.name)
-    assert stored.metadata.deleted is not None
-
-
-async def test_list_rolebindings(aiohttp_server, config, db, loop):
-    # Populate database
-    data = [RoleBindingFactory(), RoleBindingFactory()]
-    for binding in data:
-        await db.put(binding)
-
-    # Start API server
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        core_api = CoreApi(client)
-        bindings = await core_api.list_role_bindings()
-
-    assert bindings.api == "core"
-    assert bindings.kind == "RoleBindingList"
-    assert isinstance(bindings.metadata, ListMetadata)
-
-    key = attrgetter("metadata.name")
-    assert sorted(bindings.items, key=key) == sorted(data, key=key)
-
-
-async def test_create_rolebinding(aiohttp_server, config, db, loop):
-    data = RoleBindingFactory()
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        core_api = CoreApi(client)
-        received = await core_api.create_role_binding(data)
-
-    assert received.metadata.name == data.metadata.name
-    assert received.metadata.namespace is None
-    assert received.metadata.created
-    assert received.metadata.modified
-    assert received.users == data.users
-    assert received.roles == data.roles
-
-    stored = await db.get(RoleBinding, name=data.metadata.name)
-    assert stored == received
-
-
-async def test_update_rolebinding(aiohttp_server, config, db, loop):
-    binding = RoleBindingFactory()
-    await db.put(binding)
-    binding.users.append("test-user")
-    binding.roles.append("test-role")
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        core_api = CoreApi(client)
-        received = await core_api.update_role_binding(
-            name=binding.metadata.name, body=binding
-        )
-
-    assert received.users == binding.users
-    assert received.roles == binding.roles
-    assert received.metadata.created == binding.metadata.created
-    assert received.metadata.modified
-
-    stored = await db.get(RoleBinding, name=binding.metadata.name)
-    assert stored.users == binding.users
-    assert stored.roles == binding.roles
-    assert stored.metadata.created == binding.metadata.created
-    assert stored.metadata.modified
-
-
-async def test_get_rolebinding(aiohttp_server, config, db, loop):
-    data = RoleBindingFactory()
-    await db.put(data)
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        core_api = CoreApi(client)
-        received = await core_api.read_role_binding(name=data.metadata.name)
-        assert received == data
-
-
-async def test_delete_rolebinding(aiohttp_server, config, db, loop):
-    data = RoleBindingFactory()
-    await db.put(data)
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        core_api = CoreApi(client)
-        received = await core_api.delete_role_binding(name=data.metadata.name)
-        assert resource_ref(received) == resource_ref(data)
-
-    stored = await db.get(RoleBinding, name=data.metadata.name)
-    assert stored.metadata.deleted is not None
-
-
-async def test_connect_ssl(aiohttp_server, config, loop, pki):
-    server_cert = pki.gencert("api-server")
-    client_cert = pki.gencert("client")
-
-    authentication = {
-        "allow_anonymous": True,
-        "strategy": {
-            "keystone": {"enabled": False, "endpoint": "localhost"},
-            "keycloak": {"enabled": False, "endpoint": "endpoint", "realm": "krake"},
-            "static": {"enabled": False, "name": "test-user"},
-        },
-    }
-    config.authentication = AuthenticationConfiguration.deserialize(authentication)
-
-    tls_config = {
-        "enabled": True,
-        "client_ca": pki.ca.cert,
-        "cert": server_cert.cert,
-        "key": server_cert.key,
-    }
-    config.tls = TlsServerConfiguration.deserialize(tls_config)
-    app = create_app(config=config)
-
-    server = Server(app)
-    await server.start_server(ssl=app["ssl_context"])
-    assert server.scheme == "https"
-
-    client_tls = {
-        "enabled": True,
-        "client_ca": pki.ca.cert,
-        "client_cert": client_cert.cert,
-        "client_key": client_cert.key,
-    }
-    ssl_context = create_ssl_context(TlsClientConfiguration.deserialize(client_tls))
-
-    url = f"https://{server.host}:{server.port}"
-    async with Client(url=url, loop=loop, ssl_context=ssl_context) as client:
-        resp = await client.session.get(f"{url}/me")
-        data = await resp.json()
-        assert data["user"] == "client"
-
-
-async def test_list_global_metrics(aiohttp_server, config, db, loop):
-    # Populate database
-    data = [GlobalMetricFactory(), GlobalMetricFactory()]
-    for metric in data:
-        await db.put(metric)
-
-    # Start API server
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        core_api = CoreApi(client)
-        metrics = await core_api.list_global_metrics()
-
-    assert metrics.api == "core"
-    assert metrics.kind == "GlobalMetricList"
-    assert isinstance(metrics.metadata, ListMetadata)
-
-    key = attrgetter("metadata.name")
-    assert sorted(metrics.items, key=key) == sorted(data, key=key)
 
 
 async def test_create_global_metric(aiohttp_server, config, db, loop):
@@ -282,16 +30,108 @@ async def test_create_global_metric(aiohttp_server, config, db, loop):
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         core_api = CoreApi(client)
-        received = await core_api.create_global_metric(data)
+        received = await core_api.create_global_metric(body=data)
 
+    assert received.api == "core"
+    assert received.kind == "GlobalMetric"
     assert received.metadata.name == data.metadata.name
     assert received.metadata.namespace is None
     assert received.metadata.created
     assert received.metadata.modified
-    assert received.spec == data.spec
 
     stored = await db.get(GlobalMetric, name=data.metadata.name)
     assert stored == received
+
+
+async def test_delete_global_metric(aiohttp_server, config, db, loop):
+    data = GlobalMetricFactory(metadata__finalizers="keep-me")
+    await db.put(data)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.delete_global_metric(name=data.metadata.name)
+
+    assert received.api == "core"
+    assert received.kind == "GlobalMetric"
+    assert received.spec == data.spec
+    assert received.metadata.deleted is not None
+
+    stored = await db.get(GlobalMetric, name=data.metadata.name)
+    assert stored == received
+
+
+async def test_list_global_metrics(aiohttp_server, config, db, loop):
+    # Populate database
+    data = [
+        GlobalMetricFactory(),
+        GlobalMetricFactory(),
+        GlobalMetricFactory(),
+        GlobalMetricFactory(),
+        GlobalMetricFactory(),
+        GlobalMetricFactory(),
+    ]
+    for elt in data:
+        await db.put(elt)
+
+    # Start API server
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.list_global_metrics()
+
+    assert received.api == "core"
+    assert received.kind == "GlobalMetricList"
+
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(data, key=key)
+
+
+@with_timeout(3)
+async def test_watch_global_metrics(aiohttp_server, config, db, loop):
+    data = [
+        GlobalMetricFactory(),
+        GlobalMetricFactory(),
+        GlobalMetricFactory(),
+        GlobalMetricFactory(),
+    ]
+
+    async def modify():
+        for elt in data:
+            await db.put(elt)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        async with core_api.watch_global_metrics() as watcher:
+            modifying = loop.create_task(modify())
+
+            async for i, event in aenumerate(watcher):
+                expected = data[i]
+                assert event.type == WatchEventType.ADDED
+                assert event.object == expected
+
+                # '1' because of the offset length-index and '1' for the resource in
+                # another namespace
+                if i == len(data) - 2:
+                    break
+
+            await modifying
+
+
+async def test_read_global_metric(aiohttp_server, config, db, loop):
+    data = GlobalMetricFactory()
+    await db.put(data)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.read_global_metric(name=data.metadata.name)
+        assert received == data
 
 
 async def test_update_global_metric(aiohttp_server, config, db, loop):
@@ -307,64 +147,14 @@ async def test_update_global_metric(aiohttp_server, config, db, loop):
             name=data.metadata.name, body=data
         )
 
+    assert received.api == "core"
+    assert received.kind == "GlobalMetric"
+
     assert received.spec == data.spec
-    assert received.metadata.created == data.metadata.created
-    assert received.metadata.modified
+    assert data.metadata.modified < received.metadata.modified
 
     stored = await db.get(GlobalMetric, name=data.metadata.name)
-    assert stored.spec == data.spec
-    assert stored.metadata.created == data.metadata.created
-    assert stored.metadata.modified
-
-
-async def test_read_global_metric(aiohttp_server, config, db, loop):
-    data = GlobalMetricFactory()
-    await db.put(data)
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        core_api = CoreApi(client)
-        received = await core_api.read_global_metric(name=data.metadata.name)
-        assert received == data
-
-
-async def test_delete_global_metric(aiohttp_server, config, db, loop):
-    data = GlobalMetricFactory()
-    await db.put(data)
-
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        core_api = CoreApi(client)
-        await core_api.delete_global_metric(name=data.metadata.name)
-
-    stored = await db.get(GlobalMetric, name=data.metadata.name)
-    assert stored.metadata.deleted is not None
-
-
-async def test_list_global_metrics_providers(aiohttp_server, config, db, loop):
-    # Populate database
-    data = [
-        GlobalMetricsProviderFactory(spec__type="prometheus"),
-        GlobalMetricsProviderFactory(spec__type="static"),
-    ]
-    for metrics_provider in data:
-        await db.put(metrics_provider)
-
-    # Start API server
-    server = await aiohttp_server(create_app(config=config))
-
-    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        core_api = CoreApi(client)
-        metrics_providers = await core_api.list_global_metrics_providers()
-
-    assert metrics_providers.api == "core"
-    assert metrics_providers.kind == "GlobalMetricsProviderList"
-    assert isinstance(metrics_providers.metadata, ListMetadata)
-
-    key = attrgetter("metadata.name")
-    assert sorted(metrics_providers.items, key=key) == sorted(data, key=key)
+    assert stored == received
 
 
 async def test_create_global_metrics_provider(aiohttp_server, config, db, loop):
@@ -374,16 +164,110 @@ async def test_create_global_metrics_provider(aiohttp_server, config, db, loop):
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         core_api = CoreApi(client)
-        received = await core_api.create_global_metrics_provider(data)
+        received = await core_api.create_global_metrics_provider(body=data)
 
+    assert received.api == "core"
+    assert received.kind == "GlobalMetricsProvider"
     assert received.metadata.name == data.metadata.name
     assert received.metadata.namespace is None
     assert received.metadata.created
     assert received.metadata.modified
-    assert received.spec == data.spec
 
     stored = await db.get(GlobalMetricsProvider, name=data.metadata.name)
     assert stored == received
+
+
+async def test_delete_global_metrics_provider(aiohttp_server, config, db, loop):
+    data = GlobalMetricsProviderFactory(metadata__finalizers="keep-me")
+    await db.put(data)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.delete_global_metrics_provider(
+            name=data.metadata.name
+        )
+
+    assert received.api == "core"
+    assert received.kind == "GlobalMetricsProvider"
+    assert received.spec == data.spec
+    assert received.metadata.deleted is not None
+
+    stored = await db.get(GlobalMetricsProvider, name=data.metadata.name)
+    assert stored == received
+
+
+async def test_list_global_metrics_providers(aiohttp_server, config, db, loop):
+    # Populate database
+    data = [
+        GlobalMetricsProviderFactory(),
+        GlobalMetricsProviderFactory(),
+        GlobalMetricsProviderFactory(),
+        GlobalMetricsProviderFactory(),
+        GlobalMetricsProviderFactory(),
+        GlobalMetricsProviderFactory(),
+    ]
+    for elt in data:
+        await db.put(elt)
+
+    # Start API server
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.list_global_metrics_providers()
+
+    assert received.api == "core"
+    assert received.kind == "GlobalMetricsProviderList"
+
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(data, key=key)
+
+
+@with_timeout(3)
+async def test_watch_global_metrics_providers(aiohttp_server, config, db, loop):
+    data = [
+        GlobalMetricsProviderFactory(),
+        GlobalMetricsProviderFactory(),
+        GlobalMetricsProviderFactory(),
+        GlobalMetricsProviderFactory(),
+    ]
+
+    async def modify():
+        for elt in data:
+            await db.put(elt)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        async with core_api.watch_global_metrics_providers() as watcher:
+            modifying = loop.create_task(modify())
+
+            async for i, event in aenumerate(watcher):
+                expected = data[i]
+                assert event.type == WatchEventType.ADDED
+                assert event.object == expected
+
+                # '1' because of the offset length-index and '1' for the resource in
+                # another namespace
+                if i == len(data) - 2:
+                    break
+
+            await modifying
+
+
+async def test_read_global_metrics_provider(aiohttp_server, config, db, loop):
+    data = GlobalMetricsProviderFactory()
+    await db.put(data)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.read_global_metrics_provider(name=data.metadata.name)
+        assert received == data
 
 
 async def test_update_global_metrics_provider(aiohttp_server, config, db, loop):
@@ -399,37 +283,270 @@ async def test_update_global_metrics_provider(aiohttp_server, config, db, loop):
             name=data.metadata.name, body=data
         )
 
+    assert received.api == "core"
+    assert received.kind == "GlobalMetricsProvider"
+
     assert received.spec == data.spec
-    assert received.metadata.created == data.metadata.created
-    assert received.metadata.modified
+    assert data.metadata.modified < received.metadata.modified
 
     stored = await db.get(GlobalMetricsProvider, name=data.metadata.name)
-    assert stored.spec == data.spec
-    assert stored.metadata.created == data.metadata.created
-    assert stored.metadata.modified
+    assert stored == received
 
 
-async def test_read_global_metrics_provider(aiohttp_server, config, db, loop):
-    data = GlobalMetricsProviderFactory()
+async def test_create_role(aiohttp_server, config, db, loop):
+    data = RoleFactory()
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.create_role(body=data)
+
+    assert received.api == "core"
+    assert received.kind == "Role"
+    assert received.metadata.name == data.metadata.name
+    assert received.metadata.namespace is None
+    assert received.metadata.created
+    assert received.metadata.modified
+
+    stored = await db.get(Role, name=data.metadata.name)
+    assert stored == received
+
+
+async def test_delete_role(aiohttp_server, config, db, loop):
+    data = RoleFactory(metadata__finalizers="keep-me")
     await db.put(data)
 
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         core_api = CoreApi(client)
-        received = await core_api.read_global_metrics_provider(name=data.metadata.name)
+        received = await core_api.delete_role(name=data.metadata.name)
+
+    assert received.api == "core"
+    assert received.kind == "Role"
+    assert received.metadata.deleted is not None
+
+    stored = await db.get(Role, name=data.metadata.name)
+    assert stored == received
+
+
+async def test_list_roles(aiohttp_server, config, db, loop):
+    # Populate database
+    data = [
+        RoleFactory(),
+        RoleFactory(),
+        RoleFactory(),
+        RoleFactory(),
+        RoleFactory(),
+        RoleFactory(),
+    ]
+    for elt in data:
+        await db.put(elt)
+
+    # Start API server
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.list_roles()
+
+    assert received.api == "core"
+    assert received.kind == "RoleList"
+
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(data, key=key)
+
+
+@with_timeout(3)
+async def test_watch_roles(aiohttp_server, config, db, loop):
+    data = [RoleFactory(), RoleFactory(), RoleFactory(), RoleFactory()]
+
+    async def modify():
+        for elt in data:
+            await db.put(elt)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        async with core_api.watch_roles() as watcher:
+            modifying = loop.create_task(modify())
+
+            async for i, event in aenumerate(watcher):
+                expected = data[i]
+                assert event.type == WatchEventType.ADDED
+                assert event.object == expected
+
+                # '1' because of the offset length-index and '1' for the resource in
+                # another namespace
+                if i == len(data) - 2:
+                    break
+
+            await modifying
+
+
+async def test_read_role(aiohttp_server, config, db, loop):
+    data = RoleFactory()
+    await db.put(data)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.read_role(name=data.metadata.name)
         assert received == data
 
 
-async def test_delete_global_metrics_provider(aiohttp_server, config, db, loop):
-    data = GlobalMetricsProviderFactory()
+async def test_update_role(aiohttp_server, config, db, loop):
+    data = RoleFactory()
+    await db.put(data)
+    data.rules.append(RoleRuleFactory())
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.update_role(name=data.metadata.name, body=data)
+
+    assert received.api == "core"
+    assert received.kind == "Role"
+    assert received.rules == data.rules
+    assert data.metadata.modified < received.metadata.modified
+
+    stored = await db.get(Role, name=data.metadata.name)
+    assert stored == received
+
+
+async def test_create_role_binding(aiohttp_server, config, db, loop):
+    data = RoleBindingFactory()
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.create_role_binding(body=data)
+
+    assert received.api == "core"
+    assert received.kind == "RoleBinding"
+    assert received.metadata.name == data.metadata.name
+    assert received.metadata.namespace is None
+    assert received.metadata.created
+    assert received.metadata.modified
+
+    stored = await db.get(RoleBinding, name=data.metadata.name)
+    assert stored == received
+
+
+async def test_delete_role_binding(aiohttp_server, config, db, loop):
+    data = RoleBindingFactory(metadata__finalizers="keep-me")
     await db.put(data)
 
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         core_api = CoreApi(client)
-        await core_api.delete_global_metrics_provider(name=data.metadata.name)
+        received = await core_api.delete_role_binding(name=data.metadata.name)
 
-    stored = await db.get(GlobalMetricsProvider, name=data.metadata.name)
-    assert stored.metadata.deleted is not None
+    assert received.api == "core"
+    assert received.kind == "RoleBinding"
+    assert received.metadata.deleted is not None
+
+    stored = await db.get(RoleBinding, name=data.metadata.name)
+    assert stored == received
+
+
+async def test_list_role_bindings(aiohttp_server, config, db, loop):
+    # Populate database
+    data = [
+        RoleBindingFactory(),
+        RoleBindingFactory(),
+        RoleBindingFactory(),
+        RoleBindingFactory(),
+        RoleBindingFactory(),
+        RoleBindingFactory(),
+    ]
+    for elt in data:
+        await db.put(elt)
+
+    # Start API server
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.list_role_bindings()
+
+    assert received.api == "core"
+    assert received.kind == "RoleBindingList"
+
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(data, key=key)
+
+
+@with_timeout(3)
+async def test_watch_role_bindings(aiohttp_server, config, db, loop):
+    data = [
+        RoleBindingFactory(),
+        RoleBindingFactory(),
+        RoleBindingFactory(),
+        RoleBindingFactory(),
+    ]
+
+    async def modify():
+        for elt in data:
+            await db.put(elt)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        async with core_api.watch_role_bindings() as watcher:
+            modifying = loop.create_task(modify())
+
+            async for i, event in aenumerate(watcher):
+                expected = data[i]
+                assert event.type == WatchEventType.ADDED
+                assert event.object == expected
+
+                # '1' because of the offset length-index and '1' for the resource in
+                # another namespace
+                if i == len(data) - 2:
+                    break
+
+            await modifying
+
+
+async def test_read_role_binding(aiohttp_server, config, db, loop):
+    data = RoleBindingFactory()
+    await db.put(data)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.read_role_binding(name=data.metadata.name)
+        assert received == data
+
+
+async def test_update_role_binding(aiohttp_server, config, db, loop):
+    data = RoleBindingFactory()
+    await db.put(data)
+    data.users.append("test-user")
+    data.roles.append("test-role")
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        core_api = CoreApi(client)
+        received = await core_api.update_role_binding(
+            name=data.metadata.name, body=data
+        )
+
+    assert received.api == "core"
+    assert received.kind == "RoleBinding"
+    assert received.users == data.users
+    assert received.roles == data.roles
+    assert data.metadata.modified < received.metadata.modified
+
+    stored = await db.get(RoleBinding, name=data.metadata.name)
+    assert stored == received
