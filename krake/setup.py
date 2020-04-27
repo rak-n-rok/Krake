@@ -3,13 +3,13 @@ from setuptools import setup, find_packages
 
 
 install_requires = [
-    "aiohttp<4",
+    "aiohttp==3.*",
     "etcd3-py==0.1.*",
-    "keystoneauth1",
-    "kubernetes-asyncio<11.*",
+    "keystoneauth1==3.*",
+    "kubernetes-asyncio==10.*",
     "lark-parser==0.8.*",
     "makefun==1.*",
-    "marshmallow>=3",
+    "marshmallow==3.*",
     "marshmallow-enum",
     "marshmallow-oneofschema",
     "pyOpenSSL",
@@ -32,11 +32,11 @@ setup(
     extras_require={
         "dev": {
             "factory-boy==2.*",
-            "prometheus-async",
+            "prometheus-async==19.*",
             "prometheus-client==0.7.*",
             "pytest==5.*",
             "pytest-aiohttp==0.3.*",
-            "pytz",
+            "pytz==2019.*",
             "tox==3.*",
         }
     },
