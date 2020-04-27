@@ -22,7 +22,7 @@ from factories.fake import fake
 from factories.kubernetes import ApplicationFactory, ClusterFactory
 from factories.openstack import ProjectFactory
 from krake.data.serializable import Serializable
-from krake.test_utils import server_endpoint
+from krake.test_utils import server_endpoint, with_timeout
 from factories.openstack import MagnumClusterFactory
 
 
@@ -741,6 +741,7 @@ async def wait_for_resource(resource, graph, present=True, max_retry=10):
             assert False
 
 
+@with_timeout(3)
 async def test_gc_error_handling(aiohttp_server, config, db, loop, caplog):
     """Test the resilience of the garbage collector after an issue occurred with the
     dependency graph. The gc should not stop and continue its work.
@@ -761,7 +762,11 @@ async def test_gc_error_handling(aiohttp_server, config, db, loop, caplog):
 
     after_cycle = loop.create_future()
 
-    async def add_cycle(gc):
+    async def add_cycle():
+        await wait_for_resource(upper, gc.graph)
+        await wait_for_resource(middle, gc.graph)
+        await wait_for_resource(lower, gc.graph)
+
         # Add the dependency cycle
         stored = await db.get(
             Cluster, namespace=upper.metadata.namespace, name=upper.metadata.name
@@ -796,7 +801,7 @@ async def test_gc_error_handling(aiohttp_server, config, db, loop, caplog):
     run_task = loop.create_task(gc.run())
 
     with suppress(asyncio.CancelledError):
-        await asyncio.gather(run_task, add_cycle(gc), stop_controller())
+        await asyncio.gather(run_task, add_cycle(), stop_controller())
 
     assert after_cycle.done()
 

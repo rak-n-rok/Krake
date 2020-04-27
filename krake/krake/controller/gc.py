@@ -133,13 +133,14 @@ class DependencyGraph(object):
         """
         return self._relationships[resource]
 
-    def add_resource(self, resource, owners):
+    def add_resource(self, resource, owners, check_cycles=True):
         """Add a resource and its dependencies relationships to the graph.
 
         Args:
             resource (krake.data.core.ResourceRef): the resource to add to the graph.
             owners (list): list of owners (dependencies) of the resource.
-
+            check_cycles (bool, optional): if False, does not check if adding the
+                resource creates a cycle, and simply add it.
         """
         # No need to add the value explicitly here,
         # as it is lazy created in the cycles check
@@ -150,7 +151,8 @@ class DependencyGraph(object):
             if resource not in self._relationships[owner]:
                 self._relationships[owner].append(resource)
 
-        self._check_for_cycles(resource)
+        if check_cycles:
+            self._check_for_cycles(resource)
 
     def remove_resource(self, resource, check_dependents=True):
         """If a resource has no dependent, remove it from the dependency graph,
@@ -194,9 +196,11 @@ class DependencyGraph(object):
         # This action removes the dependents entirely,
         # that is why they need to be stored beforehand.
         self.remove_resource(resource, check_dependents=False)
-        self.add_resource(resource, owners)
-
+        self.add_resource(resource, owners, check_cycles=False)
         self._relationships[resource] = dependents
+
+        # Only perform the check for cycle presence when the whole update is performed
+        self._check_for_cycles(resource)
 
     def _check_for_cycles(self, reference, visited=None):
         """Verify if a cycle exists in the graph.
@@ -314,7 +318,6 @@ class GarbageCollector(Controller):
         ):
             return True
 
-        logger.debug("Rejected resource %r", resource)
         return False
 
     async def on_received_new(self, resource):
