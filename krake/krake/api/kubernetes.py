@@ -43,8 +43,8 @@ class KubernetesApi(object):
         "PUT", "/kubernetes/namespaces/{namespace}/applications/{name}/binding"
     )
     @protected(api="kubernetes", resource="applications/binding", verb="update")
-    @load("app", Application)
     @use_schema("body", ClusterBinding.Schema)
+    @load("app", Application)
     async def update_application_binding(request, body, app):
         now = datetime.now()
         app.status.scheduled = now
@@ -64,8 +64,8 @@ class KubernetesApi(object):
         "PUT", "/kubernetes/namespaces/{namespace}/applications/{name}/complete"
     )
     @protected(api="kubernetes", resource="applications/complete", verb="update")
-    @load("app", Application)
     @use_schema("body", ApplicationComplete.Schema)
+    @load("app", Application)
     async def update_application_complete(request, body, app):
         if app.status.token != body.token:
             raise web.HTTPUnauthorized()

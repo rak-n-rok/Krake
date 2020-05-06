@@ -1,7 +1,16 @@
 from dataclasses import MISSING
 
 import pytz
-from factory import Factory, SubFactory, List, lazy_attribute, fuzzy, Maybe, Dict
+from factory import (
+    Factory,
+    SubFactory,
+    List,
+    lazy_attribute,
+    fuzzy,
+    Maybe,
+    Dict,
+    post_generation,
+)
 from datetime import timedelta
 
 from .fake import fake
@@ -101,6 +110,13 @@ class RoleFactory(Factory):
     metadata = SubFactory(MetadataFactory)
     rules = List([SubFactory(RoleRuleFactory) for _ in range(2)])
 
+    @post_generation
+    def remove_namespace(role, created, extracted, **kwargs):
+        """This resource is not namespaced, so any set namespaced will be emptied.
+        """
+        if role.metadata.namespace:
+            role.metadata.namespace = None
+
 
 class RoleBindingFactory(Factory):
     class Meta:
@@ -119,6 +135,13 @@ class RoleBindingFactory(Factory):
     @lazy_attribute
     def roles(self):
         return [fuzzy_name() for _ in range(self.role_count)]
+
+    @post_generation
+    def remove_namespace(role_binding, created, extracted, **kwargs):
+        """This resource is not namespaced, so any set namespaced will be emptied.
+        """
+        if role_binding.metadata.namespace:
+            role_binding.metadata.namespace = None
 
 
 class ReasonFactory(Factory):
@@ -152,6 +175,13 @@ class MetricFactory(Factory):
 
     metadata = SubFactory(MetadataFactory)
     spec = SubFactory(MetricSpecFactory)
+
+    @post_generation
+    def remove_namespace(metric, created, extracted, **kwargs):
+        """This resource is not namespaced, so any set namespaced will be emptied.
+        """
+        if metric.metadata.namespace:
+            metric.metadata.namespace = None
 
 
 class PrometheusSpecFactory(Factory):
@@ -209,6 +239,13 @@ class MetricsProviderFactory(Factory):
 
     metadata = SubFactory(MetadataFactory)
     spec = SubFactory(MetricsProviderSpecFactory)
+
+    @post_generation
+    def remove_namespace(metric_provider, created, extracted, **kwargs):
+        """This resource is not namespaced, so any set namespaced will be emptied.
+        """
+        if metric_provider.metadata.namespace:
+            metric_provider.metadata.namespace = None
 
 
 class MetricRefFactory(Factory):
