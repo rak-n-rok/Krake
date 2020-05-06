@@ -1,5 +1,0 @@
-git_branch: master
-keystone_port: 5001
-secgroup_name: "{{ inventory_hostname}}-secgroup"
-floating_ip: false
-flavor: S

@@ -1,9 +1,0 @@
----
-exporter_dummy_image_name: dummy-exporter
-exporter_dummy_image_tag: latest
-exporter_dummy_api_ip: 0.0.0.0
-exporter_dummy_docker_folder: /opt/stack/git/krake/infra/devstack/ansible/exporter_container/dummy/
-
-exporter_openstack_image_name: rakeshpatnaik/prometheus-openstack-exporter
-exporter_openstack_image_tag: v0.2
-exporter_openstack_docker_folder: /opt/stack/git/krake/infra/devstack/ansible/exporter_container/openstack/

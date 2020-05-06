@@ -1,4 +1,0 @@
----
-- name: prometheus_reload_config
-  command: docker kill --signal=HUP prometheus
-  when: not prometheus_container is changed

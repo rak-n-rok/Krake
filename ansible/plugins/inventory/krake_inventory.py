@@ -10,7 +10,8 @@ from ansible.module_utils._text import to_native
 DOCUMENTATION = """
     name: krake_inventory
     plugin_type: inventory
-    short_description: Parse standard YAML static inventory but augment host variables with auto-generated JSON-file
+    short_description: Parse standard YAML static inventory but augment host
+        variables with auto-generated JSON-file
     description:
     options:
       yaml_extensions:
@@ -43,41 +44,10 @@ EXAMPLES = """
               network: krake-network
               vpn_cidr: 10.9.0.0/24
 
-        central_idps:
-          hosts:
-            krake-central-idp:
-              network: krake-network
-
-        devstacks:
-          hosts:
-            krake-devstack-1:
-              id: 1
-              idp: krake-central-idp
-            krake-devstack-2:
-              id: 2
-              idp: krake-central-idp
-
-        magnum_clusters:
-          hosts:
-            openstack-cluster-1:
-              name: kubernetes1
-              devstack: krake-devstack-1
-
-        prometheus:
-          hosts:
-            krake-prometheus:
-              hostname: prometheus
-              network: krake-network
-
         krake_apps:
           hosts:
             krake:
               hostname: krake
-              idp: krake-central-idp
-              devstacks:
-                - krake-devstack-2
-              magnum_clusters:
-                - openstack-cluster-1
               authorized_keys:
                 - public_keys/my
                 - public_keys/another
@@ -95,9 +65,9 @@ EXAMPLES = """
 
 
 class InventoryModule(YAMLInventory):
-    NAME = 'krake_inventory'
+    NAME = "krake_inventory"
 
-    ignore_keys = ['plugin']
+    ignore_keys = ["plugin"]
 
     def parse(self, inventory, loader, path, cache=False):
         # We do not call the base class here because this would raise an
@@ -117,26 +87,33 @@ class InventoryModule(YAMLInventory):
         if not data:
             raise AnsibleParserError("Parsed empty YAML file")
         elif not isinstance(data, MutableMapping):
-            raise AnsibleParserError("YAML inventory has invalid structure, it should be a dictionary, got: {}".format(type(data)))
+            raise AnsibleParserError(
+                "YAML inventory has invalid structure, "
+                f"it should be a dictionary, got: {type(data)}"
+            )
 
         # We expect top level keys to correspond to groups, iterate over them
         # to get host, vars and subgroups (which we iterate over recursivelly)
         if not isinstance(data, MutableMapping):
-            raise AnsibleParserError("Invalid data from file, expected dictionary and got:\n\n{!r}".format(to_native(data)))
+            raise AnsibleParserError(
+                "Invalid data from file, expected dictionary and got:\n\n{!r}".format(
+                    to_native(data)
+                )
+            )
 
         for group_name in data:
             if group_name not in self.ignore_keys:
                 self._parse_group(group_name, data[group_name])
 
         try:
-            hosts_file = self.inventory.groups['all'].get_vars()['hosts_file']
+            hosts_file = self.inventory.groups["all"].get_vars()["hosts_file"]
         except KeyError:
-            filename = '{}.json'.format(Path(path).stem)
-            hosts_file = Path(__file__).parent.parent.parent / '.etc' / filename
-            self.inventory.set_variable('all', 'hosts_file', str(hosts_file))
+            filename = "{}.json".format(Path(path).stem)
+            hosts_file = Path(__file__).parent.parent.parent / ".etc" / filename
+            self.inventory.set_variable("all", "hosts_file", str(hosts_file))
 
         try:
-            with open(hosts_file, 'r') as fd:
+            with open(hosts_file, "r") as fd:
                 hosts = json.load(fd)
         except (FileNotFoundError, json.JSONDecodeError):
             hosts = {}

@@ -1,6 +1,0 @@
----
-- name: Download Prometheus Docker image
-  docker_image:
-    name: '{{ prometheus_image_name }}'
-    tag: '{{ prometheus_image_tag }}'
-    state: present

@@ -44,62 +44,11 @@ all:
           network: krake-network
           vpn_cidr: 10.9.0.0/24
 
-    central_idps:
-      hosts:
-        krake-central-idp:
-          # Inventory name of the network on which this IdP should be deployed
-          network: krake-network
-
-    devstacks:
-      hosts:
-        krake-devstack-1:
-          # Unique DevStack ID. This ID is also used to define the IP network
-          # of the DevStack instance in the private network.
-          id: 1
-          # Inventory name of the network on which this DevStack should be
-          # deployed
-          network: krake-network
-          # Inventory name of the IdP that should be used for federation by
-          # this DevStack.
-          idp: krake-central-idp
-          prometheus: krake-prometheus
-
-    # Note: It is not recommended to use the same DevStack instance and
-    #   preset OpenStack cluster on this DevStack instance concurrently for
-    #   performance reasons.
-    # magnum_clusters:
-    #   hosts:
-    #     openstack-cluster-1:
-    #       name: kubernetes1
-    #       devstack: krake-devstack-1
-    #       prometheus: krake-prometheus
-    #       # Enable keystone deployment on the cluster
-    #       use_keystone: true
-
     minikube_clusters:
       hosts:
         minikube-cluster-1:
           name: minikube1
           network: krake-network
-          # Inventory name of the IdP that should be used for getting the certificate
-          # TODO Should be removed if trusted CA certificate takes place
-          # This will be done in: https://publicgitlab.cloudandheat.com/ragnarok/krake/issues/168
-          idp: krake-central-idp
-          # Enable keystone deployment on the cluster
-          use_keystone: true
-
-    prometheus:
-      hosts:
-        krake-prometheus:
-          hostname: prometheus
-          # Inventory name of the network on which this Prometheus should be
-          # deployed
-          network: krake-network
-
-          # Allowed TCP ports for external communication
-          # ports:
-          #   - 80
-          #   - 443
 
     krake_apps:
       hosts:

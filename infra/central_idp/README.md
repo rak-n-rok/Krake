@@ -1,1 +1,0 @@
-See [Central IdP Wiki](https://publicgitlab.cloudandheat.com/ragnarok/krake/wikis/Central-Idp)

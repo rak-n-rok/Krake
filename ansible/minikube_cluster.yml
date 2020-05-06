@@ -3,13 +3,6 @@
   gather_facts: false
   tasks:
 
-    # Check if Minikube VM and Central IdP are in the same network
-    - debug:
-        msg: >
-          Minikube VM is in a different network ({{ network }}) than the
-          IdP ({{ hostvars[idp].network }})
-      when: use_keystone and "hostvars[idp].network != network"
-
     - name: Create Heat stack for Minikube VM
       delegate_to: localhost
       os_stack:
@@ -248,15 +241,6 @@
   tags:
     - setup-cluster
   tasks:
-
-    - name: Add keystone authentication
-      vars:
-        minikube: true
-        k8s_auth_dir: "/home/{{ ansible_user }}/k8s_auth"
-        k8s_config: "/home/{{ ansible_user }}/.kube/config"
-      include_role:
-        name: k8s-keystone-auth
-      when: "use_keystone|default('')"
 
 - name: Download cluster certificates
   hosts: minikube_clusters

@@ -8,16 +8,12 @@ domain ip {
         chain FORWARD {
             # Forward all packets from VPN to krake-subnet
             saddr {{ vpn_cidr }} daddr {{ private_subnet_cidr }} ACCEPT;
-
-            # Forward all packets from VPN to DevStack subnets
-            saddr {{ vpn_cidr }} daddr {{ devstack_cidr }} ACCEPT;
         }
     }
     table nat {
         chain POSTROUTING {
             # Translate address from VPN packets into krake-subnet address
             saddr {{ vpn_cidr }} daddr {{ private_subnet_cidr }} MASQUERADE;
-            saddr {{ vpn_cidr }} daddr {{ devstack_cidr }} MASQUERADE;
         }
     }
 }
