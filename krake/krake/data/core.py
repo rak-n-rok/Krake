@@ -338,11 +338,6 @@ class RoleList(ApiObject):
     items: List[Role]
 
 
-class RoleBindingStatus(Serializable):
-    created: datetime
-    modified: datetime
-
-
 @persistent("/core/rolebindings/{name}")
 class RoleBinding(ApiObject):
     api: str = "core"
