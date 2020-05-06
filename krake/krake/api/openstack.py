@@ -76,9 +76,7 @@ class OpenStackApi(object):
             reason = HttpReason(
                 reason=message, code=HttpReasonCode.RESOURCE_ALREADY_EXISTS
             )
-            raise web.HTTPConflict(
-                text=json.dumps(reason.serialize()), content_type="application/json"
-            )
+            raise json_error(web.HTTPConflict, reason.serialize())
 
         now = utils.now()
 
@@ -193,18 +191,16 @@ class OpenStackApi(object):
         # can only be removed.
         if entity.metadata.deleted:
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
-                raise web.HTTPConflict(
-                    text=json.dumps(
-                        {
-                            "metadata": {
-                                "finalizers": [
-                                    "Finalizers can only be removed if "
-                                    "deletion is in progress."
-                                ]
-                            }
+                raise json_error(
+                    web.HTTPConflict,
+                    {
+                        "metadata": {
+                            "finalizers": [
+                                "Finalizers can only be removed if "
+                                "deletion is in progress."
+                            ]
                         }
-                    ),
-                    content_type="application/json",
+                    },
                 )
 
         # FIXME: if a user updates an immutable field, (such as the created timestamp),
@@ -283,9 +279,7 @@ class OpenStackApi(object):
             reason = HttpReason(
                 reason=message, code=HttpReasonCode.RESOURCE_ALREADY_EXISTS
             )
-            raise web.HTTPConflict(
-                text=json.dumps(reason.serialize()), content_type="application/json"
-            )
+            raise json_error(web.HTTPConflict, reason.serialize())
 
         now = utils.now()
 
@@ -397,18 +391,16 @@ class OpenStackApi(object):
         # can only be removed.
         if entity.metadata.deleted:
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
-                raise web.HTTPConflict(
-                    text=json.dumps(
-                        {
-                            "metadata": {
-                                "finalizers": [
-                                    "Finalizers can only be removed if "
-                                    "deletion is in progress."
-                                ]
-                            }
+                raise json_error(
+                    web.HTTPConflict,
+                    {
+                        "metadata": {
+                            "finalizers": [
+                                "Finalizers can only be removed if "
+                                "deletion is in progress."
+                            ]
                         }
-                    ),
-                    content_type="application/json",
+                    },
                 )
 
         # FIXME: if a user updates an immutable field, (such as the created timestamp),

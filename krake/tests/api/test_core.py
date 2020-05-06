@@ -1,297 +1,307 @@
+import asyncio
+import json
+import pytz
+from itertools import count
 from operator import attrgetter
 
 from krake.api.app import create_app
 from krake.api.helpers import HttpReason, HttpReasonCode
+
+from krake.data.core import WatchEventType, WatchEvent, resource_ref
 from krake.data.core import (
-    Role,
-    RoleBinding,
-    RoleList,
-    RoleBindingList,
-    resource_ref,
+    GlobalMetric,
     GlobalMetricsProvider,
+    RoleList,
+    GlobalMetricList,
+    RoleBinding,
+    RoleBindingList,
+    Role,
+    GlobalMetricsProviderList,
 )
 
 from tests.factories.core import (
-    RoleFactory,
-    RoleBindingFactory,
     GlobalMetricFactory,
+    MetricSpecFactory,
     GlobalMetricsProviderFactory,
     MetricsProviderSpecFactory,
+    RoleBindingFactory,
+    RoleFactory,
+    RoleRuleFactory,
 )
 
-
-# -----------------------------------------------------------------------------
-# Roles
-# -----------------------------------------------------------------------------
+from tests.factories.fake import fake
 
 
-async def test_list_roles(aiohttp_client, config, db):
-    data = [RoleFactory() for _ in range(10)]
-    for role in data:
-        await db.put(role)
-
+async def test_create_global_metric(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
-    resp = await client.get("/core/roles")
+    data = GlobalMetricFactory()
+
+    resp = await client.post("/core/globalmetrics", json=data.serialize())
     assert resp.status == 200
+    received = GlobalMetric.deserialize(await resp.json())
 
-    body = await resp.json()
-    roles = RoleList.deserialize(body)
+    assert received.metadata.created
+    assert received.metadata.modified
+    assert received.metadata.namespace is None
+    assert received.metadata.uid
 
-    key = attrgetter("metadata.uid")
-    assert sorted(roles.items, key=key) == sorted(data, key=key)
+    stored = await db.get(GlobalMetric, name=data.metadata.name)
+    assert stored == received
 
 
-async def test_list_roles_rbac(rbac_allow, config, aiohttp_client):
+async def test_create_global_metric_rbac(rbac_allow, config, aiohttp_client):
     config.authorization = "RBAC"
     client = await aiohttp_client(create_app(config=config))
 
-    resp = await client.get("/core/roles")
+    resp = await client.post("/core/globalmetrics")
     assert resp.status == 403
 
-    async with rbac_allow("core", "roles", "list", namespace=None):
-        resp = await client.get("/core/roles")
-        assert resp.status == 200
-
-
-async def test_create_role(aiohttp_client, config, db):
-    client = await aiohttp_client(create_app(config=config))
-    data = RoleFactory()
-
-    resp = await client.post("/core/roles", json=data.serialize())
-    assert resp.status == 200
-    role = Role.deserialize(await resp.json())
-
-    assert role.metadata.created
-    assert role.metadata.modified
-    assert role.rules == data.rules
-
-    stored = await db.get(Role, name=data.metadata.name)
-    assert stored == role
-
-
-async def test_create_role_rbac(rbac_allow, config, aiohttp_client):
-    config.authorization = "RBAC"
-    client = await aiohttp_client(create_app(config=config))
-
-    resp = await client.post("/core/roles")
-    assert resp.status == 403
-
-    async with rbac_allow("core", "roles", "create", namespace=None):
-        resp = await client.post("/core/roles")
+    async with rbac_allow("core", "globalmetrics", "create"):
+        resp = await client.post("/core/globalmetrics")
         assert resp.status == 415
 
 
-async def test_create_role_with_existing_name(aiohttp_client, config, db):
-    existing = RoleFactory(metadata__name="existing")
+async def test_create_global_metric_with_existing_name(aiohttp_client, config, db):
+    existing = GlobalMetricFactory(metadata__name="existing")
     await db.put(existing)
 
     client = await aiohttp_client(create_app(config=config))
 
-    resp = await client.post("/core/roles", json=existing.serialize())
+    resp = await client.post("/core/globalmetrics", json=existing.serialize())
     assert resp.status == 409
 
-    json = await resp.json()
-    reason = HttpReason.deserialize(json)
+    received = await resp.json()
+    reason = HttpReason.deserialize(received)
     assert reason.code == HttpReasonCode.RESOURCE_ALREADY_EXISTS
 
 
-async def test_get_role(aiohttp_client, config, db):
-    role = RoleFactory()
-    await db.put(role)
-    client = await aiohttp_client(create_app(config=config))
-    resp = await client.get(f"/core/roles/{role.metadata.name}")
-    assert resp.status == 200
-    data = Role.deserialize(await resp.json())
-    assert role == data
-
-
-async def test_get_role_rbac(rbac_allow, config, aiohttp_client):
-    config.authorization = "RBAC"
+async def test_delete_global_metric(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
-    resp = await client.get("/core/roles/myrole")
-    assert resp.status == 403
-
-    async with rbac_allow("core", "roles", "get", namespace=None):
-        resp = await client.get("/core/roles/myrole")
-        assert resp.status == 404
-
-
-async def test_delete_role(aiohttp_client, config, db):
-    client = await aiohttp_client(create_app(config=config))
-
-    # Create role
-    role = RoleFactory()
-    await db.put(role)
-
-    # Delete role
-    resp = await client.delete(f"/core/roles/{role.metadata.name}")
-    assert resp.status == 200
-    data = Role.deserialize(await resp.json())
-    assert resource_ref(data) == resource_ref(role)
-
-    deleted = await db.get(Role, name=role.metadata.name)
-    assert deleted.metadata.deleted is not None
-
-
-async def test_delete_role_rbac(rbac_allow, aiohttp_client, config, db):
-    config.authorization = "RBAC"
-    client = await aiohttp_client(create_app(config=config))
-
-    resp = await client.delete("/core/roles/myrole")
-    assert resp.status == 403
-
-    async with rbac_allow("core", "roles", "delete", namespace=None):
-        resp = await client.delete("/core/roles/myrole")
-        assert resp.status == 404
-
-
-async def test_update_role_no_changes(aiohttp_client, config, db):
-    client = await aiohttp_client(create_app(config=config))
-
-    data = RoleFactory()
+    data = GlobalMetricFactory()
     await db.put(data)
 
-    resp = await client.put(f"/core/roles/{data.metadata.name}", json=data.serialize())
-    assert resp.status == 400
+    resp = await client.delete(f"/core/globalmetrics/{data.metadata.name}")
+    assert resp.status == 200
+    received = GlobalMetric.deserialize(await resp.json())
+    assert resource_ref(received) == resource_ref(data)
+    assert received.metadata.deleted is not None
+
+    deleted = await db.get(GlobalMetric, name=data.metadata.name)
+    assert deleted.metadata.deleted is not None
+    assert "cascade_deletion" in deleted.metadata.finalizers
 
 
-# -----------------------------------------------------------------------------
-# Role Bindings
-# -----------------------------------------------------------------------------
+async def test_add_finalizer_in_deleted_global_metric(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = GlobalMetricFactory(
+        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+    )
+    await db.put(data)
+
+    data.metadata.finalizers = ["a-different-finalizer"]
+    resp = await client.put(
+        f"/core/globalmetrics/{data.metadata.name}", json=data.serialize()
+    )
+    assert resp.status == 409
+    body = await resp.json()
+    assert len(body["metadata"]["finalizers"]) == 1
 
 
-async def test_list_role_bindings(aiohttp_client, config, db):
-    bindings = [RoleBindingFactory() for _ in range(10)]
-    for binding in bindings:
-        await db.put(binding)
+async def test_delete_global_metric_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.delete("/core/globalmetrics/my-resource")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "globalmetrics", "delete"):
+        resp = await client.delete("/core/globalmetrics/my-resource")
+        assert resp.status == 404
+
+
+async def test_delete_global_metric_already_in_deletion(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    in_deletion = GlobalMetricFactory(metadata__deleted=fake.date_time())
+    await db.put(in_deletion)
+
+    resp = await client.delete(f"/core/globalmetrics/{in_deletion.metadata.name}")
+    assert resp.status == 200
+
+
+async def test_list_global_metrics(aiohttp_client, config, db):
+    resources = [
+        GlobalMetricFactory(),
+        GlobalMetricFactory(),
+        GlobalMetricFactory(),
+        GlobalMetricFactory(),
+        GlobalMetricFactory(),
+        GlobalMetricFactory(),
+    ]
+    for elt in resources:
+        await db.put(elt)
 
     client = await aiohttp_client(create_app(config=config))
-    resp = await client.get("/core/rolebindings")
+    resp = await client.get("/core/globalmetrics")
     assert resp.status == 200
 
     body = await resp.json()
-    received = RoleBindingList.deserialize(body)
+    received = GlobalMetricList.deserialize(body)
 
     key = attrgetter("metadata.name")
-    assert sorted(received.items, key=key) == sorted(bindings, key=key)
+    assert sorted(received.items, key=key) == sorted(resources, key=key)
 
 
-async def test_list_role_bindings_rbac(rbac_allow, config, aiohttp_client):
+async def test_list_global_metrics_rbac(rbac_allow, config, aiohttp_client):
     config.authorization = "RBAC"
-    client = await aiohttp_client(create_app(config=config))
+    client = await aiohttp_client(create_app(config))
 
-    resp = await client.get("/core/rolebindings")
+    resp = await client.get("/core/globalmetrics")
     assert resp.status == 403
 
-    async with rbac_allow("core", "rolebindings", "list", namespace=None):
-        resp = await client.get("/core/rolebindings")
+    async with rbac_allow("core", "globalmetrics", "list"):
+        resp = await client.get("/core/globalmetrics")
         assert resp.status == 200
 
 
-async def test_create_role_binding(aiohttp_client, config, db):
-    data = RoleBindingFactory()
+async def test_watch_global_metrics(aiohttp_client, config, db, loop):
+    client = await aiohttp_client(create_app(config=config))
+    resources = [GlobalMetricFactory(), GlobalMetricFactory()]
+
+    async def watch(created):
+        resp = await client.get("/core/globalmetrics?watch&heartbeat=0")
+        assert resp.status == 200
+        created.set_result(None)
+
+        for i in count():
+            line = await resp.content.readline()
+            assert line, "Unexpected EOF"
+
+            event = WatchEvent.deserialize(json.loads(line.decode()))
+            data = GlobalMetric.deserialize(event.object)
+
+            if i == 0:
+                assert event.type == WatchEventType.ADDED
+                assert data.metadata.name == resources[0].metadata.name
+                assert data.spec == resources[0].spec
+            elif i == 1:
+                assert event.type == WatchEventType.ADDED
+                assert data.metadata.name == resources[1].metadata.name
+                assert data.spec == resources[1].spec
+            elif i == 2:
+                assert event.type == WatchEventType.MODIFIED
+                assert data.metadata.name == resources[0].metadata.name
+                assert data.spec == resources[0].spec
+                return
+            elif i == 3:
+                assert False
+
+    async def modify(created):
+        # Wait for watcher to be established
+        await created
+
+        # Create the GlobalMetrics
+        for data in resources:
+            resp = await client.post("/core/globalmetrics", json=data.serialize())
+            assert resp.status == 200
+
+        resp = await client.delete(f"/core/globalmetrics/{resources[0].metadata.name}")
+        assert resp.status == 200
+
+        received = GlobalMetric.deserialize(await resp.json())
+        assert resource_ref(received) == resource_ref(resources[0])
+        assert received.metadata.deleted is not None
+
+    created = loop.create_future()
+    watching = loop.create_task(watch(created))
+    modifying = loop.create_task(modify(created))
+
+    await asyncio.wait_for(asyncio.gather(modifying, watching), timeout=3)
+
+
+async def test_read_global_metric(aiohttp_client, config, db):
+    data = GlobalMetricFactory()
+    await db.put(data)
+
+    client = await aiohttp_client(create_app(config=config))
+    resp = await client.get(f"/core/globalmetrics/{data.metadata.name}")
+    assert resp.status == 200
+    received = GlobalMetric.deserialize(await resp.json())
+    assert received == data
+
+
+async def test_read_global_metric_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
+
+    resp = await client.get("/core/globalmetrics/my-resource")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "globalmetrics", "get"):
+        resp = await client.get("/core/globalmetrics/my-resource")
+        assert resp.status == 404
+
+
+async def test_update_global_metric(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
-    resp = await client.post("/core/rolebindings", json=data.serialize())
+    data = GlobalMetricFactory()
+    await db.put(data)
+    data.spec = MetricSpecFactory(min=-10, max=10)
+
+    resp = await client.put(
+        f"/core/globalmetrics/{data.metadata.name}", json=data.serialize()
+    )
     assert resp.status == 200
-    binding = RoleBinding.deserialize(await resp.json())
+    received = GlobalMetric.deserialize(await resp.json())
 
-    assert binding.metadata.created
-    assert binding.metadata.modified
-    assert set(binding.users) == set(data.users)
-    assert set(binding.roles) == set(data.roles)
+    assert received.api == "core"
+    assert received.kind == "GlobalMetric"
+    assert data.metadata.modified < received.metadata.modified
+    assert received.spec == data.spec
 
-    stored = await db.get(RoleBinding, name=data.metadata.name)
-    assert binding == stored
+    stored = await db.get(GlobalMetric, name=data.metadata.name)
+    assert stored == received
 
 
-async def test_create_role_binding_rbac(rbac_allow, config, aiohttp_client):
+async def test_update_global_metric_to_delete(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = GlobalMetricFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__finalizers=["cascade_deletion"],
+    )
+    await db.put(data)
+
+    # Delete the GlobalMetric
+    data.metadata.finalizers = []
+    resp = await client.put(
+        f"/core/globalmetrics/{data.metadata.name}", json=data.serialize()
+    )
+    assert resp.status == 200
+    received = GlobalMetric.deserialize(await resp.json())
+    assert resource_ref(received) == resource_ref(data)
+
+    # The GlobalMetric should be deleted from the database
+    stored = await db.get(GlobalMetric, name=data.metadata.name)
+    assert stored is None
+
+
+async def test_update_global_metric_rbac(rbac_allow, config, aiohttp_client):
     config.authorization = "RBAC"
     client = await aiohttp_client(create_app(config=config))
 
-    resp = await client.post("/core/rolebindings")
+    resp = await client.put("/core/globalmetrics/my-resource")
     assert resp.status == 403
 
-    async with rbac_allow("core", "rolebindings", "create", namespace=None):
-        resp = await client.post("/core/rolebindings")
+    async with rbac_allow("core", "globalmetrics", "update"):
+        resp = await client.put("/core/globalmetrics/my-resource")
         assert resp.status == 415
 
 
-async def test_create_role_binding_with_existing_name(aiohttp_client, config, db):
-    existing = RoleBindingFactory(metadata__name="existing")
-    await db.put(existing)
-
-    client = await aiohttp_client(create_app(config=config))
-
-    resp = await client.post("/core/rolebindings", json=existing.serialize())
-    assert resp.status == 409
-
-
-async def test_get_role_binding(aiohttp_client, config, db):
-    binding = RoleBindingFactory()
-    await db.put(binding)
-    client = await aiohttp_client(create_app(config=config))
-    resp = await client.get(f"/core/rolebindings/{binding.metadata.name}")
-    assert resp.status == 200
-    data = RoleBinding.deserialize(await resp.json())
-    assert binding == data
-
-
-async def test_get_role_binding_rbac(rbac_allow, config, aiohttp_client):
-    config.authorization = "RBAC"
-    client = await aiohttp_client(create_app(config=config))
-
-    resp = await client.get("/core/rolebindings/mybinding")
-    assert resp.status == 403
-
-    async with rbac_allow("core", "rolebindings", "get", namespace=None):
-        resp = await client.get("/core/rolebindings/mybinding")
-        assert resp.status == 404
-
-
-async def test_delete_role_binding(aiohttp_client, config, db):
-    client = await aiohttp_client(create_app(config=config))
-
-    # Create binding
-    binding = RoleBindingFactory()
-    await db.put(binding)
-
-    # Delete binding
-    resp = await client.delete(f"/core/rolebindings/{binding.metadata.name}")
-    assert resp.status == 200
-    data = RoleBinding.deserialize(await resp.json())
-    assert resource_ref(data) == resource_ref(binding)
-
-    deleted = await db.get(RoleBinding, name=binding.metadata.name)
-    assert deleted.metadata.deleted is not None
-
-
-async def test_delete_role_binding_rbac(rbac_allow, aiohttp_client, config, db):
-    config.authorization = "RBAC"
-    client = await aiohttp_client(create_app(config=config))
-
-    resp = await client.delete("/core/rolebindings/mybinding")
-    assert resp.status == 403
-
-    async with rbac_allow("core", "rolebindings", "delete", namespace=None):
-        resp = await client.delete("/core/rolebindings/mybinding")
-        assert resp.status == 404
-
-
-async def test_update_role_binding_no_changes(aiohttp_client, config, db):
-    client = await aiohttp_client(create_app(config=config))
-
-    data = RoleBindingFactory()
-    await db.put(data)
-
-    resp = await client.put(
-        f"/core/rolebindings/{data.metadata.name}", json=data.serialize()
-    )
-    assert resp.status == 400
-
-
-async def test_update_metrics_no_changes(aiohttp_client, config, db):
+async def test_update_global_metric_no_changes(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = GlobalMetricFactory()
@@ -303,7 +313,290 @@ async def test_update_metrics_no_changes(aiohttp_client, config, db):
     assert resp.status == 400
 
 
-async def test_update_metrics_provider_no_changes(aiohttp_client, config, db):
+async def test_create_global_metrics_provider(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = GlobalMetricsProviderFactory()
+
+    resp = await client.post("/core/globalmetricsproviders", json=data.serialize())
+    assert resp.status == 200
+    received = GlobalMetricsProvider.deserialize(await resp.json())
+
+    assert received.metadata.created
+    assert received.metadata.modified
+    assert received.metadata.namespace is None
+    assert received.metadata.uid
+    assert received.spec == data.spec
+
+    stored = await db.get(GlobalMetricsProvider, name=data.metadata.name)
+    assert stored == received
+
+
+async def test_create_global_metrics_provider_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.post("/core/globalmetricsproviders")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "globalmetricsproviders", "create"):
+        resp = await client.post("/core/globalmetricsproviders")
+        assert resp.status == 415
+
+
+async def test_create_global_metrics_provider_with_existing_name(
+    aiohttp_client, config, db
+):
+    existing = GlobalMetricsProviderFactory(metadata__name="existing")
+    await db.put(existing)
+
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.post("/core/globalmetricsproviders", json=existing.serialize())
+    assert resp.status == 409
+
+    received = await resp.json()
+    reason = HttpReason.deserialize(received)
+    assert reason.code == HttpReasonCode.RESOURCE_ALREADY_EXISTS
+
+
+async def test_delete_global_metrics_provider(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = GlobalMetricsProviderFactory()
+    await db.put(data)
+
+    resp = await client.delete(f"/core/globalmetricsproviders/{data.metadata.name}")
+    assert resp.status == 200
+    received = GlobalMetricsProvider.deserialize(await resp.json())
+    assert resource_ref(received) == resource_ref(data)
+    assert received.metadata.deleted is not None
+
+    deleted = await db.get(GlobalMetricsProvider, name=data.metadata.name)
+    assert deleted.metadata.deleted is not None
+    assert "cascade_deletion" in deleted.metadata.finalizers
+
+
+async def test_add_finalizer_in_deleted_global_metrics_provider(
+    aiohttp_client, config, db
+):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = GlobalMetricsProviderFactory(
+        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+    )
+    await db.put(data)
+
+    data.metadata.finalizers = ["a-different-finalizer"]
+    resp = await client.put(
+        f"/core/globalmetricsproviders/{data.metadata.name}", json=data.serialize()
+    )
+    assert resp.status == 409
+    body = await resp.json()
+    assert len(body["metadata"]["finalizers"]) == 1
+
+
+async def test_delete_global_metrics_provider_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.delete("/core/globalmetricsproviders/my-resource")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "globalmetricsproviders", "delete"):
+        resp = await client.delete("/core/globalmetricsproviders/my-resource")
+        assert resp.status == 404
+
+
+async def test_delete_global_metrics_provider_already_in_deletion(
+    aiohttp_client, config, db
+):
+    client = await aiohttp_client(create_app(config=config))
+
+    in_deletion = GlobalMetricsProviderFactory(metadata__deleted=fake.date_time())
+    await db.put(in_deletion)
+
+    resp = await client.delete(
+        f"/core/globalmetricsproviders/{in_deletion.metadata.name}"
+    )
+    assert resp.status == 200
+
+
+async def test_list_global_metrics_providers(aiohttp_client, config, db):
+    resources = [
+        GlobalMetricsProviderFactory(),
+        GlobalMetricsProviderFactory(),
+        GlobalMetricsProviderFactory(),
+        GlobalMetricsProviderFactory(),
+        GlobalMetricsProviderFactory(),
+        GlobalMetricsProviderFactory(),
+    ]
+    for elt in resources:
+        await db.put(elt)
+
+    client = await aiohttp_client(create_app(config=config))
+    resp = await client.get("/core/globalmetricsproviders")
+    assert resp.status == 200
+
+    body = await resp.json()
+    received = GlobalMetricsProviderList.deserialize(body)
+
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(resources, key=key)
+
+
+async def test_list_global_metrics_providers_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
+
+    resp = await client.get("/core/globalmetricsproviders")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "globalmetricsproviders", "list"):
+        resp = await client.get("/core/globalmetricsproviders")
+        assert resp.status == 200
+
+
+async def test_watch_global_metrics_providers(aiohttp_client, config, db, loop):
+    client = await aiohttp_client(create_app(config=config))
+    resources = [GlobalMetricsProviderFactory(), GlobalMetricsProviderFactory()]
+
+    async def watch(created):
+        resp = await client.get("/core/globalmetricsproviders?watch&heartbeat=0")
+        assert resp.status == 200
+        created.set_result(None)
+
+        for i in count():
+            line = await resp.content.readline()
+            assert line, "Unexpected EOF"
+
+            event = WatchEvent.deserialize(json.loads(line.decode()))
+            data = GlobalMetricsProvider.deserialize(event.object)
+
+            if i == 0:
+                assert event.type == WatchEventType.ADDED
+                assert data.metadata.name == resources[0].metadata.name
+                assert data.spec == resources[0].spec
+            elif i == 1:
+                assert event.type == WatchEventType.ADDED
+                assert data.metadata.name == resources[1].metadata.name
+                assert data.spec == resources[1].spec
+            elif i == 2:
+                assert event.type == WatchEventType.MODIFIED
+                assert data.metadata.name == resources[0].metadata.name
+                assert data.spec == resources[0].spec
+                return
+            elif i == 3:
+                assert False
+
+    async def modify(created):
+        # Wait for watcher to be established
+        await created
+
+        # Create the  GlobalMetricsProviders
+        for data in resources:
+            resp = await client.post(
+                "/core/globalmetricsproviders", json=data.serialize()
+            )
+            assert resp.status == 200
+
+        resp = await client.delete(
+            f"/core/globalmetricsproviders/{resources[0].metadata.name}"
+        )
+        assert resp.status == 200
+
+        received = GlobalMetricsProvider.deserialize(await resp.json())
+        assert resource_ref(received) == resource_ref(resources[0])
+        assert received.metadata.deleted is not None
+
+    created = loop.create_future()
+    watching = loop.create_task(watch(created))
+    modifying = loop.create_task(modify(created))
+
+    await asyncio.wait_for(asyncio.gather(modifying, watching), timeout=3)
+
+
+async def test_read_global_metrics_provider(aiohttp_client, config, db):
+    data = GlobalMetricsProviderFactory()
+    await db.put(data)
+
+    client = await aiohttp_client(create_app(config=config))
+    resp = await client.get(f"/core/globalmetricsproviders/{data.metadata.name}")
+    assert resp.status == 200
+    received = GlobalMetricsProvider.deserialize(await resp.json())
+    assert received == data
+
+
+async def test_read_global_metrics_provider_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
+
+    resp = await client.get("/core/globalmetricsproviders/my-resource")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "globalmetricsproviders", "get"):
+        resp = await client.get("/core/globalmetricsproviders/my-resource")
+        assert resp.status == 404
+
+
+async def test_update_global_metrics_provider(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = GlobalMetricsProviderFactory(spec__type="prometheus")
+    await db.put(data)
+    data.spec = MetricsProviderSpecFactory(type="static")
+
+    resp = await client.put(
+        f"/core/globalmetricsproviders/{data.metadata.name}", json=data.serialize()
+    )
+    assert resp.status == 200
+    received = GlobalMetricsProvider.deserialize(await resp.json())
+
+    assert received.api == "core"
+    assert received.kind == "GlobalMetricsProvider"
+    assert data.metadata.modified < received.metadata.modified
+    assert received.spec == data.spec
+
+    stored = await db.get(GlobalMetricsProvider, name=data.metadata.name)
+    assert stored == received
+
+
+async def test_update_global_metrics_provider_to_delete(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = GlobalMetricsProviderFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__finalizers=["cascade_deletion"],
+    )
+    await db.put(data)
+
+    # Delete the GlobalMetricsProvider
+    data.metadata.finalizers = []
+    resp = await client.put(
+        f"/core/globalmetricsproviders/{data.metadata.name}", json=data.serialize()
+    )
+    assert resp.status == 200
+    received = GlobalMetricsProvider.deserialize(await resp.json())
+    assert resource_ref(received) == resource_ref(data)
+
+    # The GlobalMetricsProvider should be deleted from the database
+    stored = await db.get(GlobalMetricsProvider, name=data.metadata.name)
+    assert stored is None
+
+
+async def test_update_global_metrics_provider_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.put("/core/globalmetricsproviders/my-resource")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "globalmetricsproviders", "update"):
+        resp = await client.put("/core/globalmetricsproviders/my-resource")
+        assert resp.status == 415
+
+
+async def test_update_global_metrics_provider_no_changes(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = GlobalMetricsProviderFactory()
@@ -315,9 +608,9 @@ async def test_update_metrics_provider_no_changes(aiohttp_client, config, db):
     assert resp.status == 400
 
 
-async def test_update_metrics_provider_with_changes(aiohttp_client, config, db):
-    """Ensure that updates in the GlobalMetricsProvider's PolymorphicContainer
-    are considered as well.
+async def test_update_global_metrics_provider_with_changes(aiohttp_client, config, db):
+    """Ensure that updates in the GlobalMetricsProvider's PolymorphicContainer are
+    considered as well.
     """
     client = await aiohttp_client(create_app(config=config))
 
@@ -343,3 +636,565 @@ async def test_update_metrics_provider_with_changes(aiohttp_client, config, db):
     assert resp.status == 200
     received = GlobalMetricsProvider.deserialize(await resp.json())
     assert received.spec == data.spec
+
+
+async def test_create_role(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = RoleFactory()
+
+    resp = await client.post("/core/roles", json=data.serialize())
+    assert resp.status == 200
+    received = Role.deserialize(await resp.json())
+
+    assert received.metadata.created
+    assert received.metadata.modified
+    assert received.metadata.namespace is None
+    assert received.metadata.uid
+
+    stored = await db.get(Role, name=data.metadata.name)
+    assert stored == received
+
+
+async def test_create_role_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.post("/core/roles")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "roles", "create"):
+        resp = await client.post("/core/roles")
+        assert resp.status == 415
+
+
+async def test_create_role_with_existing_name(aiohttp_client, config, db):
+    existing = RoleFactory(metadata__name="existing")
+    await db.put(existing)
+
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.post("/core/roles", json=existing.serialize())
+    assert resp.status == 409
+
+    received = await resp.json()
+    reason = HttpReason.deserialize(received)
+    assert reason.code == HttpReasonCode.RESOURCE_ALREADY_EXISTS
+
+
+async def test_delete_role(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = RoleFactory()
+    await db.put(data)
+
+    resp = await client.delete(f"/core/roles/{data.metadata.name}")
+    assert resp.status == 200
+    received = Role.deserialize(await resp.json())
+    assert resource_ref(received) == resource_ref(data)
+    assert received.metadata.deleted is not None
+
+    deleted = await db.get(Role, name=data.metadata.name)
+    assert deleted.metadata.deleted is not None
+    assert "cascade_deletion" in deleted.metadata.finalizers
+
+
+async def test_add_finalizer_in_deleted_role(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = RoleFactory(
+        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+    )
+    await db.put(data)
+
+    data.metadata.finalizers = ["a-different-finalizer"]
+    resp = await client.put(f"/core/roles/{data.metadata.name}", json=data.serialize())
+    assert resp.status == 409
+    body = await resp.json()
+    assert len(body["metadata"]["finalizers"]) == 1
+
+
+async def test_delete_role_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.delete("/core/roles/my-resource")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "roles", "delete"):
+        resp = await client.delete("/core/roles/my-resource")
+        assert resp.status == 404
+
+
+async def test_delete_role_already_in_deletion(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    in_deletion = RoleFactory(metadata__deleted=fake.date_time())
+    await db.put(in_deletion)
+
+    resp = await client.delete(f"/core/roles/{in_deletion.metadata.name}")
+    assert resp.status == 200
+
+
+async def test_list_roles(aiohttp_client, config, db):
+    resources = [
+        RoleFactory(),
+        RoleFactory(),
+        RoleFactory(),
+        RoleFactory(),
+        RoleFactory(),
+        RoleFactory(),
+    ]
+    for elt in resources:
+        await db.put(elt)
+
+    client = await aiohttp_client(create_app(config=config))
+    resp = await client.get("/core/roles")
+    assert resp.status == 200
+
+    body = await resp.json()
+    received = RoleList.deserialize(body)
+
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(resources, key=key)
+
+
+async def test_list_roles_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
+
+    resp = await client.get("/core/roles")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "roles", "list"):
+        resp = await client.get("/core/roles")
+        assert resp.status == 200
+
+
+async def test_watch_roles(aiohttp_client, config, db, loop):
+    client = await aiohttp_client(create_app(config=config))
+    resources = [RoleFactory(), RoleFactory()]
+
+    async def watch(created):
+        resp = await client.get("/core/roles?watch&heartbeat=0")
+        assert resp.status == 200
+        created.set_result(None)
+
+        for i in count():
+            line = await resp.content.readline()
+            assert line, "Unexpected EOF"
+
+            event = WatchEvent.deserialize(json.loads(line.decode()))
+            data = Role.deserialize(event.object)
+
+            if i == 0:
+                assert event.type == WatchEventType.ADDED
+                assert data.metadata.name == resources[0].metadata.name
+                assert data.rules == resources[0].rules
+            elif i == 1:
+                assert event.type == WatchEventType.ADDED
+                assert data.metadata.name == resources[1].metadata.name
+                assert data.rules == resources[1].rules
+            elif i == 2:
+                assert event.type == WatchEventType.MODIFIED
+                assert data.metadata.name == resources[0].metadata.name
+                assert data.rules == resources[0].rules
+                return
+            elif i == 3:
+                assert False
+
+    async def modify(created):
+        # Wait for watcher to be established
+        await created
+
+        # Create the  Roles
+        for data in resources:
+            resp = await client.post("/core/roles", json=data.serialize())
+            assert resp.status == 200
+
+        resp = await client.delete(f"/core/roles/{resources[0].metadata.name}")
+        assert resp.status == 200
+
+        received = Role.deserialize(await resp.json())
+        assert resource_ref(received) == resource_ref(resources[0])
+        assert received.metadata.deleted is not None
+
+    created = loop.create_future()
+    watching = loop.create_task(watch(created))
+    modifying = loop.create_task(modify(created))
+
+    await asyncio.wait_for(asyncio.gather(modifying, watching), timeout=3)
+
+
+async def test_read_role(aiohttp_client, config, db):
+    data = RoleFactory()
+    await db.put(data)
+
+    client = await aiohttp_client(create_app(config=config))
+    resp = await client.get(f"/core/roles/{data.metadata.name}")
+    assert resp.status == 200
+    received = Role.deserialize(await resp.json())
+    assert received == data
+
+
+async def test_read_role_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
+
+    resp = await client.get("/core/roles/my-resource")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "roles", "get"):
+        resp = await client.get("/core/roles/my-resource")
+        assert resp.status == 404
+
+
+async def test_update_role(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = RoleFactory()
+    previous_rules = data.rules
+    await db.put(data)
+
+    new_rules = [RoleRuleFactory(), RoleRuleFactory(), RoleRuleFactory()]
+    assert new_rules != previous_rules
+    data.rules = new_rules
+
+    resp = await client.put(f"/core/roles/{data.metadata.name}", json=data.serialize())
+    assert resp.status == 200
+    received = Role.deserialize(await resp.json())
+
+    assert received.api == "core"
+    assert received.kind == "Role"
+    assert data.metadata.modified < received.metadata.modified
+    assert received.rules == new_rules
+
+    stored = await db.get(Role, name=data.metadata.name)
+    assert stored == received
+
+
+async def test_update_role_to_delete(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = RoleFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__finalizers=["cascade_deletion"],
+    )
+    await db.put(data)
+
+    # Delete the Role
+    data.metadata.finalizers = []
+    resp = await client.put(f"/core/roles/{data.metadata.name}", json=data.serialize())
+    assert resp.status == 200
+    received = Role.deserialize(await resp.json())
+    assert resource_ref(received) == resource_ref(data)
+
+    # The Role should be deleted from the database
+    stored = await db.get(Role, name=data.metadata.name)
+    assert stored is None
+
+
+async def test_update_role_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.put("/core/roles/my-resource")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "roles", "update"):
+        resp = await client.put("/core/roles/my-resource")
+        assert resp.status == 415
+
+
+async def test_update_role_no_changes(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = RoleFactory()
+    await db.put(data)
+
+    resp = await client.put(f"/core/roles/{data.metadata.name}", json=data.serialize())
+    assert resp.status == 400
+
+
+async def test_create_role_binding(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = RoleBindingFactory()
+
+    resp = await client.post("/core/rolebindings", json=data.serialize())
+    assert resp.status == 200
+    received = RoleBinding.deserialize(await resp.json())
+
+    assert received.metadata.created
+    assert received.metadata.modified
+    assert received.metadata.namespace is None
+    assert received.metadata.uid
+
+    stored = await db.get(RoleBinding, name=data.metadata.name)
+    assert stored == received
+
+
+async def test_create_role_binding_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.post("/core/rolebindings")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "rolebindings", "create"):
+        resp = await client.post("/core/rolebindings")
+        assert resp.status == 415
+
+
+async def test_create_role_binding_with_existing_name(aiohttp_client, config, db):
+    existing = RoleBindingFactory(metadata__name="existing")
+    await db.put(existing)
+
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.post("/core/rolebindings", json=existing.serialize())
+    assert resp.status == 409
+
+    received = await resp.json()
+    reason = HttpReason.deserialize(received)
+    assert reason.code == HttpReasonCode.RESOURCE_ALREADY_EXISTS
+
+
+async def test_delete_role_binding(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = RoleBindingFactory()
+    await db.put(data)
+
+    resp = await client.delete(f"/core/rolebindings/{data.metadata.name}")
+    assert resp.status == 200
+    received = RoleBinding.deserialize(await resp.json())
+    assert resource_ref(received) == resource_ref(data)
+    assert received.metadata.deleted is not None
+
+    deleted = await db.get(RoleBinding, name=data.metadata.name)
+    assert deleted.metadata.deleted is not None
+    assert "cascade_deletion" in deleted.metadata.finalizers
+
+
+async def test_add_finalizer_in_deleted_role_binding(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = RoleBindingFactory(
+        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+    )
+    await db.put(data)
+
+    data.metadata.finalizers = ["a-different-finalizer"]
+    resp = await client.put(
+        f"/core/rolebindings/{data.metadata.name}", json=data.serialize()
+    )
+    assert resp.status == 409
+    body = await resp.json()
+    assert len(body["metadata"]["finalizers"]) == 1
+
+
+async def test_delete_role_binding_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.delete("/core/rolebindings/my-resource")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "rolebindings", "delete"):
+        resp = await client.delete("/core/rolebindings/my-resource")
+        assert resp.status == 404
+
+
+async def test_delete_role_binding_already_in_deletion(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    in_deletion = RoleBindingFactory(metadata__deleted=fake.date_time())
+    await db.put(in_deletion)
+
+    resp = await client.delete(f"/core/rolebindings/{in_deletion.metadata.name}")
+    assert resp.status == 200
+
+
+async def test_list_role_bindings(aiohttp_client, config, db):
+    resources = [
+        RoleBindingFactory(),
+        RoleBindingFactory(),
+        RoleBindingFactory(),
+        RoleBindingFactory(),
+        RoleBindingFactory(),
+        RoleBindingFactory(),
+    ]
+    for elt in resources:
+        await db.put(elt)
+
+    client = await aiohttp_client(create_app(config=config))
+    resp = await client.get("/core/rolebindings")
+    assert resp.status == 200
+
+    body = await resp.json()
+    received = RoleBindingList.deserialize(body)
+
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(resources, key=key)
+
+
+async def test_list_role_bindings_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
+
+    resp = await client.get("/core/rolebindings")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "rolebindings", "list"):
+        resp = await client.get("/core/rolebindings")
+        assert resp.status == 200
+
+
+async def test_watch_role_bindings(aiohttp_client, config, db, loop):
+    client = await aiohttp_client(create_app(config=config))
+    resources = [RoleBindingFactory(), RoleBindingFactory()]
+
+    async def watch(created):
+        resp = await client.get("/core/rolebindings?watch&heartbeat=0")
+        assert resp.status == 200
+        created.set_result(None)
+
+        for i in count():
+            line = await resp.content.readline()
+            assert line, "Unexpected EOF"
+
+            event = WatchEvent.deserialize(json.loads(line.decode()))
+            data = RoleBinding.deserialize(event.object)
+
+            if i == 0:
+                assert event.type == WatchEventType.ADDED
+                assert data.metadata.name == resources[0].metadata.name
+                assert data.users == resources[0].users
+            elif i == 1:
+                assert event.type == WatchEventType.ADDED
+                assert data.metadata.name == resources[1].metadata.name
+                assert data.users == resources[1].users
+            elif i == 2:
+                assert event.type == WatchEventType.MODIFIED
+                assert data.metadata.name == resources[0].metadata.name
+                assert data.users == resources[0].users
+                return
+            elif i == 3:
+                assert False
+
+    async def modify(created):
+        # Wait for watcher to be established
+        await created
+
+        # Create the  RoleBindings
+        for data in resources:
+            resp = await client.post("/core/rolebindings", json=data.serialize())
+            assert resp.status == 200
+
+        resp = await client.delete(f"/core/rolebindings/{resources[0].metadata.name}")
+        assert resp.status == 200
+
+        received = RoleBinding.deserialize(await resp.json())
+        assert resource_ref(received) == resource_ref(resources[0])
+        assert received.metadata.deleted is not None
+
+    created = loop.create_future()
+    watching = loop.create_task(watch(created))
+    modifying = loop.create_task(modify(created))
+
+    await asyncio.wait_for(asyncio.gather(modifying, watching), timeout=3)
+
+
+async def test_read_role_binding(aiohttp_client, config, db):
+    data = RoleBindingFactory()
+    await db.put(data)
+
+    client = await aiohttp_client(create_app(config=config))
+    resp = await client.get(f"/core/rolebindings/{data.metadata.name}")
+    assert resp.status == 200
+    received = RoleBinding.deserialize(await resp.json())
+    assert received == data
+
+
+async def test_read_role_binding_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
+
+    resp = await client.get("/core/rolebindings/my-resource")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "rolebindings", "get"):
+        resp = await client.get("/core/rolebindings/my-resource")
+        assert resp.status == 404
+
+
+async def test_update_role_binding(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = RoleBindingFactory()
+    await db.put(data)
+    data.users = ["some", "additional", "users"]
+    data.roles = ["and", "other", "roles"]
+
+    resp = await client.put(
+        f"/core/rolebindings/{data.metadata.name}", json=data.serialize()
+    )
+    assert resp.status == 200
+    received = RoleBinding.deserialize(await resp.json())
+
+    assert received.api == "core"
+    assert received.kind == "RoleBinding"
+    assert data.metadata.modified < received.metadata.modified
+    assert received.users == data.users
+    assert received.roles == data.roles
+
+    stored = await db.get(RoleBinding, name=data.metadata.name)
+    assert stored == received
+
+
+async def test_update_role_binding_to_delete(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = RoleBindingFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__finalizers=["cascade_deletion"],
+    )
+    await db.put(data)
+
+    # Delete the RoleBinding
+    data.metadata.finalizers = []
+    resp = await client.put(
+        f"/core/rolebindings/{data.metadata.name}", json=data.serialize()
+    )
+    assert resp.status == 200
+    received = RoleBinding.deserialize(await resp.json())
+    assert resource_ref(received) == resource_ref(data)
+
+    # The RoleBinding should be deleted from the database
+    stored = await db.get(RoleBinding, name=data.metadata.name)
+    assert stored is None
+
+
+async def test_update_role_binding_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.put("/core/rolebindings/my-resource")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "rolebindings", "update"):
+        resp = await client.put("/core/rolebindings/my-resource")
+        assert resp.status == 415
+
+
+async def test_update_role_binding_no_changes(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = RoleBindingFactory()
+    await db.put(data)
+
+    resp = await client.put(
+        f"/core/rolebindings/{data.metadata.name}", json=data.serialize()
+    )
+    assert resp.status == 400

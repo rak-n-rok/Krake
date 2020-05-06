@@ -176,6 +176,25 @@ class Resource(object):
             sub.resource = self
         self.subresources = [sub for _, sub in subresources]
 
+    def __getitem__(self, item):
+        """Get the operation defined for this resource, with the given name.
+
+        Args:
+            item (str): name of the operation to retrieve.
+
+        Returns:
+            operation: the operation with the given name.
+
+        Raises:
+            KeyError: if no operation with this name has been defined for this Resource.
+
+        """
+        for operation in self.operations:
+            if operation.name == item:
+                return operation
+        else:
+            raise KeyError(item)
+
     @property
     def snake_case_singular(self):
         return camel_to_snake_case(self.singular)

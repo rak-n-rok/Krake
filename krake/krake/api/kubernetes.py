@@ -43,8 +43,8 @@ class KubernetesApi(object):
         "PUT", "/kubernetes/namespaces/{namespace}/applications/{name}/binding"
     )
     @protected(api="kubernetes", resource="applications/binding", verb="update")
-    @load("app", Application)
     @use_schema("body", ClusterBinding.Schema)
+    @load("app", Application)
     async def update_application_binding(request, body, app):
         now = utils.now()
         app.status.scheduled = now
@@ -64,8 +64,8 @@ class KubernetesApi(object):
         "PUT", "/kubernetes/namespaces/{namespace}/applications/{name}/complete"
     )
     @protected(api="kubernetes", resource="applications/complete", verb="update")
-    @load("app", Application)
     @use_schema("body", ApplicationComplete.Schema)
+    @load("app", Application)
     async def update_application_complete(request, body, app):
         # If the hook is not enabled for the Application or if the token is invalid
         if app.status.token is None or app.status.token != body.token:
@@ -104,9 +104,7 @@ class KubernetesApi(object):
             reason = HttpReason(
                 reason=message, code=HttpReasonCode.RESOURCE_ALREADY_EXISTS
             )
-            raise web.HTTPConflict(
-                text=json.dumps(reason.serialize()), content_type="application/json"
-            )
+            raise json_error(web.HTTPConflict, reason.serialize())
 
         now = utils.now()
 
@@ -221,18 +219,16 @@ class KubernetesApi(object):
         # can only be removed.
         if entity.metadata.deleted:
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
-                raise web.HTTPConflict(
-                    text=json.dumps(
-                        {
-                            "metadata": {
-                                "finalizers": [
-                                    "Finalizers can only be removed if "
-                                    "deletion is in progress."
-                                ]
-                            }
+                raise json_error(
+                    web.HTTPConflict,
+                    {
+                        "metadata": {
+                            "finalizers": [
+                                "Finalizers can only be removed if "
+                                "deletion is in progress."
+                            ]
                         }
-                    ),
-                    content_type="application/json",
+                    },
                 )
 
         # FIXME: if a user updates an immutable field, (such as the created timestamp),
@@ -311,9 +307,7 @@ class KubernetesApi(object):
             reason = HttpReason(
                 reason=message, code=HttpReasonCode.RESOURCE_ALREADY_EXISTS
             )
-            raise web.HTTPConflict(
-                text=json.dumps(reason.serialize()), content_type="application/json"
-            )
+            raise json_error(web.HTTPConflict, reason.serialize())
 
         now = utils.now()
 
@@ -425,18 +419,16 @@ class KubernetesApi(object):
         # can only be removed.
         if entity.metadata.deleted:
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
-                raise web.HTTPConflict(
-                    text=json.dumps(
-                        {
-                            "metadata": {
-                                "finalizers": [
-                                    "Finalizers can only be removed if "
-                                    "deletion is in progress."
-                                ]
-                            }
+                raise json_error(
+                    web.HTTPConflict,
+                    {
+                        "metadata": {
+                            "finalizers": [
+                                "Finalizers can only be removed if "
+                                "deletion is in progress."
+                            ]
                         }
-                    ),
-                    content_type="application/json",
+                    },
                 )
 
         # FIXME: if a user updates an immutable field, (such as the created timestamp),

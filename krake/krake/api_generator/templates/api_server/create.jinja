@@ -31,9 +31,7 @@ async def create_{{ operation.signature_name }}(request, body):
         reason = HttpReason(
             reason=message, code=HttpReasonCode.RESOURCE_ALREADY_EXISTS
         )
-        raise web.HTTPConflict(
-            text=json.dumps(reason.serialize()), content_type="application/json"
-        )
+        raise json_error(web.HTTPConflict, reason.serialize())
 
     now = utils.now()
 
