@@ -93,7 +93,7 @@
     #   issues. Following is a workaround.
     - name: Create workaround in Docker for C&H's MTU issues
       copy:
-        dest: "/etc/docker.json"
+        dest: "/etc/docker/daemon.json"
         content: '{ "mtu" : 1450 }'
 
     - name: Restart docker to reload the configuration
