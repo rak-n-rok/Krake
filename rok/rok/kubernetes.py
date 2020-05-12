@@ -83,7 +83,7 @@ class ApplicationListTable(BaseTable):
 @printer(table=ApplicationListTable(many=True))
 def list_applications(config, session, namespace, all):
     if all:
-        url = f"/kubernetes/applications"
+        url = "/kubernetes/applications"
     else:
         if namespace is None:
             namespace = config["user"]

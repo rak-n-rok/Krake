@@ -70,7 +70,7 @@ async def test_put_update(db, etcd_client, loop):
     await db.put(data)  # Insert first version
 
     # Make changes and put second version
-    data.name = f"updated name"
+    data.name = "updated name"
     await db.put(data)
     rev = revision(data)
 
@@ -97,7 +97,7 @@ async def test_put_modified_key(db, etcd_client):
 
     # Make changes and try to update which should raise an transaction error
     # because the key was modified.
-    data.name = f"updated name"
+    data.name = "updated name"
     with pytest.raises(TransactionError):
         await db.put(data)
 
