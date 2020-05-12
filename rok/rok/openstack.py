@@ -41,7 +41,7 @@ class ProjectTable(BaseTable):
 @printer(table=ProjectTable(many=True))
 def list_projects(config, session, namespace, all):
     if all:
-        url = f"/openstack/projects"
+        url = "/openstack/projects"
     else:
         if namespace is None:
             namespace = config["user"]

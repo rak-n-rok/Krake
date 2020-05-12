@@ -684,7 +684,7 @@ class PolymorphicContainerSchema(Schema):
         type_ = data["type"]
         dataclass = self._registry[type_]
         if dataclass.__dataclass_fields__ and type_ not in data:
-            raise ValidationError(f"Field is required", type_)
+            raise ValidationError("Field is required", type_)
 
     @post_load
     def load_subschema(self, data, **kwargs):

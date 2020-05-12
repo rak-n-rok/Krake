@@ -51,7 +51,7 @@ def _evaluate(app, cluster, constraints):
                     return False
 
     logger.debug(
-        f"Cluster %s fulfills all constraints of application %r",
+        "Cluster %s fulfills all constraints of application %r",
         resource_ref(cluster),
         resource_ref(app),
     )
