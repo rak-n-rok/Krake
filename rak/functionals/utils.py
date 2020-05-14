@@ -242,7 +242,7 @@ def check_spec_container_image(expected_image, error_message):
 
     Args:
         expected_image (str): name of the image that should be defined in the response.
-        error_message (str):
+        error_message (str): the message that will be displayed if the check fails.
 
     Returns:
 
@@ -252,6 +252,33 @@ def check_spec_container_image(expected_image, error_message):
         try:
             image = response.json["spec"]["template"]["spec"]["containers"][0]["image"]
             assert image == expected_image, error_message
+        except json.JSONDecodeError:
+            raise AssertionError(error_message)
+
+    return validate
+
+
+def check_spec_replicas(expected_replicas, error_message):
+    """Create a callable to verify that a resource has the correct number of replicas.
+
+    To be used with the :meth:`run` function and a kubectl request. The callable will
+    raise an :class:`AssertionError` if the response's number of replicas is not
+    the given one. The number of replicas corresponds to the replicas in the spec
+    of the deployment.
+
+    Args:
+        expected_replicas (int): number of replicas expected to be defined in the
+            response.
+        error_message (str): the message that will be displayed if the check fails.
+
+    Returns:
+
+    """
+
+    def validate(response):
+        try:
+            replicas = response.json["spec"]["replicas"]
+            assert replicas == expected_replicas, error_message
         except json.JSONDecodeError:
             raise AssertionError(error_message)
 

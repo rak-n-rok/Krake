@@ -96,7 +96,7 @@ Update resources
         spec:
           containers:
           - name: echo
-            image: k8s.gcr.io/echoserver:1.10
+            image: k8s.gcr.io/echoserver:1.9
             ports:
             - containerPort: 8080
     ---
