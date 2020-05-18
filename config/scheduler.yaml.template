@@ -3,6 +3,9 @@
 # Example:
 # api_endpoint: localhost:8443
 # worker_count: 5
+# debounce: 1.0
+# reschedule_after: 60
+# stickiness: 0.1
 # tls:
 #   enabled: true
 #   client_ca: tmp/pki/ca.pem

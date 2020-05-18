@@ -19,17 +19,17 @@ tls:
 authentication:
   # If enabled, every request not rejected and not authenticated by any
   # authentication method is treated as anonymous request.
-  allow_anonymous: true
+  allow_anonymous: $allow_anonymous
 
   # Keystone authentication
   strategy:
     keystone:
-      enabled: false
-      endpoint: http://localhost:5000/v3
+      enabled: $keystone_authentication_enabled
+      endpoint: $keystone_authentication_endpoint
   # Static authentication (every request is authenticated as this user-name)
     static:
-      enabled: true
-      name: system:admin
+      enabled: $static_authentication_enabled
+      name: $static_authentication_username
 
 # Authorization mode
 #
@@ -37,7 +37,7 @@ authentication:
 #  - always-allow (Allow all requests. No authorization is performed.)
 #  - always-deny (Deny all requests. Only for testing purposes.)
 #
-authorization: always-allow
+authorization: $authorization_mode
 
 
 log:

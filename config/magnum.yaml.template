@@ -3,7 +3,7 @@
 # Example:
 # api_endpoint: localhost:8443
 # worker_count: 5
-# debounce: 1.5
+# debounce: 1.0
 # poll_interval: 30
 # tls:
 #   enabled: true
@@ -15,7 +15,7 @@
 api_endpoint: $api_endpoint
 worker_count: $worker_count
 debounce: $debounce
-poll_interval: 30
+poll_interval: $poll_interval
 tls:
   enabled: $tls_enabled
   client_ca: $cert_dir/ca.pem

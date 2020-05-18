@@ -58,6 +58,31 @@ command-line options. The arguments and available options are:
     Set the directory in which the certificates for the TLS communication
     should be stored. Default: ``"tmp/pki"``.
 
+``--allow-anonymous``
+    If enabled, anonymous requests are accepted by the API. See
+    :ref:`admin/security:Authentication`. Disabled by default for the generation.
+
+``--keystone-authentication-enabled``
+    Enable the Keystone authentication as one of the authentication mechanisms. See
+    :ref:`admin/security:Authentication`. Disabled by default for the generation.
+
+``--keystone-authentication-endpoint``
+    Endpoint to connect to the keystone service. See
+    :ref:`admin/security:Authentication`. Default: ``"http://localhost:5000/v3"``.
+
+``--static-authentication-enabled``
+    Enable the static authentication as one of the authentication mechanisms. See
+    :ref:`admin/security:Authentication`. Disabled by default.
+
+``--static-authentication-username``
+    Name of the user that will authenticate through static authentication. See
+    :ref:`admin/security:Authentication`. Default: ``"system:admin"``.
+
+``--authorization-mode``
+    Authorization mode to use for the requests sent to the API.
+    Only 'RBAC' should be used in production. See :ref:`admin/security:Authorization`.
+    Default: ``always-allow``.
+
 ``--api-ip <api_ip>`` (Address)
     Host IP address of the API for the controllers. Default: ``"127.0.0.1"``.
 
@@ -79,6 +104,12 @@ command-line options. The arguments and available options are:
 ``--etcd-port <etcd_port>`` (integer)
     Port for the API to use to connect to the etcd database. Default: ``2379``.
 
+``--etcd-port <etcd_port>`` (integer)
+    Peer port for the etcd endpoint. Default: ``2380``.
+
+``--docker-daemon-mtu <docker_daemon_mtu>`` (integer)
+    The Docker daemon MTU. Default: ``1450``.
+
 ``--worker-count <worker_count>`` (integer)
     Number of worker to start on the controller. Workers are the units that
     handle resources. Default: ``5``.
@@ -90,8 +121,34 @@ command-line options. The arguments and available options are:
     mechanism prevents having to handle it each time by another component, and
     wait for the latest value. Default: ``1.0``.
 
-``--docker-daemon-mtu <docker_daemon_mtu>`` (integer)
-    The Docker daemon MTU. Default: ``1450``.
+``--reschedule-after``
+    Time in seconds after which a resource will be rescheduled. See
+    :ref:`dev/scheduling:Scheduling`. Default: ``60``.
+
+``--stickiness``
+    "Stickiness" weight to express migration overhead in the normalized ranking
+    computation. See :ref:`dev/scheduling:Scheduling`. Default: ``0.1``.
+
+``--poll-interval``
+    Time in seconds for the Magnum Controller to ask the Magnum client again after a
+    modification of a cluster. Default: ``30``.
+
+``--complete-hook-ca-dest``
+    For the complete hook, set the path to the certificate, which will be given to the
+    Application. See
+    :ref:`dev/hooks:Complete`. Default: ``"/etc/krake_ca/ca.pem"``.
+
+``--complete-hook-env-token``
+    For the complete hook, set the name of the environment variable that contain the
+    value of the token, which will be given to the Application. See
+    :ref:`dev/hooks:Complete`. Default: ``"KRAKE_TOKEN"``.
+
+``--complete-hook-env-complete``
+    For the complete hook, set the name of the environment variable that contain the
+    URL of the Krake API, which will be given to the Application. See
+    :ref:`dev/hooks:Complete`. Default: ``"KRAKE_COMPLETE_URL"``.
+
+
 
 ``-h, --help``
     Display the help message and exit the script.

@@ -63,13 +63,14 @@ $ pip install --editable "krake/[dev]"
 
 ### Running
 
+#### Configuration
 First, the configuration files need to be generated with a script. They can
 then be modified at will.
 
 ```bash
 # Start by copying the templates of the configuration files for all components.
 # You can then modify each file at your preference.
-krake_generate_config config/api.yaml.template
+krake_generate_config --allow-anonymous --static-authentication-enabled config/api.yaml.template
 
 # Optional: you can use the rok configuration template as you prefer. It can also be generated.
 #   Otherwise rok will use the default configuration
@@ -79,6 +80,13 @@ krake_generate_config rok.yaml.template
 krake_generate_config config/*.template rok.yaml.template
 ```
 
+The `--allow-anonymous` and `--static-authentication-enabled` options set the API with
+minimal authentication and authorization protections. It should not be used with a
+production deployment, but are easier to work with in a test deployment. For more
+information, take a look at the "Security principles" chapter of the
+[Admin Documentation][admin-docs].
+
+#### Bootstrapping of the database
 The database can be bootstrapped, by adding resources in the database before
 starting Krake:
 
@@ -90,7 +98,7 @@ krake_bootstrap_db bootstrapping/base_roles.yaml
 krake_bootstrap_db support/prometheus_metrics.yaml support/static_metrics.yaml
 ```
 
-
+#### Starting all components
 All services can be run as Python modules with the `-m` option of the Python
 interpreter:
 

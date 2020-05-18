@@ -65,7 +65,7 @@ Krake docker infrastructure bundle running Krake Api, Krake Controllers and Krak
   - The minimal recommended configuration is as follows:
   ```bash
   $ mkdir /etc/krake
-  $ krake_generate_config --dst /etc/krake config/*.template rok.yaml.template --api-host krake-api --etcd-host krake-db
+  $ krake_generate_config --dst /etc/krake config/*.template rok.yaml.template --api-host krake-api --etcd-host --allow-anonymous --static-authentication-enabled krake-db
   ```
 
 #### Build Krake image
