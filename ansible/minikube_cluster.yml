@@ -75,6 +75,7 @@
           - jq
           - haveged
           - python3-pip
+          - conntrack
 
     - name: Add Docker GPG key
       apt_key:
@@ -91,10 +92,11 @@
     # TODO: Remove once issue is resolved
     #   C&H infra currently suffers from "MTU bug" when typical value of 1500 causes connectivity
     #   issues. Following is a workaround.
-    - name: Create workaround in Docker for C&H's MTU issues
-      copy:
-        dest: "/etc/docker/daemon.json"
-        content: '{ "mtu" : 1450 }'
+    - name: Configure Docker daemon MTU
+      template:
+        src: files/common/daemon.json.j2
+        dest: /etc/docker/daemon.json
+      when: docker_daemon_mtu is defined
 
     - name: Restart docker to reload the configuration
       systemd:
@@ -125,12 +127,13 @@
         line: '%wheel ALL=(ALL) NOPASSWD: ALL'
         validate: 'visudo -cf %s'
 
-    - name: Add wheel group to the ubuntu user
+    - name: Add wheel and docker group to the ubuntu user
       user:
         name: ubuntu
         append: yes
         groups:
           - wheel # used for sudo
+          - docker  # used for docker command without sudo
 
     - name: Create a hushlogin for user ubuntu
       become_user: ubuntu
@@ -188,10 +191,19 @@
         path: "{{ home_dir }}/.kube/config"
         state: touch
 
+    # The error code 65 is raised when no minikube cluster is present yet.
+    - name: Stop Minikube
+      become_user: ubuntu
+      command: minikube stop
+      register: minikube_status
+      failed_when: "minikube_status.rc != 65 and minikube_status.rc != 0"
+
+    # The error code 7 is raised when a minikube cluster was present
+    # and has been stopped beforehand.
     - name: Get Minikube status
       command: minikube status
       register: minikube_status
-      failed_when: "minikube_status.rc != 1 and minikube_status.rc != 0"
+      failed_when: "minikube_status.rc != 65 and minikube_status.rc != 7"
 
     - name: Start Minikube
       become: yes
@@ -206,7 +218,6 @@
         MINIKUBE_HOME: "{{ home_dir }}"
         CHANGE_MINIKUBE_NONE_USER: true
         KUBECONFIG: "{{ home_dir }}/.kube/config"
-      when: "minikube_status.rc == 1"
 
     - name: Change ownership of a minikube and kube directories
       become: yes
@@ -234,7 +245,7 @@
 
     - name: Ensure kubectl is configured correctly
       assert:
-        that: "'kubectl: Correctly Configured' in minikube_status.stdout"
+        that: "'kubeconfig: Configured' in minikube_status.stdout"
 
 - name: Setup Minikube clusters
   hosts: minikube_clusters
@@ -253,8 +264,8 @@
         dest: cluster_certs
       with_items:
         - .minikube/ca.crt
-        - .minikube/client.crt
-        - .minikube/client.key
+        - .minikube/profiles/minikube/client.crt
+        - .minikube/profiles/minikube/client.key
 
     - name: Generate kube config file
       delegate_to: localhost

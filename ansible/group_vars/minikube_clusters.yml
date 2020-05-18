@@ -5,7 +5,7 @@ flavor: M.mem+
 
 # Minikube and kubectl configuration parameters
 minikube_install_dir: /usr/local/bin
-minikube_version: v1.4.0
+minikube_version: v1.10.1
 kubectl_version: v1.18.2
 
 # Keystone configuration parameters
@@ -13,3 +13,6 @@ kube_api_config: /etc/kubernetes/manifests/kube-apiserver.yaml
 minikube_path: /var/lib/minikube/certs
 user_role: _member_
 user_project: demo
+
+# OpenStack networks have MTU value of 1450
+docker_daemon_mtu: 1450
