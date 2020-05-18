@@ -347,7 +347,7 @@ async def register_observer(controller, app, kubernetes_client, start=True, **kw
             task.
 
     """
-    from krake.controller.kubernetes_application import KubernetesObserver
+    from krake.controller.kubernetes import KubernetesObserver
 
     cluster = await controller.kubernetes_api.read_cluster(
         namespace=app.status.running_on.namespace, name=app.status.running_on.name

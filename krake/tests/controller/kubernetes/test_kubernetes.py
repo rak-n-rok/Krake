@@ -14,7 +14,7 @@ from krake.api.app import create_app
 from krake.controller import create_ssl_context
 from krake.data.core import resource_ref, ReasonCode
 from krake.data.kubernetes import Application, ApplicationState
-from krake.controller.kubernetes_application import (
+from krake.controller.kubernetes import (
     KubernetesController,
     register_service,
     unregister_service,

@@ -6,13 +6,10 @@ import pytz
 import yaml
 
 from krake.api.app import create_app
-from krake.controller.kubernetes_application.kubernetes_application import ResourceDelta
+from krake.controller.kubernetes.kubernetes import ResourceDelta
 from krake.data.core import resource_ref
 from krake.data.kubernetes import Application, ApplicationState
-from krake.controller.kubernetes_application import (
-    KubernetesController,
-    KubernetesClient,
-)
+from krake.controller.kubernetes import KubernetesController, KubernetesClient
 from krake.client import Client
 from krake.test_utils import server_endpoint
 

@@ -63,7 +63,7 @@ services:
     tty: true
     depends_on:
       - krake-api
-    command: python3 -m krake.controller.kubernetes_application
+    command: python3 -m krake.controller.kubernetes
     environment:
       # FIXME: Krake ip address is temporary loaded from
       # environment variable "KRAKE_HOST", if present. This should
