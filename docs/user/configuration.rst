@@ -214,6 +214,10 @@ Krake configuration
 
 All configuration options for the Krake API are described here.
 
+port (integer)
+    This parameter defines the port to which the Krake API will listen to for incoming
+    requests.
+
 etcd
     This section defines the parameters to let the API communicate with the ETCD database.
 
