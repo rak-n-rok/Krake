@@ -75,6 +75,7 @@
           - haveged
           - python3-pip
           - docker.io
+          - golang-cfssl
 
     - name: Upgrade pip to latest version
       pip:
@@ -280,6 +281,21 @@
             state: directory
             owner: krake
             group: krake
+          when: enable_tls is defined and enable_tls
+
+        - name: Generate certificates for all components
+          command: >
+            {{ git_dir }}/support/pki {{ item }}
+            --dest-dir {{ configuration_dir }}/certs
+            --krake-host {{ api_host }} --ignore
+          loop:
+            - system:api-server
+            - system:scheduler
+            - system:gc
+            - system:kubernetes
+            - system:magnum
+            - system:admin
+          when: enable_tls is defined and enable_tls
 
         # The files generated overwrite the ones created
         - name: Generate the configuration files
