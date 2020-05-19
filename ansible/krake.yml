@@ -347,7 +347,10 @@
             docker exec -i {{ api_host }} krake_bootstrap_db --force -
             {% if etcd_host is defined %} --db-host {{ etcd_host }} {% endif %}
             {% if etcd_port is defined %} --db-port {{ etcd_port }} {% endif %}
-            < {{ git_dir }}/docker/prometheus/bootstrap.yaml
+            < {{ git_dir }}/{{ item }}
+          loop:
+            - "bootstrapping/base_roles.yaml"
+            - "docker/prometheus/bootstrap.yaml"
 
     - name: Krake rok deployment
       tags:

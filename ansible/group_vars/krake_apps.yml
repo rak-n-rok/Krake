@@ -25,7 +25,7 @@ static_authentication_enabled: false
 static_authentication_username: "system:admin"
 
 # Authorization-related parameters
-authorization_mode: always-allow
+authorization_mode: RBAC
 
 ## Controllers parameters
 worker_count: 5
