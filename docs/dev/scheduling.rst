@@ -38,28 +38,36 @@ Scheduling of Applications
   corresponding metrics providers which should be defined in the metric resource
   specification, see :ref:`dev/scheduling:Metrics and Metric Providers`.
 
-- Then, the rank for each Kubernetes cluster resource is computed. The cluster rank is
+- Then, the score for each Kubernetes cluster resource is computed. The cluster score is
   represented by a decimal number and is computed from Kubernetes cluster stickiness
   and metric values and weights. More information on stickiness in the
   :ref:`dev/scheduling:Stickiness` section. The Kubernetes clusters with defined metrics
   are preferred. It means clusters which are not linked to any metric have a lower
-  priority than the ones with linked metrics. This step is a **ranking** step.
+  priority than the ones with linked metrics:
 
-  - The rank formula for a cluster without metrics is defined as follows:
+  - If there are no cluster with metrics: the score is only computed using the
+    stickiness;
+
+  - If there are clusters with metrics: the clusters without metrics are filtered out
+    and the scores of the ones with metrics are computed and compared.
+
+  This step is a **ranking** step.
+
+  - The score formula for a cluster without metrics is defined as follows:
 
     .. math::
 
-        rank = sticky_{value} \cdot sticky_{weight}
+        score = sticky_{value} \cdot sticky_{weight}
 
-  - The rank formula for a cluster with `n` metrics is defined as follows:
+  - The score formula for a cluster with `n` metrics is defined as follows:
 
     .. math::
 
-        rank = \frac{(sticky_{value} \cdot sticky_{weight}) + \sum\limits_{i=1}^n metric_{value_i} \cdot metric_{weight_i}}
+        score = \frac{(sticky_{value} \cdot sticky_{weight}) + \sum\limits_{i=1}^n metric_{value_i} \cdot metric_{weight_i}}
                {sticky_{weight} + \sum\limits_{i=1}^n metric_{weight_i}}
 
-- The application is scheduled to the cluster with the highest rank. If several
-  clusters have the same rank, one of them is chosen randomly.
+- The application is scheduled to the cluster with the highest score. If several
+  clusters have the same score, one of them is chosen randomly.
 
 Rescheduling (automatic migration) of Applications
 --------------------------------------------------
@@ -76,14 +84,14 @@ Stickiness
 ----------
 
 Stickiness is an extra metric for clusters to make the application "stick" to it by
-increasing its rank. Stickiness extra metric is defined by its value and
+increasing its score. Stickiness extra metric is defined by its value and
 configurable weight. It represents the cost of migration of an Application, as it is
-added to the rank of the cluster on which the Application is currently running.
+added to the score of the cluster on which the Application is currently running.
 
-If the value is high, no migration will be performed, as the updated rank of the current
-cluster of the Application will be too high compared to the rank of the other clusters.
+If the value is high, no migration will be performed, as the updated score of the current
+cluster of the Application will be too high compared to the score of the other clusters.
 If this value is too low, or if this mechanism was not present, any application could be
-migrated from just the slightest change in the clusters rank, which could be induced by
+migrated from just the slightest change in the clusters score, which could be induced by
 small changes in the metrics value. Thus the stickiness acts as a threshold: the changes
 in the metrics values has to be higher than this value to trigger a rescheduling.
 
@@ -156,27 +164,33 @@ Scheduling of Magnum clusters
   metric values from the corresponding metrics providers which should be defined in the
   metric resource specification, see :ref:`dev/scheduling:Metrics and Metric Providers`.
 
-- Then, the rank for each OpenStack project resource is computed. The OpenStack project
-  rank is represented by a decimal number and is computed from metric values and
-  weights. If a given OpenStack project does not contain metric definition, its rank is
-  set to `0`. Therefore, the OpenStack projects with defined metrics are preferred.
+- Then, the score for each OpenStack project resource is computed. The OpenStack project
+  score is represented by a decimal number and is computed from metric values and
+  weights. If a given OpenStack project does not contain metric definition, its score is
+  set to `0`. Therefore, the OpenStack projects with defined metrics are preferred:
+
+  - If there are no project with metrics: the score is 0 for all projects;
+
+  - If there are projects with metrics: the projects without metrics are filtered out
+    and the scores of the ones with metrics are computed and compared.
+
   This step is a **ranking** step.
 
-  - The rank formula for a OpenStack project without metrics is defined as follows:
+  - The score formula for a OpenStack project without metrics is defined as follows:
 
     .. math::
 
-        rank = 0
+        score = 0
 
-  - The rank formula for a OpenStack project with `n` metrics is defined as follows:
+  - The score formula for a OpenStack project with `n` metrics is defined as follows:
 
     .. math::
 
-        rank = \frac{\sum\limits_{i=1}^n metric_{value_i} \cdot metric_{weight_i}}
+        score = \frac{\sum\limits_{i=1}^n metric_{value_i} \cdot metric_{weight_i}}
                {\sum\limits_{i=1}^n metric_{weight_i}}
 
-- The Magnum cluster is scheduled to the OpenStack project with the highest rank. If
-  several OpenStack projects have the same rank, one of them is chosen randomly.
+- The Magnum cluster is scheduled to the OpenStack project with the highest score. If
+  several OpenStack projects have the same score, one of them is chosen randomly.
 
 The following figure gives an overview about the Magnum cluster handler of Krake
 scheduler. "OS project" means "OpenStack project resource" on the figure.
