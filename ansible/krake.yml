@@ -283,7 +283,7 @@
             group: krake
           when: enable_tls is defined and enable_tls
 
-        - name: Generate certificates for all components
+        - name: Generate certificates for all the Krake components
           command: >
             {{ git_dir }}/support/pki {{ item }}
             --dest-dir {{ configuration_dir }}/certs
@@ -355,14 +355,24 @@
     - name: Krake rok deployment
       tags:
         - krake-rok-deployment
+      vars:
+        rok_configuration_dir: /etc/rok
       block:
 
-        # Add the path to directory to look for the Rok configuration file
-        - name: Add the rok config path to profile
-          lineinfile:
-            path: /home/krake/.profile
-            regexp: '^export XDG_CONFIG_HOME='
-            line: "export XDG_CONFIG_HOME={{ git_dir }}"
+        - name: Generate certificates for rok
+          command: >
+            {{ git_dir }}/support/pki system:admin
+            --dest-dir {{ configuration_dir }}/certs
+            --krake-host {{ api_host }} --ignore
+          when: enable_tls is defined and enable_tls
+
+        - name: Create configuration directory for rok
+          become_user: root
+          file:
+            path: "{{ rok_configuration_dir }}"
+            state: directory
+            owner: krake
+            group: krake
 
         - name: Install Krake rok
           tags:
@@ -374,12 +384,13 @@
             extra_args: --user
 
         - name: Create Krake rok configuration file
-          script: |
-            {{ repo_dir }}/krake/scripts/krake_generate_config --dst {{ git_dir }} \
-            {% if enable_tls is defined and enable_tls %} --tls-enabled {% endif %} \
-            {% if cert_dir is defined %} --cert-dir {{ cert_dir }} {% endif %} \
-            --api-host localhost \
-            {% if api_port is defined %} --api-port {{ api_port }} {% endif %} \
+          script: >
+            {{ repo_dir }}/krake/scripts/krake_generate_config
+            --dst {{ rok_configuration_dir }}
+            {% if enable_tls is defined and enable_tls %} --tls-enabled {% endif %}
+            {% if cert_dir is defined %} --cert-dir {{ cert_dir }} {% endif %}
+            --api-host localhost
+            {% if api_port is defined %} --api-port {{ api_port }} {% endif %}
             {{ git_dir }}/rok.yaml.template
 
 - name: Generate cluster config
