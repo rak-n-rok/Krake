@@ -553,6 +553,27 @@ async def test_complete_hook_unauthorized(aiohttp_client, config, db):
     )
     assert resp.status == 401
 
+    stored = await db.get(Application, namespace="testing", name=app.metadata.name)
+    assert stored.metadata.deleted is None
+
+
+async def test_complete_hook_disabled(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    # Create application
+    app = ApplicationFactory(status__token=None)
+    await db.put(app)
+
+    # Complete application
+    resp = await client.put(
+        f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/complete",
+        json=ApplicationComplete(token=None).serialize(),
+    )
+    assert resp.status == 401
+
+    stored = await db.get(Application, namespace="testing", name=app.metadata.name)
+    assert stored.metadata.deleted is None
+
 
 async def test_list_clusters(aiohttp_client, config, db):
     clusters = [ClusterFactory(), ClusterFactory(), ClusterFactory()]

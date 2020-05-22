@@ -36,7 +36,8 @@ class KubernetesApi:
     @load("app", Application)
     @use_schema("body", ApplicationComplete.Schema)
     async def update_application_complete(request, body, app):
-        if app.status.token != body.token:
+        # If the hook is not enabled for the Application or if the token is invalid
+        if app.status.token is None or app.status.token != body.token:
             raise web.HTTPUnauthorized()
 
         # Resource marked as deletion, to be deleted by the Garbage Collector
