@@ -4,7 +4,7 @@ from krake.data.config import HooksConfiguration
 nginx_manifest = list(
     yaml.safe_load_all(
         """---
-apiVersion: apps/v1
+apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   name: nginx-demo

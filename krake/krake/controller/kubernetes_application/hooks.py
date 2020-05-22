@@ -18,6 +18,7 @@ from typing import NamedTuple
 import OpenSSL
 import yarl
 from krake.controller import Observer, ControllerError
+from krake.utils import camel_to_snake_case
 from kubernetes_asyncio.client.rest import ApiException
 from yarl import URL
 from secrets import token_urlsafe
@@ -303,14 +304,18 @@ def merge_status(orig, new):
 
     result = {}
     for key, value in orig.items():
+        # The keys taken from the new dictionary are in camel case, while the keys from
+        # the old dictionary are in snake case.
+        underscore_key = camel_to_snake_case(key)
+
         # Go through dictionaries recursively
         if type(value) is dict:
-            new_value = new.get(key, {})
+            new_value = new.get(underscore_key, {})
             assert type(new_value) is dict
             result[key] = merge_status(value, new_value)
 
         elif type(value) is list:
-            new_value = new.get(key, [])
+            new_value = new.get(underscore_key, [])
             # Replace the list with the newest if the length is different
             if len(value) != len(new_value):
                 result[key] = new_value
@@ -325,7 +330,7 @@ def merge_status(orig, new):
 
         else:
             # Update with value from new dictionary, or use original as default
-            result[key] = new.get(key, value)
+            result[key] = new.get(underscore_key, value)
 
     return result
 
