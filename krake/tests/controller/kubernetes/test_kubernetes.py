@@ -1335,6 +1335,98 @@ async def test_complete_hook_tls(aiohttp_server, config, pki, db, loop):
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
 
+async def test_complete_hook_reschedule(aiohttp_server, config, pki, db, loop):
+    """Attempt to reschedule an Application augmented with the "complete" hook. Enable
+    TLS to use the "full-featured" hook (with the ConfigMap containing a certificate).
+    """
+    routes = web.RouteTableDef()
+
+    server_cert = pki.gencert("api-server")
+    config.tls = TlsServerConfiguration(
+        enabled=True, client_ca=pki.ca.cert, cert=server_cert.cert, key=server_cert.key
+    )
+
+    client_cert = pki.gencert("client")
+    client_tls = TlsClientConfiguration(
+        enabled=True,
+        client_ca=pki.ca.cert,
+        client_cert=client_cert.cert,
+        client_key=client_cert.key,
+    )
+    ssl_context = create_ssl_context(client_tls)
+
+    @routes.get("/api/v1/namespaces/secondary/configmaps/ca.pem")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/api/v1/namespaces/secondary/configmaps")
+    async def _(request):
+        return web.Response(status=200)
+
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
+    async def _(request):
+        return web.Response(status=200)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    # We only consider the first resource in the manifest file, that is a Deployment.
+    # This Deployment should be modified by the "complete" hook with ENV vars.
+    deployment_manifest = deepcopy(nginx_manifest[0])
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
+        spec__hooks=["complete"],
+        spec__manifest=[deployment_manifest],
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    server_app = create_app(config)
+    api_server = Server(server_app)
+
+    await api_server.start_server(ssl=server_app["ssl_context"])
+    assert api_server.scheme == "https"
+
+    async with Client(
+        url=server_endpoint(api_server), loop=loop, ssl_context=ssl_context
+    ) as client:
+        controller = KubernetesController(
+            server_endpoint(api_server),
+            worker_count=0,
+            ssl_context=ssl_context,
+            hooks=deepcopy(hooks_config),
+        )
+        await controller.prepare(client)
+        # Observer started here in order to be stopped afterwards,
+        # otherwise get an exception from the Controller trying to stop a non-existing
+        # Observer.
+        await controller.resource_received(app, start_observer=True)
+
+        stored = await db.get(
+            Application, namespace=app.metadata.namespace, name=app.metadata.name
+        )
+        assert stored.status.state == ApplicationState.RUNNING
+        assert stored.status.manifest is not None
+
+        # Do a rescheduling --> start the reconciliation loop
+        await controller.resource_received(stored, start_observer=False)
+
+        stored = await db.get(
+            Application, namespace=app.metadata.namespace, name=app.metadata.name
+        )
+        assert stored.status.state == ApplicationState.RUNNING
+        assert stored.status.manifest is not None
+
+
 async def test_kubernetes_controller_error_handling(aiohttp_server, config, db, loop):
     """Test the behavior of the Controller in case of a ControllerError.
     """
