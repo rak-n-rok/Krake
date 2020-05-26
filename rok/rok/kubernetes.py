@@ -13,6 +13,7 @@ import yaml
 from .parser import (
     ParserSpec,
     argument,
+    mutually_exclusive_group,
     arg_formatting,
     arg_labels,
     arg_namespace,
@@ -28,6 +29,27 @@ kubernetes = ParserSpec(
 
 application = kubernetes.subparser(
     "application", aliases=["app"], help="Manage Kubernetes applications"
+)
+
+arg_migration_constraints = mutually_exclusive_group(
+    [
+        (
+            ["--disable-migration"],
+            {
+                "dest": "disable_migration",
+                "action": "store_true",
+                "help": "Disable migration of the application",
+            },
+        ),
+        (
+            ["--enable-migration"],
+            {
+                "dest": "enable_migration",
+                "action": "store_true",
+                "help": "Enable migration of the application",
+            },
+        ),
+    ],
 )
 
 arg_cluster_label_constraints = argument(
@@ -98,6 +120,7 @@ def list_applications(config, session, namespace, all):
     "-f", "--file", type=FileType(), required=True, help="Kubernetes manifest file"
 )
 @argument("name", help="Name of the application")
+@arg_migration_constraints(default="--enable-migration")
 @arg_cluster_label_constraints
 @arg_cluster_resource_constraints
 @arg_namespace
@@ -110,6 +133,8 @@ def create_application(
     file,
     name,
     namespace,
+    disable_migration,
+    enable_migration,
     cluster_label_constraints,
     labels,
     cluster_resource_constraints,
@@ -118,6 +143,9 @@ def create_application(
     if namespace is None:
         namespace = config["user"]
 
+    migration = True
+    if enable_migration or disable_migration:  # If either one was specified by the user
+        migration = enable_migration
     manifest = list(yaml.safe_load_all(file))
     app = {
         "metadata": {"name": name, "labels": labels},
@@ -125,10 +153,11 @@ def create_application(
             "hooks": hooks,
             "manifest": manifest,
             "constraints": {
+                "migration": migration,
                 "cluster": {
                     "labels": cluster_label_constraints,
                     "custom_resources": cluster_resource_constraints,
-                }
+                },
             },
         },
     }
@@ -168,6 +197,7 @@ def get_application(config, session, namespace, name):
 @application.command("update", help="Update Kubernetes application")
 @argument("name", help="Kubernetes application name")
 @argument("-f", "--file", type=FileType(), help="Kubernetes manifest file")
+@arg_migration_constraints()
 @arg_cluster_label_constraints
 @arg_cluster_resource_constraints
 @arg_namespace
@@ -181,6 +211,8 @@ def update_application(
     name,
     file,
     labels,
+    disable_migration,
+    enable_migration,
     cluster_label_constraints,
     cluster_resource_constraints,
     hooks,
@@ -211,6 +243,8 @@ def update_application(
         app_constraints["cluster"]["labels"] = cluster_label_constraints
     if cluster_resource_constraints:
         app_constraints["cluster"]["custom_resources"] = cluster_resource_constraints
+    if disable_migration or enable_migration:
+        app_constraints["migration"] = enable_migration
 
     resp = session.put(
         f"/kubernetes/namespaces/{namespace}/applications/{name}", json=app

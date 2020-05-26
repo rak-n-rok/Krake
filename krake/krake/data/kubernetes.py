@@ -20,6 +20,7 @@ class ClusterConstraints(Serializable):
 
 class Constraints(Serializable):
     cluster: ClusterConstraints = None
+    migration: bool = True
 
 
 class ApplicationSpec(Serializable):
