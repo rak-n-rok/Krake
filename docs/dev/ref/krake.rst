@@ -49,7 +49,7 @@ krake.controller
 
     All new controller should be added in this module.
 
-    krake.controller.kubernetes_application
+    krake.controller.kubernetes
         This sub-module contains the definition of the controller specialized
         for the Kubernetes clusters and applications handling.
 
@@ -180,7 +180,7 @@ Controllers
 Controller Kubernetes Application
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: krake.controller.kubernetes_application
+.. automodule:: krake.controller.kubernetes
     :members:
     :show-inheritance:
 

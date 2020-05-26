@@ -111,7 +111,7 @@ python -m krake.controller.gc
 python -m krake.controller.scheduler
 
 # Run the Kubernetes application controller
-python -m krake.controller.kubernetes_application
+python -m krake.controller.kubernetes
 ```
 
 

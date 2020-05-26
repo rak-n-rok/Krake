@@ -23,10 +23,7 @@ from typing import NamedTuple, Tuple
 from .hooks import listen, Hook
 from krake.client.kubernetes import KubernetesApi
 from krake.controller import Controller, Reflector, ControllerError
-from krake.controller.kubernetes_application.hooks import (
-    register_observer,
-    unregister_observer,
-)
+from krake.controller.kubernetes.hooks import register_observer, unregister_observer
 from krake.data.core import ReasonCode, resource_ref, Reason
 from krake.data.kubernetes import ApplicationState
 from krake.utils import camel_to_snake_case, cached_property

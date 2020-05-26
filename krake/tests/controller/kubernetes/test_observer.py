@@ -5,13 +5,11 @@ from aiohttp import web
 import yaml
 
 from krake.api.app import create_app
-from krake.controller.kubernetes_application.hooks import register_observer
-from krake.controller.kubernetes_application.kubernetes_application import (
-    KubernetesClient,
-)
+from krake.controller.kubernetes.hooks import register_observer
+from krake.controller.kubernetes.kubernetes import KubernetesClient
 from krake.data.core import resource_ref
 from krake.data.kubernetes import Application, ApplicationState
-from krake.controller.kubernetes_application import (
+from krake.controller.kubernetes import (
     KubernetesController,
     KubernetesObserver,
     merge_status,

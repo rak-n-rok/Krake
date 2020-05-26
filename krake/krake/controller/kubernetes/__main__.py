@@ -43,7 +43,7 @@ from krake import (
 from krake.data.config import KubernetesConfiguration
 
 from ...controller import create_ssl_context, run
-from .kubernetes_application import KubernetesController
+from .kubernetes import KubernetesController
 
 
 logger = logging.getLogger("krake.controller.kubernetes")

@@ -97,7 +97,7 @@ class RoleRule(Serializable):
     verbs: List[Verb]
 
 
-@persistent("/roles/{name}")
+@persistent("/core/roles/{name}")
 class Role(ApiObject):
     api: str = "core"
     kind: str = "Role"
@@ -117,7 +117,7 @@ class RoleBindingStatus(Serializable):
     modified: datetime
 
 
-@persistent("/rolebindings/{name}")
+@persistent("/core/rolebindings/{name}")
 class RoleBinding(ApiObject):
     api: str = "core"
     kind: str = "RoleBinding"
@@ -168,7 +168,7 @@ class MetricSpec(Serializable):
     provider: MetricSpecProvider
 
 
-@persistent("/metric/{name}")
+@persistent("/core/metric/{name}")
 class Metric(ApiObject):
     api: str = "core"
     kind: str = "Metric"
@@ -197,7 +197,7 @@ class StaticSpec(Serializable):
     metrics: Dict[str, float]
 
 
-@persistent("/metricsprovider/{name}")
+@persistent("/core/metricsprovider/{name}")
 class MetricsProvider(ApiObject):
     api: str = "core"
     kind: str = "MetricsProvider"
