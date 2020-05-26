@@ -47,10 +47,7 @@
   roles:
     - authorized-keys
   vars:
-    # IP subnet which is used by VMs spawned by DevStack. By convention, the
-    # 3rd block of the subnet is to the DevStack ID, e.g. address
-    # "172.16.1.100" belongs to "DevStack 1"
-    devstack_cidr: 172.16.0.0/16
+
     authorized_user: ubuntu
   tasks:
 
@@ -101,10 +98,6 @@
         # OpenStack subnet
         private_network_address: "{{ hostvars[network]['subnet_cidr'] | network_address }}"
         private_netmask: "{{ hostvars[network]['subnet_cidr'] | netmask }}"
-
-        # DevStack subnet
-        devstack_network_address: "{{ devstack_cidr | network_address }}"
-        devstack_netmask: "{{ devstack_cidr | netmask }}"
       template:
         src: "{{ playbook_dir }}/files/gateway/server.conf.j2"
         dest: /etc/openvpn/server/krake/server.conf

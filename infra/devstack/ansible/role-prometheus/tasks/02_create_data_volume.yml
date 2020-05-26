@@ -1,8 +1,0 @@
----
-# docker_volume module doesn't work when no volume exists
-# This should be fixed in Ansible version 2.4.3.0
-# See Ansible issue: #28145
-- name: Create Prometheus data volume
-  shell: docker volume create --driver local prometheus-data
-  args:
-    creates: /var/lib/docker/volumes/prometheus-data

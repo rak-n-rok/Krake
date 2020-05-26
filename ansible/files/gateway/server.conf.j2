@@ -112,10 +112,6 @@ ifconfig-pool-persist ipp.txt
 # back to the OpenVPN server.
 push "route {{ private_network_address }} {{ private_netmask }}"
 
-# Push route to DevStack subnets. This allows clients to
-# reach DevStack VMs.
-push "route {{ devstack_network_address }} {{ devstack_netmask }}"
-
 # To assign specific IP addresses to specific
 # clients or if a connecting client has a private
 # subnet behind it that should also have VPN access,

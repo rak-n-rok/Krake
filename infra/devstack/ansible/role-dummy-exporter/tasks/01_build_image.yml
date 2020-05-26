@@ -1,3 +1,0 @@
----
-- name: Build docker image for dummy exporter 
-  command: docker build -t {{ exporter_dummy_image_name }}:{{ exporter_dummy_image_tag }} {{ exporter_dummy_docker_folder }}
