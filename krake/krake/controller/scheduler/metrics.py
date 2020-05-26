@@ -125,11 +125,21 @@ class Provider(object):
         provider_type = kwargs["metrics_provider"].spec.type
         return object.__new__(mcls.registry[provider_type])
 
-    async def query(self):
-        """Asynchronous callback executed whenever an error occurs during
-        :meth:`resource_received`.
+    async def query(self, metric):
+        """Returns the metric value using the metric provider.
+
+        Args:
+            metric (Metric): Metric description.
+
+        Returns:
+            Any: Metric value returned by the metrics provider.
+
+        Raises:
+            MetricError: If the requested metric name cannot be found in the
+                specification.
+
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
 
 class Prometheus(Provider):
