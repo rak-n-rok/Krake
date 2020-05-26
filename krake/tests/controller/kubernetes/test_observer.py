@@ -161,10 +161,12 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
     """
     routes = web.RouteTableDef()
 
-    # Actual resource, with container image changed
+    # Actual resource, with container image and selector changed
     updated_app = deepcopy(app_response)
     first_container = get_first_container(updated_app)
     first_container["image"] = "nginx:1.6"
+    # Test the observation of changes on values with a CamelCase format
+    updated_app["spec"]["selector"]["matchLabels"] = {"app": "foo"}
 
     @routes.get("/api/v1/namespaces/default/services/nginx-demo")
     async def _(request):
@@ -196,15 +198,22 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
     async def on_res_update(resource):
         assert resource.metadata.name == app.metadata.name
 
-        status_image = get_first_container(resource.status.manifest[0])["image"]
+        deployment_resource = resource.status.manifest[0]
+        status_image = get_first_container(deployment_resource)["image"]
         if actual_state[0] == 0:
             assert status_image == "nginx:1.7.9"
             assert len(resource.status.manifest) == 2
         elif actual_state[0] == 1:
             assert status_image == "nginx:1.6"
+            assert deployment_resource["spec"]["selector"]["matchLabels"] == {
+                "app": "foo"
+            }
             assert len(resource.status.manifest) == 2
         elif actual_state[0] == 2:
             assert status_image == "nginx:1.6"
+            assert deployment_resource["spec"]["selector"]["matchLabels"] == {
+                "app": "foo"
+            }
             manifests = resource.status.manifest
             assert len(manifests) == 1
             assert manifests[0]["kind"] == "Deployment"
