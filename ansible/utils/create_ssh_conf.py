@@ -18,8 +18,11 @@ def translate_hosts_to_conf(fname):
     with open(fname) as f:
         hosts = json.load(f)
 
-    configs = (generate_ssh_entry(name, conf) for name, conf in hosts.items()
-               if 'ansible_host' in conf)
+    configs = (
+        generate_ssh_entry(name, conf)
+        for name, conf in hosts.items()
+        if "ansible_host" in conf
+    )
 
     return header.format(hosts_file=os.path.abspath(fname)) + "\n".join(configs)
 
@@ -31,9 +34,9 @@ def generate_extra_options(optstr):
     while options:
         key = options.pop(0)
 
-        if key == '-o':
+        if key == "-o":
             value = options.pop(0)
-            name, option = value.split('=', 1)
+            name, option = value.split("=", 1)
             yield "    {} {}\n".format(name, option)
 
 
@@ -50,19 +53,21 @@ def generate_ssh_entry(host, conf):
         name=host,
         hostname=conf["ansible_host"],
         user=conf["ansible_user"],
-        identity_file=conf["ansible_ssh_private_key_file"] or '~/.ssh/id_rsa'
+        identity_file=conf["ansible_ssh_private_key_file"] or "~/.ssh/id_rsa",
     )
 
-    common = generate_extra_options(conf.get('ansible_ssh_common_args', ''))
-    extra = generate_extra_options(conf.get('ansible_ssh_extra_args', ''))
+    common = generate_extra_options(conf.get("ansible_ssh_common_args", ""))
+    extra = generate_extra_options(conf.get("ansible_ssh_extra_args", ""))
 
-    return head + ''.join(chain(common, extra))
+    return head + "".join(chain(common, extra))
 
 
-if __name__ == '__main__':
-    parser = ArgumentParser(description="Generate ssh config section for "
-                                        "every dynamic host in Ansible "
-                                        "inventory")
+if __name__ == "__main__":
+    parser = ArgumentParser(
+        description="Generate ssh config section for "
+        "every dynamic host in Ansible "
+        "inventory"
+    )
     parser.add_argument("hosts")
     parser.add_argument("--out", help="Output file", default=None)
     args = parser.parse_args()

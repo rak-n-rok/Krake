@@ -222,16 +222,19 @@ if __name__ == "__main__":
     #  variable "KRAKE_HOST" in the application controller.
     #  This should be removed when DNS service takes place.
     add_option(
-        parser, "--api-ip", "API host IP address for the controllers.",
-        default="127.0.0.1"
+        parser,
+        "--api-ip",
+        "API host IP address for the controllers.",
+        default="127.0.0.1",
     )
     add_option(
-        parser, "--api-host", "API endpoint host for the controllers.",
-        default="localhost"
+        parser,
+        "--api-host",
+        "API endpoint host for the controllers.",
+        default="localhost",
     )
     add_option(
-        parser, "--api-port", "API endpoint port for the controllers.",
-        default=8080,
+        parser, "--api-port", "API endpoint port for the controllers.", default=8080
     )
     add_option(
         parser, "--etcd-version", "The etcd database version.", default="v3.3.13"
@@ -241,8 +244,7 @@ if __name__ == "__main__":
     )
     add_option(parser, "--etcd-port", "Port for the etcd endpoint.", default=2379)
     add_option(
-        parser, "--etcd-peer-port", "Peer port for the etcd endpoint.",
-        default=2380,
+        parser, "--etcd-peer-port", "Peer port for the etcd endpoint.", default=2380
     )
     add_option(
         parser,
@@ -280,9 +282,7 @@ if __name__ == "__main__":
         ),
         default=0.1,
     )
-    add_option(
-        parser, "--docker-daemon-mtu", "The Docker daemon MTU.", default=1450
-    )
+    add_option(parser, "--docker-daemon-mtu", "The Docker daemon MTU.", default=1450)
 
     args = vars(parser.parse_args())
     sys.exit(main(**args))
