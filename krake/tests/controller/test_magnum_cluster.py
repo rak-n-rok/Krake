@@ -19,9 +19,9 @@ from krake.data.openstack import MagnumCluster, MagnumClusterState
 from krake.data.kubernetes import Cluster
 from krake.controller.magnum import MagnumClusterController
 
-from factories.openstack import ProjectFactory, MagnumClusterFactory
-from factories.kubernetes import ClusterFactory as KubernetesClusterFactory
-from factories import fake
+from tests.factories.openstack import ProjectFactory, MagnumClusterFactory
+from tests.factories.kubernetes import ClusterFactory as KubernetesClusterFactory
+from tests.factories import fake
 
 
 def make_openstack_app(cluster_responses):

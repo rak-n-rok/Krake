@@ -12,8 +12,12 @@ from krake.data.openstack import (
 from krake.api.app import create_app
 from krake.api.database import revision
 
-from factories.core import ReasonFactory
-from factories.openstack import ProjectFactory, AuthMethodFactory, MagnumClusterFactory
+from tests.factories.core import ReasonFactory
+from tests.factories.openstack import (
+    ProjectFactory,
+    AuthMethodFactory,
+    MagnumClusterFactory,
+)
 
 
 async def test_list_projects(aiohttp_client, config, db):

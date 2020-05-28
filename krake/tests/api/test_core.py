@@ -4,7 +4,7 @@ from krake.api.app import create_app
 from krake.api.helpers import HttpReason, HttpReasonCode
 from krake.data.core import Role, RoleBinding, RoleList, RoleBindingList, resource_ref
 
-from factories.core import RoleFactory, RoleBindingFactory
+from tests.factories.core import RoleFactory, RoleBindingFactory
 
 
 # -----------------------------------------------------------------------------

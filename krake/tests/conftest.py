@@ -388,7 +388,7 @@ class RecordsContext(object):
 
 @pytest.fixture
 def rbac_allow(db, user):
-    from factories.core import RoleFactory, RoleBindingFactory
+    from tests.factories.core import RoleFactory, RoleBindingFactory
     from krake.data.core import Verb, RoleRule
 
     def rbac_creator(api, resource, verb, namespace="testing"):

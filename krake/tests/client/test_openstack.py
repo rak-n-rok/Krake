@@ -9,7 +9,7 @@ from krake.data.openstack import Project, MagnumCluster, MagnumClusterBinding
 from krake.utils import aenumerate
 from krake.test_utils import with_timeout
 
-from factories.openstack import ProjectFactory, MagnumClusterFactory
+from tests.factories.openstack import ProjectFactory, MagnumClusterFactory
 
 
 async def test_list_projects(aiohttp_server, config, db, loop):

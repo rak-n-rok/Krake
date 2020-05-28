@@ -7,7 +7,7 @@ from krake.data import Key
 from krake.data.serializable import Serializable
 from krake.api.database import EventType, Revision, revision, TransactionError
 
-from factories import fake
+from tests.factories import fake
 
 
 class MyModel(Serializable):

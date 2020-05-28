@@ -19,7 +19,7 @@ from krake.data.core import (
     MetricsProvider,
 )
 
-from factories.core import RoleFactory, RoleBindingFactory, RoleRuleFactory
+from tests.factories.core import RoleFactory, RoleBindingFactory, RoleRuleFactory
 
 from tests.factories.core import (
     MetricFactory,
