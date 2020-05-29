@@ -84,7 +84,7 @@ class CompleteHookConfiguration(Serializable):
         metadata={
             "help": (
                 "Name of the environment variable to be used in the Kubernetes"
-                "Application to access the token to identify the Application."
+                " Application to access the token to identify the Application."
             )
         },
     )
@@ -93,8 +93,19 @@ class CompleteHookConfiguration(Serializable):
         metadata={
             "help": (
                 "Name of the environment variable to be used in the Kubernetes"
-                "Application to access the actual API endpoint of Krake to notify"
-                "the end of job."
+                " Application to access the actual API endpoint of Krake to notify the"
+                " end of job."
+            )
+        },
+    )
+    external_endpoint: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "URL that will be provided to the Application, which corresponds to the"
+                " API endpoint to notify the end of job. If not provided, the default"
+                " endpoint of the Krake API will be used. It should be set if the"
+                " KubernetesController is connected to the API with a private IP."
             )
         },
     )

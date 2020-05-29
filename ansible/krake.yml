@@ -178,7 +178,9 @@
     # Directory on the VM for the bind mount, to store the configuration files of Krake
     configuration_dir: /etc/krake
     authorized_user: krake
-
+    api_endpoint: "{% if enable_tls is defined and enable_tls %}https{% else %}http{% endif %}://{{ private_ip }}:{{ api_port }}"
+    # Host or IP from which the Krake API is accessible externally.
+    external_host: "{% if external_endpoint is defined %}{{ external_endpoint | urlsplit('hostname') }}{% else %}{{ private_ip }}{% endif %}"
   tasks:
 
     - name: Create git sub-directory
@@ -291,7 +293,8 @@
           command: >
             {{ git_dir }}/support/pki {{ item }}
             --dest-dir {{ configuration_dir }}/certs
-            --krake-host {{ api_host }} --ignore
+            --host {{ external_host }}
+            --host {{ api_host }} --ignore
           loop:
             - system:api-server
             - system:scheduler
@@ -325,6 +328,7 @@
             {% if complete_hook_ca_dest is defined %} --complete-hook-ca-dest {{ complete_hook_ca_dest }} {% endif %} \
             {% if complete_hook_env_token is defined %} --complete-hook-env-token {{ complete_hook_env_token }} {% endif %} \
             {% if complete_hook_env_complete is defined %} --complete-hook-env-complete {{ complete_hook_env_complete }} {% endif %} \
+            --external-endpoint {% if external_endpoint is defined %}{{ external_endpoint }}{% else %}{{ api_endpoint }}{% endif %} \
             {{ git_dir }}/config/*template
 
         - name: Change permissions of the configuration directory
@@ -405,7 +409,7 @@
           command: >
             {{ git_dir }}/support/pki system:admin
             --dest-dir {{ rok_configuration_dir }}/certs
-            --krake-host {{ api_host }} --ignore
+            --host {{ api_host }} --ignore
           when: enable_tls is defined and enable_tls
 
         - name: Create configuration directory for rok

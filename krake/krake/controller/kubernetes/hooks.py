@@ -417,6 +417,10 @@ async def complete(app, api_endpoint, ssl_context, config):
     if "complete" not in app.spec.hooks:
         return
 
+    # Use the endpoint of the API only if the external endpoint has not been set.
+    if config.complete.external_endpoint:
+        api_endpoint = config.complete.external_endpoint
+
     app.status.token = app.status.token if app.status.token else token_urlsafe()
 
     hook = Complete(
@@ -457,24 +461,16 @@ class Complete(object):
         api_endpoint (str): the given API endpoint
         ssl_context (ssl.SSLContext): SSL context to communicate with the API endpoint
         ca_dest (str, optional): Path path of the CA in deployed Application.
-            Defaults to /etc/krake_ca/ca.pem
         env_token (str, optional): Name of the environment variable, which stores Krake
-            authentication token. Defaults to KRAKE_TOKEN
+            authentication token.
         env_complete (str, optional): Name of the environment variable,
-            which stores Krake complete hook URL. Defaults to KRAKE_COMPLETE_URL
+            which stores Krake complete hook URL.
 
     """
 
     complete_resources = ("Pod", "Deployment", "ReplicationController")
 
-    def __init__(
-        self,
-        api_endpoint,
-        ssl_context,
-        ca_dest="/etc/krake_ca/ca.pem",
-        env_token="KRAKE_TOKEN",
-        env_complete="KRAKE_COMPLETE_URL",
-    ):
+    def __init__(self, api_endpoint, ssl_context, ca_dest, env_token, env_complete):
         self.api_endpoint = api_endpoint
         self.ssl_context = ssl_context
         self.ca_dest = ca_dest

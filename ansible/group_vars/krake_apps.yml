@@ -41,3 +41,6 @@ poll_interval: 30
 # complete_hook_ca_dest: "/etc/krake_ca/ca.pem"
 # complete_hook_env_token: "KRAKE_TOKEN"
 # complete_hook_env_complete: "KRAKE_COMPLETE_URL"
+
+# if "external_endpoint" is not defined, the Krake VM private endpoint will be used.
+# external_endpoint: https://krake.host:1234
