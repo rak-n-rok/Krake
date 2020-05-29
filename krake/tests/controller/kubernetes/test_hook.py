@@ -17,8 +17,13 @@ from krake.controller.kubernetes import KubernetesController
 from krake.client import Client
 from krake.test_utils import server_endpoint
 
-from tests.factories.kubernetes import ApplicationFactory, ClusterFactory, make_kubeconfig
-from tests.controller.kubernetes import nginx_manifest, hooks_config
+from tests.controller.kubernetes import hooks_config, nginx_manifest
+from tests.factories.kubernetes import (
+    ApplicationFactory,
+    ClusterFactory,
+    make_kubeconfig,
+)
+from yarl import URL
 
 
 async def test_complete_hook(aiohttp_server, config, db, loop):
@@ -367,7 +372,77 @@ def get_hook_environment_value(application):
     return token, url
 
 
-async def test_complete_hook_sending(aiohttp_server, config, db, loop):
+async def test_complete_hook_external_endpoint(
+    aiohttp_server, config, db, loop, hooks_config
+):
+    """Verify that the Controller set the URL for the Krake endpoint based on the
+    external endpoint set in the "complete" hook configuration.
+
+    Conditions:
+     * TLS:  disabled
+     * RBAC: disabled
+     * extras: set the external endpoint in the "complete" hook configuration, with
+       "https" as scheme, even though TLS is disabled.
+
+    Expectations:
+        The URL in the KRAKE_URL environment variable has the external endpoint set as
+        host, and that the scheme was changed to "http".
+
+    """
+    hooks_config.complete.external_endpoint = "https://new.external.endpoint"
+
+    routes = web.RouteTableDef()
+
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
+    async def _(request):
+        return web.Response(status=200)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    # We only consider the first resource in the manifest file, that is a Deployment.
+    # This Deployment should be modified by the "complete" hook with ENV vars.
+    deployment_manifest = deepcopy(nginx_manifest[0])
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
+        spec__hooks=["complete"],
+        spec__manifest=[deployment_manifest],
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        controller = KubernetesController(
+            server_endpoint(api_server), worker_count=0, hooks=hooks_config
+        )
+        await controller.prepare(client)
+        await controller.resource_received(app)
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+
+    # TLS is disabled, so no additional resource has been generated
+    assert len(stored.status.manifest) == 1
+
+    _, url = get_hook_environment_value(stored)
+    endpoint = URL(url)
+    assert endpoint.host == "new.external.endpoint"
+    assert endpoint.scheme == "http"
+
+
+async def test_complete_hook_sending(aiohttp_server, config, db, loop, hooks_config):
     """Send a hook using ONLY the information present in the environment of the
     Deployment, without TLS enabled.
 

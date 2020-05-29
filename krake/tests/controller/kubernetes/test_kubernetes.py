@@ -3,6 +3,7 @@ from contextlib import suppress
 from copy import deepcopy
 from textwrap import dedent
 
+import pytest
 from aiohttp import web
 import pytz
 import yaml
@@ -26,6 +27,54 @@ from tests.factories.kubernetes import (
     make_kubeconfig,
 )
 from tests.controller.kubernetes import nginx_manifest
+
+
+@pytest.mark.parametrize(
+    "base", ["1.2.3.4", "1.2.3.4:8888", "1.2.3.4/path/to", "1.2.3.4:8888/path/to"]
+)
+async def test_api_endpoint(hooks_config, client_ssl_context, caplog, base):
+    """Test the verification of the provided external endpoint in the Kubernetes
+    controller.
+    """
+    # No endpoint provided
+    hooks_config.complete.external_endpoint = None
+    controller = KubernetesController("http://krake.api", hooks=hooks_config)
+    assert controller.hooks.complete.external_endpoint is None
+
+    # Simple behavior
+    hooks_config.complete.external_endpoint = f"http://{base}"
+    controller = KubernetesController("http://krake.api", hooks=hooks_config)
+    assert controller.hooks.complete.external_endpoint == f"http://{base}"
+
+    # Setting the scheme as https when TLS is disabled will result in a warning
+    hooks_config.complete.external_endpoint = f"https://{base}"
+    controller = KubernetesController("http://krake.api", hooks=hooks_config)
+    assert controller.hooks.complete.external_endpoint == f"http://{base}"
+    record = next(iter(caplog.records))
+    assert record.levelname == "WARNING"
+    assert len(list(caplog.records)) == 1
+    caplog.clear()
+
+    # TLS enabled
+
+    ssl_context = client_ssl_context("client")
+
+    # Simple behavior
+    hooks_config.complete.external_endpoint = f"https://{base}"
+    controller = KubernetesController(
+        "https://krake.api", hooks=hooks_config, ssl_context=ssl_context
+    )
+    assert controller.hooks.complete.external_endpoint == f"https://{base}"
+
+    # Setting the scheme as https when TLS is enabled will result in a warning
+    hooks_config.complete.external_endpoint = f"http://{base}"
+    controller = KubernetesController(
+        "https://krake.api", hooks=hooks_config, ssl_context=ssl_context
+    )
+    assert controller.hooks.complete.external_endpoint == f"https://{base}"
+    record = next(iter(caplog.records))
+    assert record.levelname == "WARNING"
+    assert len(list(caplog.records)) == 1
 
 
 async def test_app_reception(aiohttp_server, config, db, loop):

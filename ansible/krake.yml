@@ -178,6 +178,10 @@
     configuration_dir: /etc/krake
     authorized_user: krake
     rok_configuration_dir: /etc/rok
+    scheme: "{% if enable_tls is defined and enable_tls %}https{% else %}http{% endif %}"
+    api_endpoint: "{{ scheme }}://{{ private_ip }}:{{ api_port }}"
+    # Host or IP from which the Krake API is accessible externally.
+    external_host: "{% if external_endpoint is defined %}{{ external_endpoint | urlsplit('hostname') }}{% else %}{{ private_ip }}{% endif %}"
 
   tasks:
 
@@ -248,7 +252,6 @@
         - name: Generate the docker configuration file
           script: |
             {{ repo_dir }}/krake/scripts/krake_generate_config --dst {{ git_dir }}/docker \
-            --api-ip {{ ansible_host }} \
             {% if api_host is defined %} --api-host {{ api_host }} {% endif %} \
             {% if api_port is defined %} --api-port {{ api_port }} {% endif %} \
             {% if etcd_host is defined %} --etcd-host {{ etcd_host }} {% endif %} \
@@ -297,7 +300,9 @@
           command: >
             {{ git_dir }}/support/pki {{ item }}
             --dest-dir {{ configuration_dir }}/certs
-            --krake-host {{ api_host }} --ignore
+            --host {{ external_host }}
+            --host {{ api_host }}
+            --ignore
           loop:
             - system:api-server
             - system:scheduler
@@ -334,7 +339,11 @@
             {% if complete_hook_ca_dest is defined %} --complete-hook-ca-dest {{ complete_hook_ca_dest }} {% endif %} \
             {% if complete_hook_env_token is defined %} --complete-hook-env-token {{ complete_hook_env_token }} {% endif %} \
             {% if complete_hook_env_complete is defined %} --complete-hook-env-complete {{ complete_hook_env_complete }} {% endif %} \
+            {% if external_endpoint is defined or use_private_ip %} --external-endpoint {{ final_external_endpoint }} {% endif %} \
             {{ git_dir }}/config/*template
+          vars:
+            external_endpoint_with_scheme: "{{ scheme }}://{{ external_host }}:{{ api_port }}"
+            final_external_endpoint: "{% if external_endpoint is defined %}{{ external_endpoint }}{% elif use_private_ip %}{{ external_endpoint_with_scheme }}{% endif %}"
 
         - name: Change permissions of the configuration directory
           become_user: root
@@ -413,7 +422,7 @@
           command: >
             {{ git_dir }}/support/pki system:admin
             --dest-dir {{ rok_configuration_dir }}/certs
-            --krake-host {{ api_host }} --ignore
+            --host {{ api_host }} --ignore
           when: enable_tls is defined and enable_tls
 
         - name: Create configuration directory for rok

@@ -95,9 +95,6 @@ command-line options. The arguments and available options are:
     Only 'RBAC' should be used in production. See :ref:`admin/security:Authorization`.
     Default: ``always-allow``.
 
-``--api-ip <api_ip>`` (Address)
-    Host IP address of the API for the controllers. Default: ``"127.0.0.1"``.
-
 ``--api-host <api_host>`` (Address)
     Host that will be used to create the endpoint of the API for the
     controllers. Default: ``"localhost"``.
@@ -160,7 +157,9 @@ command-line options. The arguments and available options are:
     URL of the Krake API, which will be given to the Application. See
     :ref:`dev/hooks:Complete`. Default: ``"KRAKE_COMPLETE_URL"``.
 
-
+``--external-endpoint`` (str)
+    If set, replaces the value of the URL host and port of the endpoint given to the
+    Applications which have the 'complete' hook enabled. See :ref:`dev/hooks:Complete`.
 
 ``-h, --help``
     Display the help message and exit the script.
@@ -312,7 +311,7 @@ Controllers configuration
 The general configuration is the same for each controller. Additional parameters can be added for specific controllers, depending on the implementation. Here are the common parameters:
 
 api_endpoint (URL)
-    .. _controllers.controller_name.api_endpoint:
+    .. _api_endpoint:
 
     Address of the API to be reached by the current controller. Example: ``http://localhost:8080``
 
@@ -325,7 +324,7 @@ tls
     This section defines the parameters needed for TLS support. If TLS support is enabled on the API, it needs to be enabled on the controllers to let them communicate with the API.
 
     enabled (boolean)
-        Activate or deactivate the TLS support. If the API uses only TLS, then this should be set to ``true``. This has priority over the scheme given by controllers.controller_name.api_endpoint_. Example: ``false``
+        Activate or deactivate the TLS support. If the API uses only TLS, then this should be set to ``true``. This has priority over the scheme given by api_endpoint_. Example: ``false``
     client_ca (path)
         Set the path to the client certificate authority. Example: ``./tmp/pki/ca.pem``
     client_cert (path)
@@ -338,7 +337,8 @@ Kubernetes application controller
 Additional parameters, specific for the Kubernetes application controller:
 
 hooks (string)
-    All the parameters for the application hooks are described here.
+    All the parameters for the application hooks are described here. See also
+    :ref:`dev/hooks:Complete`.
 
     complete (string)
         This section defines the parameters needed for the Application ``complete`` hook. If is not defined the Application ``complete`` hook is disabled.
@@ -348,8 +348,14 @@ hooks (string)
         env_token (string)
             Name of the environment variable, which stores Krake authentication token. Example: ``KRAKE_TOKEN``
         env_complete (string)
-            Name of the environment variable, which stores Krake ``complete`` hook URL. Example: ``KRAKE_COMPLETE_URL``
+            .. _env_complete:
 
+            Name of the environment variable, which stores Krake ``complete`` hook URL. Example: ``KRAKE_COMPLETE_URL``
+        external_endpoint (URL, optional)
+            If set, replaces the host and port in the value of environment variable in
+            the Krake ``complete`` hook URL (the name of this variable is given by
+            env_complete_). By default, the value stored in the variable is the
+            api_endpoint_. Example: ``https://krake.external.host:1234``.
 
 Scheduler
 ---------

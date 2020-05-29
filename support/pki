@@ -72,7 +72,7 @@ def init_ca(ca_csr_file, ca_key_file, ca_cert_file, ca_config_file):
         json.dump(ca_config, fd, indent=4)
 
 
-def main(name, dest_dir=None, krake_host=None, ignore=False):
+def main(name, dest_dir=None, host=None, ignore=False):
     if shutil.which("cfssl") is None:
         print(
             "Error: Could not found 'cfssl'. Please install "
@@ -93,8 +93,8 @@ def main(name, dest_dir=None, krake_host=None, ignore=False):
     ca_csr_file = certs_dir / "ca-csr.json"
 
     additional_hosts = []
-    if krake_host:
-        additional_hosts = [krake_host]
+    if host:
+        additional_hosts = host
 
     client_csr = create_client_csr_template(name, hosts=additional_hosts)
     client_csr_file = certs_dir / f"{name}-csr.json"
@@ -147,7 +147,11 @@ def main(name, dest_dir=None, krake_host=None, ignore=False):
 parser = ArgumentParser(description="PKI tool for development purpose on top of cfssl")
 parser.add_argument("name", help="Common name of the client")
 parser.add_argument("--dest-dir", help="Directory to store the certificates.")
-parser.add_argument("--krake-host", help="Host to connect to the Krake API.")
+parser.add_argument(
+    "--host",
+    action="append",
+    help="Host to connect to the Krake API. Can be specified several times.",
+)
 parser.add_argument(
     "--ignore",
     action="store_true",

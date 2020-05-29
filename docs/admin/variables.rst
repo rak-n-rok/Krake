@@ -96,6 +96,24 @@ krake_apps.yml
         On each Controller, timeout (in seconds) for the worker queue before handing over a resource,
         to wait for an updated state.
 
+    complete_hook_user (string)
+        Name of the user for the "complete" hook.
+    complete_hook_cert_dest (file path)
+        Path inside the deployed Application where the certificate and its key will be
+        stored (for the "complete" hook).
+    complete_hook_env_token (string)
+        Name of the environment variable that will contain the token in the deployed
+        Application.
+    complete_hook_env_complete (string)
+        Name of the environment variable that will contain the URL of the Krake API in
+        the deployed Application.
+    external_endpoint (URL, optional)
+        URL of the Krake API that will be reachable for any deployed Application.
+    use_private_ip (boolean)
+        If set to True, and no external endpoint has been set, the URL for the external
+        endpoint (see above) will be computed automatically, using the Krake API private
+        IP, its port and the "http" or "https" scheme depending on the status of TLS on
+        the Krake API (enabled or disabled).
 
 magnum_clusters.yml
     prometheus_port

@@ -360,6 +360,11 @@ name. This name can then be used along with the ``RBAC`` mode and a specific
     CA, and the certificates they use for communication must also be signed using this
     CA.
 
+.. note::
+    If an external endpoint is specified in the Kubernetes controller configuration for
+    the `complete` hook, then this host must also be specified in the certificate of the
+    API.
+
 _____
 
 
