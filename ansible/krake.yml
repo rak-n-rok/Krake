@@ -140,7 +140,7 @@
 
     - name: Configure Docker daemon MTU
       template:
-        src: files/krake/daemon.json.j2
+        src: files/common/daemon.json.j2
         dest: /etc/docker/daemon.json
 
     - name: Restart docker to reload the configuration
