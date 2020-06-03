@@ -70,6 +70,65 @@ async def test_kubernetes_reception(aiohttp_server, config, db, loop):
     assert deleted.metadata.uid not in scheduler.queue.timers
 
 
+async def test_kubernetes_reception_no_migration(aiohttp_server, config, db, loop):
+    # Test that the Reflector present on the Scheduler actually put the
+    # received Applications correctly on the WorkQueue, also with migration disabled.
+    scheduled = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=True,
+        spec__constraints__migration=False,
+    )
+    updated = ApplicationFactory(
+        status__state=ApplicationState.RUNNING,
+        status__is_scheduled=False,
+        spec__constraints__migration=False,
+    )
+    pending = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=False,
+        spec__constraints__migration=False,
+    )
+    failed = ApplicationFactory(
+        status__state=ApplicationState.FAILED,
+        status__is_scheduled=False,
+        spec__constraints__migration=False,
+    )
+    deleted = ApplicationFactory(
+        metadata__deleted=datetime.now(),
+        status__state=ApplicationState.RUNNING,
+        status__is_scheduled=False,
+        spec__constraints__migration=False,
+    )
+
+    assert updated.metadata.modified > updated.status.scheduled
+
+    server = await aiohttp_server(create_app(config))
+
+    await db.put(scheduled)
+    await db.put(updated)
+    await db.put(pending)
+    await db.put(failed)
+    await db.put(deleted)
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        # Update the client, to be used by the background tasks
+        await scheduler.prepare(client)  # need to be called explicitly
+        await scheduler.kubernetes_reflector.list_resource()
+
+    assert scheduled.metadata.uid not in scheduler.queue.dirty
+    assert updated.metadata.uid in scheduler.queue.dirty
+    assert pending.metadata.uid in scheduler.queue.dirty
+    assert failed.metadata.uid not in scheduler.queue.dirty
+    assert deleted.metadata.uid not in scheduler.queue.dirty
+
+    assert scheduled.metadata.uid not in scheduler.queue.timers
+    assert updated.metadata.uid not in scheduler.queue.timers
+    assert pending.metadata.uid not in scheduler.queue.timers
+    assert failed.metadata.uid not in scheduler.queue.timers
+    assert deleted.metadata.uid not in scheduler.queue.timers
+
+
 async def test_openstack_reception(aiohttp_server, config, db, loop):
     """Test that the reflector present on the Scheduler actually put the right
     received Applications into the work queue.
@@ -776,6 +835,81 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
         assert stored2.status.scheduled_to == resource_ref(cluster2)
         assert stored2.status.state == ApplicationState.PENDING
         assert stored2.status.scheduled > stored1.status.scheduled
+        assert stored2.metadata.modified <= utc.localize(stored2.status.scheduled)
+
+
+async def test_kubernetes_no_migration(aiohttp_server, config, db, loop):
+    """
+    Test that an app with migration constraint false does not get
+    rescheduled due to cluster constraints.
+    """
+    utc = pytz.UTC
+
+    prometheus = await aiohttp_server(
+        make_prometheus(
+            {"heat_demand_1": ("0.5", "0.25"), "heat_demand_2": ("0.25", "0.5")}
+        )
+    )
+
+    cluster1 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-1", weight=1)])
+    cluster2 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-2", weight=1)])
+    app = ApplicationFactory(
+        metadata__modified=utc.localize(datetime.now()),
+        spec__constraints__cluster__labels=[],
+        spec__constraints__cluster__custom_resources=[],
+        spec__constraints__migration=False,
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=False,
+    )
+    metric1 = MetricFactory(
+        metadata__name="heat-demand-1",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus",
+        spec__provider__metric="heat_demand_1",
+    )
+    metric2 = MetricFactory(
+        metadata__name="heat-demand-2",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus",
+        spec__provider__metric="heat_demand_2",
+    )
+    metrics_provider = MetricsProviderFactory(
+        metadata__name="prometheus",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+    await db.put(metric1)
+    await db.put(metric2)
+    await db.put(metrics_provider)
+    await db.put(cluster1)
+    await db.put(cluster2)
+    await db.put(app)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        await scheduler.kubernetes_application_received(app)
+
+        stored1 = await db.get(
+            Application, namespace=app.metadata.namespace, name=app.metadata.name
+        )
+        assert stored1.status.scheduled_to == resource_ref(cluster1)
+        assert stored1.status.state == ApplicationState.PENDING
+        assert stored1.metadata.modified <= utc.localize(stored1.status.scheduled)
+
+        # Schedule the scheduled resource a second time
+        await scheduler.kubernetes_application_received(stored1)
+
+        stored2 = await db.get(
+            Application, namespace=app.metadata.namespace, name=app.metadata.name
+        )
+        assert stored2.status.scheduled_to == resource_ref(cluster1)
+        assert stored2.status.state == ApplicationState.PENDING
+        assert stored2.status.scheduled == stored1.status.scheduled
         assert stored2.metadata.modified <= utc.localize(stored2.status.scheduled)
 
 
