@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import subprocess
 import time
 from collections import defaultdict
@@ -8,6 +9,9 @@ from typing import NamedTuple
 from dataclasses import MISSING
 
 logger = logging.getLogger("krake.test_utils.run")
+
+KRAKE_HOMEDIR = "/home/krake"
+ROK_INSTALL_DIR = f"{KRAKE_HOMEDIR}/.local/bin"
 
 
 class Response(object):
@@ -101,9 +105,12 @@ def run(command, retry=10, interval=1, condition=None):
 
     logger.debug(f"Running: {command}")
 
+    env = os.environ.copy()
+    env["PATH"] = f"{ROK_INSTALL_DIR}:{env['PATH']}"
+
     while True:
         process = subprocess.run(
-            command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+            command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env
         )
 
         response = Response(process.stdout.decode(), process.returncode)
