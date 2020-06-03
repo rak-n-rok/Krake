@@ -292,6 +292,37 @@ def check_spec_replicas(expected_replicas, error_message):
     return validate
 
 
+def check_app_running_on(expected_cluster, error_message):
+    """Create a callable to verify the cluster on which an Application is
+    running obtained as a response.
+
+    To be used with the :meth:`run` function. The callable will raise an
+    :class:`AssertionError` if the state of the Application is different
+    from the given one.
+
+    Args:
+        expected_cluster (str): the name of the cluster on which the
+            Application is expected to be running.
+        error_message (str): the message that will be displayed if the
+            check fails.
+
+    Returns:
+        callable: a condition that will check its given response against
+            the parameters of the current function.
+
+    """
+
+    def validate(response):
+        try:
+            app_details = response.json
+            observed_cluster = app_details["status"]["running_on"]["name"]
+            assert observed_cluster == expected_cluster, error_message
+        except json.JSONDecodeError:
+            raise AssertionError(error_message)
+
+    return validate
+
+
 class ApplicationDefinition(NamedTuple):
     """Definition of an Application resource for the test environment
     :class:`Environment`.
@@ -302,11 +333,17 @@ class ApplicationDefinition(NamedTuple):
     Args:
         name (str): name of the Application to create.
         manifest_path (str): path to the manifest file to use for the creation.
+        constraints (list(str)): optional list of cluster label constraints
+            to use for the creation of the application.
+        migration (bool): optional migration flag indicating whether the
+            application should be able to migrate.
 
     """
 
     name: str
     manifest_path: str
+    constraints: list = []
+    migration: bool = None
     kind: str = "Application"
 
     def creation_command(self):
@@ -316,7 +353,24 @@ class ApplicationDefinition(NamedTuple):
             str: the command to create an Application.
 
         """
-        return f"rok kube app create -f {self.manifest_path} {self.name}"
+        migration_flag = self._get_migration_flag(self.migration)
+        constraints = " ".join(f"-L {constraint}" for constraint in self.constraints)
+        return (
+            f"rok kube app create {migration_flag} {constraints} "
+            f"-f {self.manifest_path} {self.name}"
+        )
+
+    @staticmethod
+    def _get_migration_flag(migration):
+        if migration is False:
+            migration_flag = "--disable-migration"
+        elif migration is True:
+            migration_flag = "--enable-migration"
+        elif migration is None:
+            migration_flag = ""
+        else:
+            raise RuntimeError("migration must be None, False or True.")
+        return migration_flag
 
     def check_created(self):
         """Run the command for checking if the Application has been created.
@@ -347,6 +401,43 @@ class ApplicationDefinition(NamedTuple):
             condition=check_resource_deleted(error_message),
         )
 
+    def update_command(self, cluster_labels=None, migration=None):
+        """Generate a command for updating an application
+
+        Args:
+            cluster_labels (list(str)): optional list of cluster label constraints
+            migration (bool): optional migration flag indicating whether the
+                application should be able to migrate.
+
+        Returns:
+            str: the command to update the Application.
+
+        """
+        migration_flag = self._get_migration_flag(migration)
+        clc_options = (
+            " ".join(f"-L {constraint}" for constraint in cluster_labels)
+            if cluster_labels
+            else ""
+        )
+        return f"rok kube app update {clc_options} {migration_flag} {self.name}"
+
+    def check_running_on(self, cluster_name):
+        """Run the command for checking that the application is running on the
+        specified cluster.
+
+        Args:
+            cluster_name (str): Name of the cluster on which the application is
+                expected to run.
+        """
+        error_message = (
+            f"Unable to observe that the application {self.name} "
+            f"is running on cluster {cluster_name}."
+        )
+        run(
+            f"rok kube app get {self.name} -f json",
+            condition=check_app_running_on(cluster_name, error_message),
+        )
+
 
 class ClusterDefinition(NamedTuple):
     """Definition of a cluster resource for the test environment :class:`Environment`.
@@ -356,12 +447,14 @@ class ClusterDefinition(NamedTuple):
 
     Args:
         name (str): name of the Application to create.
-        kubeconfig_path (str): path to the manifest file to use for the creation.
+        kubeconfig_path (str): path to the kubeconfig file to use for the creation.
+        labels (list(str)): list of cluster labels to use for the creation.
 
     """
 
     name: str
     kubeconfig_path: str
+    labels: list = []
     kind: str = "Cluster"
 
     def creation_command(self):
@@ -371,7 +464,8 @@ class ClusterDefinition(NamedTuple):
             str: the command to create a cluster.
 
         """
-        return f"rok kube cluster create {self.kubeconfig_path}"
+        label_flags = " ".join(f"-l {label}" for label in self.labels)
+        return f"rok kube cluster create {label_flags} {self.kubeconfig_path}"
 
     def delete_command(self):
         """Generate a command for deleting a cluster.
@@ -515,3 +609,52 @@ def create_simple_environment(cluster_name, kubeconfig_path, app_name, manifest_
         10: [ClusterDefinition(name=cluster_name, kubeconfig_path=kubeconfig_path)],
         0: [ApplicationDefinition(name=app_name, manifest_path=manifest_path)],
     }
+
+
+def create_multiple_cluster_environment(
+    kubeconfig_paths,
+    cluster_labels=None,
+    app_name=None,
+    manifest_path=None,
+    app_cluster_constraints=None,
+    app_migration=None,
+):
+    """Create the resource definitions for a test environment with
+    one Application and multiple Clusters.
+
+    Args:
+        kubeconfig_paths (dict of PathLike: PathLike): mapping between Cluster
+            names and path to the kubeconfig file for the corresponding Cluster
+            to create.
+        cluster_labels (dict of PathLike: List(str)): optional mapping between
+            Cluster names and labels for the corresponding Cluster to create.
+        app_name (PathLike): optional name of the Application to create.
+        manifest_path (PathLike): optional path to the manifest file that
+            should be used to create the Application.
+        app_cluster_constraints (List(str)): optional list of cluster constraints
+            for the Application to create.
+        app_migration (bool): optional migration flag indicating whether the
+            application should be able to migrate.
+
+    Returns:
+        dict: an environment definition to use to create a test environment.
+
+    """
+    if not cluster_labels:
+        cluster_labels = {cn: [] for cn in kubeconfig_paths}
+    env = {
+        10: [
+            ClusterDefinition(name=cn, kubeconfig_path=kcp, labels=cluster_labels[cn])
+            for cn, kcp in kubeconfig_paths.items()
+        ],
+    }
+    if app_name:
+        env[0] = [
+            ApplicationDefinition(
+                name=app_name,
+                manifest_path=manifest_path,
+                constraints=app_cluster_constraints,
+                migration=app_migration,
+            )
+        ]
+    return env
