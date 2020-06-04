@@ -21,6 +21,7 @@ from utils import (
     Environment,
     create_simple_environment,
     check_spec_container_image,
+    check_spec_replicas,
     ClusterDefinition,
 )
 
@@ -42,8 +43,11 @@ def test_update_application_manifest(minikube_clusters):
     2. the new state of the Application on the API is checked, to see if the image
        changed;
     3. the new state of the k8s resource is checked on the actual cluster to see if the
-       image changed.
-
+       image changed;
+    4. the new state of the Application on the API is checked, to see if the number of
+       replicas changed;
+    5. the new state of the k8s resource is checked on the actual cluster to see if the
+       number of replicas changed.
     Args:
         minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
 
@@ -83,6 +87,21 @@ def test_update_application_manifest(minikube_clusters):
         run(
             f"kubectl --kubeconfig {kubeconfig_path} get deployment {app.name} -o json",
             condition=check_spec_container_image(expected_image, error_message),
+        )
+
+        # 4. Check that the number of replicas has been changed on the API
+        replicas = app_details["spec"]["manifest"][0]["spec"].get("replicas")
+        expected_replicas = 2
+        assert replicas == expected_replicas
+
+        # 5. Check that the number of replicas has been changed on the cluster
+        error_message = (
+            f"The number of replicas of deployment {app.name}"
+            f"should have been updated to {expected_replicas}."
+        )
+        run(
+            f"kubectl --kubeconfig {kubeconfig_path} get deployment {app.name} -o json",
+            condition=check_spec_replicas(expected_replicas, error_message),
         )
 
 
