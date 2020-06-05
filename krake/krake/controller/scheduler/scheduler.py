@@ -335,10 +335,17 @@ class Scheduler(Controller):
             # waiting for the Scheduler to take a decision before handling the update on
             # an Application. By updating this, the KubernetesController can start
             # working on the current Application.
-            app.status.scheduled = datetime.now()
-            await self.kubernetes_api.update_application_status(
-                namespace=app.metadata.namespace, name=app.metadata.name, body=app
-            )
+            # However, if no update has been performed on the Application, then the
+            # modified timestamp is lower. As we are in the case of no change in the
+            # scheduling decision, there is no need to have the KubernetesController
+            # processing the Application. Updating the timestamp would simply trigger
+            # a processing of the Application by the KubernetesController, which would
+            # not make the controller perform any action.
+            if app.metadata.modified > app.status.scheduled:
+                app.status.scheduled = datetime.now()
+                await self.kubernetes_api.update_application_status(
+                    namespace=app.metadata.namespace, name=app.metadata.name, body=app
+                )
             return
 
         if app.status.scheduled_to:
