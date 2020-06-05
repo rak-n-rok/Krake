@@ -73,13 +73,19 @@
         packages:
           - jq
           - haveged
-          - python3-distutils
+          - python3-pip
 
           # Docker dependencies
           - apt-transport-https
           - ca-certificates
           - curl
           - software-properties-common
+
+    - name: Upgrade pip to latest version
+      pip:
+        name: pip
+        executable: pip3
+        state: latest
 
     - name: Add Docker GPG key
       apt_key:
@@ -235,15 +241,6 @@
       tags:
         - pip
       block:
-
-        - name: Get pip installer
-          uri:
-            url: https://bootstrap.pypa.io/get-pip.py
-            dest: /home/krake/get-pip.py
-
-        - name: Install latest pip
-          command: python3 /home/krake/get-pip.py --user --no-warn-script-location
-
         - name: Install Krake docker dependencies
           pip:
             name:
@@ -251,8 +248,6 @@
               - docker-compose
             executable: pip3
             extra_args: --user
-          environment:
-            PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
 
     - name: Krake infrastructure deployment
       tags:
@@ -273,8 +268,6 @@
 
         - name: Configure docker infrastructure bundles
           command: "{{ git_dir }}/docker/generate --config {{ git_dir }}/docker/docker.yaml {{ git_dir }}/docker/krake {{ git_dir }}/docker/prometheus"
-          environment:
-            PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
 
         - name: Remove Krake infrastructure
           docker_compose:
@@ -368,8 +361,6 @@
             name: "{{ git_dir }}/rok"
             executable: pip3
             extra_args: --user
-          environment:
-            PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
 
         - name: Create Krake rok configuration file
           script: |
