@@ -22,23 +22,22 @@ FROM python:3.6-slim AS base
 FROM base as builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  build-essential \
-  gcc
+        build-essential \
+        gcc \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN python3 -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-COPY ./krake /krake
+# Generate the default configuration files
+COPY ./krake/scripts /krake
 COPY ./config /tmp/config
-
-RUN pip3 install /krake
-
 RUN mkdir -p /etc/krake && \
-  krake_generate_config --dst /etc/krake /tmp/config/*template
+  python /krake/krake_generate_config --dst /etc/krake /tmp/config/*template
 
 FROM base as runner
 
 COPY --from=builder /etc/krake /etc/krake
-COPY --from=builder /opt/venv /opt/venv
 
-ENV PATH="/opt/venv/bin:$PATH"
+# Install Krake
+COPY ./krake/krake /krake/krake
+COPY ./krake/scripts /krake/scripts
+COPY ./krake/setup.py /krake
+RUN pip3 install /krake
