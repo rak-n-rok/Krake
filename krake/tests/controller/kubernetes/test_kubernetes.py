@@ -228,7 +228,7 @@ async def test_app_creation(aiohttp_server, config, db, loop):
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.last_observed_manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
@@ -295,7 +295,7 @@ async def test_app_creation_default_namespace(aiohttp_server, config, db, loop):
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.last_observed_manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
@@ -365,7 +365,7 @@ async def test_app_creation_cluster_default_namespace(aiohttp_server, config, db
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.last_observed_manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
@@ -434,7 +434,7 @@ async def test_app_creation_manifest_namespace_set(aiohttp_server, config, db, l
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.last_observed_manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
@@ -474,7 +474,7 @@ async def test_app_update(aiohttp_server, config, db, loop):
         status__is_scheduled=True,
         status__running_on=resource_ref(cluster),
         status__scheduled_to=resource_ref(cluster),
-        status__manifest=list(
+        status__last_observed_manifest=list(
             yaml.safe_load_all(
                 dedent(
                     """
@@ -611,7 +611,7 @@ async def test_app_update(aiohttp_server, config, db, loop):
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.last_observed_manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
@@ -715,7 +715,7 @@ async def test_app_migration(aiohttp_server, config, db, loop):
         status__is_scheduled=True,
         status__running_on=resource_ref(cluster_A),
         status__scheduled_to=resource_ref(cluster_B),
-        status__manifest=old_manifest,
+        status__last_observed_manifest=old_manifest,
         spec__manifest=new_manifest,
     )
 
@@ -740,7 +740,7 @@ async def test_app_migration(aiohttp_server, config, db, loop):
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.last_observed_manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.status.running_on == resource_ref(cluster_B)
     assert resource_ref(cluster_A) not in stored.metadata.owners
@@ -980,7 +980,7 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
         status__state=ApplicationState.RUNNING,
         status__scheduled_to=resource_ref(cluster),
         status__running_on=resource_ref(cluster),
-        status__manifest=nginx_manifest,
+        status__last_observed_manifest=nginx_manifest,
         metadata__finalizers=["kubernetes_resources_deletion"],
     )
     assert resource_ref(cluster) in app.metadata.owners
@@ -1411,7 +1411,7 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
         status__scheduled_to=resource_ref(cluster),
         spec__manifest=[nginx_manifest[0]],
         status__services={"nginx-demo": "127.0.0.1:30704"},
-        status__manifest=manifest,
+        status__last_observed_manifest=manifest,
     )
 
     await db.put(cluster)
@@ -1430,6 +1430,356 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
     assert stored.status.services == {}
 
 
+async def test_complete_hook(aiohttp_server, config, db, loop):
+    routes = web.RouteTableDef()
+
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
+    async def _(request):
+        return web.Response(status=200)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    # We only consider the first resource in the manifest file, that is a Deployment.
+    # This Deployment should be modified by the "complete" hook with ENV vars.
+    deployment_manifest = deepcopy(nginx_manifest[0])
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
+        spec__hooks=["complete"],
+        spec__manifest=[deployment_manifest],
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        controller = KubernetesController(
+            server_endpoint(api_server), worker_count=0, hooks=deepcopy(hooks_config)
+        )
+        await controller.prepare(client)
+        await controller.resource_received(app)
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    for resource in stored.status.last_observed_manifest:
+        if resource["kind"] != "Deployment":
+            continue
+
+        for container in resource["spec"]["template"]["spec"]["containers"]:
+            assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
+            assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
+
+    assert stored.status.state == ApplicationState.RUNNING
+    assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
+
+
+async def test_complete_hook_default_namespace(aiohttp_server, config, db, loop):
+    """Verify that the Controller mangled the received Application to add elements of
+    the "complete" hook if it had been enabled, even if the resources have been created
+    without any namespace.
+    """
+    deployment_created = False
+
+    routes = web.RouteTableDef()
+
+    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    async def _(request):
+        nonlocal deployment_created
+        deployment_created = True
+        return web.Response(status=200)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    # We only consider the first resource in the manifest file, that is a Deployment.
+    # This Deployment should be modified by the "complete" hook with ENV vars.
+    deployment_manifest = deepcopy(nginx_manifest[0])
+    # Create a manifest with resources without any namespace.
+    del deployment_manifest["metadata"]["namespace"]
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
+        spec__hooks=["complete"],
+        spec__manifest=[deployment_manifest],
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        controller = KubernetesController(
+            server_endpoint(api_server), worker_count=0, hooks=deepcopy(hooks_config)
+        )
+        await controller.prepare(client)
+        await controller.resource_received(app)
+
+    assert deployment_created
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+
+    assert len(stored.status.last_observed_manifest) == 1  # one resource in the spec manifest
+
+    for resource in stored.status.last_observed_manifest:
+        for container in resource["spec"]["template"]["spec"]["containers"]:
+            assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
+            assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
+
+    assert stored.status.state == ApplicationState.RUNNING
+    assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
+
+
+async def test_complete_hook_disable_by_user(aiohttp_server, config, db, loop):
+    routes = web.RouteTableDef()
+
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
+    async def _(request):
+        return web.Response(status=200)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    # We only consider the first resource in the manifest file, that is a Deployment.
+    # This Deployment should be modified by the "complete" hook with ENV vars.
+    deployment_manifest = deepcopy(nginx_manifest[0])
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
+        spec__manifest=[deployment_manifest],
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        controller = KubernetesController(
+            server_endpoint(api_server), worker_count=0, hooks=deepcopy(hooks_config)
+        )
+        await controller.prepare(client)
+        await controller.resource_received(app)
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    for resource in stored.status.last_observed_manifest:
+        if resource["kind"] != "Deployment":
+            continue
+
+        for container in resource["spec"]["template"]["spec"]["containers"]:
+            assert "env" not in container
+
+    assert stored.status.last_observed_manifest == app.spec.manifest
+    assert stored.status.state == ApplicationState.RUNNING
+    assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
+
+
+async def test_complete_hook_tls(aiohttp_server, config, pki, db, loop):
+    routes = web.RouteTableDef()
+
+    server_cert = pki.gencert("api-server")
+    client_cert = pki.gencert("client")
+    client_tls = TlsClientConfiguration(
+        enabled=True,
+        client_ca=pki.ca.cert,
+        client_cert=client_cert.cert,
+        client_key=client_cert.key,
+    )
+    ssl_context = create_ssl_context(client_tls)
+    config.tls = TlsServerConfiguration(
+        enabled=True, client_ca=pki.ca.cert, cert=server_cert.cert, key=server_cert.key
+    )
+
+    @routes.get("/api/v1/namespaces/secondary/configmaps/ca.pem")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/api/v1/namespaces/secondary/configmaps")
+    async def _(request):
+        return web.Response(status=200)
+
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
+    async def _(request):
+        return web.Response(status=200)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    # We only consider the first resource in the manifest file, that is a Deployment.
+    # This Deployment should be modified by the "complete" hook with ENV vars.
+    deployment_manifest = deepcopy(nginx_manifest[0])
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
+        spec__hooks="complete",
+        spec__manifest=[deployment_manifest],
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    server_app = create_app(config)
+    api_server = Server(server_app)
+
+    await api_server.start_server(ssl=server_app["ssl_context"])
+    assert api_server.scheme == "https"
+
+    async with Client(
+        url=server_endpoint(api_server), loop=loop, ssl_context=ssl_context
+    ) as client:
+        controller = KubernetesController(
+            server_endpoint(api_server),
+            worker_count=0,
+            ssl_context=ssl_context,
+            hooks=deepcopy(hooks_config),
+        )
+        await controller.prepare(client)
+        await controller.resource_received(app, start_observer=False)
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    for resource in stored.status.last_observed_manifest:
+        if resource["kind"] != "Deployment":
+            continue
+
+        for container in resource["spec"]["template"]["spec"]["containers"]:
+            assert "volumeMounts" in container
+            assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
+            assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
+
+    assert stored.status.state == ApplicationState.RUNNING
+    assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
+
+
+async def test_complete_hook_reschedule(aiohttp_server, config, pki, db, loop):
+    """Attempt to reschedule an Application augmented with the "complete" hook. Enable
+    TLS to use the "full-featured" hook (with the ConfigMap containing a certificate).
+    """
+    routes = web.RouteTableDef()
+
+    server_cert = pki.gencert("api-server")
+    config.tls = TlsServerConfiguration(
+        enabled=True, client_ca=pki.ca.cert, cert=server_cert.cert, key=server_cert.key
+    )
+
+    client_cert = pki.gencert("client")
+    client_tls = TlsClientConfiguration(
+        enabled=True,
+        client_ca=pki.ca.cert,
+        client_cert=client_cert.cert,
+        client_key=client_cert.key,
+    )
+    ssl_context = create_ssl_context(client_tls)
+
+    @routes.get("/api/v1/namespaces/secondary/configmaps/ca.pem")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/api/v1/namespaces/secondary/configmaps")
+    async def _(request):
+        return web.Response(status=200)
+
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
+    async def _(request):
+        return web.Response(status=200)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    # We only consider the first resource in the manifest file, that is a Deployment.
+    # This Deployment should be modified by the "complete" hook with ENV vars.
+    deployment_manifest = deepcopy(nginx_manifest[0])
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
+        spec__hooks=["complete"],
+        spec__manifest=[deployment_manifest],
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    server_app = create_app(config)
+    api_server = Server(server_app)
+
+    await api_server.start_server(ssl=server_app["ssl_context"])
+    assert api_server.scheme == "https"
+
+    async with Client(
+        url=server_endpoint(api_server), loop=loop, ssl_context=ssl_context
+    ) as client:
+        controller = KubernetesController(
+            server_endpoint(api_server),
+            worker_count=0,
+            ssl_context=ssl_context,
+            hooks=deepcopy(hooks_config),
+        )
+        await controller.prepare(client)
+        # Observer started here in order to be stopped afterwards,
+        # otherwise get an exception from the Controller trying to stop a non-existing
+        # Observer.
+        await controller.resource_received(app, start_observer=True)
+
+        stored = await db.get(
+            Application, namespace=app.metadata.namespace, name=app.metadata.name
+        )
+        assert stored.status.state == ApplicationState.RUNNING
+        assert stored.status.last_observed_manifest is not None
+
+        # Do a rescheduling --> start the reconciliation loop
+        await controller.resource_received(stored, start_observer=False)
+
+        stored = await db.get(
+            Application, namespace=app.metadata.namespace, name=app.metadata.name
+        )
+        assert stored.status.state == ApplicationState.RUNNING
+        assert stored.status.last_observed_manifest is not None
+
+
 async def test_kubernetes_controller_error_handling(aiohttp_server, config, db, loop):
     """Test the behavior of the Controller in case of a ControllerError."""
     failed_manifest = deepcopy(nginx_manifest)
@@ -1442,7 +1792,7 @@ async def test_kubernetes_controller_error_handling(aiohttp_server, config, db, 
         status__state=ApplicationState.PENDING,
         status__is_scheduled=True,
         status__scheduled_to=resource_ref(cluster),
-        status__manifest=[],
+        status__last_observed_manifest=[],
     )
 
     await db.put(cluster)
@@ -1477,7 +1827,7 @@ async def test_kubernetes_api_error_handling(aiohttp_server, config, db, loop):
         status__state=ApplicationState.PENDING,
         status__is_scheduled=True,
         status__scheduled_to=resource_ref(cluster),
-        status__manifest=[],
+        status__last_observed_manifest=[],
     )
 
     await db.put(cluster)

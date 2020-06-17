@@ -249,12 +249,13 @@ class KubernetesObserver(Observer):
         app = self.resource
 
         status = deepcopy(app.status)
-        status.manifest = []
+        status.last_observed_manifest = []
 
         # For each kubernetes resource of the Application,
         # get its current status on the cluster.
-        for resource in app.status.manifest:
+        for resource in app.status.last_observed_manifest:
             kube = KubernetesClient(self.cluster.spec.kubeconfig)
+
             async with kube:
                 try:
                     resource_api = await kube.get_resource_api(resource["kind"])
@@ -275,7 +276,7 @@ class KubernetesObserver(Observer):
             # Update the status with the information taken from the resource on the
             # cluster
             actual_manifest = merge_status(resource, resp.to_dict())
-            status.manifest.append(actual_manifest)
+            status.last_observed_manifest.append(actual_manifest)
 
         return status
 
@@ -504,7 +505,7 @@ async def complete(app, api_endpoint, ssl_context, config):
         app.metadata.name,
         app.metadata.namespace,
         app.status.token,
-        app.status.mangling,
+        app.status.last_applied_manifest,
         config.complete.intermediate_src,
         generated_cert,
     )
@@ -572,21 +573,21 @@ class Complete(object):
         self.env_complete = env_complete
 
     def mangle_app(
-        self, name, namespace, token, mangling, intermediate_src, generated_cert
+        self, name, namespace, token, last_applied_manifest, intermediate_src, generated_cert
     ):
         """Mangle given application and injects complete hook resources and
-        sub-resources into mangling object by :meth:`mangle`.
+        sub-resources into :attr:`last_applied_manifest` object by :meth:`mangle`.
 
-        Mangling object is created as a deep copy of desired application resources,
-        defined by user. This object can be updated by custom hook resources
-        or modified by custom hook sub-resources. It is used as a desired state for the
-        Krake deployment process.
+        :attr:`last_applied_manifest` is created as a deep copy of the desired
+        application resources, as defined by user. It can be updated by custom hook
+        resources or modified by custom hook sub-resources. It is used as a desired
+        state for the Krake deployment process.
 
         Args:
             name (str): Application name
             namespace (str): Application namespace
             token (str): Complete hook authentication token
-            mangling (list): Application resources
+            last_applied_manifest (list): Application resources
             intermediate_src (str): content of the certificate that is used to sign new
                 certificates for the complete hook.
             generated_cert (CertificatePair): tuple that contains the content of the
@@ -627,8 +628,8 @@ class Complete(object):
             *self.volumes(cfg_name, volume_name, ca_certs),
         ]
 
-        self.mangle(hook_resources, mangling)
-        self.mangle(hook_sub_resources, mangling, sub_resource=True)
+        self.mangle(hook_resources, last_applied_manifest)
+        self.mangle(hook_sub_resources, last_applied_manifest, is_sub_resource=True)
 
     @staticmethod
     def attribute_map(obj):
@@ -657,14 +658,14 @@ class Complete(object):
             if getattr(obj, attr) is not None
         }
 
-    def mangle(self, items, mangling, sub_resource=False):
+    def mangle(self, items, last_applied_manifest, is_sub_resource=False):
         """Mangle application desired state with custom hook resources or
         sub-resources
 
         Example:
             .. code:: python
 
-            mangling = [
+            last_applied_manifest = [
                 {
                     'apiVersion': 'v1',
                     'kind': 'Pod',
@@ -686,10 +687,10 @@ class Complete(object):
                 )
             ]
 
-            mangle(hook_resources, mangling)
-            mangle(hook_sub_resources, mangling, sub_resource=True)
+            mangle(hook_resources, last_applied_manifest)
+            mangle(hook_sub_resources, last_applied_manifest, is_sub_resource=True)
 
-            assert mangling == [
+            assert last_applied_manifest == [
                 {
                     "apiVersion": "v1",
                     "kind": "Pod",
@@ -709,33 +710,34 @@ class Complete(object):
 
         Args:
             items (list): Custom hook resources or sub-resources
-            mangling (list): Application resources
-            sub_resource (bool, optional): if False, the function only extend
-                the mangling list of Kuberentes resources by new hook resources.
-                Otherwise, continue to inject each new hook sub-resource into the
-                mangling object sub-resources. Defaults to False
+            last_applied_manifest (list): Application resources
+            is_sub_resource (bool, optional): if False, the function only extend list of
+                Kubernetes resources definied in :attr:`last_applied_manifest` with new
+                hook resources. Otherwise, continue to inject each new hook
+                sub-resource into the :attr:`last_applied_manifest` object
+                sub-resources. Defaults to False
 
         """
 
         if not items:
             return
 
-        if not sub_resource:
-            mangling.extend(items)
+        if not is_sub_resource:
+            last_applied_manifest.extend(items)
             return
 
         def inject(sub_resource, sub_resources_to_mangle):
-            """Inject hook defined sub-resources into mangle sub-resources
+            """Inject hook defined sub-resources into Kubernetes sub-resources
 
             Args:
                 sub_resource (SubResource): Hook sub-resource that needs to be injected
-                    into desired mangling state
-                sub_resources_to_mangle (dict): Sub-resource from the Mangling state
-                    which needs to be processed
+                    into :attr:`last_applied_manifest`
+                sub_resources_to_mangle (object): Kubernetes sub-resources from
+                    :attr:`last_applied_manifest` which need to be processed
 
             """
 
-            # Create sub-resource group if not present in the mangle sub-resources
+            # Create sub-resource group if not present in the kubernetes sub-resources
             if sub_resource.group not in sub_resources_to_mangle:
                 sub_resources_to_mangle.update({sub_resource.group: []})
 
@@ -751,7 +753,7 @@ class Complete(object):
             else:
                 sub_resources_to_mangle[sub_resource.group].append(sub_resource.body)
 
-        for resource in mangling:
+        for resource in last_applied_manifest:
             # Complete hook is applied only on defined Kubernetes resources
             if resource["kind"] not in self.complete_resources:
                 continue

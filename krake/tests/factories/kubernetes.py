@@ -167,7 +167,7 @@ class ApplicationStatusFactory(Factory):
         )
 
     @lazy_attribute
-    def manifest(self):
+    def last_observed_manifest(self):
         if self.state == ApplicationState.PENDING:
             return None
 

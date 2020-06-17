@@ -124,7 +124,7 @@ async def test_custom_resource_cached_property_called_once(
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.last_observed_manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
@@ -210,7 +210,7 @@ async def test_custom_resource_cached_property(aiohttp_server):
             status__state=ApplicationState.PENDING,
             status__scheduled_to=resource_ref(cluster),
             status__is_scheduled=False,
-            status__mangling=list(
+            status__last_applied_manifest=list(
                 yaml.safe_load_all(
                     dedent(
                         """
@@ -321,7 +321,7 @@ async def test_app_custom_resource_creation(aiohttp_server, config, db, loop):
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.last_observed_manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
@@ -388,7 +388,7 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
         status__is_scheduled=True,
         status__running_on=resource_ref(cluster),
         status__scheduled_to=resource_ref(cluster),
-        status__manifest=list(
+        status__last_observed_manifest=list(
             yaml.safe_load_all(
                 dedent(
                     """
@@ -465,7 +465,7 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.last_observed_manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
@@ -584,7 +584,7 @@ async def test_app_custom_resource_migration(aiohttp_server, config, db, loop):
         status__is_scheduled=True,
         status__running_on=resource_ref(cluster_A),
         status__scheduled_to=resource_ref(cluster_B),
-        status__manifest=old_manifest,
+        status__last_observed_manifest=old_manifest,
         spec__manifest=new_manifest,
     )
 
@@ -609,7 +609,7 @@ async def test_app_custom_resource_migration(aiohttp_server, config, db, loop):
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.last_observed_manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.status.running_on == resource_ref(cluster_B)
     assert resource_ref(cluster_A) not in stored.metadata.owners
@@ -661,7 +661,7 @@ async def test_app_custom_resource_deletion(aiohttp_server, config, db, loop):
         status__scheduled_to=resource_ref(cluster),
         status__running_on=resource_ref(cluster),
         metadata__finalizers=["kubernetes_resources_deletion"],
-        status__manifest=list(
+        status__last_observed_manifest=list(
             yaml.safe_load_all(
                 dedent(
                     """

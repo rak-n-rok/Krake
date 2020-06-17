@@ -96,11 +96,11 @@ class ResourceDelta(NamedTuple):
         """
         desired = {
             ResourceID.from_resource(resource): resource
-            for resource in app.status.mangling
+            for resource in app.status.last_applied_manifest
         }
         current = {
             ResourceID.from_resource(resource): resource
-            for resource in (app.status.manifest or [])
+            for resource in (app.status.last_observed_manifest or [])
         }
 
         deleted = [current[rid] for rid in set(current) - set(desired)]
@@ -455,7 +455,7 @@ class KubernetesController(Controller):
     async def _delete_manifest(self, app):
         # Delete Kubernetes resources if the application was bound to a
         # cluster and there were Kubernetes resources created.
-        if app.status.running_on and app.status.manifest:
+        if app.status.running_on and app.status.last_observed_manifest:
             cluster = await self.kubernetes_api.read_cluster(
                 namespace=app.status.running_on.namespace,
                 name=app.status.running_on.name,
@@ -463,7 +463,7 @@ class KubernetesController(Controller):
             async with KubernetesClient(
                 cluster.spec.kubeconfig, cluster.spec.custom_resources
             ) as kube:
-                for resource in app.status.manifest:
+                for resource in app.status.last_observed_manifest:
                     await listen.hook(
                         Hook.ResourcePreDelete,
                         app=app,
@@ -484,8 +484,8 @@ class KubernetesController(Controller):
             app.metadata.owners.remove(app.status.running_on)
 
         # Clear manifest in status
-        app.status.manifest = None
-        app.status.mangling = None
+        app.status.last_observed_manifest = None
+        app.status.last_applied_manifest = None
         app.status.running_on = None
 
     async def _reconcile_application(self, app):
@@ -495,7 +495,7 @@ class KubernetesController(Controller):
             )
 
         # Mangle desired spec resource by Mangling hook
-        app.status.mangling = deepcopy(app.spec.manifest)
+        app.status.last_applied_manifest = deepcopy(app.spec.manifest)
         await listen.hook(
             Hook.ApplicationMangling,
             app=app,
@@ -614,7 +614,7 @@ class KubernetesController(Controller):
                 )
 
         # Update resource in application status
-        app.status.manifest = deepcopy(app.status.mangling)
+        app.status.last_observed_manifest = deepcopy(app.status.last_applied_manifest)
 
         # Application is now running on the scheduled cluster
         app.status.running_on = app.status.scheduled_to
@@ -641,7 +641,7 @@ class KubernetesController(Controller):
         await self._delete_manifest(app)
 
         # Mangle desired spec resource by Mangling hook
-        app.status.mangling = deepcopy(app.spec.manifest)
+        app.status.last_applied_manifest = deepcopy(app.spec.manifest)
         await listen.hook(
             Hook.ApplicationMangling,
             app=app,
@@ -650,11 +650,13 @@ class KubernetesController(Controller):
             config=self.hooks,
         )
         # Create complete manifest on the new cluster
-        delta = ResourceDelta(new=tuple(app.status.mangling), modified=(), deleted=())
+        delta = ResourceDelta(
+            new=tuple(app.status.last_applied_manifest), modified=(), deleted=()
+        )
         await self._apply_manifest(app, delta)
 
         # Update resource in application status
-        app.status.manifest = deepcopy(app.status.mangling)
+        app.status.last_observed_manifest = deepcopy(app.status.last_applied_manifest)
 
         # Transition into "RUNNING" state
         app.status.state = ApplicationState.RUNNING
