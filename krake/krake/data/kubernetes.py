@@ -52,11 +52,12 @@ class ApplicationStatus(Status):
             application is currently running.
         services (dict): Mapping of Kubernetes service names to their public
             endpoints.
-        manifest (list[dict]): List of Kubernetes objects currently currently
-            existing
-        mangling (list[dict]): manifest augmented by additional resources
-            needed to be created for the functioning of internal mechanisms,
-            such as the "Complete Hook".
+        last_observed_manifest (list[dict]): List of Kubernetes resources observed on
+            the Kubernetes API.
+        last_applied_manifest (list[dict]): List of Kubernetes resources created via
+            Krake. The manifest is augmented by additional resources needed to be
+            created for the functioning of internal mechanisms, such as the "Complete
+            Hook".
         token (str): Token for the identification of the "Complete Hook" request
     """
 
@@ -65,8 +66,8 @@ class ApplicationStatus(Status):
     scheduled_to: ResourceRef = None
     running_on: ResourceRef = None
     services: dict = field(default_factory=dict)
-    manifest: List[dict] = None
-    mangling: List[dict] = None
+    last_observed_manifest: List[dict] = field(default_factory=list)
+    last_applied_manifest: List[dict] = field(default_factory=list)
     token: str = None
 
 

@@ -198,7 +198,7 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
         status__state=ApplicationState.RUNNING,
         status__running_on=resource_ref(cluster),
         spec__manifest=nginx_manifest,
-        status__manifest=nginx_manifest,
+        status__last_observed_manifest=nginx_manifest,
     )
 
     calls_to_res_update = 0
@@ -209,7 +209,7 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
         nonlocal calls_to_res_update, actual_state
         calls_to_res_update += 1
 
-        manifests = resource.status.manifest
+        manifests = resource.status.last_observed_manifest
         status_image = get_first_container(manifests[0])["image"]
         if actual_state == 0:
             # As no changes are noticed by the Observer, the res_update function will
@@ -271,7 +271,7 @@ async def test_observer_on_status_update(aiohttp_server, db, config, loop):
     app = ApplicationFactory(
         status__state=ApplicationState.RUNNING,
         status__running_on=resource_ref(cluster),
-        status__manifest=nginx_manifest,
+        status__last_observed_manifest=nginx_manifest,
         spec__manifest=nginx_manifest,
     )
     await db.put(cluster)
@@ -293,7 +293,7 @@ async def test_observer_on_status_update(aiohttp_server, db, config, loop):
         )
         assert updated.spec == app.spec
         assert updated.metadata.created == app.metadata.created
-        first_container = get_first_container(updated.status.manifest[0])
+        first_container = get_first_container(updated.status.last_observed_manifest[0])
         assert first_container["image"] == "nginx:1.6"
 
 
@@ -426,7 +426,7 @@ async def test_observer_on_status_update_mangled(aiohttp_server, db, config, loo
         status__running_on=resource_ref(cluster),
         status__scheduled_to=resource_ref(cluster),
         spec__manifest=nginx_manifest,
-        status__manifest=nginx_manifest,
+        status__last_observed_manifest=nginx_manifest,
         spec__hooks=["complete"],
     )
     await db.put(cluster)
@@ -464,7 +464,9 @@ async def test_observer_on_status_update_mangled(aiohttp_server, db, config, loo
         # endpoint that are stored in the Observer
         first_container = get_first_container(copy_deploy_mangled_response)
         first_container["env"][0]["value"] = observer.resource.status.token
-        app_container = get_first_container(observer.resource.status.manifest[0])
+        app_container = get_first_container(
+            observer.resource.status.last_observed_manifest[0]
+        )
         first_container["env"][1]["value"] = app_container["env"][1]["value"]
 
         actual_state = 1
@@ -487,9 +489,9 @@ async def test_observer_on_status_update_mangled(aiohttp_server, db, config, loo
         )
         assert updated.spec == app.spec
         # Check that the hook is present in the stored Application
-        assert "env" in get_first_container(updated.status.manifest[0])
+        assert "env" in get_first_container(updated.status.last_observed_manifest[0])
         assert updated.metadata.created == app.metadata.created
-        first_container = get_first_container(updated.status.manifest[0])
+        first_container = get_first_container(updated.status.last_observed_manifest[0])
         assert first_container["image"] == "nginx:1.6"
 
 
@@ -583,7 +585,7 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
         status__state=ApplicationState.RUNNING,
         status__running_on=cluster_ref,
         status__scheduled_to=cluster_ref,
-        status__manifest=deepcopy(nginx_manifest),
+        status__last_observed_manifest=deepcopy(nginx_manifest),
         spec__manifest=deepcopy(nginx_manifest),
         metadata__finalizers=["kubernetes_resources_deletion"],
     )
@@ -702,7 +704,7 @@ async def test_observer_on_delete(aiohttp_server, config, db, loop):
     app = ApplicationFactory(
         metadata__deleted=fake.date_time(),
         status__state=ApplicationState.RUNNING,
-        status__manifest=nginx_manifest,
+        status__last_observed_manifest=nginx_manifest,
         status__running_on=resource_ref(cluster),
         spec__manifest=nginx_manifest,
         metadata__finalizers=["kubernetes_resources_deletion"],

@@ -172,7 +172,7 @@ async def test_app_creation(aiohttp_server, config, db, loop):
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.last_observed_manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
@@ -212,7 +212,7 @@ async def test_app_update(aiohttp_server, config, db, loop):
         status__is_scheduled=True,
         status__running_on=resource_ref(cluster),
         status__scheduled_to=resource_ref(cluster),
-        status__manifest=list(
+        status__last_observed_manifest=list(
             yaml.safe_load_all(
                 dedent(
                     """
@@ -344,7 +344,7 @@ async def test_app_update(aiohttp_server, config, db, loop):
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.last_observed_manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
@@ -446,7 +446,7 @@ async def test_app_migration(aiohttp_server, config, db, loop):
         status__is_scheduled=True,
         status__running_on=resource_ref(cluster_A),
         status__scheduled_to=resource_ref(cluster_B),
-        status__manifest=old_manifest,
+        status__last_observed_manifest=old_manifest,
         spec__manifest=new_manifest,
     )
 
@@ -471,7 +471,7 @@ async def test_app_migration(aiohttp_server, config, db, loop):
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.last_observed_manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.status.running_on == resource_ref(cluster_B)
     assert resource_ref(cluster_A) not in stored.metadata.owners
@@ -502,7 +502,7 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
         status__state=ApplicationState.RUNNING,
         status__scheduled_to=resource_ref(cluster),
         status__running_on=resource_ref(cluster),
-        status__manifest=nginx_manifest,
+        status__last_observed_manifest=nginx_manifest,
         metadata__finalizers=["kubernetes_resources_deletion"],
     )
     assert resource_ref(cluster) in app.metadata.owners
@@ -781,7 +781,7 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
         status__scheduled_to=resource_ref(cluster),
         spec__manifest=[],
         status__services={"nginx-demo": "127.0.0.1:30704"},
-        status__manifest=manifest,
+        status__last_observed_manifest=manifest,
     )
 
     await db.put(cluster)
@@ -861,7 +861,7 @@ async def test_complete_hook(aiohttp_server, config, db, loop):
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    for resource in stored.status.manifest:
+    for resource in stored.status.last_observed_manifest:
         if resource["kind"] != "Deployment":
             continue
 
@@ -933,14 +933,14 @@ async def test_complete_hook_disable_by_user(aiohttp_server, config, db, loop):
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    for resource in stored.status.manifest:
+    for resource in stored.status.last_observed_manifest:
         if resource["kind"] != "Deployment":
             continue
 
         for container in resource["spec"]["template"]["spec"]["containers"]:
             assert "env" not in container
 
-    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.last_observed_manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
@@ -1036,7 +1036,7 @@ async def test_complete_hook_tls(aiohttp_server, config, pki, db, loop):
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    for resource in stored.status.manifest:
+    for resource in stored.status.last_observed_manifest:
         if resource["kind"] != "Deployment":
             continue
 
@@ -1062,7 +1062,7 @@ async def test_kubernetes_controller_error_handling(aiohttp_server, config, db, 
         status__state=ApplicationState.PENDING,
         status__is_scheduled=True,
         status__scheduled_to=resource_ref(cluster),
-        status__manifest=[],
+        status__last_observed_manifest=[],
     )
 
     await db.put(cluster)
@@ -1098,7 +1098,7 @@ async def test_kubernetes_api_error_handling(aiohttp_server, config, db, loop):
         status__state=ApplicationState.PENDING,
         status__is_scheduled=True,
         status__scheduled_to=resource_ref(cluster),
-        status__manifest=[],
+        status__last_observed_manifest=[],
     )
 
     await db.put(cluster)
