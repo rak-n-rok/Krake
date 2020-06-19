@@ -2,55 +2,81 @@
   become: yes
   become_user: krake
   hosts: krake_apps
+  environment:
+    # pytest and rok are installed locally in /home/krake/.local/bin which isn't in the
+    # default PATH
+    PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
   vars:
     git_dir: /home/krake/git/krake
     test_dir: rak/functionals
   tasks:
-    - name: Install Tests dependencies
-      pip:
-        name: "{{ git_dir }}/rak/[test]"
-        state: present
-        executable: pip3
-        extra_args: --user
-      environment:
-        PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
-      tags:
-        - always
+    - name: Run Krake Integration tests
+      block:
 
-    # We need one Minikube cluster in order to run the integration tests
-    - name: Check if a Minikube clusters have been spawned
-      assert:
-        that:
-          - "groups['minikube_clusters'][0] is defined"
-          - "groups['minikube_clusters'][1] is defined"
-      tags:
-        - always
+        - name: Install Tests dependencies
+          pip:
+            name: "{{ git_dir }}/rak/[test]"
+            state: present
+            executable: pip3
+            extra_args: --user
+          tags:
+            - always
 
-    # pytest and rok are installed locally in /home/krake/.local/bin which
-    # isn't in the default PATH
-    - name: Run integration tests for the scheduling algorithm
-      command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_scheduling.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
-      environment:
-        PATH: "{{ ansible_env.PATH }}:{{ansible_env.HOME}}/.local/bin"
-      tags:
-        - test_scheduling
+        # We need two Minikube clusters in order to run the integration tests
+        - name: Check if two Minikube clusters have been spawned
+          assert:
+            that:
+              - "groups['minikube_clusters'][0] is defined"
+              - "groups['minikube_clusters'][1] is defined"
+          tags:
+            - always
 
-    - name: Run integration tests for the Krake k8s resources update
-      command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_update.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
-      environment:
-        PATH: "{{ ansible_env.PATH }}:{{ansible_env.HOME}}/.local/bin"
-      tags: test_update
+        - name: Run integration tests for the scheduling algorithm
+          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_scheduling.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
+          tags:
+            - test_scheduling
 
-    - name: Run integration tests for the Kubernetes Observer
-      command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_kubernetes_observer.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
-      environment:
-        PATH: "{{ ansible_env.PATH }}:{{ansible_env.HOME}}/.local/bin"
-      tags:
-        - test_kubernetes_observer
+        - name: Run integration tests for the Krake k8s resources update
+          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_update.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
+          tags:
+            - test_update
 
-    - name: Run integration tests for krake scripts
-      command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_scripts.py --krake_container {{ api_host }} --etcd_container {{ etcd_host }} --etcd_container_port {{ etcd_port }}"
-      environment:
-        PATH: "{{ ansible_env.PATH }}:{{ansible_env.HOME}}/.local/bin"
-      tags:
-        - test_scripts
+        - name: Run integration tests for the Kubernetes Observer
+          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_kubernetes_observer.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
+          tags:
+            - test_kubernetes_observer
+
+        - name: Run integration tests for krake scripts
+          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_scripts.py --krake_container {{ api_host }} --etcd_container {{ etcd_host }} --etcd_container_port {{ etcd_port }}"
+          tags:
+            - test_scripts
+
+      always:
+
+        - name: Save Krake containers logs
+          shell: "docker logs {{ item }} > /tmp/{{ item }}.log"
+          with_items:
+            - krake-db
+            - krake-api
+            - krake_krake-ctrl-scheduler_1
+            - krake_krake-ctrl-kubernetes-application_1
+            - krake_krake-ctrl-garbage-collector_1
+            - krake_krake-ctrl-magnum_1
+          tags:
+            - always
+
+        - name: Create a tar.gz archive from the log files
+          archive:
+            path: /tmp/krake*.log
+            dest: /tmp/krake_logs.tar.gz
+            format: gz
+          tags:
+            - always
+
+        - name: Download the Krake logs
+          fetch:
+            src: /tmp/krake_logs.tar.gz
+            dest: E2E_logs/
+            flat: true
+          tags:
+            - always
