@@ -315,6 +315,13 @@ class Scheduler(Controller):
         """
         logger.info("Schedule %r", app)
 
+        if app.status.scheduled_to and not app.spec.constraints.migration:
+            logger.debug(
+                "Not migrating %r, since migration of the application is disabled.",
+                app,
+            )
+            return
+
         clusters = await self.kubernetes_api.list_all_clusters()
         cluster = await self.select_kubernetes_cluster(app, clusters.items)
 
@@ -401,6 +408,13 @@ class Scheduler(Controller):
             app (krake.data.kubernetes.Application): the Application to reschedule.
 
         """
+        if not app.spec.constraints.migration:
+            logger.debug(
+                "Not rescheduling %r, since migration of the application is disabled.",
+                app,
+            )
+            return
+
         # Put the application into the work queue with a certain delay. This
         # ensures the rescheduling of the application. Only put it if there is
         # not already another version of the resource in the queue. This check

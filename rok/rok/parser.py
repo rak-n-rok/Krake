@@ -2,6 +2,7 @@
 module.
 """
 from argparse import ArgumentParser, ArgumentError, Action
+import copy
 
 
 class ParserSpec(object):
@@ -126,6 +127,11 @@ class ParserSpec(object):
             for argument_args, argument_kwargs in getattr(fn, "parser_arguments", []):
                 parser.add_argument(*argument_args, **argument_kwargs)
 
+            for mut_ex_group in getattr(fn, "parser_mutually_exclusive_groups", []):
+                group = parser.add_mutually_exclusive_group()
+                for argument_args, argument_kwargs in mut_ex_group:
+                    group.add_argument(*argument_args, **argument_kwargs)
+
         for subparser in self.specs:
             subparser.create_parser(parent=commands)
 
@@ -160,6 +166,44 @@ def argument(*args, **kwargs):
         return fn
 
     return decorator
+
+
+def mutually_exclusive_group(group):
+    """Decorator function for mutually exclusive :mod:`argparse` arguments.
+
+    Args:
+        group (list of tuples): A list of the standard :mod: `argparse`
+            arguments which are mutually exclusive. Each argument is
+            represented as a tuple of its args and kwargs.
+
+    Returns:
+        callable: A decorator that can be used to decorate a command function.
+
+    """
+
+    def arg_for_exclusive_group(default=None):
+        """
+        Args:
+            default (str): The default argument
+
+        Returns:
+            callable: A decorator that can be used to decorate a command function.
+        """
+
+        def decorator(fn):
+            if not hasattr(fn, "parser_mutually_exclusive_groups"):
+                fn.parser_mutually_exclusive_groups = []
+            grp = copy.deepcopy(group)
+            if default:
+                for args, kwargs in grp:
+                    if default == args[0]:
+                        kwargs["help"] += " (default)"
+            fn.parser_mutually_exclusive_groups.append(grp)
+            return fn
+
+        return decorator
+
+    return arg_for_exclusive_group
 
 
 class StoreDict(Action):
