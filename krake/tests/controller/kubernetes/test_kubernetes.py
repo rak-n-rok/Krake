@@ -478,6 +478,206 @@ async def test_app_migration(aiohttp_server, config, db, loop):
     assert resource_ref(cluster_B) in stored.metadata.owners
 
 
+async def test_app_multi_migration(aiohttp_server, config, db, loop):
+    """Migrating an application back and forth between num_clusters clusters,
+    num_cycles times.
+
+    First the application is scheduled to an initial cluster.
+
+    Then it is migrated between the num_clusters clusters (one after the other)
+    num_cycles times.
+
+    After each scheduling we assert that the kubernetes controller behaves correctly.
+    In particular, we verify that the kubernetes controller:
+
+    - correctly updates
+        - application.status.state
+        - application.status.running_on
+        - application.status.scheduled_to
+        - application.metadata.owners
+    - correctly calls the servers on the clusters involved, i.e.,
+        - creates the application on the target cluster
+        - when migrating the application, deletes it from the start cluster
+    """
+
+    # In this test we want to perform migration, i.e, num_cycles must be > 0.
+    # If num_cycles == 0 we only create an application, but do not migrate it.
+    num_cycles = 3
+    # In this test we want to migrate an application between clusters,
+    # i.e, num_clusters must be > 1.
+    num_clusters = 4
+
+    routes = web.RouteTableDef()
+    app_categories = ["created", "deleted", "existing"]
+
+    def clear_server(srv):
+        """
+        Reset the created, deleted and existing sets of a cluster kubernetes server
+        Args:
+            srv (TestServer): server of a kubernetes cluster
+        """
+        for c in app_categories:
+            srv.app[c].clear()
+
+    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    async def _(request):
+        body = await request.json()
+        request.app["created"].add(body["metadata"]["name"])
+        return web.Response(status=201)
+
+    @routes.delete("/apis/apps/v1/namespaces/default/deployments/{name}")
+    async def _(request):
+        request.app["deleted"].add(request.match_info["name"])
+        return web.Response(status=200)
+
+    @routes.get("/apis/apps/v1/namespaces/default/deployments/{name}")
+    async def _(request):
+        if request.match_info["name"] in request.app["existing"]:
+            return web.Response(status=200)
+        return web.Response(status=404)
+
+    async def make_kubernetes_api():
+        app = web.Application()
+        for category in app_categories:
+            app[category] = set()
+        app.add_routes(routes)
+        return await aiohttp_server(app)
+
+    def assert_owners(application, *owners):
+        """
+        Assert that the application is owned by exactly the clusters in owners
+        Args:
+            application (Application): the application
+            *owners (Cluster): the clusters that are expected to be in the
+                application's list of owners
+        """
+        assert len(owners) == len(application.metadata.owners)
+        for o in owners:
+            assert resource_ref(o) in application.metadata.owners
+
+    # clusters[first_index] is the cluster where the application will be created
+    first_index = 0
+
+    deployment_manifest = yaml.safe_load(
+        """---
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: nginx-demo
+    spec:
+      selector:
+        matchLabels:
+          app: nginx
+      template:
+        metadata:
+          labels:
+            app: nginx
+        spec:
+          containers:
+          - name: nginx
+            image: nginx:1.7.9
+            ports:
+            - containerPort: 80
+    """
+    )
+    app_name = deployment_manifest["metadata"]["name"]
+
+    assert num_cycles > 0
+    assert num_clusters > 1
+
+    # Create clusters and the kubernetes server on each cluster
+    kube_servers = [await make_kubernetes_api() for _ in range(num_clusters)]
+    clusters = [
+        ClusterFactory(spec__kubeconfig=make_kubeconfig(s)) for s in kube_servers
+    ]
+
+    # Create the application
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=False,
+        status__scheduled_to=resource_ref(clusters[first_index]),
+        spec__manifest=[deployment_manifest],
+    )
+
+    # Assert correct initial state before inserting the application into the db.
+    assert app.status.state == ApplicationState.PENDING
+    assert not app.status.running_on
+    assert app.status.scheduled_to == resource_ref(clusters[first_index])
+    assert_owners(app, clusters[first_index])
+    assert not any(
+        [kube_servers[first_index].app[category] for category in app_categories]
+    )
+
+    [await db.put(cluster) for cluster in clusters]
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        await controller.prepare(client)
+
+        # Let the kubernetes controller create the application
+        await db.put(app)
+        await controller.resource_received(app, start_observer=False)
+        # Remove app's observer from dict to prevent the observer from being
+        # stopped next time controller.resource_received(app) is called
+        # (although it was not started).
+        controller.observers.pop(app.metadata.uid)
+
+        # Assert correct state after creating the application on the
+        # initial cluster clusters[first_index].
+        app = await db.get(
+            Application, namespace=app.metadata.namespace, name=app.metadata.name
+        )
+        assert app.status.state == ApplicationState.RUNNING
+        assert app.status.running_on == resource_ref(clusters[first_index])
+        assert app.status.running_on == app.status.scheduled_to
+        assert_owners(app, clusters[first_index])
+        assert app_name in kube_servers[first_index].app["created"]
+        assert app_name not in kube_servers[first_index].app["deleted"]
+        assert app_name not in kube_servers[first_index].app["existing"]
+
+        # We migrate the app from one cluster to another num_clusters*num_cycles times.
+        # Initially the app is running on clusters[first_index].
+        for migration in range(first_index, first_index + num_clusters * num_cycles):
+            # We migrate the app from the cluster at start_index to the
+            # cluster at target_index.
+            start_index = migration % num_clusters
+            target_index = (migration + 1) % num_clusters
+
+            # Setup servers
+            [clear_server(server) for server in kube_servers]
+            kube_servers[start_index].app["existing"].add(app_name)
+
+            # Setup app
+            app.status.scheduled_to = resource_ref(clusters[target_index])
+            app.metadata.owners.append(resource_ref(clusters[target_index]))
+            assert_owners(app, clusters[start_index], clusters[target_index])
+
+            # Let the kubernetes controller migrate the application from
+            # clusters[start_index] to clusters[target_index]
+            await db.put(app)
+            await controller.resource_received(app, start_observer=False)
+            # Remove app's observer from dict to prevent the observer from being
+            # stopped next time controller.resource_received(app) is called
+            # (although it was not started).
+            controller.observers.pop(app.metadata.uid)
+
+            # Assert correct state after migrating the application
+            # from clusters[start_index] to clusters[target_index].
+            app = await db.get(
+                Application, namespace=app.metadata.namespace, name=app.metadata.name
+            )
+            assert app.status.state == ApplicationState.RUNNING
+            assert app.status.running_on == resource_ref(clusters[target_index])
+            assert app.status.running_on == app.status.scheduled_to
+            assert_owners(app, clusters[target_index])
+            assert app_name in kube_servers[start_index].app["deleted"]
+            assert app_name not in kube_servers[start_index].app["created"]
+            assert app_name in kube_servers[target_index].app["created"]
+            assert app_name not in kube_servers[target_index].app["deleted"]
+
+
 async def test_app_deletion(aiohttp_server, config, db, loop):
     kubernetes_app = web.Application()
     routes = web.RouteTableDef()
