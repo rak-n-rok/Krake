@@ -1,4 +1,5 @@
 """Data model definitions for Kubernetes-related resources"""
+from copy import deepcopy
 from enum import Enum, auto
 from dataclasses import field
 from typing import List
@@ -23,10 +24,189 @@ class Constraints(Serializable):
     migration: bool = True
 
 
+def _validate_observer_schema(observer_schema, manifest):
+    """Validation method for observer_schema
+
+    Attributes:
+        observer_schema (list[dict], optional): List of dictionaries of fields that
+            should be observed by the Kubernetes Observer.
+
+    Raises:
+        SyntaxError: If the observer_schema is not valid
+
+    """
+
+    def _validate_observer_schema_dict(observer_schema_dict, first_level=False):
+        """Together with :func:`_validate_observer_schema_list``, this function is
+        called recursively to validate a partial ``observer_schema``.
+
+        Args:
+            observer_schema_dict (dict): Partial observer_schema to validate
+            first_level (bool, optional): Boolean to indicate if the validation is
+                performed on the first level dictionary of the resource, as additional
+                checks should then be performed
+
+        Raises:
+            AssertionError: If the partial observer_schema is not valid
+
+        In case of ``first_level`` dictionary (i.e. complete ``observer_schema`` for a
+        resource), the keys necessary for identifying the resource have to be present.
+
+        """
+        if first_level:
+            try:
+                observer_schema_dict.pop("apiVersion")
+            except KeyError:
+                raise AssertionError("apiVersion is not defined")
+
+            try:
+                observer_schema_dict.pop("kind")
+            except KeyError:
+                raise AssertionError("kind is not defined")
+
+            try:
+                metadata = observer_schema_dict.pop("metadata")
+                assert isinstance(metadata, dict)
+            except (KeyError, AssertionError):
+                raise AssertionError("metadata dictionary is not defined")
+
+            try:
+                metadata.pop("name")
+            except KeyError:
+                raise AssertionError("name is not defined in the metadata dictionary")
+
+            _validate_observer_schema_dict(metadata)
+
+        for key, value in observer_schema_dict.items():
+
+            if isinstance(value, dict):
+                _validate_observer_schema_dict(value)
+
+            elif isinstance(value, list):
+                _validate_observer_schema_list(value)
+
+            else:
+                assert value is None, f"Value of '{key}' is not 'None'"
+
+    def _validate_observer_schema_list(observer_schema_list):
+        """Together with :func:`_validate_observer_schema_dict``, this function is
+        called recursively to validate a partial ``observer_schema``.
+
+        Args:
+            observer_schema_list (list): Partial observer_schema to validate
+
+        Raises:
+            AssertionError: If the partial observer_schema is not valid
+
+        Especially, this function checks that the list control dictionary is present and
+        well-formed.
+
+        """
+        assert isinstance(
+            observer_schema_list[-1], dict
+        ), "Special list control dictionary not found"
+        assert (
+            "observer_schema_list_min_length" in observer_schema_list[-1]
+            and "observer_schema_list_max_length" in observer_schema_list[-1]
+        ), "Special list control dictionary malformed"
+
+        observer_schema_list_min_length = observer_schema_list[-1][
+            "observer_schema_list_min_length"
+        ]
+        observer_schema_list_max_length = observer_schema_list[-1][
+            "observer_schema_list_max_length"
+        ]
+
+        assert isinstance(
+            observer_schema_list_min_length, int
+        ), "observer_schema_list_min_length should be an integer"
+        assert isinstance(
+            observer_schema_list_max_length, int
+        ), "observer_schema_list_max_length should be an integer"
+
+        assert (
+            observer_schema_list_min_length >= 0
+        ), "Invalid value for observer_schema_list_min_length"
+        assert (
+            observer_schema_list_max_length >= -1
+        ), "Invalid value for observer_schema_list_max_length"
+        assert observer_schema_list_max_length >= observer_schema_list_min_length, (
+            "observer_schema_list_max_length is inferior to "
+            "observer_schema_list_min_length"
+        )
+        assert observer_schema_list_max_length >= len(observer_schema_list[:-1]), (
+            "observer_schema_list_max_length is inferior to the number of observed "
+            "elements"
+        )
+
+        for value in observer_schema_list[:-1]:
+
+            if isinstance(value, dict):
+                _validate_observer_schema_dict(value)
+
+            elif isinstance(value, list):
+                _validate_observer_schema_list(value)
+
+            else:
+                assert value is None, "Element of a list is not 'None'"
+
+    from krake.controller.kubernetes import get_kubernetes_resource_idx
+
+    for resource_observer_schema in observer_schema:
+
+        try:
+            _validate_observer_schema_dict(
+                deepcopy(resource_observer_schema), first_level=True
+            )
+        except AssertionError as e:
+            raise SyntaxError(e)
+
+        try:
+            get_kubernetes_resource_idx(
+                manifest,
+                resource_observer_schema["apiVersion"],
+                resource_observer_schema["kind"],
+                resource_observer_schema["metadata"]["name"],
+            )
+        except IndexError:
+            raise SyntaxError("Observed resource must be in manifest")
+
+
 class ApplicationSpec(Serializable):
+    """Spec subresource of :class:`Application`.
+
+    Attributes:
+        manifest (list[dict]): List of Kubernetes resources to create. This attribute
+            is managed by the user.
+        observer_schema (list[dict], optional): List of dictionaries of fields that
+            should be observed by the Kubernetes Observer. This attribute can be
+            user defined or automatically initialized from :attr:`manifest`. See
+            :meth:`__post_init__`
+        constraints (Constraints, optional): Scheduling constraints
+        hooks (list[str], optional): List of enabled hooks
+
+    """
+
     manifest: List[dict]
+    observer_schema: List[dict] = field(default_factory=list)
     constraints: Constraints = None
     hooks: List[str] = field(default_factory=list)
+
+    def __post_init__(self):
+        """Method automatically ran at the end of the :meth:`__init__` method, used to
+        validate :attr:`observer_schema`.
+
+        If a custom :attr:`observer_schema` is specified by the user, it needs to be
+        validated, i.e. verify that resources are correctly identified and refer to
+        resources defined in :attr:`manifest`, that fields are correctly idenfitied and
+        that all special control dictionary are corretly defined.
+
+        This validation cannot be achieved directly using a ``validate`` metadata, as
+        this must be a zero-argument callable, with no access to the other attributes of
+        the dataclass.
+
+        """
+        _validate_observer_schema(self.observer_schema, self.manifest)
 
 
 class ApplicationState(Enum):
@@ -66,6 +246,7 @@ class ApplicationStatus(Status):
     scheduled_to: ResourceRef = None
     running_on: ResourceRef = None
     services: dict = field(default_factory=dict)
+    mangled_observer_schema: List[dict] = field(default_factory=list)
     last_observed_manifest: List[dict] = field(default_factory=list)
     last_applied_manifest: List[dict] = field(default_factory=list)
     token: str = None
