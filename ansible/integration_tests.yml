@@ -36,6 +36,11 @@
           tags:
             - test_scheduling
 
+        - name: Run integration tests for the migration of kubernetes applications
+          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_kubernetes_migration.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
+          tags:
+            - test_kubernetes_migration
+
         - name: Run integration tests for the Krake k8s resources update
           command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_update.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
           tags:
