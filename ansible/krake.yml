@@ -76,6 +76,7 @@
           - python3-pip
           - docker.io
           - golang-cfssl
+          - etcd-client
 
     - name: Upgrade pip to latest version
       pip:
@@ -367,6 +368,7 @@
           loop:
             - "bootstrapping/base_roles.yaml"
             - "docker/prometheus/bootstrap.yaml"
+            - "support/static_metrics.yaml"
 
     - name: Krake rok deployment
       tags:
