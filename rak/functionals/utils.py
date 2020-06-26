@@ -12,6 +12,10 @@ logger = logging.getLogger("krake.test_utils.run")
 
 KRAKE_HOMEDIR = "/home/krake"
 ROK_INSTALL_DIR = f"{KRAKE_HOMEDIR}/.local/bin"
+STICKINESS_WEIGHT = 0.1
+
+_ETCD_STATIC_PROVIDER_KEY = "/core/metricsprovider/static_provider"
+_ETCDCTL_ENV = {"ETCDCTL_API": "3"}
 
 
 class Response(object):
@@ -35,7 +39,7 @@ class Response(object):
         return self._json
 
 
-def run(command, retry=10, interval=1, condition=None, input=None):
+def run(command, retry=10, interval=1, condition=None, input=None, env_vars=None):
     """Runs a subprocess
 
     This function runs the provided ``command`` in a subprocess.
@@ -67,6 +71,9 @@ def run(command, retry=10, interval=1, condition=None, input=None):
         interval (int, optional): Interval in seconds between two retries
         condition (callable, optional): Condition that has to be met.
         input (str, optional): input given through stdin to the command.
+        env_vars (dict, optional): key-value pairs of additional environment
+            variables that need to be set. ROK_INSTALL_DIR will always be added
+            to the PATH.
 
     Returns:
         Response: The output and return code of the provided command
@@ -107,8 +114,9 @@ def run(command, retry=10, interval=1, condition=None, input=None):
     logger.debug(f"Running: {command}")
 
     env = os.environ.copy()
+    if env_vars:
+        env.update(env_vars)
     env["PATH"] = f"{ROK_INSTALL_DIR}:{env['PATH']}"
-
     while True:
         process = subprocess.run(
             command,
@@ -173,6 +181,41 @@ def check_app_state(state, error_message, reason=None):
     return validate
 
 
+def check_app_created_and_up():
+    err_msg_fmt = "App was not up and running. Error: {details}"
+
+    def validate(response):
+        try:
+            app_details = response.json
+            expected_state = "RUNNING"
+            observed_state = app_details["status"]["state"]
+            observed_running_on = app_details["status"]["running_on"]
+            observed_scheduled_to = app_details["status"]["scheduled_to"]
+
+            details = (
+                f"Unable to observe application in a {expected_state} state. "
+                f"Observed: {observed_state}."
+            )
+            assert observed_state == expected_state, err_msg_fmt.format(details=details)
+
+            details = (
+                f"App was in {expected_state} state but its running_on "
+                f"was {observed_running_on}."
+            )
+            assert observed_running_on, err_msg_fmt % {"details": details}
+
+            details = (
+                f"App was in {expected_state} state but its scheduled_to "
+                f"was {observed_scheduled_to}."
+            )
+            assert observed_scheduled_to, err_msg_fmt % {"details": details}
+
+        except (KeyError, json.JSONDecodeError) as e:
+            raise AssertionError(err_msg_fmt % {"details": str(e)})
+
+    return validate
+
+
 def check_return_code(error_message, expected_code=0):
     """Create a callable to verify the return code of a response.
 
@@ -192,7 +235,11 @@ def check_return_code(error_message, expected_code=0):
     """
 
     def validate(response):
-        assert response.returncode == expected_code, error_message
+        details = (
+            f" Expected return code: {expected_code}."
+            f" Observed return code: {response.returncode}."
+        )
+        assert response.returncode == expected_code, error_message + details
 
     return validate
 
@@ -320,9 +367,15 @@ def check_app_running_on(expected_cluster, error_message):
     def validate(response):
         try:
             app_details = response.json
-            observed_cluster = app_details["status"]["running_on"]["name"]
-            assert observed_cluster == expected_cluster, error_message
-        except json.JSONDecodeError:
+            observed_cluster = app_details["status"]["running_on"].get("name", None)
+            scheduled_to = app_details["status"]["scheduled_to"].get("name", None)
+            msg = (
+                error_message + f" App state: {app_details['status']['state']}, "
+                f"App scheduled_to: {scheduled_to}, "
+                f"Observed cluster: {observed_cluster}"
+            )
+            assert observed_cluster == expected_cluster, msg
+        except (KeyError, json.JSONDecodeError):
             raise AssertionError(error_message)
 
     return validate
@@ -370,15 +423,27 @@ class ApplicationDefinition(NamedTuple):
     kind: str = "Application"
 
     def create_resource(self):
-        """Create the application."""
-        migration_flag = self._get_migration_flag(self.migration)
-        constraints = " ".join(f"-L {constraint}" for constraint in self.constraints)
-
+        """Create the application.
+        """
         error_message = f"The Application {self.name} could not be created."
-        run(
+        run(self.creation_command(), condition=check_return_code(error_message))
+
+    def creation_command(self):
+        """Generate a command for creating the Application.
+
+        Returns:
+            str: the command to create the Application.
+
+        """
+        migration_flag = self._get_migration_flag(self.migration)
+        constraints = (
+            " ".join(f"-L {constraint}" for constraint in self.constraints)
+            if self.constraints
+            else ""
+        )
+        return (
             f"rok kube app create {migration_flag} {constraints} "
-            f"-f {self.manifest_path} {self.name}",
-            condition=check_return_code(error_message),
+            f"-f {self.manifest_path} {self.name}"
         )
 
     @staticmethod
@@ -395,35 +460,64 @@ class ApplicationDefinition(NamedTuple):
 
     def check_created(self):
         """Run the command for checking if the Application has been created."""
-        error_message = (
-            f"Unable to observe the application {self.name} in a RUNNING state"
-        )
         run(
-            f"rok kube app get {self.name} -o json",
-            condition=check_app_state("RUNNING", error_message),
+            self.get_command(), condition=check_app_created_and_up(),
         )
 
     def delete_resource(self):
         """Delete the actual Application."""
         # The 404 HTTP code is allowed for the cases where the resource has been deleted
         # during the test.
-        run(f"rok kube app delete {self.name}", condition=allow_404)
+        run(self.delete_command(), condition=allow_404)
+
+    def delete_command(self):
+        """Generate a command for deleting the application.
+
+        Returns:
+            str: the command to delete the application.
+
+        """
+        return f"rok kube app delete {self.name}"
 
     def check_deleted(self):
         """Run the command for checking if the Application has been deleted."""
         error_message = f"Unable to observe the application {self.name} deleted"
         run(
-            f"rok kube app get {self.name}",
-            condition=check_resource_deleted(error_message),
+            self.get_command(), condition=check_resource_deleted(error_message),
         )
 
-    def update_command(self, cluster_labels=None, migration=None):
-        """Generate a command for updating an application
+    def update(self, cluster_labels=None, migration=None, labels=None):
+        """Update the application with the provided information.
 
         Args:
             cluster_labels (list(str)): optional list of cluster label constraints
-            migration (bool): optional migration flag indicating whether the
-                application should be able to migrate.
+                to give the application, e.g. ['location=DE']
+            migration (bool): Optional flag indicating which migration flag should
+                be given to the update command.
+                    True: --enable-migration
+                    False: --disable-migration
+                    None: (No flag)
+            labels (dict[str: str]): dict of labels with which to update the app.
+
+        """
+        run(
+            self.update_command(
+                cluster_labels=cluster_labels, migration=migration, labels=labels
+            )
+        )
+
+    def update_command(self, cluster_labels=None, migration=None, labels=None):
+        """Generate a command for updating the application.
+
+        Args:
+            cluster_labels (list(str)): optional list of cluster label constraints
+                to give the application, e.g. ['location=DE']
+            migration (bool): Optional flag indicating which migration flag should
+                be given to the update command.
+                    True: --enable-migration
+                    False: --disable-migration
+                    None: (No flag)
+            labels (dict[str: str]): dict of labels with which to update the app.
 
         Returns:
             str: the command to update the Application.
@@ -435,24 +529,110 @@ class ApplicationDefinition(NamedTuple):
             if cluster_labels
             else ""
         )
-        return f"rok kube app update {clc_options} {migration_flag} {self.name}"
+        label_options = (
+            " ".join(f"-l {label}={value}" for label, value in labels.items())
+            if labels
+            else ""
+        )
+        return (
+            f"rok kube app update "
+            f"{clc_options} {migration_flag} {label_options} {self.name}"
+        )
 
-    def check_running_on(self, cluster_name):
+    def check_running_on(
+        self, cluster_name, within=10, after_delay=0, error_message=""
+    ):
         """Run the command for checking that the application is running on the
         specified cluster.
+
+        The first check occurs after `after_delay` seconds, and rechecks for
+        `within` seconds every
+        second until the application was observed to run on the cluster
+        `cluster_name`.
+
+        An AssertionError is raised if the application is not running on cluster
+        `cluster_name` within `within` seconds of the first check.
 
         Args:
             cluster_name (str): Name of the cluster on which the application is
                 expected to run.
+            within (int): number of seconds it is allowed to take until the app
+                is running on the cluster `cluster_name`.
+            after_delay (int): number of seconds to delay before checking.
+            error_message (str): displayed error message in case of error.
         """
-        error_message = (
-            f"Unable to observe that the application {self.name} "
-            f"is running on cluster {cluster_name}."
-        )
+        if not error_message:
+            error_message = (
+                f"Unable to observe that the application {self.name} "
+                f"is running on cluster {cluster_name}."
+            )
+        if after_delay:
+            time.sleep(after_delay)
         run(
-            f"rok kube app get {self.name} -o json",
+            self.get_command(),
+            retry=within,
+            interval=1,
             condition=check_app_running_on(cluster_name, error_message),
         )
+
+    def get(self):
+        """Get the application by executing the 'rok kube app get' command.
+
+        Returns:
+            dict: the application as a dict built from the output of the
+                executed command.
+        """
+
+        response = run(self.get_command())
+        return response.json
+
+    def get_command(self):
+        """Generate a command for getting the application.
+
+        Returns:
+            str: the command to get the application
+        """
+        return f"rok kube app get {self.name} -o json"
+
+    def get_running_on(self, strict=False):
+        """Run the command for getting the application and return the name of
+        the cluster it is running on.
+
+        Args:
+            strict (bool): Flag signaling whether to be strict and only return
+            running_on if it is equal to scheduled_to.
+
+        Returns:
+            str: the name of the cluster the application is running on or None
+            if scheduled_to != running_on
+        """
+        app_dict = self.get()
+        running_on = app_dict["status"]["running_on"]["name"]
+        if strict:
+            scheduled_to = app_dict["status"]["scheduled_to"]["name"]
+            if scheduled_to != running_on:
+                # We cannot be sure where it is running right now...
+                return None
+        return running_on
+
+    def get_scheduled_to(self):
+        """Run the command for getting the application and return the name of
+        the cluster it is scheduled to.
+
+        Returns:
+            str: the name of the cluster the application is scheduled to
+        """
+        app_dict = self.get()
+        return app_dict["status"]["scheduled_to"]["name"]
+
+    def get_state(self):
+        """Run the command for getting the application and return its state.
+
+        Returns:
+            str: the current state of the application
+        """
+        app_dict = self.get()
+        return app_dict["status"]["state"]
 
 
 class ClusterDefinition(NamedTuple):
@@ -472,22 +652,42 @@ class ClusterDefinition(NamedTuple):
     kubeconfig_path: str
     labels: list = []
     kind: str = "Cluster"
+    metrics: dict = {}
 
     def create_resource(self):
         """Create the Cluster."""
-        label_flags = " ".join(f"-l {label}" for label in self.labels)
 
-        error_message = f"The Cluster {self.name}"
-        run(
-            f"rok kube cluster create {label_flags} {self.kubeconfig_path}",
-            condition=check_return_code(error_message),
+        error_message = f"The Cluster {self.name} could not be created."
+        run(self.creation_command(), condition=check_return_code(error_message))
+
+    def creation_command(self):
+        """Generate a command for creating the cluster.
+
+        Returns:
+            str: the command to create the cluster.
+
+        """
+        label_flags = " ".join(f"-l {label}" for label in self.labels)
+        metric_flags = " ".join(
+            f"-m {metric} {weight}" for metric, weight in self.metrics.items()
+        )
+        return (
+            f"rok kube cluster create {label_flags} {metric_flags} "
+            f"{self.kubeconfig_path}"
         )
 
     def delete_resource(self):
         """Delete the actual Cluster."""
         # The 404 HTTP code is allowed for the cases where the resource has been deleted
         # during the test.
-        run(f"rok kube cluster delete {self.name}", condition=allow_404)
+        run(self.delete_command(), condition=allow_404)
+
+    def delete_command(self):
+        """Generate a command for deleting the cluster.
+
+        Returns:
+            str: the command to delete the cluster."""
+        return f"rok kube cluster delete {self.name}"
 
     def check_deleted(self):
         """Run the command for checking if the Cluster has been deleted."""
@@ -496,6 +696,46 @@ class ClusterDefinition(NamedTuple):
             f"rok kube cluster get {self.name}",
             condition=check_resource_deleted(error_message),
         )
+
+    def update(self, labels=None, metrics=None):
+        """Update the cluster with the provided information.
+
+        Args:
+            labels (list(str)): optional list of labels
+                to give the cluster, e.g. ['location=DE']
+            metrics (dict[str: float]): optional dict with metrics and their weights
+                to give the cluster
+
+        """
+        run(self.update_command(labels=labels, metrics=metrics))
+
+    def update_command(self, labels=None, metrics=None):
+        """Generate a command for updating the cluster.
+
+        Args:
+            labels (list(str)): optional list of labels
+                to give the cluster, e.g. ['location=DE']
+            metrics (dict[str: float]): optional dict with metrics and their weights
+                to give the cluster.
+
+        Returns:
+            str: the command to update the cluster.
+
+        """
+        if not (labels or metrics):
+            msg = (
+                "Either labels or metrics must be present in a "
+                "cluster update command."
+            )
+            raise AssertionError(msg)
+
+        metric_opts = (
+            " ".join(f"-m {metric} {weight}" for metric, weight in metrics.items())
+            if metrics
+            else ""
+        )
+        label_opts = " ".join(f"-l {label}" for label in labels) if labels else ""
+        return f"rok kube cluster update {label_opts} {metric_opts} {self.name}"
 
 
 class Environment(object):
@@ -609,6 +849,36 @@ class Environment(object):
         for handler in self.after_handlers:
             handler(self.resources)
 
+    @classmethod
+    def get_resource(cls, resources, kind, name):
+        """
+        If there exists exactly one resource in 'resources' of kind 'kind'
+        with name 'name', return it. Otherwise raise AssertionError.
+        Args:
+            resources (list): list of ClusterDefinition and ApplicationDefinition
+                objects.
+            kind (str): 'Cluster' or 'Application' depending on which kind of resource
+                is sought.
+            name (str): the name of the resource that is sought.
+
+        Returns:
+            If found, the sought resource
+            (either of type ClusterDefinition or ApplicationDefinition).
+        Raises:
+            AssertionError if not exactly one resource was found.
+
+        """
+        found = [r for r in resources if r.kind == kind and r.name == name]
+        if len(found) != 1:
+            msg = (
+                f"Found {len(found)} resources of kind {kind} with name {name} "
+                f"(expected one)."
+            )
+            if len(found) != 0:
+                msg += f" They were: {', '.join(found)}"
+            raise AssertionError(msg)
+        return found[0]
+
 
 def create_simple_environment(cluster_name, kubeconfig_path, app_name, manifest_path):
     """Create the resource definitions for a test environment with one Cluster and one
@@ -636,6 +906,7 @@ def create_simple_environment(cluster_name, kubeconfig_path, app_name, manifest_
 def create_multiple_cluster_environment(
     kubeconfig_paths,
     cluster_labels=None,
+    metrics=None,
     app_name=None,
     manifest_path=None,
     app_cluster_constraints=None,
@@ -645,28 +916,39 @@ def create_multiple_cluster_environment(
     one Application and multiple Clusters.
 
     Args:
-        kubeconfig_paths (dict of PathLike: PathLike): mapping between Cluster
+        kubeconfig_paths (dict[str: PathLike]): mapping between Cluster
             names and path to the kubeconfig file for the corresponding Cluster
             to create.
-        cluster_labels (dict of PathLike: List(str)): optional mapping between
+        cluster_labels (dict[str: List[str]], optional): mapping between
             Cluster names and labels for the corresponding Cluster to create.
-        app_name (PathLike): optional name of the Application to create.
-        manifest_path (PathLike): optional path to the manifest file that
+        metrics (dict[str: List[str]], optional): mapping between
+            Cluster names and metrics for the corresponding Cluster to create.
+        app_name (str, optional): name of the Application to create.
+        manifest_path (PathLike, optional): path to the manifest file that
             should be used to create the Application.
-        app_cluster_constraints (List(str)): optional list of cluster constraints
+        app_cluster_constraints (List[str], optional): list of cluster constraints
             for the Application to create.
-        app_migration (bool): optional migration flag indicating whether the
+        app_migration (bool, optional): migration flag indicating whether the
             application should be able to migrate.
 
     Returns:
-        dict: an environment definition to use to create a test environment.
+        dict[int: List[NamedTuple]]: an environment definition to use to create
+            a test environment.
 
     """
     if not cluster_labels:
         cluster_labels = {cn: [] for cn in kubeconfig_paths}
+    if not metrics:
+        metrics = {cn: {} for cn in kubeconfig_paths}
+
     env = {
         10: [
-            ClusterDefinition(name=cn, kubeconfig_path=kcp, labels=cluster_labels[cn])
+            ClusterDefinition(
+                name=cn,
+                kubeconfig_path=kcp,
+                labels=cluster_labels[cn],
+                metrics=metrics[cn],
+            )
             for cn, kcp in kubeconfig_paths.items()
         ]
     }
@@ -680,3 +962,141 @@ def create_multiple_cluster_environment(
             )
         ]
     return env
+
+
+def get_scheduling_score(cluster, values, weights, scheduled_to=None):
+    """Get the scheduling cluster score for the cluster (including stickiness).
+
+    Args:
+        cluster (str): cluster name
+        values (dict[str: float]): Dictionary of the metric values. The dictionary keys
+            are the names of the metrics and the dictionary values the metric values.
+        weights (dict[str: dict[str: float]]): Dictionary of cluster weights.
+            The keys are the names of the clusters and each value is a dictionary in
+            itself, with the metric names as keys and the cluster's weights as values.
+        scheduled_to (str): name of the cluster to which the application being
+            scheduled has been scheduled.
+
+    Returns:
+        float: The score of the given cluster.
+
+    """
+    # Sanity check: Check that the metrics (i.e., the keys) are the same in both lists
+    assert len(values) == len(weights[cluster])
+    assert all(metric in weights[cluster] for metric in values)
+
+    rank = sum(values[metric] * weights[cluster][metric] for metric in values)
+    norm = sum(weights[cluster][metric] for metric in weights[cluster])
+    if scheduled_to == cluster:
+        stickiness_value = 1
+        rank += STICKINESS_WEIGHT * stickiness_value
+        norm += STICKINESS_WEIGHT
+    return rank / norm
+
+
+def _put_etcd_entry(data, key):
+    """Put `data` as the value of the key `key` in the etcd store.
+
+    Args:
+        data (object): The data to put
+        key (str): the key to update.
+
+    """
+    data_str = json.dumps(data)
+    put_cmd = ["etcdctl", "put", key, "--", data_str]
+    run(command=put_cmd, env_vars=_ETCDCTL_ENV)
+
+
+def _get_etcd_entry(key, condition=None):
+    """Retrieve the value of the key `key` from the etcd store.
+    This method calls run to perform the actual command.
+
+    Args:
+        key (str): the key to retrieve from the db.
+        condition (callable, optional): a callable. This will be passed to run()
+            as its `condition` parameter.
+
+    Returns:
+        object: Value of the key `key` in the etcd database, parsed by json.
+    """
+    get_cmd = ["etcdctl", "get", key, "--print-value-only"]
+    resp = run(command=get_cmd, condition=condition, env_vars=_ETCDCTL_ENV)
+    try:
+        return resp.json
+    except Exception as e:
+        msg = f"Failed to load response '{resp}'. Error: {e}"
+        raise AssertionError(msg)
+
+
+def get_static_metrics():
+    """Retrieve metrics from the etcd database.
+
+    Returns:
+         dict[str: float]
+            Dict with the metrics names as keys and metric values as values.
+
+    """
+    static_provider = _get_etcd_entry(_ETCD_STATIC_PROVIDER_KEY)
+    return static_provider["spec"]["static"]["metrics"]
+
+
+def set_static_metrics(values):
+    """Modify the database entry for the static metrics provider by setting its
+     values to the provided metrics.
+
+    Args:
+        values (dict[str: float]): Dictionary with the metrics names as keys and
+            metric values as values.
+
+    """
+    static_provider = _get_etcd_entry(_ETCD_STATIC_PROVIDER_KEY)
+
+    # sanity check that we are only modifying existing metrics
+    old_metrics = static_provider["spec"]["static"]["metrics"]
+    assert all([metric in old_metrics for metric in values])
+
+    # set the new values
+    static_provider["spec"]["static"]["metrics"].update(values)
+
+    # update database with the updated static_provider
+    _put_etcd_entry(static_provider, key=_ETCD_STATIC_PROVIDER_KEY)
+
+    # make sure the changing of the values took place
+    _get_etcd_entry(_ETCD_STATIC_PROVIDER_KEY, condition=check_static_metrics(values))
+
+
+def check_static_metrics(expected_metrics, error_message=""):
+    """Create a callable to verify that the static provider response contains
+    the expected values.
+
+    To be used with the :meth:`run` function. The callable will raise an
+    :class:`AssertionError` if the static metrics in the response are different
+    from the given ones.
+
+    Args:
+        expected_metrics (dict[str: float]): Dictionary with the metrics names as
+            keys and metric values as values.
+        error_message (str): the message that will be displayed if the
+            check fails.
+
+    Returns:
+        callable: a condition that will check its given response against
+            the parameters of the current function.
+
+    """
+    if not error_message:
+        error_message = (
+            f"The static provider did not provide the expected "
+            f"metrics. Expected metrics: {expected_metrics}"
+        )
+
+    def validate(response):
+        try:
+            observed_metrics = response.json["spec"]["static"]["metrics"]
+            msg = error_message + f" Provided metrics: {observed_metrics}"
+            for m, val in expected_metrics.items():
+                assert val == observed_metrics.get(m), msg
+        except Exception as e:
+            raise AssertionError(error_message + f"Error: {e}")
+
+    return validate
