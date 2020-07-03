@@ -518,3 +518,21 @@ async def test_multiple_puts(loop):
 
     with pytest.raises(asyncio.TimeoutError):
         await asyncio.wait_for(queue.get(), loop=loop, timeout=0)
+
+
+async def test_active(loop):
+    queue = WorkQueue(loop=loop, debounce=0)
+
+    await queue.put("key", 1)
+    await queue.get()
+
+    await queue.put("key", 2)
+    await queue.done("key")
+
+    # Check that the key isn't removed from the active set when the done method is
+    # called while a new value is present in the dirty dictionary.
+    assert "key" in queue.active
+
+    # Consequently, check that the key is added only once to the queue.
+    await queue.put("key", 3)
+    assert queue.queue.qsize() == 1
