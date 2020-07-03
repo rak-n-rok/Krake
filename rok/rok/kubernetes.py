@@ -51,7 +51,7 @@ arg_migration_constraints = mutually_exclusive_group(
                 "help": "Enable migration of the application",
             },
         ),
-    ],
+    ]
 )
 
 arg_cluster_label_constraints = argument(
@@ -121,6 +121,7 @@ def list_applications(config, session, namespace, all):
 @argument(
     "-f", "--file", type=FileType(), required=True, help="Kubernetes manifest file"
 )
+@argument("-o", "--observer_schema_file", type=FileType(), help="Observer Schema File")
 @argument("name", help="Name of the application")
 @arg_migration_constraints(default="--enable-migration")
 @arg_cluster_label_constraints
@@ -133,6 +134,7 @@ def create_application(
     config,
     session,
     file,
+    observer_schema_file,
     name,
     namespace,
     disable_migration,
@@ -149,11 +151,17 @@ def create_application(
     if enable_migration or disable_migration:  # If either one was specified by the user
         migration = enable_migration
     manifest = list(yaml.safe_load_all(file))
+    observer_schema = (
+        list(yaml.safe_load_all(observer_schema_file))
+        if observer_schema_file
+        else list()
+    )
     app = {
         "metadata": {"name": name, "labels": labels},
         "spec": {
             "hooks": hooks,
             "manifest": manifest,
+            "observer_schema": observer_schema,
             "constraints": {
                 "migration": migration,
                 "cluster": {
@@ -199,6 +207,7 @@ def get_application(config, session, namespace, name):
 @application.command("update", help="Update Kubernetes application")
 @argument("name", help="Kubernetes application name")
 @argument("-f", "--file", type=FileType(), help="Kubernetes manifest file")
+@argument("-o", "--observer_schema_file", type=FileType(), help="Observer Schema File")
 @arg_migration_constraints()
 @arg_cluster_label_constraints
 @arg_cluster_resource_constraints
@@ -212,6 +221,7 @@ def update_application(
     namespace,
     name,
     file,
+    observer_schema_file,
     labels,
     disable_migration,
     enable_migration,
@@ -234,6 +244,10 @@ def update_application(
     if file:
         manifest = list(yaml.safe_load_all(file))
         app["spec"]["manifest"] = manifest
+
+    if observer_schema_file:
+        observer_schema = list(yaml.safe_load_all(observer_schema_file))
+        app["spec"]["observer_schema"] = observer_schema
 
     if labels:
         app["metadata"]["labels"] = labels
