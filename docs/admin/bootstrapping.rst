@@ -65,6 +65,20 @@ Other arguments can be used:
     database, the resource will be replaced with its new definition. If not, an error
     occurs, and a rollback is performed.
 
+The content of the file can alternatively be passed by stdin, using the ``-`` option:
+
+.. prompt:: bash $ auto
+
+    $ cat file_1.yaml | krake_bootstrap_db -
+
+This can become very useful when starting the command with a container running Krake. If
+the file is not present in the container, and you do not want to use a volume, you can
+still execute the following:
+
+.. prompt:: bash $ auto
+
+    $ docker exec -i <krake_container> krake_bootstrap_db - < file_1.yaml
+
 
 Structure
 =========

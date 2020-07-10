@@ -314,15 +314,12 @@
             state: present
             build: no
 
-        - name: Copy bootsrap file
-          command: "docker cp {{ git_dir }}/docker/prometheus/bootstrap.yaml krake-api:/tmp"
-
-        - name: Bootsrap etcd database
-          command: |
-            docker exec -it {{ api_host }} krake_bootstrap_db /tmp/bootstrap.yaml \
-            {% if etcd_host is defined %} --db-host {{ etcd_host }} {% endif %} \
-            {% if etcd_port is defined %} --db-port {{ etcd_port }} {% endif %} \
-            --force
+        - name: Bootstrap etcd database
+          shell : >
+            docker exec -i {{ api_host }} krake_bootstrap_db --force -
+            {% if etcd_host is defined %} --db-host {{ etcd_host }} {% endif %}
+            {% if etcd_port is defined %} --db-port {{ etcd_port }} {% endif %}
+            < {{ git_dir }}/docker/prometheus/bootstrap.yaml
 
     - name: Krake rok deployment
       tags:

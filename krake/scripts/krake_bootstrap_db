@@ -9,6 +9,9 @@ It can be used as follows:
 
     krake_bootstrap_db [OPTIONS] <file_1> <file_2> ... <file_n>
 
+    # Or from stdin:
+    my-program | krake_bootstrap_db - [OPTIONS]
+
 The definition of the resources must be written in YAML files, with the following
 structure:
 
@@ -64,9 +67,9 @@ can happen in different cases:
 The script needs Krake to be installed to be launched.
 """
 
+import argparse
 import asyncio
 import sys
-from argparse import ArgumentParser
 from datetime import datetime
 from typing import NamedTuple
 from uuid import uuid4
@@ -225,7 +228,7 @@ async def insert_from_file(src_path, db_host, db_port, force=False):
     it to the database.
 
     Args:
-        src_path (str): the path of the file to read.
+        src_path (_io.TextIOWrapper): file object to access the actual file to read.
         db_host (str): the host of the database to connect to.
         db_port (int): the port of the database to connect to.
         force (bool): if True, resources already present in the database will be deleted
@@ -236,8 +239,9 @@ async def insert_from_file(src_path, db_host, db_port, force=False):
             an element is present in the list.
 
     """
-    with open(src_path, "r") as file:
-        resources = yaml.safe_load_all(file)
+    # Ensures that the file will be closed, even if an exception is raised.
+    with src_path as src_path:
+        resources = yaml.safe_load_all(src_path)
 
         result = await asyncio.gather(
             *(
@@ -298,7 +302,8 @@ async def process_resources(src_files, db_host, db_port, force):
     """For each file path given, insert the resources defined in it to a database.
 
     Args:
-        src_files (list): the list of all files to read to get the resources.
+        src_files (list[_io.TextIOWrapper]): the list of all files to read to get the
+            resources, as list of file objects that are bound to the actual files.
         db_host (str): the host of the database in which the resources will be inserted.
         db_port (int): the port of the database in which the resources will be inserted.
         force (bool): if True, resources already present in the database will be deleted
@@ -334,7 +339,7 @@ async def process_resources(src_files, db_host, db_port, force):
     # print it along with its error.
     message = ["#############", "The following could not be added:"]
     for i, src_file in enumerate(src_files):
-        message.append(f"In file {src_file}:")
+        message.append(f"In file {src_file.name!r}:")
 
         # results follows the same order for the resources as the one read.
         for insertion_result in results[i]:
@@ -355,7 +360,8 @@ def main(src_files, db_host, db_port, force):
     """Start the script as an asyncio coroutine.
 
     Returns:
-        src_files (list): the list of all files to read to get the resources.
+        src_files (list[_io.TextIOWrapper]): the list of all files to read to get the
+            resources, as list of file objects that are bound to the actual files.
         db_host (str): the host of the database in which the resources will be inserted.
         db_port (int): the port of the database in which the resources will be inserted.
         force (bool): if True, resources already present in the database will be deleted
@@ -407,7 +413,7 @@ def add_option(parser, name, help, short=None, default=None, action=None, **kwar
 
 
 if __name__ == "__main__":
-    parser = ArgumentParser(
+    parser = argparse.ArgumentParser(
         description=(
             "Insert Krake resources into the database directly, without using the API."
         )
@@ -415,7 +421,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "src_files",
         nargs="+",
-        help="List of YAML files to read the resources definitions from.",
+        type=argparse.FileType("r"),
+        default=sys.stdin,
+        help=(
+            "List of YAML files to read the resources definitions from."
+            " Use '-' to read from stdin"
+        ),
     )
 
     add_option(

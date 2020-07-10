@@ -35,7 +35,7 @@ class Response(object):
         return self._json
 
 
-def run(command, retry=10, interval=1, condition=None):
+def run(command, retry=10, interval=1, condition=None, input=None):
     """Runs a subprocess
 
     This function runs the provided ``command`` in a subprocess.
@@ -66,6 +66,7 @@ def run(command, retry=10, interval=1, condition=None):
         retry (int, optional): Number of retry to perform. Defaults to 10
         interval (int, optional): Interval in seconds between two retries
         condition (callable, optional): Condition that has to be met.
+        input (str, optional): input given through stdin to the command.
 
     Returns:
         Response: The output and return code of the provided command
@@ -110,7 +111,11 @@ def run(command, retry=10, interval=1, condition=None):
 
     while True:
         process = subprocess.run(
-            command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=env,
+            input=input,
         )
 
         response = Response(process.stdout.decode(), process.returncode)
@@ -646,7 +651,7 @@ def create_multiple_cluster_environment(
         10: [
             ClusterDefinition(name=cn, kubeconfig_path=kcp, labels=cluster_labels[cn])
             for cn, kcp in kubeconfig_paths.items()
-        ],
+        ]
     }
     if app_name:
         env[0] = [
