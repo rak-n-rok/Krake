@@ -8,6 +8,8 @@
 import sys
 from argparse import FileType
 from base64 import b64encode
+
+import requests
 import yaml
 
 from .parser import (
@@ -289,19 +291,6 @@ class ClusterTable(BaseTable):
 def create_cluster(
     config, session, namespace, kubeconfig, contexts, metrics, labels, custom_resources
 ):
-    if namespace is None:
-        namespace = config["user"]
-
-    config = yaml.safe_load(kubeconfig)
-
-    if not contexts:
-        # current_context = config["current-context"]
-        # if not current_context:
-        #     print("Error: No current context specified")
-        #     return 1
-        # contexts = [current_context]
-        contexts = [context["name"] for context in config["contexts"]]
-
     def find_resource_by_name(kind, name):
         for resource in config[kind]:
             if resource["name"] == name:
@@ -325,6 +314,16 @@ def create_cluster(
             del spec[attr]
             spec[f"{attr}-data"] = data
 
+    if namespace is None:
+        namespace = config["user"]
+
+    config = yaml.safe_load(kubeconfig)
+
+    if not contexts:
+        current_context = find_resource_by_name("contexts", config["current-context"])
+        contexts = [current_context["name"]]
+
+    error = False
     for context_name in contexts:
         context = find_resource_by_name("contexts", context_name)
         cluster = find_resource_by_name("clusters", context["context"]["cluster"])
@@ -339,7 +338,7 @@ def create_cluster(
         cluster_config["contexts"] = [context]
         cluster_config["users"] = [user]
         cluster_config["current-context"] = context["name"]
-        cluster = {
+        to_create = {
             "metadata": {"name": cluster["name"], "labels": labels},
             "spec": {
                 "kubeconfig": cluster_config,
@@ -347,13 +346,25 @@ def create_cluster(
                 "custom_resources": custom_resources,
             },
         }
-        resp = session.post(
-            f"/kubernetes/namespaces/{namespace}/clusters", json=cluster
-        )
+        try:
+            resp = session.post(
+                f"/kubernetes/namespaces/{namespace}/clusters", json=to_create
+            )
+        except requests.exceptions.HTTPError as err:
+            if err.response.status_code == 409:
+                print(
+                    f"The cluster {cluster['name']!r} already exists"
+                    f" in namespace {namespace!r}"
+                )
+                error = True
+                continue
+            raise
 
         print("---")
         data = resp.json()
         yaml.dump(data, default_flow_style=False, stream=sys.stdout)
+
+    sys.exit(error)
 
 
 @cluster.command("list", help="List Kubernetes clusters")
