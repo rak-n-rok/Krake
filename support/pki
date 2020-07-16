@@ -13,16 +13,29 @@ import shutil
 ca_csr = {
     "CN": "Krake CA",
     "key": {"algo": "ecdsa", "size": 256},
+    "ca": {"pathlen": 2},
     "names": [{"O": "Acme Corporation"}],
 }
 
 ca_config = {
     "signing": {
         "profiles": {
-            "krake-ca": {
+            "krake-component": {
                 "usages": ["signing", "key encipherment", "server auth", "client auth"],
                 "expiry": "8760h",
-            }
+            },
+            "intermediate-ca": {
+                "usages": [
+                    "signing",
+                    "key encipherment",
+                    "server auth",
+                    "client auth",
+                    "cert sign",
+                    "crl sign",
+                ],
+                "ca_constraint": {"is_ca": True, "max_path_len": 1},
+                "expiry": "8760h",
+            },
         }
     }
 }
@@ -35,7 +48,8 @@ def create_client_csr_template(name, hosts=None):
         "key": {"algo": "ecdsa", "size": 256},
         "names": [{"O": "Acme Corporation"}],
     }
-    client_csr_template["hosts"].extend(hosts)
+    if hosts:
+        client_csr_template["hosts"].extend(hosts)
     return client_csr_template
 
 
@@ -72,15 +86,37 @@ def init_ca(ca_csr_file, ca_key_file, ca_cert_file, ca_config_file):
         json.dump(ca_config, fd, indent=4)
 
 
-def main(name, dest_dir=None, host=None, ignore=False):
+def main(
+    name,
+    dest_dir=None,
+    host=None,
+    ignore=False,
+    ca_cert=None,
+    ca_key=None,
+    intermediate_ca=False,
+):
+    if bool(ca_cert) != bool(ca_key):
+        print(
+            "Error: both '--ca-cert' and '--ca-key' must be specified", file=sys.stderr
+        )
+        return 1
+
+    if intermediate_ca and host:
+        print(
+            "Error: hosts cannot be specified for intermediate CAs (TLS limitation).",
+            file=sys.stderr,
+        )
+        return 1
+
     if shutil.which("cfssl") is None:
         print(
-            "Error: Could not found 'cfssl'. Please install "
+            "Error: Could not find 'cfssl'. Please install "
             "(https://github.com/cloudflare/cfssl)",
             file=sys.stderr,
         )
         return 1
 
+    # Prepare all paths for the generated/read files
     if not dest_dir:
         root_dir = Path(__file__).parent.parent.resolve()
         certs_dir = root_dir / "tmp/pki"
@@ -92,13 +128,7 @@ def main(name, dest_dir=None, host=None, ignore=False):
     ca_config_file = certs_dir / "ca-config.json"
     ca_csr_file = certs_dir / "ca-csr.json"
 
-    additional_hosts = []
-    if host:
-        additional_hosts = host
-
-    client_csr = create_client_csr_template(name, hosts=additional_hosts)
     client_csr_file = certs_dir / f"{name}-csr.json"
-
     client_cert_file = certs_dir / f"{name}.pem"
     client_key_file = certs_dir / f"{name}-key.pem"
 
@@ -114,23 +144,35 @@ def main(name, dest_dir=None, host=None, ignore=False):
         print(f"The client key {client_key_file} already exists, ignore.")
         return 0
 
+    # Generate CA
     if not ca_config_file.exists():
         init_ca(ca_csr_file, ca_key_file, ca_cert_file, ca_config_file)
 
+    # Generate CSR for the new certificate
+    client_csr = create_client_csr_template(name, hosts=host)
     with client_csr_file.open("w") as fd:
         json.dump(client_csr, fd, indent=4)
+
+    # If the CA is not provided, use the self-signed CA.
+    if not ca_cert:
+        ca_cert = str(ca_cert_file)
+        ca_key = str(ca_key_file)
+
+    profile = "krake-component"
+    if intermediate_ca:
+        profile = "intermediate-ca"
 
     certs = jsoncall(
         "cfssl",
         "gencert",
         "-profile",
-        "krake",
+        profile,
         "-config",
         str(ca_config_file),
         "-ca",
-        str(ca_cert_file),
+        ca_cert,
         "-ca-key",
-        str(ca_key_file),
+        ca_key,
         str(client_csr_file),
     )
 
@@ -158,6 +200,28 @@ parser.add_argument(
     help=(
         "Create the certificates even if a key already"
         "exists in the destination directory"
+    ),
+)
+parser.add_argument(
+    "--ca-cert",
+    help=(
+        "Path to a CA certificate to use for the signing phase."
+        " Have to be used along with the '--ca-key' option"
+    ),
+)
+parser.add_argument(
+    "--ca-key",
+    help=(
+        "Path to the key of the CA certificate to use for the signing phase."
+        " Have to be used along with the '--ca-cert' option"
+    ),
+)
+parser.add_argument(
+    "--intermediate-ca",
+    action="store_true",
+    help=(
+        "If set, the generated certificate will be an intermediate CA,"
+        " which can be used to generate new certificates."
     ),
 )
 
