@@ -13,8 +13,12 @@ from krake.controller.kubernetes import KubernetesController, KubernetesClient
 from krake.client import Client
 from krake.test_utils import server_endpoint
 
-from factories.fake import fake
-from factories.kubernetes import ApplicationFactory, ClusterFactory, make_kubeconfig
+from tests.factories.fake import fake
+from tests.factories.kubernetes import (
+    ApplicationFactory,
+    ClusterFactory,
+    make_kubeconfig,
+)
 
 
 async def test_custom_resource_cached_property_called_once(

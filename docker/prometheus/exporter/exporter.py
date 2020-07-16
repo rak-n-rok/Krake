@@ -74,9 +74,7 @@ async def exporter(host, port, zones):
     await site.start()
 
 
-parser = ArgumentParser(
-    description="Metrics exporter server."
-)
+parser = ArgumentParser(description="Metrics exporter server.")
 parser.add_argument(
     "--host",
     type=str,

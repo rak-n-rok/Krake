@@ -178,7 +178,7 @@ def _create_subresource_handlers(cls, subresource, routes, logger):
 
 def _make_list_handler(operation, logger, all=False):
     # FIXME: Ugly assumptions ahead!
-    entity_class, = get_field(operation.response, "items").type.__args__
+    (entity_class,) = get_field(operation.response, "items").type.__args__
 
     assert "heartbeat" in operation.query, "'heartbeat' query parameter is required"
     assert "watch" in operation.query, "'watch' query parameter is required"

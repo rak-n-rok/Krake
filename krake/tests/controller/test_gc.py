@@ -17,13 +17,13 @@ from krake.controller.gc import (
     DependencyCycleException,
 )
 
-from factories.core import MetadataFactory
-from factories.fake import fake
-from factories.kubernetes import ApplicationFactory, ClusterFactory
-from factories.openstack import ProjectFactory
+from tests.factories.core import MetadataFactory
+from tests.factories.fake import fake
+from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
+from tests.factories.openstack import ProjectFactory
 from krake.data.serializable import Serializable
 from krake.test_utils import server_endpoint, with_timeout
-from factories.openstack import MagnumClusterFactory
+from tests.factories.openstack import MagnumClusterFactory
 
 
 class UpperResource(Serializable):

@@ -151,7 +151,7 @@ class MagnumConfiguration(ControllerConfiguration):
         default=30,
         metadata={
             "help": "Time in seconds to wait between two requests to the Magnum "
-                    "client, to get a Magnum cluster new state after modification."
+            "client, to get a Magnum cluster new state after modification."
         },
     )
 

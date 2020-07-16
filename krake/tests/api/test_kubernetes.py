@@ -21,9 +21,9 @@ from krake.data.kubernetes import (
 from krake.api.app import create_app
 from krake.api.database import revision
 
-from factories.kubernetes import ApplicationFactory, ClusterFactory
-from factories.core import ReasonFactory
-from factories.fake import fake
+from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
+from tests.factories.core import ReasonFactory
+from tests.factories.fake import fake
 
 
 async def test_list_apps(aiohttp_client, config, db):

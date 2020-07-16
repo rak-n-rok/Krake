@@ -2,7 +2,7 @@
 
 This directory is used to host a bundle to create various docker infrastructures.
 Docker infrastructure bundle is organized in separate subdirectory and contains
-several templates which have to be configured before use. 
+several templates which have to be configured before use.
 
 Currently supported infrastructure bundles:
 
@@ -29,7 +29,7 @@ by the script `docker/generate` in case of standalone docker installation.
 for defined docker infrastructure bundles.
 
   - [Jinja2](https://pypi.org/project/Jinja2/) is a prerequisite.
-  
+
   - The `docker/docker.yaml` file defines the input variables for the `docker/generate`
     script to generate the `docker-compose` files for each bundle.
 

@@ -14,11 +14,10 @@ def network_hosts(cidr):
 
 
 class FilterModule(object):
-
     def filters(self):
         return {
-            'ipnetwork': ip_network,
-            'network_address': network_address,
-            'netmask': netmask,
-            'network_hosts': network_hosts,
+            "ipnetwork": ip_network,
+            "network_address": network_address,
+            "netmask": netmask,
+            "network_hosts": network_hosts,
         }

@@ -407,7 +407,7 @@ def make_list_handler(operation, doc):
 def make_watch_handler(operation, doc):
     # Infer the type of the watch event objects from the type of the list
     # of items.
-    model, = get_field(operation.response, "items").type.__args__
+    (model,) = get_field(operation.response, "items").type.__args__
     signature = make_signature(operation, {"heartbeat"})
 
     @with_signature(signature, doc=str(doc))
@@ -443,7 +443,7 @@ def make_list_all_handler(operation, doc):
 def make_watch_all_handler(operation, doc):
     # Infer the type of the watch event objects from the type of the list
     # of items.
-    model, = get_field(operation.response, "items").type.__args__
+    (model,) = get_field(operation.response, "items").type.__args__
     signature = make_signature(operation, query={"heartbeat"})
 
     @with_signature(signature, doc=str(doc))

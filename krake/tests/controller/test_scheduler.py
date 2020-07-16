@@ -17,10 +17,10 @@ from krake.client import Client
 from krake.data.core import resource_ref, ReasonCode
 from krake.test_utils import server_endpoint, make_prometheus
 
-from factories.core import MetricsProviderFactory, MetricFactory
-from factories.kubernetes import ApplicationFactory, ClusterFactory
-from factories.openstack import MagnumClusterFactory, ProjectFactory
-from factories import fake
+from tests.factories.core import MetricsProviderFactory, MetricFactory
+from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
+from tests.factories.openstack import MagnumClusterFactory, ProjectFactory
+from tests.factories import fake
 
 
 async def test_kubernetes_reception(aiohttp_server, config, db, loop):

@@ -12,8 +12,12 @@ from krake.data.openstack import (
 from krake.api.app import create_app
 from krake.api.database import revision
 
-from factories.core import ReasonFactory
-from factories.openstack import ProjectFactory, AuthMethodFactory, MagnumClusterFactory
+from tests.factories.core import ReasonFactory
+from tests.factories.openstack import (
+    ProjectFactory,
+    AuthMethodFactory,
+    MagnumClusterFactory,
+)
 
 
 async def test_list_projects(aiohttp_client, config, db):
@@ -79,8 +83,7 @@ async def test_create_project(aiohttp_client, config, db):
     data = ProjectFactory()
 
     resp = await client.post(
-        "/openstack/namespaces/testing/projects",
-        json=data.serialize(),
+        "/openstack/namespaces/testing/projects", json=data.serialize()
     )
     body = await resp.json()
     assert resp.status == 200
@@ -117,8 +120,7 @@ async def test_create_project_with_existing_name(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     resp = await client.post(
-        "/openstack/namespaces/testing/projects",
-        json=existing.serialize(),
+        "/openstack/namespaces/testing/projects", json=existing.serialize()
     )
     assert resp.status == 409
 
@@ -282,8 +284,7 @@ async def test_create_magnum_cluster(aiohttp_client, config, db):
     data = MagnumClusterFactory(status=None)
 
     resp = await client.post(
-        "/openstack/namespaces/testing/magnumclusters",
-        json=data.serialize(),
+        "/openstack/namespaces/testing/magnumclusters", json=data.serialize()
     )
     body = await resp.json()
     assert resp.status == 200
@@ -320,8 +321,7 @@ async def test_create_magnum_cluster_with_existing_name(aiohttp_client, config, 
     client = await aiohttp_client(create_app(config=config))
 
     resp = await client.post(
-        "/openstack/namespaces/testing/magnumclusters",
-        json=existing.serialize(),
+        "/openstack/namespaces/testing/magnumclusters", json=existing.serialize()
     )
     assert resp.status == 409
 

@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 from aiohttp import ClientConnectorError
-from factories.kubernetes import ApplicationFactory, ApplicationStatusFactory
+from tests.factories.kubernetes import ApplicationFactory, ApplicationStatusFactory
 from krake.controller import (
     WorkQueue,
     Executor,
@@ -15,7 +15,7 @@ from krake.controller import (
 )
 from krake.data.core import WatchEvent, WatchEventType
 from krake.data.kubernetes import ApplicationState
-from controller import SimpleWorker
+from tests.controller import SimpleWorker
 
 
 async def test_put_get_done():

@@ -22,9 +22,13 @@ from krake.controller.kubernetes import (
 from krake.client import Client
 from krake.test_utils import server_endpoint
 
-from factories.fake import fake
-from factories.kubernetes import ApplicationFactory, ClusterFactory, make_kubeconfig
-from controller.kubernetes import nginx_manifest, hooks_config
+from tests.factories.fake import fake
+from tests.factories.kubernetes import (
+    ApplicationFactory,
+    ClusterFactory,
+    make_kubeconfig,
+)
+from tests.controller.kubernetes import nginx_manifest, hooks_config
 
 
 async def test_app_reception(aiohttp_server, config, db, loop):
