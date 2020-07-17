@@ -1,7 +1,12 @@
 from setuptools import setup, find_packages
 
 
-install_requires = ["python-dateutil==2.*", "requests==2.*", "texttable==1.*"]
+install_requires = [
+    "PyYAML==5.*",
+    "python-dateutil==2.*",
+    "requests==2.*",
+    "texttable==1.*",
+]
 
 setup(
     name="rok",
