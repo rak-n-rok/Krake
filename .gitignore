@@ -39,14 +39,14 @@ __pycache__/
 /docs/_build
 
 # Configuration files from templates
-rok.yaml
-api.yaml
-garbage_collector.yaml
-kubernetes.yaml
-scheduler.yaml
-magnum.yaml
+/rok.yaml
+/api.yaml
+/garbage_collector.yaml
+/kubernetes.yaml
+/magnum.yaml
+/scheduler.yaml
 
-ansible/hosts.yml
+/ansible/hosts.yml
 
 # Krake dot env configuration variables file
 .env
