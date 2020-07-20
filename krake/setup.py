@@ -23,12 +23,27 @@ install_requires = [
 if sys.version_info < (3, 7):
     install_requires.append("dataclasses==0.6.*")
 
+
+with open("../README.md", "r") as fh:
+    long_description = fh.read()
+
 setup(
     name="krake",
     version="1.0.0",
     python_requires=">=3.6",
+    description="Krake [ˈkʀaːkə] is an orchestrator engine for containerized and "
+    "virtualized workloads across distributed and heterogeneous cloud "
+    "platforms",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url="https://gitlab.com/rak-n-rok/krake",
     packages=find_packages(),
     install_requires=install_requires,
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: Apache Software License",
+        "Operating System :: OS Independent",
+    ],
     extras_require={
         "dev": {
             "factory-boy==2.*",
