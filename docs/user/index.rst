@@ -7,4 +7,5 @@ User Documentation
 
     rok-documentation
     configuration
+    observer-schema
     user-stories

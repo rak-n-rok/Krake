@@ -106,6 +106,9 @@ will update the ``status`` of the Application and the Kubernetes Controller will
 a deviation with the ``spec`` and update the actual ``Deployment`` and ``Service``
 accordingly.
 
+The list of fields which are observed by the Kubernetes Observer can be controlled by
+specifying a :ref:`user/observer-schema:custom observer schema`.
+
 
 The actual workflow of the Kubernetes Observer is as follow:
 
