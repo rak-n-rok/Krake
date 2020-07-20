@@ -192,7 +192,9 @@ class Environment(object):
         return found[0]
 
 
-def create_simple_environment(cluster_name, kubeconfig_path, app_name, manifest_path):
+def create_simple_environment(
+    cluster_name, kubeconfig_path, app_name, manifest_path, observer_schema_path=None
+):
     """Create the resource definitions for a test environment with one Cluster and one
     Application. The Cluster should be created first, and is thus given a higher
     priority.
@@ -204,6 +206,8 @@ def create_simple_environment(cluster_name, kubeconfig_path, app_name, manifest_
         app_name (PathLike): name of the Application to create.
         manifest_path (PathLike): path to the manifest file that should be used to
             create the Application.
+        observer_schema_path (PathLike, optional): path to the observer_schema file
+            that should be used by the Kubernetes Observer
 
     Returns:
         dict: an environment definition to use to create a test environment.
@@ -211,7 +215,13 @@ def create_simple_environment(cluster_name, kubeconfig_path, app_name, manifest_
     """
     return {
         10: [ClusterDefinition(name=cluster_name, kubeconfig_path=kubeconfig_path)],
-        0: [ApplicationDefinition(name=app_name, manifest_path=manifest_path)],
+        0: [
+            ApplicationDefinition(
+                name=app_name,
+                manifest_path=manifest_path,
+                observer_schema_path=observer_schema_path,
+            )
+        ],
     }
 
 
