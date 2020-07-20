@@ -18,6 +18,7 @@ import json
 import random
 import tempfile
 import time
+import pytest
 
 from utils import (
     run,
@@ -27,11 +28,13 @@ from utils import (
     check_resource_deleted,
     check_return_code,
     check_spec_container_image,
+    check_spec_replicas,
 )
 
 KRAKE_HOMEDIR = "/home/krake"
 CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
 MANIFEST_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals"
+OBSERVER_SCHEMA_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals"
 
 
 def kubectl_cmd(kubeconfig):
@@ -39,13 +42,14 @@ def kubectl_cmd(kubeconfig):
 
 
 def test_kubernetes_observer_deletion(minikube_clusters):
-    """Check that if a resource of an Application is deleted on its cluster, the
-    Observer watches it and notifies the API, which leads to the recreation of the
+    """Check that if an observed resource of an Application is deleted on its cluster,
+    the Observer watches it and notifies the API, which leads to the recreation of the
     resource.
 
     In the test environment:
-    1. Delete a resource on the actual given kubernetes cluster. The KubernetesObserver
-    should be seeing this change and the resource should be recreated.
+    1. Delete an observed resource on the actual given kubernetes cluster. The
+    KubernetesObserver should be seeing this change and the resource should be
+    recreated.
     2. Ensure the presence of this resource after it has been deleted.
 
     Args:
@@ -61,7 +65,7 @@ def test_kubernetes_observer_deletion(minikube_clusters):
     )
 
     with Environment(environment):
-        # 1. Delete a resource on the cluster
+        # 1. Delete an observed resource on the cluster
         error_message = "The deployment echo-demo could not be deleted"
         run(
             f"{kubectl_cmd(kubeconfig_path)} delete deployment echo-demo",
@@ -77,14 +81,14 @@ def test_kubernetes_observer_deletion(minikube_clusters):
 
 
 def test_kubernetes_observer_update_on_cluster(minikube_clusters):
-    """Check that if a resource of an Application is updated on its cluster, the
+    """Check that if an observed field of a resource is updated on its cluster, the
     Observer watches it and notifies the API, which leads to the resource being reverted
     to its original state.
 
     In the test environment:
-    1. Update a resource directly on the actual given kubernetes cluster.
-    The KubernetesObserver should be seeing this change and the resource should be
-    reverted to its previous state.
+    1. Update an observed field of a resource directly on the actual given kubernetes
+    cluster. The KubernetesObserver should be seeing this change and the resource
+    should be reverted to its previous state.
     2. Verify the specifications of this resource after it has been updated. Compare it
     to its original specifications.
 
@@ -127,6 +131,116 @@ def test_kubernetes_observer_update_on_cluster(minikube_clusters):
         run(
             f"{kubectl_cmd(kubeconfig_path)} get deployment echo-demo -o json",
             condition=check_spec_container_image(expected_image, error_message),
+        )
+
+
+def test_kubernetes_observer_update_on_cluster_nonobserved(minikube_clusters):
+    """Check that if an non-observed field of a resource is updated on its cluster, the
+    Observer doesn't notify the API. The resource is not reverted to its original state.
+
+    In the test environment:
+    1. Update an non-observed field of a resource directly on the actual given
+    kubernetes cluster.
+    2. Verify the specifications of this resource after it has been updated. Compare it
+    to its original specifications.
+
+    Args:
+        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+
+    """
+    minikube_cluster = random.choice(minikube_clusters)
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+
+    manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
+    observer_schema_path = (
+        f"{OBSERVER_SCHEMA_PATH}/echo-demo-observer-schema-custom-1.yaml"
+    )
+    environment = create_simple_environment(
+        minikube_cluster,
+        kubeconfig_path,
+        "echo-demo",
+        manifest_path,
+        observer_schema_path=observer_schema_path,
+    )
+
+    with Environment(environment):
+        # 1. Update a resource on the cluster
+        patch = {
+            "spec": {
+                "template": {
+                    "spec": {
+                        "containers": [
+                            {"name": "echo", "image": "k8s.gcr.io/echoserver:1.4"}
+                        ]
+                    }
+                }
+            }
+        }
+        # A list of "words" split between spaces is needed.
+        command = kubectl_cmd(kubeconfig_path).split()
+        command += ["patch", "deployment", "echo-demo", "--patch", json.dumps(patch)]
+        error_message = "The echo-demo Application could not be patched."
+        run(command, condition=check_return_code(error_message))
+
+        # 2. Check that the image has not been reverted to the previous state
+        with pytest.raises(AssertionError):
+            expected_image = "k8s.gcr.io/echoserver:1.10"
+            error_message = (
+                "The Observer did not revert the deployment to its previous state."
+            )
+            run(
+                f"{kubectl_cmd(kubeconfig_path)} get deployment echo-demo -o json",
+                condition=check_spec_container_image(expected_image, error_message),
+            )
+
+
+def test_kubernetes_observer_update_on_cluster_noninitialized(minikube_clusters):
+    """This test demonstrates that the Observer behavior also works on fields which are
+    not initialized by the user, as long as the field is observed.
+
+    In the test environment:
+    1. Update an observed field of a resource directly on the actual given kubernetes
+    cluster. The KubernetesObserver should be seeing this change and the resource
+    should be reverted to its previous state.
+    2. Verify the specifications of this resource after it has been updated. Compare it
+    to its original specifications.
+
+    Args:
+        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+
+    """
+    minikube_cluster = random.choice(minikube_clusters)
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+
+    manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
+    observer_schema_path = (
+        f"{OBSERVER_SCHEMA_PATH}/echo-demo-observer-schema-custom-1.yaml"
+    )
+    environment = create_simple_environment(
+        minikube_cluster,
+        kubeconfig_path,
+        "echo-demo",
+        manifest_path,
+        observer_schema_path=observer_schema_path,
+    )
+
+    with Environment(environment):
+        # 1. Update a resource on the cluster
+        patch = {"spec": {"replicas": 2}}
+        # A list of "words" split between spaces is needed.
+        command = kubectl_cmd(kubeconfig_path).split()
+        command += ["patch", "deployment", "echo-demo", "--patch", json.dumps(patch)]
+        error_message = "The echo-demo Application could not be patched."
+        run(command, condition=check_return_code(error_message))
+
+        # 2. Check that the deployment has been reverted to its previous state
+        expected_replicas_count = 1
+        error_message = (
+            "The Observer did not revert the deployment to its previous state."
+        )
+        run(
+            f"{kubectl_cmd(kubeconfig_path)} get deployment echo-demo -o json",
+            condition=check_spec_replicas(expected_replicas_count, error_message),
         )
 
 
