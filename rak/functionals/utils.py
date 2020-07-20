@@ -342,6 +342,7 @@ class ApplicationDefinition(NamedTuple):
             to use for the creation of the application.
         migration (bool): optional migration flag indicating whether the
             application should be able to migrate.
+        observer_schema_path (str): path to the observer_schema file to use.
 
     """
 
@@ -349,6 +350,7 @@ class ApplicationDefinition(NamedTuple):
     manifest_path: str
     constraints: list = []
     migration: bool = None
+    observer_schema_path: str = None
     kind: str = "Application"
 
     def creation_command(self):
@@ -360,10 +362,17 @@ class ApplicationDefinition(NamedTuple):
         """
         migration_flag = self._get_migration_flag(self.migration)
         constraints = " ".join(f"-L {constraint}" for constraint in self.constraints)
-        return (
-            f"rok kube app create {migration_flag} {constraints} "
-            f"-f {self.manifest_path} {self.name}"
+
+        cmd = (
+            f"rok kube app create {migration_flag} {constraints}"
+            f" -f {self.manifest_path}"
         )
+        if self.observer_schema_path:
+            cmd += f" -o {self.observer_schema_path}"
+
+        cmd += f" {self.name}"
+
+        return cmd
 
     @staticmethod
     def _get_migration_flag(migration):
@@ -593,7 +602,9 @@ class Environment(object):
                     resource.check_deleted()
 
 
-def create_simple_environment(cluster_name, kubeconfig_path, app_name, manifest_path):
+def create_simple_environment(
+    cluster_name, kubeconfig_path, app_name, manifest_path, observer_schema_path=None
+):
     """Create the resource definitions for a test environment with one Cluster and one
     Application. The Cluster should be created first, and is thus given a higher
     priority.
@@ -605,6 +616,8 @@ def create_simple_environment(cluster_name, kubeconfig_path, app_name, manifest_
         app_name (PathLike): name of the Application to create.
         manifest_path (PathLike): path to the manifest file that should be used to
             create the Application.
+        observer_schema_path (PathLike, optional): path to the observer_schema file
+            that should be used by the Kubernetes Observer
 
     Returns:
         dict: an environment definition to use to create a test environment.
@@ -612,7 +625,13 @@ def create_simple_environment(cluster_name, kubeconfig_path, app_name, manifest_
     """
     return {
         10: [ClusterDefinition(name=cluster_name, kubeconfig_path=kubeconfig_path)],
-        0: [ApplicationDefinition(name=app_name, manifest_path=manifest_path)],
+        0: [
+            ApplicationDefinition(
+                name=app_name,
+                manifest_path=manifest_path,
+                observer_schema_path=observer_schema_path,
+            )
+        ],
     }
 
 
