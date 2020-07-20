@@ -143,6 +143,10 @@ create
     ``-f | --file``:
         The path to the manifest file that describes the new Application.
 
+    ``-O | --observer_schema`` (optional):
+        The path to the custom observer schema file, specifying the fields of the
+        Kubernetes resources defined in the manifest file which should be observed. If none is given, all fields defined in the manifest file are observed.
+
     ``-n | --namespace`` (optional):
         The namespace to which the Application has to be added. If none is given, the user namespace is selected.
 
@@ -177,6 +181,10 @@ update
 
     ``-f | --file``:
         The path to the manifest file that describes the Application with the updated fields.
+
+    ``-O | --observer_schema`` (optional):
+        The path to the custom observer schema file, specifying the fields of the
+        Kubernetes resources defined in the manifest file which should be observed. If none is given, the observer schema is not udpated.
 
     ``-n | --namespace`` (optional):
         The namespace from which the Applications have to be taken. If none is given, the user namespace is selected.
