@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 install_requires = []
 
 setup(
-    name="rak",
+    name="krake-rak",
     version="1.0.0",
     python_requires=">=3.6",
     description="CLI to install and manage a Krake setup",

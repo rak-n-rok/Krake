@@ -9,7 +9,7 @@ install_requires = [
 ]
 
 setup(
-    name="rok",
+    name="krake-rok",
     version="1.0.0",
     description="CLI for Krake",
     url="https://gitlab.com/rak-n-rok/krake",

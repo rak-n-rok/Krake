@@ -28,7 +28,7 @@ with open("../README.md", "r") as fh:
     long_description = fh.read()
 
 setup(
-    name="krake",
+    name="krake-orchestrator",
     version="1.0.0",
     python_requires=">=3.6",
     description="Krake [ˈkʀaːkə] is an orchestrator engine for containerized and "
