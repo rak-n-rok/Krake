@@ -1,6 +1,9 @@
+import json
 import os.path
 import ssl
 import tempfile
+import yaml
+
 from copy import deepcopy
 
 import aiohttp
@@ -15,15 +18,20 @@ from krake.data.core import resource_ref
 from krake.data.kubernetes import Application, ApplicationState, ApplicationComplete
 from krake.controller.kubernetes import KubernetesController
 from krake.client import Client
-from krake.test_utils import server_endpoint
+from krake.test_utils import server_endpoint, get_first_container
 
-from tests.controller.kubernetes import nginx_manifest
 from tests.factories.kubernetes import (
     ApplicationFactory,
     ClusterFactory,
     make_kubeconfig,
 )
 from yarl import URL
+
+from tests.controller.kubernetes import (
+    deployment_manifest,
+    custom_deployment_observer_schema,
+    deployment_response,
+)
 
 
 async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
@@ -41,14 +49,29 @@ async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
 
     """
     routes = web.RouteTableDef()
+    deploy_mangled_response = deepcopy(deployment_response)
 
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a Deployment named `nginx-demo` already exists.
     @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         return web.Response(status=404)
 
+    # As part of the reconciliation loop, the k8s controller creates the deployment. We
+    # augment the standard API Response with the additional "env" dictionary that
+    # contains the TOKEN and the URL
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        return web.Response(status=200)
+        nonlocal deploy_mangled_response
+        rd = await request.read()
+
+        app = json.loads(rd)
+
+        app_first_container = get_first_container(app)
+        resp_first_container = get_first_container(deploy_mangled_response)
+        resp_first_container["env"] = app_first_container["env"]
+
+        return web.json_response(deploy_mangled_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -57,14 +80,13 @@ async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
 
     # We only consider the first resource in the manifest file, that is a Deployment.
     # This Deployment should be modified by the "complete" hook with ENV vars.
-    deployment_manifest = deepcopy(nginx_manifest[0])
-
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING,
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
         spec__hooks=["complete"],
         spec__manifest=[deployment_manifest],
+        spec__observer_schema=[custom_deployment_observer_schema],
     )
     await db.put(cluster)
     await db.put(app)
@@ -72,10 +94,14 @@ async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        # Create the controller and configure the hooks
         controller = KubernetesController(
             server_endpoint(api_server), worker_count=0, hooks=hooks_config
         )
         await controller.prepare(client)
+
+        # The application is received by the Controller, which starts the reconciliation
+        # loop, creates the application and updates the DB accordingly
         await controller.resource_received(app)
 
     stored = await db.get(
@@ -83,12 +109,47 @@ async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
     )
 
     # TLS is disabled, so no additional resource has been generated
-    assert len(stored.status.manifest) == 1
-    for resource in stored.status.manifest:
+    assert len(stored.status.last_observed_manifest) == 1
+
+    # Mangled `env` dictionary should be observed
+    for observer_schema in stored.status.mangled_observer_schema:
+        if observer_schema["kind"] != "Deployment":
+            continue
+
+        for container in observer_schema["spec"]["template"]["spec"]["containers"][:-1]:
+            assert container["env"] == [
+                {"name": None, "value": None},
+                {"name": None, "value": None},
+                {
+                    "observer_schema_list_min_length": 2,
+                    "observer_schema_list_max_length": 2,
+                },
+            ]
+
+    # Mangled `env` dictionary should be present in last_applied_manifest and
+    # last_observed_manifest
+    for resource in stored.status.last_applied_manifest:
+        if resource["kind"] != "Deployment":
+            continue
 
         for container in resource["spec"]["template"]["spec"]["containers"]:
             assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
             assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
+
+    for resource in stored.status.last_observed_manifest:
+        if resource["kind"] != "Deployment":
+            continue
+
+        # Loop over observed containers, but exclude special control list
+        for container in resource["spec"]["template"]["spec"]["containers"][:-1]:
+            assert "KRAKE_TOKEN" in [env["name"] for env in container["env"][:-1]]
+            assert "KRAKE_COMPLETE_URL" in [
+                env["name"] for env in container["env"][:-1]
+            ]
+
+            # Check special control dictionary
+            assert len(container["env"]) == 3
+            assert container["env"][-1] == {"observer_schema_list_current_length": 2}
 
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
@@ -111,13 +172,19 @@ async def test_complete_hook_disable_by_user(
     """
     routes = web.RouteTableDef()
 
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a Deployment named `nginx-demo` already exists.
     @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
+        # No `nginx-demo` Deployment exist
         return web.Response(status=404)
 
+    # As part of the reconciliation loop, the k8s controller creates the `nginx-demo`
+    # Deployment
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        return web.Response(status=200)
+        # As a response, the k8s API provides the full Deployment object
+        return web.json_response(deployment_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -126,13 +193,15 @@ async def test_complete_hook_disable_by_user(
 
     # We only consider the first resource in the manifest file, that is a Deployment.
     # This Deployment should be modified by the "complete" hook with ENV vars.
-    deployment_manifest = deepcopy(nginx_manifest[0])
-
+    #
+    # When received by the k8s controller, the application is in PENDING state and
+    # scheduled to a cluster. It contains a manifest and a custom observer_schema.
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING,
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
         spec__manifest=[deployment_manifest],
+        spec__observer_schema=[custom_deployment_observer_schema],
     )
     await db.put(cluster)
     await db.put(app)
@@ -140,22 +209,28 @@ async def test_complete_hook_disable_by_user(
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        # Create the controller and configure the hooks
         controller = KubernetesController(
             server_endpoint(api_server), worker_count=0, hooks=hooks_config
         )
         await controller.prepare(client)
+
+        # The resource is received by the controller, which starts the reconciliation
+        # loop, and updates the application in the DB accordingly.
         await controller.resource_received(app)
 
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
 
-    assert len(stored.status.manifest) == 1
-    for resource in stored.status.manifest:
+    assert len(stored.status.last_observed_manifest) == 1
+    for resource in stored.status.last_observed_manifest:
+        if resource["kind"] != "Deployment":
+            continue
+
         for container in resource["spec"]["template"]["spec"]["containers"]:
             assert "env" not in container
 
-    assert stored.status.manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
@@ -178,6 +253,8 @@ async def test_complete_hook_tls(
 
     """
     routes = web.RouteTableDef()
+    deploy_mangled_response = deepcopy(deployment_response)
+    configmap_resource = {}
 
     server_cert = pki.gencert("api-server")
     ssl_context = client_ssl_context("client")
@@ -185,21 +262,68 @@ async def test_complete_hook_tls(
         enabled=True, client_ca=pki.ca.cert, cert=server_cert.cert, key=server_cert.key
     )
 
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a ConfigMap named `ca.pem` already exists.
     @routes.get("/api/v1/namespaces/secondary/configmaps/ca.pem")
     async def _(request):
         return web.Response(status=404)
 
+    # As part of the reconciliation loop, the k8s controller created the `ca.pem`
+    # ConfigMap
     @routes.post("/api/v1/namespaces/secondary/configmaps")
     async def _(request):
-        return web.Response(status=200)
+        nonlocal configmap_resource
+        rd = await request.read()
 
+        configmap_resource = json.loads(rd)
+
+        resp = yaml.safe_load(
+            """
+            apiVersion: v1
+            data: CONFIGMAP_DATA
+            kind: ConfigMap
+            metadata:
+              annotations: {}
+              creationTimestamp: "2020-07-21T13:57:03Z"
+              managedFields: []
+              name: CONFIGMAP_NAME
+              namespace: secondary
+              resourceVersion: "5073306"
+              selfLink: /api/v1/namespaces/default/configmaps/name
+              uid: e851306b-4581-48f3-808d-1d18c9038309
+                """
+        )
+
+        resp["metadata"]["name"] = configmap_resource["metadata"]["name"]
+        resp["data"] = configmap_resource["data"]
+
+        return web.json_response(resp)
+
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a Deployment named `nginx-demo` already exists.
     @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         return web.Response(status=404)
 
+    # As part of the reconciliation loop, the k8s controller created the `nginx-demo`
+    # Deployment
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        return web.Response(status=200)
+        nonlocal deploy_mangled_response
+        rd = await request.read()
+
+        app = json.loads(rd)
+
+        app_first_container = get_first_container(app)
+        resp_first_container = get_first_container(deploy_mangled_response)
+        resp_first_container["env"] = app_first_container["env"]
+        resp_first_container["volumeMounts"] = app_first_container["volumeMounts"]
+
+        deploy_mangled_response["spec"]["template"]["spec"]["volumes"] = app["spec"][
+            "template"
+        ]["spec"]["volumes"]
+
+        return web.json_response(deploy_mangled_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -208,14 +332,13 @@ async def test_complete_hook_tls(
 
     # We only consider the first resource in the manifest file, that is a Deployment.
     # This Deployment should be modified by the "complete" hook with ENV vars.
-    deployment_manifest = deepcopy(nginx_manifest[0])
-
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING,
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
         spec__hooks=["complete"],
         spec__manifest=[deployment_manifest],
+        spec__observer_schema=[custom_deployment_observer_schema],
     )
     await db.put(cluster)
     await db.put(app)
@@ -236,26 +359,96 @@ async def test_complete_hook_tls(
             hooks=hooks_config,
         )
         await controller.prepare(client)
+
+        # The resource is received by the controller, which starts the reconciliation
+        # loop, mangles the manifest file, creates the Deployment and the ConfigMap, and
+        # updates the DB accordingly
         await controller.resource_received(app, start_observer=False)
 
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
 
-    assert len(stored.status.manifest) == 2
-    for resource in stored.status.manifest:
-        # Ensure all resources (provided and generated) are created in the same
-        # namespace.
-        assert resource["metadata"]["namespace"] == "secondary"
+    expected_config_map_observer_schema = yaml.safe_load(
+        f"""
+            apiVersion: v1
+            data:
+              ca-bundle.pem: null
+              cert.pem: null
+              key.pem: null
+            kind: ConfigMap
+            metadata:
+              name: {configmap_resource["metadata"]["name"]}
+              namespace: secondary
+                """
+    )
 
-        if resource["kind"] != "Deployment":
-            assert resource["kind"] == "ConfigMap"
-            continue
+    # The last_applied_manifest, last_observed_manifest, and observer_schema, should
+    # contain the Deployment and the ConfigMap
+    assert len(stored.status.mangled_observer_schema) == 2
+    assert len(stored.status.last_applied_manifest) == 2
+    assert len(stored.status.last_observed_manifest) == 2
 
-        for container in resource["spec"]["template"]["spec"]["containers"]:
-            assert "volumeMounts" in container
-            assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
-            assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
+    containers = stored.status.mangled_observer_schema[0]["spec"]["template"]["spec"][
+        "containers"
+    ]
+
+    # The `env` and `volumeMounts` sub-resources should be observed
+    assert stored.status.mangled_observer_schema[0]["kind"] == "Deployment"
+    for container in containers[:-1]:
+        assert "volumeMounts" in container
+        assert container["env"] == [
+            {"name": None, "value": None},
+            {"name": None, "value": None},
+            {
+                "observer_schema_list_min_length": 2,
+                "observer_schema_list_max_length": 2,
+            },
+        ]
+
+    containers = stored.status.last_applied_manifest[0]["spec"]["template"]["spec"][
+        "containers"
+    ]
+    # The last_applied_manifest and last_observed_manifest should contain the mangled
+    # sub-resources `volumeMounts` and `env`
+    assert stored.status.last_applied_manifest[0]["kind"] == "Deployment"
+    for container in containers:
+        assert "volumeMounts" in container
+        assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
+        assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
+
+    assert stored.status.last_observed_manifest[0]["kind"] == "Deployment"
+    assert (
+        stored.status.last_observed_manifest[0]["metadata"]["namespace"] == "secondary"
+    )
+    for container in stored.status.last_observed_manifest[0]["spec"]["template"][
+        "spec"
+    ]["containers"][:-1]:
+        assert "volumeMounts" in container
+        assert "KRAKE_TOKEN" in [env["name"] for env in container["env"][:-1]]
+        assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"][:-1]]
+        assert len(container["env"]) == 3
+        assert container["env"][-1] == {"observer_schema_list_current_length": 2}
+
+    # The last_applied_manifest and last_observed_manifest should contain the mangled
+    # resource ConfigMap
+    assert stored.status.last_applied_manifest[1]["kind"] == "ConfigMap"
+    assert (
+        stored.status.last_observed_manifest[0]["metadata"]["namespace"] == "secondary"
+    )
+    assert stored.status.last_applied_manifest[1] == configmap_resource
+
+    # There are no list in the ConfigMap resource, therefore there are no special
+    # control dictionary added. In this specific case, it is equal to the ConfigMap
+    # resource
+    assert stored.status.last_observed_manifest[1]["kind"] == "ConfigMap"
+    assert stored.status.last_observed_manifest[1] == configmap_resource
+
+    # The mangled resource ConfigMap should be observed
+    assert stored.status.mangled_observer_schema[1]["kind"] == "ConfigMap"
+    assert (
+        stored.status.mangled_observer_schema[1] == expected_config_map_observer_schema
+    )
 
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
@@ -281,18 +474,33 @@ async def test_complete_hook_default_namespace(
 
     """
     deployment_created = False
+    deploy_mangled_response = deepcopy(deployment_response)
 
     routes = web.RouteTableDef()
 
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a Deployment named `nginx-demo` already exists.
     @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
     async def _(request):
+        # No `nginx-demo` Deployment exist
         return web.Response(status=404)
 
+    # As part of the reconciliation loop, the k8s controller creates the `nginx-demo`
+    # Deployment
     @routes.post("/apis/apps/v1/namespaces/default/deployments")
     async def _(request):
-        nonlocal deployment_created
+        nonlocal deployment_created, deploy_mangled_response
         deployment_created = True
-        return web.Response(status=200)
+
+        rd = await request.read()
+
+        app = json.loads(rd)
+
+        app_first_container = get_first_container(app)
+        resp_first_container = get_first_container(deploy_mangled_response)
+        resp_first_container["env"] = app_first_container["env"]
+
+        return web.json_response(deploy_mangled_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -301,16 +509,19 @@ async def test_complete_hook_default_namespace(
 
     # We only consider the first resource in the manifest file, that is a Deployment.
     # This Deployment should be modified by the "complete" hook with ENV vars.
-    deployment_manifest = deepcopy(nginx_manifest[0])
+    copy_deployment_manifest = deepcopy(deployment_manifest)
     # Create a manifest with resources without any namespace.
-    del deployment_manifest["metadata"]["namespace"]
+    del copy_deployment_manifest["metadata"]["namespace"]
 
+    # When received by the k8s controller, the application is in PENDING state and
+    # scheduled to a cluster. It contains a manifest and a custom observer_schema.
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING,
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
         spec__hooks=["complete"],
-        spec__manifest=[deployment_manifest],
+        spec__manifest=[copy_deployment_manifest],
+        spec__observer_schema=[custom_deployment_observer_schema],
     )
     await db.put(cluster)
     await db.put(app)
@@ -330,12 +541,32 @@ async def test_complete_hook_default_namespace(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
 
-    assert len(stored.status.manifest) == 1  # one resource in the spec manifest
+    assert (
+        len(stored.status.last_observed_manifest) == 1
+    )  # one resource in the spec manifest
 
-    for resource in stored.status.manifest:
+    for resource in stored.status.last_applied_manifest:
+        if resource["kind"] != "Deployment":
+            continue
+
         for container in resource["spec"]["template"]["spec"]["containers"]:
             assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
             assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
+
+    for resource in stored.status.last_observed_manifest:
+        if resource["kind"] != "Deployment":
+            continue
+
+        # Loop over observed containers, but exclude special control list
+        for container in resource["spec"]["template"]["spec"]["containers"][:-1]:
+            assert "KRAKE_TOKEN" in [env["name"] for env in container["env"][:-1]]
+            assert "KRAKE_COMPLETE_URL" in [
+                env["name"] for env in container["env"][:-1]
+            ]
+
+            # Check special control dictionary
+            assert len(container["env"]) == 3
+            assert container["env"][-1] == {"observer_schema_list_current_length": 2}
 
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
@@ -353,13 +584,14 @@ def get_hook_environment_value(application):
         (str, str): a tuple of two elements: the token generated by the "complete" hook
             and the URL of the Krake API, as inserted by the hook.
 
+
     """
-    deployment = application.status.manifest[0]
+    deployment = application.status.last_observed_manifest[0]
 
     token = None
     url = None
-    for container in deployment["spec"]["template"]["spec"]["containers"]:
-        for env in container["env"]:
+    for container in deployment["spec"]["template"]["spec"]["containers"][:-1]:
+        for env in container["env"][:-1]:
             if env["name"] == "KRAKE_TOKEN":
                 token = env["value"]
             if env["name"] == "KRAKE_COMPLETE_URL":
@@ -389,16 +621,32 @@ async def test_complete_hook_external_endpoint(
 
     """
     hooks_config.complete.external_endpoint = "https://new.external.endpoint"
+    deploy_mangled_response = deepcopy(deployment_response)
 
     routes = web.RouteTableDef()
 
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a Deployment named `nginx-demo` already exists.
     @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
+        # No `nginx-demo` Deployment exist
         return web.Response(status=404)
 
+    # As part of the reconciliation loop, the k8s controller creates the `nginx-demo`
+    # Deployment
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        return web.Response(status=200)
+        nonlocal deploy_mangled_response
+
+        rd = await request.read()
+
+        app = json.loads(rd)
+
+        app_first_container = get_first_container(app)
+        resp_first_container = get_first_container(deploy_mangled_response)
+        resp_first_container["env"] = app_first_container["env"]
+
+        return web.json_response(deploy_mangled_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -407,14 +655,13 @@ async def test_complete_hook_external_endpoint(
 
     # We only consider the first resource in the manifest file, that is a Deployment.
     # This Deployment should be modified by the "complete" hook with ENV vars.
-    deployment_manifest = deepcopy(nginx_manifest[0])
-
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING,
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
         spec__hooks=["complete"],
         spec__manifest=[deployment_manifest],
+        spec__observer_schema=[custom_deployment_observer_schema],
     )
     await db.put(cluster)
     await db.put(app)
@@ -433,7 +680,7 @@ async def test_complete_hook_external_endpoint(
     )
 
     # TLS is disabled, so no additional resource has been generated
-    assert len(stored.status.manifest) == 1
+    assert len(stored.status.last_observed_manifest) == 1
 
     _, url = get_hook_environment_value(stored)
     endpoint = URL(url)
@@ -456,29 +703,44 @@ async def test_complete_hook_sending(aiohttp_server, config, db, loop, hooks_con
         deletion of the Application on the API.
 
     """
+    deploy_mangled_response = deepcopy(deployment_response)
+
     routes = web.RouteTableDef()
 
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a Deployment named `nginx-demo` already exists.
     @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         return web.Response(status=404)
 
+    # As part of the reconciliation loop, the k8s controller creates the deployment. We
+    # augment the standard API Response with the additional "env" dictionary that
+    # contains the TOKEN and the URL
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        return web.Response(status=200)
+        nonlocal deploy_mangled_response
+        rd = await request.read()
+
+        app = json.loads(rd)
+
+        app_first_container = get_first_container(app)
+        resp_first_container = get_first_container(deploy_mangled_response)
+        resp_first_container["env"] = app_first_container["env"]
+
+        return web.json_response(deploy_mangled_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
     kubernetes_server = await aiohttp_server(kubernetes_app)
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
 
-    spec_manifest = nginx_manifest[:1]
-
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING,
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
         spec__hooks=["complete"],
-        spec__manifest=spec_manifest,
+        spec__manifest=[deployment_manifest],
+        spec__observer_schema=[custom_deployment_observer_schema],
     )
     await db.put(cluster)
     await db.put(app)
@@ -527,6 +789,8 @@ async def test_complete_hook_sending_tls(
 
     """
     routes = web.RouteTableDef()
+    deploy_mangled_response = deepcopy(deployment_response)
+    configmap_resource = {}
 
     server_cert = pki.gencert("api-server")
     config.tls = TlsServerConfiguration(
@@ -535,35 +799,81 @@ async def test_complete_hook_sending_tls(
 
     ssl_context = client_ssl_context("client")
 
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a ConfigMap named `ca.pem` already exists.
     @routes.get("/api/v1/namespaces/secondary/configmaps/ca.pem")
     async def _(request):
         return web.Response(status=404)
 
+    # As part of the reconciliation loop, the k8s controller created the `ca.pem`
+    # ConfigMap
     @routes.post("/api/v1/namespaces/secondary/configmaps")
     async def _(request):
-        return web.Response(status=200)
+        nonlocal configmap_resource
+        rd = await request.read()
 
+        configmap_resource = json.loads(rd)
+
+        resp = yaml.safe_load(
+            """
+            apiVersion: v1
+            data: CONFIGMAP_DATA
+            kind: ConfigMap
+            metadata:
+              annotations: {}
+              creationTimestamp: "2020-07-21T13:57:03Z"
+              managedFields: []
+              name: CONFIGMAP_NAME
+              namespace: secondary
+              resourceVersion: "5073306"
+              selfLink: /api/v1/namespaces/default/configmaps/name
+              uid: e851306b-4581-48f3-808d-1d18c9038309
+                """
+        )
+
+        resp["metadata"]["name"] = configmap_resource["metadata"]["name"]
+        resp["data"] = configmap_resource["data"]
+
+        return web.json_response(resp)
+
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a Deployment named `nginx-demo` already exists.
     @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         return web.Response(status=404)
 
+    # As part of the reconciliation loop, the k8s controller created the `nginx-demo`
+    # Deployment
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        return web.Response(status=200)
+        nonlocal deploy_mangled_response
+        rd = await request.read()
+
+        app = json.loads(rd)
+
+        app_first_container = get_first_container(app)
+        resp_first_container = get_first_container(deploy_mangled_response)
+        resp_first_container["env"] = app_first_container["env"]
+        resp_first_container["volumeMounts"] = app_first_container["volumeMounts"]
+
+        deploy_mangled_response["spec"]["template"]["spec"]["volumes"] = app["spec"][
+            "template"
+        ]["spec"]["volumes"]
+
+        return web.json_response(deploy_mangled_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
     kubernetes_server = await aiohttp_server(kubernetes_app)
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
 
-    spec_manifest = nginx_manifest[:1]
-
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING,
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
         spec__hooks=["complete"],
-        spec__manifest=spec_manifest,
+        spec__manifest=[deployment_manifest],
+        spec__observer_schema=[custom_deployment_observer_schema],
     )
     await db.put(cluster)
     await db.put(app)
@@ -605,7 +915,7 @@ async def test_complete_hook_sending_tls(
 
     # Attempt to send a request to the hook endpoint with the certificate taken from the
     # deployed Application. Should succeed.
-    configmap = stored.status.manifest[1]
+    configmap = stored.status.last_observed_manifest[1]
 
     # Load the certificates into an SSL context.
     with tempfile.TemporaryDirectory() as tmpdirname:
@@ -658,6 +968,8 @@ async def test_complete_hook_sending_tls_rbac(
     config.authorization = "RBAC"
     config.authentication.strategy.static.enabled = False
 
+    deploy_mangled_response = deepcopy(deployment_response)
+    configmap_resource = {}
     routes = web.RouteTableDef()
 
     server_cert = pki.gencert("api-server")
@@ -669,35 +981,81 @@ async def test_complete_hook_sending_tls_rbac(
     controller_ssl_context = client_ssl_context(client_user)
     invalid_ssl_context = client_ssl_context("invalid_user")
 
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a ConfigMap named `ca.pem` already exists.
     @routes.get("/api/v1/namespaces/secondary/configmaps/ca.pem")
     async def _(request):
         return web.Response(status=404)
 
+    # As part of the reconciliation loop, the k8s controller created the `ca.pem`
+    # ConfigMap
     @routes.post("/api/v1/namespaces/secondary/configmaps")
     async def _(request):
-        return web.Response(status=200)
+        nonlocal configmap_resource
+        rd = await request.read()
 
+        configmap_resource = json.loads(rd)
+
+        resp = yaml.safe_load(
+            """
+            apiVersion: v1
+            data: CONFIGMAP_DATA
+            kind: ConfigMap
+            metadata:
+              annotations: {}
+              creationTimestamp: "2020-07-21T13:57:03Z"
+              managedFields: []
+              name: CONFIGMAP_NAME
+              namespace: secondary
+              resourceVersion: "5073306"
+              selfLink: /api/v1/namespaces/default/configmaps/name
+              uid: e851306b-4581-48f3-808d-1d18c9038309
+                """
+        )
+
+        resp["metadata"]["name"] = configmap_resource["metadata"]["name"]
+        resp["data"] = configmap_resource["data"]
+
+        return web.json_response(resp)
+
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a Deployment named `nginx-demo` already exists.
     @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         return web.Response(status=404)
 
+    # As part of the reconciliation loop, the k8s controller created the `nginx-demo`
+    # Deployment
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        return web.Response(status=200)
+        nonlocal deploy_mangled_response
+        rd = await request.read()
+
+        app = json.loads(rd)
+
+        app_first_container = get_first_container(app)
+        resp_first_container = get_first_container(deploy_mangled_response)
+        resp_first_container["env"] = app_first_container["env"]
+        resp_first_container["volumeMounts"] = app_first_container["volumeMounts"]
+
+        deploy_mangled_response["spec"]["template"]["spec"]["volumes"] = app["spec"][
+            "template"
+        ]["spec"]["volumes"]
+
+        return web.json_response(deploy_mangled_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
     kubernetes_server = await aiohttp_server(kubernetes_app)
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
 
-    spec_manifest = nginx_manifest[:1]
-
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING,
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
         spec__hooks=["complete"],
-        spec__manifest=spec_manifest,
+        spec__manifest=[deployment_manifest],
+        spec__observer_schema=[custom_deployment_observer_schema],
     )
     await db.put(cluster)
     await db.put(app)
@@ -750,7 +1108,7 @@ async def test_complete_hook_sending_tls_rbac(
 
     # Attempt to send a request to the hook endpoint with a valid certificate, taken
     # from the Application itself. Should succeed.
-    configmap = stored.status.manifest[1]
+    configmap = stored.status.last_observed_manifest[1]
 
     # Load the certificates into an SSL context.
     with tempfile.TemporaryDirectory() as tmpdirname:
@@ -811,6 +1169,8 @@ async def test_complete_hook_reschedule(
 
     """
     routes = web.RouteTableDef()
+    deploy_mangled_response = deepcopy(deployment_response)
+    configmap_resource = {}
 
     server_cert = pki.gencert("api-server")
     config.tls = TlsServerConfiguration(
@@ -832,7 +1192,32 @@ async def test_complete_hook_reschedule(
 
     @routes.post("/api/v1/namespaces/secondary/configmaps")
     async def _(request):
-        return web.Response(status=200)
+        nonlocal configmap_resource
+        rd = await request.read()
+
+        configmap_resource = json.loads(rd)
+
+        resp = yaml.safe_load(
+            """
+            apiVersion: v1
+            data: CONFIGMAP_DATA
+            kind: ConfigMap
+            metadata:
+              annotations: {}
+              creationTimestamp: "2020-07-21T13:57:03Z"
+              managedFields: []
+              name: CONFIGMAP_NAME
+              namespace: secondary
+              resourceVersion: "5073306"
+              selfLink: /api/v1/namespaces/default/configmaps/name
+              uid: e851306b-4581-48f3-808d-1d18c9038309
+                """
+        )
+
+        resp["metadata"]["name"] = configmap_resource["metadata"]["name"]
+        resp["data"] = configmap_resource["data"]
+
+        return web.json_response(resp)
 
     @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
@@ -840,7 +1225,21 @@ async def test_complete_hook_reschedule(
 
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        return web.Response(status=200)
+        nonlocal deploy_mangled_response
+        rd = await request.read()
+
+        app = json.loads(rd)
+
+        app_first_container = get_first_container(app)
+        resp_first_container = get_first_container(deploy_mangled_response)
+        resp_first_container["env"] = app_first_container["env"]
+        resp_first_container["volumeMounts"] = app_first_container["volumeMounts"]
+
+        deploy_mangled_response["spec"]["template"]["spec"]["volumes"] = app["spec"][
+            "template"
+        ]["spec"]["volumes"]
+
+        return web.json_response(deploy_mangled_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -849,14 +1248,13 @@ async def test_complete_hook_reschedule(
 
     # We only consider the first resource in the manifest file, that is a Deployment.
     # This Deployment should be modified by the "complete" hook with ENV vars.
-    deployment_manifest = deepcopy(nginx_manifest[0])
-
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING,
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
         spec__hooks=["complete"],
         spec__manifest=[deployment_manifest],
+        spec__observer_schema=[custom_deployment_observer_schema],
     )
     await db.put(cluster)
     await db.put(app)
@@ -886,9 +1284,7 @@ async def test_complete_hook_reschedule(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
         )
         assert stored.status.state == ApplicationState.RUNNING
-        assert stored.status.manifest is not None
-
-        previous_manifest = stored.status.manifest
+        assert stored.status.last_observed_manifest is not None
 
         # Do a rescheduling --> start the reconciliation loop
         await controller.resource_received(stored, start_observer=False)
@@ -897,8 +1293,4 @@ async def test_complete_hook_reschedule(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
         )
         assert stored.status.state == ApplicationState.RUNNING
-        assert stored.status.manifest is not None
-
-    # Ensure that the rescheduling kept the resources created by the "complete"
-    # hook.
-    assert stored.status.manifest == previous_manifest
+        assert stored.status.last_observed_manifest is not None

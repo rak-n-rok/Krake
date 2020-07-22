@@ -9,9 +9,15 @@ from krake.api.app import create_app
 from krake.controller.kubernetes.kubernetes import ResourceDelta
 from krake.data.core import resource_ref
 from krake.data.kubernetes import Application, ApplicationState
-from krake.controller.kubernetes import KubernetesController, KubernetesClient
+from krake.controller.kubernetes import (
+    KubernetesController,
+    KubernetesClient,
+    Hook,
+    update_last_applied_manifest_from_resp,
+    update_last_observed_manifest_from_resp,
+)
 from krake.client import Client
-from krake.test_utils import server_endpoint
+from krake.test_utils import server_endpoint, HandlerDeactivator
 
 from tests.factories.fake import fake
 from tests.factories.kubernetes import (
@@ -93,6 +99,7 @@ async def test_custom_resource_cached_property_called_once(
                     kind: CronTab
                     metadata:
                         name: cron1
+                        namespace: default
                     spec:
                         cronSpec: "* * * * */5"
                         image: cron-image1
@@ -101,6 +108,7 @@ async def test_custom_resource_cached_property_called_once(
                     kind: CronTab
                     metadata:
                         name: cron2
+                        namespace: default
                     spec:
                         cronSpec: "* * * * */10"
                         image: cron-image2
@@ -119,7 +127,13 @@ async def test_custom_resource_cached_property_called_once(
         controller = KubernetesController(server_endpoint(api_server), worker_count=0)
         await controller.prepare(client)
 
-        await controller.resource_received(app)
+        with HandlerDeactivator(
+            Hook.ResourcePostCreate, update_last_applied_manifest_from_resp
+        ):
+            with HandlerDeactivator(
+                Hook.ResourcePostCreate, update_last_observed_manifest_from_resp
+            ):
+                await controller.resource_received(app)
 
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -219,9 +233,44 @@ async def test_custom_resource_cached_property(aiohttp_server):
                         kind: CronTab
                         metadata:
                             name: cron
+                            namespace: default
                         spec:
                             cronSpec: "* * * * */5"
                             image: cron-image
+                        """
+                    )
+                )
+            ),
+            spec__manifest=list(
+                yaml.safe_load_all(
+                    dedent(
+                        """
+                        ---
+                        apiVersion: stable.example.com/v1
+                        kind: CronTab
+                        metadata:
+                            name: cron
+                            namespace: default
+                        spec:
+                            cronSpec: "* * * * */5"
+                            image: cron-image
+                        """
+                    )
+                )
+            ),
+            spec__observer_schema=list(
+                yaml.safe_load_all(
+                    dedent(
+                        """
+                        ---
+                        apiVersion: stable.example.com/v1
+                        kind: CronTab
+                        metadata:
+                            name: cron
+                            namespace: null
+                        spec:
+                            cronSpec: null
+                            image: null
                         """
                     )
                 )
@@ -299,6 +348,7 @@ async def test_app_custom_resource_creation(aiohttp_server, config, db, loop):
                     kind: CronTab
                     metadata:
                         name: cron
+                        namespace: default
                     spec:
                         cronSpec: "* * * * */5"
                         image: cron-image
@@ -316,7 +366,13 @@ async def test_app_custom_resource_creation(aiohttp_server, config, db, loop):
         controller = KubernetesController(server_endpoint(api_server), worker_count=0)
         await controller.prepare(client)
 
-        await controller.resource_received(app)
+        with HandlerDeactivator(
+            Hook.ResourcePostCreate, update_last_applied_manifest_from_resp
+        ):
+            with HandlerDeactivator(
+                Hook.ResourcePostCreate, update_last_observed_manifest_from_resp
+            ):
+                await controller.resource_received(app)
 
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -397,6 +453,7 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
                     kind: CronTab
                     metadata:
                         name: cron-demo-1
+                        namespace: default
                     spec:
                         cronSpec: "* * * * */5"
                         image: cron-image
@@ -405,6 +462,7 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
                     kind: CronTab
                     metadata:
                         name: cron-demo-2
+                        namespace: default
                     spec:
                         cronSpec: "* * * * */15"
                         image: cron-image
@@ -413,6 +471,7 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
                     kind: CronTab
                     metadata:
                         name: cron-demo-3
+                        namespace: default
                     spec:
                         cronSpec: "* * * * */35"
                         image: cron-image
@@ -431,6 +490,7 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
                     kind: CronTab
                     metadata:
                         name: cron-demo-2
+                        namespace: default
                     spec:
                         cronSpec: "* * * * */15"
                         image: cron-image
@@ -439,6 +499,7 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
                     kind: CronTab
                     metadata:
                         name: cron-demo-3
+                        namespace: default
                     spec:
                         cronSpec: "* * * * */35"
                         image: cron-image:1.2 # updated image version
@@ -457,7 +518,13 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
         controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
-        await controller.resource_received(app)
+        with HandlerDeactivator(
+            Hook.ResourcePostUpdate, update_last_applied_manifest_from_resp
+        ):
+            with HandlerDeactivator(
+                Hook.ResourcePostUpdate, update_last_observed_manifest_from_resp
+            ):
+                await controller.resource_received(app)
 
     assert "cron-demo-1" in deleted
     assert "cron-demo-3" in patched
@@ -544,6 +611,7 @@ async def test_app_custom_resource_migration(aiohttp_server, config, db, loop):
                 kind: Deployment
                 metadata:
                   name: nginx-demo
+                  namespace: default
                 spec:
                   selector:
                     matchLabels:
@@ -571,6 +639,7 @@ async def test_app_custom_resource_migration(aiohttp_server, config, db, loop):
                 kind: CronTab
                 metadata:
                     name: cron
+                    namespace: default
                 spec:
                     cronSpec: "* * * * */5"
                     image: cron-image
@@ -601,7 +670,13 @@ async def test_app_custom_resource_migration(aiohttp_server, config, db, loop):
         controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
-        await controller.resource_received(app)
+        with HandlerDeactivator(
+            Hook.ResourcePostCreate, update_last_applied_manifest_from_resp
+        ):
+            with HandlerDeactivator(
+                Hook.ResourcePostCreate, update_last_observed_manifest_from_resp
+            ):
+                await controller.resource_received(app)
 
     assert "nginx-demo" in kubernetes_server_A.app["deleted"]
     assert "cron" in kubernetes_server_B.app["created"]
@@ -670,6 +745,7 @@ async def test_app_custom_resource_deletion(aiohttp_server, config, db, loop):
                     kind: CronTab
                     metadata:
                         name: cron
+                        namespace: default
                     spec:
                         cronSpec: "* * * * */5"
                         image: cron-image
