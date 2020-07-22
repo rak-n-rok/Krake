@@ -187,6 +187,22 @@ spec:
     )
 )
 
+new_observer_schema = list(
+    yaml.safe_load_all(
+        """---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: busybox-sleep
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: busybox-sleep-less
+"""
+    )
+)
+
 
 async def test_update_app(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
@@ -194,6 +210,7 @@ async def test_update_app(aiohttp_client, config, db):
     data = ApplicationFactory(status__state=ApplicationState.PENDING)
     await db.put(data)
     data.spec.manifest = new_manifest
+    data.spec.observer_schema = new_observer_schema
 
     resp = await client.put(
         f"/kubernetes/namespaces/{data.metadata.namespace}"
@@ -205,6 +222,7 @@ async def test_update_app(aiohttp_client, config, db):
 
     assert app.status.state == data.status.state
     assert app.spec.manifest == new_manifest
+    assert app.spec.observer_schema == new_observer_schema
 
     stored = await db.get(
         Application, namespace=data.metadata.namespace, name=app.metadata.name

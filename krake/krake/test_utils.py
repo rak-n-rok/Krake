@@ -5,6 +5,8 @@ from functools import wraps
 from time import time
 from aiohttp import web
 
+from krake.controller.kubernetes import listen
+
 
 def with_timeout(timeout):
     """Decorator function for coroutines
@@ -159,3 +161,50 @@ def make_prometheus(metrics):
     app["series"] = {name: iter(value) for name, value in metrics.items()}
 
     return app
+
+
+class HandlerDeactivator(object):
+    """Context manager used in the tests to temporarly remove a Handler from a Hook.
+
+    Args:
+        hook (krake.controller.hooks.Hook): Hook for which the handler should be
+            temporarly disabled.
+        handler (callable): The handler to deactivate
+
+    """
+
+    def __init__(self, hook, handler):
+        self.hook = hook
+        self.handler = handler
+
+    def __enter__(self):
+        listen.registry[self.hook].remove(self.handler)
+
+    def __exit__(self, *exc):
+        listen.registry[self.hook].append(self.handler)
+
+
+def serialize_k8s_object(manifest, object_type):
+    """Create a Kubernetes object from a dictionary.
+
+    This is usefull to test functions which only accept Kubernetes objects.
+
+    This is a temporary implementation, as a proper deserialization function hasn't yet
+    been implemented in the kubernetes_client package. See
+    https://github.com/kubernetes-client/python/pull/989
+
+    This solution is inspired by
+    https://github.com/kubernetes-client/python/issues/977#issuecomment-592030030
+    """
+    from kubernetes_asyncio.client import ApiClient
+
+    api_client = ApiClient()
+
+    class FakeKubeResponse:
+        def __init__(self, obj):
+            import json
+
+            self.data = json.dumps(obj)
+
+    fake_kube_response = FakeKubeResponse(manifest)
+    return api_client.deserialize(fake_kube_response, object_type)
