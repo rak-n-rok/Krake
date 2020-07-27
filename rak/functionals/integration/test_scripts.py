@@ -91,7 +91,7 @@ def test_generate(krake_container):
 
     krake = client.containers.get(krake_container)
 
-    dst = Path("/tmp")
+    dst = Path("/home/krake")
     config = str(dst / "test.config.yaml")
     template = str(dst / "test.config.yaml.template")
 
@@ -200,7 +200,7 @@ def test_bootstrap(krake_container, etcd_container, etcd_container_port):
         etcd_container_port,
     ]
 
-    dst = Path("/tmp")
+    dst = Path("/home/krake")
     bootstrap = str(dst / "bootstrap.yaml")
 
     # 1. Create a bootstrap.yaml file
@@ -289,7 +289,7 @@ def test_bootstrap_rollback_invalid(
         etcd_container_port,
     ]
 
-    dst = Path("/tmp")
+    dst = Path("/home/krake")
     bootstrap = str(dst / "bootstrap.yaml")
     bootstrap_invalid = str(dst / "bootstrap_invalid.yaml")
 
@@ -394,7 +394,7 @@ def test_bootstrap_rollback_present(
         etcd_container_port,
     ]
 
-    dst = Path("/tmp")
+    dst = Path("/home/krake")
     bootstrap = str(dst / "bootstrap.yaml")
     bootstrap_present = str(dst / "bootstrap_present.yaml")
 
