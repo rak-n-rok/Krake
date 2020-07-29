@@ -7,7 +7,7 @@ import tarfile
 import docker
 from pathlib import Path
 from tempfile import TemporaryDirectory
-
+from utils import run, check_return_code
 
 client = docker.from_env()
 
@@ -232,6 +232,77 @@ def test_bootstrap(krake_container, etcd_container, etcd_container_port):
     # from the Etcd database
     exec_container(etcd, ["etcdctl", "del", record_path])
     exec_container(krake, ["rm", bootstrap])
+
+
+def test_bootstrap_from_stdin(krake_container, etcd_container, etcd_container_port):
+    """End to end testing for ``krake_bootstrap_db`` script, reading from stdin
+
+    E2e testing of ``krake_bootstrap_db`` script is executed against
+    Krake docker test infrastructure.
+
+    We run a basic workflow in following steps:
+    1. Execute krake_bootstrap_db script, reading file from stdin
+    2. Validate Etcd database
+    3. Execute krake_bootstrap_db script with the `force` option
+    4. Validate Etcd database
+    5. Delete the test record from the Etcd database
+
+    Args:
+        krake_container (str): Krake container name
+        etcd_container (str): Etcd container name
+        etcd_container_port (str): Etcd container port
+
+    """
+    etcd = client.containers.get(etcd_container)
+    record_name = TEST_BOOTSTRAP["metadata"]["name"]
+    record_path = "/core/metric/" + record_name
+
+    bootstrap_cmd = [
+        "docker",
+        "exec",
+        "-i",
+        krake_container,
+        "krake_bootstrap_db",
+        "--db-host",
+        etcd_container,
+        "--db-port",
+        etcd_container_port,
+        "-",
+    ]
+    bootstrap_file = yaml.dump(TEST_BOOTSTRAP).encode("utf-8")
+
+    # Ensure the test record does not exist in the database
+    exec_container(etcd, ["etcdctl", "del", record_path])
+
+    # 1. Execute bootstrap script
+    error_message = "The bootstrapping through stdin failed."
+    run(
+        bootstrap_cmd,
+        retry=0,
+        condition=check_return_code(error_message),
+        input=bootstrap_file,
+    )
+
+    # 2. Validate Etcd database
+    out = exec_container(etcd, ["etcdctl", "get", "--print-value-only", record_path])
+    assert yaml.safe_load(out)["metadata"]["name"] == record_name
+
+    # 3. Execute bootstrap script with the `force` option
+    bootstrap_cmd.insert(-1, "--force")
+    error_message = "The bootstrapping through stdin failed when using '--force'."
+    run(
+        bootstrap_cmd,
+        retry=0,
+        condition=check_return_code(error_message),
+        input=bootstrap_file,
+    )
+
+    # 4. Validate Etcd database
+    out = exec_container(etcd, ["etcdctl", "get", "--print-value-only", record_path])
+    assert yaml.safe_load(out)["metadata"]["name"] == record_name
+
+    # 5. Delete the test record from the Etcd database
+    exec_container(etcd, ["etcdctl", "del", record_path])
 
 
 TEST_BOOTSTRAP_INVALID = {
