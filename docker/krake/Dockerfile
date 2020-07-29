@@ -41,3 +41,7 @@ COPY ./krake/krake /krake/krake
 COPY ./krake/scripts /krake/scripts
 COPY ./krake/setup.py /krake
 RUN pip3 install /krake
+
+RUN useradd --create-home --shell /bin/bash krake
+USER krake
+WORKDIR /home/krake
