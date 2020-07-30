@@ -1,0 +1,69 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: krake-kubernetes
+data:
+  kubernetes.yaml: |
+    api_endpoint: http://krake-api:8080
+    worker_count: 5
+    debounce: 1.0
+    hooks:
+      complete:
+        ca_dest: /etc/krake_ca/ca.pem
+        env_token: KRAKE_TOKEN
+        env_complete: KRAKE_COMPLETE_URL
+    tls:
+      enabled: False
+      client_ca: ""
+      client_cert: ""
+      client_key: ""
+    log:
+      version: 1
+      level: INFO
+      disable_existing_loggers: false
+      formatters:
+        krake:
+          format: "%(asctime)s - [%(name)s] - [%(levelname)-5s] - %(message)s"
+      handlers:
+        console:
+          class: logging.StreamHandler
+          formatter: krake
+          stream: ext://sys.stdout
+      root:
+        handlers: [console]
+      loggers:
+        krake:
+          handlers: [console]
+          propagate: no
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: krake-kubernetes
+  labels:
+    app.kubernetes.io/name: krake-kubernetes
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: krake-kubernetes
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: krake-kubernetes
+    spec:
+      containers:
+      - image: raknrok/krake
+        name: krake-kubernetes
+        command:
+          - "python"
+          - "-m"
+          - "krake.controller.kubernetes"
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/krake
+      volumes:
+        - name: config-volume
+          configMap:
+            name: krake-kubernetes
