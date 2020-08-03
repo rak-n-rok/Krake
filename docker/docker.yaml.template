@@ -10,6 +10,7 @@ docker_daemon_mtu: $docker_daemon_mtu
 krake:
   config:
     path: /etc/krake
+  cert_dir: $cert_dir
 
 # Krake ETCD database
 etcd:

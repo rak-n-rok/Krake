@@ -248,6 +248,7 @@
             {% if etcd_host is defined %} --etcd-host {{ etcd_host }} {% endif %} \
             {% if etcd_port is defined %} --etcd-port {{ etcd_port }} {% endif %} \
             {% if etcd_peer_port is defined %} --etcd-peer-port {{ etcd_peer_port }} {% endif %} \
+            {% if cert_dir is defined %} --cert-dir {{ cert_dir }} {% endif %} \
             {{ git_dir }}/docker/docker.yaml.template
 
         - name: Configure docker infrastructure bundles
@@ -265,6 +266,8 @@
           docker_image:
             name: krake:latest
             state: absent
+          tags:
+            - build_krake_image
 
         - name: Create configuration directory
           become_user: root
@@ -273,6 +276,7 @@
             state: directory
             owner: krake
             group: krake
+            recurse: yes
 
         - name: Create configuration certificates sub-directory
           become_user: root
@@ -323,6 +327,14 @@
             {% if complete_hook_env_complete is defined %} --complete-hook-env-complete {{ complete_hook_env_complete }} {% endif %} \
             {{ git_dir }}/config/*template
 
+        - name: Change permissions of the configuration directory
+          become_user: root
+          file:
+            path: "{{ configuration_dir }}"
+            owner: "{{ krake_image_uid }}"
+            group: "{{ krake_image_uid }}"
+            recurse: yes
+
         - name: Build Krake image
           docker_image:
             name: krake:latest
@@ -332,6 +344,10 @@
               pull: yes
               path: "{{ git_dir }}"
               nocache: yes
+              args:
+                krake_uid: "{{ krake_image_uid }}"
+          tags:
+            - build_krake_image
 
         - name: Start Krake infrastructure
           docker_compose:
@@ -359,10 +375,36 @@
         rok_configuration_dir: /etc/rok
       block:
 
+        - name: Create configuration certificates sub-directory
+          become_user: root
+          file:
+            path: "{{ rok_configuration_dir }}/certs"
+            state: directory
+            owner: krake
+            group: krake
+          when: enable_tls is defined and enable_tls
+
+        # The creation of certificates for rok needs the ca used by Krake. Thus the
+        # creation of the certificate is done in the Krake deployment.
+        - name: Copy the rok certificates
+          become_user: root
+          copy:
+            src: "{{ configuration_dir }}/certs/{{ item.src }}"
+            dest: "{{ rok_configuration_dir }}/certs"
+            owner: krake
+            group: krake
+            mode: "{{ item.mode }}"
+            remote_src: yes
+          loop:
+            - { src: "ca.pem", mode: '0644' }
+            - { src: "system:admin.pem", mode: '0644' }
+            - { src: "system:admin-key.pem", mode: '0600' }
+          when: enable_tls is defined and enable_tls
+
         - name: Generate certificates for rok
           command: >
             {{ git_dir }}/support/pki system:admin
-            --dest-dir {{ configuration_dir }}/certs
+            --dest-dir {{ rok_configuration_dir }}/certs
             --krake-host {{ api_host }} --ignore
           when: enable_tls is defined and enable_tls
 
@@ -388,7 +430,8 @@
             {{ repo_dir }}/krake/scripts/krake_generate_config
             --dst {{ rok_configuration_dir }}
             {% if enable_tls is defined and enable_tls %} --tls-enabled {% endif %}
-            {% if cert_dir is defined %} --cert-dir {{ cert_dir }} {% endif %}
+            {% if enable_tls is defined and enable_tls %}
+            --cert-dir {{ rok_configuration_dir }}/certs {% endif %}
             --api-host localhost
             {% if api_port is defined %} --api-port {{ api_port }} {% endif %}
             {{ git_dir }}/rok.yaml.template

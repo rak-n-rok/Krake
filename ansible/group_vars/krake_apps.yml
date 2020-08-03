@@ -5,6 +5,9 @@ flavor: S
 # OpenStack networks have MTU value of 1450
 docker_daemon_mtu: 1450
 
+# Krake Docker image
+krake_image_uid: 17890
+
 # Configuration parameters
 api_host: krake-api
 api_port: 8443
