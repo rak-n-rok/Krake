@@ -374,6 +374,10 @@ class HandlerDeactivator(object):
         listen.registry[self.hook].append(self.handler)
 
 
+def get_first_container(deployment):
+    return deployment["spec"]["template"]["spec"]["containers"][0]
+
+
 def serialize_k8s_object(manifest, object_type):
     """Create a Kubernetes object from a dictionary.
 

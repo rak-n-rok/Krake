@@ -8,7 +8,6 @@ import mock
 import pytest
 from aiohttp import web
 import pytz
-import yaml
 
 from krake import utils
 from kubernetes_asyncio.client import V1Status, V1Service, V1ServiceSpec, V1ServicePort
@@ -25,6 +24,7 @@ from krake.controller.kubernetes.kubernetes import ResourceDelta
 from krake.controller.kubernetes.hooks import (
     update_last_applied_manifest_from_spec,
     update_last_applied_manifest_from_resp,
+    generate_default_observer_schema,
 )
 from krake.client import Client
 from krake.test_utils import server_endpoint, serialize_k8s_object
@@ -39,6 +39,7 @@ from tests.factories.kubernetes import (
 from tests.controller.kubernetes import (
     deployment_manifest,
     service_manifest,
+    configmap_manifest,
     nginx_manifest,
     custom_deployment_observer_schema,
     custom_service_observer_schema,
@@ -257,6 +258,8 @@ async def test_app_creation_default_namespace(aiohttp_server, config, db, loop):
 
     routes = web.RouteTableDef()
 
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a Deployment named `nginx-demo` already exists.
     @routes.get("/apis/apps/v1/namespaces/{namespace}/deployments/nginx-demo")
     async def _(request):
         nonlocal called_get
@@ -265,8 +268,12 @@ async def test_app_creation_default_namespace(aiohttp_server, config, db, loop):
             received == accepted
         ), f"The namespace {received} must not be used by the client."
         called_get = True
+
+        # No `nginx-demo` Deployment exist
         return web.Response(status=404)
 
+    # As part of the reconciliation loop, the k8s controller creates the `nginx-demo`
+    # Deployment
     @routes.post("/apis/apps/v1/namespaces/{namespace}/deployments")
     async def _(request):
         nonlocal called_post
@@ -275,7 +282,11 @@ async def test_app_creation_default_namespace(aiohttp_server, config, db, loop):
             received == accepted
         ), f"The namespace {received} must not be used by the client."
         called_post = True
-        return web.Response(status=200)
+
+        # As a response, the k8s API provides the full Deployment object
+        copy_deployment_response = deepcopy(deployment_response)
+        copy_deployment_response["metadata"]["namespace"] = received
+        return web.json_response(copy_deployment_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -284,14 +295,15 @@ async def test_app_creation_default_namespace(aiohttp_server, config, db, loop):
 
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
 
-    deployment_manifest = deepcopy(nginx_manifest[0])
-    del deployment_manifest["metadata"]["namespace"]
+    copy_deployment_manifest = deepcopy(deployment_manifest)
+    del copy_deployment_manifest["metadata"]["namespace"]
 
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING,
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
-        spec__manifest=[deployment_manifest],
+        spec__manifest=[copy_deployment_manifest],
+        spec__observer_schema=[custom_deployment_observer_schema],
     )
     await db.put(cluster)
     await db.put(app)
@@ -301,7 +313,6 @@ async def test_app_creation_default_namespace(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
         controller = KubernetesController(server_endpoint(api_server), worker_count=0)
         await controller.prepare(client)
-
         await controller.resource_received(app, start_observer=False)
 
     assert called_get and called_post
@@ -309,7 +320,14 @@ async def test_app_creation_default_namespace(aiohttp_server, config, db, loop):
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.last_observed_manifest == app.spec.manifest
+
+    copy_initial_last_observed_manifest_deployment = deepcopy(
+        initial_last_observed_manifest_deployment
+    )
+    copy_initial_last_observed_manifest_deployment["metadata"]["namespace"] = "default"
+    assert stored.status.last_observed_manifest == [
+        copy_initial_last_observed_manifest_deployment
+    ]
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
@@ -324,6 +342,8 @@ async def test_app_creation_cluster_default_namespace(aiohttp_server, config, db
 
     routes = web.RouteTableDef()
 
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a Deployment named `nginx-demo` already exists.
     @routes.get("/apis/apps/v1/namespaces/{namespace}/deployments/nginx-demo")
     async def _(request):
         nonlocal called_get
@@ -334,6 +354,8 @@ async def test_app_creation_cluster_default_namespace(aiohttp_server, config, db
         called_get = True
         return web.Response(status=404)
 
+    # As part of the reconciliation loop, the k8s controller creates the `nginx-demo`
+    # Deployment
     @routes.post("/apis/apps/v1/namespaces/{namespace}/deployments")
     async def _(request):
         nonlocal called_post
@@ -342,7 +364,11 @@ async def test_app_creation_cluster_default_namespace(aiohttp_server, config, db
             received == accepted
         ), f"The namespace {received} must not be used by the client."
         called_post = True
-        return web.Response(status=200)
+
+        # As a response, the k8s API provides the full Deployment object
+        copy_deployment_response = deepcopy(deployment_response)
+        copy_deployment_response["metadata"]["namespace"] = received
+        return web.json_response(copy_deployment_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -354,14 +380,15 @@ async def test_app_creation_cluster_default_namespace(aiohttp_server, config, db
     kubeconfig["contexts"][0]["context"]["namespace"] = "another_namespace"
     cluster = ClusterFactory(spec__kubeconfig=kubeconfig)
 
-    deployment_manifest = deepcopy(nginx_manifest[0])
-    del deployment_manifest["metadata"]["namespace"]
+    copy_deployment_manifest = deepcopy(deployment_manifest)
+    del copy_deployment_manifest["metadata"]["namespace"]
 
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING,
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
-        spec__manifest=[deployment_manifest],
+        spec__manifest=[copy_deployment_manifest],
+        spec__observer_schema=[custom_deployment_observer_schema],
     )
     await db.put(cluster)
     await db.put(app)
@@ -379,7 +406,16 @@ async def test_app_creation_cluster_default_namespace(aiohttp_server, config, db
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.last_observed_manifest == app.spec.manifest
+
+    copy_initial_last_observed_manifest_deployment = deepcopy(
+        initial_last_observed_manifest_deployment
+    )
+    copy_initial_last_observed_manifest_deployment["metadata"][
+        "namespace"
+    ] = "another_namespace"
+    assert stored.status.last_observed_manifest == [
+        copy_initial_last_observed_manifest_deployment
+    ]
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
@@ -394,6 +430,8 @@ async def test_app_creation_manifest_namespace_set(aiohttp_server, config, db, l
 
     routes = web.RouteTableDef()
 
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a Deployment named `nginx-demo` already exists.
     @routes.get("/apis/apps/v1/namespaces/{namespace}/deployments/nginx-demo")
     async def _(request):
         nonlocal called_get
@@ -404,6 +442,8 @@ async def test_app_creation_manifest_namespace_set(aiohttp_server, config, db, l
         called_get = True
         return web.Response(status=404)
 
+    # As part of the reconciliation loop, the k8s controller creates the `nginx-demo`
+    # Deployment
     @routes.post("/apis/apps/v1/namespaces/{namespace}/deployments")
     async def _(request):
         nonlocal called_post
@@ -412,7 +452,11 @@ async def test_app_creation_manifest_namespace_set(aiohttp_server, config, db, l
             received == accepted
         ), f"The namespace {received} must not be used by the client."
         called_post = True
-        return web.Response(status=200)
+
+        # As a response, the k8s API provides the full Deployment object
+        copy_deployment_response = deepcopy(deployment_response)
+        copy_deployment_response["metadata"]["namespace"] = received
+        return web.json_response(copy_deployment_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -424,13 +468,14 @@ async def test_app_creation_manifest_namespace_set(aiohttp_server, config, db, l
     kubeconfig["contexts"][0]["context"]["namespace"] = "another_namespace"
     cluster = ClusterFactory(spec__kubeconfig=kubeconfig)
 
-    deployment_manifest = deepcopy(nginx_manifest[0])
+    copy_deployment_manifest = deepcopy(deployment_manifest)
 
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING,
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
-        spec__manifest=[deployment_manifest],
+        spec__manifest=[copy_deployment_manifest],
+        spec__observer_schema=[custom_deployment_observer_schema],
     )
     await db.put(cluster)
     await db.put(app)
@@ -440,7 +485,6 @@ async def test_app_creation_manifest_namespace_set(aiohttp_server, config, db, l
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
         controller = KubernetesController(server_endpoint(api_server), worker_count=0)
         await controller.prepare(client)
-
         await controller.resource_received(app, start_observer=False)
 
     assert called_get and called_post
@@ -448,7 +492,16 @@ async def test_app_creation_manifest_namespace_set(aiohttp_server, config, db, l
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.last_observed_manifest == app.spec.manifest
+
+    copy_initial_last_observed_manifest_deployment = deepcopy(
+        initial_last_observed_manifest_deployment
+    )
+    copy_initial_last_observed_manifest_deployment["metadata"][
+        "namespace"
+    ] = "secondary"
+    assert stored.status.last_observed_manifest == [
+        copy_initial_last_observed_manifest_deployment
+    ]
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
@@ -533,6 +586,7 @@ async def test_app_update(aiohttp_server, config, db, loop):
     """Test the update of a running application
 
     The Kubernetes Controller should patch the application and update the DB.
+
     """
     routes = web.RouteTableDef()
 
@@ -721,6 +775,7 @@ async def test_app_migration(aiohttp_server, config, db, loop):
     @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/{name}")
     async def delete_deployment(request):
         request.app["deleted"].add(request.match_info["name"])
+        return web.Response(status=200)
 
     async def make_kubernetes_api(existing=()):
         app = web.Application()
@@ -846,21 +901,21 @@ async def test_app_multi_migration(aiohttp_server, config, db, loop):
         for c in app_categories:
             srv.app[c].clear()
 
-    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
         body = await request.json()
         request.app["created"].add(body["metadata"]["name"])
-        return web.Response(status=201)
+        return web.json_response(deployment_response)
 
-    @routes.delete("/apis/apps/v1/namespaces/default/deployments/{name}")
+    @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/{name}")
     async def _(request):
         request.app["deleted"].add(request.match_info["name"])
         return web.Response(status=200)
 
-    @routes.get("/apis/apps/v1/namespaces/default/deployments/{name}")
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/{name}")
     async def _(request):
         if request.match_info["name"] in request.app["existing"]:
-            return web.Response(status=200)
+            return web.json_response(deployment_response)
         return web.Response(status=404)
 
     async def make_kubernetes_api():
@@ -885,28 +940,6 @@ async def test_app_multi_migration(aiohttp_server, config, db, loop):
     # clusters[first_index] is the cluster where the application will be created
     first_index = 0
 
-    deployment_manifest = yaml.safe_load(
-        """---
-    apiVersion: apps/v1
-    kind: Deployment
-    metadata:
-      name: nginx-demo
-    spec:
-      selector:
-        matchLabels:
-          app: nginx
-      template:
-        metadata:
-          labels:
-            app: nginx
-        spec:
-          containers:
-          - name: nginx
-            image: nginx:1.7.9
-            ports:
-            - containerPort: 80
-    """
-    )
     app_name = deployment_manifest["metadata"]["name"]
 
     assert num_cycles > 0
@@ -924,6 +957,7 @@ async def test_app_multi_migration(aiohttp_server, config, db, loop):
         status__is_scheduled=False,
         status__scheduled_to=resource_ref(clusters[first_index]),
         spec__manifest=[deployment_manifest],
+        spec__observer_schema=[custom_deployment_observer_schema],
     )
 
     # Assert correct initial state before inserting the application into the db.
@@ -1027,7 +1061,7 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
         deleted.add("Service")
         return web.Response(status=200)
 
-    @routes.delete("/api/v1/namespaces/default/configmaps/nginx-demo")
+    @routes.delete("/api/v1/namespaces/secondary/configmaps/nginx-demo")
     async def _(request):
         deleted.add("ConfigMap")
         return web.Response(status=200)
@@ -1116,7 +1150,7 @@ async def test_app_management_no_error_logs(aiohttp_server, config, db, loop, ca
 
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        return web.Response(status=200)
+        return web.json_response(deployment_response)
 
     @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
@@ -1197,7 +1231,7 @@ async def test_session_closed(aiohttp_server, config, db, loop):
 
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        return web.Response(status=200)
+        return web.json_response(deployment_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -1422,11 +1456,11 @@ async def test_kubernetes_controller_error_handling(aiohttp_server, config, db, 
 
     cluster = ClusterFactory(spec__custom_resources=[])
     app = ApplicationFactory(
-        spec__manifest=failed_manifest,
         status__state=ApplicationState.PENDING,
         status__is_scheduled=True,
         status__scheduled_to=resource_ref(cluster),
         status__last_observed_manifest=[],
+        spec__manifest=failed_manifest,
     )
 
     await db.put(cluster)
@@ -1457,11 +1491,12 @@ async def test_kubernetes_api_error_handling(aiohttp_server, config, db, loop):
 
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
     app = ApplicationFactory(
-        spec__manifest=nginx_manifest,
         status__state=ApplicationState.PENDING,
         status__is_scheduled=True,
         status__scheduled_to=resource_ref(cluster),
         status__last_observed_manifest=[],
+        spec__manifest=[deployment_manifest],
+        spec__observer_schema=[custom_deployment_observer_schema],
     )
 
     await db.put(cluster)
@@ -1557,6 +1592,8 @@ def test_resource_delta(loop):
         spec__observer_schema=deepcopy(custom_observer_schema),
     )
 
+    generate_default_observer_schema(app)
+    initial_mangled_observer_schema = deepcopy(app.status.mangled_observer_schema)
     update_last_applied_manifest_from_spec(app)
 
     deployment_object = serialize_k8s_object(deployment_response, "V1Deployment")
@@ -1614,7 +1651,7 @@ def test_resource_delta(loop):
     # present in last_observed_manifest
     app.status.last_applied_manifest = deepcopy(initial_last_applied_manifest)
     app.status.last_observed_manifest = deepcopy(initial_last_observed_manifest)
-    app.spec.observer_schema[0]["spec"].pop("replicas")
+    app.status.mangled_observer_schema[0]["spec"].pop("replicas")
     app.status.last_applied_manifest[0]["spec"]["replicas"] = 2
 
     # The modification of an non observed field should not trigger an update of the
@@ -1637,7 +1674,7 @@ def test_resource_delta(loop):
 
     # State (6): Update a field in the last_observed_manifest, which is observed and
     # present in last_applied_manifest
-    app.spec.observer_schema = deepcopy(custom_observer_schema)
+    app.status.mangled_observer_schema = deepcopy(initial_mangled_observer_schema)
     app.status.last_applied_manifest = deepcopy(initial_last_applied_manifest)
     app.status.last_observed_manifest = deepcopy(initial_last_observed_manifest)
 
@@ -1720,7 +1757,7 @@ def test_resource_delta(loop):
     assert app.status.last_applied_manifest[1] in modified  # Service
 
     # State (11): Remove elements from a list in last_observed_manifest
-    app.spec.observer_schema[1]["spec"]["ports"][-1][
+    app.status.mangled_observer_schema[1]["spec"]["ports"][-1][
         "observer_schema_list_min_length"
     ] = 1
     app.status.last_observed_manifest[1]["spec"][
@@ -1741,7 +1778,7 @@ def test_resource_delta(loop):
     # State (12): Remove ConfigMap
     app.status.last_applied_manifest = deepcopy(initial_last_applied_manifest)
     app.status.last_observed_manifest = deepcopy(initial_last_observed_manifest)
-    app.spec.observer_schema.pop(2)
+    app.status.mangled_observer_schema.pop(2)
     app.spec.manifest.pop(2)
     app.status.last_applied_manifest.pop(2)
 
