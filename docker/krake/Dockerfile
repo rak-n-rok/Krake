@@ -16,6 +16,8 @@
 #     docker run --detach --tty --interactive \
 #                --publish 8080:8080 --name krake-api \
 #                krake:latest python3 -m krake.api
+#
+# The UID of the "krake" user inside the image can be set with the argument "krake_uid".
 
 FROM python:3.6-slim AS base
 
@@ -34,14 +36,17 @@ RUN mkdir -p /etc/krake && \
 
 FROM base as runner
 
+ARG krake_uid=17890
+
 COPY --from=builder /etc/krake /etc/krake
 
 # Install Krake
 COPY ./krake/krake /krake/krake
 COPY ./krake/scripts /krake/scripts
 COPY ./krake/setup.py /krake
-RUN pip3 install /krake
+RUN pip install --upgrade pip && pip3 install /krake
 
-RUN useradd --create-home --shell /bin/bash krake
+RUN useradd --create-home --uid $krake_uid --shell /bin/bash krake
+
 USER krake
 WORKDIR /home/krake

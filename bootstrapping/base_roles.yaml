@@ -87,7 +87,7 @@ rules:
   - ''
   resources:
     - "metrics"
-    - "metricproviders"
+    - "metricsproviders"
   verbs:
   - get
 

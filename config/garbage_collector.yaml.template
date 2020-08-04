@@ -1,5 +1,16 @@
 ## Configuration file for the Krake Garbage Collector
 
+# Example:
+# api_endpoint: localhost:8443
+# worker_count: 5
+# debounce: 1.0
+# tls:
+#   enabled: true
+#   client_ca: tmp/pki/ca.pem
+#   client_cert: tmp/pki/<resource>_contr.pem
+#   client_key: tmp/pki/<resource>_contr-key.pem
+# If the 'enabled' element is not true, the controller will not use TLS
+
 api_endpoint: $api_endpoint
 worker_count: $worker_count
 debounce: $debounce

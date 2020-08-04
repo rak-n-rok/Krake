@@ -28,13 +28,20 @@ mapper.add_arguments(parser)
 
 
 def main(config):
+    """Starts the API using the provided configuration.
+
+    Args:
+        config (ApiConfiguration): the configuration that will be used to parameterize
+            the API.
+
+    """
     setup_logging(config.log)
     logger.debug(
         "Krake configuration settings:\n %s", pprint.pformat(config.serialize())
     )
 
     app = create_app(config)
-    web.run_app(app, ssl_context=app["ssl_context"])
+    web.run_app(app, ssl_context=app["ssl_context"], port=config.port)
 
 
 if __name__ == "__main__":

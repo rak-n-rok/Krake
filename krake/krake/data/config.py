@@ -157,6 +157,9 @@ class MagnumConfiguration(ControllerConfiguration):
 
 
 class ApiConfiguration(Serializable):
+    port: int = field(
+        default=8080, metadata={"help": "Port to which the Krake API listens to."}
+    )
     etcd: EtcdConfiguration
     tls: TlsServerConfiguration
     authentication: AuthenticationConfiguration

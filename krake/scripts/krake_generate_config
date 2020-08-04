@@ -67,20 +67,6 @@ def create_api_endpoint(api_host=None, api_port=None, tls_enabled=None, **kwargs
     return f"{scheme}://{api_host}:{api_port}"
 
 
-@register("tls_enabled")
-def format_tls_enabled(tls_enabled=None, **kwargs):
-    """Format the attr:`tls_enabled` boolean to match the YAML specifications.
-
-    Args:
-        tls_enabled (bool): True if TLS support should be enabled for the components
-
-    Returns:
-        str: ``true`` is TLS is enabled, ``false`` otherwise.
-
-    """
-    return str(tls_enabled).lower()
-
-
 def generate_substitution(options):
     """From the options, apply the registered handler to modify the given values or
     add the newly defined ones.
@@ -216,7 +202,50 @@ if __name__ == "__main__":
         action="store_true",
     )
     add_option(
-        parser, "--cert-dir", "Directory for generated files.", default="tmp/pki"
+        parser,
+        "--cert-dir",
+        "Directory for the certificates of the Krake components.",
+        default="tmp/pki",
+    )
+    add_option(
+        parser,
+        "--allow-anonymous",
+        "Enable the acceptance of all requests which have not been authenticated.",
+        action="store_true",
+    )
+    add_option(
+        parser,
+        "--keystone-authentication-enabled",
+        "Enable the Keystone authentication as one of the authentication mechanisms.",
+        action="store_true",
+    )
+    add_option(
+        parser,
+        "--keystone-authentication-endpoint",
+        "Endpoint to connect to the keystone service.",
+        default="http://localhost:5000/v3",
+    )
+    add_option(
+        parser,
+        "--static-authentication-enabled",
+        "Enable the static authentication as one of the authentication mechanisms.",
+        action="store_true",
+    )
+    add_option(
+        parser,
+        "--static-authentication-username",
+        "Name of the user that will authenticate through static authentication.",
+        default="system:admin",
+    )
+    add_option(
+        parser,
+        "--authorization-mode",
+        (
+            "Authorization mode to use for the requests sent to the API. "
+            "Only 'RBAC' should be used in production."
+        ),
+        default="always-allow",
+        choices=["RBAC", "always-allow", "always-deny"],
     )
     # FIXME: Krake host IP address is temporary loaded from environment
     #  variable "KRAKE_HOST" in the application controller.
@@ -246,6 +275,7 @@ if __name__ == "__main__":
     add_option(
         parser, "--etcd-peer-port", "Peer port for the etcd endpoint.", default=2380
     )
+    add_option(parser, "--docker-daemon-mtu", "The Docker daemon MTU.", default=1450)
     add_option(
         parser,
         "--worker-count",
@@ -280,9 +310,37 @@ if __name__ == "__main__":
             "Time in seconds for the Magnum Controller to ask the Magnum client again"
             "after a modification of a cluster."
         ),
-        default=0.1,
+        default=30,
     )
-    add_option(parser, "--docker-daemon-mtu", "The Docker daemon MTU.", default=1450)
+    add_option(
+        parser,
+        "--complete-hook-ca-dest",
+        (
+            "For the complete hook, set the path to the certificate, "
+            "which will be given to the Application."
+        ),
+        default="/etc/krake_ca/ca.pem",
+    )
+    add_option(
+        parser,
+        "--complete-hook-env-token",
+        (
+            "For the complete hook, set the name of the environment variable"
+            " that contain the value of the token,"
+            " which will be given to the Application."
+        ),
+        default="KRAKE_TOKEN",
+    )
+    add_option(
+        parser,
+        "--complete-hook-env-complete",
+        (
+            "For the complete hook, set the name of the environment variable"
+            " that contain the URL of the Krake API,"
+            " which will be given to the Application."
+        ),
+        default="KRAKE_COMPLETE_URL",
+    )
 
     args = vars(parser.parse_args())
     sys.exit(main(**args))

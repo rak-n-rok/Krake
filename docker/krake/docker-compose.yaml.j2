@@ -10,7 +10,7 @@
 #     $ docker/generate --config docker.yaml docker/krake
 #     $ docker-compose --file krake/docker-compose.yaml up --detach
 
-version: "3"
+version: "3.8"
 
 services:
 
@@ -44,8 +44,15 @@ services:
     depends_on:
       - krake-etcd
     command: python3 -m krake.api
-    volumes:
-      - {{ krake.config.path }}:/etc/krake:ro
+    secrets:
+      - source: api-config
+        target: "{{ krake.config.path }}/api.yaml"
+      - source: ca-cert
+        target: "{{ krake.cert_dir }}/ca.pem"
+      - source: api-server-cert
+        target: "{{ krake.cert_dir }}/system:api-server.pem"
+      - source: api-server-key
+        target: "{{ krake.cert_dir }}/system:api-server-key.pem"
 
   krake-ctrl-garbage-collector:
     image: krake:latest
@@ -54,8 +61,15 @@ services:
     depends_on:
       - krake-api
     command: python3 -m krake.controller.gc
-    volumes:
-      - {{ krake.config.path }}:/etc/krake:ro
+    secrets:
+      - source: gc-config
+        target: "{{ krake.config.path }}/garbage_collector.yaml"
+      - source: ca-cert
+        target: "{{ krake.cert_dir }}/ca.pem"
+      - source: gc-cert
+        target: "{{ krake.cert_dir }}/system:gc.pem"
+      - source: gc-key
+        target: "{{ krake.cert_dir }}/system:gc-key.pem"
 
   krake-ctrl-kubernetes-application:
     image: krake:latest
@@ -69,8 +83,15 @@ services:
       # environment variable "KRAKE_HOST", if present. This should
       # be removed when DNS service takes place.
       KRAKE_HOST: {{ api.ip }}
-    volumes:
-      - {{ krake.config.path }}:/etc/krake:ro
+    secrets:
+      - source: kubernetes-config
+        target: "{{ krake.config.path }}/kubernetes.yaml"
+      - source: ca-cert
+        target: "{{ krake.cert_dir }}/ca.pem"
+      - source: kubernetes-cert
+        target: "{{ krake.cert_dir }}/system:kubernetes.pem"
+      - source: kubernetes-key
+        target: "{{ krake.cert_dir }}/system:kubernetes-key.pem"
 
   krake-ctrl-scheduler:
     image: krake:latest
@@ -79,8 +100,15 @@ services:
     depends_on:
       - krake-api
     command: python3 -m krake.controller.scheduler
-    volumes:
-      - {{ krake.config.path }}:/etc/krake:ro
+    secrets:
+      - source: scheduler-config
+        target: "{{ krake.config.path }}/scheduler.yaml"
+      - source: ca-cert
+        target: "{{ krake.cert_dir }}/ca.pem"
+      - source: scheduler-cert
+        target: "{{ krake.cert_dir }}/system:scheduler.pem"
+      - source: scheduler-key
+        target: "{{ krake.cert_dir }}/system:scheduler-key.pem"
 
   krake-ctrl-magnum:
     image: krake:latest
@@ -89,8 +117,57 @@ services:
     depends_on:
       - krake-api
     command: python3 -m krake.controller.magnum
-    volumes:
-      - {{ krake.config.path }}:/etc/krake:ro
+    secrets:
+      - source: magnum-config
+        target: "{{ krake.config.path }}/magnum.yaml"
+      - source: ca-cert
+        target: "{{ krake.cert_dir }}/ca.pem"
+      - source: magnum-cert
+        target: "{{ krake.cert_dir }}/system:magnum.pem"
+      - source: magnum-key
+        target: "{{ krake.cert_dir }}/system:magnum-key.pem"
+
+# Configs are not supported by docker-compose without Swarm, but the certificates and
+# keys should not be shared between containers.
+# As as workaround, secrets are used for all files specific to each container.
+secrets:
+  ca-cert:
+    file: "{{ krake.cert_dir }}/ca.pem"
+
+  api-config:
+    file: "{{ krake.config.path }}/api.yaml"
+  api-server-cert:
+    file: "{{ krake.cert_dir }}/system:api-server.pem"
+  api-server-key:
+    file: "{{ krake.cert_dir }}/system:api-server-key.pem"
+
+  gc-config:
+    file: "{{ krake.config.path }}/garbage_collector.yaml"
+  gc-cert:
+    file: "{{ krake.cert_dir }}/system:gc.pem"
+  gc-key:
+    file: "{{ krake.cert_dir }}/system:gc-key.pem"
+
+  kubernetes-config:
+    file: "{{ krake.config.path }}/kubernetes.yaml"
+  kubernetes-cert:
+    file: "{{ krake.cert_dir }}/system:kubernetes.pem"
+  kubernetes-key:
+    file: "{{ krake.cert_dir }}/system:kubernetes-key.pem"
+
+  scheduler-config:
+    file: "{{ krake.config.path }}/scheduler.yaml"
+  scheduler-cert:
+    file: "{{ krake.cert_dir }}/system:scheduler.pem"
+  scheduler-key:
+    file: "{{ krake.cert_dir }}/system:scheduler-key.pem"
+
+  magnum-config:
+    file: "{{ krake.config.path }}/magnum.yaml"
+  magnum-cert:
+    file: "{{ krake.cert_dir }}/system:magnum.pem"
+  magnum-key:
+    file: "{{ krake.cert_dir }}/system:magnum-key.pem"
 
 {% if docker_daemon_mtu is defined %}
 networks:

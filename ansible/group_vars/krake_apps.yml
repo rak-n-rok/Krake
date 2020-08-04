@@ -2,9 +2,15 @@
 floating_ip: false
 flavor: S
 
+# OpenStack networks have MTU value of 1450
+docker_daemon_mtu: 1450
+
+# Krake Docker image
+krake_image_uid: 17890
+
 # Configuration parameters
 api_host: krake-api
-api_port: 8080
+api_port: 8443
 
 ## etcd database parameters
 # address and port for the etcd container
@@ -12,13 +18,26 @@ etcd_host: krake-db
 etcd_port: 2379
 etcd_peer_port: 2380
 
-# Set TLS to enabled on all Krake components.
-# The certificates have to be added in '/etc/krake/certs' on the VM.
-enable_tls: false
+# Authentication-related parameters
+enable_tls: true
+cert_dir: '/etc/krake/certs'
+allow_anonymous: false
+keystone_authentication_enabled: false
+keystone_authentication_endpoint: "http://localhost:5000/v3"
+static_authentication_enabled: false
+static_authentication_username: "system:admin"
+
+# Authorization-related parameters
+authorization_mode: RBAC
 
 ## Controllers parameters
 worker_count: 5
 debounce: 1.0
+reschedule_after: 60
+stickiness: 0.1
+poll_interval: 30
 
-# OpenStack networks have MTU value of 1450
-docker_daemon_mtu: 1450
+# "Complete" Hook-related parameters
+# complete_hook_ca_dest: "/etc/krake_ca/ca.pem"
+# complete_hook_env_token: "KRAKE_TOKEN"
+# complete_hook_env_complete: "KRAKE_COMPLETE_URL"
