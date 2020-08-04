@@ -5,6 +5,11 @@ from .hooks import (
     unregister_service,
     KubernetesObserver,
     merge_status,
+    get_kubernetes_resource_idx,
+    listen,
+    Hook,
+    update_last_applied_manifest_from_resp,
+    update_last_observed_manifest_from_resp,
 )
 from .kubernetes import KubernetesController, KubernetesClient
 
@@ -15,4 +20,9 @@ __all__ = [
     "unregister_service",
     "KubernetesObserver",
     "merge_status",
+    "get_kubernetes_resource_idx",
+    "listen",
+    "Hook",
+    "update_last_applied_manifest_from_resp",
+    "update_last_observed_manifest_from_resp",
 ]

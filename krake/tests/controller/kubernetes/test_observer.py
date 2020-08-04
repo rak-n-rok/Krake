@@ -11,13 +11,14 @@ from krake.controller.kubernetes.hooks import (
     update_last_applied_manifest_from_spec,
     update_last_applied_manifest_from_resp,
     update_last_observed_manifest_from_resp,
+    generate_default_observer_schema,
 )
 from krake.controller.kubernetes.kubernetes import KubernetesClient
 from krake.data.core import resource_ref
 from krake.data.kubernetes import Application, ApplicationState
 from krake.controller.kubernetes import KubernetesController, KubernetesObserver
 from krake.client import Client
-from krake.test_utils import server_endpoint, serialize_k8s_object
+from krake.test_utils import server_endpoint, get_first_container, serialize_k8s_object
 
 from tests.factories.fake import fake
 from tests.factories.kubernetes import (
@@ -40,10 +41,6 @@ from . import (
     initial_last_observed_manifest_service,
     initial_last_observed_manifest,
 )
-
-
-def get_first_container(deployment):
-    return deployment["spec"]["template"]["spec"]["containers"][0]
 
 
 async def test_reception_for_observer(aiohttp_server, config, db, loop):
@@ -186,7 +183,7 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
         status__state=ApplicationState.RUNNING,
         status__running_on=resource_ref(cluster),
         spec__manifest=nginx_manifest,
-        spec__observer_schema=custom_observer_schema,
+        status__mangled_observer_schema=custom_observer_schema,
         status__last_observed_manifest=initial_last_observed_manifest,
     )
 
@@ -341,7 +338,7 @@ async def test_observer_on_status_update(aiohttp_server, db, config, loop):
     app = ApplicationFactory(
         status__state=ApplicationState.RUNNING,
         status__running_on=resource_ref(cluster),
-        spec__observer_schema=custom_observer_schema,
+        status__mangled_observer_schema=custom_observer_schema,
         status__last_observed_manifest=initial_last_observed_manifest,
         spec__manifest=nginx_manifest,
     )
@@ -571,32 +568,17 @@ async def test_observer_on_status_update_mangled(aiohttp_server, db, config, loo
         # Remove from dict to prevent cancellation in KubernetesController.stop_observer
         observer, _ = controller.observers.pop(app.metadata.uid)
 
-        # Modify the response of the cluster to match the Application specific token and
-        # endpoint that are stored in the Observer
-        deploy_mangled_response = deepcopy(deployment_response)
-        first_container = get_first_container(deploy_mangled_response)
-        first_container["env"].append(
-            {"name": "KRAKE_TOKEN", "value": observer.resource.status.token}
-        )
-        app_container = get_first_container(
-            observer.resource.status.last_observed_manifest[0]
-        )
-        first_container["env"].append(
-            {"name": "KRAKE_COMPLETE_URL", "value": app_container["env"][1]["value"]}
+        assert "env" in get_first_container(
+            observer.resource.status.mangled_observer_schema[0]
         )
 
-        actual_state = 0
+        actual_state = 1
 
         # The observer should not call on_res_update
         await observer.observe_resource()
         assert calls_to_res_update == 0
 
-        actual_state = 1
-
-        # Actual resource, with container image changed
-        updated_deployment_response = deepcopy(deploy_mangled_response)
-        first_container = get_first_container(updated_deployment_response)
-        first_container["image"] = "nginx:1.6"
+        actual_state = 2
 
         await observer.observe_resource()
         assert calls_to_res_update == 1
@@ -604,10 +586,12 @@ async def test_observer_on_status_update_mangled(aiohttp_server, db, config, loo
         updated = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
         )
-        assert updated.spec == app.spec
-        # Check that the hook is present in the stored Application
+        assert updated.spec.manifest == app.spec.manifest
+        # Check that the hook is present and observed in the stored Application
         assert "env" in get_first_container(updated.status.last_observed_manifest[0])
+        assert "env" in get_first_container(updated.status.mangled_observer_schema[0])
         assert updated.metadata.created == app.metadata.created
+        # Check update of observed image
         first_container = get_first_container(updated.status.last_observed_manifest[0])
         assert first_container["image"] == "nginx:1.6"
 
@@ -652,6 +636,7 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
     State (2):
         the Service is deleted by the API and removed from the observer schema. Only
         the Deployment is present, with the version "1.6"
+
     """
     routes = web.RouteTableDef()
 
@@ -802,8 +787,6 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
         # Status should not be updated by observer
         await check_observer_does_not_update(obs, app, db)
 
-        # TODO: Check the observer_schema used by the observer ?
-
 
 async def test_observer_on_delete(aiohttp_server, config, db, loop):
     """Test the behavior of the Kubernetes Controller and Observer when an application
@@ -846,7 +829,7 @@ async def test_observer_on_delete(aiohttp_server, config, db, loop):
     app = ApplicationFactory(
         metadata__deleted=fake.date_time(),
         status__state=ApplicationState.RUNNING,
-        spec__observer_schema=custom_observer_schema,
+        status__mangled_observer_schema=custom_observer_schema,
         status__last_observed_manifest=initial_last_observed_manifest,
         status__running_on=resource_ref(cluster),
         spec__manifest=nginx_manifest,
@@ -910,13 +893,14 @@ def test_update_last_applied_manifest_from_spec():
 
     # State (0): last_applied_manifest` is empty. It should be initialized to
     # spec.manifest
+    generate_default_observer_schema(app)
     update_last_applied_manifest_from_spec(app)
     assert app.status.last_applied_manifest == app.spec.manifest
 
     # State (1): The Deployment's manifest file specifies a value for the previously
     # unset `revisionHistoryLimit` and `progressDeadlineSeconds`. Only the first one is
     # observed.
-    app.spec.observer_schema[0]["spec"]["revisionHistoryLimit"] = None
+    app.status.mangled_observer_schema[0]["spec"]["revisionHistoryLimit"] = None
     app.spec.manifest[0]["spec"]["revisionHistoryLimit"] = 20
     app.spec.manifest[0]["spec"]["progressDeadlineSeconds"] = 300
 
@@ -1004,6 +988,8 @@ def test_update_last_applied_manifest_from_resp(loop):
         ],
         status__last_applied_manifest=[deployment_manifest, service_manifest],
     )
+
+    generate_default_observer_schema(app)
 
     # Create k8s objects from the k8s response
     copy_deployment_response = deepcopy(deployment_response)
@@ -1127,6 +1113,8 @@ def test_update_last_observed_manifest_from_resp(loop):
         spec__manifest=nginx_manifest,
         spec__observer_schema=custom_observer_schema,
     )
+
+    generate_default_observer_schema(app)
 
     # Create k8s object from the k8s response
     copy_deployment_response = deepcopy(deployment_response)

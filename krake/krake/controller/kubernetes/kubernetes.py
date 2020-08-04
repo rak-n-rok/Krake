@@ -23,7 +23,13 @@ from typing import NamedTuple, Tuple
 from .hooks import listen, Hook
 from krake.client.kubernetes import KubernetesApi
 from krake.controller import Controller, Reflector, ControllerError
-from krake.controller.kubernetes.hooks import register_observer, unregister_observer
+from krake.controller.kubernetes.hooks import (
+    register_observer,
+    unregister_observer,
+    get_kubernetes_resource_idx,
+    update_last_applied_manifest_from_spec,
+    generate_default_observer_schema,
+)
 from krake.data.core import ReasonCode, resource_ref, Reason
 from krake.data.kubernetes import ApplicationState
 from krake.utils import camel_to_snake_case, cached_property
@@ -71,6 +77,10 @@ class ResourceID(NamedTuple):
         )
 
 
+class ModifiedResourceException(Exception):
+    pass
+
+
 class ResourceDelta(NamedTuple):
     """Description of the difference between the resource of two Kubernetes
     application.
@@ -104,25 +114,176 @@ class ResourceDelta(NamedTuple):
             ResourceDelta: Difference in resources between specification and
             status.
 
+        This function loops over all observed resources:
+        - If the resource is not present in the last_observed_manifest, it has to be
+        created.
+        - If the resource is present in both last_applied_manifest and
+        last_observed_manifest, then the function checks if it has been modified.
+
+        Finally, if a resource is present in last_observed_manifest but not in the
+        observer_schema, it should be deleted.
+
         """
-        desired = {
-            ResourceID.from_resource(resource): resource
-            for resource in app.status.last_applied_manifest
-        }
-        current = {
-            ResourceID.from_resource(resource): resource
-            for resource in (app.status.last_observed_manifest or [])
-        }
 
-        deleted = [current[rid] for rid in set(current) - set(desired)]
+        def _calculate_modified_dict(observed, desired, current):
+            """Together with :func:`_calculate_modified_list``, this function is called
+            recursively to check if the observed fields of a resource have been modified
+            (difference between desired and current)
 
-        new = [desired[rid] for rid in set(desired) - set(current)]
+            Args:
+                observed (dict): partial ``observer_schema`` of a resource
+                desired (dict): partial ``last_applied_manifest`` of a resource
+                current (dict): partial ``last_observed_manifest`` of a resource
 
-        modified = [
-            desired[rid]
-            for rid in set(desired) & set(current)
-            if desired[rid]["spec"] != current[rid]["spec"]
-        ]
+            Raises:
+                ModifiedResourceException: If there exists a difference in the observed
+                    valued between the desired and the current resource
+
+            This function go through all observed fields, and check their value in the
+            desired and current dictionary
+
+            """
+            for key, value in observed.items():
+
+                if key not in current:
+                    # If the key is observed but not in the current dictionary, we
+                    # should trigger an update of the resource to get its value from the
+                    # Kubernetes API.
+                    raise ModifiedResourceException(
+                        f"{key} not in current dict {current}"
+                    )
+
+                if key not in desired:
+                    # If the key is observed but not in the desired dictionary, we
+                    # should trigger an update of the resource to get its value from the
+                    # Kubernetes API.
+                    raise ModifiedResourceException(
+                        f"{key} not in desired dict {desired}"
+                    )
+
+                else:
+                    if isinstance(value, dict):
+                        _calculate_modified_dict(
+                            observed[key], desired[key], current[key]
+                        )
+                    elif isinstance(value, list):
+                        _calculate_modified_list(
+                            observed[key], desired[key], current[key]
+                        )
+                    else:
+                        if desired[key] != current[key]:
+                            raise ModifiedResourceException(
+                                f"current {key} not matching desired value.",
+                                f" desired: {desired} - current: {current}",
+                            )
+
+        def _calculate_modified_list(observed, desired, current):
+            """Together with :func:`_calculate_modified_dict``, this function is called
+            recursively to check if the observed fields of a resource have been modified
+            (difference between desired and current)
+
+            Args:
+                observed (list): partial ``observer_schema`` of a resource
+                desired (list): partial ``last_applied_manifest`` of a resource
+                current (list): partial ``last_observed_manifest`` of a resource
+
+            Raises:
+                ModifiedResourceException: If there exists a difference in the observed
+                    valued between the desired and the current resource
+
+            This function go through all observed fields, and check their value in the
+            desired and current list
+
+            """
+            for idx, value in enumerate(observed[:-1]):
+
+                # Logical XOR
+                if bool(idx >= len(current)) != bool(idx >= len(desired)):
+                    # If an observed element is present in only one of the dictionary,
+                    # we consider the list as modified.
+                    raise ModifiedResourceException(
+                        "Observed element not present in one of the manifest"
+                    )
+
+                elif idx < len(current) and idx < len(desired):
+
+                    if isinstance(value, dict):
+                        _calculate_modified_dict(
+                            observed[idx], desired[idx], current[idx]
+                        )
+                    elif isinstance(value, list):
+                        _calculate_modified_list(
+                            observed[idx], desired[idx], current[idx]
+                        )
+                    else:
+                        if desired[idx] != current[idx]:
+                            raise ModifiedResourceException(
+                                f"current index {idx} not matching desired value.",
+                                f"desired: {desired} - current: {current}",
+                            )
+
+            # Check current list length against authorized list length
+            if (
+                current[-1]["observer_schema_list_current_length"]
+                < observed[-1]["observer_schema_list_min_length"]
+                or current[-1]["observer_schema_list_current_length"]
+                > observed[-1]["observer_schema_list_max_length"]
+            ):
+                raise ModifiedResourceException(
+                    f"Invalid list length for list {current}"
+                )
+
+        new = []
+        deleted = []
+        modified = []
+
+        for observed_resource in app.status.mangled_observer_schema:
+
+            desired_idx = get_kubernetes_resource_idx(
+                app.status.last_applied_manifest,
+                observed_resource["apiVersion"],
+                observed_resource["kind"],
+                observed_resource["metadata"]["name"],
+            )
+            desired_resource = app.status.last_applied_manifest[desired_idx]
+
+            current_resource = None
+            with suppress(IndexError):
+                current_idx = get_kubernetes_resource_idx(
+                    app.status.last_observed_manifest,
+                    observed_resource["apiVersion"],
+                    observed_resource["kind"],
+                    observed_resource["metadata"]["name"],
+                )
+                current_resource = app.status.last_observed_manifest[current_idx]
+
+            if not current_resource:
+                # If the resource is not present in the last_observed_manifest, it has
+                # to be created.
+                new.append(desired_resource)
+            else:
+                # If the resource is present in both last_applied_manifest and
+                # last_observed_manifest, check if it has been modified.
+                try:
+                    _calculate_modified_dict(
+                        observed_resource, desired_resource, current_resource
+                    )
+                except ModifiedResourceException:
+                    modified.append(desired_resource)
+
+        # Check if there are resources which were previously created (i.e. present in
+        # last_observed_manifest) and which should be deleted (not present in
+        # last_applied_manifest nor observer_schema)
+        for current_resource in app.status.last_observed_manifest:
+            try:
+                get_kubernetes_resource_idx(
+                    app.status.last_applied_manifest,
+                    current_resource["apiVersion"],
+                    current_resource["kind"],
+                    current_resource["metadata"]["name"],
+                )
+            except IndexError:
+                deleted.append(current_resource)
 
         return cls(new=tuple(new), deleted=tuple(deleted), modified=tuple(modified))
 
@@ -322,7 +483,6 @@ class KubernetesController(Controller):
         logger.debug("Handle %r", app)
 
         copy = deepcopy(app)
-
         if app.metadata.deleted:
             # Delete the Application
             await listen.hook(
@@ -422,10 +582,13 @@ class KubernetesController(Controller):
                 namespace=app.status.running_on.namespace,
                 name=app.status.running_on.name,
             )
+            # Loop over a copy of the `last_observed_manifest` as we modify delete
+            # resources from the dictionary in the ResourcePostDelete hook
+            last_observed_manifest_copy = deepcopy(app.status.last_observed_manifest)
             async with KubernetesClient(
                 cluster.spec.kubeconfig, cluster.spec.custom_resources
             ) as kube:
-                for resource in app.status.last_observed_manifest:
+                for resource in last_observed_manifest_copy:
                     await listen.hook(
                         Hook.ResourcePreDelete,
                         app=app,
@@ -446,8 +609,6 @@ class KubernetesController(Controller):
             app.metadata.owners.remove(app.status.running_on)
 
         # Clear manifest in status
-        app.status.last_observed_manifest = None
-        app.status.last_applied_manifest = None
         app.status.running_on = None
 
     async def _reconcile_application(self, app):
@@ -457,7 +618,8 @@ class KubernetesController(Controller):
             )
 
         # Mangle desired spec resource by Mangling hook
-        app.status.last_applied_manifest = deepcopy(app.spec.manifest)
+        generate_default_observer_schema(app)
+        update_last_applied_manifest_from_spec(app)
         await listen.hook(
             Hook.ApplicationMangling,
             app=app,
@@ -466,7 +628,13 @@ class KubernetesController(Controller):
             config=self.hooks,
         )
 
-        delta = ResourceDelta.calculate(app)
+        if not app.status.last_observed_manifest:
+            # Initial creation of the application: create all resources
+            delta = ResourceDelta(
+                new=tuple(app.status.last_applied_manifest), modified=(), deleted=()
+            )
+        else:
+            delta = ResourceDelta.calculate(app)
 
         if not delta:
             logger.info(
@@ -575,9 +743,6 @@ class KubernetesController(Controller):
                     response=resp,
                 )
 
-        # Update resource in application status
-        app.status.last_observed_manifest = deepcopy(app.status.last_applied_manifest)
-
         # Application is now running on the scheduled cluster
         app.status.running_on = app.status.scheduled_to
 
@@ -603,7 +768,8 @@ class KubernetesController(Controller):
         await self._delete_manifest(app)
 
         # Mangle desired spec resource by Mangling hook
-        app.status.last_applied_manifest = deepcopy(app.spec.manifest)
+        generate_default_observer_schema(app)
+        update_last_applied_manifest_from_spec(app)
         await listen.hook(
             Hook.ApplicationMangling,
             app=app,
@@ -616,9 +782,6 @@ class KubernetesController(Controller):
             new=tuple(app.status.last_applied_manifest), modified=(), deleted=()
         )
         await self._apply_manifest(app, delta)
-
-        # Update resource in application status
-        app.status.last_observed_manifest = deepcopy(app.status.last_applied_manifest)
 
         # Transition into "RUNNING" state
         app.status.state = ApplicationState.RUNNING

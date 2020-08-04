@@ -18,6 +18,7 @@ from typing import NamedTuple
 import OpenSSL
 import yarl
 from krake.controller import Observer, ControllerError
+
 from krake.utils import camel_to_snake_case
 from kubernetes_asyncio.client.rest import ApiException
 from yarl import URL
@@ -199,6 +200,541 @@ async def unregister_service(app, cluster, resource, response):
         pass
 
 
+@listen.on(Hook.ResourcePostDelete)
+async def remove_resource_from_last_observed_manifest(app, cluster, resource, response):
+    """Remove a given resource from the last_observed_manifest after its deletion
+
+    Args:
+        app (krake.data.kubernetes.Application): Application the service belongs to
+        cluster (krake.data.kubernetes.Cluster): The cluster on which the
+            application is running
+        resource (dict): Kubernetes object description as specified in the
+            specification of the application.
+        response (kubernetes_asyncio.client.V1Status): Response of the
+            Kubernetes API
+
+    """
+    try:
+        idx = get_kubernetes_resource_idx(
+            app.status.last_observed_manifest,
+            resource["apiVersion"],
+            resource["kind"],
+            resource["metadata"]["name"],
+        )
+    except IndexError:
+        return
+
+    app.status.last_observed_manifest.pop(idx)
+
+
+@listen.on(Hook.ResourcePostCreate)
+@listen.on(Hook.ResourcePostUpdate)
+def update_last_applied_manifest_from_resp(app, cluster, resource, response):
+    """Hook run after the creation or update of an application in order to update the
+    `status.last_applied_manifest` using the k8s response.
+
+    Args:
+        app (krake.data.kubernetes.Application): Application the service belongs to
+        cluster (krake.data.kubernetes.Cluster): The cluster on which the
+            application is running - Not Used
+        resource (dict): Kubernetes object description as specified in the
+            specification of the application. - Not Used
+        response (kubernetes_asyncio.client.V1Status): Response of the Kubernetes API
+
+    After a Kubernetes resource has been created/updated, the
+    `status.last_applied_manifest` has to be updated. All fields already initialized
+    (either from the mangling of `spec.manifest`, or by a previous call to this
+    function) should be left untouched. Only observed fields which are not present in
+    `status.last_applied_manifest` should be initialized.
+
+    """
+
+    def update_last_applied_manifest_dict_from_resp(
+        last_applied_manifest, observer_schema, response
+    ):
+        """Together with :func:``update_last_applied_manifest_list_from_resp``, this
+        function is called recursively to update a partial ``last_applied_manifest``
+        from a partial Kubernetes response
+
+        Args:
+            last_applied_manifest (dict): partial ``last_applied_manifest`` being
+                updated
+            observer_schema (dict): partial ``observer_schema``
+            response (dict): partial response from the Kubernetes API.
+
+        Raises:
+            KeyError: If the an observed field is not present in the Kubernetes response
+
+        This function go through all observed fields, and initialized their value in
+        last_applied_manifest if they are not yet present
+
+        """
+        for key, value in observer_schema.items():
+
+            # Keys in the response are in camelCase
+            camel_key = camel_to_snake_case(key)
+
+            if camel_key not in response:
+                # An observed key should always be present in the k8s response
+                raise KeyError(
+                    f"Observed key {camel_key} is not present in response {response}"
+                )
+
+            if isinstance(value, dict):
+                if key not in last_applied_manifest:
+                    # The dictionary is observed, but not present in
+                    # last_applied_manifest
+                    last_applied_manifest[key] = {}
+
+                update_last_applied_manifest_dict_from_resp(
+                    last_applied_manifest[key],
+                    observer_schema[key],
+                    response[camel_key],
+                )
+
+            elif isinstance(value, list):
+                if key not in last_applied_manifest:
+                    # The list is observed, but not present in last_applied_manifest
+                    last_applied_manifest[key] = []
+
+                update_last_applied_manifest_list_from_resp(
+                    last_applied_manifest[key],
+                    observer_schema[key],
+                    response[camel_key],
+                )
+
+            elif key not in last_applied_manifest:
+                # If key not present in last_applied_manifest, and value is neither a
+                # dict nor a list, simply add it.
+                last_applied_manifest[key] = response[camel_key]
+
+    def update_last_applied_manifest_list_from_resp(
+        last_applied_manifest, observer_schema, response
+    ):
+        """Together with :func:``update_last_applied_manifest_dict_from_resp``, this
+        function is called recursively to update a partial ``last_applied_manifest``
+        from a partial Kubernetes response
+
+        Args:
+            last_applied_manifest (list): partial ``last_applied_manifest`` being
+                updated
+            observer_schema (list): partial ``observer_schema``
+            response (list): partial response from the Kubernetes API.
+
+        This function go through all observed fields, and initialized their value in
+        last_applied_manifest if they are not yet present
+
+        """
+        # Looping over the observed resource, except the last element which is the
+        # special control dictionary
+        for idx, val in enumerate(observer_schema[:-1]):
+
+            if idx >= len(response):
+                # Element is observed but not present in k8s response, so following
+                # elements will also not exist.
+                #
+                # This doesn't raise an Exception as observing the element of a list
+                # doesn't ensure its presence. The list length is control by the special
+                # control dictionary
+                return
+
+            if isinstance(val, dict):
+                if idx >= len(last_applied_manifest):
+                    # The dict is observed, but not present in last_applied_manifest
+                    last_applied_manifest.append({})
+
+                update_last_applied_manifest_dict_from_resp(
+                    last_applied_manifest[idx], observer_schema[idx], response[idx]
+                )
+
+            elif type(response[idx]) == list:
+                if idx >= len(last_applied_manifest):
+                    # The list is observed, but not present in last_applied_manifest
+                    last_applied_manifest.append([])
+
+                update_last_applied_manifest_list_from_resp(
+                    last_applied_manifest[idx], observer_schema[idx], response[idx]
+                )
+
+            elif idx >= len(last_applied_manifest):
+                # Element is not yet present in last_applied_manifest. Adding it.
+                last_applied_manifest.append(response[idx])
+
+    if isinstance(response, dict):
+        # The Kubernetes API couldn't deserialize the k8s response into an obect
+        resp = response
+    else:
+        # The Kubernetes API deserialized the k8s response into an obect
+        resp = response.to_dict()
+
+    idx_applied = get_kubernetes_resource_idx(
+        app.status.last_applied_manifest,
+        resp["api_version"],
+        resp["kind"],
+        resp["metadata"]["name"],
+    )
+
+    idx_observed = get_kubernetes_resource_idx(
+        app.status.mangled_observer_schema,
+        resp["api_version"],
+        resp["kind"],
+        resp["metadata"]["name"],
+    )
+
+    update_last_applied_manifest_dict_from_resp(
+        app.status.last_applied_manifest[idx_applied],
+        app.status.mangled_observer_schema[idx_observed],
+        resp,
+    )
+
+
+@listen.on(Hook.ResourcePostCreate)
+@listen.on(Hook.ResourcePostUpdate)
+def update_last_observed_manifest_from_resp(app, cluster, resource, response):
+    """Handler to run after the creation or update of a Kubernetes resource to update
+    the last_observed_manifest from the response of the Kubernetes API.
+
+    Args:
+        app (krake.data.kubernetes.Application): Application the service belongs to
+        cluster (krake.data.kubernetes.Cluster): The cluster on which the
+            application is running
+        resource (dict): Kubernetes object description as specified in the
+            specification of the application.
+        response (kubernetes_asyncio.client.V1Service): Response of the
+            Kubernetes API
+
+    The target last_observed_manifest holds the value of all observed fields plus the
+    special control dictionaries for the list length
+
+    """
+    if isinstance(response, dict):
+        # The Kubernetes API couldn't deserialize the k8s response into an obect
+        resp = response
+    else:
+        # The Kubernetes API deserialized the k8s response into an obect
+        resp = response.to_dict()
+
+    try:
+        idx_observed = get_kubernetes_resource_idx(
+            app.status.mangled_observer_schema,
+            resp["api_version"],
+            resp["kind"],
+            resp["metadata"]["name"],
+        )
+    except IndexError:
+        # All created resources should be observed
+        raise
+
+    try:
+        idx_last_observed = get_kubernetes_resource_idx(
+            app.status.last_observed_manifest,
+            resp["api_version"],
+            resp["kind"],
+            resp["metadata"]["name"],
+        )
+    except IndexError:
+        # If the resource is not yes present in last_observed_manifest, append it.
+        idx_last_observed = len(app.status.last_observed_manifest)
+        app.status.last_observed_manifest.append({})
+
+    # Overwrite the last_observed_manifest for this resource
+    app.status.last_observed_manifest[
+        idx_last_observed
+    ] = update_last_observed_manifest_dict(
+        app.status.mangled_observer_schema[idx_observed], resp
+    )
+
+
+def update_last_observed_manifest_dict(observed_resource, response):
+    """Together with :func:``update_last_observed_manifest_list``, recursively
+    crafts the ``last_observed_manifest`` from the Kubernetes :attr:``response``.
+
+    Args:
+        observed_resource (dict): The schema to observe for the partial given resource
+        response (dict): The partial Kubernetes response for this resource.
+
+    Raises:
+        KeyError: If an observed key is not present in the Kubernetes response
+
+    Returns:
+        dict: The dictionary of observed keys and their value
+
+    Get the value of all observed fields from the Kubernetes response
+    """
+    res = {}
+    for key, value in observed_resource.items():
+
+        camel_key = camel_to_snake_case(key)
+        if camel_key not in response:
+            raise KeyError(
+                f"Observed key {camel_key} is not present in response {response}"
+            )
+
+        if isinstance(value, dict):
+            res[key] = update_last_observed_manifest_dict(value, response[camel_key])
+
+        elif isinstance(value, list):
+            res[key] = update_last_observed_manifest_list(value, response[camel_key])
+
+        else:
+            res[key] = response[camel_key]
+
+    return res
+
+
+def update_last_observed_manifest_list(observed_resource, response):
+    """Together with :func:``update_last_observed_manifest_dict``, recursively
+    crafts the ``last_observed_manifest`` from the Kubernetes :attr:``response``.
+
+    Args:
+        observed_resource (list): the schema to observe for the partial given resource
+        response (list): the partial Kubernetes response for this resource.
+
+    Returns:
+        list: The list of observed elements, plus the special list length control
+            dictionary
+
+    Get the value of all observed elements from the Kubernetes response
+    """
+
+    if not response:
+        return [{"observer_schema_list_current_length": 0}]
+
+    res = []
+    # Looping over the observed resource, except the last element which is the special
+    # control dictionary
+    for idx, val in enumerate(observed_resource[:-1]):
+
+        if idx >= len(response):
+            # Element is not present in the Kubernetes response, nothing more to do
+            break
+
+        if type(response[idx]) == dict:
+            res.append(update_last_observed_manifest_dict(val, response[idx]))
+
+        elif type(response[idx]) == list:
+            res.append(update_last_observed_manifest_list(val, response[idx]))
+
+        else:
+            res.append(response[idx])
+
+    # Append the special control dictionary to the list
+    res.append({"observer_schema_list_current_length": len(response)})
+
+    return res
+
+
+def update_last_applied_manifest_from_spec(app):
+    """Update the status.last_applied_manifest of an application from spec.manifests
+
+    Args:
+        app (krake.data.kubernetes.Application): Application to update
+
+    This function is called on application creation and updates. The
+    last_applied_manifest of an application is initialized as a copy of spec.manifest,
+    and is augmented by all known observed fields not yet initialized (i.e. all observed
+    fields or resources which are present in the current last_applied_manifest but not
+    in the spec.manifest)
+
+    """
+
+    def update_last_applied_manifest_dict_from_spec(
+        resource_status_new, resource_status_old, resource_observed
+    ):
+        """Together with :func:``update_last_applied_manifest_list_from_spec``, this
+        function is called recursively to update a partial ``last_applied_manifest``
+
+        Args:
+            resource_status_new (dict): partial ``last_applied_manifest`` being updated
+            resource_status_old (dict): partial of the current ``last_applied_manifest``
+            resource_observed (dict): partial observer_schema for the manifest file
+                being updated
+
+        """
+        for key, value in resource_observed.items():
+
+            if key not in resource_status_old:
+                continue
+
+            if key in resource_status_new:
+
+                if isinstance(value, dict):
+                    update_last_applied_manifest_dict_from_spec(
+                        resource_status_new[key],
+                        resource_status_old[key],
+                        resource_observed[key],
+                    )
+
+                elif isinstance(value, dict):
+                    update_last_applied_manifest_list_from_spec(
+                        resource_status_new[key],
+                        resource_status_old[key],
+                        resource_observed[key],
+                    )
+
+            else:
+                # If the key is not present the spec.manifest, we first need to
+                # initialize it
+
+                if isinstance(value, dict):
+                    resource_status_new[key] = {}
+                    update_last_applied_manifest_dict_from_spec(
+                        resource_status_new[key],
+                        resource_status_old[key],
+                        resource_observed[key],
+                    )
+
+                elif isinstance(value, dict):
+                    resource_status_new[key] = []
+                    update_last_applied_manifest_list_from_spec(
+                        resource_status_new[key],
+                        resource_status_old[key],
+                        resource_observed[key],
+                    )
+
+                else:
+                    resource_status_new[key] = resource_status_old[key]
+
+    def update_last_applied_manifest_list_from_spec(
+        resource_status_new, resource_status_old, resource_observed
+    ):
+        """Together with :func:``update_last_applied_manifest_dict_from_spec``, this
+        function is called recursively to update a partial ``last_applied_manifest``
+
+        Args:
+            resource_status_new (list): partial ``last_applied_manifest`` being updated
+            resource_status_old (list): partial of the current ``last_applied_manifest``
+            resource_observed (list): partial observer_schema for the manifest file
+                being updated
+
+        """
+
+        # Looping over the observed resource, except the last element which is the
+        # special control dictionary
+        for idx, val in enumerate(resource_observed[:-1]):
+
+            if idx >= len(resource_status_old):
+                # The element in not in the current last_applied_manifest, and neither
+                # is the rest of the list
+                break
+
+            if idx < resource_status_new:
+                # The element is present in spec.manifest and in the current
+                # last_applied_manifest. Updating observed fields
+
+                if isinstance(val, dict):
+                    update_last_applied_manifest_dict_from_spec(
+                        resource_status_new[idx],
+                        resource_status_old[idx],
+                        resource_observed[idx],
+                    )
+
+                elif isinstance(val, list):
+                    update_last_applied_manifest_list_from_spec(
+                        resource_status_new[idx],
+                        resource_status_old[idx],
+                        resource_observed[idx],
+                    )
+
+            else:
+                # If the element is not presnt in the spec.manifest, we first have to
+                # initiliaze it.
+
+                if isinstance(val, dict):
+                    resource_status_new.append({})
+                    update_last_applied_manifest_dict_from_spec(
+                        resource_status_new[idx],
+                        resource_status_old[idx],
+                        resource_observed[idx],
+                    )
+
+                elif isinstance(val, list):
+                    resource_status_new.append([])
+                    update_last_applied_manifest_list_from_spec(
+                        resource_status_new[idx],
+                        resource_status_old[idx],
+                        resource_observed[idx],
+                    )
+
+                else:
+                    resource_status_new.append(resource_status_old[idx])
+
+    # The new last_applied_manifest is initialized as a copy of the spec.manifest, and
+    # augmented by all observed fields which are present in the current
+    # last_applied_manifest but not in the original spec.manifest
+    new_last_applied_manifest = deepcopy(app.spec.manifest)
+
+    # Loop over observed resources and observed fields, and check if they should be
+    # added to the new last_applied_manifest (i.e. present in the current
+    # last_applied_manifest but not in spec.manifest)
+    for resource_observed in app.status.mangled_observer_schema:
+
+        # If the resource is not present in the current last_applied_manifest, there is
+        # nothing to do. Whether the resource was initialized by spec.manifest doesn't
+        # matter.
+        try:
+            idx_status_old = get_kubernetes_resource_idx(
+                app.status.last_applied_manifest,
+                resource_observed["apiVersion"],
+                resource_observed["kind"],
+                resource_observed["metadata"]["name"],
+            )
+        except IndexError:
+            continue
+
+        # As the resource is present in the current last_applied_manifest, we need to go
+        # through it to check if observed fields should be set to their current value
+        # (i.e. fields are present in the current last_applied_manifest, but not in
+        # spec.manifest)
+        try:
+            idx_status_new = get_kubernetes_resource_idx(
+                new_last_applied_manifest,
+                resource_observed["apiVersion"],
+                resource_observed["kind"],
+                resource_observed["metadata"]["name"],
+            )
+        except IndexError:
+            # The resource is not present in the spec.manifest.
+            new_last_applied_manifest.append({})
+            idx_status_new = len(new_last_applied_manifest) - 1
+        finally:
+            update_last_applied_manifest_dict_from_spec(
+                new_last_applied_manifest[idx_status_new],
+                app.status.last_applied_manifest[idx_status_old],
+                resource_observed,
+            )
+
+    app.status.last_applied_manifest = new_last_applied_manifest
+
+
+def get_kubernetes_resource_idx(manifest, resource_api, resource_kind, resource_name):
+    """Get a resource identified by its resource api, kind and name, from a manifest
+    file
+
+    Args:
+        manifest (dict): Manifest file to get the resource from
+        resource_api (str): API Version of the resource to find
+        resource_kind (str): Kind of the resource to find
+        resource_name (str): Name of the resource to find
+
+    Raises:
+        IndexError: If the resource is not present in the manifest
+
+    Returns:
+        int: Position of the resource in the manifest
+
+    """
+    for idx, found_resource in enumerate(manifest):
+        if (
+            found_resource["apiVersion"] == resource_api
+            and found_resource["kind"] == resource_kind
+            and found_resource["metadata"]["name"] == resource_name
+        ):
+            return idx
+
+    raise IndexError
+
+
 class KubernetesObserver(Observer):
     """Observer specific for Kubernetes Applications. One observer is created for each
     Application managed by the Controller, but not one per Kubernetes resource
@@ -253,15 +789,19 @@ class KubernetesObserver(Observer):
         status = deepcopy(app.status)
         status.last_observed_manifest = []
 
-        # For each kubernetes resource of the Application,
+        # For each observed kubernetes resource of the Application,
         # get its current status on the cluster.
-        for resource in app.status.last_observed_manifest:
+        for observed_resource in app.status.mangled_observer_schema:
             kube = self.kubernetes_client(self.cluster.spec.kubeconfig)
             async with kube:
                 try:
-                    resource_api = await kube.get_resource_api(resource["kind"])
+                    resource_api = await kube.get_resource_api(
+                        observed_resource["kind"]
+                    )
                     resp = await resource_api.read(
-                        resource["kind"], resource["metadata"]["name"], "default"
+                        observed_resource["kind"],
+                        observed_resource["metadata"]["name"],
+                        "default",
                     )
                 except ApiException as err:
                     if err.status == 404:
@@ -270,10 +810,10 @@ class KubernetesObserver(Observer):
                     # Otherwise, log the unexpected errors
                     logger.error(err)
 
-            # Update the status with the information taken from the resource on the
-            # cluster
-            actual_manifest = merge_status(resource, resp.to_dict())
-            status.last_observed_manifest.append(actual_manifest)
+            observed_manifest = update_last_observed_manifest_dict(
+                observed_resource, resp.to_dict()
+            )
+            status.last_observed_manifest.append(observed_manifest)
 
         return status
 
@@ -357,6 +897,7 @@ async def register_observer(controller, app, kubernetes_client, start=True, **kw
     cluster = await controller.kubernetes_api.read_cluster(
         namespace=app.status.running_on.namespace, name=app.status.running_on.name
     )
+
     observer = KubernetesObserver(
         cluster,
         app,
@@ -398,6 +939,116 @@ async def unregister_observer(controller, app, **kwargs):
         await task
 
 
+def generate_default_observer_schema(app):
+    """Generate the default observer schema for each Kubernetes resource present in
+    ``spec.manifest`` for which a custom observer schema hasn't been specified.
+
+    Args:
+        app (krake.data.kubernetes.Application): The application for which to generate a
+            default observer schema
+
+    """
+
+    app.status.mangled_observer_schema = deepcopy(app.spec.observer_schema)
+
+    for resource_manifest in app.spec.manifest:
+        try:
+            get_kubernetes_resource_idx(
+                app.status.mangled_observer_schema,
+                resource_manifest["apiVersion"],
+                resource_manifest["kind"],
+                resource_manifest["metadata"]["name"],
+            )
+        except IndexError:
+            # Only create a default observer schema is a custom observer schema hasn't
+            # be set by the user.
+            app.status.mangled_observer_schema.append(
+                generate_default_observer_schema_dict(
+                    resource_manifest, first_level=True
+                )
+            )
+
+
+def generate_default_observer_schema_dict(manifest_dict, first_level=False):
+    """Together with :func:``generate_default_observer_schema_list``, this function is
+    called recursively to generate part of a default ``observer_schema`` from part of a
+    Kubernetes resource, defined respectively by ``manifest_dict`` or ``manifest_list``.
+
+    Args:
+        manifest_dict (dict): Partial Kubernetes resources
+
+    Returns:
+        dict: Generated partial observer_schema
+
+    This function creates a new dictionary from ``manifest_dict`` and replaces all
+    non-list and non-dict values by ``None``.
+
+    In case of ``first_level`` dictionary (i.e. complete ``observer_schema`` for a
+    resource), the values of the identiftying fields are copied from the manifest file.
+
+    """
+    observer_schema_dict = {}
+
+    for key, value in manifest_dict.items():
+
+        if isinstance(value, dict):
+            observer_schema_dict[key] = generate_default_observer_schema_dict(value)
+
+        elif isinstance(value, list):
+            observer_schema_dict[key] = generate_default_observer_schema_list(value)
+
+        else:
+            observer_schema_dict[key] = None
+
+    if first_level:
+        observer_schema_dict["apiVersion"] = manifest_dict["apiVersion"]
+        observer_schema_dict["kind"] = manifest_dict["kind"]
+        observer_schema_dict["metadata"]["name"] = manifest_dict["metadata"]["name"]
+
+    return observer_schema_dict
+
+
+def generate_default_observer_schema_list(manifest_list):
+    """Together with :func:``generate_default_observer_schema_dict``, this function is
+    called recursively to generate part of a default ``observer_schema`` from part of a
+    Kubernetes resource, defined respectively by ``manifest_list`` or ``manifest_dict``.
+
+    Args:
+        manifest_list (list): Partial Kubernetes resources
+
+    Returns:
+        list: Generated partial observer_schema
+
+    This function creates a new list from ``manifest_list`` and replaces all non-list
+    and non-dict elements by ``None``.
+
+    Additionally, it generates the default list control dictionary, using the current
+    length of the list as default minimum and maximum values.
+
+    """
+    observer_schema_list = []
+
+    for value in manifest_list:
+
+        if isinstance(value, dict):
+            observer_schema_list.append(generate_default_observer_schema_dict(value))
+
+        elif isinstance(value, list):
+            observer_schema_list.append(generate_default_observer_schema_list(value))
+
+        else:
+            observer_schema_list.append(None)
+
+    observer_schema_list.append(
+        {
+            "observer_schema_list_min_length": len(manifest_list),
+            "observer_schema_list_max_length": len(manifest_list),
+        }
+    )
+
+    return observer_schema_list
+
+
 @listen.on(Hook.ApplicationMangling)
 async def complete(app, api_endpoint, ssl_context, config):
     """Execute application complete hook defined by :class:`Complete`.
@@ -432,6 +1083,7 @@ async def complete(app, api_endpoint, ssl_context, config):
         app.metadata.namespace,
         app.status.token,
         app.status.last_applied_manifest,
+        app.status.mangled_observer_schema,
     )
 
 
@@ -445,17 +1097,20 @@ class SubResource(NamedTuple):
 class Complete(object):
     """Mangle given application and injects complete hooks variables into it.
 
-    Hook injects environment variable which stores Krake authentication token
-    and environment variable which stores the Krake complete hook URL for given
-    application into application resource definition. Only resource for the Kubernetes
-    Pod creation defined in :args:`complete_resources` can be modified.
+    Hook injects an environment variable which stores the Krake authentication token
+    and an environment variable which stores the Krake complete hook URL for the given
+    application into the application resource definition. Only resources defined in
+    :args:`complete_resources` can be modified.
+
     Names of environment variables are defined in the application controller
     configuration file.
-    If TLS is enabled on Krake API, complete hook injects Kubernetes configmap
-    and volume definition for the Krake CA certificate.
-    CA certificate is loaded from configmap and stored as a file in injected
-    application volume. Filename is defined in the application controller configuration
-    file.
+
+    If TLS is enabled on the Krake API, the complete hook injects a Kubernetes ConfigMap
+    and a Volume definition for the Krake CA certificate.
+
+    The CA certificate is loaded from the ConfigMap and stored as a file in the injected
+    application Volume. Its filename is defined in the application controller
+    configuration file.
 
     Args:
         api_endpoint (str): the given API endpoint
@@ -485,9 +1140,12 @@ class Complete(object):
         self.env_token = env_token
         self.env_complete = env_complete
 
-    def mangle_app(self, name, namespace, token, last_applied_manifest):
+    def mangle_app(
+        self, name, namespace, token, last_applied_manifest, mangled_observer_schema
+    ):
         """Mangle given application and injects complete hook resources and
-        sub-resources into :attr:`last_applied_manifest` object by :meth:`mangle`.
+        sub-resources into :attr:`last_applied_manifest` object by :meth:`mangle`. Also
+        mangle the observer_schema as new resources and sub-resources should be observed
 
         :attr:`last_applied_manifest` is created as a deep copy of the desired
         application resources, as defined by user. It can be updated by custom hook
@@ -499,6 +1157,7 @@ class Complete(object):
             namespace (str): Application namespace
             token (str): Complete hook authentication token
             last_applied_manifest (list): Application resources
+            mangled_observer_schema (list): Observed fields
 
         """
         cfg_name = "-".join([name, "krake", "configmap"])
@@ -515,8 +1174,13 @@ class Complete(object):
             *self.volumes(cfg_name, volume_name, ca_certs),
         ]
 
-        self.mangle(hook_resources, last_applied_manifest)
-        self.mangle(hook_sub_resources, last_applied_manifest, is_sub_resource=True)
+        self.mangle(hook_resources, last_applied_manifest, mangled_observer_schema)
+        self.mangle(
+            hook_sub_resources,
+            last_applied_manifest,
+            mangled_observer_schema,
+            is_sub_resource=True,
+        )
 
     @staticmethod
     def attribute_map(obj):
@@ -545,7 +1209,13 @@ class Complete(object):
             if getattr(obj, attr) is not None
         }
 
-    def mangle(self, items, last_applied_manifest, is_sub_resource=False):
+    def mangle(
+        self,
+        items,
+        last_applied_manifest,
+        mangled_observer_schema,
+        is_sub_resource=False,
+    ):
         """Mangle application desired state with custom hook resources or
         sub-resources
 
@@ -558,6 +1228,22 @@ class Complete(object):
                     'kind': 'Pod',
                     'metadata': {'name': 'test'},
                     'spec': {'containers': [{'name': 'test'}]}
+                }
+            ]
+            mangled_observer_schema = [
+                {
+                    'apiVersion': 'v1',
+                    'kind': 'Pod',
+                    'metadata': {'name': 'test'},
+                    'spec': {
+                        'containers': [
+                            {'name': None},
+                            {
+                                'observer_schema_list_max_length': 1,
+                                'observer_schema_list_min_length': 1,
+                            },
+                        ]
+                    },
                 }
             ]
             hook_resources = [
@@ -574,8 +1260,13 @@ class Complete(object):
                 )
             ]
 
-            mangle(hook_resources, last_applied_manifest)
-            mangle(hook_sub_resources, last_applied_manifest, is_sub_resource=True)
+            mangle(hook_resources, last_applied_manifest, mangled_observer_schema)
+            mangle(
+                hook_sub_resources,
+                last_applied_manifest,
+                mangled_observer_schema,
+                is_sub_resource=True
+            )
 
             assert last_applied_manifest == [
                 {
@@ -594,15 +1285,42 @@ class Complete(object):
                 {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "cfg"}},
             ]
 
+            assert mangled_observer_schema == [
+                {
+                    'apiVersion': 'v1',
+                    'kind': 'Pod',
+                    'metadata': {'name': 'test'},
+                    'spec': {
+                        'containers': [
+                            {
+                                'name': None,
+                                'env': [
+                                    {'name': None, 'value': None},
+                                    {
+                                        'observer_schema_list_max_length': 1,
+                                        'observer_schema_list_min_length': 1,
+                                    },
+                                ],
+                            },
+                            {
+                                'observer_schema_list_max_length': 1,
+                                'observer_schema_list_min_length': 1,
+                            },
+                        ]
+                    },
+                },
+                {'apiVersion': 'v1', 'kind': 'ConfigMap', 'metadata': {'name': 'cfg'}},
+            ]
 
         Args:
-            items (list): Custom hook resources or sub-resources
+            items (list[SubResource]): Custom hook resources or sub-resources
             last_applied_manifest (list): Application resources
-            is_sub_resource (bool, optional): if False, the function only extend list of
-                Kubernetes resources definied in :attr:`last_applied_manifest` with new
-                hook resources. Otherwise, continue to inject each new hook
+            mangled_observer_schema (list): Observed resources
+            is_sub_resource (bool, optional): if False, the function only extend the
+                list of Kubernetes resources definied in :attr:`last_applied_manifest`
+                with new hook resources. Otherwise, the function injects each new hook
                 sub-resource into the :attr:`last_applied_manifest` object
-                sub-resources. Defaults to False
+                sub-resources. Defaults to False.
 
         """
 
@@ -611,34 +1329,101 @@ class Complete(object):
 
         if not is_sub_resource:
             last_applied_manifest.extend(items)
+            for sub_resource in items:
+                # Generate the default observer schema for the each resource
+                mangled_observer_schema.append(
+                    generate_default_observer_schema_dict(
+                        sub_resource, first_level=True
+                    )
+                )
             return
 
-        def inject(sub_resource, sub_resources_to_mangle):
-            """Inject hook defined sub-resources into Kubernetes sub-resources
+        def inject(sub_resource, sub_resource_to_mangle, observed_resource_to_mangle):
+            """Inject hook defined sub-resource into Kubernetes sub-resource
 
             Args:
                 sub_resource (SubResource): Hook sub-resource that needs to be injected
                     into :attr:`last_applied_manifest`
-                sub_resources_to_mangle (object): Kubernetes sub-resources from
+                sub_resource_to_mangle (dict): Kubernetes sub-resource from
                     :attr:`last_applied_manifest` which needs to be processed
+                observed_resource_to_mangle (dict): partial mangled_observer_schema
+                    corresponding to the Kubernetes sub-resource.
 
             """
 
-            # Create sub-resource group if not present in the kubernetes sub-resources
-            if sub_resource.group not in sub_resources_to_mangle:
-                sub_resources_to_mangle.update({sub_resource.group: []})
+            # Create sub-resource group if not present in the Kubernetes sub-resource
+            if sub_resource.group not in sub_resource_to_mangle:
+                # FIXME: This assumes the subresource group contains a list
+                sub_resource_to_mangle.update({sub_resource.group: []})
+
+            # Create sub-resource group if not present in the observed fields
+            if sub_resource.group not in observed_resource_to_mangle:
+                observed_resource_to_mangle.update(
+                    {
+                        sub_resource.group: [
+                            {
+                                "observer_schema_list_min_length": 0,
+                                "observer_schema_list_max_length": 0,
+                            }
+                        ]
+                    }
+                )
 
             # Inject sub-resource
             # If sub-resource name is already there update it, if not, append it
             if sub_resource.name in [
-                g["name"] for g in sub_resources_to_mangle[sub_resource.group]
+                g["name"] for g in sub_resource_to_mangle[sub_resource.group]
             ]:
-                for idx, item in enumerate(sub_resources_to_mangle[sub_resource.group]):
+                # FIXME: Assuming we are dealing with a list
+                for idx, item in enumerate(sub_resource_to_mangle[sub_resource.group]):
 
+                    # FIXME: Assuming we are dealing with a "name" key acting as an
+                    # identifier
                     if item.name == item["name"]:
-                        sub_resources_to_mangle[item.group][idx] = item.body
+                        sub_resource_to_mangle[item.group][idx] = item.body
             else:
-                sub_resources_to_mangle[sub_resource.group].append(sub_resource.body)
+                sub_resource_to_mangle[sub_resource.group].append(sub_resource.body)
+
+            # Make sure the value is observed
+            if sub_resource.name not in [
+                g["name"] for g in observed_resource_to_mangle[sub_resource.group][:-1]
+            ]:
+                observed_resource_to_mangle[sub_resource.group].insert(
+                    -1, generate_default_observer_schema_dict(sub_resource.body)
+                )
+                observed_resource_to_mangle[sub_resource.group][-1][
+                    "observer_schema_list_min_length"
+                ] += 1
+                observed_resource_to_mangle[sub_resource.group][-1][
+                    "observer_schema_list_max_length"
+                ] += 1
+
+        def create_path(mangled_observer_schema, keys):
+            """Create the path to the observed field in the observer schema.
+
+            When a sub-resource is mangled, it should be observed. This function creates
+            the path to the subresource to observe.
+
+            Args:
+                mangled_observer_schema (dict): Observed fields
+                keys (list): list of keys forming the path to the sub-resource to
+                    observe
+
+            FIXME: This assumes we are only adding keys to dict. We don't consider lists
+
+            """
+
+            # Unpack the first key first, as it contains the base directory
+            key = keys.pop(0)
+
+            # If the key is the last of the list, we reached the end of the path.
+            if len(keys) == 0:
+                mangled_observer_schema[key] = None
+                return
+
+            if key not in mangled_observer_schema:
+                mangled_observer_schema[key] = {}
+            create_path(mangled_observer_schema[key], keys)
 
         for resource in last_applied_manifest:
             # Complete hook is applied only on defined Kubernetes resources
@@ -647,19 +1432,52 @@ class Complete(object):
 
             for sub_resource in items:
                 sub_resources_to_mangle = None
+                observed_sub_resources = None
+                idx_observed = get_kubernetes_resource_idx(
+                    mangled_observer_schema,
+                    resource["apiVersion"],
+                    resource["kind"],
+                    resource["metadata"]["name"],
+                )
                 for keys in sub_resource.path:
                     try:
                         sub_resources_to_mangle = reduce(getitem, keys, resource)
                     except KeyError:
                         continue
+
                     break
 
+                # Create the path to the observed sub-resource, if it doesn't yet exist
+                try:
+                    observed_sub_resources = reduce(
+                        getitem, keys, mangled_observer_schema[idx_observed]
+                    )
+                except KeyError:
+                    create_path(mangled_observer_schema, list(keys))
+                    observed_sub_resources = reduce(
+                        getitem, keys, mangled_observer_schema[idx_observed]
+                    )
+
                 if isinstance(sub_resources_to_mangle, list):
-                    for sub_resource_to_mangle in sub_resources_to_mangle:
-                        inject(sub_resource, sub_resource_to_mangle)
+                    for idx, sub_resource_to_mangle in enumerate(
+                        sub_resources_to_mangle
+                    ):
+
+                        idx_observed = idx
+                        if idx >= len(observed_sub_resources[:-1]):
+                            idx_observed = len(observed_sub_resources[:-1])
+                            observed_sub_resources.insert(-1, {})
+                        observed_sub_resource = observed_sub_resources[idx_observed]
+
+                        # FIXME: This is assuming a list always contains dict
+                        inject(
+                            sub_resource, sub_resource_to_mangle, observed_sub_resource
+                        )
 
                 elif isinstance(sub_resources_to_mangle, dict):
-                    inject(sub_resource, sub_resources_to_mangle)
+                    inject(
+                        sub_resource, sub_resources_to_mangle, observed_sub_resources
+                    )
 
                 else:
                     raise InvalidResourceError
