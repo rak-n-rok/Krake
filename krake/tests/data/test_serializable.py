@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import List, Dict, Union
 import pytest
 from dataclasses import field
+from krake.data.core import Metadata
 from marshmallow import ValidationError
 
 from krake.data.serializable import (
@@ -13,6 +14,7 @@ from krake.data.serializable import (
     is_qualified_generic,
     is_generic_subtype,
 )
+from tests.factories.core import MetadataFactory
 
 
 class Person(Serializable):
@@ -368,3 +370,79 @@ def test_schema_validation():
         Interval.deserialize({"min": 72, "max": 42})
 
     assert "_schema" in excinfo.value.messages
+
+
+@pytest.mark.parametrize(
+    "label_value",
+    [
+        {"key": "value"},
+        {"key1": "value"},
+        {"key": "value1"},
+        {"key-one": "value"},
+        {"key": "value-one"},
+        {"key-1": "value"},
+        {"key": "value-1"},
+        {"k": "value"},
+        {"key": "v"},
+        {"kk": "value"},
+        {"key": "vv"},
+        {"k.k": "value"},
+        {"key": "v-v"},
+        {"key_one.one": "value"},
+        {"key": "value.one_one"},
+        {"url.com/name": "value"},
+        {"url1.com/name": "value"},
+        {"url-suffix/name": "value"},
+        {"url.com/name-one": "value"},
+        {"url1.com/name-one": "value"},
+        {"url-suffix/name-one": "value"},
+    ],
+)
+def test_label_validation(label_value):
+    # Test that valid label keys and values are accepted.
+    data = MetadataFactory(labels=label_value)
+
+    Metadata.deserialize(data.serialize())
+
+
+@pytest.mark.parametrize(
+    "label_value",
+    [
+        {"key!": "value"},
+        {"key.": "value"},
+        {"-key": "value"},
+        {"-k": "value"},
+        {"-": "value"},
+        {"url/second/key": "value"},
+        {"url/": "value"},
+        {"/key": "value"},
+        {"k" * 70: "value"},
+        {"p" * 300 + "/" + "k" * 60: "value"},
+    ],
+)
+def test_label_validation_reject_key(label_value):
+    # Test that invalid label keys raise an exception.
+    data = MetadataFactory(labels=label_value)
+
+    with pytest.raises(ValidationError, match="Label key"):
+        Metadata.deserialize(data.serialize())
+
+
+@pytest.mark.parametrize(
+    "label_value",
+    [
+        {"key": "value$"},
+        {"key": "value."},
+        {"key": "-value"},
+        {"key": "v-"},
+        {"key": "."},
+        {"key": "url.com/value"},
+        {"key": "v" * 70},
+    ],
+)
+def test_label_validation_reject_value(label_value):
+    # Test that invalid label values raise an exception.
+    data = MetadataFactory(labels=label_value)
+
+    with pytest.raises(ValidationError, match="Label value"):
+        Metadata.deserialize(data.serialize())

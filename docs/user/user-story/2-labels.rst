@@ -38,6 +38,10 @@ Preparation
 
 - Create the two clusters with a ``location`` ``Label``.
 
+.. note::
+    Each label always have a key and a value. We follow the same specifications as
+    Kubernetes_.
+
 .. prompt:: bash $ auto
 
     $ rok kube cluster create clusters/config/minikube-cluster-demoenv-1 -l location=DE
@@ -73,3 +77,6 @@ Cleanup
     $ rok kube app delete echo-demo
     $ rok kube cluster delete minikube-cluster-demoenv-1
     $ rok kube cluster delete minikube-cluster-demoenv-2
+
+
+.. _Kubernetes: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set
