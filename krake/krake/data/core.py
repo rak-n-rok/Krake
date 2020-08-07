@@ -80,6 +80,41 @@ def _get_labels_regex():
     return _label_key_regex, _label_value_regex
 
 
+def validate_key(key):
+    """Validate the given key against the corresponding regular expression.
+
+    Args:
+        key: the string to validate
+
+    Raises:
+        ValidationError: if the given key is not conform to the regular expression.
+
+    """
+    key_regex, _ = _get_labels_regex()
+    if not key_regex.fullmatch(key):
+        raise ValidationError(
+            f"Label key {key!r} does not match the regex {_label_key_pattern!r}."
+        )
+
+
+def validate_value(value):
+    """Validate the given value against the corresponding regular expression.
+
+    Args:
+        value: the string to validate
+
+    Raises:
+        ValidationError: if the given value is not conform to the regular expression.
+
+    """
+    _, value_regex = _get_labels_regex()
+    if not value_regex.fullmatch(value):
+        raise ValidationError(
+            f"Label value {value!r} does not match"
+            f" the regex {_label_value_pattern!r}."
+        )
+
+
 def _validate_labels(labels):
     """Check that keys and values in the given labels match against their corresponding
     regular expressions.
@@ -92,19 +127,9 @@ def _validate_labels(labels):
             regular expression.
 
     """
-    key_regex, value_regex = _get_labels_regex()
-
     for key, value in labels.items():
-        if not key_regex.fullmatch(key):
-            raise ValidationError(
-                f"Label key {key!r} does not match the regex {_label_key_pattern!r}."
-            )
-
-        if not value_regex.fullmatch(value):
-            raise ValidationError(
-                f"Label value {value!r} does not match"
-                f" the regex {_label_value_pattern!r}."
-            )
+        validate_key(key)
+        validate_value(value)
 
 
 class Metadata(Serializable):
