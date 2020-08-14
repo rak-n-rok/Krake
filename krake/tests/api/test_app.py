@@ -12,8 +12,8 @@ from krake.data.config import AuthenticationConfiguration, TlsServerConfiguratio
 from krake.data.serializable import Serializable
 
 
-async def test_index(aiohttp_client, db, config):
-    client = await aiohttp_client(create_app(config=config))
+async def test_index(aiohttp_client, no_db_config):
+    client = await aiohttp_client(create_app(config=no_db_config))
     resp = await client.get("/")
     assert resp.status == 200
     data = await resp.json()
