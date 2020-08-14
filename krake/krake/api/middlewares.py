@@ -4,50 +4,42 @@ import json
 from aiohttp import web, hdrs
 from krake.api.helpers import HttpReason, HttpReasonCode
 
-from .database import Session, TransactionError
+from .database import TransactionError
 
 
-def database(host, port, retry=1):
-    """Middleware factory for per-request etcd database sessions and
-    transaction error handling.
+def retry_transaction(retry=1):
+    """Middleware factory for transaction error handling.
 
-    If an :class:`.database.TransactionError` occurs, the request handler is
-    retried for the specified number of times. If the transaction error
-    persists, a *409 Conflict* HTTP exception is raised.
+    If a :class:`.database.TransactionError` occurs, the request handler is retried for
+    the specified number of times. If the transaction error persists, a *409 Conflict*
+    HTTP exception is raised.
 
     Args:
-        host (str): Host of the etcd server
-        port (int): TCP port of the etcd server
-        retry (int, optional): Number of retries if a transaction error
-            occurs.
+        retry (int, optional): Number of retries if a transaction error occurs.
 
     Returns:
-        aiohttp middleware injecting an etcd database session into each HTTP
-        request and handling transaction errors.
+        coroutine: aiohttp middleware handling transaction errors.
 
     """
     # TODO: Maybe we can share the TCP connection pool across all HTTP
     #     handlers (like for SQLAlchemy engines)
     @web.middleware
-    async def database_middleware(request, handler):
-        async with Session(host=host, port=port) as session:
-            request["db"] = session
+    async def retry_transaction_middleware(request, handler):
+        for _ in range(retry + 1):
+            try:
+                return await handler(request)
+            except TransactionError as err:
+                request.app.logger.warn("Transaction failed (%s)", err)
 
-            for _ in range(retry + 1):
-                try:
-                    return await handler(request)
-                except TransactionError as err:
-                    request.app.logger.warn("Transaction failed (%s)", err)
+        reason = HttpReason(
+            reason="Concurrent writes to database",
+            code=HttpReasonCode.TRANSACTION_ERROR,
+        )
+        raise web.HTTPConflict(
+            text=json.dumps(reason.serialize()), content_type="application/json"
+        )
 
-            reason = HttpReason(
-                reason="Concurrent writes to database",
-                code=HttpReasonCode.TRANSACTION_ERROR,
-            )
-            raise web.HTTPConflict(
-                text=json.dumps(reason.serialize()), content_type="application/json"
-            )
-
-    return database_middleware
+    return retry_transaction_middleware
 
 
 def error_log():

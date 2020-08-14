@@ -43,8 +43,8 @@ def json_error(exc, content):
 def session(request):
     """Load the database session for a given aiohttp request
 
-    Internally, it just returns the value that was assigned by
-    func:`krake.middlewares.database`.
+    Internally, it just returns the value that was given as cleanup context by
+    func:`krake.api.app.db_session`.
 
     Args:
         request (aiohttp.web.Request): HTTP request
@@ -52,7 +52,7 @@ def session(request):
     Returns:
         krake.database.Session: Database session for the given request
     """
-    return request["db"]
+    return request.app["db"]
 
 
 class Heartbeat(object):
