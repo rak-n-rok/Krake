@@ -203,11 +203,20 @@ def user():
     return "testuser"
 
 
-@pytest.fixture
-def config(etcd_server, user):
-    etcd_host, etcd_port = etcd_server
+def base_config(user, etcd_host="localhost", etcd_port=2379):
+    """Creates a configuration with some simple parameters, which have a default value
+    that can be set.
 
-    config = {
+    Args:
+        user (str): the name of the user for the static authentication
+        etcd_host (str): the host for the database.
+        etcd_port (int): the port for the database.
+
+    Returns:
+        dict: the created configuration.
+
+    """
+    return {
         "tls": {
             "enabled": False,
             "cert": "cert_path",
@@ -230,6 +239,18 @@ def config(etcd_server, user):
         "etcd": {"host": etcd_host, "port": etcd_port, "retry_transactions": 0},
         "log": {},
     }
+
+
+@pytest.fixture
+def config(etcd_server, user):
+    etcd_host, etcd_port = etcd_server
+    config = base_config(user, etcd_host=etcd_host, etcd_port=etcd_port)
+    return ApiConfiguration.deserialize(config, creation_ignored=True)
+
+
+@pytest.fixture
+def no_db_config(user):
+    config = base_config(user)
     return ApiConfiguration.deserialize(config, creation_ignored=True)
 
 
