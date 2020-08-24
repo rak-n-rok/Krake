@@ -1,3 +1,4 @@
+from krake.data.core import validate_value, validate_key
 from lark import Lark, UnexpectedInput
 from marshmallow import ValidationError, fields
 from marshmallow.utils import ensure_text_type
@@ -50,19 +51,24 @@ class LabelConstraint(object):
 
     grammar = Lark(
         """
-        start: WORD (equal | notequal | in | notin)
+        start: key (equal | notequal | in | notin)
 
-        equal: ("==" | "=" | "is") WORD
+        // Accept any kind of string, no validation is performed on the key here
+        key: /[^ ,()=!]+/
 
-        notequal: ("!=" | "is" "not") WORD
+        // Accept any kind of string, no validation is performed on the value here
+        value: /[^ ,()=!]+/
 
-        in: "in" "(" (WORD ",")* WORD* ")"
+        equal: ("==" | "=" | "is") value
 
-        notin: "not" "in" "(" (WORD ",")* WORD* ")"
+        notequal: ("!=" | "is" "not") value
+
+        in: "in" "(" (value ",")* value ","* ")"
+
+        notin: "not" "in" "(" (value ",")* value ","* ")"
 
         %ignore " "
         %ignore "\t"
-        %import common.WORD
         """
     )
 
@@ -109,21 +115,35 @@ class LabelConstraint(object):
 
         """
         tree = cls.grammar.parse(expression)
-        label = tree.children[0]
+        label = tree.children[0].children[0]
+        validate_key(label)
         operation = tree.children[1].data
 
+        def format_possibilities(token):
+            """Format one token to extract the actual value inside.
+            """
+            single_value = str(token.children[0])
+            validate_value(single_value)
+            return single_value
+
         if operation == "equal":
-            value = str(tree.children[1].children[0])
+            value = str(tree.children[1].children[0].children[0])
+            validate_value(value)
             return EqualConstraint(label, value, parsed=expression)
+
         elif operation == "notequal":
-            value = str(tree.children[1].children[0])
+            value = str(tree.children[1].children[0].children[0])
+            validate_value(value)
             return NotEqualConstraint(label, value, parsed=expression)
+
         elif operation == "in":
-            values = map(str, tree.children[1].children)
+            values = map(format_possibilities, tree.children[1].children)
             return InConstraint(label, values, parsed=expression)
+
         elif operation == "notin":
-            values = map(str, tree.children[1].children)
+            values = map(format_possibilities, tree.children[1].children)
             return NotInConstraint(label, values, parsed=expression)
+
         else:
             raise ValueError(f"Unknown operation {operation!r}")
 
