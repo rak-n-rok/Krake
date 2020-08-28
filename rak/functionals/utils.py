@@ -17,6 +17,13 @@ STICKINESS_WEIGHT = 0.1
 _ETCD_STATIC_PROVIDER_KEY = "/core/metricsprovider/static_provider"
 _ETCDCTL_ENV = {"ETCDCTL_API": "3"}
 
+GIT_DIR = "git/krake"
+TEST_DIR = "rak/functionals"
+CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
+MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}"
+DEFAULT_MANIFEST = "echo-demo.yaml"
+DEFAULT_KUBE_APP_NAME = "echo-demo"
+
 
 class Response(object):
     """The response of a command
@@ -485,10 +492,18 @@ class ApplicationDefinition(NamedTuple):
             raise RuntimeError("migration must be None, False or True.")
         return migration_flag
 
-    def check_created(self):
-        """Run the command for checking if the Application has been created."""
+    def check_created(self, delay=10):
+        """Run the command for checking if the Application has been created.
+
+        Args:
+            delay (int, optional): The number of seconds that should be allowed
+                before giving up.
+        """
         run(
-            self.get_command(), condition=check_app_created_and_up(),
+            self.get_command(),
+            condition=check_app_created_and_up(),
+            interval=1,
+            retry=delay,
         )
 
     def delete_resource(self):
@@ -828,10 +843,21 @@ class Environment(object):
 
     """
 
-    def __init__(self, resources, before_handlers=None, after_handlers=None):
+    def __init__(
+        self, resources, before_handlers=None, after_handlers=None, creation_delay=10
+    ):
+        """
+
+        Args:
+            resources: The resources in the environment
+                (see explanation in class doc string)
+            creation_delay (int, optional): The number of seconds that should
+                be allowed before concluding that a resource could not be created.
+        """
         # Dictionary: "priority: list of resources to create"
         self.res_to_create = resources
         self.resources = defaultdict(list)
+        self.creation_delay = creation_delay
 
         self.before_handlers = before_handlers if before_handlers else []
         self.after_handlers = after_handlers if after_handlers else []
@@ -856,7 +882,7 @@ class Environment(object):
         for _, resource_list in sorted(self.res_to_create.items(), reverse=True):
             for resource in resource_list:
                 if hasattr(resource, "check_created"):
-                    resource.check_created()
+                    resource.check_created(delay=self.creation_delay)
 
         return self.resources
 
@@ -967,6 +993,8 @@ def create_multiple_cluster_environment(
         cluster_labels = {cn: [] for cn in kubeconfig_paths}
     if not metrics:
         metrics = {cn: {} for cn in kubeconfig_paths}
+    if not app_cluster_constraints:
+        app_cluster_constraints = []
 
     env = {
         10: [
@@ -1127,3 +1155,126 @@ def check_static_metrics(expected_metrics, error_message=""):
             raise AssertionError(error_message + f"Error: {e}")
 
     return validate
+
+
+def create_default_environment(
+    cluster_names,
+    metrics=None,
+    cluster_labels=None,
+    app_cluster_constraints=None,
+    app_migration=None,
+):
+    """Create and return a test environment definition with one application and
+    len(cluster_names) clusters using default kubeconfig and manifest files.
+
+    This method is a convenience method wrapping
+    `create_multiple_cluster_environment()`.
+
+    The kubeconfig file that will be used for `cluster_name` in `cluster_names`
+    is `CLUSTERS_CONFIGS/cluster_name`. This file is assumed to exist.
+
+    The manifest file that will be used for the application is
+    `MANIFEST_PATH/DEFAULT_MANIFEST`. This file is assumed to exist.
+
+    Args:
+        cluster_names (list(str)): cluster names
+        metrics (dict(str: dict(str: str)), optional):
+            Cluster names and their metrics.
+            keys: the same names as in `cluster_names`
+            values: dict of metrics
+                keys: metric names
+                values: weight of the metrics
+        cluster_labels (dict(str: dict(str: str)), optional):
+            Cluster names and their cluster labels.
+            keys: the same names as in `cluster_names`
+            values: dict of cluster labels
+                keys: cluster labels
+                values: value of the cluster labels
+        app_cluster_constraints (list(str), optional):
+            list of cluster constraints, e.g. ["location != DE"]
+        app_migration (bool, optional): migration flag indicating whether the
+            application should be able to migrate. If not provided, none is
+            provided when creating the application.
+
+    Returns:
+        dict: an environment definition to use to create a test environment.
+
+    """
+    kubeconfig_paths = {c: os.path.join(CLUSTERS_CONFIGS, c) for c in cluster_names}
+    manifest_path = os.path.join(MANIFEST_PATH, DEFAULT_MANIFEST)
+    return create_multiple_cluster_environment(
+        kubeconfig_paths=kubeconfig_paths,
+        metrics=metrics,
+        cluster_labels=cluster_labels,
+        app_name=DEFAULT_KUBE_APP_NAME,
+        manifest_path=manifest_path,
+        app_cluster_constraints=app_cluster_constraints,
+        app_migration=app_migration,
+    )
+
+
+def create_cluster_info(cluster_names, sub_keys, values):
+    """
+    Convenience method for preparing the input parameters cluster_labels and metrics
+    of `create_default_environment()`.
+
+    The sub-keys can for example be thought of as
+    metric names (and `values` their weights) or
+    cluster label names (and `values` their values).
+
+    Example:
+        Sample input:
+            cluster_names = ["cluster1", "cluster2", "cluster3"]
+            sub_keys = ["m1", "m2"]
+            values = [3, 4]
+        Return value:
+            {
+                "cluster1": {
+                    "m1": 3,
+                },
+                "cluster2": {
+                    "m2": 4,
+                },
+                "cluster3": {},
+            }
+
+    If sub_keys is not a list, the list will be constructed as follows:
+        sub_keys = [sub_keys] * len(values)
+    This is useful when the seb-key should be the same for all clusters.
+
+    The ith cluster will get the ith sub-key with the ith value.
+    Caveat: If there are fewer sub-keys and values than clusters,
+    the last cluster(s) will not become any <sub-key, value> pairs at all.
+
+    Limitation:
+        Each cluster can only have one <sub-key, value> pair using this method.
+
+    Args:
+        cluster_names (list(str)): The keys in the return dict.
+        sub_keys: The keys in the second level dicts in the return dict.
+            If type(sub_keys) isn't list, a list will be created as such:
+                sub_keys = [sub_keys] * len(values)
+        values (list): The values in the second level dicts in the return dict.
+
+    Returns:
+        dict(str: dict) with same length as cluster_names.
+            The first `len(values)` <key, value> pairs will be:
+                cluster_names[i]: {sub_keys[i]: values[i]}
+            The last `len(cluster_names) - len(values)` <key: value> pairs will be:
+                top_level_keys[i]: {}
+
+    Asserts:
+        len(cluster_names) >= len(values)
+        len(sub_keys) == len(values) if type(sub_keys) is list
+
+    """
+    if not type(sub_keys) is list:
+        sub_keys = [sub_keys] * len(values)
+
+    assert len(cluster_names) >= len(values)
+    assert len(sub_keys) == len(values)
+
+    cluster_dicts = [{sub_keys[i]: values[i]} for i in range(len(values))]
+    cluster_dicts += [{}] * (len(cluster_names) - len(values))
+
+    return dict(zip(cluster_names, cluster_dicts))
