@@ -461,16 +461,23 @@ class ClusterDefinition(NamedTuple):
     kubeconfig_path: str
     labels: list = []
     kind: str = "Cluster"
+    metrics: dict = {}
 
     def creation_command(self):
-        """Generate a command for creating a cluster.
+        """Generate a command for creating the cluster.
 
         Returns:
-            str: the command to create a cluster.
+            str: the command to create the cluster.
 
         """
         label_flags = " ".join(f"-l {label}" for label in self.labels)
-        return f"rok kube cluster create {label_flags} {self.kubeconfig_path}"
+        metric_flags = " ".join(
+            f"-m {metric} {weight}" for metric, weight in self.metrics.items()
+        )
+        return (
+            f"rok kube cluster create {label_flags} {metric_flags} "
+            f"{self.kubeconfig_path}"
+        )
 
     def delete_command(self):
         """Generate a command for deleting a cluster.
@@ -619,6 +626,7 @@ def create_simple_environment(cluster_name, kubeconfig_path, app_name, manifest_
 def create_multiple_cluster_environment(
     kubeconfig_paths,
     cluster_labels=None,
+    metrics=None,
     app_name=None,
     manifest_path=None,
     app_cluster_constraints=None,
@@ -633,6 +641,8 @@ def create_multiple_cluster_environment(
             to create.
         cluster_labels (dict of PathLike: List(str)): optional mapping between
             Cluster names and labels for the corresponding Cluster to create.
+        metrics (dict of PathLike: List(str)): optional mapping between
+            Cluster names and metrics for the corresponding Cluster to create.
         app_name (PathLike): optional name of the Application to create.
         manifest_path (PathLike): optional path to the manifest file that
             should be used to create the Application.
@@ -647,9 +657,17 @@ def create_multiple_cluster_environment(
     """
     if not cluster_labels:
         cluster_labels = {cn: [] for cn in kubeconfig_paths}
+    if not metrics:
+        metrics = {cn: {} for cn in kubeconfig_paths}
+
     env = {
         10: [
-            ClusterDefinition(name=cn, kubeconfig_path=kcp, labels=cluster_labels[cn])
+            ClusterDefinition(
+                name=cn,
+                kubeconfig_path=kcp,
+                labels=cluster_labels[cn],
+                metrics=metrics[cn],
+            )
             for cn, kcp in kubeconfig_paths.items()
         ]
     }
