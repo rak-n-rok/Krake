@@ -31,15 +31,14 @@ Test constraints, metrics and metrics providers are globally defined as follows:
         metrics_provider:
             prometheus
 
+    The values provided by the dummy provider for metric `heat_demand_zone_i`
+    will be between i-1 and i.
+
     Basic template also defines 1 unreachable metrics provider and corresponding metric:
     `heat_demand_zone_unreachable`.
 """
 
-import itertools
-import string
 import time
-from typing import NamedTuple, List
-
 from utils import (
     Environment,
     run,
@@ -48,12 +47,13 @@ from utils import (
     check_return_code,
     create_multiple_cluster_environment,
     create_simple_environment,
+    create_default_environment,
+    create_cluster_info,
+    CLUSTERS_CONFIGS,
+    MANIFEST_PATH,
 )
 import random
 
-KRAKE_HOMEDIR = "/home/krake"
-GIT_DIR = "git/krake"
-TEST_DIR = "rak/functionals"
 METRICS = [
     "heat_demand_zone_1",
     "heat_demand_zone_2",
@@ -71,190 +71,35 @@ CONSTRAINT_EXPRESSIONS = {
     ],
     False: ["location is not DE", "location != DE", "location not in (DE,)"],
 }
-CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
-MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}"
-COUNTRY_CODES = [
-    l1 + l2
-    for l1, l2 in itertools.product(string.ascii_uppercase, string.ascii_uppercase)
-]
-
-
-def execute_tests(tests):
-    """Execute tests
-
-    Each test is described by application which should be deployed on defined cluster.
-
-    Args:
-        tests (List[Test]): List of tests
-
-    """
-    expected_cluster = ""
-
-    for test in tests:
-        # 1. Create a Minikube clusters from a config file with defined arguments
-        for cluster in test.clusters:
-
-            if cluster.scheduled_to:
-                expected_cluster = cluster.name
-
-            kubeconfig_path = f"{KRAKE_HOMEDIR}/clusters/config/{cluster.name}"
-            args = []
-            if cluster.metrics:
-                args.extend(
-                    itertools.chain(
-                        *[["--metric", metric, "1"] for metric in cluster.metrics]
-                    )
-                )
-            if cluster.labels:
-                args.extend(
-                    itertools.chain(*[["--label", label] for label in cluster.labels])
-                )
-            cmd_create = f"rok kube cluster create {kubeconfig_path}"
-            run(cmd_create.split() + args)
-
-        # 2. Create an application
-        args_app = []
-        if test.application.cluster_label_constraints:
-            args_app.extend(
-                itertools.chain(
-                    *[["-L", clc] for clc in test.application.cluster_label_constraints]
-                )
-            )
-        cmd_create_app = (
-            f"rok kube app create "
-            f"-f {KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}/echo-demo.yaml "
-            f"{test.application.name}"
-        )
-        run(cmd_create_app.split() + args_app)
-
-        # 3. Validate application deployment
-        # Get application details and assert it's running on the expected cluster,
-        # if defined
-        if expected_cluster:
-            response = run(
-                f"rok kube app get {test.application.name} -o json",
-                retry=5,
-                interval=10,
-                condition=check_app_state(
-                    "RUNNING", "Unable to observe the application in a RUNNING state"
-                ),
-            )
-
-            app_details = response.json
-            assert app_details["status"]["running_on"]["name"] == expected_cluster
-
-            # 4. Delete the application
-            run(f"rok kube app delete {test.application.name}")
-            # Add a condition to wait for the application to be actually deleted
-            run(
-                "rok kube app list -o json",
-                condition=check_empty_list("Unable to observe the application deleted"),
-            )
-        else:
-            run(
-                "rok kube app list -o json",
-                condition=check_empty_list(
-                    "Unable to observe the empty list of applications"
-                ),
-            )
-
-        # 5. Delete the clusters
-        for cluster in test.clusters:
-            run(f"rok kube cluster delete {cluster.name}")
-
-        # Add a condition to wait for the cluster to be actually deleted
-        run(
-            "rok kube cluster list -a -o json",
-            condition=check_empty_list("Unable to observe the cluster deleted"),
-        )
-
-
-class Application(NamedTuple):
-    name: str
-    cluster_label_constraints: list = []
-
-
-class Cluster(NamedTuple):
-    name: str
-    scheduled_to: bool = False
-    labels: list = []
-    metrics: list = []
-
-
-class Test(NamedTuple):
-    application: Application
-    clusters: List[Cluster]
 
 
 def test_create_cluster_and_app(minikube_clusters):
     """Basic end to end testing
 
-    We run a basic workflow in 5 steps:
-    1. Create a Minikube cluster from a config file
-    2. Create an application
-    3. Access the application
-    4. Delete the application
-    5. Delete the cluster
+    1. Create cluster and application;
+    2. Check that the application is in RUNNING state;
+    3. Ensure that the application was scheduled to the cluster;
+    4. Delete the application and cluster;
+    5. Check that the application and cluster were properly deleted.
 
     Args:
         minikube_clusters (list): Names of the Minikube backend.
-
     """
     cluster = random.choice(minikube_clusters)
-    execute_tests(
-        [
-            Test(
-                application=Application(name="app-test"),
-                clusters=[Cluster(name=cluster, scheduled_to=True)],
-            )
-        ]
-    )
+    environment = create_default_environment([cluster])
 
+    # 1. Create cluster and application
+    # 2. Check that the application is in RUNNING state
+    # (Checks 1-2 are performed automatically when entering the environment);
+    with Environment(environment) as resources:
+        app = resources["Application"][0]
 
-def test_scheduler_cluster_label_constraints(minikube_clusters):
-    """Basic end to end testing of application cluster label constraints
+        # 3. Ensure that the application was scheduled to the cluster;
+        app.check_running_on(cluster)
 
-    Test iterates over the `CONSTRAINT_EXPRESSIONS` and applies workflow as follows:
-
-        1. Create a Minikube clusters from a config file
-            The cluster labels `location=DE` and `location=IT` are randomly assigned
-            to the clusters. `scheduled_to` variable is set to True if the cluster
-            should be selected by the scheduler algorithm.
-        2. Create an application with the cluster label constraint <expression>
-        3. Validate application deployment
-        4. Delete the application
-        5. Delete the clusters
-
-    Args:
-        minikube_clusters (list): Names of the Minikube backend.
-
-    """
-    tests = []
-    for match, constraints in CONSTRAINT_EXPRESSIONS.items():
-        for constraint in constraints:
-
-            random.shuffle(minikube_clusters)
-
-            tests.append(
-                Test(
-                    application=Application(
-                        name="app-test", cluster_label_constraints=[constraint]
-                    ),
-                    clusters=[
-                        Cluster(
-                            name=minikube_clusters[0],
-                            labels=["location=DE"],
-                            scheduled_to=match,
-                        ),
-                        Cluster(
-                            name=minikube_clusters[1],
-                            labels=["location=IT"],
-                            scheduled_to=not match,
-                        ),
-                    ],
-                )
-            )
-    execute_tests(tests)
+    # 4. Delete the application and cluster;
+    # 5. Check that the application and cluster were properly deleted.
+    # (Checks 4-5 are performed automatically when exiting the environment);
 
 
 def test_create_on_other_namespace(minikube_clusters):
@@ -333,49 +178,104 @@ def test_create_on_other_namespace(minikube_clusters):
         )
 
 
-def test_scheduler_clusters_with_metrics(minikube_clusters):
-    """Basic end to end testing of clusters metrics
+def test_scheduler_cluster_label_constraints(minikube_clusters):
+    """Basic end to end testing of application cluster label constraints
 
-    Cluster metrics and metrics provider are tested multiple times (3) as follows:
+    The test repeatedly creates an application and two clusters with the
+    labels `location=DE` and `location=IT` randomly assigned to the clusters.
+    Each time the application is created with a different cluster label
+    constraint, thus creating an expectation as to which cluster it should be
+    scheduled.
 
-        1. Create a Minikube clusters from a config file
-            Randomly selected metric is assigned to the randomly selected to both
-            clusters. `scheduled_to` variable is set to True if the cluster should
-            be selected by the scheduler algorithm.
-        2. Create an application
-        3. Validate application deployment
-        4. Delete the application
-        5. Delete the clusters
+    The test iterates over the `CONSTRAINT_EXPRESSIONS` which contains the
+    cluster label constraints for the application and a boolean indicating
+    whether the application due to this constraint is expected to be scheduled
+    to the cluster with `location=DE`.
+
+    The work workflow for each iteration is as follows:
+
+        1. Create two clusters from a config file with the cluster labels
+            `location=DE` and `location=IT` (in random order);
+        2. Create an application with the cluster label constraint given by
+            `CONSTRAINT_EXPRESSIONS`;
+        3. Ensure that the application was scheduled to the requested cluster;
 
     Args:
         minikube_clusters (list): Names of the Minikube backend.
 
     """
-    tests = []
-    for _ in range(3):
+    num_clusters = 2
+    countries = ["DE", "IT"]
 
-        random.shuffle(minikube_clusters)
-        metric_clusters = random.sample(set(METRICS), 2)
-        metric_max = max(metric_clusters, key=lambda x: int(x[-1]))
+    for match, constraints in CONSTRAINT_EXPRESSIONS.items():
 
-        tests.append(
-            Test(
-                application=Application(name="app-test"),
-                clusters=[
-                    Cluster(
-                        name=minikube_clusters[0],
-                        metrics=[metric_clusters[0]],
-                        scheduled_to=metric_clusters[0] == metric_max,
-                    ),
-                    Cluster(
-                        name=minikube_clusters[1],
-                        metrics=[metric_clusters[1]],
-                        scheduled_to=metric_clusters[1] == metric_max,
-                    ),
-                ],
+        # We expect the app to be scheduled on the DE cluster if match and
+        # otherwise on the IT cluster, so we remember this index into the
+        # 'countries' list (and later also into the 'clusters' list).
+        expected_index = 0 if match else 1  # choose DE if match else IT
+
+        for app_cluster_constraint in constraints:
+            # The two clusters used in this test (randomly ordered)
+            clusters = random.sample(minikube_clusters, num_clusters)
+
+            # 1. Create two clusters from a config file with the cluster labels
+            #     `location=DE` and `location=IT` (in random order);
+            # 2. Create an application with the cluster label constraint given by
+            #     `CONSTRAINT_EXPRESSIONS`;
+            cluster_labels = create_cluster_info(clusters, "location", countries)
+            environment = create_default_environment(
+                clusters,
+                cluster_labels=cluster_labels,
+                app_cluster_constraints=[app_cluster_constraint],
             )
+            with Environment(environment) as resources:
+                app = resources["Application"][0]
+
+                # 3. Ensure that the application was scheduled to the requested cluster;
+                app.check_running_on(clusters[expected_index])
+
+
+def test_scheduler_clusters_with_metrics(minikube_clusters):
+    """Basic end to end testing of clusters metrics
+
+    Cluster metrics and metrics provider are tested multiple times (3) as follows:
+
+        1. Create two Minikube clusters (from a config file) with a randomly
+            selected metric assigned to each cluster and an application.
+        2. Ensure that the application was scheduled to the expected cluster;
+
+    Args:
+        minikube_clusters (list): Names of the Minikube backend.
+
+    """
+    for _ in range(3):
+        # The two clusters and metrics used in this test (randomly ordered)
+        num_clusters = 2
+        clusters = random.sample(minikube_clusters, num_clusters)
+        metric_names = random.sample(set(METRICS), num_clusters)
+        weights = [1] * num_clusters
+
+        # Determine to which cluster we expect the application to be scheduled.
+        # (Due to the implementation of the dummy metrics provider, the metric
+        # with the highest suffix will have the highest value. Therefore
+        # (and since the weights of the metrics will be the same
+        # for all clusters), the cluster with the highest metric name suffix
+        # is expected to be chosen by the scheduler.)
+        metric_max = max(metric_names, key=lambda x: int(x[-1]))
+        max_index = next(
+            i for i in range(num_clusters) if metric_max == metric_names[i]
         )
-    execute_tests(tests)
+        expected_cluster = clusters[max_index]
+
+        # 1. Create two Minikube clusters (from a config file) with a randomly
+        #     selected metric assigned to each cluster and an application.
+        cluster_metrics = create_cluster_info(clusters, metric_names, weights)
+        environment = create_default_environment(clusters, metrics=cluster_metrics)
+        with Environment(environment) as resources:
+            app = resources["Application"][0]
+
+            # 2. Ensure that the application was scheduled to the expected cluster;
+            app.check_running_on(expected_cluster)
 
 
 def test_scheduler_clusters_one_with_metrics(minikube_clusters):
@@ -383,37 +283,36 @@ def test_scheduler_clusters_one_with_metrics(minikube_clusters):
 
     Cluster metrics and metrics provider are tested multiple times (3) as follows:
 
-        1. Create a Minikube clusters from a config file
-            Randomly selected metric is assigned only to one randomly selected cluster.
-            `scheduled_to` variable is set to True if the cluster should
-            be selected by the scheduler algorithm.
-        2. Create an application
-        3. Validate application deployment
-        4. Delete the application
-        5. Delete the clusters
+        1. Create two Minikube clusters (from a config file) with a randomly
+            selected metric assigned only to one randomly selected cluster,
+            and an application.
+            The cluster with the metric is expected to be chosen by the scheduler.
+        2. Ensure that the application was scheduled to the expected cluster;
 
     Args:
         minikube_clusters (list): Names of the Minikube backend.
 
     """
-    tests = []
     for _ in range(3):
 
-        random.shuffle(minikube_clusters)
-        metric = random.choice(METRICS)
+        # the two clusters and one metric to be used in this test
+        clusters = random.sample(minikube_clusters, 2)
+        metric_names = [random.choice(METRICS)]
+        weights = [1]
 
-        tests.append(
-            Test(
-                application=Application(name="app-test"),
-                clusters=[
-                    Cluster(
-                        name=minikube_clusters[0], metrics=[metric], scheduled_to=True
-                    ),
-                    Cluster(name=minikube_clusters[1], metrics=[], scheduled_to=False),
-                ],
-            )
-        )
-    execute_tests(tests)
+        # Determine to which cluster we expect the application to be scheduled.
+        # (The cluster with the metric is expected to be chosen by the scheduler.)
+        expected_cluster = clusters[0]
+
+        # 1. Create two Minikube clusters (from a config file) with a randomly
+        #     selected metric assigned to one cluster and an application.
+        metrics_by_cluster = create_cluster_info(clusters, metric_names, weights)
+        environment = create_default_environment(clusters, metrics=metrics_by_cluster)
+        with Environment(environment) as resources:
+            app = resources["Application"][0]
+
+            # 2. Ensure that the application was scheduled to the expected cluster;
+            app.check_running_on(expected_cluster)
 
 
 def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
@@ -422,48 +321,50 @@ def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
 
     Test iterates over the `CONSTRAINT_EXPRESSIONS` and applies workflow as follows:
 
-        1. Create a Minikube clusters from a config file
-            The cluster labels `location=DE`, `location=IT` and randomly selected metric
-            are randomly assigned to the clusters. `scheduled_to` variable is set to
-            True if the cluster should be selected by the scheduler algorithm.
-        2. Create an application with the cluster label constraint <expression>
-        3. Validate application deployment
-        4. Delete the application
-        5. Delete the clusters
+        1. Create an application (with a cluster label constraint given from
+            `CONSTRAINT_EXPRESSIONS`) and two Minikube clusters (from a config file)
+            with cluster labels (randomly selected from: `location=DE`,
+            `location=IT`) and randomly selected metrics.
+        2. Ensure that the application was scheduled to the requested cluster;
+
 
     Args:
         minikube_clusters (list): Names of the Minikube backend.
 
     """
-    tests = []
+    num_clusters = 2
+    countries = ["DE", "IT"]
     for match, constraints in CONSTRAINT_EXPRESSIONS.items():
-        for constraint in constraints:
 
-            random.shuffle(minikube_clusters)
-            metric_clusters = random.sample(set(METRICS), 2)
+        # We expect the app to be scheduled on the DE cluster if match and
+        # otherwise on the IT cluster, so we remember this index into the
+        # 'countries' list (and later also into the 'clusters' list).
+        expected_index = 0 if match else 1  # choose DE if match else IT
 
-            tests.append(
-                Test(
-                    application=Application(
-                        name="app-test", cluster_label_constraints=[constraint]
-                    ),
-                    clusters=[
-                        Cluster(
-                            name=minikube_clusters[0],
-                            labels=["location=DE"],
-                            metrics=[metric_clusters[0]],
-                            scheduled_to=match,
-                        ),
-                        Cluster(
-                            name=minikube_clusters[1],
-                            labels=["location=IT"],
-                            metrics=[metric_clusters[1]],
-                            scheduled_to=not match,
-                        ),
-                    ],
-                )
+        for app_cluster_constraint in constraints:
+            # The two clusters, countries and metrics used in this test
+            # (randomly ordered)
+            clusters = random.sample(minikube_clusters, num_clusters)
+            metric_names = random.sample(set(METRICS), num_clusters)
+            weights = [1] * num_clusters
+
+            # 1. Create an application (with a cluster label constraint given from
+            # `CONSTRAINT_EXPRESSIONS`) and two Minikube clusters (from a config file)
+            # with cluster labels (randomly selected from: `location=DE`,
+            # `location=IT`) and randomly selected metrics.
+            cluster_labels = create_cluster_info(clusters, "location", countries)
+            metrics = create_cluster_info(clusters, metric_names, weights)
+            environment = create_default_environment(
+                clusters,
+                metrics=metrics,
+                cluster_labels=cluster_labels,
+                app_cluster_constraints=[app_cluster_constraint],
             )
-    execute_tests(tests)
+            with Environment(environment) as resources:
+                app = resources["Application"][0]
+
+                # 2. Ensure that the application was scheduled to the requested cluster;
+                app.check_running_on(clusters[expected_index])
 
 
 def test_unreachable_metrics_provider(minikube_clusters):
@@ -471,36 +372,39 @@ def test_unreachable_metrics_provider(minikube_clusters):
 
     Test applies workflow as follows:
 
-        1. Create a Minikube clusters from a config file
-            Assign `heat_demand_zone_unreachable` metric to the randomly selected
-            cluster. `scheduled_to` variable is set to True if the cluster should be
-            selected by the scheduler algorithm.
-        2. Create an application
-        3. Validate application deployment
-        4. Delete the application
-        5. Delete the clusters
+        1. Create one application, and two clusters with metrics - one with
+            metrics from a reachable metrics provider and one with
+            the metrics from an unreachable provider.
+        2. Ensure that the application was scheduled to the cluster with
+            the metrics provided by the reachable metrics provider;
 
     Args:
         minikube_clusters (list): Names of the Minikube backend.
 
     """
-    random.shuffle(minikube_clusters)
-    execute_tests(
-        [
-            Test(
-                application=Application(name="app-test"),
-                clusters=[
-                    Cluster(
-                        name=minikube_clusters[0],
-                        metrics=["heat_demand_zone_unreachable"],
-                        scheduled_to=False,
-                    ),
-                    Cluster(
-                        name=minikube_clusters[1],
-                        metrics=[random.choice(METRICS)],
-                        scheduled_to=True,
-                    ),
-                ],
-            )
-        ]
+    # The two clusters and metrics used in this test (randomly ordered)
+    num_clusters = 2
+    clusters = random.sample(minikube_clusters, num_clusters)
+    metric_names = ["heat_demand_zone_unreachable"] * (num_clusters - 1) + [
+        random.choice(METRICS)
+    ]
+    weights = [1] * num_clusters
+
+    metrics_by_cluster = create_cluster_info(clusters, metric_names, weights)
+
+    # Determine to which cluster we expect the application to be scheduled.
+    # (The cluster with the reachable metric is expected to be chosen by the scheduler.)
+    expected_cluster = next(
+        c
+        for c in clusters
+        if "heat_demand_zone_unreachable" not in metrics_by_cluster[c]
     )
+
+    # 1. Create one application, one cluster without metrics, and one with
+    #     the metric `heat_demand_zone_unreachable`.
+    environment = create_default_environment(clusters, metrics=metrics_by_cluster)
+    with Environment(environment, creation_delay=30) as resources:
+        app = resources["Application"][0]
+
+        # 2. Ensure that the application was scheduled to the expected cluster;
+        app.check_running_on(expected_cluster)
