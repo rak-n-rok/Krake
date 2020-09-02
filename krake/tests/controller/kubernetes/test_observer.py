@@ -60,9 +60,9 @@ service_response = yaml.safe_load(
     metadata:
       creationTimestamp: "2019-11-11T12:01:05Z"
       name: nginx-demo
-      namespace: default
+      namespace: secondary
       resourceVersion: "8080020"
-      selfLink: /api/v1/namespaces/default/services/nginx-demo
+      selfLink: /api/v1/namespaces/secondary/services/nginx-demo
       uid: e2b789b0-19a1-493d-9f23-3f2a63fade52
     spec:
       clusterIP: 10.100.78.172
@@ -91,9 +91,9 @@ app_response = yaml.safe_load(
       creationTimestamp: "2019-11-11T12:01:05Z"
       generation: 1
       name: nginx-demo
-      namespace: default
+      namespace: secondary
       resourceVersion: "8080030"
-      selfLink: /apis/extensions/v1beta1/namespaces/default/deployments/nginx-demo
+      selfLink: /apis/extensions/v1beta1/namespaces/secondary/deployments/nginx-demo
       uid: 047686e4-af52-4264-b2a4-2f82b890e809
     spec:
       progressDeadlineSeconds: 600
@@ -172,7 +172,7 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
     # Test the observation of changes on values with a CamelCase format
     updated_app["spec"]["selector"]["matchLabels"] = {"app": "foo"}
 
-    @routes.get("/api/v1/namespaces/default/services/nginx-demo")
+    @routes.get("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
         nonlocal actual_state
         if actual_state in (0, 1):
@@ -180,7 +180,7 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
         elif actual_state == 2:
             return web.Response(status=404)
 
-    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         nonlocal actual_state
         if actual_state == 0:
@@ -258,7 +258,7 @@ async def test_observer_on_status_update(aiohttp_server, db, config, loop):
     first_container = get_first_container(updated_app)
     first_container["image"] = "nginx:1.6"
 
-    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         return web.json_response(updated_app)
 
@@ -307,9 +307,9 @@ deploy_mangled_response = yaml.safe_load(
       creationTimestamp: "2019-12-03T08:21:11Z"
       generation: 1
       name: nginx-demo
-      namespace: default
+      namespace: secondary
       resourceVersion: "10373629"
-      selfLink: /apis/extensions/v1beta1/namespaces/default/deployments/nginx-demo
+      selfLink: /apis/extensions/v1beta1/namespaces/secondary/deployments/nginx-demo
       uid: 5ee5cbe8-6b18-4b2c-9691-3c9517748fe1
     spec:
       progressDeadlineSeconds: 600
@@ -389,7 +389,7 @@ async def test_observer_on_status_update_mangled(aiohttp_server, db, config, loo
     actual_state = 0
     copy_deploy_mangled_response = deepcopy(deploy_mangled_response)
 
-    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         nonlocal actual_state
         if actual_state == 0:
@@ -399,15 +399,15 @@ async def test_observer_on_status_update_mangled(aiohttp_server, db, config, loo
         if actual_state == 2:
             return web.json_response(updated_app)
 
-    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
         return web.Response(status=200)
 
-    @routes.patch("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.patch("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         return web.json_response(updated_app)
 
-    @routes.get("/api/v1/namespaces/default/services/nginx-demo")
+    @routes.get("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
         nonlocal actual_state
         if actual_state == 0:
@@ -534,7 +534,7 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
 
     actual_state = 0
 
-    @routes.get("/api/v1/namespaces/default/services/nginx-demo")
+    @routes.get("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
         nonlocal actual_state
         if actual_state in (0, 1):
@@ -546,7 +546,7 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
     first_container = get_first_container(updated_app)
     first_container["image"] = "nginx:1.6"
 
-    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         nonlocal actual_state
         if actual_state == 0:
@@ -554,18 +554,18 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
         elif actual_state >= 1:
             return web.json_response(updated_app)
 
-    @routes.patch("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.patch("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         nonlocal actual_state
         assert actual_state in (0, 1)
         return web.json_response(updated_app)
 
-    @routes.patch("/api/v1/namespaces/default/services/nginx-demo")
+    @routes.patch("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
         assert actual_state in (0, 2)
         return web.json_response(service_response)
 
-    @routes.delete("/api/v1/namespaces/default/services/nginx-demo")
+    @routes.delete("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
         nonlocal actual_state
         assert actual_state == 2
@@ -672,23 +672,23 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
 async def test_observer_on_delete(aiohttp_server, config, db, loop):
     routes = web.RouteTableDef()
 
-    @routes.get("/api/v1/namespaces/default/services/nginx-demo")
+    @routes.get("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
         return web.json_response(service_response)
 
-    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         return web.json_response(app_response)
 
-    @routes.delete("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         return web.Response(status=200)
 
-    @routes.delete("/api/v1/namespaces/default/services/nginx-demo")
+    @routes.delete("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
         return web.Response(status=200)
 
-    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
         return web.Response(status=200)
 

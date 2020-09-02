@@ -114,11 +114,11 @@ async def test_app_reception(aiohttp_server, config, db, loop):
 async def test_app_creation(aiohttp_server, config, db, loop):
     routes = web.RouteTableDef()
 
-    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         return web.Response(status=404)
 
-    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
         return web.Response(status=200)
 
@@ -140,6 +140,7 @@ async def test_app_creation(aiohttp_server, config, db, loop):
             kind: Deployment
             metadata:
               name: nginx-demo
+              namespace: secondary
             spec:
               selector:
                 matchLabels:
@@ -183,17 +184,17 @@ async def test_app_update(aiohttp_server, config, db, loop):
     deleted = set()
     patched = set()
 
-    @routes.patch("/apis/apps/v1/namespaces/default/deployments/{name}")
+    @routes.patch("/apis/apps/v1/namespaces/secondary/deployments/{name}")
     async def patch_deployment(request):
         patched.add(request.match_info["name"])
         return web.Response(status=200)
 
-    @routes.delete("/apis/apps/v1/namespaces/default/deployments/{name}")
+    @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/{name}")
     async def delete_deployment(request):
         deleted.add(request.match_info["name"])
         return web.Response(status=200)
 
-    @routes.get("/apis/apps/v1/namespaces/default/deployments/{name}")
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/{name}")
     async def _(request):
         deployments = ("nginx-demo-1", "nginx-demo-2", "nginx-demo-3")
         if request.match_info["name"] in deployments:
@@ -221,6 +222,7 @@ async def test_app_update(aiohttp_server, config, db, loop):
                     kind: Deployment
                     metadata:
                       name: nginx-demo-1
+                      namespace: secondary
                     spec:
                       selector:
                         matchLabels:
@@ -240,6 +242,7 @@ async def test_app_update(aiohttp_server, config, db, loop):
                     kind: Deployment
                     metadata:
                       name: nginx-demo-2
+                      namespace: secondary
                     spec:
                       selector:
                         matchLabels:
@@ -259,6 +262,7 @@ async def test_app_update(aiohttp_server, config, db, loop):
                     kind: Deployment
                     metadata:
                       name: nginx-demo-3
+                      namespace: secondary
                     spec:
                       selector:
                         matchLabels:
@@ -288,6 +292,7 @@ async def test_app_update(aiohttp_server, config, db, loop):
                     kind: Deployment
                     metadata:
                       name: nginx-demo-2
+                      namespace: secondary
                     spec:
                       selector:
                         matchLabels:
@@ -307,6 +312,7 @@ async def test_app_update(aiohttp_server, config, db, loop):
                     kind: Deployment
                     metadata:
                       name: nginx-demo-3
+                      namespace: secondary
                     spec:
                       selector:
                         matchLabels:
@@ -355,18 +361,18 @@ async def test_app_migration(aiohttp_server, config, db, loop):
     """
     routes = web.RouteTableDef()
 
-    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
         body = await request.json()
         request.app["created"].add(body["metadata"]["name"])
         return web.Response(status=201)
 
-    @routes.delete("/apis/apps/v1/namespaces/default/deployments/{name}")
+    @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/{name}")
     async def delete_deployment(request):
         request.app["deleted"].add(request.match_info["name"])
         return web.Response(status=200)
 
-    @routes.get("/apis/apps/v1/namespaces/default/deployments/{name}")
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/{name}")
     async def _(request):
         if request.match_info["name"] in request.app["existing"]:
             return web.Response(status=200)
@@ -396,6 +402,7 @@ async def test_app_migration(aiohttp_server, config, db, loop):
                 kind: Deployment
                 metadata:
                   name: nginx-demo
+                  namespace: secondary
                 spec:
                   selector:
                     matchLabels:
@@ -422,6 +429,7 @@ async def test_app_migration(aiohttp_server, config, db, loop):
                 kind: Deployment
                 metadata:
                   name: echoserver
+                  namespace: secondary
                 spec:
                   selector:
                     matchLabels:
@@ -682,17 +690,26 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
     kubernetes_app = web.Application()
     routes = web.RouteTableDef()
 
-    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    deployment_deleted = False
+    service_deleted = False
+
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         return web.Response(status=200)
 
-    @routes.delete("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
+        nonlocal deployment_deleted
+        deployment_deleted = True
         return web.Response(status=200)
 
-    @routes.delete("/api/v1/namespaces/default/services/nginx-demo")
+    @routes.delete("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
+        nonlocal service_deleted
+        service_deleted = True
         return web.Response(status=200)
+
+    kubernetes_app.add_routes(routes)
 
     kubernetes_server = await aiohttp_server(kubernetes_app)
 
@@ -730,6 +747,9 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
 
         with suppress(asyncio.CancelledError):
             await reflector_task
+
+    assert deployment_deleted
+    assert service_deleted
 
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -794,11 +814,11 @@ async def test_service_registration(aiohttp_server, config, db, loop):
     # Setup Kubernetes API mock server
     routes = web.RouteTableDef()
 
-    @routes.get("/api/v1/namespaces/default/services/nginx-demo")
+    @routes.get("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
         return web.Response(status=404)
 
-    @routes.post("/api/v1/namespaces/default/services")
+    @routes.post("/api/v1/namespaces/secondary/services")
     async def _(request):
         return web.json_response(
             {
@@ -806,8 +826,8 @@ async def test_service_registration(aiohttp_server, config, db, loop):
                 "apiVersion": "v1",
                 "metadata": {
                     "name": "nginx-demo",
-                    "namespace": "default",
-                    "selfLink": "/api/v1/namespaces/default/services/nginx-demo",
+                    "namespace": "secondary",
+                    "selfLink": "/api/v1/namespaces/secondary/services/nginx-demo",
                     "uid": "266728ad-090a-4282-8185-9328eb673cd3",
                     "resourceVersion": "115304",
                     "creationTimestamp": "2019-07-30T15:11:15Z",
@@ -849,6 +869,7 @@ async def test_service_registration(aiohttp_server, config, db, loop):
             kind: Service
             metadata:
               name: nginx-demo
+              namespace: secondary
             spec:
               type: NodePort
               selector:
@@ -901,7 +922,7 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
     # Setup Kubernetes API mock server
     routes = web.RouteTableDef()
 
-    @routes.get("/api/v1/namespaces/default/services/nginx-demo")
+    @routes.get("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
         return web.json_response(
             {
@@ -910,9 +931,9 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
                 "metadata": {
                     "creationTimestamp": "2019-11-12 08:44:02+00:00",
                     "name": "nginx-demo",
-                    "namespace": "default",
+                    "namespace": "secondary",
                     "resourceVersion": "2075568",
-                    "selfLink": "/api/v1/namespaces/default/services/nginx-demo",
+                    "selfLink": "/api/v1/namespaces/secondary/services/nginx-demo",
                     "uid": "4da165e0-e58f-4058-be44-fa393a58c2c8",
                 },
                 "spec": {
@@ -934,7 +955,7 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
             }
         )
 
-    @routes.delete("/api/v1/namespaces/default/services/nginx-demo")
+    @routes.delete("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
         return web.json_response(
             {
@@ -964,6 +985,7 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
             kind: Service
             metadata:
               name: nginx-demo
+              namespace: secondary
             spec:
               type: NodePort
               selector:
@@ -1003,11 +1025,11 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
 async def test_complete_hook(aiohttp_server, config, db, loop):
     routes = web.RouteTableDef()
 
-    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         return web.Response(status=404)
 
-    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
         return web.Response(status=200)
 
@@ -1016,35 +1038,16 @@ async def test_complete_hook(aiohttp_server, config, db, loop):
     kubernetes_server = await aiohttp_server(kubernetes_app)
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
 
+    # We only consider the first resource in the manifest file, that is a Deployment.
+    # This Deployment should be modified by the "complete" hook with ENV vars.
+    deployment_manifest = deepcopy(nginx_manifest[0])
+
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING,
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
         spec__hooks=["complete"],
-        spec__manifest=list(
-            yaml.safe_load_all(
-                """---
-            apiVersion: apps/v1
-            kind: Deployment
-            metadata:
-              name: nginx-demo
-            spec:
-              selector:
-                matchLabels:
-                  app: nginx
-              template:
-                metadata:
-                  labels:
-                    app: nginx
-                spec:
-                  containers:
-                  - name: nginx
-                    image: nginx:1.7.9
-                    ports:
-                    - containerPort: 80
-            """
-            )
-        ),
+        spec__manifest=[deployment_manifest],
     )
     await db.put(cluster)
     await db.put(app)
@@ -1076,11 +1079,11 @@ async def test_complete_hook(aiohttp_server, config, db, loop):
 async def test_complete_hook_disable_by_user(aiohttp_server, config, db, loop):
     routes = web.RouteTableDef()
 
-    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         return web.Response(status=404)
 
-    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
         return web.Response(status=200)
 
@@ -1089,34 +1092,15 @@ async def test_complete_hook_disable_by_user(aiohttp_server, config, db, loop):
     kubernetes_server = await aiohttp_server(kubernetes_app)
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
 
+    # We only consider the first resource in the manifest file, that is a Deployment.
+    # This Deployment should be modified by the "complete" hook with ENV vars.
+    deployment_manifest = deepcopy(nginx_manifest[0])
+
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING,
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
-        spec__manifest=list(
-            yaml.safe_load_all(
-                """---
-            apiVersion: apps/v1
-            kind: Deployment
-            metadata:
-              name: nginx-demo
-            spec:
-              selector:
-                matchLabels:
-                  app: nginx
-              template:
-                metadata:
-                  labels:
-                    app: nginx
-                spec:
-                  containers:
-                  - name: nginx
-                    image: nginx:1.7.9
-                    ports:
-                    - containerPort: 80
-            """
-            )
-        ),
+        spec__manifest=[deployment_manifest],
     )
     await db.put(cluster)
     await db.put(app)
@@ -1161,19 +1145,19 @@ async def test_complete_hook_tls(aiohttp_server, config, pki, db, loop):
         enabled=True, client_ca=pki.ca.cert, cert=server_cert.cert, key=server_cert.key
     )
 
-    @routes.get("/api/v1/namespaces/default/configmaps/ca.pem")
+    @routes.get("/api/v1/namespaces/secondary/configmaps/ca.pem")
     async def _(request):
         return web.Response(status=404)
 
-    @routes.post("/api/v1/namespaces/default/configmaps")
+    @routes.post("/api/v1/namespaces/secondary/configmaps")
     async def _(request):
         return web.Response(status=200)
 
-    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         return web.Response(status=404)
 
-    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
         return web.Response(status=200)
 
@@ -1182,35 +1166,16 @@ async def test_complete_hook_tls(aiohttp_server, config, pki, db, loop):
     kubernetes_server = await aiohttp_server(kubernetes_app)
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
 
+    # We only consider the first resource in the manifest file, that is a Deployment.
+    # This Deployment should be modified by the "complete" hook with ENV vars.
+    deployment_manifest = deepcopy(nginx_manifest[0])
+
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING,
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
         spec__hooks="complete",
-        spec__manifest=list(
-            yaml.safe_load_all(
-                """---
-            apiVersion: apps/v1
-            kind: Deployment
-            metadata:
-              name: nginx-demo
-            spec:
-              selector:
-                matchLabels:
-                  app: nginx
-              template:
-                metadata:
-                  labels:
-                    app: nginx
-                spec:
-                  containers:
-                  - name: nginx
-                    image: nginx:1.7.9
-                    ports:
-                    - containerPort: 80
-            """
-            )
-        ),
+        spec__manifest=[deployment_manifest],
     )
     await db.put(cluster)
     await db.put(app)

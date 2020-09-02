@@ -8,6 +8,7 @@ apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   name: nginx-demo
+  namespace: secondary
 spec:
   selector:
     matchLabels:
@@ -27,6 +28,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: nginx-demo
+  namespace: secondary
 spec:
   type: NodePort
   selector:

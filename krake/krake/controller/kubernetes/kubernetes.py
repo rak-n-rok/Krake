@@ -46,12 +46,13 @@ class InvalidStateError(ControllerError):
 
 class ResourceID(NamedTuple):
     """Named tuple for identifying Kubernetes resource objects by their API
-    version, kind and name.
+    version, kind, namespace and name.
     """
 
     api_version: str
     kind: str
     name: str
+    namespace: str
 
     @classmethod
     def from_resource(cls, resource):
@@ -68,6 +69,7 @@ class ResourceID(NamedTuple):
             api_version=resource["apiVersion"],
             kind=resource["kind"],
             name=resource["metadata"]["name"],
+            namespace=resource["metadata"].get("namespace"),
         )
 
 
@@ -894,7 +896,20 @@ class KubernetesClient(object):
 
         return resource_api
 
-    async def apply(self, resource, namespace="default"):
+    async def apply(self, resource):
+        """Apply the given resource on the cluster using its internal data as reference.
+
+        Args:
+            resource (dict): the resource to create, as a manifest file translated in
+                dict.
+
+        Returns:
+            object: response from the cluster as given by the Kubernetes client.
+
+        """
+        metadata = resource["metadata"]
+        namespace = metadata.get("namespace", "default")
+
         try:
             kind = resource["kind"]
         except KeyError:
@@ -903,7 +918,7 @@ class KubernetesClient(object):
         resource_api = await self.get_resource_api(kind)
 
         try:
-            name = resource["metadata"]["name"]
+            name = metadata["name"]
         except KeyError:
             raise InvalidResourceError('Resource must define "metadata.name"')
 
@@ -925,7 +940,22 @@ class KubernetesClient(object):
 
         return resp
 
-    async def delete(self, resource, namespace="default"):
+    async def delete(self, resource):
+        """Delete the given resource on the cluster using its internal data as
+        reference.
+
+        Args:
+            resource (dict): the resource to delete, as a manifest file translated in
+                dict.
+
+        Returns:
+            kubernetes_asyncio.client.models.v1_status.V1Status: response from the
+                cluster as given by the Kubernetes client.
+
+        """
+        metadata = resource["metadata"]
+        namespace = metadata.get("namespace", "default")
+
         try:
             kind = resource["kind"]
         except KeyError:
@@ -934,7 +964,7 @@ class KubernetesClient(object):
         resource_api = await self.get_resource_api(kind)
 
         try:
-            name = resource["metadata"]["name"]
+            name = metadata["name"]
         except KeyError:
             raise InvalidResourceError('Resource must define "metadata.name"')
 

@@ -260,8 +260,10 @@ class KubernetesObserver(Observer):
             async with kube:
                 try:
                     resource_api = await kube.get_resource_api(resource["kind"])
+
+                    namespace = resource["metadata"].get("namespace", "default")
                     resp = await resource_api.read(
-                        resource["kind"], resource["metadata"]["name"], "default"
+                        resource["kind"], resource["metadata"]["name"], namespace
                     )
                 except ApiException as err:
                     if err.status == 404:
@@ -506,7 +508,20 @@ class Complete(object):
             else None
         )
 
-        hook_resources = [*self.configmap(cfg_name, ca_certs)]
+        # Extract all different namespaces
+        # FIXME: too many assumptions here: do we create one ConfigMap for each
+        #  namespace?
+        resource_namespaces = {
+            resource["metadata"].get("namespace", "default") for resource in mangling
+        }
+
+        hook_resources = []
+        if ca_certs:
+            hook_resources = [
+                self.configmap(cfg_name, namespace, ca_certs=ca_certs)
+                for namespace in resource_namespaces
+            ]
+
         hook_sub_resources = [
             *self.env_vars(name, namespace, self.api_endpoint, token),
             *self.volumes(cfg_name, volume_name, ca_certs),
@@ -615,7 +630,7 @@ class Complete(object):
             Args:
                 sub_resource (SubResource): Hook sub-resource that needs to be injected
                     into desired mangling state
-                sub_resources_to_mangle (object): Sub-resource from the Mangling state
+                sub_resources_to_mangle (dict): Sub-resource from the Mangling state
                     which needs to be processed
 
             """
@@ -660,22 +675,20 @@ class Complete(object):
                 else:
                     raise InvalidResourceError
 
-    def configmap(self, cfg_name, ca_certs=None):
-        """Create complete hook configmap resource
+    def configmap(self, cfg_name, namespace, ca_certs=None):
+        """Create a complete hook configmap resource.
 
         Complete hook configmap stores Krake CAs to communicate with the Krake API
 
         Args:
             cfg_name (str): Configmap name
             ca_certs (list): Krake CA list
+            namespace (str): Kubernetes namespace where the ConfigMap will be created.
 
         Returns:
-            list: List of complete hook configmaps resources
+            dict: complete hook configmaps resources
 
         """
-        if not ca_certs:
-            return []
-
         ca_name = os.path.basename(self.ca_dest)
 
         ca_certs_pem = ""
@@ -687,16 +700,14 @@ class Complete(object):
                 OpenSSL.crypto.FILETYPE_PEM, x509
             ).decode("utf-8")
 
-        return [
-            self.attribute_map(
-                V1ConfigMap(
-                    api_version="v1",
-                    kind="ConfigMap",
-                    data={ca_name: ca_certs_pem},
-                    metadata={"name": cfg_name},
-                )
+        return self.attribute_map(
+            V1ConfigMap(
+                api_version="v1",
+                kind="ConfigMap",
+                data={ca_name: ca_certs_pem},
+                metadata={"name": cfg_name, "namespace": namespace},
             )
-        ]
+        )
 
     def volumes(self, cfg_name, volume_name, ca_certs=None):
         """Create complete hook volume and volume mount sub-resources
