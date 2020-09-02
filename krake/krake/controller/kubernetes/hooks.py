@@ -18,6 +18,7 @@ from typing import NamedTuple
 import OpenSSL
 import yarl
 from krake.controller import Observer, ControllerError
+from krake.controller.kubernetes.client import KubernetesClient
 from krake.utils import camel_to_snake_case
 from kubernetes_asyncio.client.rest import ApiException
 from yarl import URL
@@ -227,18 +228,14 @@ class KubernetesObserver(Observer):
             of the resource to observe will be updated. If the API cannot be contacted,
             ``None`` can be returned. In this case the internal instance of the Observer
             will not be updated.
-        kubernetes_client (type):
         time_step (int, optional): how frequently the Observer should watch the actual
             status of the resources.
 
     """
 
-    def __init__(
-        self, cluster, resource, on_res_update, kubernetes_client, time_step=2
-    ):
+    def __init__(self, cluster, resource, on_res_update, time_step=2):
         super().__init__(resource, on_res_update, time_step)
         self.cluster = cluster
-        self.kubernetes_client = kubernetes_client
 
     async def poll_resource(self):
         """Fetch the current status of the Application monitored by the Observer.
@@ -256,7 +253,7 @@ class KubernetesObserver(Observer):
         # For each kubernetes resource of the Application,
         # get its current status on the cluster.
         for resource in app.status.manifest:
-            kube = self.kubernetes_client(self.cluster.spec.kubeconfig)
+            kube = KubernetesClient(self.cluster.spec.kubeconfig)
             async with kube:
                 try:
                     resource_api = await kube.get_resource_api(resource["kind"])
@@ -339,7 +336,7 @@ def merge_status(orig, new):
 
 @listen.on(Hook.ApplicationPostReconcile)
 @listen.on(Hook.ApplicationPostMigrate)
-async def register_observer(controller, app, kubernetes_client, start=True, **kwargs):
+async def register_observer(controller, app, start=True, **kwargs):
     """Create an observer for the given Application, and start it as background
     task if wanted.
 
@@ -349,7 +346,6 @@ async def register_observer(controller, app, kubernetes_client, start=True, **kw
         controller (KubernetesController): the controller for which the observer will be
             added in the list of working observers.
         app (krake.data.kubernetes.Application): the Application to observe
-        kubernetes_client (type):
         start (bool, optional): if False, does not start the observer as background
             task.
 
@@ -363,7 +359,6 @@ async def register_observer(controller, app, kubernetes_client, start=True, **kw
         cluster,
         app,
         controller.on_status_update,
-        kubernetes_client,
         time_step=controller.observer_time_step,
     )
 
