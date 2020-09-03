@@ -178,6 +178,61 @@ async def test_app_creation(aiohttp_server, config, db, loop):
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
 
+async def test_app_creation_default_namespace(aiohttp_server, config, db, loop):
+    """This test ensures that NOT specifying a namespace for a resource creates it in
+    the "default" namespace
+    """
+    app_is_created = False
+
+    routes = web.RouteTableDef()
+
+    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    async def _(request):
+        nonlocal app_is_created
+        app_is_created = True
+        return web.Response(status=200)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    deployment_manifest = deepcopy(nginx_manifest[0])
+    del deployment_manifest["metadata"]["namespace"]
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
+        spec__manifest=[deployment_manifest],
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        controller = KubernetesController(server_endpoint(api_server), worker_count=0)
+        await controller.prepare(client)
+
+        await controller.resource_received(app, start_observer=False)
+
+    assert app_is_created
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.state == ApplicationState.RUNNING
+    assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
+
+
 async def test_app_update(aiohttp_server, config, db, loop):
     routes = web.RouteTableDef()
 
@@ -1068,6 +1123,72 @@ async def test_complete_hook(aiohttp_server, config, db, loop):
         if resource["kind"] != "Deployment":
             continue
 
+        for container in resource["spec"]["template"]["spec"]["containers"]:
+            assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
+            assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
+
+    assert stored.status.state == ApplicationState.RUNNING
+    assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
+
+
+async def test_complete_hook_default_namespace(aiohttp_server, config, db, loop):
+    """Verify that the Controller mangled the received Application to add elements of
+    the "complete" hook if it had been enabled, even if the resources have been created
+    without any namespace.
+    """
+    deployment_created = False
+
+    routes = web.RouteTableDef()
+
+    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    async def _(request):
+        nonlocal deployment_created
+        deployment_created = True
+        return web.Response(status=200)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    # We only consider the first resource in the manifest file, that is a Deployment.
+    # This Deployment should be modified by the "complete" hook with ENV vars.
+    deployment_manifest = deepcopy(nginx_manifest[0])
+    # Create a manifest with resources without any namespace.
+    del deployment_manifest["metadata"]["namespace"]
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
+        spec__hooks=["complete"],
+        spec__manifest=[deployment_manifest],
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        controller = KubernetesController(
+            server_endpoint(api_server), worker_count=0, hooks=deepcopy(hooks_config)
+        )
+        await controller.prepare(client)
+        await controller.resource_received(app)
+
+    assert deployment_created
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+
+    assert len(stored.status.manifest) == 1  # one resource in the spec manifest
+
+    for resource in stored.status.manifest:
         for container in resource["spec"]["template"]["spec"]["containers"]:
             assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
             assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]

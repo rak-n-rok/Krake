@@ -328,6 +328,22 @@ def check_app_running_on(expected_cluster, error_message):
     return validate
 
 
+def allow_404(response):
+    """Check that the response given succeeded, or if it did not succeed, that the
+    output shows a "404" HTTP error.
+
+    Args:
+        response (Response): the response to check
+
+    Raises:
+        AssertionError: if the response failed, but not from a "404" error.
+
+    """
+    error_message = "The response got an error code different from 404."
+    if response.returncode != 0:
+        assert "404" in response.output, error_message
+
+
 class ApplicationDefinition(NamedTuple):
     """Definition of an Application resource for the test environment
     :class:`Environment`.
@@ -543,13 +559,24 @@ class Environment(object):
     Args:
         resources (dict): a dictionary that describes the resources to create, with
             their priority.
+        before_handlers (list): this list of functions will be called one after the
+            other in the given order before all Krake resources have been created. Their
+            signature should be "handler(dict) -> void". The given dict contains the
+            definition of all resources managed by the Environment.
+        after_handlers (list): this list of functions will be called one after the other
+            in the given order after all Krake resources have been deleted. Their
+            signature should be "handler(dict) -> void". The given dict contains the
+            definition of all resources managed by the Environment.
 
     """
 
-    def __init__(self, resources):
+    def __init__(self, resources, before_handlers=None, after_handlers=None):
         # Dictionary: "priority: list of resources to create"
         self.res_to_create = resources
         self.resources = defaultdict(list)
+
+        self.before_handlers = before_handlers if before_handlers else []
+        self.after_handlers = after_handlers if after_handlers else []
 
     def __enter__(self):
         """Create all given resources and check that they have been actually created.
@@ -558,6 +585,9 @@ class Environment(object):
             dict: all resources that have been created in the environment, with their
                 kind as string as key.
         """
+        for handler in self.before_handlers:
+            handler(self.resources)
+
         # Create resources with highest priority first
         for _, resource_list in sorted(self.res_to_create.items(), reverse=True):
             for resource in resource_list:
@@ -581,16 +611,18 @@ class Environment(object):
         # Delete resources with lowest priority first
         for _, resource_list in sorted(self.res_to_create.items()):
             for resource in resource_list:
-                # FIXME because rok returns an error code of "1" even if the resource
-                #  was deleted, there are no check done here. It should be added as soon
-                #  as rok has been refactored.
-                run(resource.delete_command())
+                # The 404 HTTP code is allowed for the cases where the resource has been
+                # deleted during the test.
+                run(resource.delete_command(), condition=allow_404)
 
         # Check for each resource if it has been deleted
         for _, resource_list in sorted(self.res_to_create.items()):
             for resource in resource_list:
                 if hasattr(resource, "check_deleted"):
                     resource.check_deleted()
+
+        for handler in self.after_handlers:
+            handler(self.resources)
 
 
 def create_simple_environment(cluster_name, kubeconfig_path, app_name, manifest_path):

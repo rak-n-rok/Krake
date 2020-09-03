@@ -45,7 +45,9 @@ from utils import (
     run,
     check_app_state,
     check_empty_list,
+    check_return_code,
     create_multiple_cluster_environment,
+    create_simple_environment,
 )
 import random
 
@@ -253,6 +255,82 @@ def test_scheduler_cluster_label_constraints(minikube_clusters):
                 )
             )
     execute_tests(tests)
+
+
+def test_create_on_other_namespace(minikube_clusters):
+    """Check that resources defined in a namespace which is NOT "default" in a manifest
+    given to an application are deployed to the right namespace.
+
+    In the test environment:
+    1. Create the application
+    2. Ensure that the k8s resources were deployed to the right namespace
+    3. Delete the Application
+    4. Ensure no resource is left on the namespace
+
+    Args:
+        minikube_clusters (list): Names of the Minikube backend.
+
+    """
+    minikube_cluster = random.choice(minikube_clusters)
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+
+    manifest_path = f"{MANIFEST_PATH}/echo-demo-namespaced.yaml"
+    environment = create_simple_environment(
+        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
+    )
+
+    def create_namespace(resources):
+        error_message = "The namespace 'secondary' could not be created"
+        run(
+            f"kubectl --kubeconfig {kubeconfig_path} create namespace secondary",
+            condition=check_return_code(error_message),
+        )
+
+    def delete_namespace(resources):
+        error_message = "The namespace 'secondary' could not be deleted"
+        run(
+            f"kubectl --kubeconfig {kubeconfig_path} delete namespace secondary",
+            condition=check_return_code(error_message),
+        )
+
+    # 1. Create the application
+    with Environment(
+        environment,
+        before_handlers=[create_namespace],
+        after_handlers=[delete_namespace],
+    ) as resources:
+        app = resources["Application"][0]
+
+        # 2. Ensure that the k8s resources were deployed to the right namespace
+        error_message = (
+            "The deployment 'echo-demo' is not present in the 'secondary' namespace"
+        )
+        run(
+            f"kubectl --kubeconfig {kubeconfig_path} -n secondary"
+            " get deployment echo-demo",
+            condition=check_return_code(error_message),
+        )
+
+        # 3. Delete the Application
+        run(app.delete_command())
+        run(
+            "rok kube app list -f json",
+            condition=check_empty_list(
+                "Unable to observe the empty list of applications"
+            ),
+        )
+
+        # 4. Ensure no resource is left on the namespace
+        time.sleep(30)  # Wait for the namespace to leave the "Terminating" state
+
+        error_message = (
+            "The deployment 'echo-demo' is still present in the 'secondary' namespace"
+        )
+        run(
+            f"kubectl --kubeconfig {kubeconfig_path} -n secondary"
+            " get deployment echo-demo",
+            condition=check_return_code(error_message, expected_code=1),
+        )
 
 
 def test_kubernetes_no_migration(minikube_clusters):
