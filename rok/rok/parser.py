@@ -234,8 +234,8 @@ class StoreDict(Action):
 
 
 arg_formatting = argument(
-    "-f",
-    "--format",
+    "-o",
+    "--output",
     choices=["table", "json", "yaml"],
     default="table",
     help="Format of the output, table by default",

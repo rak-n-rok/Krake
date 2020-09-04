@@ -53,7 +53,7 @@ Spawn the demo application
 .. prompt:: bash $ auto
 
     $ rok kube app create -f git/krake/rak/functionals/echo-demo.yaml echo-demo
-    $ rok kube app get echo-demo -f json | jq .status.running_on
+    $ rok kube app get echo-demo -o json | jq .status.running_on
 
 Cleanup
 =======

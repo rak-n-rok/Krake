@@ -339,7 +339,9 @@ def allow_404(response):
         AssertionError: if the response failed, but not from a "404" error.
 
     """
-    error_message = "The response got an error code different from 404."
+    error_message = (
+        f"The response got an error code different from 404: {response.output}"
+    )
     if response.returncode != 0:
         assert "404" in response.output, error_message
 
@@ -367,18 +369,16 @@ class ApplicationDefinition(NamedTuple):
     migration: bool = None
     kind: str = "Application"
 
-    def creation_command(self):
-        """Generate a command for creating an Application.
-
-        Returns:
-            str: the command to create an Application.
-
-        """
+    def create_resource(self):
+        """Create the application."""
         migration_flag = self._get_migration_flag(self.migration)
         constraints = " ".join(f"-L {constraint}" for constraint in self.constraints)
-        return (
+
+        error_message = f"The Application {self.name} could not be created."
+        run(
             f"rok kube app create {migration_flag} {constraints} "
-            f"-f {self.manifest_path} {self.name}"
+            f"-f {self.manifest_path} {self.name}",
+            condition=check_return_code(error_message),
         )
 
     @staticmethod
@@ -394,28 +394,23 @@ class ApplicationDefinition(NamedTuple):
         return migration_flag
 
     def check_created(self):
-        """Run the command for checking if the Application has been created.
-        """
+        """Run the command for checking if the Application has been created."""
         error_message = (
             f"Unable to observe the application {self.name} in a RUNNING state"
         )
         run(
-            f"rok kube app get {self.name} -f json",
+            f"rok kube app get {self.name} -o json",
             condition=check_app_state("RUNNING", error_message),
         )
 
-    def delete_command(self):
-        """Generate a command for deleting an Application.
-
-        Returns:
-            str: the command to delete an Application.
-
-        """
-        return f"rok kube app delete {self.name}"
+    def delete_resource(self):
+        """Delete the actual Application."""
+        # The 404 HTTP code is allowed for the cases where the resource has been deleted
+        # during the test.
+        run(f"rok kube app delete {self.name}", condition=allow_404)
 
     def check_deleted(self):
-        """Run the command for checking if the Application has been deleted.
-        """
+        """Run the command for checking if the Application has been deleted."""
         error_message = f"Unable to observe the application {self.name} deleted"
         run(
             f"rok kube app get {self.name}",
@@ -455,7 +450,7 @@ class ApplicationDefinition(NamedTuple):
             f"is running on cluster {cluster_name}."
         )
         run(
-            f"rok kube app get {self.name} -f json",
+            f"rok kube app get {self.name} -o json",
             condition=check_app_running_on(cluster_name, error_message),
         )
 
@@ -478,28 +473,24 @@ class ClusterDefinition(NamedTuple):
     labels: list = []
     kind: str = "Cluster"
 
-    def creation_command(self):
-        """Generate a command for creating a cluster.
-
-        Returns:
-            str: the command to create a cluster.
-
-        """
+    def create_resource(self):
+        """Create the Cluster."""
         label_flags = " ".join(f"-l {label}" for label in self.labels)
-        return f"rok kube cluster create {label_flags} {self.kubeconfig_path}"
 
-    def delete_command(self):
-        """Generate a command for deleting a cluster.
+        error_message = f"The Cluster {self.name}"
+        run(
+            f"rok kube cluster create {label_flags} {self.kubeconfig_path}",
+            condition=check_return_code(error_message),
+        )
 
-        Returns:
-            str: the command to delete a cluster.
-
-        """
-        return f"rok kube cluster delete {self.name}"
+    def delete_resource(self):
+        """Delete the actual Cluster."""
+        # The 404 HTTP code is allowed for the cases where the resource has been deleted
+        # during the test.
+        run(f"rok kube cluster delete {self.name}", condition=allow_404)
 
     def check_deleted(self):
-        """Run the command for checking if the Cluster has been deleted.
-        """
+        """Run the command for checking if the Cluster has been deleted."""
         error_message = f"Unable to observe the cluster {self.name} deleted"
         run(
             f"rok kube cluster get {self.name}",
@@ -592,10 +583,7 @@ class Environment(object):
         for _, resource_list in sorted(self.res_to_create.items(), reverse=True):
             for resource in resource_list:
                 self.resources[resource.kind] += [resource]
-                # FIXME because rok returns an error code of "1" even if the resource
-                #  was created, there are no check done here. It should be added as soon
-                #  as rok has been refactored.
-                run(resource.creation_command())
+                resource.create_resource()
 
         # Check for each resource if it has been created
         for _, resource_list in sorted(self.res_to_create.items(), reverse=True):
@@ -606,14 +594,11 @@ class Environment(object):
         return self.resources
 
     def __exit__(self, *exceptions):
-        """Delete all given resources and check that they have been actually deleted.
-        """
+        """Delete all given resources and check that they have been actually deleted."""
         # Delete resources with lowest priority first
         for _, resource_list in sorted(self.res_to_create.items()):
             for resource in resource_list:
-                # The 404 HTTP code is allowed for the cases where the resource has been
-                # deleted during the test.
-                run(resource.delete_command(), condition=allow_404)
+                resource.delete_resource()
 
         # Check for each resource if it has been deleted
         for _, resource_list in sorted(self.res_to_create.items()):

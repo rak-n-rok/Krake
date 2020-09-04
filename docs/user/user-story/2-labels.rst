@@ -15,7 +15,7 @@ Introduction to Scheduling mechanisms
 
 .. prompt:: bash $ auto
 
-    $ watch "rok kube app get echo-demo -f json | jq .status.running_on"
+    $ watch "rok kube app get echo-demo -o json | jq .status.running_on"
 
 - Watch Scheduler logs:
 
@@ -55,7 +55,7 @@ Spawn the demo application
 .. prompt:: bash $ auto
 
     $ rok kube app create -f git/krake/rak/functionals/echo-demo.yaml echo-demo -L location=DE
-    $ rok kube app get echo-demo -f json | jq .status.running_on
+    $ rok kube app get echo-demo -o json | jq .status.running_on
 
 Observe a migration
 ===================
@@ -65,7 +65,7 @@ Observe a migration
 .. prompt:: bash $ auto
 
     $ rok kube app update echo-demo -L location=SK
-    $ rok kube app get echo-demo -f json | jq .status.running_on  # The Application is now running on "minikube-cluster-demoenv-2"
+    $ rok kube app get echo-demo -o json | jq .status.running_on  # The Application is now running on "minikube-cluster-demoenv-2"
 
 Cleanup
 =======

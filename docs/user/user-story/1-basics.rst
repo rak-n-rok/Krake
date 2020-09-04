@@ -47,13 +47,13 @@ Spawn the demo application
 .. prompt:: bash $ auto
 
     $ rok kube app get echo-demo
-    $ rok kube app get echo-demo -f json  # Use JSON format, which is also more verbose
+    $ rok kube app get echo-demo -o json  # Use JSON format, which is also more verbose
 
 - Access the demo application endpoint:
 
 .. prompt:: bash $ auto
 
-    $ APP_URL=$(rok kube app get echo-demo -f json | jq '.status.services["echo-demo"]'); APP_URL="${APP_URL:1: -1}"  # Extract Application endpoint from JSON output and register it in the APP_URL variable
+    $ APP_URL=$(rok kube app get echo-demo -o json | jq '.status.services["echo-demo"]'); APP_URL="${APP_URL:1: -1}"  # Extract Application endpoint from JSON output and register it in the APP_URL variable
     $ curl $APP_URL
 
 - Check the created resources on the Kubernetes cluster:
