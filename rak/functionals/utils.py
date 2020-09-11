@@ -14,6 +14,9 @@ KRAKE_HOMEDIR = "/home/krake"
 ROK_INSTALL_DIR = f"{KRAKE_HOMEDIR}/.local/bin"
 STICKINESS_WEIGHT = 0.1
 
+_ETCD_STATIC_PROVIDER_PREFIX = "/core/metricsprovider/static_provider"
+_ETCDCTL_ENV = {"ETCDCTL_API": "3"}
+
 
 class Response(object):
     """The response of a command
@@ -178,6 +181,41 @@ def check_app_state(state, error_message, reason=None):
     return validate
 
 
+def check_app_created_and_up():
+    err_msg_fmt = "App was not up and running. Error: %(details)s"
+
+    def validate(response):
+        try:
+            app_details = response.json
+            expected_state = "RUNNING"
+            observed_state = app_details["status"]["state"]
+            observed_running_on = app_details["status"]["running_on"]
+            observed_scheduled_to = app_details["status"]["scheduled_to"]
+
+            details = (
+                f"Unable to observe application in a {expected_state} state. "
+                f"Observed: {observed_state}."
+            )
+            assert observed_state == expected_state, err_msg_fmt % {"details": details}
+
+            details = (
+                f"App was in {expected_state} state but its running_on "
+                f"was {observed_running_on}."
+            )
+            assert observed_running_on, err_msg_fmt % {"details": details}
+
+            details = (
+                f"App was in {expected_state} state but its scheduled_to "
+                f"was {observed_scheduled_to}."
+            )
+            assert observed_scheduled_to, err_msg_fmt % {"details": details}
+
+        except (KeyError, json.JSONDecodeError) as e:
+            raise AssertionError(err_msg_fmt % {"details": str(e)})
+
+    return validate
+
+
 def check_return_code(error_message, expected_code=0):
     """Create a callable to verify the return code of a response.
 
@@ -325,10 +363,15 @@ def check_app_running_on(expected_cluster, error_message):
     def validate(response):
         try:
             app_details = response.json
-            observed_cluster = app_details["status"]["running_on"]["name"]
-            msg = error_message + f" Observed cluster: {observed_cluster}"
+            observed_cluster = app_details["status"]["running_on"].get("name", None)
+            scheduled_to = app_details["status"]["scheduled_to"].get("name", None)
+            msg = (
+                error_message + f" App state: {app_details['status']['state']}, "
+                f"App scheduled_to: {scheduled_to}, "
+                f"Observed cluster: {observed_cluster}"
+            )
             assert observed_cluster == expected_cluster, msg
-        except json.JSONDecodeError:
+        except (KeyError, json.JSONDecodeError):
             raise AssertionError(error_message)
 
     return validate
@@ -413,12 +456,8 @@ class ApplicationDefinition(NamedTuple):
 
     def check_created(self):
         """Run the command for checking if the Application has been created."""
-        error_message = (
-            f"Unable to observe the application {self.name} in a RUNNING state"
-        )
         run(
-            f"rok kube app get {self.name} -o json",
-            condition=check_app_state("RUNNING", error_message),
+            self.get_command(), condition=check_app_created_and_up(),
         )
 
     def delete_resource(self):
@@ -440,8 +479,7 @@ class ApplicationDefinition(NamedTuple):
         """Run the command for checking if the Application has been deleted."""
         error_message = f"Unable to observe the application {self.name} deleted"
         run(
-            f"rok kube app get {self.name}",
-            condition=check_resource_deleted(error_message),
+            self.get_command(), condition=check_resource_deleted(error_message),
         )
 
     def update(self, cluster_labels=None, migration=None, labels=None):
@@ -497,20 +535,39 @@ class ApplicationDefinition(NamedTuple):
             f"{clc_options} {migration_flag} {label_options} {self.name}"
         )
 
-    def check_running_on(self, cluster_name):
+    def check_running_on(
+        self, cluster_name, within=10, after_delay=0, error_message=""
+    ):
         """Run the command for checking that the application is running on the
         specified cluster.
+
+        The first check occurs after `after_delay` seconds, and rechecks for
+        `within` seconds every
+        second until the application was observed to run on the cluster
+        `cluster_name`.
+
+        An AssertionError is raised if the application is not running on cluster
+        `cluster_name` within `within` seconds of the first check.
 
         Args:
             cluster_name (str): Name of the cluster on which the application is
                 expected to run.
+            within (int): number of seconds it is allowed to take until the app
+                is running on the cluster `cluster_name`.
+            after_delay (int): number of seconds to delay before checking.
+            error_message (str): displayed error message in case of error.
         """
-        error_message = (
-            f"Unable to observe that the application {self.name} "
-            f"is running on cluster {cluster_name}."
-        )
+        if not error_message:
+            error_message = (
+                f"Unable to observe that the application {self.name} "
+                f"is running on cluster {cluster_name}."
+            )
+        if after_delay:
+            time.sleep(after_delay)
         run(
-            f"rok kube app get {self.name} -o json",
+            self.get_command(),
+            retry=within,
+            interval=1,
             condition=check_app_running_on(cluster_name, error_message),
         )
 
@@ -531,9 +588,9 @@ class ApplicationDefinition(NamedTuple):
         Returns:
             str: the command to get the application
         """
-        return f"rok kube app get {self.name} -f json"
+        return f"rok kube app get {self.name} -o json"
 
-    def get_running_on(self, strict=True):
+    def get_running_on(self, strict=False):
         """Run the command for getting the application and return the name of
         the cluster it is running on.
 
@@ -546,12 +603,32 @@ class ApplicationDefinition(NamedTuple):
             if scheduled_to != running_on
         """
         app_dict = self.get()
-        scheduled_to = app_dict["status"]["scheduled_to"]["name"]
         running_on = app_dict["status"]["running_on"]["name"]
-        if scheduled_to != running_on and strict:
-            # We cannot be sure...
-            return None
+        if strict:
+            scheduled_to = app_dict["status"]["scheduled_to"]["name"]
+            if scheduled_to != running_on:
+                # We cannot be sure where it is running right now...
+                return None
         return running_on
+
+    def get_scheduled_to(self):
+        """Run the command for getting the application and return the name of
+        the cluster it is scheduled to.
+
+        Returns:
+            str: the name of the cluster the application is scheduled to
+        """
+        app_dict = self.get()
+        return app_dict["status"]["scheduled_to"]["name"]
+
+    def get_state(self):
+        """Run the command for getting the application and return its state.
+
+        Returns:
+            str: the current state of the application
+        """
+        app_dict = self.get()
+        return app_dict["status"]["state"]
 
 
 class ClusterDefinition(NamedTuple):
@@ -912,24 +989,64 @@ def get_scheduling_score(cluster, values, weights, scheduled_to=None):
     return rank / norm
 
 
+def _put_etcd_entry(data, ns_prefix):
+    """Put `data` into etcdctl at prefix `ns_prefix`.
+
+    Args:
+        data (dict): The data to put
+        ns_prefix (str): the namespace prefix.
+
+    """
+    data_str = json.dumps(data)
+    put_cmd = ["etcdctl", "put", ns_prefix, "--", data_str]
+    run(command=put_cmd, env_vars=_ETCDCTL_ENV)
+
+
+def _get_etcd_entry(ns_prefix, condition=None):
+    """Retrieve the output from etcdctl at prefix `ns_prefix`.
+    This method calls run to perform the actual command.
+
+    Args:
+        ns_prefix (str): the namespace prefix to retrieve from the db.
+        condition (callable, optional): a callable to pass to run
+
+    Returns:
+        dict
+    """
+    get_cmd = ["etcdctl", "get", "--prefix", ns_prefix]
+    resp = run(command=get_cmd, condition=condition, env_vars=_ETCDCTL_ENV)
+    try:
+        parts = resp.output.split("\n")
+        return json.loads(parts[1])
+    except Exception as e:
+        msg = f"Failed to load response '{resp}'. Error: {e}"
+        raise AssertionError(msg)
+
+
+def get_static_metrics():
+    """Retrieve metrics from the etcd database.
+
+    Returns:
+         dict(str: str)
+            Dict with the metrics names as keys and metric values as values.
+
+    """
+    static_provider = _get_etcd_entry(_ETCD_STATIC_PROVIDER_PREFIX)
+    return static_provider["spec"]["static"]["metrics"]
+
+
 def set_static_metrics(values):
     """Modify the database entry for the static metrics provider by setting its
      values to the provided metrics.
 
     Args:
-        values (dict): Dictionary with the metrics names as keys and
+        values (dict(str: str)): Dictionary with the metrics names as keys and
             metric values as values.
 
     """
-    # get the static_provider from the database
-    ns_prefix = "/core/metricsprovider/static_provider"
-    env = {"ETCDCTL_API": "3"}
-    get_cmd = ["etcdctl", "get", "--prefix", ns_prefix]
-    resp = run(command=get_cmd, env_vars=env)
-    parts = resp.output.split("\n")
-    static_provider = json.loads(parts[1])
+    static_provider = _get_etcd_entry(_ETCD_STATIC_PROVIDER_PREFIX)
 
-    # santity check that we are only modifying existing metrics
+    # sanity check that we are only modifying existing metrics
     old_metrics = static_provider["spec"]["static"]["metrics"]
     assert all([metric in old_metrics for metric in values])
 
@@ -937,6 +1054,48 @@ def set_static_metrics(values):
     static_provider["spec"]["static"]["metrics"].update(values)
 
     # update database with the updated static_provider
-    data = json.dumps(static_provider)
-    put_cmd = ["etcdctl", "put", ns_prefix, "--", data]
-    run(command=put_cmd, env_vars=env)
+    _put_etcd_entry(static_provider, ns_prefix=_ETCD_STATIC_PROVIDER_PREFIX)
+
+    # make sure the changing of the values took place
+    _get_etcd_entry(
+        _ETCD_STATIC_PROVIDER_PREFIX, condition=check_static_metrics(values)
+    )
+
+
+def check_static_metrics(expected_metrics, error_message=""):
+    """Create a callable to verify that the static provider response contains
+    the expected values.
+
+    To be used with the :meth:`run` function. The callable will raise an
+    :class:`AssertionError` if the static metrics in the response are different
+    from the given ones.
+
+    Args:
+        expected_metrics (dict(str: str)): Dictionary with the metrics names as
+            keys and metric values as values.
+        error_message (str): the message that will be displayed if the
+            check fails.
+
+    Returns:
+        callable: a condition that will check its given response against
+            the parameters of the current function.
+
+    """
+    if not error_message:
+        error_message = (
+            f"The static provider did not provide the expected "
+            f"metrics. Expected metrics: {expected_metrics}"
+        )
+
+    def validate(response):
+        try:
+            parts = response.output.split("\n")
+            static_provider = json.loads(parts[1])
+            observed_metrics = static_provider["spec"]["static"]["metrics"]
+            msg = error_message + f" Provided metrics: {observed_metrics}"
+            for m, val in expected_metrics.items():
+                assert m in observed_metrics and val == observed_metrics[m], msg
+        except Exception as e:
+            raise AssertionError(error_message + f"Error: {e}")
+
+    return validate
