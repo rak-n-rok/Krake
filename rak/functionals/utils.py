@@ -359,14 +359,19 @@ class ApplicationDefinition(NamedTuple):
     kind: str = "Application"
 
     def creation_command(self):
-        """Generate a command for creating an Application.
+        """Generate a command for creating the Application.
 
         Returns:
-            str: the command to create an Application.
+            str: the command to create the Application.
 
         """
         migration_flag = self._get_migration_flag(self.migration)
-        constraints = " ".join(f"-L {constraint}" for constraint in self.constraints)
+        constraints = (
+            " ".join(f"-L {constraint}" for constraint in self.constraints)
+            if self.constraints
+            else ""
+        )
+
         return (
             f"rok kube app create {migration_flag} {constraints} "
             f"-f {self.manifest_path} {self.name}"
