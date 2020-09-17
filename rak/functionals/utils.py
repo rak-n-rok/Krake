@@ -666,6 +666,8 @@ def create_multiple_cluster_environment(
         cluster_labels = {cn: [] for cn in kubeconfig_paths}
     if not metrics:
         metrics = {cn: {} for cn in kubeconfig_paths}
+    if not app_cluster_constraints:
+        app_cluster_constraints = []
 
     env = {
         10: [
