@@ -1,3 +1,4 @@
+import itertools
 import json
 import logging
 import os
@@ -362,20 +363,14 @@ class ApplicationDefinition(NamedTuple):
         """Generate a command for creating the Application.
 
         Returns:
-            str: the command to create the Application.
+            list(str): the command to create the Application.
 
         """
-        migration_flag = self._get_migration_flag(self.migration)
-        constraints = (
-            " ".join(f"-L {constraint}" for constraint in self.constraints)
-            if self.constraints
-            else ""
-        )
-
-        return (
-            f"rok kube app create {migration_flag} {constraints} "
-            f"-f {self.manifest_path} {self.name}"
-        )
+        cmd = f"rok kube app create -f {self.manifest_path} {self.name}".split()
+        cmd += self._get_cluster_label_options(self.constraints)
+        if self.migration:
+            cmd += [self._get_migration_flag(self.migration)]
+        return cmd
 
     @staticmethod
     def _get_migration_flag(migration):
@@ -432,24 +427,59 @@ class ApplicationDefinition(NamedTuple):
             labels (dict): dict of labels with which to update the application.
 
         Returns:
-            str: the command to update the Application.
+            list(str): the command to update the Application.
 
         """
-        migration_flag = self._get_migration_flag(migration)
-        clc_options = (
-            " ".join(f"-L {constraint}" for constraint in cluster_labels)
-            if cluster_labels
-            else ""
-        )
-        label_options = (
-            " ".join(f"-l {label}={value}" for label, value in labels.items())
-            if labels
-            else ""
-        )
-        return (
-            f"rok kube app update "
-            f"{clc_options} {migration_flag} {label_options} {self.name}"
-        )
+        cmd = f"rok kube app update {self.name}".split()
+        cmd += self._get_cluster_label_options(cluster_labels)
+        cmd += self._get_label_options(labels)
+        if migration:
+            cmd += [self._get_migration_flag(migration)]
+        return cmd
+
+    def _get_cluster_label_options(self, cluster_label_constraints):
+        """
+        Args:
+            cluster_label_constraints (list(str)): list of cluster label constraints
+                to give the application, e.g. ['location is DE']
+
+        Returns:
+            list(str): ['-L', constr_1, '-L', constr_2, ..., '-L', constr_n]
+                for all n constraints in cluster_label_constraints.
+
+        """
+        return self._get_flag_str_options("-L", cluster_label_constraints)
+
+    def _get_label_options(self, labels):
+        """
+        Args:
+            labels (dict(str: str)): dict of application labels and their values
+
+        Returns:
+            list(str):
+                ['-l', key_1=value_1, '-l', key_2=value_2, ..., '-l', key_n=value_n]
+                for all n key, value pairs in labels.
+
+        """
+        labels = [k + "=" + v for k, v in labels.items()]
+        return self._get_flag_str_options("-l", labels)
+
+    @staticmethod
+    def _get_flag_str_options(flag, values):
+        """
+        Convenience method for generating option lists for cli commands.
+
+        Args:
+            flag (str):
+            values (list(str)):
+
+        Returns:
+            list(str): [flag, val1, flag, val_2, ..., flag, val_n]
+                for all n values in values.
+        """
+        if not values:
+            return []
+        return list(itertools.chain(*[[flag, val] for val in values]))
 
     def check_running_on(self, cluster_name):
         """Run the command for checking that the application is running on the
@@ -755,6 +785,11 @@ def create_default_environment(
     """
     kubeconfig_paths = {c: os.path.join(CLUSTERS_CONFIGS, c) for c in cluster_names}
     manifest_path = os.path.join(MANIFEST_PATH, DEFAULT_MANIFEST)
+    if cluster_labels:
+        cluster_labels = {
+            c: ["=".join([key, value]) for key, value in cluster_labels[c].items()]
+            for c in cluster_names
+        }
     return create_multiple_cluster_environment(
         kubeconfig_paths=kubeconfig_paths,
         metrics=metrics,
