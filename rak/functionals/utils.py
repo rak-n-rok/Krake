@@ -418,13 +418,18 @@ class ApplicationDefinition(NamedTuple):
             condition=check_resource_deleted(error_message),
         )
 
-    def update_command(self, cluster_labels=None, migration=None):
-        """Generate a command for updating an application
+    def update_command(self, cluster_labels=None, migration=None, labels=None):
+        """Generate a command for updating the application
 
         Args:
             cluster_labels (list(str)): optional list of cluster label constraints
-            migration (bool): optional migration flag indicating whether the
-                application should be able to migrate.
+                to give the application, e.g. ['location=DE']
+            migration (bool): Optional flag indicating which migration flag should
+                be given to the update command.
+                    True: --enable-migration
+                    False: --disable-migration
+                    None: (No flag)
+            labels (dict): dict of labels with which to update the application.
 
         Returns:
             str: the command to update the Application.
@@ -436,7 +441,15 @@ class ApplicationDefinition(NamedTuple):
             if cluster_labels
             else ""
         )
-        return f"rok kube app update {clc_options} {migration_flag} {self.name}"
+        label_options = (
+            " ".join(f"-l {label}={value}" for label, value in labels.items())
+            if labels
+            else ""
+        )
+        return (
+            f"rok kube app update "
+            f"{clc_options} {migration_flag} {label_options} {self.name}"
+        )
 
     def check_running_on(self, cluster_name):
         """Run the command for checking that the application is running on the
