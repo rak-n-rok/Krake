@@ -119,14 +119,19 @@ def test_scheduler_cluster_label_constraints(minikube_clusters):
         minikube_clusters (list): Names of the Minikube backend.
 
     """
+    num_clusters = 2
+    countries = ["DE", "IT"]
+
     for match, constraints in CONSTRAINT_EXPRESSIONS.items():
+
+        # We expect the app to be scheduled on the DE cluster if match and
+        # otherwise on the IT cluster, so we remember this index into the
+        # 'countries' list (and later also into the 'clusters' list).
+        expected_index = 0 if match else 1  # choose DE if match else IT
+
         for app_cluster_constraint in constraints:
             # The two clusters used in this test (randomly ordered)
-            clusters = random.sample(minikube_clusters, 2)
-            countries = ["DE", "IT"]
-
-            # Determine which cluster we expect the application to be scheduled to
-            requested_cluster = clusters[0]  # The DE cluster
+            clusters = random.sample(minikube_clusters, num_clusters)
 
             # 1. Create two clusters from a config file with the cluster labels
             #     `location=DE` and `location=IT` (in random order);
@@ -142,7 +147,7 @@ def test_scheduler_cluster_label_constraints(minikube_clusters):
                 app = resources["Application"][0]
 
                 # 3. Ensure that the application was scheduled to the requested cluster;
-                app.check_running_on(requested_cluster)
+                app.check_running_on(clusters[expected_index])
 
 
 def test_scheduler_clusters_with_metrics(minikube_clusters):
@@ -242,19 +247,21 @@ def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
         minikube_clusters (list): Names of the Minikube backend.
 
     """
-
+    num_clusters = 2
+    countries = ["DE", "IT"]
     for match, constraints in CONSTRAINT_EXPRESSIONS.items():
+
+        # We expect the app to be scheduled on the DE cluster if match and
+        # otherwise on the IT cluster, so we remember this index into the
+        # 'countries' list (and later also into the 'clusters' list).
+        expected_index = 0 if match else 1  # choose DE if match else IT
+
         for app_cluster_constraint in constraints:
             # The two clusters, countries and metrics used in this test
             # (randomly ordered)
-            num_clusters = 2
             clusters = random.sample(minikube_clusters, num_clusters)
             metric_names = random.sample(set(METRICS), num_clusters)
             weights = [1] * num_clusters
-            countries = ["DE", "IT"]
-
-            # Determine to which cluster we expect the application to be scheduled
-            requested_cluster = clusters[0]  # The DE cluster
 
             # 1. Create an application (with a cluster label constraint given from
             # `CONSTRAINT_EXPRESSIONS`) and two Minikube clusters (from a config file)
@@ -272,7 +279,7 @@ def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
                 app = resources["Application"][0]
 
                 # 2. Ensure that the application was scheduled to the requested cluster;
-                app.check_running_on(requested_cluster)
+                app.check_running_on(clusters[expected_index])
 
 
 def test_unreachable_metrics_provider(minikube_clusters):
