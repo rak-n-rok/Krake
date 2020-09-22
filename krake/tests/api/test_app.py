@@ -105,3 +105,32 @@ async def test_transaction_error(aiohttp_client, db, config, loop):
     json = await resp.json()
     reason = HttpReason.deserialize(json)
     assert reason.code == HttpReasonCode.TRANSACTION_ERROR
+
+
+async def test_cors_setup(aiohttp_client, db, config, loop):
+    app = create_app(config=config)
+    client = await aiohttp_client(app)
+
+    # Authorized request to Krake
+    resp = await client.options(
+        "/",
+        headers={
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "X-Requested-With",
+            "Origin": "http://example.com",
+        },
+    )
+    assert resp.status == 200
+
+    # Request refused because of the "PATCH" method.
+    resp = await client.options(
+        "/",
+        headers={
+            "Access-Control-Request-Method": "PATCH",
+            "Access-Control-Request-Headers": "X-Requested-With",
+            "Origin": "http://example.com",
+        },
+    )
+    data = await resp.text()
+    assert "PATCH" in data and "CORS" in data
+    assert resp.status == 403
