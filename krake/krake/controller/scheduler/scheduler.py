@@ -601,15 +601,19 @@ class Scheduler(Controller):
 
         # Only use clusters without metrics when there are no clusters with
         # metrics.
-        if not with_metrics:
+        ranked = []
+        if with_metrics:
+            # Rank the clusters based on their metric and return the cluster with
+            # a minimal rank.
+            ranked = await self.rank_kubernetes_clusters(app, with_metrics)
+
+        if not ranked:
+            # If no cluster with metrics could be ranked (e.g. due to unreachable
+            # metrics providers), rank the matching clusters that do not have metrics.
             ranked = [
                 self.calculate_kubernetes_cluster_rank((), cluster, app)
                 for cluster in matching
             ]
-        else:
-            # Rank the clusters based on their metric and return the cluster with
-            # a minimal rank.
-            ranked = await self.rank_kubernetes_clusters(app, with_metrics)
 
         if not ranked:
             logger.info("Unable to rank any Kubernetes cluster")
