@@ -865,6 +865,37 @@ async def test_register_service_without_node_port():
     assert app.status.services == {}
 
 
+node_port_response = next(
+    yaml.safe_load_all(
+        """
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: '2019-07-30T15:11:15Z'
+  name: nginx-demo
+  namespace: secondary
+  resourceVersion: '115304'
+  selfLink: /api/v1/namespaces/secondary/services/nginx-demo
+  uid: 266728ad-090a-4282-8185-9328eb673cd3
+spec:
+  clusterIP: 10.107.207.206
+  externalTrafficPolicy: Cluster
+  ports:
+  - nodePort: 30886
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: nginx
+  sessionAffinity: None
+  type: NodePort
+status:
+  loadBalancer: {}
+"""
+    )
+)
+
+
 async def test_service_registration(aiohttp_server, config, db, loop):
     # Setup Kubernetes API mock server
     routes = web.RouteTableDef()
@@ -875,36 +906,7 @@ async def test_service_registration(aiohttp_server, config, db, loop):
 
     @routes.post("/api/v1/namespaces/secondary/services")
     async def _(request):
-        return web.json_response(
-            {
-                "kind": "Service",
-                "apiVersion": "v1",
-                "metadata": {
-                    "name": "nginx-demo",
-                    "namespace": "secondary",
-                    "selfLink": "/api/v1/namespaces/secondary/services/nginx-demo",
-                    "uid": "266728ad-090a-4282-8185-9328eb673cd3",
-                    "resourceVersion": "115304",
-                    "creationTimestamp": "2019-07-30T15:11:15Z",
-                },
-                "spec": {
-                    "ports": [
-                        {
-                            "protocol": "TCP",
-                            "port": 80,
-                            "targetPort": 80,
-                            "nodePort": 30886,
-                        }
-                    ],
-                    "selector": {"app": "nginx"},
-                    "clusterIP": "10.107.207.206",
-                    "type": "NodePort",
-                    "sessionAffinity": "None",
-                    "externalTrafficPolicy": "Cluster",
-                },
-                "status": {"loadBalancer": {}},
-            }
-        )
+        return web.json_response(node_port_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -913,29 +915,13 @@ async def test_service_registration(aiohttp_server, config, db, loop):
 
     # Setup API Server
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    service_manifest = deepcopy(nginx_manifest[1:])
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING,
         status__is_scheduled=True,
         status__scheduled_to=resource_ref(cluster),
-        spec__manifest=list(
-            yaml.safe_load_all(
-                """---
-            apiVersion: v1
-            kind: Service
-            metadata:
-              name: nginx-demo
-              namespace: secondary
-            spec:
-              type: NodePort
-              selector:
-                app: nginx
-              ports:
-              - port: 80
-                protocol: TCP
-                targetPort: 80
-            """
-            )
-        ),
+        spec__manifest=service_manifest,
     )
 
     await db.put(cluster)
@@ -979,36 +965,7 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
 
     @routes.get("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
-        return web.json_response(
-            {
-                "apiVersion": "v1",
-                "kind": "Service",
-                "metadata": {
-                    "creationTimestamp": "2019-11-12 08:44:02+00:00",
-                    "name": "nginx-demo",
-                    "namespace": "secondary",
-                    "resourceVersion": "2075568",
-                    "selfLink": "/api/v1/namespaces/secondary/services/nginx-demo",
-                    "uid": "4da165e0-e58f-4058-be44-fa393a58c2c8",
-                },
-                "spec": {
-                    "clusterIp": "10.98.197.124",
-                    "externalTrafficPolicy": "Cluster",
-                    "ports": [
-                        {
-                            "nodePort": 30704,
-                            "port": 8080,
-                            "protocol": "TCP",
-                            "targetPort": 8080,
-                        }
-                    ],
-                    "selector": {"app": "echo"},
-                    "sessionAffinity": "None",
-                    "type": "NodePort",
-                },
-                "status": {"loadBalancer": {}},
-            }
-        )
+        return web.json_response(node_port_response)
 
     @routes.delete("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
@@ -1033,31 +990,13 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
 
     # Setup API Server
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
-    manifest = list(
-        yaml.safe_load_all(
-            """---
-            apiVersion: v1
-            kind: Service
-            metadata:
-              name: nginx-demo
-              namespace: secondary
-            spec:
-              type: NodePort
-              selector:
-                app: nginx
-              ports:
-              - port: 8080
-                protocol: TCP
-                targetPort: 8080
-        """
-        )
-    )
+    manifest = deepcopy(nginx_manifest[1:])
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING,
         status__is_scheduled=True,
         status__scheduled_to=resource_ref(cluster),
         spec__manifest=[],
-        status__services={"nginx-demo": "127.0.0.1:30704"},
+        status__services={"nginx-demo": "127.0.0.1:30886"},
         status__manifest=manifest,
     )
 
