@@ -8,7 +8,15 @@ from aiohttp.test_utils import TestServer as Server
 import pytz
 import yaml
 from krake.data.config import TlsClientConfiguration, TlsServerConfiguration
-from kubernetes_asyncio.client import V1Status, V1Service, V1ServiceSpec, V1ServicePort
+from kubernetes_asyncio.client import (
+    V1Status,
+    V1Service,
+    V1ServiceSpec,
+    V1ServicePort,
+    V1ServiceStatus,
+    V1LoadBalancerStatus,
+    V1LoadBalancerIngress,
+)
 
 from krake.api.app import create_app
 from krake.controller import create_ssl_context
@@ -860,9 +868,44 @@ async def test_register_service_without_node_port():
     resource = {"kind": "Service", "metadata": {"name": "nginx"}}
     cluster = ClusterFactory()
     app = ApplicationFactory(status__services={"nginx": "127.0.0.1:1234"})
-    response = V1Service(spec=V1ServiceSpec(ports=[]))
+    response = V1Service(
+        spec=V1ServiceSpec(ports=[V1ServicePort(port=80, target_port=8080)])
+    )
     await register_service(app, cluster, resource, response)
     assert app.status.services == {}
+
+
+async def test_register_load_balancer_service():
+    resource = {"kind": "Service", "metadata": {"name": "nginx"}}
+    cluster = ClusterFactory()
+    app = ApplicationFactory()
+    response = V1Service(
+        spec=V1ServiceSpec(
+            ports=[V1ServicePort(port=80, target_port=8080, node_port=1234)],
+            type="LoadBalancer",
+        ),
+        status=V1ServiceStatus(
+            load_balancer=V1LoadBalancerStatus(
+                ingress=[V1LoadBalancerIngress(ip="123.456.789.123")]
+            )
+        ),
+    )
+    await register_service(app, cluster, resource, response)
+    assert app.status.services == {"nginx": "123.456.789.123:80"}
+
+
+async def test_register_load_balancer_service_without_ip():
+    resource = {"kind": "Service", "metadata": {"name": "nginx"}}
+    cluster = ClusterFactory()
+    app = ApplicationFactory()
+    response = V1Service(
+        spec=V1ServiceSpec(
+            ports=[V1ServicePort(port=80, target_port=8080)], type="LoadBalancer"
+        ),
+        status=V1ServiceStatus(load_balancer=V1LoadBalancerStatus()),
+    )
+    await register_service(app, cluster, resource, response)
+    assert app.status.services == {"nginx": "<pending>:80"}
 
 
 node_port_response = next(

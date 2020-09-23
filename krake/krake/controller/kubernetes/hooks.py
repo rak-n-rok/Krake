@@ -154,6 +154,19 @@ async def register_service(app, cluster, resource, response):
     service_name = resource["metadata"]["name"]
     node_port = None
 
+    if response.spec and response.spec.type == "LoadBalancer":
+        # For a "LoadBalancer" type of Service, an external IP is given in the cluster
+        # by a load balancer controller to the service. In this case, the "port"
+        # specified in the spec is reachable from the outside.
+        if not response.status.load_balancer.ingress:
+            external_ip = "<pending>"
+        else:
+            external_ip = response.status.load_balancer.ingress[0].ip
+
+        external_port = response.spec.ports[0].port
+        app.status.services[service_name] = f"{external_ip}:{external_port}"
+        return
+
     # Ensure that ports are specified
     if response.spec and response.spec.ports:
         node_port = response.spec.ports[0].node_port
