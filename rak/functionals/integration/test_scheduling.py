@@ -471,36 +471,33 @@ def test_unreachable_metrics_provider(minikube_clusters):
 
     Test applies workflow as follows:
 
-        1. Create a Minikube clusters from a config file
-            Assign `heat_demand_zone_unreachable` metric to the randomly selected
-            cluster. `scheduled_to` variable is set to True if the cluster should be
-            selected by the scheduler algorithm.
-        2. Create an application
-        3. Validate application deployment
-        4. Delete the application
-        5. Delete the clusters
+        1. Create one application, one cluster without metrics, and one with
+            the metric `heat_demand_zone_unreachable`.
+            The cluster without the metric is expected to be chosen by the scheduler.
+        2. Ensure that the application was scheduled to the expected cluster;
 
     Args:
         minikube_clusters (list): Names of the Minikube backend.
 
     """
-    random.shuffle(minikube_clusters)
-    execute_tests(
-        [
-            Test(
-                application=Application(name="app-test"),
-                clusters=[
-                    Cluster(
-                        name=minikube_clusters[0],
-                        metrics=["heat_demand_zone_unreachable"],
-                        scheduled_to=False,
-                    ),
-                    Cluster(
-                        name=minikube_clusters[1],
-                        metrics=[random.choice(METRICS)],
-                        scheduled_to=True,
-                    ),
-                ],
-            )
-        ]
-    )
+    # The two clusters and metrics used in this test (randomly ordered)
+    num_clusters = 2
+    clusters = random.sample(minikube_clusters, num_clusters)
+    # metric_names = ["heat_demand_zone_unreachable"]
+    # weights = [1]
+
+    metrics_by_cluster = None  # create_cluster_info(clusters, metric_names, weights)
+
+    # Determine to which cluster we expect the application to be scheduled.
+    # (The cluster without the metric is expected to be chosen by the scheduler.)
+    expected_cluster = next(c for c in clusters if not metrics_by_cluster[c])
+
+    # 1. Create one application, one cluster without metrics, and one with
+    #     the metric `heat_demand_zone_unreachable`.
+    environment = None
+    # create_default_environment(clusters, metrics=metrics_by_cluster)
+    with Environment(environment) as resources:
+        app = resources["Application"][0]
+
+        # 2. Ensure that the application was scheduled to the expected cluster;
+        app.check_running_on(expected_cluster)
