@@ -148,8 +148,33 @@ async def register_service(app, cluster, resource, response):
         return
 
     service_name = resource["metadata"]["name"]
-    node_port = None
 
+    if response.spec and response.spec.type == "LoadBalancer":
+        # For a "LoadBalancer" type of Service, an external IP is given in the cluster
+        # by a load balancer controller to the service. In this case, the "port"
+        # specified in the spec is reachable from the outside.
+        if (
+            not response.status.load_balancer or
+            not response.status.load_balancer.ingress
+        ):
+            # When a "LoadBalancer" type of service is created, the IP is given by an
+            # additional controller (e.g. a controller that requests a floating IP to an
+            # OpenStack infrastructure). This process can take some time, but the
+            # Service itself already exist before the IP is assigned. In the case of an
+            # error with the controller, the IP is also not given. This "<pending>" IP
+            # just expresses that the Service exists, but the IP is not ready yet.
+            external_ip = "<pending>"
+        else:
+            external_ip = response.status.load_balancer.ingress[0].ip
+
+        if not response.spec.ports:
+            external_port = "<pending>"
+        else:
+            external_port = response.spec.ports[0].port
+        app.status.services[service_name] = f"{external_ip}:{external_port}"
+        return
+
+    node_port = None
     # Ensure that ports are specified
     if response.spec and response.spec.ports:
         node_port = response.spec.ports[0].node_port

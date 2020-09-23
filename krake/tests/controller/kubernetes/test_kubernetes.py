@@ -11,13 +11,14 @@ from aiohttp import web, ClientConnectorError
 from asyncio.subprocess import PIPE, STDOUT
 import pytz
 
-from krake import utils
-from krake.controller.kubernetes.client import InvalidManifestError
 from kubernetes_asyncio.client import (
     V1Service,
     V1ServiceSpec,
     V1ServicePort,
     ApiException,
+    V1ServiceStatus,
+    V1LoadBalancerStatus,
+    V1LoadBalancerIngress,
 )
 
 from krake.api.app import create_app
@@ -30,6 +31,7 @@ from krake.controller.kubernetes import (
     unregister_service,
     KubernetesClient,
 )
+from krake.controller.kubernetes.client import InvalidManifestError
 from krake.controller.kubernetes.kubernetes import ResourceDelta
 from krake.controller.kubernetes.hooks import (
     update_last_applied_manifest_from_spec,
@@ -38,6 +40,7 @@ from krake.controller.kubernetes.hooks import (
 )
 from krake.client import Client
 from krake.test_utils import server_endpoint, with_timeout, serialize_k8s_object
+from krake import utils
 
 from tests.factories.fake import fake
 from tests.factories.kubernetes import (
@@ -1395,13 +1398,63 @@ async def test_register_service_with_empty_ports():
     assert app.status.services == {}
 
 
-async def test_register_service_without_node_port():
+async def test_register_clusterip_service_without_node_port():
     resource = {"kind": "Service", "metadata": {"name": "nginx"}}
     cluster = ClusterFactory()
     app = ApplicationFactory(status__services={"nginx": "127.0.0.1:1234"})
-    response = V1Service(spec=V1ServiceSpec(ports=[]))
+    response = V1Service(
+        spec=V1ServiceSpec(
+            ports=[V1ServicePort(port=80, target_port=8080)], type="ClusterIP"
+        )
+    )
     await register_service(app, cluster, resource, response)
     assert app.status.services == {}
+
+
+async def test_register_nodeport_service_without_node_port():
+    resource = {"kind": "Service", "metadata": {"name": "nginx"}}
+    cluster = ClusterFactory()
+    app = ApplicationFactory(status__services={"nginx": "127.0.0.1:1234"})
+    response = V1Service(
+        spec=V1ServiceSpec(
+            ports=[V1ServicePort(port=80, target_port=8080)], type="NodePort"
+        )
+    )
+    await register_service(app, cluster, resource, response)
+    assert app.status.services == {}
+
+
+async def test_register_load_balancer_service():
+    resource = {"kind": "Service", "metadata": {"name": "nginx"}}
+    cluster = ClusterFactory()
+    app = ApplicationFactory()
+    response = V1Service(
+        spec=V1ServiceSpec(
+            ports=[V1ServicePort(port=80, target_port=8080, node_port=1234)],
+            type="LoadBalancer",
+        ),
+        status=V1ServiceStatus(
+            load_balancer=V1LoadBalancerStatus(
+                ingress=[V1LoadBalancerIngress(ip="123.456.789.123")]
+            )
+        ),
+    )
+    await register_service(app, cluster, resource, response)
+    assert app.status.services == {"nginx": "123.456.789.123:80"}
+
+
+async def test_register_load_balancer_service_without_ip():
+    resource = {"kind": "Service", "metadata": {"name": "nginx"}}
+    cluster = ClusterFactory()
+    app = ApplicationFactory()
+    response = V1Service(
+        spec=V1ServiceSpec(
+            ports=[V1ServicePort(port=80, target_port=8080)], type="LoadBalancer"
+        ),
+        status=V1ServiceStatus(load_balancer=V1LoadBalancerStatus()),
+    )
+    await register_service(app, cluster, resource, response)
+    assert app.status.services == {"nginx": "<pending>:80"}
 
 
 async def test_service_registration(aiohttp_server, config, db, loop):
