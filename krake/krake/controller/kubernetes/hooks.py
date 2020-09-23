@@ -18,6 +18,7 @@ from typing import NamedTuple
 import OpenSSL
 import yarl
 from krake.controller import Observer, ControllerError
+from krake.controller.kubernetes.client import KubernetesClient
 from krake.utils import camel_to_snake_case
 from kubernetes_asyncio.client.rest import ApiException
 from yarl import URL
@@ -227,18 +228,14 @@ class KubernetesObserver(Observer):
             of the resource to observe will be updated. If the API cannot be contacted,
             ``None`` can be returned. In this case the internal instance of the Observer
             will not be updated.
-        kubernetes_client (type):
         time_step (int, optional): how frequently the Observer should watch the actual
             status of the resources.
 
     """
 
-    def __init__(
-        self, cluster, resource, on_res_update, kubernetes_client, time_step=2
-    ):
+    def __init__(self, cluster, resource, on_res_update, time_step=2):
         super().__init__(resource, on_res_update, time_step)
         self.cluster = cluster
-        self.kubernetes_client = kubernetes_client
 
     async def poll_resource(self):
         """Fetch the current status of the Application monitored by the Observer.
@@ -256,12 +253,14 @@ class KubernetesObserver(Observer):
         # For each kubernetes resource of the Application,
         # get its current status on the cluster.
         for resource in app.status.manifest:
-            kube = self.kubernetes_client(self.cluster.spec.kubeconfig)
+            kube = KubernetesClient(self.cluster.spec.kubeconfig)
             async with kube:
                 try:
                     resource_api = await kube.get_resource_api(resource["kind"])
+
+                    namespace = resource["metadata"].get("namespace", "default")
                     resp = await resource_api.read(
-                        resource["kind"], resource["metadata"]["name"], "default"
+                        resource["kind"], resource["metadata"]["name"], namespace
                     )
                 except ApiException as err:
                     if err.status == 404:
@@ -337,7 +336,7 @@ def merge_status(orig, new):
 
 @listen.on(Hook.ApplicationPostReconcile)
 @listen.on(Hook.ApplicationPostMigrate)
-async def register_observer(controller, app, kubernetes_client, start=True, **kwargs):
+async def register_observer(controller, app, start=True, **kwargs):
     """Create an observer for the given Application, and start it as background
     task if wanted.
 
@@ -347,7 +346,6 @@ async def register_observer(controller, app, kubernetes_client, start=True, **kw
         controller (KubernetesController): the controller for which the observer will be
             added in the list of working observers.
         app (krake.data.kubernetes.Application): the Application to observe
-        kubernetes_client (type):
         start (bool, optional): if False, does not start the observer as background
             task.
 
@@ -361,7 +359,6 @@ async def register_observer(controller, app, kubernetes_client, start=True, **kw
         cluster,
         app,
         controller.on_status_update,
-        kubernetes_client,
         time_step=controller.observer_time_step,
     )
 
@@ -506,7 +503,20 @@ class Complete(object):
             else None
         )
 
-        hook_resources = [*self.configmap(cfg_name, ca_certs)]
+        # Extract all different namespaces
+        # FIXME: too many assumptions here: do we create one ConfigMap for each
+        #  namespace?
+        resource_namespaces = {
+            resource["metadata"].get("namespace", "default") for resource in mangling
+        }
+
+        hook_resources = []
+        if ca_certs:
+            hook_resources = [
+                self.configmap(cfg_name, namespace, ca_certs=ca_certs)
+                for namespace in resource_namespaces
+            ]
+
         hook_sub_resources = [
             *self.env_vars(name, namespace, self.api_endpoint, token),
             *self.volumes(cfg_name, volume_name, ca_certs),
@@ -615,7 +625,7 @@ class Complete(object):
             Args:
                 sub_resource (SubResource): Hook sub-resource that needs to be injected
                     into desired mangling state
-                sub_resources_to_mangle (object): Sub-resource from the Mangling state
+                sub_resources_to_mangle (dict): Sub-resource from the Mangling state
                     which needs to be processed
 
             """
@@ -660,22 +670,20 @@ class Complete(object):
                 else:
                     raise InvalidResourceError
 
-    def configmap(self, cfg_name, ca_certs=None):
-        """Create complete hook configmap resource
+    def configmap(self, cfg_name, namespace, ca_certs=None):
+        """Create a complete hook configmap resource.
 
         Complete hook configmap stores Krake CAs to communicate with the Krake API
 
         Args:
             cfg_name (str): Configmap name
             ca_certs (list): Krake CA list
+            namespace (str): Kubernetes namespace where the ConfigMap will be created.
 
         Returns:
-            list: List of complete hook configmaps resources
+            dict: complete hook configmaps resources
 
         """
-        if not ca_certs:
-            return []
-
         ca_name = os.path.basename(self.ca_dest)
 
         ca_certs_pem = ""
@@ -687,16 +695,14 @@ class Complete(object):
                 OpenSSL.crypto.FILETYPE_PEM, x509
             ).decode("utf-8")
 
-        return [
-            self.attribute_map(
-                V1ConfigMap(
-                    api_version="v1",
-                    kind="ConfigMap",
-                    data={ca_name: ca_certs_pem},
-                    metadata={"name": cfg_name},
-                )
+        return self.attribute_map(
+            V1ConfigMap(
+                api_version="v1",
+                kind="ConfigMap",
+                data={ca_name: ca_certs_pem},
+                metadata={"name": cfg_name, "namespace": namespace},
             )
-        ]
+        )
 
     def volumes(self, cfg_name, volume_name, ca_certs=None):
         """Create complete hook volume and volume mount sub-resources

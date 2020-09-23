@@ -6,7 +6,6 @@ import yaml
 
 from krake.api.app import create_app
 from krake.controller.kubernetes.hooks import register_observer
-from krake.controller.kubernetes.kubernetes import KubernetesClient
 from krake.data.core import resource_ref
 from krake.data.kubernetes import Application, ApplicationState
 from krake.controller.kubernetes import (
@@ -60,9 +59,9 @@ service_response = yaml.safe_load(
     metadata:
       creationTimestamp: "2019-11-11T12:01:05Z"
       name: nginx-demo
-      namespace: default
+      namespace: secondary
       resourceVersion: "8080020"
-      selfLink: /api/v1/namespaces/default/services/nginx-demo
+      selfLink: /api/v1/namespaces/secondary/services/nginx-demo
       uid: e2b789b0-19a1-493d-9f23-3f2a63fade52
     spec:
       clusterIP: 10.100.78.172
@@ -83,7 +82,7 @@ service_response = yaml.safe_load(
 
 app_response = yaml.safe_load(
     """
-    apiVersion: extensions/v1beta1
+    apiVersion: apps/v1
     kind: Deployment
     metadata:
       annotations:
@@ -91,9 +90,9 @@ app_response = yaml.safe_load(
       creationTimestamp: "2019-11-11T12:01:05Z"
       generation: 1
       name: nginx-demo
-      namespace: default
+      namespace: secondary
       resourceVersion: "8080030"
-      selfLink: /apis/extensions/v1beta1/namespaces/default/deployments/nginx-demo
+      selfLink: /apis/apps/v1/namespaces/secondary/deployments/nginx-demo
       uid: 047686e4-af52-4264-b2a4-2f82b890e809
     spec:
       progressDeadlineSeconds: 600
@@ -172,7 +171,7 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
     # Test the observation of changes on values with a CamelCase format
     updated_app["spec"]["selector"]["matchLabels"] = {"app": "foo"}
 
-    @routes.get("/api/v1/namespaces/default/services/nginx-demo")
+    @routes.get("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
         nonlocal actual_state
         if actual_state in (0, 1):
@@ -180,7 +179,7 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
         elif actual_state == 2:
             return web.Response(status=404)
 
-    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         nonlocal actual_state
         if actual_state == 0:
@@ -227,9 +226,137 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
         spec_image = get_first_container(resource.spec.manifest[0])["image"]
         assert spec_image == "nginx:1.7.9"
 
-    observer = KubernetesObserver(
-        cluster, app, on_res_update, KubernetesClient, time_step=-1
+    observer = KubernetesObserver(cluster, app, on_res_update, time_step=-1)
+
+    # Observe an unmodified resource
+    # As no changes are noticed by the Observer, the res_update function will not be
+    # called.
+    actual_state = 0
+    assert calls_to_res_update == 0
+
+    # Modify the actual resource "externally"
+    actual_state = 1
+    await observer.observe_resource()
+    assert calls_to_res_update == 1
+
+    # Delete the service "externally"
+    actual_state = 2
+    await observer.observe_resource()
+    assert calls_to_res_update == 2
+
+
+def set_default_namespace(response):
+    """Creates a copy of the given Kubernetes API response, where the namespaces have
+    been reset to the default one.
+
+    Args:
+        response (dict): the response to modify.
+
+    Returns:
+        dict: a copy of the original response, with the namespaces updated.
+
+    """
+    copy = deepcopy(response)
+    default_namespace = "default"
+    original_namespace = copy["metadata"]["namespace"]
+
+    new_self_link = copy["metadata"]["selfLink"].replace(
+        original_namespace, default_namespace
     )
+    copy["metadata"]["selfLink"] = new_self_link
+
+    copy["metadata"]["namespace"] = default_namespace
+    return copy
+
+
+async def test_observer_on_poll_update_default_namespace(
+    aiohttp_server, db, config, loop
+):
+    """Test the Observer's behavior on update of an actual resource which has been
+    created WITHOUT any namespace.
+
+    State (0):
+        a Deployment and a Service are present, the Deployment has an nginx
+        image with version "1.7.9"
+    State (1):
+        both resources are still present, but the Deployment image version
+        changed to "1.6"
+    State (2):
+        only the Deployment is present, with the version "1.6"
+    """
+    routes = web.RouteTableDef()
+
+    deployment = set_default_namespace(app_response)
+    service = set_default_namespace(service_response)
+
+    # Actual resource, with container image and selector changed
+    updated_app = deepcopy(deployment)
+    first_container = get_first_container(updated_app)
+    first_container["image"] = "nginx:1.6"
+    # Test the observation of changes on values with a CamelCase format
+    updated_app["spec"]["selector"]["matchLabels"] = {"app": "foo"}
+
+    @routes.get("/api/v1/namespaces/default/services/nginx-demo")
+    async def _(request):
+        nonlocal actual_state
+        if actual_state in (0, 1):
+            return web.json_response(service)
+        elif actual_state == 2:
+            return web.Response(status=404)
+
+    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    async def _(request):
+        nonlocal actual_state
+        if actual_state == 0:
+            return web.json_response(deployment)
+        elif actual_state >= 1:
+            return web.json_response(updated_app)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    # Create a manifest with resources without any namespace.
+    manifest = deepcopy(nginx_manifest)
+    for resource in manifest:
+        del resource["metadata"]["namespace"]
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.RUNNING,
+        status__running_on=resource_ref(cluster),
+        spec__manifest=manifest,
+        status__manifest=manifest,
+    )
+
+    calls_to_res_update = 0
+
+    async def on_res_update(resource):
+        assert resource.metadata.name == app.metadata.name
+
+        nonlocal calls_to_res_update, actual_state
+        calls_to_res_update += 1
+
+        manifests = resource.status.manifest
+        status_image = get_first_container(manifests[0])["image"]
+        if actual_state == 0:
+            # As no changes are noticed by the Observer, the res_update function will
+            # not be called.
+            assert False
+        elif actual_state == 1:
+            assert status_image == "nginx:1.6"
+            assert len(manifests) == 2
+        elif actual_state == 2:
+            assert status_image == "nginx:1.6"
+            assert len(manifests) == 1
+            assert manifests[0]["kind"] == "Deployment"
+
+        # The spec never changes
+        spec_image = get_first_container(resource.spec.manifest[0])["image"]
+        assert spec_image == "nginx:1.7.9"
+
+    observer = KubernetesObserver(cluster, app, on_res_update, time_step=-1)
 
     # Observe an unmodified resource
     # As no changes are noticed by the Observer, the res_update function will not be
@@ -249,8 +376,7 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
 
 
 async def test_observer_on_status_update(aiohttp_server, db, config, loop):
-    """Test the ``on_status_update`` method of the Kubernetes Controller
-    """
+    """Test the ``on_status_update`` method of the Kubernetes Controller"""
     routes = web.RouteTableDef()
 
     # Actual resource, with container image changed
@@ -258,7 +384,7 @@ async def test_observer_on_status_update(aiohttp_server, db, config, loop):
     first_container = get_first_container(updated_app)
     first_container["image"] = "nginx:1.6"
 
-    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         return web.json_response(updated_app)
 
@@ -284,7 +410,7 @@ async def test_observer_on_status_update(aiohttp_server, db, config, loop):
         await controller.prepare(client)
 
         observer = KubernetesObserver(
-            cluster, app, controller.on_status_update, KubernetesClient, time_step=-1
+            cluster, app, controller.on_status_update, time_step=-1
         )
 
         await observer.observe_resource()
@@ -299,7 +425,7 @@ async def test_observer_on_status_update(aiohttp_server, db, config, loop):
 
 deploy_mangled_response = yaml.safe_load(
     """
-    apiVersion: extensions/v1beta1
+    apiVersion: apps/v1
     kind: Deployment
     metadata:
       annotations:
@@ -307,9 +433,9 @@ deploy_mangled_response = yaml.safe_load(
       creationTimestamp: "2019-12-03T08:21:11Z"
       generation: 1
       name: nginx-demo
-      namespace: default
+      namespace: secondary
       resourceVersion: "10373629"
-      selfLink: /apis/extensions/v1beta1/namespaces/default/deployments/nginx-demo
+      selfLink: /apis/apps/v1/namespaces/secondary/deployments/nginx-demo
       uid: 5ee5cbe8-6b18-4b2c-9691-3c9517748fe1
     spec:
       progressDeadlineSeconds: 600
@@ -389,7 +515,7 @@ async def test_observer_on_status_update_mangled(aiohttp_server, db, config, loo
     actual_state = 0
     copy_deploy_mangled_response = deepcopy(deploy_mangled_response)
 
-    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         nonlocal actual_state
         if actual_state == 0:
@@ -399,15 +525,15 @@ async def test_observer_on_status_update_mangled(aiohttp_server, db, config, loo
         if actual_state == 2:
             return web.json_response(updated_app)
 
-    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
         return web.Response(status=200)
 
-    @routes.patch("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.patch("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         return web.json_response(updated_app)
 
-    @routes.get("/api/v1/namespaces/default/services/nginx-demo")
+    @routes.get("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
         nonlocal actual_state
         if actual_state == 0:
@@ -534,7 +660,7 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
 
     actual_state = 0
 
-    @routes.get("/api/v1/namespaces/default/services/nginx-demo")
+    @routes.get("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
         nonlocal actual_state
         if actual_state in (0, 1):
@@ -546,7 +672,7 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
     first_container = get_first_container(updated_app)
     first_container["image"] = "nginx:1.6"
 
-    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         nonlocal actual_state
         if actual_state == 0:
@@ -554,18 +680,18 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
         elif actual_state >= 1:
             return web.json_response(updated_app)
 
-    @routes.patch("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.patch("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         nonlocal actual_state
         assert actual_state in (0, 1)
         return web.json_response(updated_app)
 
-    @routes.patch("/api/v1/namespaces/default/services/nginx-demo")
+    @routes.patch("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
         assert actual_state in (0, 2)
         return web.json_response(service_response)
 
-    @routes.delete("/api/v1/namespaces/default/services/nginx-demo")
+    @routes.delete("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
         nonlocal actual_state
         assert actual_state == 2
@@ -672,23 +798,23 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
 async def test_observer_on_delete(aiohttp_server, config, db, loop):
     routes = web.RouteTableDef()
 
-    @routes.get("/api/v1/namespaces/default/services/nginx-demo")
+    @routes.get("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
         return web.json_response(service_response)
 
-    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         return web.json_response(app_response)
 
-    @routes.delete("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         return web.Response(status=200)
 
-    @routes.delete("/api/v1/namespaces/default/services/nginx-demo")
+    @routes.delete("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
         return web.Response(status=200)
 
-    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
         return web.Response(status=200)
 
@@ -719,7 +845,7 @@ async def test_observer_on_delete(aiohttp_server, config, db, loop):
         await controller.prepare(client)
 
         # Start the observer, which will not observe due to time step
-        await register_observer(controller, app, KubernetesClient)
+        await register_observer(controller, app)
         observer, _ = controller.observers[app.metadata.uid]
 
         # Observe a resource actually in deletion.
