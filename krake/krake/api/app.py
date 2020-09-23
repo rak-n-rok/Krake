@@ -21,6 +21,8 @@ Example:
 """
 import logging
 import ssl
+
+import aiohttp_cors
 from aiohttp import web, ClientSession
 
 from krake.data.core import RoleBinding
@@ -110,7 +112,30 @@ def create_app(config):
     app.add_routes(OpenStackApi.routes)
     app.add_routes(KubernetesApi.routes)
 
+    cors_setup(app)
     return app
+
+
+def cors_setup(app):
+    """Set the default CORS (Cross-Origin Resource Sharing) rules for all routes of the
+    given web application.
+
+    Args:
+        app (web.Application): Web application
+
+    """
+    cors = aiohttp_cors.setup(
+        app,
+        defaults={
+            "*": aiohttp_cors.ResourceOptions(
+                allow_credentials=True,
+                allow_headers="*",
+                allow_methods=["DELETE", "GET", "OPTIONS", "POST", "PUT"],
+            )
+        },
+    )
+    for route in app.router.routes():
+        cors.add(route)
 
 
 async def http_session(app):
