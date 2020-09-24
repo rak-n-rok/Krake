@@ -384,8 +384,12 @@ class ApplicationDefinition(NamedTuple):
             raise RuntimeError("migration must be None, False or True.")
         return migration_flag
 
-    def check_created(self):
+    def check_created(self, delay=10):
         """Run the command for checking if the Application has been created.
+
+        Args:
+            delay (int, optional): The number of seconds that should be allowed
+                before giving up.
         """
         error_message = (
             f"Unable to observe the application {self.name} in a RUNNING state"
@@ -393,6 +397,8 @@ class ApplicationDefinition(NamedTuple):
         run(
             f"rok kube app get {self.name} -f json",
             condition=check_app_state("RUNNING", error_message),
+            interval=1,
+            retry=delay,
         )
 
     def delete_command(self):
@@ -608,10 +614,19 @@ class Environment(object):
 
     """
 
-    def __init__(self, resources):
+    def __init__(self, resources, creation_delay=10):
+        """
+
+        Args:
+            resources: The resources in the environment
+                (see explanation in class doc string)
+            creation_delay (int, optional): The number of seconds that should
+                be allowed before concluding that a resource could not be created.
+        """
         # Dictionary: "priority: list of resources to create"
         self.res_to_create = resources
         self.resources = defaultdict(list)
+        self.creation_delay = creation_delay
 
     def __enter__(self):
         """Create all given resources and check that they have been actually created.
@@ -633,7 +648,7 @@ class Environment(object):
         for _, resource_list in sorted(self.res_to_create.items(), reverse=True):
             for resource in resource_list:
                 if hasattr(resource, "check_created"):
-                    resource.check_created()
+                    resource.check_created(delay=self.creation_delay)
 
         return self.resources
 
