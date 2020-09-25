@@ -1,4 +1,6 @@
 import asyncio
+import ssl
+
 from aiohttp import web
 
 from krake.api import __version__ as version
@@ -6,6 +8,7 @@ from krake.api.app import create_app
 from krake.api.helpers import session, HttpReason, HttpReasonCode
 from krake.api.database import revision, TransactionError
 from krake.data import Key
+from krake.data.config import AuthenticationConfiguration, TlsServerConfiguration
 from krake.data.serializable import Serializable
 
 
@@ -125,6 +128,92 @@ async def test_cors_setup(aiohttp_client, db, config, loop):
     # Request refused because of the "PATCH" method.
     resp = await client.options(
         "/",
+        headers={
+            "Access-Control-Request-Method": "PATCH",
+            "Access-Control-Request-Headers": "X-Requested-With",
+            "Origin": "http://example.com",
+        },
+    )
+    data = await resp.text()
+    assert "PATCH" in data and "CORS" in data
+    assert resp.status == 403
+
+
+async def test_cors_setup_rbac(aiohttp_client, db, config, loop, pki):
+    """Ensure that even with TLS and RBAC enabled, and no authentication method that
+    matches, the CORS mechanism is still accessible.
+    """
+    server_cert = pki.gencert("api-server")
+    client_cert = pki.gencert("test-user")
+    authentication = {
+        "allow_anonymous": False,
+        "strategy": {
+            "keystone": {"enabled": False, "endpoint": "localhost"},
+            "static": {"enabled": False, "name": "test-user"},
+        },
+    }
+    config.authentication = AuthenticationConfiguration.deserialize(authentication)
+    config.authorization = "RBAC"
+
+    tls_config = {
+        "enabled": True,
+        "client_ca": pki.ca.cert,
+        "cert": server_cert.cert,
+        "key": server_cert.key,
+    }
+    config.tls = TlsServerConfiguration.deserialize(tls_config)
+
+    app = create_app(config=config)
+    client = await aiohttp_client(app)
+    context = ssl.create_default_context(
+        purpose=ssl.Purpose.CLIENT_AUTH, cafile=pki.ca.cert
+    )
+    context.load_cert_chain(*client_cert)
+
+    # Requests authenticated via TLS
+
+    # Authorized request to Krake
+    resp = await client.options(
+        "/kubernetes/applications",
+        headers={
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "X-Requested-With",
+            "Origin": "http://example.com",
+        },
+        ssl=context,
+    )
+    assert resp.status == 200
+
+    # Request refused because of the "PATCH" method.
+    resp = await client.options(
+        "/kubernetes/applications",
+        headers={
+            "Access-Control-Request-Method": "PATCH",
+            "Access-Control-Request-Headers": "X-Requested-With",
+            "Origin": "http://example.com",
+        },
+        ssl=context,
+    )
+    data = await resp.text()
+    assert "PATCH" in data and "CORS" in data
+    assert resp.status == 403
+
+    # Requests without TLS authentication
+
+    # Authorized request to Krake
+    resp = await client.options(
+        "/kubernetes/applications",
+        headers={
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "X-Requested-With",
+            "Origin": "http://example.com",
+        },
+    )
+    assert resp.status == 200
+
+    # Request refused because of the "PATCH" method.
+    resp = await client.options(
+        "/kubernetes/applications",
         headers={
             "Access-Control-Request-Method": "PATCH",
             "Access-Control-Request-Headers": "X-Requested-With",
