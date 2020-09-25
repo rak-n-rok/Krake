@@ -181,7 +181,10 @@ class KubernetesController(Controller):
         # Accept only scheduled applications. Forces the Applications to be first
         # handled by the Scheduler, before the KubernetesController applies its
         # decision.
-        if app.status.scheduled and app.status.scheduled >= app.metadata.modified:
+        if (
+            app.status.kube_controller_triggered
+            and app.status.kube_controller_triggered >= app.metadata.modified
+        ):
             logger.debug("Accept scheduled %r", app)
             return True
 
@@ -257,7 +260,7 @@ class KubernetesController(Controller):
 
         # The Application needs to be processed (thus accepted) by the Kubernetes
         # Controller
-        app.status.scheduled = datetime.now()
+        app.status.kube_controller_triggered = datetime.now()
         assert app.metadata.modified is not None
 
         app = await self.kubernetes_api.update_application_status(

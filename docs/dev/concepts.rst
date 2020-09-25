@@ -68,7 +68,7 @@ created
     The timestamp when the resource was created. This field is immutable.
 
 modified
-    The timestamp when the ``spec`` field of the resource was changed.
+    The timestamp when the ``spec`` or ``metadata`` field of the resource was changed.
 
 deleted
     The timestamp when the resource was deleted. If this field is set, the

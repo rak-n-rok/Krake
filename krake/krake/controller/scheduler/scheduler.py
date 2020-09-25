@@ -198,7 +198,10 @@ class Scheduler(Controller):
         # The application is already scheduled and no change has been made to the specs
         # since then. Nevertheless, we should perform a periodic rescheduling to handle
         # changes in the cluster metric values.
-        elif app.status.scheduled and app.metadata.modified <= app.status.scheduled:
+        elif (
+            app.status.kube_controller_triggered
+            and app.metadata.modified <= app.status.kube_controller_triggered
+        ):
             await self.reschedule_kubernetes_application(app)
 
         elif app.status.state == ApplicationState.FAILED:
@@ -317,8 +320,7 @@ class Scheduler(Controller):
 
         if app.status.scheduled_to and not app.spec.constraints.migration:
             logger.debug(
-                "Not migrating %r, since migration of the application is disabled.",
-                app,
+                "Not migrating %r, since migration of the application is disabled.", app
             )
             return
 
@@ -341,8 +343,8 @@ class Scheduler(Controller):
             # processing the Application. Updating the timestamp would simply trigger
             # a processing of the Application by the KubernetesController, which would
             # not make the controller perform any action.
-            if app.metadata.modified > app.status.scheduled:
-                app.status.scheduled = datetime.now()
+            if app.metadata.modified > app.status.kube_controller_triggered:
+                app.status.kube_controller_triggered = datetime.now()
                 await self.kubernetes_api.update_application_status(
                     namespace=app.metadata.namespace, name=app.metadata.name, body=app
                 )

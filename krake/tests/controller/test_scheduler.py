@@ -45,7 +45,9 @@ async def test_kubernetes_reception(aiohttp_server, config, db, loop):
         status__is_scheduled=False,
     )
 
+    assert updated.metadata.modified > updated.status.kube_controller_triggered
     assert updated.metadata.modified > updated.status.scheduled
+    assert updated.status.kube_controller_triggered >= updated.status.scheduled
 
     server = await aiohttp_server(create_app(config))
 
@@ -101,7 +103,9 @@ async def test_kubernetes_reception_no_migration(aiohttp_server, config, db, loo
         spec__constraints__migration=False,
     )
 
+    assert updated.metadata.modified > updated.status.kube_controller_triggered
     assert updated.metadata.modified > updated.status.scheduled
+    assert updated.status.kube_controller_triggered >= updated.status.scheduled
 
     server = await aiohttp_server(create_app(config))
 
@@ -745,6 +749,7 @@ async def test_kubernetes_scheduling(aiohttp_server, config, db, loop):
         stored = await db.get(Application, namespace="testing", name=app.metadata.name)
 
         assert stored.status.scheduled_to == resource_ref(cluster)
+        assert stored.status.kube_controller_triggered
         assert stored.status.scheduled
 
         assert app.metadata.uid in scheduler.queue.timers, "Application is rescheduled"
@@ -825,6 +830,9 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
         )
         assert stored1.status.scheduled_to == resource_ref(cluster1)
         assert stored1.status.state == ApplicationState.PENDING
+        assert stored1.metadata.modified <= utc.localize(
+            stored1.status.kube_controller_triggered
+        )
         assert stored1.metadata.modified <= utc.localize(stored1.status.scheduled)
 
         # Schedule a second time the scheduled resource
@@ -835,6 +843,13 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
         )
         assert stored2.status.scheduled_to == resource_ref(cluster2)
         assert stored2.status.state == ApplicationState.PENDING
+        assert (
+            stored2.status.kube_controller_triggered
+            > stored1.status.kube_controller_triggered
+        )
+        assert stored2.metadata.modified <= utc.localize(
+            stored2.status.kube_controller_triggered
+        )
         assert stored2.status.scheduled > stored1.status.scheduled
         assert stored2.metadata.modified <= utc.localize(stored2.status.scheduled)
 
@@ -900,6 +915,9 @@ async def test_kubernetes_no_migration(aiohttp_server, config, db, loop):
         )
         assert stored1.status.scheduled_to == resource_ref(cluster1)
         assert stored1.status.state == ApplicationState.PENDING
+        assert stored1.metadata.modified <= utc.localize(
+            stored1.status.kube_controller_triggered
+        )
         assert stored1.metadata.modified <= utc.localize(stored1.status.scheduled)
 
         # Schedule the scheduled resource a second time
@@ -910,6 +928,13 @@ async def test_kubernetes_no_migration(aiohttp_server, config, db, loop):
         )
         assert stored2.status.scheduled_to == resource_ref(cluster1)
         assert stored2.status.state == ApplicationState.PENDING
+        assert (
+            stored2.status.kube_controller_triggered
+            == stored1.status.kube_controller_triggered
+        )
+        assert stored2.metadata.modified <= utc.localize(
+            stored2.status.kube_controller_triggered
+        )
         assert stored2.status.scheduled == stored1.status.scheduled
         assert stored2.metadata.modified <= utc.localize(stored2.status.scheduled)
 
@@ -974,6 +999,9 @@ async def test_kubernetes_application_update(aiohttp_server, config, db, loop):
         )
         assert stored1.status.scheduled_to == resource_ref(cluster1)
         assert stored1.status.state == ApplicationState.PENDING
+        assert stored1.metadata.modified <= utc.localize(
+            stored1.status.kube_controller_triggered
+        )
         assert stored1.metadata.modified <= utc.localize(stored1.status.scheduled)
 
         # Actual update:
@@ -993,10 +1021,17 @@ async def test_kubernetes_application_update(aiohttp_server, config, db, loop):
         )
         assert stored2.status.scheduled_to == resource_ref(cluster1)
         assert stored2.status.state == ApplicationState.PENDING
+        # As the scheduling decision was the same, the timestamp should not change.
+        assert stored2.status.scheduled == stored1.status.scheduled
+        assert stored2.metadata.modified >= stored2.status.scheduled
+
         # Even if the scheduled cluster did not change, the timestamp should be updated,
         # as the Application was updated.
-        assert stored2.status.scheduled > stored1.status.scheduled
-        assert stored2.metadata.modified <= stored2.status.scheduled
+        assert (
+            stored2.status.kube_controller_triggered
+            > stored1.status.kube_controller_triggered
+        )
+        assert stored2.metadata.modified <= stored2.status.kube_controller_triggered
 
 
 async def test_kubernetes_application_reschedule_no_update(
@@ -1061,10 +1096,16 @@ async def test_kubernetes_application_reschedule_no_update(
         )
         assert stored1.status.scheduled_to == resource_ref(cluster1)
         assert stored1.status.state == ApplicationState.PENDING
+        assert stored1.metadata.modified <= utc.localize(
+            stored1.status.kube_controller_triggered
+        )
         assert stored1.metadata.modified <= utc.localize(stored1.status.scheduled)
 
         # This update is only needed for offset-naive and offset-aware datetimes
         # comparison issues, it is not considered as an actual update.
+        stored1.status.kube_controller_triggered = utc.localize(
+            stored1.status.kube_controller_triggered
+        )
         stored1.status.scheduled = utc.localize(stored1.status.scheduled)
         await db.put(stored1)
 
@@ -1078,7 +1119,12 @@ async def test_kubernetes_application_reschedule_no_update(
         assert stored2.status.scheduled_to == resource_ref(cluster1)
         assert stored2.status.state == ApplicationState.PENDING
         # As the scheduled cluster did not change and the Application was not updated,
-        # the timestamp should not be updated.
+        # the timestamps should not be updated.
+        assert (
+            stored2.status.kube_controller_triggered
+            == stored1.status.kube_controller_triggered
+        )
+        assert stored2.metadata.modified <= stored2.status.kube_controller_triggered
         assert stored2.status.scheduled == stored1.status.scheduled
         assert stored2.metadata.modified <= stored2.status.scheduled
 

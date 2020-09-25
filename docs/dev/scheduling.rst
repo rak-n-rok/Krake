@@ -112,11 +112,16 @@ The following figure gives an overview about the application handler of Krake sc
 Special note on updates:
 ------------------------
 
-A special case appears when a user updates manually an ``Application``.
+kube_controller_triggered:
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The ``Application`` resources all have a ``scheduled`` timestamp. It is updated when the
-chosen ``Cluster`` has changed, or once after the update of an Application triggered its
-rescheduling, even if this did not change the scheduled cluster.
+This timestamp is used as a flag to trigger the Kubernetes Controller reconciliation.
+Together with ``modified``, it's allowing correct synchronization between Scheduler and
+Controller.
+
+It is updated when the chosen ``Cluster`` has changed, or once after the update of an
+Application triggered its rescheduling, even if this did not change the scheduled
+cluster. The second case mostly occurs when a user updates it through the API.
 
 This timestamp is used to force an ``Application`` that has been updated by a user to be
 rescheduled before the changes are applied by the Kubernetes Controller. Without this
@@ -128,14 +133,16 @@ is an additional interaction with the Kubernetes Controller:
 
 - The user updates the ``Application`` ``my-app`` on the API:
 
-   ``my-app``'s ``modified`` timestamp is **higher** than the ``scheduled`` timestamp;
+   ``my-app``'s ``modified`` timestamp is **higher** than the
+   ``kube_controller_triggered`` timestamp;
 
 - The Kubernetes Controller rejects the update on ``my-app`` in this case;
 - The Scheduler accepts the update on ``my-app`` and chooses a cluster for the updated
   ``my-app``;
-- as the cluster changed, the ``scheduled`` timestamp is updated;
+- as the cluster changed, the ``kube_controller_triggered`` timestamp is updated;
 
-   ``my-app``'s ``modified`` timestamp is **lower** than the ``scheduled`` timestamp;
+   ``my-app``'s ``modified`` timestamp is **lower** than the
+   ``kube_controller_triggered`` timestamp;
 
 - the updated ``my-app`` is rejected by the Scheduler because of this comparison;
 - the updated ``my-app`` is accepted by the Kubernetes Controller;
@@ -143,13 +150,28 @@ is an additional interaction with the Kubernetes Controller:
   if needed.
 
 When the Application is rescheduled, if the selected cluster did not change, then the
-``scheduled`` timestamp is updated only if the rescheduling was triggered by an update
-of the Application. If the Application is rescheduled on the same cluster automatically,
-then the timestamp is not updated. This prevents an update of each Application on each
-automatic rescheduling, which would need to be handled by the Kubernetes controller.
+``kube_controller_triggered`` timestamp is updated only if the rescheduling was
+triggered by an update of the Application. If the Application is rescheduled on the same
+cluster automatically, then the timestamp is not updated. This prevents an update of
+each Application on each automatic rescheduling, which would need to be handled by the
+Kubernetes controller.
 
-To sum up, the ``scheduled`` timestamp represent the last time this version of the
-Application was scheduled by the Scheduler.
+To sum up, the ``kube_controller_triggered`` timestamp represent the last time this
+version of the Application was scheduled by the Scheduler.
+
+
+scheduled:
+~~~~~~~~~~
+
+The ``scheduled`` timestamp expresses the last time the scheduling decision changed for
+the current resource. This timestamp does not correspond to the time where the
+Application was deployed on the new cluster, just the time where the scheduler updated,
+on the Application, the reference to the cluster where it should be deployed. It is
+actually updated during a call from the scheduler to the API to change the binding of
+the Application.
+
+This timestamp is however not updated if an update of its Application did not lead to a
+rescheduling, just a re-deployment.
 
 
 Magnum cluster handler

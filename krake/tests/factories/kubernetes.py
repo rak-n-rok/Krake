@@ -109,6 +109,27 @@ class ApplicationStatusFactory(Factory):
             return None  # Application was never scheduled
         else:
             return fake.date_time_between(
+                start_date=created,
+                end_date=self.kube_controller_triggered,
+                tzinfo=pytz.utc,
+            )
+
+    @lazy_attribute
+    def kube_controller_triggered(self):
+        if not self.factory_parent:
+            return fake.date_time()
+
+        created = self.factory_parent.metadata.created
+        modified = self.factory_parent.metadata.modified
+
+        assert created <= modified
+
+        if self.is_scheduled:
+            return fake.date_time_between(start_date=self.scheduled, tzinfo=pytz.utc)
+        elif self.state == ApplicationState.PENDING:
+            return None  # Application was never scheduled
+        else:
+            return fake.date_time_between(
                 start_date=created, end_date=modified, tzinfo=pytz.utc
             )
 
