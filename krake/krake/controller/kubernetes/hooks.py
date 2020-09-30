@@ -152,7 +152,6 @@ async def register_service(app, cluster, resource, response):
         return
 
     service_name = resource["metadata"]["name"]
-    node_port = None
 
     if response.spec and response.spec.type == "LoadBalancer":
         # For a "LoadBalancer" type of Service, an external IP is given in the cluster
@@ -173,6 +172,7 @@ async def register_service(app, cluster, resource, response):
         app.status.services[service_name] = f"{external_ip}:{external_port}"
         return
 
+    node_port = None
     # Ensure that ports are specified
     if response.spec and response.spec.ports:
         node_port = response.spec.ports[0].node_port

@@ -864,12 +864,27 @@ async def test_register_service_with_empty_ports():
     assert app.status.services == {}
 
 
-async def test_register_service_without_node_port():
+async def test_register_clusterip_service_without_node_port():
     resource = {"kind": "Service", "metadata": {"name": "nginx"}}
     cluster = ClusterFactory()
     app = ApplicationFactory(status__services={"nginx": "127.0.0.1:1234"})
     response = V1Service(
-        spec=V1ServiceSpec(ports=[V1ServicePort(port=80, target_port=8080)])
+        spec=V1ServiceSpec(
+            ports=[V1ServicePort(port=80, target_port=8080)], type="ClusterIP"
+        )
+    )
+    await register_service(app, cluster, resource, response)
+    assert app.status.services == {}
+
+
+async def test_register_nodeport_service_without_node_port():
+    resource = {"kind": "Service", "metadata": {"name": "nginx"}}
+    cluster = ClusterFactory()
+    app = ApplicationFactory(status__services={"nginx": "127.0.0.1:1234"})
+    response = V1Service(
+        spec=V1ServiceSpec(
+            ports=[V1ServicePort(port=80, target_port=8080)], type="NodePort"
+        )
     )
     await register_service(app, cluster, resource, response)
     assert app.status.services == {}
