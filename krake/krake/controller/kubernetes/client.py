@@ -290,7 +290,7 @@ class KubernetesClient(object):
 
         """
         metadata = resource["metadata"]
-        namespace = metadata.get("namespace", "default")
+        namespace = metadata.get("namespace", self.default_namespace)
 
         try:
             kind = resource["kind"]
@@ -336,7 +336,7 @@ class KubernetesClient(object):
 
         """
         metadata = resource["metadata"]
-        namespace = metadata.get("namespace", "default")
+        namespace = metadata.get("namespace", self.default_namespace)
 
         try:
             kind = resource["kind"]
@@ -361,3 +361,14 @@ class KubernetesClient(object):
         self.log_resp(resp, kind, action="deleted")
 
         return resp
+
+    @property
+    def default_namespace(self):
+        """From the kubeconfig file, get the default Kubernetes namespace where the
+        resources will be created. If no namespace is specified, "default" will be used.
+
+        Returns:
+            str: the default namespace in the kubeconfig file.
+
+        """
+        return self.kubeconfig["contexts"][0]["context"].get("namespace", "default")
