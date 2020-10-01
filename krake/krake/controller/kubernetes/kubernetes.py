@@ -106,7 +106,7 @@ class ResourceDelta(NamedTuple):
         modified = [
             desired[rid]
             for rid in set(desired) & set(current)
-            if desired[rid]["spec"] != current[rid]["spec"]
+            if desired[rid] != current[rid]
         ]
 
         return cls(new=tuple(new), deleted=tuple(deleted), modified=tuple(modified))
