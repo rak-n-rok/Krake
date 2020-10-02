@@ -219,10 +219,12 @@ def test_kubernetes_observer_additional_resource(minikube_clusters):
             after_response = run(f"rok kube app get {application_name} -f json")
             app_before = before_response.json
             app_after = after_response.json
-            # The application is rescheduled, so the "scheduled" timestamp is updated.
-            # The test would break if the timestamp was not the same on the "before" and
-            # "after" outputs.
-            app_before["status"]["scheduled"] = app_after["status"]["scheduled"]
+            # The application is rescheduled, so the "kube_controller_triggered"
+            # timestamp is updated. The test would break if the timestamp was not the
+            # same on the "before" and "after" outputs.
+            app_before["status"]["kube_controller_triggered"] = app_after["status"][
+                "kube_controller_triggered"
+            ]
             assert app_before == app_after
 
             # Compare the Application deployment data before and after having added the

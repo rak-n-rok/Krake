@@ -198,7 +198,10 @@ class Scheduler(Controller):
         # The application is already scheduled and no change has been made to the specs
         # since then. Nevertheless, we should perform a periodic rescheduling to handle
         # changes in the cluster metric values.
-        elif app.status.scheduled and app.metadata.modified <= app.status.scheduled:
+        elif (
+            app.status.kube_controller_triggered
+            and app.metadata.modified <= app.status.kube_controller_triggered
+        ):
             await self.reschedule_kubernetes_application(app)
 
         elif app.status.state == ApplicationState.FAILED:
@@ -317,8 +320,7 @@ class Scheduler(Controller):
 
         if app.status.scheduled_to and not app.spec.constraints.migration:
             logger.debug(
-                "Not migrating %r, since migration of the application is disabled.",
-                app,
+                "Not migrating %r, since migration of the application is disabled.", app
             )
             return
 
@@ -335,10 +337,17 @@ class Scheduler(Controller):
             # waiting for the Scheduler to take a decision before handling the update on
             # an Application. By updating this, the KubernetesController can start
             # working on the current Application.
-            app.status.scheduled = datetime.now()
-            await self.kubernetes_api.update_application_status(
-                namespace=app.metadata.namespace, name=app.metadata.name, body=app
-            )
+            # However, if no update has been performed on the Application, then the
+            # modified timestamp is lower. As we are in the case of no change in the
+            # scheduling decision, there is no need to have the KubernetesController
+            # processing the Application. Updating the timestamp would simply trigger
+            # a processing of the Application by the KubernetesController, which would
+            # not make the controller perform any action.
+            if app.metadata.modified > app.status.kube_controller_triggered:
+                app.status.kube_controller_triggered = datetime.now()
+                await self.kubernetes_api.update_application_status(
+                    namespace=app.metadata.namespace, name=app.metadata.name, body=app
+                )
             return
 
         if app.status.scheduled_to:

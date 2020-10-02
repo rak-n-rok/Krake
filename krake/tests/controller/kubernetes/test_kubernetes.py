@@ -80,6 +80,11 @@ async def test_app_reception(aiohttp_server, config, db, loop):
         metadata__deleted=fake.date_time(tzinfo=pytz.utc),
     )
 
+    assert pending.status.kube_controller_triggered is None
+    assert waiting.status.kube_controller_triggered < waiting.metadata.modified
+    assert scheduled.status.kube_controller_triggered >= scheduled.metadata.modified
+    assert failed.status.kube_controller_triggered >= failed.metadata.modified
+
     assert pending.status.scheduled is None
     assert waiting.status.scheduled < waiting.metadata.modified
     assert scheduled.status.scheduled >= scheduled.metadata.modified

@@ -290,12 +290,16 @@ async def test_update_app_binding(aiohttp_client, config, db):
     body = await resp.json()
     received = Application.deserialize(body)
     assert received.status.scheduled_to == cluster_ref
+    assert received.status.scheduled
+    assert received.status.scheduled == received.status.kube_controller_triggered
     assert received.status.running_on is None
     assert received.status.state == ApplicationState.PENDING
     assert cluster_ref in received.metadata.owners
 
     stored = await db.get(Application, namespace="testing", name=app.metadata.name)
     assert stored.status.scheduled_to == cluster_ref
+    assert stored.status.scheduled
+    assert stored.status.scheduled == received.status.kube_controller_triggered
     assert stored.status.running_on is None
     assert stored.status.state == ApplicationState.PENDING
     assert cluster_ref in stored.metadata.owners

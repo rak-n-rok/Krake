@@ -18,7 +18,9 @@ class KubernetesApi:
     @load("app", Application)
     @use_schema("body", ClusterBinding.Schema)
     async def update_application_binding(request, body, app):
-        app.status.scheduled = datetime.now()
+        now = datetime.now()
+        app.status.scheduled = now
+        app.status.kube_controller_triggered = now
         app.status.scheduled_to = body.cluster
 
         if body.cluster not in app.metadata.owners:

@@ -44,8 +44,21 @@ class ApplicationStatus(Status):
 
     Attributes:
         state (ApplicationState): Current state of the application
-        scheduled (datetime.datetime): Timestamp when the application was last
-            scheduled.
+        kube_controller_triggered (datetime.datetime): Timestamp that represents the
+            last time the current version of the Application was scheduled (version here
+            meaning the Application after an update). It is only updated after the
+            update of the Application led to a rescheduling, or at the first scheduling.
+            It is used to keep a strict workflow between the Scheduler and
+            Kubernetes Controller: the first one should always handle an Application
+            creation or update before the latter. Only after this field has been updated
+            by the Scheduler to be higher than the modified timestamp can the
+            Kubernetes Controller handle the Application.
+        scheduled (datetime.datetime): Timestamp that represents the last time the
+            application was scheduled to a different cluster, in other words when
+            ``scheduled_to`` was modified. Thus, it is updated at the first binding to a
+            cluster, or during the binding with a different cluster. This represents the
+            timestamp when the current Application was scheduled to its current cluster,
+            even if it has been updated in the meantime.
         scheduled_to (ResourceRef): Reference to the cluster where the
             application should run.
         running_on (ResourceRef): Reference to the cluster where the
@@ -61,6 +74,7 @@ class ApplicationStatus(Status):
     """
 
     state: ApplicationState = ApplicationState.PENDING
+    kube_controller_triggered: datetime = None
     scheduled: datetime = None
     scheduled_to: ResourceRef = None
     running_on: ResourceRef = None
