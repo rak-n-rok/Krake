@@ -1,7 +1,7 @@
 """This modules defines aiohttp middlewares for the Krake HTTP API"""
 import asyncio
 import json
-from aiohttp import web
+from aiohttp import web, hdrs
 from krake.api.helpers import HttpReason, HttpReasonCode
 
 from .database import Session, TransactionError
@@ -109,7 +109,9 @@ def authentication(authenticators, allow_anonymous):
                 break
 
         if user is None:
-            if not allow_anonymous:
+            # Set OPTIONS requests (only directed to the CORS handler) to be received,
+            # even if authentication mechanisms are used.
+            if not allow_anonymous and request.method != hdrs.METH_OPTIONS:
                 raise web.HTTPUnauthorized()
             user = "system:anonymous"
 
