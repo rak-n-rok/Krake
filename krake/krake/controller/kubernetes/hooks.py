@@ -258,7 +258,9 @@ class KubernetesObserver(Observer):
                 try:
                     resource_api = await kube.get_resource_api(resource["kind"])
 
-                    namespace = resource["metadata"].get("namespace", "default")
+                    namespace = resource["metadata"].get(
+                        "namespace", kube.default_namespace
+                    )
                     resp = await resource_api.read(
                         resource["kind"], resource["metadata"]["name"], namespace
                     )

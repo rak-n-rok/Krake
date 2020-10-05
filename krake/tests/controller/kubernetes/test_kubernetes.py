@@ -184,21 +184,33 @@ async def test_app_creation(aiohttp_server, config, db, loop):
 
 
 async def test_app_creation_default_namespace(aiohttp_server, config, db, loop):
-    """This test ensures that NOT specifying a namespace for a resource creates it in
-    the "default" namespace
+    """This test ensures that NOT specifying a namespace for a resource or the
+    kubeconfig file creates it in the "default" namespace.
     """
-    app_is_created = False
+    accepted = "default"
+    called_get = False
+    called_post = False
 
     routes = web.RouteTableDef()
 
-    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.get("/apis/apps/v1/namespaces/{namespace}/deployments/nginx-demo")
     async def _(request):
+        nonlocal called_get
+        received = request.match_info["namespace"]
+        assert (
+            received == accepted
+        ), f"The namespace {received} must not be used by the client."
+        called_get = True
         return web.Response(status=404)
 
-    @routes.post("/apis/apps/v1/namespaces/default/deployments")
+    @routes.post("/apis/apps/v1/namespaces/{namespace}/deployments")
     async def _(request):
-        nonlocal app_is_created
-        app_is_created = True
+        nonlocal called_post
+        received = request.match_info["namespace"]
+        assert (
+            received == accepted
+        ), f"The namespace {received} must not be used by the client."
+        called_post = True
         return web.Response(status=200)
 
     kubernetes_app = web.Application()
@@ -228,7 +240,146 @@ async def test_app_creation_default_namespace(aiohttp_server, config, db, loop):
 
         await controller.resource_received(app, start_observer=False)
 
-    assert app_is_created
+    assert called_get and called_post
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.state == ApplicationState.RUNNING
+    assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
+
+
+async def test_app_creation_cluster_default_namespace(aiohttp_server, config, db, loop):
+    """If a default namespace is set in the kubeconfig, and no namespace is set in the
+    manifest file, the default cluster of the kubeconfig file should be used.
+    """
+    accepted = "another_namespace"
+    called_get = False
+    called_post = False
+
+    routes = web.RouteTableDef()
+
+    @routes.get("/apis/apps/v1/namespaces/{namespace}/deployments/nginx-demo")
+    async def _(request):
+        nonlocal called_get
+        received = request.match_info["namespace"]
+        assert (
+            received == accepted
+        ), f"The namespace {received} must not be used by the client."
+        called_get = True
+        return web.Response(status=404)
+
+    @routes.post("/apis/apps/v1/namespaces/{namespace}/deployments")
+    async def _(request):
+        nonlocal called_post
+        received = request.match_info["namespace"]
+        assert (
+            received == accepted
+        ), f"The namespace {received} must not be used by the client."
+        called_post = True
+        return web.Response(status=200)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    # Replace the default namespace in the kubeconfig file
+    kubeconfig = make_kubeconfig(kubernetes_server)
+    kubeconfig["contexts"][0]["context"]["namespace"] = "another_namespace"
+    cluster = ClusterFactory(spec__kubeconfig=kubeconfig)
+
+    deployment_manifest = deepcopy(nginx_manifest[0])
+    del deployment_manifest["metadata"]["namespace"]
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
+        spec__manifest=[deployment_manifest],
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        controller = KubernetesController(server_endpoint(api_server), worker_count=0)
+        await controller.prepare(client)
+
+        await controller.resource_received(app, start_observer=False)
+
+    assert called_get and called_post
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.state == ApplicationState.RUNNING
+    assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
+
+
+async def test_app_creation_manifest_namespace_set(aiohttp_server, config, db, loop):
+    """If a default namespace is set in the kubeconfig, and a namespace IS set in the
+    manifest file, the namespace in the manifest file should be used.
+    """
+    accepted = "secondary"
+    called_get = False
+    called_post = False
+
+    routes = web.RouteTableDef()
+
+    @routes.get("/apis/apps/v1/namespaces/{namespace}/deployments/nginx-demo")
+    async def _(request):
+        nonlocal called_get
+        received = request.match_info["namespace"]
+        assert (
+            received == accepted
+        ), f"The namespace {received} must not be used by the client."
+        called_get = True
+        return web.Response(status=404)
+
+    @routes.post("/apis/apps/v1/namespaces/{namespace}/deployments")
+    async def _(request):
+        nonlocal called_post
+        received = request.match_info["namespace"]
+        assert (
+            received == accepted
+        ), f"The namespace {received} must not be used by the client."
+        called_post = True
+        return web.Response(status=200)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    # Replace the default namespace in the kubeconfig file
+    kubeconfig = make_kubeconfig(kubernetes_server)
+    kubeconfig["contexts"][0]["context"]["namespace"] = "another_namespace"
+    cluster = ClusterFactory(spec__kubeconfig=kubeconfig)
+
+    deployment_manifest = deepcopy(nginx_manifest[0])
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
+        spec__manifest=[deployment_manifest],
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        controller = KubernetesController(server_endpoint(api_server), worker_count=0)
+        await controller.prepare(client)
+
+        await controller.resource_received(app, start_observer=False)
+
+    assert called_get and called_post
 
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -1433,8 +1584,7 @@ async def test_complete_hook_reschedule(aiohttp_server, config, pki, db, loop):
 
 
 async def test_kubernetes_controller_error_handling(aiohttp_server, config, db, loop):
-    """Test the behavior of the Controller in case of a ControllerError.
-    """
+    """Test the behavior of the Controller in case of a ControllerError."""
     failed_manifest = deepcopy(nginx_manifest)
     for resource in failed_manifest:
         resource["kind"] = "Unsupported"
@@ -1468,8 +1618,7 @@ async def test_kubernetes_controller_error_handling(aiohttp_server, config, db, 
 
 
 async def test_kubernetes_api_error_handling(aiohttp_server, config, db, loop):
-    """Test the behavior of the Controller in case of a Kubernetes error.
-    """
+    """Test the behavior of the Controller in case of a Kubernetes error."""
     # Create an actual "kubernetes cluster" with no route, so it responds wrongly
     # to the requests of the Controller.
     kubernetes_app = web.Application()

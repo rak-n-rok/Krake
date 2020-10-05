@@ -273,7 +273,8 @@ async def test_observer_on_poll_update_default_namespace(
     aiohttp_server, db, config, loop
 ):
     """Test the Observer's behavior on update of an actual resource which has been
-    created WITHOUT any namespace.
+    created WITHOUT any namespace, and for which the cluster's kubeconfig also did not
+    specify any namespace.
 
     State (0):
         a Deployment and a Service are present, the Deployment has an nginx
@@ -296,16 +297,34 @@ async def test_observer_on_poll_update_default_namespace(
     # Test the observation of changes on values with a CamelCase format
     updated_app["spec"]["selector"]["matchLabels"] = {"app": "foo"}
 
-    @routes.get("/api/v1/namespaces/default/services/nginx-demo")
+    accepted = "default"
+    called_get = False
+    called_post = False
+
+    @routes.get("/api/v1/namespaces/{namespace}/services/nginx-demo")
     async def _(request):
+        nonlocal called_get
+        received = request.match_info["namespace"]
+        assert (
+            received == accepted
+        ), f"The namespace {received} must not be used by the client."
+        called_get = True
+
         nonlocal actual_state
         if actual_state in (0, 1):
             return web.json_response(service)
         elif actual_state == 2:
             return web.Response(status=404)
 
-    @routes.get("/apis/apps/v1/namespaces/default/deployments/nginx-demo")
+    @routes.get("/apis/apps/v1/namespaces/{namespace}/deployments/nginx-demo")
     async def _(request):
+        nonlocal called_post
+        received = request.match_info["namespace"]
+        assert (
+            received == accepted
+        ), f"The namespace {received} must not be used by the client."
+        called_post = True
+
         nonlocal actual_state
         if actual_state == 0:
             return web.json_response(deployment)
@@ -343,7 +362,7 @@ async def test_observer_on_poll_update_default_namespace(
         if actual_state == 0:
             # As no changes are noticed by the Observer, the res_update function will
             # not be called.
-            assert False
+            assert False, "The first poll of the observer should not issue an update."
         elif actual_state == 1:
             assert status_image == "nginx:1.6"
             assert len(manifests) == 2
@@ -373,6 +392,263 @@ async def test_observer_on_poll_update_default_namespace(
     actual_state = 2
     await observer.observe_resource()
     assert calls_to_res_update == 2
+
+    assert called_get and called_post, "GET and POST did not get call at least once."
+
+
+async def test_observer_on_poll_update_cluster_default_namespace(
+    aiohttp_server, db, config, loop
+):
+    """Test the Observer's behavior on update of an actual resource which has been
+    created WITHOUT any namespace, but where a default namespace has been set in the
+    Cluster's kubeconfig.
+
+    State (0):
+        a Deployment and a Service are present, the Deployment has an nginx
+        image with version "1.7.9"
+    State (1):
+        both resources are still present, but the Deployment image version
+        changed to "1.6"
+    State (2):
+        only the Deployment is present, with the version "1.6"
+    """
+    routes = web.RouteTableDef()
+
+    deployment = set_default_namespace(app_response)
+    service = set_default_namespace(service_response)
+
+    # Actual resource, with container image and selector changed
+    updated_app = deepcopy(deployment)
+    first_container = get_first_container(updated_app)
+    first_container["image"] = "nginx:1.6"
+    # Test the observation of changes on values with a CamelCase format
+    updated_app["spec"]["selector"]["matchLabels"] = {"app": "foo"}
+
+    accepted = "another_namespace"
+    called_get = False
+    called_post = False
+
+    @routes.get("/api/v1/namespaces/{namespace}/services/nginx-demo")
+    async def _(request):
+        nonlocal called_get
+        received = request.match_info["namespace"]
+        assert (
+            received == accepted
+        ), f"The namespace {received} must not be used by the client."
+        called_get = True
+
+        nonlocal actual_state
+        if actual_state in (0, 1):
+            return web.json_response(service)
+        elif actual_state == 2:
+            return web.Response(status=404)
+
+    @routes.get("/apis/apps/v1/namespaces/{namespace}/deployments/nginx-demo")
+    async def _(request):
+        nonlocal called_post
+        received = request.match_info["namespace"]
+        assert (
+            received == accepted
+        ), f"The namespace {received} must not be used by the client."
+        called_post = True
+
+        nonlocal actual_state
+        if actual_state == 0:
+            return web.json_response(deployment)
+        elif actual_state >= 1:
+            return web.json_response(updated_app)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    # Replace the default namespace in the kubeconfig file
+    kubeconfig = make_kubeconfig(kubernetes_server)
+    kubeconfig["contexts"][0]["context"]["namespace"] = "another_namespace"
+    cluster = ClusterFactory(spec__kubeconfig=kubeconfig)
+
+    # Create a manifest with resources without any namespace.
+    manifest = deepcopy(nginx_manifest)
+    for resource in manifest:
+        del resource["metadata"]["namespace"]
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.RUNNING,
+        status__running_on=resource_ref(cluster),
+        spec__manifest=manifest,
+        status__manifest=manifest,
+    )
+
+    calls_to_res_update = 0
+
+    async def on_res_update(resource):
+        assert resource.metadata.name == app.metadata.name
+
+        nonlocal calls_to_res_update, actual_state
+        calls_to_res_update += 1
+
+        manifests = resource.status.manifest
+        status_image = get_first_container(manifests[0])["image"]
+        if actual_state == 0:
+            # As no changes are noticed by the Observer, the res_update function will
+            # not be called.
+            assert False, "The first poll of the observer should not issue an update."
+        elif actual_state == 1:
+            assert status_image == "nginx:1.6"
+            assert len(manifests) == 2
+        elif actual_state == 2:
+            assert status_image == "nginx:1.6"
+            assert len(manifests) == 1
+            assert manifests[0]["kind"] == "Deployment"
+
+        # The spec never changes
+        spec_image = get_first_container(resource.spec.manifest[0])["image"]
+        assert spec_image == "nginx:1.7.9"
+
+    observer = KubernetesObserver(cluster, app, on_res_update, time_step=-1)
+
+    # Observe an unmodified resource
+    # As no changes are noticed by the Observer, the res_update function will not be
+    # called.
+    actual_state = 0
+    assert calls_to_res_update == 0
+
+    # Modify the actual resource "externally"
+    actual_state = 1
+    await observer.observe_resource()
+    assert calls_to_res_update == 1
+
+    # Delete the service "externally"
+    actual_state = 2
+    await observer.observe_resource()
+    assert calls_to_res_update == 2
+
+    assert called_get and called_post, "GET and POST did not get call at least once."
+
+
+async def test_observer_on_poll_update_manifest_namespace_set(
+    aiohttp_server, db, config, loop
+):
+    """Test the Observer's behavior on update of an actual resource which has been
+    created with a defined namespace, but where a default namespace has been set in the
+    Cluster's kubeconfig. The manifest file's namespace should be used.
+
+    State (0):
+        a Deployment and a Service are present, the Deployment has an nginx
+        image with version "1.7.9"
+    State (1):
+        both resources are still present, but the Deployment image version
+        changed to "1.6"
+    State (2):
+        only the Deployment is present, with the version "1.6"
+    """
+    routes = web.RouteTableDef()
+
+    deployment = set_default_namespace(app_response)
+    service = set_default_namespace(service_response)
+
+    # Actual resource, with container image and selector changed
+    updated_app = deepcopy(deployment)
+    first_container = get_first_container(updated_app)
+    first_container["image"] = "nginx:1.6"
+    # Test the observation of changes on values with a CamelCase format
+    updated_app["spec"]["selector"]["matchLabels"] = {"app": "foo"}
+
+    accepted = "secondary"
+    called_get = False
+    called_post = False
+
+    @routes.get("/api/v1/namespaces/{namespace}/services/nginx-demo")
+    async def _(request):
+        nonlocal called_get
+        received = request.match_info["namespace"]
+        assert (
+            received == accepted
+        ), f"The namespace {received} must not be used by the client."
+        called_get = True
+
+        nonlocal actual_state
+        if actual_state in (0, 1):
+            return web.json_response(service)
+        elif actual_state == 2:
+            return web.Response(status=404)
+
+    @routes.get("/apis/apps/v1/namespaces/{namespace}/deployments/nginx-demo")
+    async def _(request):
+        nonlocal called_post
+        received = request.match_info["namespace"]
+        assert (
+            received == accepted
+        ), f"The namespace {received} must not be used by the client."
+        called_post = True
+
+        nonlocal actual_state
+        if actual_state == 0:
+            return web.json_response(deployment)
+        elif actual_state >= 1:
+            return web.json_response(updated_app)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    # Replace the default namespace in the kubeconfig file
+    kubeconfig = make_kubeconfig(kubernetes_server)
+    kubeconfig["contexts"][0]["context"]["namespace"] = "another_namespace"
+    cluster = ClusterFactory(spec__kubeconfig=kubeconfig)
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.RUNNING,
+        status__running_on=resource_ref(cluster),
+        spec__manifest=nginx_manifest,
+        status__manifest=nginx_manifest,
+    )
+
+    calls_to_res_update = 0
+
+    async def on_res_update(resource):
+        assert resource.metadata.name == app.metadata.name
+
+        nonlocal calls_to_res_update, actual_state
+        calls_to_res_update += 1
+
+        manifests = resource.status.manifest
+        status_image = get_first_container(manifests[0])["image"]
+        if actual_state == 0:
+            # As no changes are noticed by the Observer, the res_update function will
+            # not be called.
+            assert False, "The first poll of the observer should not issue an update."
+        elif actual_state == 1:
+            assert status_image == "nginx:1.6"
+            assert len(manifests) == 2
+        elif actual_state == 2:
+            assert status_image == "nginx:1.6"
+            assert len(manifests) == 1
+            assert manifests[0]["kind"] == "Deployment"
+
+        # The spec never changes
+        spec_image = get_first_container(resource.spec.manifest[0])["image"]
+        assert spec_image == "nginx:1.7.9"
+
+    observer = KubernetesObserver(cluster, app, on_res_update, time_step=-1)
+
+    # Observe an unmodified resource
+    # As no changes are noticed by the Observer, the res_update function will not be
+    # called.
+    actual_state = 0
+    assert calls_to_res_update == 0
+
+    # Modify the actual resource "externally"
+    actual_state = 1
+    await observer.observe_resource()
+    assert calls_to_res_update == 1
+
+    # Delete the service "externally"
+    actual_state = 2
+    await observer.observe_resource()
+    assert calls_to_res_update == 2
+
+    assert called_get and called_post, "GET and POST did not get call at least once."
 
 
 async def test_observer_on_status_update(aiohttp_server, db, config, loop):
