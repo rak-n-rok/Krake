@@ -96,7 +96,7 @@ class ApplicationStatusFactory(Factory):
     @lazy_attribute
     def scheduled(self):
         if not self.factory_parent:
-            return fake.date_time()
+            return fake.date_time(tzinfo=pytz.utc)
 
         created = self.factory_parent.metadata.created
         modified = self.factory_parent.metadata.modified

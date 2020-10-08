@@ -14,6 +14,7 @@ from krake.data.serializable import (
     is_qualified_generic,
     is_generic_subtype,
 )
+from krake import utils
 from tests.factories.core import MetadataFactory
 
 
@@ -28,7 +29,7 @@ class Person(Serializable):
 
 class Book(Serializable):
     id: int = field(metadata={"immutable": True})
-    created: datetime = field(default_factory=datetime.now, metadata={"readonly": True})
+    created: datetime = field(default_factory=utils.now, metadata={"readonly": True})
     name: str
     author: Person
     characters: List[Person] = field(default_factory=list)
@@ -118,14 +119,14 @@ def test_list_attr():
 def test_update():
     book = Book(
         id=42,
-        created=datetime(1979, 10, 12),
+        created=datetime(1979, 10, 12).astimezone(),
         name="The Hitchhiker's Guide to the Galaxy",
         author=Person(given_name="Douglas", surname="Adams"),
     )
     update = Book(
         id=9780465025275,
         name="Six Easy Pieces",
-        created=datetime(2011, 3, 11),
+        created=datetime(2011, 3, 11).astimezone(),
         author=Person(given_name="Richard", surname="Feynman"),
     )
 
@@ -142,14 +143,14 @@ def test_update():
 def test_update_replacing_value_with_none():
     book = Book(
         id=42,
-        created=datetime(1979, 10, 12),
+        created=datetime(1979, 10, 12).astimezone(),
         name="The Hitchhiker's Guide to the Galaxy",
         author=Person(given_name="Douglas", surname="Adams"),
     )
     update = Book(
         id=9780465025275,
         name="Six Easy Pieces",
-        created=datetime(2011, 3, 11),
+        created=datetime(2011, 3, 11).astimezone(),
         author=None,
     )
     book.update(update)
@@ -161,12 +162,12 @@ def test_update_replacing_none_with_value():
     book = Book(
         id=9780465025275,
         name="Six Easy Pieces",
-        created=datetime(2011, 3, 11),
+        created=datetime(2011, 3, 11).astimezone(),
         author=None,
     )
     update = Book(
         id=42,
-        created=datetime(1979, 10, 12),
+        created=datetime(1979, 10, 12).astimezone(),
         name="The Hitchhiker's Guide to the Galaxy",
         author=Person(given_name="Douglas", surname="Adams"),
     )
