@@ -1,6 +1,6 @@
 import logging
 from aiohttp import web
-from datetime import datetime
+from krake import utils
 
 from krake.apidefs.kubernetes import kubernetes
 from krake.data.kubernetes import Application, ClusterBinding, ApplicationComplete
@@ -18,7 +18,7 @@ class KubernetesApi:
     @load("app", Application)
     @use_schema("body", ClusterBinding.Schema)
     async def update_application_binding(request, body, app):
-        now = datetime.now()
+        now = utils.now()
         app.status.scheduled = now
         app.status.kube_controller_triggered = now
         app.status.scheduled_to = body.cluster
@@ -40,7 +40,7 @@ class KubernetesApi:
             raise web.HTTPUnauthorized()
 
         # Resource marked as deletion, to be deleted by the Garbage Collector
-        app.metadata.deleted = datetime.now()
+        app.metadata.deleted = utils.now()
         await session(request).put(app)
         logger.info(
             "Deleting of application %r (%s) by calling complete hook",

@@ -1,9 +1,8 @@
 import pytest
-import pytz
 import random
 from aiohttp import web, ClientSession, ClientConnectorError, ClientResponseError
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timezone
 
 from krake.api.app import create_app
 from krake.client.kubernetes import KubernetesApi
@@ -40,7 +39,7 @@ async def test_kubernetes_reception(aiohttp_server, config, db, loop):
         status__state=ApplicationState.FAILED, status__is_scheduled=False
     )
     deleted = ApplicationFactory(
-        metadata__deleted=datetime.now(),
+        metadata__deleted=datetime.now(timezone.utc),
         status__state=ApplicationState.RUNNING,
         status__is_scheduled=False,
     )
@@ -97,7 +96,7 @@ async def test_kubernetes_reception_no_migration(aiohttp_server, config, db, loo
         spec__constraints__migration=False,
     )
     deleted = ApplicationFactory(
-        metadata__deleted=datetime.now(),
+        metadata__deleted=datetime.now(timezone.utc),
         status__state=ApplicationState.RUNNING,
         status__is_scheduled=False,
         spec__constraints__migration=False,
@@ -147,7 +146,8 @@ async def test_openstack_reception(aiohttp_server, config, db, loop):
     )
     running = MagnumClusterFactory(status__state=MagnumClusterState.RUNNING)
     deleted = MagnumClusterFactory(
-        metadata__deleted=datetime.now(), status__state=MagnumClusterState.RUNNING
+        metadata__deleted=datetime.now(timezone.utc),
+        status__state=MagnumClusterState.RUNNING,
     )
 
     assert pending.status.project is None
@@ -665,7 +665,9 @@ async def test_kubernetes_select_cluster_not_deleted():
     for _ in range(10):
         index = random.randint(0, 9)
         clusters = [
-            ClusterFactory(metadata__deleted=datetime.now(), spec__metrics=[])
+            ClusterFactory(
+                metadata__deleted=datetime.now(timezone.utc), spec__metrics=[]
+            )
             for _ in range(10)
         ]
         clusters[index].metadata.deleted = None
@@ -775,8 +777,6 @@ async def test_kubernetes_scheduling_error(aiohttp_server, config, db, loop):
 
 
 async def test_kubernetes_migration(aiohttp_server, config, db, loop):
-    utc = pytz.UTC
-
     prometheus = await aiohttp_server(
         make_prometheus(
             {"heat_demand_1": ("0.5", "0.25"), "heat_demand_2": ("0.25", "0.5")}
@@ -786,7 +786,7 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
     cluster1 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-1", weight=1)])
     cluster2 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-2", weight=1)])
     app = ApplicationFactory(
-        metadata__modified=utc.localize(datetime.now()),
+        metadata__modified=datetime.now(timezone.utc),
         spec__constraints__cluster__labels=[],
         spec__constraints__cluster__custom_resources=[],
         status__state=ApplicationState.PENDING,
@@ -830,10 +830,8 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
         )
         assert stored1.status.scheduled_to == resource_ref(cluster1)
         assert stored1.status.state == ApplicationState.PENDING
-        assert stored1.metadata.modified <= utc.localize(
-            stored1.status.kube_controller_triggered
-        )
-        assert stored1.metadata.modified <= utc.localize(stored1.status.scheduled)
+        assert stored1.metadata.modified <= stored1.status.kube_controller_triggered
+        assert stored1.metadata.modified <= stored1.status.scheduled
 
         # Schedule a second time the scheduled resource
         await scheduler.kubernetes_application_received(stored1)
@@ -847,11 +845,9 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
             stored2.status.kube_controller_triggered
             > stored1.status.kube_controller_triggered
         )
-        assert stored2.metadata.modified <= utc.localize(
-            stored2.status.kube_controller_triggered
-        )
+        assert stored2.metadata.modified <= stored2.status.kube_controller_triggered
         assert stored2.status.scheduled > stored1.status.scheduled
-        assert stored2.metadata.modified <= utc.localize(stored2.status.scheduled)
+        assert stored2.metadata.modified <= stored2.status.scheduled
 
 
 async def test_kubernetes_no_migration(aiohttp_server, config, db, loop):
@@ -859,8 +855,6 @@ async def test_kubernetes_no_migration(aiohttp_server, config, db, loop):
     Test that an app with migration constraint false does not get
     rescheduled due to cluster constraints.
     """
-    utc = pytz.UTC
-
     prometheus = await aiohttp_server(
         make_prometheus(
             {"heat_demand_1": ("0.5", "0.25"), "heat_demand_2": ("0.25", "0.5")}
@@ -870,7 +864,7 @@ async def test_kubernetes_no_migration(aiohttp_server, config, db, loop):
     cluster1 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-1", weight=1)])
     cluster2 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-2", weight=1)])
     app = ApplicationFactory(
-        metadata__modified=utc.localize(datetime.now()),
+        metadata__modified=datetime.now(timezone.utc),
         spec__constraints__cluster__labels=[],
         spec__constraints__cluster__custom_resources=[],
         spec__constraints__migration=False,
@@ -915,10 +909,8 @@ async def test_kubernetes_no_migration(aiohttp_server, config, db, loop):
         )
         assert stored1.status.scheduled_to == resource_ref(cluster1)
         assert stored1.status.state == ApplicationState.PENDING
-        assert stored1.metadata.modified <= utc.localize(
-            stored1.status.kube_controller_triggered
-        )
-        assert stored1.metadata.modified <= utc.localize(stored1.status.scheduled)
+        assert stored1.metadata.modified <= stored1.status.kube_controller_triggered
+        assert stored1.metadata.modified <= stored1.status.scheduled
 
         # Schedule the scheduled resource a second time
         await scheduler.kubernetes_application_received(stored1)
@@ -932,11 +924,9 @@ async def test_kubernetes_no_migration(aiohttp_server, config, db, loop):
             stored2.status.kube_controller_triggered
             == stored1.status.kube_controller_triggered
         )
-        assert stored2.metadata.modified <= utc.localize(
-            stored2.status.kube_controller_triggered
-        )
+        assert stored2.metadata.modified <= stored2.status.kube_controller_triggered
         assert stored2.status.scheduled == stored1.status.scheduled
-        assert stored2.metadata.modified <= utc.localize(stored2.status.scheduled)
+        assert stored2.metadata.modified <= stored2.status.scheduled
 
 
 async def test_kubernetes_application_update(aiohttp_server, config, db, loop):
@@ -944,7 +934,6 @@ async def test_kubernetes_application_update(aiohttp_server, config, db, loop):
     # updated. As the metrics did not change, the cluster scheduled should be the same,
     # but the scheduled timestamp should be updated to allow the KubernetesController to
     # handle the Application afterwards.
-    utc = pytz.UTC
 
     prometheus = await aiohttp_server(
         make_prometheus(
@@ -955,7 +944,7 @@ async def test_kubernetes_application_update(aiohttp_server, config, db, loop):
     cluster1 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-1", weight=1)])
     cluster2 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-2", weight=1)])
     app = ApplicationFactory(
-        metadata__modified=utc.localize(datetime.now()),
+        metadata__modified=datetime.now(timezone.utc),
         spec__constraints__cluster__labels=[],
         spec__constraints__cluster__custom_resources=[],
         status__state=ApplicationState.PENDING,
@@ -999,10 +988,8 @@ async def test_kubernetes_application_update(aiohttp_server, config, db, loop):
         )
         assert stored1.status.scheduled_to == resource_ref(cluster1)
         assert stored1.status.state == ApplicationState.PENDING
-        assert stored1.metadata.modified <= utc.localize(
-            stored1.status.kube_controller_triggered
-        )
-        assert stored1.metadata.modified <= utc.localize(stored1.status.scheduled)
+        assert stored1.metadata.modified <= stored1.status.kube_controller_triggered
+        assert stored1.metadata.modified <= stored1.status.scheduled
 
         # Actual update:
         stored1.metadata.labels["foo"] = "bar"
@@ -1010,7 +997,7 @@ async def test_kubernetes_application_update(aiohttp_server, config, db, loop):
         received = await kubernetes_api.update_application(
             name=app.metadata.name, namespace=app.metadata.namespace, body=app
         )
-        assert stored1.metadata.modified < utc.localize(received.metadata.modified)
+        assert stored1.metadata.modified < received.metadata.modified
 
         # Schedule a second time the scheduled resource
         updated_app = deepcopy(received)
@@ -1041,7 +1028,6 @@ async def test_kubernetes_application_reschedule_no_update(
     # rescheduling. As the metrics did not change, the cluster scheduled should be the
     # same. Because of this and also because the Application did not change, the
     # scheduled timestamp should not be updated.
-    utc = pytz.UTC
 
     prometheus = await aiohttp_server(
         make_prometheus(
@@ -1052,7 +1038,7 @@ async def test_kubernetes_application_reschedule_no_update(
     cluster1 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-1", weight=1)])
     cluster2 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-2", weight=1)])
     app = ApplicationFactory(
-        metadata__modified=utc.localize(datetime.now()),
+        metadata__modified=datetime.now(timezone.utc),
         spec__constraints__cluster__labels=[],
         spec__constraints__cluster__custom_resources=[],
         status__state=ApplicationState.PENDING,
@@ -1096,18 +1082,8 @@ async def test_kubernetes_application_reschedule_no_update(
         )
         assert stored1.status.scheduled_to == resource_ref(cluster1)
         assert stored1.status.state == ApplicationState.PENDING
-        assert stored1.metadata.modified <= utc.localize(
-            stored1.status.kube_controller_triggered
-        )
-        assert stored1.metadata.modified <= utc.localize(stored1.status.scheduled)
-
-        # This update is only needed for offset-naive and offset-aware datetimes
-        # comparison issues, it is not considered as an actual update.
-        stored1.status.kube_controller_triggered = utc.localize(
-            stored1.status.kube_controller_triggered
-        )
-        stored1.status.scheduled = utc.localize(stored1.status.scheduled)
-        await db.put(stored1)
+        assert stored1.metadata.modified <= stored1.status.kube_controller_triggered
+        assert stored1.metadata.modified <= stored1.status.scheduled
 
         # Schedule a second time the scheduled resource
         updated_app = deepcopy(stored1)
@@ -1349,7 +1325,9 @@ async def test_select_project_not_deleted():
     for _ in range(10):
         index = random.randint(0, 9)
         projects = [
-            ProjectFactory(metadata__deleted=datetime.now(), spec__metrics=[])
+            ProjectFactory(
+                metadata__deleted=datetime.now(timezone.utc), spec__metrics=[]
+            )
             for _ in range(10)
         ]
         projects[index].metadata.deleted = None

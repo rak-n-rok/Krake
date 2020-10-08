@@ -1,12 +1,12 @@
 import asyncio
 import logging
 import random
-from datetime import datetime
 from typing import NamedTuple
 
 from functools import total_ordering
 from aiohttp import ClientError
 
+from krake import utils
 from krake.data.openstack import Project, MagnumClusterState, MagnumClusterBinding
 from krake.client.openstack import OpenStackApi
 from krake.client.core import CoreApi
@@ -344,7 +344,7 @@ class Scheduler(Controller):
             # a processing of the Application by the KubernetesController, which would
             # not make the controller perform any action.
             if app.metadata.modified > app.status.kube_controller_triggered:
-                app.status.kube_controller_triggered = datetime.now()
+                app.status.kube_controller_triggered = utils.now()
                 await self.kubernetes_api.update_application_status(
                     namespace=app.metadata.namespace, name=app.metadata.name, body=app
                 )
