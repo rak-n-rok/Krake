@@ -1,4 +1,5 @@
 import asyncio
+from datetime import timedelta
 import logging
 import random
 from typing import NamedTuple
@@ -556,6 +557,33 @@ class Scheduler(Controller):
         if not matching:
             logger.info("No matching Kubernetes cluster for %r found", app)
             raise NoClusterFound("No matching Kubernetes cluster found")
+
+        # If the application already has been scheduled it might be that it
+        # was very recently. In fact, since the controller reacts to all updates
+        # of the application, it might very well be that the previous scheduling
+        # took place very recently. For example, the kubernetes controller updates
+        # the app in reaction to the scheduler's scheduling, in which case
+        # the scheduler will try and select the best cluster yet again.
+        # Therefore we have to make sure the previous scheduling was not too recent.
+        # If it was, we want to stay at the current cluster.
+        if app.status.scheduled_to:
+            current = next(
+                (c for c in matching if resource_ref(c) == app.status.scheduled_to),
+                None,
+            )
+            # if current cluster is still matching
+            if current:
+                # We check how long ago the previous scheduling took place.
+                # If it is less than reschedule_after seconds ago, we do not
+                # reschedule. We use reschedule_after for this comparison,
+                # since it indicates how often it is desired that an application
+                # should be rescheduled when a more appropriate cluster exists.
+                time_since_scheduled_to_current = utils.now() - app.status.scheduled
+                app_recently_scheduled = time_since_scheduled_to_current < timedelta(
+                    seconds=self.reschedule_after
+                )
+                if app_recently_scheduled:
+                    return current
 
         # Partition list if matching clusters into a list if clusters with
         # metrics and without metrics. Clusters with metrics are preferred

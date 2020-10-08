@@ -2,7 +2,7 @@ import pytest
 import random
 from aiohttp import web, ClientSession, ClientConnectorError, ClientResponseError
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from krake.api.app import create_app
 from krake.client.kubernetes import KubernetesApi
@@ -21,6 +21,8 @@ from tests.factories.core import MetricsProviderFactory, MetricFactory
 from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
 from tests.factories.openstack import MagnumClusterFactory, ProjectFactory
 from tests.factories import fake
+
+import time
 
 
 async def test_kubernetes_reception(aiohttp_server, config, db, loop):
@@ -706,7 +708,10 @@ async def test_kubernetes_select_cluster_sticky_without_metric():
     cluster_A = ClusterFactory(spec__metrics=[])
     cluster_B = ClusterFactory(spec__metrics=[])
     app = ApplicationFactory(
-        spec__constraints=None, status__scheduled_to=resource_ref(cluster_A)
+        spec__constraints=None,
+        status__scheduled_to=resource_ref(cluster_A),
+        status__is_scheduled=True,
+        status__state=ApplicationState.RUNNING,
     )
 
     scheduler = Scheduler("http://localhost:8080", worker_count=0)
@@ -777,6 +782,8 @@ async def test_kubernetes_scheduling_error(aiohttp_server, config, db, loop):
 
 
 async def test_kubernetes_migration(aiohttp_server, config, db, loop):
+    """ Test that the app is migrated due to metrics changes if the time passed
+    since the last schedule was long enough."""
     prometheus = await aiohttp_server(
         make_prometheus(
             {"heat_demand_1": ("0.5", "0.25"), "heat_demand_2": ("0.25", "0.5")}
@@ -821,7 +828,15 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        # The reschedule_after time should be kept small to shorten the runtime
+        # of the test. If it is too short however the test will fail,
+        # since second_try_elapsed will become greater than reschedule_after.
+        reschedule_after = timedelta(seconds=1)
+        scheduler = Scheduler(
+            server_endpoint(server),
+            worker_count=0,
+            reschedule_after=reschedule_after.seconds,
+        )
         await scheduler.prepare(client)
         await scheduler.kubernetes_application_received(app)
 
@@ -835,6 +850,32 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
 
         # Schedule a second time the scheduled resource
         await scheduler.kubernetes_application_received(stored1)
+        second_try_time = datetime.now().astimezone()
+
+        # Since not much time has passed the application should not have migrated
+        # although the metrics changed. This is to avoid migrating the application
+        # everytime the metrics change.
+        # In test_kubernetes_migration_w_update the same test is performed but with
+        # an update, and there the second_try does cause a migration.
+
+        stored_second_try = await db.get(
+            Application, namespace=app.metadata.namespace, name=app.metadata.name
+        )
+        second_try_elapsed = second_try_time - stored1.status.scheduled
+        assert second_try_elapsed < reschedule_after
+        assert stored_second_try.status.scheduled_to == resource_ref(cluster1)
+        assert stored_second_try.status.state == ApplicationState.PENDING
+        assert stored_second_try.status.scheduled == stored1.status.scheduled
+
+        # Pause until scheduler.reschedule_after seconds has passed after the
+        # first migration before receiving the application again.
+        # This time it should be rescheduled,
+        # since it was long enough ago that it was scheduled the first time.
+        pause = reschedule_after - second_try_elapsed
+        time.sleep(pause.total_seconds())
+
+        # Schedule the application a third time
+        await scheduler.kubernetes_application_received(stored_second_try)
 
         stored2 = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -847,7 +888,112 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
         )
         assert stored2.metadata.modified <= stored2.status.kube_controller_triggered
         assert stored2.status.scheduled > stored1.status.scheduled
+        time_between_migrations = stored2.status.scheduled - stored1.status.scheduled
+        assert time_between_migrations >= reschedule_after
         assert stored2.metadata.modified <= stored2.status.scheduled
+
+
+@pytest.mark.skip(
+    reason="The functionality that is tested here has not yet been "
+    "implemented, since we cannot differentiate between "
+    "update by user (which should (?) cause reevaluation "
+    "of scheduling decision) and update by kube controller "
+    "after scheduling decision was made."
+)
+async def test_kubernetes_migration_w_update(aiohttp_server, config, db, loop):
+    """ Test that the app is migrated due to an update even if the time passed
+    since the last schedule was shorter than the rescheduling interval."""
+    prometheus = await aiohttp_server(
+        make_prometheus(
+            {"heat_demand_1": ("0.5", "0.25"), "heat_demand_2": ("0.25", "0.5")}
+        )
+    )
+
+    cluster1 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-1", weight=1)])
+    cluster2 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-2", weight=1)])
+    app = ApplicationFactory(
+        metadata__modified=datetime.now(timezone.utc),
+        spec__constraints__cluster__labels=[],
+        spec__constraints__cluster__custom_resources=[],
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=False,
+    )
+    metric1 = MetricFactory(
+        metadata__name="heat-demand-1",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus",
+        spec__provider__metric="heat_demand_1",
+    )
+    metric2 = MetricFactory(
+        metadata__name="heat-demand-2",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus",
+        spec__provider__metric="heat_demand_2",
+    )
+    metrics_provider = MetricsProviderFactory(
+        metadata__name="prometheus",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+    await db.put(metric1)
+    await db.put(metric2)
+    await db.put(metrics_provider)
+    await db.put(cluster1)
+    await db.put(cluster2)
+    await db.put(app)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        # The reschedule_after time should be kept small to shorten the runtime
+        # of the test. If it is too short however the test will fail,
+        # since second_try_elapsed will become greater than reschedule_after.
+        reschedule_after = timedelta(seconds=5)
+        scheduler = Scheduler(
+            server_endpoint(server),
+            worker_count=0,
+            reschedule_after=reschedule_after.seconds,
+        )
+        await scheduler.prepare(client)
+        await scheduler.kubernetes_application_received(app)
+
+        stored1 = await db.get(
+            Application, namespace=app.metadata.namespace, name=app.metadata.name
+        )
+        assert stored1.status.scheduled_to == resource_ref(cluster1)
+        assert stored1.status.state == ApplicationState.PENDING
+        assert stored1.metadata.modified <= stored1.status.kube_controller_triggered
+        assert stored1.metadata.modified <= stored1.status.scheduled
+
+        # Schedule a second time the scheduled resource WITH update
+        kubernetes_api = KubernetesApi(client)
+        received = await kubernetes_api.update_application(
+            name=stored1.metadata.name,
+            namespace=stored1.metadata.namespace,
+            body=stored1,
+        )
+        assert stored1.metadata.modified < received.metadata.modified
+
+        update_app = deepcopy(received)
+        await scheduler.kubernetes_application_received(update_app)
+        second_try_time = datetime.now().astimezone()
+
+        # Although not much time has passed since the last scheduling,
+        # the application should have migrated
+        # due to metrics change since the app was updated.
+        # In test_kubernetes_migration the same test is performed but without
+        # the update, and there the second_try does not cause a migration.
+
+        stored_second_try = await db.get(
+            Application, namespace=app.metadata.namespace, name=app.metadata.name
+        )
+        second_try_elapsed = second_try_time - stored1.status.scheduled
+        assert second_try_elapsed < reschedule_after
+        assert stored_second_try.status.scheduled_to == resource_ref(cluster2)
+        assert stored_second_try.status.state == ApplicationState.PENDING
+        assert stored_second_try.status.scheduled > stored1.status.scheduled
 
 
 async def test_kubernetes_no_migration(aiohttp_server, config, db, loop):
