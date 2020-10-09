@@ -6,6 +6,7 @@
     # pytest and rok are installed locally in /home/krake/.local/bin which isn't in the
     # default PATH
     PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
+    PYTEST_TIMEOUT: 1200
   vars:
     git_dir: /home/krake/git/krake
     test_dir: rak/functionals
