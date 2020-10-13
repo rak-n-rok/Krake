@@ -182,7 +182,7 @@ def test_kubernetes_observer_additional_resource(minikube_clusters):
 
         # 1. Read the state of the Application on the API and on the cluster to
         # be able to compare afterwards
-        before_response = run(f"rok kube app get {application_name} -f json")
+        before_response = run(f"rok kube app get {application_name} -o json")
 
         error_message = "The Application echo-demo could not be found on the cluster."
         response = run(
@@ -216,7 +216,7 @@ def test_kubernetes_observer_additional_resource(minikube_clusters):
             assert deployment_names == {"echo-demo", "nginx-deployment"}
 
             # Compare the Application data before and after having added the resource
-            after_response = run(f"rok kube app get {application_name} -f json")
+            after_response = run(f"rok kube app get {application_name} -o json")
             app_before = before_response.json
             app_after = after_response.json
             # The application is rescheduled, so the "kube_controller_triggered"
@@ -350,7 +350,7 @@ def test_kubernetes_observer_delete_on_api(minikube_clusters):
         # 3. Create the resource again but with other specs
         run(f"rok kube app create echo-demo -f {MANIFEST_PATH}/echo-demo-update.yaml")
         run(
-            f"rok kube app get {application_name} -f json",
+            f"rok kube app get {application_name} -o json",
             condition=check_app_state(
                 "RUNNING", "Unable to observe the application in a RUNNING state"
             ),

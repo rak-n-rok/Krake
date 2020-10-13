@@ -82,7 +82,7 @@ def printer(file=sys.stdout, **formatters):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            format_type = kwargs.pop("format", "yaml")
+            format_type = kwargs.pop("output", "yaml")
 
             try:
                 value = func(*args, **kwargs)
@@ -132,6 +132,20 @@ def format_datetime(time_str):
     if time_str is None:
         return None
     return datetime.strftime(parse(time_str), "%Y-%m-%d %H:%M:%S")
+
+
+def bool_formatter(attr):
+    """Format a boolean into a more readable format
+
+    Args:
+        attr (bool): a boolean attribute
+
+    Returns:
+        str: the string "True" or "False", depending of the boolean value of the given
+            attribute.
+
+    """
+    return str(attr)
 
 
 def dict_formatter(attr):

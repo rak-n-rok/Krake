@@ -44,7 +44,7 @@ Scheduling of an application
 .. prompt:: bash $ auto
 
     $ rok kube app create -f git/krake/rak/functionals/echo-demo.yaml echo-demo
-    $ rok kube app get echo-demo -f json | jq .status.running_on  # The Application is running on "minikube-cluster-demoenv-1"
+    $ rok kube app get echo-demo -o json | jq .status.running_on  # The Application is running on "minikube-cluster-demoenv-1"
 
 .. note::
 
@@ -58,7 +58,7 @@ Observe a migration
 .. prompt:: bash $ auto
 
     $ ETCDCTL_API=3 etcdctl put /metricsprovider/static_provider -- '{"metadata": {"namespace": null, "uid": "26ef45e8-e5c8-44fe-8a7f-a3f40944c925", "labels": {}, "modified": "2020-01-21T10:50:11.500376", "deleted": null, "name": "static_provider", "owners": [], "created": "2020-01-21T10:50:11.500376", "finalizers": []}, "spec": {"type": "static", "static": {"metrics": {"electricity_cost_1": 0.1, "latency_1": 0.9}}}, "api": "core", "kind": "MetricsProvider"}'
-    $ rok kube app get echo-demo -f json | jq .status.running_on  # The Application is now running on "minikube-cluster-demoenv-2"
+    $ rok kube app get echo-demo -o json | jq .status.running_on  # The Application is now running on "minikube-cluster-demoenv-2"
 
 Cleanup
 =======

@@ -22,8 +22,14 @@ from .parser import (
     arg_metric,
 )
 from .fixtures import depends
-from .formatters import BaseTable, Cell, printer, dict_formatter
-
+from .formatters import (
+    BaseTable,
+    Cell,
+    printer,
+    dict_formatter,
+    bool_formatter,
+    format_datetime,
+)
 
 kubernetes = ParserSpec(
     "kubernetes", aliases=["kube"], help="Manage Kubernetes resources"
@@ -51,7 +57,7 @@ arg_migration_constraints = mutually_exclusive_group(
                 "help": "Enable migration of the application",
             },
         ),
-    ],
+    ]
 )
 
 arg_cluster_label_constraints = argument(
@@ -117,6 +123,24 @@ def list_applications(config, session, namespace, all):
     return body["items"]
 
 
+class ApplicationTable(ApplicationListTable):
+    reason = Cell("status.reason", formatter=dict_formatter)
+    services = Cell("status.services", formatter=dict_formatter)
+    migration = Cell(
+        "spec.constraints.migration", name="allow migration", formatter=bool_formatter
+    )
+    label_constraints = Cell(
+        "spec.constraints.cluster.labels", name="label constraints"
+    )
+    resources_constraints = Cell(
+        "spec.constraints.cluster.custom_resources", name="resources constraints"
+    )
+    hooks = Cell("spec.hooks")
+    scheduled_to = Cell("status.scheduled_to")
+    scheduled = Cell("status.scheduled", formatter=format_datetime)
+    running_on = Cell("status.running_on")
+
+
 @application.command("create", help="Create Kubernetes application")
 @argument(
     "-f", "--file", type=FileType(), required=True, help="Kubernetes manifest file"
@@ -128,7 +152,9 @@ def list_applications(config, session, namespace, all):
 @arg_namespace
 @arg_labels
 @arg_hooks
+@arg_formatting
 @depends("config", "session")
+@printer(table=ApplicationTable())
 def create_application(
     config,
     session,
@@ -164,14 +190,7 @@ def create_application(
         },
     }
     resp = session.post(f"/kubernetes/namespaces/{namespace}/applications", json=app)
-    data = resp.json()
-    yaml.dump(data, default_flow_style=False, stream=sys.stdout)
-
-
-class ApplicationTable(ApplicationListTable):
-    reason = Cell("status.reason", formatter=dict_formatter)
-    services = Cell("status.services", formatter=dict_formatter)
-    constraints = Cell("spec.constraints", formatter=dict_formatter)
+    return resp.json()
 
 
 @application.command("get", help="Get Kubernetes application")
@@ -189,8 +208,8 @@ def get_application(config, session, namespace, name):
         raise_for_status=False,
     )
     if resp.status_code == 404:
-        print(f"Error: Kubernetes application {name!r} not found")
-        raise SystemExit(1)
+        raise SystemExit(f"Error 404: Application {name!r} not found")
+    resp.raise_for_status()
 
     resp.raise_for_status()
     return resp.json()
@@ -205,7 +224,9 @@ def get_application(config, session, namespace, name):
 @arg_namespace
 @arg_labels
 @arg_hooks
+@arg_formatting
 @depends("config", "session")
+@printer(table=ApplicationTable())
 def update_application(
     config,
     session,
@@ -227,7 +248,7 @@ def update_application(
         raise_for_status=False,
     )
     if resp.status_code == 404:
-        raise SystemExit(f"Error: Magnum cluster {name!r} not found")
+        raise SystemExit(f"Error 404: Application {name!r} not found")
     resp.raise_for_status()
     app = resp.json()
 
@@ -258,12 +279,21 @@ def update_application(
 @application.command("delete", help="Delete Kubernetes application")
 @argument("name", help="Kubernetes application name")
 @arg_namespace
+@arg_formatting
 @depends("config", "session")
+@printer(table=ApplicationTable())
 def delete_application(config, session, namespace, name):
     if namespace is None:
         namespace = config["user"]
 
-    resp = session.delete(f"/kubernetes/namespaces/{namespace}/applications/{name}")
+    resp = session.delete(
+        f"/kubernetes/namespaces/{namespace}/applications/{name}",
+        raise_for_status=False,
+    )
+    if resp.status_code == 404:
+        raise SystemExit(f"Error 404: Application {name!r} not found")
+    resp.raise_for_status()
+
     if resp.status_code == 204:
         return None
     return resp.json()
@@ -273,7 +303,8 @@ cluster = kubernetes.subparser("cluster", help="Manage Kubernetes clusters")
 
 
 class ClusterTable(BaseTable):
-    pass
+    custom_resources = Cell("spec.custom_resources")
+    metrics = Cell("spec.metrics")
 
 
 @cluster.command("create", help="Register an existing Kubernetes cluster")
@@ -287,7 +318,9 @@ class ClusterTable(BaseTable):
 @arg_metric
 @arg_namespace
 @arg_labels
+@arg_formatting
 @depends("config", "session")
+@printer(table=ClusterTable(many=False))
 def create_cluster(
     config, session, namespace, kubeconfig, contexts, metrics, labels, custom_resources
 ):
@@ -360,9 +393,7 @@ def create_cluster(
                 continue
             raise
 
-        print("---")
-        data = resp.json()
-        yaml.dump(data, default_flow_style=False, stream=sys.stdout)
+        return resp.json()
 
     sys.exit(error)
 
@@ -374,7 +405,7 @@ def create_cluster(
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
-@printer(table=ClusterTable(many=True))
+@printer(table=BaseTable(many=True))
 def list_clusters(config, session, namespace, all):
     if all:
         url = "/kubernetes/clusters"
@@ -401,8 +432,7 @@ def get_cluster(config, session, namespace, name):
         f"/kubernetes/namespaces/{namespace}/clusters/{name}", raise_for_status=False
     )
     if resp.status_code == 404:
-        print(f"Error: Kubernetes cluster {name!r} not found")
-        raise SystemExit(1)
+        raise SystemExit(f"Error 404: Kubernetes cluster {name!r} not found")
 
     resp.raise_for_status()
     return resp.json()
@@ -414,8 +444,10 @@ def get_cluster(config, session, namespace, name):
 @arg_custom_resources
 @arg_metric
 @arg_namespace
+@arg_formatting
 @arg_labels
 @depends("config", "session")
+@printer(table=ClusterTable())
 def update_cluster(
     config, session, name, namespace, file, metrics, labels, custom_resources
 ):
@@ -426,7 +458,7 @@ def update_cluster(
         f"/kubernetes/namespaces/{namespace}/clusters/{name}", raise_for_status=False
     )
     if resp.status_code == 404:
-        raise SystemExit(f"Error: Magnum cluster {name!r} not found")
+        raise SystemExit(f"Error 404: Kubernetes cluster {name!r} not found")
     resp.raise_for_status()
     cluster = resp.json()
 
@@ -445,31 +477,26 @@ def update_cluster(
         f"/kubernetes/namespaces/{namespace}/clusters/{name}", json=cluster
     )
 
-    print("---")
-    data = resp.json()
-    yaml.dump(data, default_flow_style=False, stream=sys.stdout)
+    return resp.json()
 
 
 @cluster.command("delete", help="Delete Kubernetes cluster")
-@argument(
-    "--cascade",
-    help="Delete the cluster and all dependent resources",
-    action="store_true",
-)
 @argument("name", help="Kubernetes cluster name")
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
 @printer(table=ClusterTable())
-def delete_cluster(config, session, namespace, name, cascade):
+def delete_cluster(config, session, namespace, name):
     if namespace is None:
         namespace = config["user"]
 
-    url = f"/kubernetes/namespaces/{namespace}/clusters/{name}"
-    if cascade:
-        url = f"{url}?cascade"
+    resp = session.delete(
+        f"/kubernetes/namespaces/{namespace}/clusters/{name}", raise_for_status=False
+    )
+    if resp.status_code == 404:
+        raise SystemExit(f"Error 404: Kubernetes cluster {name!r} not found")
+    resp.raise_for_status()
 
-    resp = session.delete(url)
     if resp.status_code == 204:
         return None
     return resp.json()

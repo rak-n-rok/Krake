@@ -6,9 +6,6 @@
 
 """
 import os
-import sys
-
-import yaml
 
 from .parser import (
     ParserSpec,
@@ -29,6 +26,7 @@ project = openstack.subparser("project", help="Manage OpenStack projects")
 class ProjectTable(BaseTable):
     url = Cell("spec.url")
     template = Cell("spec.template")
+    auth = Cell("spec.auth.type", name="auth type")
 
 
 @project.command("list", help="List OpenStack projects")
@@ -38,7 +36,7 @@ class ProjectTable(BaseTable):
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
-@printer(table=ProjectTable(many=True))
+@printer(table=BaseTable(many=True))
 def list_projects(config, session, namespace, all):
     if all:
         url = "/openstack/projects"
@@ -144,8 +142,7 @@ def get_project(config, session, namespace, name):
         f"/openstack/namespaces/{namespace}/projects/{name}", raise_for_status=False
     )
     if resp.status_code == 404:
-        print(f"Error: OpenStack project {name!r} not found")
-        raise SystemExit(1)
+        raise SystemExit(f"Error 404: Project {name!r} not found")
 
     resp.raise_for_status()
     return resp.json()
@@ -188,6 +185,10 @@ def update_project(
     resp = session.get(
         f"/openstack/namespaces/{namespace}/projects/{name}", raise_for_status=False
     )
+    if resp.status_code == 404:
+        raise SystemExit(f"Error 404: Project {name!r} not found")
+    resp.raise_for_status()
+
     project = resp.json()
 
     if application_credential:
@@ -246,7 +247,13 @@ def delete_project(config, session, namespace, name):
     if namespace is None:
         namespace = config["user"]
 
-    resp = session.delete(f"/openstack/namespaces/{namespace}/projects/{name}")
+    resp = session.delete(
+        f"/openstack/namespaces/{namespace}/projects/{name}", raise_for_status=False
+    )
+    if resp.status_code == 404:
+        raise SystemExit(f"Error 404: Project {name!r} not found")
+    resp.raise_for_status()
+
     if resp.status_code == 204:
         return None
     return resp.json()
@@ -276,7 +283,16 @@ class ClusterTable(ClusterListTable):
     reason = Cell("status.reason", formatter=dict_formatter)
     master = Cell("status.master_addresses")
     nodes = Cell("status.node_addresses")
-    project = Cell("status.project.name")
+    label_constraints = Cell("spec.constraints", name="label constraints")
+    metrics = Cell("spec.metrics")
+    project = Cell("status.project")
+    template = Cell("status.template")
+    cluster_id = Cell("status.cluster_id")
+    node_count = Cell("status.node_count")
+    api_address = Cell("status.api_address")
+    master_addresses = Cell("status.master_addresses")
+    node_addresses = Cell("status.node_addresses")
+    cluster = Cell("status.cluster")
 
 
 @cluster.command("create", help="Create Magnum cluster")
@@ -321,8 +337,7 @@ def create_cluster(
         json=cluster,
         raise_for_status=False,
     )
-    data = resp.json()
-    yaml.dump(data, default_flow_style=False, stream=sys.stdout)
+    return resp.json()
 
 
 @cluster.command("list", help="List Magnum clusters")
@@ -360,8 +375,7 @@ def get_cluster(config, session, namespace, name):
         raise_for_status=False,
     )
     if resp.status_code == 404:
-        print(f"Error: Magnum cluster {name!r} not found")
-        raise SystemExit(1)
+        raise SystemExit(f"Error 404: Magnum cluster {name!r} not found")
 
     resp.raise_for_status()
     return resp.json()
@@ -387,8 +401,7 @@ def update_cluster(
         raise_for_status=False,
     )
     if resp.status_code == 404:
-        print(f"Error: Magnum cluster {name!r} not found")
-        raise SystemExit(1)
+        raise SystemExit(f"Error 404: Magnum cluster {name!r} not found")
     resp.raise_for_status()
     cluster = resp.json()
 
@@ -412,25 +425,23 @@ def update_cluster(
 
 
 @cluster.command("delete", help="Delete Magnum cluster")
-@argument(
-    "--cascade",
-    help="Delete the cluster and all dependent resources",
-    action="store_true",
-)
 @argument("name", help="Magnum cluster name")
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
 @printer(table=ClusterTable())
-def delete_cluster(config, session, namespace, name, cascade):
+def delete_cluster(config, session, namespace, name):
     if namespace is None:
         namespace = config["user"]
 
-    url = f"/openstack/namespaces/{namespace}/magnumclusters/{name}"
-    if cascade:
-        url = f"{url}?cascade"
+    resp = session.delete(
+        f"/openstack/namespaces/{namespace}/magnumclusters/{name}",
+        raise_for_status=False,
+    )
+    if resp.status_code == 404:
+        raise SystemExit(f"Error 404: Magnum cluster {name!r} not found")
+    resp.raise_for_status()
 
-    resp = session.delete(url)
     if resp.status_code == 204:
         return None
     return resp.json()

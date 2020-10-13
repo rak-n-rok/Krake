@@ -132,7 +132,7 @@ def execute_tests(tests):
         # if defined
         if expected_cluster:
             response = run(
-                f"rok kube app get {test.application.name} -f json",
+                f"rok kube app get {test.application.name} -o json",
                 retry=5,
                 interval=10,
                 condition=check_app_state(
@@ -147,12 +147,12 @@ def execute_tests(tests):
             run(f"rok kube app delete {test.application.name}")
             # Add a condition to wait for the application to be actually deleted
             run(
-                "rok kube app list -f json",
+                "rok kube app list -o json",
                 condition=check_empty_list("Unable to observe the application deleted"),
             )
         else:
             run(
-                "rok kube app list -f json",
+                "rok kube app list -o json",
                 condition=check_empty_list(
                     "Unable to observe the empty list of applications"
                 ),
@@ -164,7 +164,7 @@ def execute_tests(tests):
 
         # Add a condition to wait for the cluster to be actually deleted
         run(
-            "rok kube cluster list -a -f json",
+            "rok kube cluster list -a -o json",
             condition=check_empty_list("Unable to observe the cluster deleted"),
         )
 
@@ -312,9 +312,9 @@ def test_create_on_other_namespace(minikube_clusters):
         )
 
         # 3. Delete the Application
-        run(app.delete_command())
+        app.delete_resource()
         run(
-            "rok kube app list -f json",
+            "rok kube app list -o json",
             condition=check_empty_list(
                 "Unable to observe the empty list of applications"
             ),

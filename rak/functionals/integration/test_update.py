@@ -20,6 +20,7 @@ from utils import (
     run,
     Environment,
     create_simple_environment,
+    check_return_code,
     check_spec_container_image,
     check_spec_replicas,
     ClusterDefinition,
@@ -64,13 +65,14 @@ def test_update_application_manifest(minikube_clusters):
         app = resources["Application"][0]
 
         # 1. Update the Application
-        # FIXME because rok returns an error code of "1" even if the resource was
-        #  updated, there are no check done here. It should be added as soon as rok has
-        #  been refactored. The same is true for the next rok update commands
-        run(f"rok kube app update {app.name} -f {MANIFEST_PATH}/echo-demo-update.yaml")
+        error_message = f"The Application {app.name} could not be updated."
+        run(
+            f"rok kube app update {app.name} -f {MANIFEST_PATH}/echo-demo-update.yaml",
+            condition=check_return_code(error_message),
+        )
 
         # 2. Check that the image version has been changed on the API
-        response = run(f"rok kube app get {app.name} -f json")
+        response = run(f"rok kube app get {app.name} -o json")
 
         app_details = response.json
         manifest_spec = app_details["spec"]["manifest"][0]["spec"]["template"]["spec"]
@@ -134,18 +136,26 @@ def test_update_application_labels(minikube_clusters):
         app = resources["Application"][0]
 
         # 1. Update the Application
-        run(f"rok kube app update {app.name} -l location=DE -l lbl=first")
+        error_message = f"The Application {app.name} could not be updated."
+        run(
+            f"rok kube app update {app.name} -l location=DE -l lbl=first",
+            condition=check_return_code(error_message),
+        )
 
         # 2. Check that the label has been changed on the API
-        response = run(f"rok kube app get {app.name} -f json")
+        response = run(f"rok kube app get {app.name} -o json")
         app_details = response.json
         assert app_details["metadata"]["labels"] == {"location": "DE", "lbl": "first"}
 
         # 3. Update the Application
-        run(f"rok kube app update {app.name} -l lbl=second -l other=value")
+        error_message = f"The Application {app.name} could not be updated."
+        run(
+            f"rok kube app update {app.name} -l lbl=second -l other=value",
+            condition=check_return_code(error_message),
+        )
 
         # 4. Check that the label has been changed on the API
-        response = run(f"rok kube app get {app.name} -f json")
+        response = run(f"rok kube app get {app.name} -o json")
         app_details = response.json
         assert app_details["metadata"]["labels"] == {"lbl": "second", "other": "value"}
 
@@ -185,13 +195,13 @@ def test_update_cluster_kubeconfig(minikube_clusters):
         run(f"rok kube cluster update {cluster.name} -f {other_kubeconfig_path}")
 
         # 2. Check that the kubeconfig has been changed on the API
-        response = run(f"rok kube cluster get {cluster.name} -f json")
+        response = run(f"rok kube cluster get {cluster.name} -o json")
 
         cluster_details = response.json
         assert cluster_details["spec"]["kubeconfig"] == other_content
 
         # 3. Revert its state back
-        run(f"rok kube cluster update {cluster.name} -f {kubeconfig_path}")
+        run(f"rok kube cluster update {cluster.name} -o {kubeconfig_path}")
 
 
 def test_update_cluster_labels(minikube_clusters):
@@ -224,10 +234,14 @@ def test_update_cluster_labels(minikube_clusters):
         cluster = resources["Cluster"][0]
 
         # 1. Update the Cluster
-        run(f"rok kube cluster update {cluster.name} -l location=DE -l lbl=first")
+        error_message = f"The Cluster {cluster.name} could not be updated."
+        run(
+            f"rok kube cluster update {cluster.name} -l location=DE -l lbl=first",
+            condition=check_return_code(error_message),
+        )
 
         # 2. Check that the label has been changed on the API
-        response = run(f"rok kube cluster get {cluster.name} -f json")
+        response = run(f"rok kube cluster get {cluster.name} -o json")
         cluster_details = response.json
         assert cluster_details["metadata"]["labels"] == {
             "location": "DE",
@@ -235,10 +249,14 @@ def test_update_cluster_labels(minikube_clusters):
         }
 
         # 3. Update the Cluster
-        run(f"rok kube cluster update {cluster.name} -l lbl=second -l other=value")
+        error_message = f"The Cluster {cluster.name} could not be updated."
+        run(
+            f"rok kube cluster update {cluster.name} -l lbl=second -l other=value",
+            condition=check_return_code(error_message),
+        )
 
         # 4. Check that the label has been changed on the API
-        response = run(f"rok kube cluster get {cluster.name} -f json")
+        response = run(f"rok kube cluster get {cluster.name} -o json")
         cluster_details = response.json
         assert cluster_details["metadata"]["labels"] == {
             "lbl": "second",

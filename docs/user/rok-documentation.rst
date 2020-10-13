@@ -21,7 +21,7 @@ The separate elements are:
     The verb used for the operation to apply. For instance ``list`` can be used to get all instances of one kind of resource, while ``delete`` can be used to remove a resource.
 
 ``parameters`` element:
-    The specific argument for the current operation. For instance, for some operations, the ``-f | --format`` argument change the format of the response.
+    The specific argument for the current operation. For instance, the ``-o | --output`` argument change the format of the response.
 
 
 A few examples:
@@ -70,9 +70,6 @@ create
 list
     List all Cluster of a namespace.
 
-    ``-f | --format <format>`` (optional):
-        The format of the displayed response. Three are available: YAML: ``yaml``, JSON: ``json`` or table: ``table``.
-
     ``-n | --namespace`` (optional):
         The namespace from which the Clusters have to be listed. If none is given, the user namespace is selected.
 
@@ -119,9 +116,6 @@ create
 list
     List all Applications of a namespace.
 
-    ``-f | --format <format>`` (optional):
-        The format of the displayed response. Three are available: YAML: ``yaml``, JSON: ``json`` or table: ``table``.
-
     ``-n | --namespace`` (optional):
         The namespace from which the Applications have to be listed. If none is given, the user namespace is selected.
 
@@ -130,10 +124,6 @@ get
 
     ``name``:
         The name of the Application to fetch.
-
-    ``-f | --format <format>`` (optional):
-        The format of the displayed response. Three are available: YAML: ``yaml``, JSON: ``json`` or table: ``table``.
-
     ``-n | --namespace`` (optional):
         The namespace from which the Applications have to be retrieved. If none is given, the user namespace is selected.
 
@@ -166,3 +156,13 @@ delete
 
     ``-n | --namespace`` (optional):
         The namespace from which the Application have to be deleted. If none is given, the user namespace is selected.
+
+
+
+Common options
+==============
+
+These options are common to all commands:
+
+``-o | --output <format>`` (optional):
+    The format of the displayed response. Three are available: YAML: ``yaml``, JSON: ``json`` or table: ``table``.
