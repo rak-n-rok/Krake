@@ -14,7 +14,7 @@ KRAKE_HOMEDIR = "/home/krake"
 ROK_INSTALL_DIR = f"{KRAKE_HOMEDIR}/.local/bin"
 STICKINESS_WEIGHT = 0.1
 
-_ETCD_STATIC_PROVIDER_PREFIX = "/core/metricsprovider/static_provider"
+_ETCD_STATIC_PROVIDER_KEY = "/core/metricsprovider/static_provider"
 _ETCDCTL_ENV = {"ETCDCTL_API": "3"}
 
 
@@ -182,7 +182,7 @@ def check_app_state(state, error_message, reason=None):
 
 
 def check_app_created_and_up():
-    err_msg_fmt = "App was not up and running. Error: %(details)s"
+    err_msg_fmt = "App was not up and running. Error: {details}"
 
     def validate(response):
         try:
@@ -196,7 +196,7 @@ def check_app_created_and_up():
                 f"Unable to observe application in a {expected_state} state. "
                 f"Observed: {observed_state}."
             )
-            assert observed_state == expected_state, err_msg_fmt % {"details": details}
+            assert observed_state == expected_state, err_msg_fmt.format(details=details)
 
             details = (
                 f"App was in {expected_state} state but its running_on "
@@ -493,7 +493,7 @@ class ApplicationDefinition(NamedTuple):
                     True: --enable-migration
                     False: --disable-migration
                     None: (No flag)
-            labels (dict): dict of labels with which to update the application.
+            labels (dict[str: str]): dict of labels with which to update the app.
 
         """
         run(
@@ -513,7 +513,7 @@ class ApplicationDefinition(NamedTuple):
                     True: --enable-migration
                     False: --disable-migration
                     None: (No flag)
-            labels (dict): dict of labels with which to update the application.
+            labels (dict[str: str]): dict of labels with which to update the app.
 
         Returns:
             str: the command to update the Application.
@@ -699,7 +699,7 @@ class ClusterDefinition(NamedTuple):
         Args:
             labels (list(str)): optional list of labels
                 to give the cluster, e.g. ['location=DE']
-            metrics (dict): optional dict with metrics and their weights
+            metrics (dict[str: float]): optional dict with metrics and their weights
                 to give the cluster
 
         """
@@ -711,7 +711,7 @@ class ClusterDefinition(NamedTuple):
         Args:
             labels (list(str)): optional list of labels
                 to give the cluster, e.g. ['location=DE']
-            metrics (dict): optional dict with metrics and their weights
+            metrics (dict[str: float]): optional dict with metrics and their weights
                 to give the cluster.
 
         Returns:
@@ -912,23 +912,24 @@ def create_multiple_cluster_environment(
     one Application and multiple Clusters.
 
     Args:
-        kubeconfig_paths (dict of PathLike: PathLike): mapping between Cluster
+        kubeconfig_paths (dict[str: PathLike]): mapping between Cluster
             names and path to the kubeconfig file for the corresponding Cluster
             to create.
-        cluster_labels (dict of PathLike: List(str)): optional mapping between
+        cluster_labels (dict[str: List[str]], optional): mapping between
             Cluster names and labels for the corresponding Cluster to create.
-        metrics (dict of PathLike: List(str)): optional mapping between
+        metrics (dict[str: List[str]], optional): mapping between
             Cluster names and metrics for the corresponding Cluster to create.
-        app_name (PathLike): optional name of the Application to create.
-        manifest_path (PathLike): optional path to the manifest file that
+        app_name (str, optional): name of the Application to create.
+        manifest_path (PathLike, optional): path to the manifest file that
             should be used to create the Application.
-        app_cluster_constraints (List(str)): optional list of cluster constraints
+        app_cluster_constraints (List[str], optional): list of cluster constraints
             for the Application to create.
-        app_migration (bool): optional migration flag indicating whether the
+        app_migration (bool, optional): migration flag indicating whether the
             application should be able to migrate.
 
     Returns:
-        dict: an environment definition to use to create a test environment.
+        dict[int: List[NamedTuple]]: an environment definition to use to create
+            a test environment.
 
     """
     if not cluster_labels:
@@ -964,16 +965,16 @@ def get_scheduling_score(cluster, values, weights, scheduled_to=None):
 
     Args:
         cluster (str): cluster name
-        values (dict): Dictionary of the metric values. The dictionary keys are
-        the names of the metrics and the dictionary values the metric values.
-        weights (dict): Dictionary of cluster weights. The keys are the names
-            of the clusters and each value is a dictionary in itself, with the
-            metric names as keys and the cluster's weights as values.
+        values (dict[str: float]): Dictionary of the metric values. The dictionary keys
+            are the names of the metrics and the dictionary values the metric values.
+        weights (dict[str: dict[str: float]]): Dictionary of cluster weights.
+            The keys are the names of the clusters and each value is a dictionary in
+            itself, with the metric names as keys and the cluster's weights as values.
         scheduled_to (str): name of the cluster to which the application being
             scheduled has been scheduled.
 
     Returns:
-        The score of the given cluster.
+        float: The score of the given cluster.
 
     """
     # Sanity check: Check that the metrics (i.e., the keys) are the same in both lists
@@ -989,35 +990,35 @@ def get_scheduling_score(cluster, values, weights, scheduled_to=None):
     return rank / norm
 
 
-def _put_etcd_entry(data, ns_prefix):
-    """Put `data` into etcdctl at prefix `ns_prefix`.
+def _put_etcd_entry(data, key):
+    """Put `data` as the value of the key `key` in the etcd store.
 
     Args:
-        data (dict): The data to put
-        ns_prefix (str): the namespace prefix.
+        data (object): The data to put
+        key (str): the key to update.
 
     """
     data_str = json.dumps(data)
-    put_cmd = ["etcdctl", "put", ns_prefix, "--", data_str]
+    put_cmd = ["etcdctl", "put", key, "--", data_str]
     run(command=put_cmd, env_vars=_ETCDCTL_ENV)
 
 
-def _get_etcd_entry(ns_prefix, condition=None):
-    """Retrieve the output from etcdctl at prefix `ns_prefix`.
+def _get_etcd_entry(key, condition=None):
+    """Retrieve the value of the key `key` from the etcd store.
     This method calls run to perform the actual command.
 
     Args:
-        ns_prefix (str): the namespace prefix to retrieve from the db.
-        condition (callable, optional): a callable to pass to run
+        key (str): the key to retrieve from the db.
+        condition (callable, optional): a callable. This will be passed to run()
+            as its `condition` parameter.
 
     Returns:
-        dict
+        object
     """
-    get_cmd = ["etcdctl", "get", "--prefix", ns_prefix]
+    get_cmd = ["etcdctl", "get", key, "--print-value-only"]
     resp = run(command=get_cmd, condition=condition, env_vars=_ETCDCTL_ENV)
     try:
-        parts = resp.output.split("\n")
-        return json.loads(parts[1])
+        return resp.json
     except Exception as e:
         msg = f"Failed to load response '{resp}'. Error: {e}"
         raise AssertionError(msg)
@@ -1027,11 +1028,11 @@ def get_static_metrics():
     """Retrieve metrics from the etcd database.
 
     Returns:
-         dict(str: str)
+         dict[str: float]
             Dict with the metrics names as keys and metric values as values.
 
     """
-    static_provider = _get_etcd_entry(_ETCD_STATIC_PROVIDER_PREFIX)
+    static_provider = _get_etcd_entry(_ETCD_STATIC_PROVIDER_KEY)
     return static_provider["spec"]["static"]["metrics"]
 
 
@@ -1040,11 +1041,11 @@ def set_static_metrics(values):
      values to the provided metrics.
 
     Args:
-        values (dict(str: str)): Dictionary with the metrics names as keys and
+        values (dict[str: float]): Dictionary with the metrics names as keys and
             metric values as values.
 
     """
-    static_provider = _get_etcd_entry(_ETCD_STATIC_PROVIDER_PREFIX)
+    static_provider = _get_etcd_entry(_ETCD_STATIC_PROVIDER_KEY)
 
     # sanity check that we are only modifying existing metrics
     old_metrics = static_provider["spec"]["static"]["metrics"]
@@ -1054,12 +1055,10 @@ def set_static_metrics(values):
     static_provider["spec"]["static"]["metrics"].update(values)
 
     # update database with the updated static_provider
-    _put_etcd_entry(static_provider, ns_prefix=_ETCD_STATIC_PROVIDER_PREFIX)
+    _put_etcd_entry(static_provider, key=_ETCD_STATIC_PROVIDER_KEY)
 
     # make sure the changing of the values took place
-    _get_etcd_entry(
-        _ETCD_STATIC_PROVIDER_PREFIX, condition=check_static_metrics(values)
-    )
+    _get_etcd_entry(_ETCD_STATIC_PROVIDER_KEY, condition=check_static_metrics(values))
 
 
 def check_static_metrics(expected_metrics, error_message=""):
@@ -1071,7 +1070,7 @@ def check_static_metrics(expected_metrics, error_message=""):
     from the given ones.
 
     Args:
-        expected_metrics (dict(str: str)): Dictionary with the metrics names as
+        expected_metrics (dict[str: float]): Dictionary with the metrics names as
             keys and metric values as values.
         error_message (str): the message that will be displayed if the
             check fails.
@@ -1089,12 +1088,10 @@ def check_static_metrics(expected_metrics, error_message=""):
 
     def validate(response):
         try:
-            parts = response.output.split("\n")
-            static_provider = json.loads(parts[1])
-            observed_metrics = static_provider["spec"]["static"]["metrics"]
+            observed_metrics = response.json["spec"]["static"]["metrics"]
             msg = error_message + f" Provided metrics: {observed_metrics}"
             for m, val in expected_metrics.items():
-                assert m in observed_metrics and val == observed_metrics[m], msg
+                assert val == observed_metrics.get(m), msg
         except Exception as e:
             raise AssertionError(error_message + f"Error: {e}")
 
