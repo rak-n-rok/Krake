@@ -62,11 +62,10 @@ class cached_property(object):
 
 
 def now():
-    """
-    Returns the current time in the UTC timezone.
+    """Returns the current time in the UTC timezone.
 
     Returns:
-        (datetime.datetime) the current time (UTC timezone)
+        datetime.datetime: the current time (UTC timezone)
 
     """
     return datetime.now(timezone.utc)
