@@ -415,8 +415,7 @@ def test_kubernetes_auto_metrics_migration(minikube_clusters):
 
 
 def _get_other_cluster(this_cluster, clusters):
-    """
-    Return the cluster in clusters, which is not this_cluster.
+    """Return the cluster in clusters, which is not this_cluster.
 
     Args:
         this_cluster (str): name of this_cluster
@@ -429,18 +428,17 @@ def _get_other_cluster(this_cluster, clusters):
 
 
 def _get_metrics_triggering_migration(source, target, metrics, weights):
-    """
-    Returns the metrics that the static metrics provider need to return in
+    """Returns the metrics that the static metrics provider need to return in
     order for a migration to be triggered from the source to the target cluster.
 
     Args:
         source (str): name of the source cluster.
         target (str): name of the target cluster.
-        weights (dict(dict(str: float))): dict of cluster names to a dict with
+        weights (dict[str: dict[str: float]]): dict of cluster names and dicts with
             metric names and metric values.
 
     Returns:
-        dict: metrics that will trigger a migration to target from source
+        dict[str, float]: metrics that will trigger a migration to target from source
         (metric names as keys and metric values as values).
 
     """
@@ -466,7 +464,12 @@ def _get_metrics_triggering_migration(source, target, metrics, weights):
     target_score = get_scheduling_score(
         target, metrics_set_2, weights, scheduled_to=source
     )
-    assert target_score > source_score
+    err_msg = (
+        f"Using the provided metrics ({metrics}) and weights ({weights}), "
+        f"we were unable to choose metrics that will trigger a migration "
+        f"from the source cluster {source} to the target cluster {target}."
+    )
+    assert target_score > source_score, err_msg
     return metrics_set_2
 
 
@@ -485,7 +488,7 @@ def test_kubernetes_metrics_migration(minikube_clusters):
     of cluster 1.
     6. Wait for the migration to cluster 2 to take place (remember its timestamp)
     7. Change the metrics so that score of cluster 1 is higher than the score
-    of cluster 2. (remember this time stamp)
+    of cluster 2. (remember this timestamp)
     8. Wait for the migration to cluster 1 to take place (remember its timestamp)
     9. Ensure that the time elapsed between the two migrations was more than
     RESCHEDULING_INTERVAL seconds.
@@ -600,7 +603,7 @@ def test_kubernetes_metrics_migration(minikube_clusters):
         migration_one = time.time()  # the approximate time of 1st migration
 
         # 7. Change the metrics so that score of cluster 1 is higher than the
-        # score of cluster 2. (remember this time stamp)
+        # score of cluster 2. (remember this timestamp)
         metric_values_mig2 = _get_metrics_triggering_migration(
             second_cluster, first_cluster, metrics, metric_weights
         )
@@ -761,9 +764,8 @@ def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
             if previous_migration_time:
                 assert migration_time - previous_migration_time >= RESCHEDULING_INTERVAL
 
-            tmp_cluster = this_cluster
-            this_cluster = next_cluster
-            next_cluster = tmp_cluster
+            # setup the loop variables for the next iteration of the loop
+            this_cluster, next_cluster = next_cluster, this_cluster
             previous_migration_time = migration_time
 
         # 6. Ensure that the number of migrations == 3.
@@ -784,8 +786,7 @@ def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
 )
 def test_kubernetes_metrics_migration_at_update(minikube_clusters):
     """Check that an application scheduled on a cluster migrates at the time
-    of a an update of the application due to
-    changing metrics.
+    of a user's update of the application if the metrics have changed.
 
     In the test environment:
     1. Set the metrics provided by the metrics provider
@@ -994,13 +995,13 @@ def test_kubernetes_stickiness_migration(minikube_clusters):
         assert score_cluster_1 > score_cluster_2
         # ... but ignoring that the app is running on cluster_1, score_cluster_2
         # should be higher.
-        score_cluster_1_wo_stickiness = get_scheduling_score(
+        score_cluster_1_no_stickiness = get_scheduling_score(
             cluster_1, metric_values, metric_weights
         )
-        score_cluster_2_wo_stickiness = get_scheduling_score(
+        score_cluster_2_no_stickiness = get_scheduling_score(
             cluster_2, metric_values, metric_weights
         )
-        assert score_cluster_1_wo_stickiness < score_cluster_2_wo_stickiness
+        assert score_cluster_1_no_stickiness < score_cluster_2_no_stickiness
 
         # 6. Wait and ensure that the application was not migrated to cluster 2;
         # Wait until the RESCHEDULING_INTERVAL s have past.
@@ -1012,9 +1013,9 @@ def test_kubernetes_stickiness_migration(minikube_clusters):
             f"Score expected cluster: {score_cluster_1}. "
             f"Score other cluster: {score_cluster_2}. "
             f"Score expected cluster w/o stickiness: "
-            f"{score_cluster_1_wo_stickiness}. "
+            f"{score_cluster_1_no_stickiness}. "
             f"Score other cluster w/o stickiness: "
-            f"{score_cluster_2_wo_stickiness}. "
+            f"{score_cluster_2_no_stickiness}. "
         )
         assert metric_values == observed_metrics, msg
         msg = (
