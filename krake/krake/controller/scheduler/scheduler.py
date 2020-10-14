@@ -566,6 +566,12 @@ class Scheduler(Controller):
         # the scheduler will try and select the best cluster yet again.
         # Therefore we have to make sure the previous scheduling was not too recent.
         # If it was, we want to stay at the current cluster.
+        # The above reasoning is also true in the case the user has performed an
+        # update of the application's cluster label constraints. Also in this case, the
+        # update should not cause a migration if 'the app was `recently scheduled`
+        # and 'current cluster is still matching'. If the app was recently scheduled
+        # but the update caused the current cluster to no longer be matching, we
+        # will reschedule, since `current` will become None below.
         if app.status.scheduled_to:
             current = next(
                 (c for c in matching if resource_ref(c) == app.status.scheduled_to),
