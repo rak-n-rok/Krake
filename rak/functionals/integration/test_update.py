@@ -167,7 +167,6 @@ def test_update_cluster_kubeconfig(minikube_clusters):
     1. the Cluster is updated with another kubeconfig
     2. the new state of the Cluster on the API is checked, to see if the kubeconfig
     changed.
-    3. the cluster is updated back to its original configuration.
 
     Args:
         minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
@@ -199,9 +198,6 @@ def test_update_cluster_kubeconfig(minikube_clusters):
 
         cluster_details = response.json
         assert cluster_details["spec"]["kubeconfig"] == other_content
-
-        # 3. Revert its state back
-        run(f"rok kube cluster update {cluster.name} -o {kubeconfig_path}")
 
 
 def test_update_cluster_labels(minikube_clusters):
