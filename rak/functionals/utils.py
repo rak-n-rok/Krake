@@ -1013,8 +1013,7 @@ def _get_etcd_entry(key, condition=None):
             as its `condition` parameter.
 
     Returns:
-        object
-            Value of the key `key` in the etcd database, parsed by json.
+        object: Value of the key `key` in the etcd database, parsed by json.
     """
     get_cmd = ["etcdctl", "get", key, "--print-value-only"]
     resp = run(command=get_cmd, condition=condition, env_vars=_ETCDCTL_ENV)
