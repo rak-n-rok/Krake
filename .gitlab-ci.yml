@@ -170,6 +170,7 @@ e2e-tests:
     - openstack keypair delete my_runner_key_$CI_PIPELINE_ID || true
     - openstack keypair create my_runner_key_$CI_PIPELINE_ID > .ssh/id_rsa
     - chmod 600 .ssh/id_rsa
+    - cat .ssh/id_rsa
 
     # Configure host-CI template with the CI Pipeline ID
     - sed -i "s/\$CI_PIPELINE_ID/$CI_PIPELINE_ID/g" ansible/hosts-CI
