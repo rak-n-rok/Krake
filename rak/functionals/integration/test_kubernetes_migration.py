@@ -499,7 +499,7 @@ def test_kubernetes_metrics_migration(minikube_clusters):
     the elapsed time (between changing the metrics in step 7 and the migration
     in step 8) has to be rather large in comparison to RESCHEDULING_INTERVAL.
     Otherwise we cannot ensure that we did not sleep for almost
-    RESCHEUDLING_INTERVAL seconds after Step 6 and before Step 7. If we did,
+    RESCHEDULING_INTERVAL seconds after Step 6 and before Step 7. If we did,
     the two migrations could have taken place at the time of changing the metrics,
     which this test should disprove.
 
@@ -785,16 +785,16 @@ def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
         )
 
 
-# FIXME: Skip until we figured out how to differentiate between an update by user
-# and an update by the kubernetes controller. Update by user should cause a
-# migration if the metrics changed, whereas an update by the kubernetes controller
-# only should cause a migration of the app was not 'recently' scheduled.
+# FIXME: krake#405: Skip until we figured out how to differentiate between an
+# update by user and an update by the kubernetes controller. Update by user
+# should cause a migration if the metrics changed, whereas an update by the
+# kubernetes controller only should cause a migration of the app was not
+# 'recently' scheduled.
 @pytest.mark.skip(
-    reason="The functionality that is tested here has not yet been "
-    "implemented, since we cannot differentiate between "
-    "update by user (which should (?) cause reevaluation "
-    "of scheduling decision) and update by kube controller "
-    "after scheduling decision was made."
+    reason="The functionality that is tested here has not yet been implemented, "
+    "since we cannot differentiate between update by user (which should (?) "
+    "cause reevaluation of scheduling decision) and update by kube controller "
+    "after scheduling decision was made (krake#405)."
 )
 def test_kubernetes_metrics_migration_at_update(minikube_clusters):
     """Check that an application scheduled on a cluster migrates at the time
