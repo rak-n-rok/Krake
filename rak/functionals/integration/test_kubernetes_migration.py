@@ -495,6 +495,14 @@ def test_kubernetes_metrics_migration(minikube_clusters):
     10. Ensure that the time elapsed between the last change of the metrics
     and the second migration was more than RESCHEDULING_INTERVAL*2/3 seconds apart.
 
+    The fraction 2/3 in Step 10 is chosen arbitrarily, under the constraint that
+    the elapsed time (between changing the metrics in step 7 and the migration
+    in step 8) has to be rather large in comparison to RESCHEDULING_INTERVAL.
+    Otherwise we cannot ensure that we did not sleep for almost
+    RESCHEUDLING_INTERVAL seconds after Step 6 and before Step 7. If we did,
+    the two migrations could have taken place at the time of changing the metrics,
+    which this test should disprove.
+
     Args:
         minikube_clusters (list): Names of the Minikube backend.
 
@@ -655,7 +663,7 @@ def test_kubernetes_metrics_migration(minikube_clusters):
 
         # 10. Ensure that the time elapsed between the last change of the metrics
         # and the second migration was more than RESCHEDULING_INTERVAL*2/3
-        # seconds apart.
+        # seconds apart. (See doctring for an explanation of the value 2/3.)
         elapsed = migration_two - metric_change_time
         assert elapsed > RESCHEDULING_INTERVAL * 0.67, (
             f"Changing the metrics occurred too close to the second migration"
@@ -777,6 +785,10 @@ def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
         )
 
 
+# FIXME: Skip until we figured out how to differentiate between an update by user
+# and an update by the kubernetes controller. Update by user should cause a
+# migration if the metrics changed, whereas an update by the kubernetes controller
+# only should cause a migration of the app was not 'recently' scheduled.
 @pytest.mark.skip(
     reason="The functionality that is tested here has not yet been "
     "implemented, since we cannot differentiate between "
