@@ -893,16 +893,16 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
         assert stored2.metadata.modified <= stored2.status.scheduled
 
 
-# FIXME: Skip until we figured out how to differentiate between an update by user
-# and an update by the kubernetes controller. Update by user should cause a
-# migration if the metrics changed, whereas an update by the kubernetes controller
-# only should cause a migration of the app was not 'recently' scheduled.
+# FIXME: krake#405: Skip until we figured out how to differentiate between an
+# update by user and an update by the kubernetes controller. Update by user
+# should cause a migration if the metrics changed, whereas an update by the
+# kubernetes controller only should cause a migration of the app was not
+# 'recently' scheduled.
 @pytest.mark.skip(
-    reason="The functionality that is tested here has not yet been "
-    "implemented, since we cannot differentiate between "
-    "update by user (which should (?) cause reevaluation "
-    "of scheduling decision) and update by kube controller "
-    "after scheduling decision was made."
+    reason="The functionality that is tested here has not yet been implemented, "
+    "since we cannot differentiate between update by user (which should (?) "
+    "cause reevaluation of scheduling decision) and update by kube controller "
+    "after scheduling decision was made (krake#405)."
 )
 async def test_kubernetes_migration_w_update(aiohttp_server, config, db, loop):
     """ Test that the app is migrated due to an update even if the time passed

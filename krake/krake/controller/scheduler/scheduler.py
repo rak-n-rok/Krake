@@ -572,7 +572,7 @@ class Scheduler(Controller):
         # and 'current cluster is still matching'. If the app was recently scheduled
         # but the update caused the current cluster to no longer be matching, we
         # will reschedule, since `current` will become None below.
-        # if 'app was NOT `recently scheduled`' and 'current cluster is still matching',
+        # If 'app was NOT `recently scheduled`' and 'current cluster is still matching',
         # we might reschedule, e.g., due to changing metrics.
         if app.status.scheduled_to:
             # get current cluster as first cluster in matching to which app is scheduled
