@@ -235,7 +235,11 @@ def check_return_code(error_message, expected_code=0):
     """
 
     def validate(response):
-        assert response.returncode == expected_code, error_message
+        details = (
+            f" Expected return code: {expected_code}."
+            f" Observed return code: {response.returncode}."
+        )
+        assert response.returncode == expected_code, error_message + details
 
     return validate
 
@@ -653,7 +657,7 @@ class ClusterDefinition(NamedTuple):
     def create_resource(self):
         """Create the Cluster."""
 
-        error_message = f"The Cluster {self.name}"
+        error_message = f"The Cluster {self.name} could not be created."
         run(self.creation_command(), condition=check_return_code(error_message))
 
     def creation_command(self):
