@@ -215,10 +215,7 @@ def use_schema(argname, schema):
             try:
                 payload = schema.load(body)
             except ValidationError as err:
-                raise web.HTTPUnprocessableEntity(
-                    body=json.dumps(err.messages).encode("utf-8"),
-                    content_type="application/json",
-                )
+                raise json_error(web.HTTPUnprocessableEntity, err.messages)
 
             kwargs[argname] = payload
 

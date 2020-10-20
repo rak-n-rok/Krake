@@ -12,7 +12,15 @@ from webargs.aiohttpparser import use_kwargs
 
 from krake.data.core import WatchEvent, WatchEventType, ListMetadata
 from ..utils import camel_to_snake_case, get_field
-from .helpers import load, session, Heartbeat, use_schema, HttpReason, HttpReasonCode
+from .helpers import (
+    load,
+    session,
+    Heartbeat,
+    use_schema,
+    HttpReason,
+    HttpReasonCode,
+    json_error,
+)
 from .auth import protected
 from .database import EventType
 
@@ -293,9 +301,7 @@ def _make_create_handler(operation, logger):
             reason = HttpReason(
                 reason=message, code=HttpReasonCode.RESOURCE_ALREADY_EXISTS
             )
-            raise web.HTTPConflict(
-                text=json.dumps(reason.serialize()), content_type="application/json"
-            )
+            raise json_error(web.HTTPConflict, reason.serialize())
 
         now = datetime.now()
 
@@ -338,18 +344,16 @@ def _make_update_handler(operation, logger):
         # can only be removed.
         if entity.metadata.deleted:
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
-                raise web.HTTPConflict(
-                    body=json.dumps(
-                        {
-                            "metadata": {
-                                "finalizers": [
-                                    "Finalizers can only be removed if "
-                                    "deletion is in progress."
-                                ]
-                            }
+                raise json_error(
+                    web.HTTPConflict,
+                    {
+                        "metadata": {
+                            "finalizers": [
+                                "Finalizers can only be removed if "
+                                "deletion is in progress."
+                            ]
                         }
-                    ),
-                    content_type="application/json",
+                    },
                 )
 
         entity.update(body)
