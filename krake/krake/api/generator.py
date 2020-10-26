@@ -339,7 +339,7 @@ def _make_update_handler(operation, logger):
         if entity.metadata.deleted:
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 raise web.HTTPConflict(
-                    body=json.dumps(
+                    text=json.dumps(
                         {
                             "metadata": {
                                 "finalizers": [
