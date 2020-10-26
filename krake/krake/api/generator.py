@@ -188,7 +188,7 @@ def _make_list_handler(operation, logger, all=False):
         resource=operation.resource.plural.lower(),
         verb="list",
     )
-    @use_kwargs(operation.query, locations=("query",))
+    @use_kwargs(operation.query, location="query")
     async def list_or_watch(request, heartbeat, watch, **query):
         if not all:
             namespace = request.match_info.get("namespace")

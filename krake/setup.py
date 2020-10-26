@@ -17,7 +17,7 @@ install_requires = [
     "python-magnumclient==2.*",
     "PyYAML==5.*",
     "requests==2.*",
-    "webargs==5.*",
+    "webargs==6.*",
 ]
 
 # dataclasses backport
