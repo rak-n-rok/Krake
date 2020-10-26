@@ -7,7 +7,7 @@ install_requires = [
     "aiohttp-cors==0.7.*",
     "etcd3-py==0.1.*",
     "keystoneauth1==3.*",
-    "kubernetes-asyncio==10.*",
+    "kubernetes-asyncio==12.*",
     "lark-parser==0.8.*",
     "makefun==1.*",
     "marshmallow==3.*",

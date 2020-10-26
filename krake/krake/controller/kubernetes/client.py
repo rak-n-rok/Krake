@@ -8,7 +8,6 @@ from kubernetes_asyncio.client import (
     Configuration,
     ApiextensionsV1beta1Api,
     CustomObjectsApi,
-    V1DeleteOptions,
 )
 from kubernetes_asyncio.client.rest import ApiException
 
@@ -113,14 +112,12 @@ class ApiAdapterCustom(object):
         )
 
     async def delete(self, kind, name=None, namespace=None):
-        body = V1DeleteOptions()
-
         if self.scope == "Namespaced":
             return await self.api.delete_namespaced_custom_object(
-                self.group, self.version, namespace, self.plural, name, body
+                self.group, self.version, namespace, self.plural, name
             )
         return await self.api.delete_cluster_custom_object(
-            self.group, self.version, self.plural, name, body
+            self.group, self.version, self.plural, name
         )
 
 
