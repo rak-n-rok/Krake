@@ -70,6 +70,18 @@ command-line options. The arguments and available options are:
     Endpoint to connect to the keystone service. See
     :ref:`admin/security:Authentication`. Default: ``"http://localhost:5000/v3"``.
 
+``--keycloak-authentication-enabled``
+    Enable the Keycloak authentication as one of the authentication mechanisms. See
+    :ref:`admin/security:Authentication`. Disabled by default for the generation.
+
+``--keycloak-authentication-endpoint``
+    Endpoint to connect to the Keycloak service. See
+    :ref:`admin/security:Authentication`. Default: ``"http://localhost:9080"``.
+
+``--keycloak-authentication-realm``
+    Keycloak realm to use on the provided endpoint. See
+    :ref:`admin/security:Authentication`. Default: ``krake``.
+
 ``--static-authentication-enabled``
     Enable the static authentication as one of the authentication mechanisms. See
     :ref:`admin/security:Authentication`. Disabled by default.
@@ -246,7 +258,9 @@ Authentication and authorization
 --------------------------------
 
 authentication
-    This section defines the method for authenticating users that connect to the API. Two methods are available: keystone_ and static_. A user not recognized can still send request if anonymous_ are allowed.
+    This section defines the method for authenticating users that connect to the API.
+    Three methods are available: keystone_, keycloak_ and static_. A user not recognized
+    can still send request if anonymous_ are allowed.
 
     allow_anonymous (boolean), default: ``false``
         .. _anonymous:
@@ -265,6 +279,18 @@ authentication
                 Set Keystone as authentication method. Example: ``false``
             endpoint (URL)
                 Endpoint of the Keystone service. Example: ``http://localhost:5000/v3``
+
+        keycloak
+            .. _keycloak:
+
+            The Keycloak service can be used as authentication method.
+
+            enabled (boolean)
+                Set Keycloak as authentication method. Example: ``false``
+            endpoint (URL)
+                Endpoint of the Keycloak service. Example: ``http://localhost:9080``
+            realm (str)
+                Keycloak realm to use at the provided endpoint. Example: ``krake``
 
         static
             .. _static:
