@@ -13,6 +13,8 @@ class HttpReasonCode(Enum):
     TRANSACTION_ERROR = auto()
     # When the authentication through keystone failed
     INVALID_KEYSTONE_TOKEN = auto()
+    # When the authentication through keycloak failed
+    INVALID_KEYCLOAK_TOKEN = auto()
     # When a resource already in database is requested to be created
     RESOURCE_ALREADY_EXISTS = auto()
 

@@ -182,6 +182,12 @@ def load_authentication(config):
         authenticators.append(
             auth.keystone_authentication(endpoint=strategy.keystone.endpoint)
         )
+    elif strategy.keycloak.enabled:
+        authenticators.append(
+            auth.keycloak_authentication(
+                endpoint=strategy.keycloak.endpoint, realm=strategy.keycloak.realm
+            )
+        )
 
     # If the "client_ca" TLS configuration parameter is given, enable client
     # certificate authentication.

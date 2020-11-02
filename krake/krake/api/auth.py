@@ -87,6 +87,8 @@ from typing import NamedTuple, Optional
 from aiohttp import web
 
 from krake.data.core import Verb, Role, RoleBinding
+from yarl import URL
+
 from .helpers import session, json_error, HttpReason, HttpReasonCode
 
 
@@ -178,6 +180,46 @@ def keystone_authentication(endpoint):
 
         data = await resp.json()
         return data["token"]["user"]["name"]
+
+    return authenticator
+
+
+def keycloak_authentication(endpoint, realm):
+    """Authenticator factory for Keycloak authentication.
+
+    The token in the ``Authorization`` header of a request sent to Krake will be sent as
+    access token to the OpenID user information endpoint. The returned user name from
+    Keycloak is used as authenticated user name.
+
+    The authenticator requires an HTTP client session that is loaded from the
+    ``http`` key of the application.
+
+    Args:
+        endpoint (str): Keycloak HTTP endpoint.
+        realm (str): Keycloak realm to use at this endpoint.
+
+    Returns:
+        callable: Authenticator for the given Keystone endpoint.
+
+    """
+
+    async def authenticator(request):
+        token = request.headers.get("Authorization")
+        if not token:
+            return None
+
+        path = f"auth/realms/{realm}/protocol/openid-connect/userinfo"
+        url = URL(endpoint) / path
+        resp = await request.app["http"].post(url, data={"access_token": token})
+        if resp.status != 200:
+            message = f"Invalid Keycloak token " f"(HTTP {resp.status} {resp.reason})"
+            reason = HttpReason(
+                reason=message, code=HttpReasonCode.INVALID_KEYCLOAK_TOKEN
+            )
+            raise json_error(web.HTTPUnauthorized, reason.serialize())
+
+        data = await resp.json()
+        return data["preferred_username"]
 
     return authenticator
 
