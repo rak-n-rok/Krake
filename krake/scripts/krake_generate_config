@@ -227,6 +227,24 @@ if __name__ == "__main__":
     )
     add_option(
         parser,
+        "--keycloak-authentication-enabled",
+        "Enable the Keystone authentication as one of the authentication mechanisms.",
+        action="store_true",
+    )
+    add_option(
+        parser,
+        "--keycloak-authentication-endpoint",
+        "Endpoint to connect to the Keycloak service.",
+        default="http://localhost:9080",
+    )
+    add_option(
+        parser,
+        "--keycloak-authentication-realm",
+        "Keycloak realm to use for authentication.",
+        default="krake",
+    )
+    add_option(
+        parser,
         "--static-authentication-enabled",
         "Enable the static authentication as one of the authentication mechanisms.",
         action="store_true",

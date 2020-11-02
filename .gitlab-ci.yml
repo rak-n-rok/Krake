@@ -65,6 +65,13 @@ cache:
     - cfssl version
     - cfssljson --version
 
+    # Download java for Keycloak
+    # see https://github.com/docker-library/openjdk/blob/0584b2804ed12dca7c5e264b5fc55fc07a3ac148/8-jre/slim/Dockerfile#L51
+    - mkdir -p /usr/share/man/man1
+    - apt-get update
+    - apt-get install -y --no-install-recommends openjdk-11-jre
+    - java --version
+
     - pip install tox
     - tox -- --cov krake/krake --no-cov-on-fail --cov-report= --runslow krake/tests
   tags:

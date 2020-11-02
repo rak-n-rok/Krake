@@ -28,6 +28,10 @@ authentication:
     keystone:
       enabled: $keystone_authentication_enabled
       endpoint: $keystone_authentication_endpoint
+    keycloak:
+      enabled: $keycloak_authentication_enabled
+      endpoint: $keycloak_authentication_endpoint
+      realm: $keycloak_authentication_realm
   # Static authentication (every request is authenticated as this user-name)
     static:
       enabled: $static_authentication_enabled
