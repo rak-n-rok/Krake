@@ -15,7 +15,10 @@ Configuration is loaded from the ``controllers.kubernetes.application`` section:
     debounce: 1.0
     hooks:
       complete:
-        ca_dest: /etc/krake_ca/ca.pem
+        hook_user: system:complete-hook
+        intermediate_src: tmp/pki/system:complete-signing.pem
+        intermediate_key_src: tmp/pki/system:complete-signing-key.pem
+        cert_dest: /etc/krake_cert
         env_token: KRAKE_TOKEN
         env_complete: KRAKE_COMPLETE_URL
 

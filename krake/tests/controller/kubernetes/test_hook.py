@@ -5,7 +5,7 @@ from copy import deepcopy
 
 import aiohttp
 import pytest
-from aiohttp import web
+from aiohttp import web, ClientResponseError
 from aiohttp.test_utils import TestServer as Server
 from krake.data.config import TlsClientConfiguration, TlsServerConfiguration
 
@@ -17,11 +17,15 @@ from krake.controller.kubernetes import KubernetesController
 from krake.client import Client
 from krake.test_utils import server_endpoint
 
-from tests.factories.kubernetes import ApplicationFactory, ClusterFactory, make_kubeconfig
-from tests.controller.kubernetes import nginx_manifest, hooks_config
+from tests.factories.kubernetes import (
+    ApplicationFactory,
+    ClusterFactory,
+    make_kubeconfig,
+)
+from tests.controller.kubernetes import nginx_manifest
 
 
-async def test_complete_hook(aiohttp_server, config, db, loop):
+async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
     """Verify that the Controller mangled the received Application to add elements of
     the "complete" hook if it had been enabled
     """
@@ -58,7 +62,7 @@ async def test_complete_hook(aiohttp_server, config, db, loop):
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
         controller = KubernetesController(
-            server_endpoint(api_server), worker_count=0, hooks=deepcopy(hooks_config)
+            server_endpoint(api_server), worker_count=0, hooks=hooks_config
         )
         await controller.prepare(client)
         await controller.resource_received(app)
@@ -78,7 +82,9 @@ async def test_complete_hook(aiohttp_server, config, db, loop):
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
 
-async def test_complete_hook_disable_by_user(aiohttp_server, config, db, loop):
+async def test_complete_hook_disable_by_user(
+    aiohttp_server, config, db, loop, hooks_config
+):
     """Verify that the Controller did not mangle the received Application to add
     elements of the "complete" hook if it had not been enabled.
     """
@@ -114,7 +120,7 @@ async def test_complete_hook_disable_by_user(aiohttp_server, config, db, loop):
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
         controller = KubernetesController(
-            server_endpoint(api_server), worker_count=0, hooks=deepcopy(hooks_config)
+            server_endpoint(api_server), worker_count=0, hooks=hooks_config
         )
         await controller.prepare(client)
         await controller.resource_received(app)
@@ -133,7 +139,9 @@ async def test_complete_hook_disable_by_user(aiohttp_server, config, db, loop):
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
 
-async def test_complete_hook_tls(aiohttp_server, config, pki, db, loop):
+async def test_complete_hook_tls(
+    aiohttp_server, config, pki, db, loop, client_ssl_context, hooks_config
+):
     """Verify that the Controller mangled the received Application to add elements of
     the "complete" hook if it had been enabled when the communication with TLS was
     enabled.
@@ -141,14 +149,7 @@ async def test_complete_hook_tls(aiohttp_server, config, pki, db, loop):
     routes = web.RouteTableDef()
 
     server_cert = pki.gencert("api-server")
-    client_cert = pki.gencert("client")
-    client_tls = TlsClientConfiguration(
-        enabled=True,
-        client_ca=pki.ca.cert,
-        client_cert=client_cert.cert,
-        client_key=client_cert.key,
-    )
-    ssl_context = create_ssl_context(client_tls)
+    ssl_context = client_ssl_context("client")
     config.tls = TlsServerConfiguration(
         enabled=True, client_ca=pki.ca.cert, cert=server_cert.cert, key=server_cert.key
     )
@@ -201,7 +202,7 @@ async def test_complete_hook_tls(aiohttp_server, config, pki, db, loop):
             server_endpoint(api_server),
             worker_count=0,
             ssl_context=ssl_context,
-            hooks=deepcopy(hooks_config),
+            hooks=hooks_config,
         )
         await controller.prepare(client)
         await controller.resource_received(app, start_observer=False)
@@ -225,7 +226,9 @@ async def test_complete_hook_tls(aiohttp_server, config, pki, db, loop):
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
 
-async def test_complete_hook_default_namespace(aiohttp_server, config, db, loop):
+async def test_complete_hook_default_namespace(
+    aiohttp_server, config, db, loop, hooks_config
+):
     """Verify that the Controller mangled the received Application to add elements of
     the "complete" hook if it had been enabled, even if the resources have been created
     without any namespace.
@@ -269,7 +272,7 @@ async def test_complete_hook_default_namespace(aiohttp_server, config, db, loop)
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
         controller = KubernetesController(
-            server_endpoint(api_server), worker_count=0, hooks=deepcopy(hooks_config)
+            server_endpoint(api_server), worker_count=0, hooks=hooks_config
         )
         await controller.prepare(client)
         await controller.resource_received(app)
@@ -321,7 +324,7 @@ def get_hook_environment_value(application):
     return token, url
 
 
-async def test_complete_hook_sending(aiohttp_server, config, db, loop):
+async def test_complete_hook_sending(aiohttp_server, config, db, loop, hooks_config):
     """Send a hook using ONLY the information present in the environment of the
     Deployment, without TLS enabled.
     """
@@ -356,7 +359,7 @@ async def test_complete_hook_sending(aiohttp_server, config, db, loop):
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
         controller = KubernetesController(
-            server_endpoint(api_server), worker_count=0, hooks=deepcopy(hooks_config)
+            server_endpoint(api_server), worker_count=0, hooks=hooks_config
         )
         await controller.prepare(client)
         await controller.resource_received(app)
@@ -378,7 +381,9 @@ async def test_complete_hook_sending(aiohttp_server, config, db, loop):
     assert stored.metadata.deleted is not None
 
 
-async def test_complete_hook_sending_tls(aiohttp_server, config, pki, db, loop):
+async def test_complete_hook_sending_tls(
+    aiohttp_server, config, pki, db, loop, client_ssl_context, hooks_config
+):
     """Send a hook using ONLY the information present in the environment of the
     Deployment, with TLS enabled.
     """
@@ -389,14 +394,7 @@ async def test_complete_hook_sending_tls(aiohttp_server, config, pki, db, loop):
         enabled=True, client_ca=pki.ca.cert, cert=server_cert.cert, key=server_cert.key
     )
 
-    client_cert = pki.gencert("client")
-    client_tls = TlsClientConfiguration(
-        enabled=True,
-        client_ca=pki.ca.cert,
-        client_cert=client_cert.cert,
-        client_key=client_cert.key,
-    )
-    ssl_context = create_ssl_context(client_tls)
+    ssl_context = client_ssl_context("client")
 
     @routes.get("/api/v1/namespaces/secondary/configmaps/ca.pem")
     async def _(request):
@@ -444,7 +442,7 @@ async def test_complete_hook_sending_tls(aiohttp_server, config, pki, db, loop):
             server_endpoint(api_server),
             worker_count=0,
             ssl_context=ssl_context,
-            hooks=deepcopy(hooks_config),
+            hooks=hooks_config,
         )
         await controller.prepare(client)
         await controller.resource_received(app, start_observer=False)
@@ -466,32 +464,186 @@ async def test_complete_hook_sending_tls(aiohttp_server, config, pki, db, loop):
         with pytest.raises(aiohttp.ClientSSLError):
             await client.session.put(url, json=complete.serialize())
 
-    # Attempt to send a request to the hook endpoint with a certificate. Should succeed.
+    # Attempt to send a request to the hook endpoint with the certificate taken from the
+    # deployed Application. Should succeed.
     configmap = stored.status.manifest[1]
-    certificate = configmap["data"]["ca.pem"]
 
+    # Load the certificates into an SSL context.
     with tempfile.TemporaryDirectory() as tmpdirname:
-        cert_path = os.path.join(tmpdirname, "ca.pem")
+        cert_paths = {}
+        # Write the CA, the certificate and the key to files.
+        for file_name, content in configmap["data"].items():
+            cert_path = os.path.join(tmpdirname, file_name)
+            cert_paths[file_name] = cert_path
 
-        with open(cert_path, "w") as f:
-            f.write(certificate)
+            with open(cert_path, "w") as f:
+                f.write(content)
 
-        hook_ssl_context = ssl.create_default_context(cafile=cert_path)
-
-        async with Client(
-            url=server_endpoint(api_server), loop=loop, ssl_context=hook_ssl_context
-        ) as client:
-            complete = ApplicationComplete(token=token)
-            resp = await client.session.put(url, json=complete.serialize())
-            assert resp.status == 200
-
-        stored = await db.get(
-            Application, namespace=app.metadata.namespace, name=app.metadata.name
+        hook_ssl_context = ssl.create_default_context(
+            cafile=cert_paths["ca-bundle.pem"]
         )
-        assert stored.metadata.deleted is not None
+        hook_ssl_context.load_cert_chain(
+            certfile=cert_paths["cert.pem"], keyfile=cert_paths["key.pem"]
+        )
+
+    async with Client(
+        url=server_endpoint(api_server), loop=loop, ssl_context=hook_ssl_context
+    ) as client:
+        complete = ApplicationComplete(token=token)
+        resp = await client.session.put(url, json=complete.serialize())
+        assert resp.status == 200
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored.metadata.deleted is not None
 
 
-async def test_complete_hook_reschedule(aiohttp_server, config, pki, db, loop):
+async def test_complete_hook_sending_tls_rbac(
+    aiohttp_server, config, pki, db, loop, rbac_allow, client_ssl_context, hooks_config
+):
+    """Send a hook using ONLY the information present in the environment of the
+    Deployment, with TLS enabled and RBAC set on the API.
+    """
+    config.authorization = "RBAC"
+    config.authentication.strategy.static.enabled = False
+
+    routes = web.RouteTableDef()
+
+    server_cert = pki.gencert("api-server")
+    config.tls = TlsServerConfiguration(
+        enabled=True, client_ca=pki.ca.cert, cert=server_cert.cert, key=server_cert.key
+    )
+
+    client_user = "client"
+    controller_ssl_context = client_ssl_context(client_user)
+    invalid_ssl_context = client_ssl_context("invalid_user")
+
+    @routes.get("/api/v1/namespaces/secondary/configmaps/ca.pem")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/api/v1/namespaces/secondary/configmaps")
+    async def _(request):
+        return web.Response(status=200)
+
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
+    async def _(request):
+        return web.Response(status=404)
+
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
+    async def _(request):
+        return web.Response(status=200)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    spec_manifest = nginx_manifest[:1]
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
+        spec__hooks=["complete"],
+        spec__manifest=spec_manifest,
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    server_app = create_app(config)
+    api_server = Server(server_app)
+
+    await api_server.start_server(ssl=server_app["ssl_context"])
+    assert api_server.scheme == "https"
+
+    async with Client(
+        url=server_endpoint(api_server), loop=loop, ssl_context=controller_ssl_context
+    ) as client:
+        controller = KubernetesController(
+            server_endpoint(api_server),
+            worker_count=0,
+            ssl_context=controller_ssl_context,
+            hooks=hooks_config,
+        )
+        await controller.prepare(client)
+
+        # As RBAC is set, the user defined in the Controller's certificate has to be
+        # allowed to perform specific actions.
+        async with rbac_allow(
+            "kubernetes", "applications", "update", override_user=client_user
+        ):
+            async with rbac_allow(
+                "kubernetes", "applications/status", "update", override_user=client_user
+            ):
+                async with rbac_allow(
+                    "kubernetes", "clusters", "get", override_user=client_user
+                ):
+                    await controller.resource_received(app, start_observer=False)
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored.metadata.deleted is None
+
+    token, url = get_hook_environment_value(stored)
+
+    # Attempt to send a request to the hook endpoint with a valid certificate but a
+    # non-allowed user. Should fail because of RBAC -> return a "403 Forbidden".
+    async with Client(
+        url=server_endpoint(api_server), loop=loop, ssl_context=invalid_ssl_context
+    ) as client:
+        complete = ApplicationComplete(token=token)
+        with pytest.raises(ClientResponseError, match="403"):
+            await client.session.put(url, json=complete.serialize())
+
+    # Attempt to send a request to the hook endpoint with a valid certificate, taken
+    # from the Application itself. Should succeed.
+    configmap = stored.status.manifest[1]
+
+    # Load the certificates into an SSL context.
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        cert_paths = {}
+        # Write the CA, the certificate and the key to files.
+        for file_name, content in configmap["data"].items():
+            cert_path = os.path.join(tmpdirname, file_name)
+            cert_paths[file_name] = cert_path
+
+            with open(cert_path, "w") as f:
+                f.write(content)
+
+        hook_ssl_context = ssl.create_default_context(
+            cafile=cert_paths["ca-bundle.pem"]
+        )
+        hook_ssl_context.load_cert_chain(
+            certfile=cert_paths["cert.pem"], keyfile=cert_paths["key.pem"]
+        )
+
+    async with Client(
+        url=server_endpoint(api_server), loop=loop, ssl_context=hook_ssl_context
+    ) as client:
+        complete = ApplicationComplete(token=token)
+
+        # Allow the user defined in hooks-token.
+        async with rbac_allow(
+            "kubernetes",
+            "applications/complete",
+            "update",
+            override_user="test-complete-hook-user",
+        ):
+            resp = await client.session.put(url, json=complete.serialize())
+        assert resp.status == 200
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored.metadata.deleted is not None
+
+
+async def test_complete_hook_reschedule(
+    aiohttp_server, config, pki, db, loop, hooks_config
+):
     """Attempt to reschedule an Application augmented with the "complete" hook. Enable
     TLS to use the "full-featured" hook (with the ConfigMap containing a certificate).
     """
@@ -559,7 +711,7 @@ async def test_complete_hook_reschedule(aiohttp_server, config, pki, db, loop):
             server_endpoint(api_server),
             worker_count=0,
             ssl_context=ssl_context,
-            hooks=deepcopy(hooks_config),
+            hooks=hooks_config,
         )
         await controller.prepare(client)
         # Observer started here in order to be stopped afterwards,

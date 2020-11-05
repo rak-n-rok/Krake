@@ -22,7 +22,7 @@ from tests.factories.kubernetes import (
     ClusterFactory,
     make_kubeconfig,
 )
-from tests.controller.kubernetes import nginx_manifest, hooks_config
+from tests.controller.kubernetes import nginx_manifest
 
 
 def get_first_container(deployment):
@@ -774,7 +774,9 @@ deploy_mangled_response = yaml.safe_load(
 )
 
 
-async def test_observer_on_status_update_mangled(aiohttp_server, db, config, loop):
+async def test_observer_on_status_update_mangled(
+    aiohttp_server, db, config, loop, hooks_config
+):
     """Test the ``on_status_update`` method of the Kubernetes Controller in case of
     an Application mangled with the "complete" hook.
 
@@ -853,7 +855,7 @@ async def test_observer_on_status_update_mangled(aiohttp_server, db, config, loo
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         controller = KubernetesController(
-            server_endpoint(server), worker_count=0, hooks=deepcopy(hooks_config)
+            server_endpoint(server), worker_count=0, hooks=hooks_config
         )
         controller.on_status_update = update_decorator(controller.on_status_update)
         await controller.prepare(client)

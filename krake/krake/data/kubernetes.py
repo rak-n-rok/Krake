@@ -71,6 +71,9 @@ class ApplicationStatus(Status):
             needed to be created for the functioning of internal mechanisms,
             such as the "Complete Hook".
         token (str): Token for the identification of the "Complete Hook" request
+        complete_cert (str): certificate for the identification of the "Complete Hook".
+        complete_key (str): key for the certificate of the "Complete Hook"
+            identification.
     """
 
     state: ApplicationState = ApplicationState.PENDING
@@ -82,6 +85,8 @@ class ApplicationStatus(Status):
     manifest: List[dict] = None
     mangling: List[dict] = None
     token: str = None
+    complete_cert: str = None
+    complete_key: str = None
 
 
 @persistent("/kubernetes/applications/{namespace}/{name}")
