@@ -128,8 +128,33 @@ def _validate_endpoint(endpoint):
 
 
 class CompleteHookConfiguration(Serializable):
-    ca_dest: str = field(
-        default="/etc/krake_ca/ca.pem",
+    hook_user: str = field(
+        default="system:complete-hook",
+        metadata={
+            "help": (
+                "Name of the 'complete' hook user put in the certificates given to"
+                " Applications. Needed if RBAC is enabled."
+            )
+        },
+    )
+    intermediate_src: str = field(
+        metadata={
+            "help": (
+                "Path to the certificate which will sign new certificates given to the"
+                " Applications."
+            )
+        }
+    )
+    intermediate_key_src: str = field(
+        metadata={
+            "help": (
+                "Path to the certificate key which will sign new certificates given"
+                " to the Applications."
+            )
+        }
+    )
+    cert_dest: str = field(
+        default="/etc/krake_certs/",
         metadata={
             "help": "Environment variable to be used in the Kubernetes Application"
         },

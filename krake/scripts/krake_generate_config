@@ -343,12 +343,22 @@ if __name__ == "__main__":
     )
     add_option(
         parser,
-        "--complete-hook-ca-dest",
+        "--complete-hook-user",
         (
-            "For the complete hook, set the path to the certificate, "
-            "which will be given to the Application."
+            "For the 'complete' hook, the name of the user defined in the CN of the"
+            " generated certificates. Should match the Roles in the database if RBAC is"
+            " enabled."
         ),
-        default="/etc/krake_ca/ca.pem",
+        default="system:complete-hook",
+    )
+    add_option(
+        parser,
+        "--complete-hook-cert-dest",
+        (
+            "For the complete hook, set the path to the directory, where the"
+            " certificates will be stored in the deployed Application."
+        ),
+        default="/etc/krake_cert",
     )
     add_option(
         parser,

@@ -142,10 +142,15 @@ command-line options. The arguments and available options are:
     Time in seconds for the Magnum Controller to ask the Magnum client again after a
     modification of a cluster. Default: ``30``.
 
-``--complete-hook-ca-dest``
-    For the complete hook, set the path to the certificate, which will be given to the
-    Application. See
-    :ref:`dev/hooks:Complete`. Default: ``"/etc/krake_ca/ca.pem"``.
+``--complete-hook-user``
+    For the complete hook, set the name of the user that will be defined as CN of the
+    generated certificates. See :ref:`dev/hooks:Complete`.
+    Default: ``"system:complete-hook"``.
+
+``--complete-hook-cert-dest``
+    For the complete hook, set the path to the mounted directory, in which the
+    certificates to communicate with the API will be stored. See
+    :ref:`dev/hooks:Complete`. Default: ``"/etc/krake_cert"``.
 
 ``--complete-hook-env-token``
     For the complete hook, set the name of the environment variable that contain the
@@ -343,8 +348,20 @@ hooks (string)
     complete (string)
         This section defines the parameters needed for the Application ``complete`` hook. If is not defined the Application ``complete`` hook is disabled.
 
-        ca_dest (path)
-            Set the path to the certificate authority in deployed Application. Example: ``/etc/krake_ca/ca.pem``
+        hook_user (string)
+            Name of the user that will be set as CN in the certificates generated for
+            the hook. If RBAC is enabled, should match a ``RoleBinding`` for the
+            ``applications/complete`` subresource. Example ``system:complete-hook``
+        intermediate_src (path)
+            Path to the certificate which will be used to sign new generated
+            certificates for the hook. Not needed if TLS is not enabled. Example:
+            ``/etc/krake/certs/system:complete-signing.pem``
+        intermediate_key_src (path)
+            Path to the key of the certificate which will be used to sign new generated
+            certificates for the hook. Not needed if TLS is not enabled. Example:
+            ``/etc/krake/certs/system:complete-signing-key.pem``
+        cert_dest (path)
+            Set the path to the certificate authority on the deployed Application. Example: ``/etc/krake_cert``
         env_token (string)
             Name of the environment variable, which stores Krake authentication token. Example: ``KRAKE_TOKEN``
         env_complete (string)

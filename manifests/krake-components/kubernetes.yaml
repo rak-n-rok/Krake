@@ -10,7 +10,10 @@ data:
     debounce: 1.0
     hooks:
       complete:
-        ca_dest: /etc/krake_ca/ca.pem
+        hook_user: system:complete-hook
+        intermediate_src: ""
+        intermediate_key_src: ""
+        cert_dest: /etc/krake_cert
         env_token: KRAKE_TOKEN
         env_complete: KRAKE_COMPLETE_URL
     tls:

@@ -6,9 +6,13 @@
 # debounce: 1.0
 # hooks:
 #   complete:
-#     ca_dest: /etc/krake_ca/ca.pem
+#     hook_user: system:complete-hook
+#     intermediate_src: tmp/pki/system:complete-signing.pem
+#     intermediate_key_src: tmp/pki/system:complete-signing-key.pem
+#     cert_dest: /etc/krake_cert
 #     env_token: KRAKE_TOKEN
 #     env_complete: KRAKE_COMPLETE_URL
+#     external_endpoint: https://<krake_IP>  # optional
 #
 # tls:
 #   enabled: true
@@ -23,7 +27,10 @@ worker_count: $worker_count
 debounce: $debounce
 hooks:
   complete:
-    ca_dest: $complete_hook_ca_dest
+    hook_user: $complete_hook_user
+    intermediate_src: $cert_dir/system:complete-signing.pem
+    intermediate_key_src: $cert_dir/system:complete-signing-key.pem
+    cert_dest: $complete_hook_cert_dest
     env_token: $complete_hook_env_token
     env_complete: $complete_hook_env_complete
     $external_endpoint_key_and_value
