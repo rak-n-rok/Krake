@@ -27,6 +27,20 @@ DEFAULT_MANIFEST = "echo-demo.yaml"
 DEFAULT_KUBE_APP_NAME = "echo-demo"
 
 
+def kubectl_cmd(kubeconfig):
+    """Builds the kubectl command to communicate with the cluster that can be reached by
+    the provided kubeconfig file.
+
+    Args:
+        kubeconfig (str): path to the kubeconfig file.
+
+    Returns:
+        str: the base kubectl command to use for communicating with the cluster.
+
+    """
+    return f"kubectl --kubeconfig {kubeconfig}"
+
+
 class Response(object):
     """The response of a command
 
@@ -946,18 +960,26 @@ class ApplicationDefinition(ResourceDefinition):
         constraints (list[str], optional): list of cluster label constraints
             to use for the creation of the application.
         labels (dict[str, str]): dict of application labels and their values
+        hooks (list[str]): list of hooks name to apply to the application.
         migration (bool, optional): migration flag indicating whether the
             application should be able to migrate.
     """
 
     def __init__(
-        self, name, manifest_path, constraints=None, labels=None, migration=None
+        self,
+        name,
+        manifest_path,
+        constraints=None,
+        labels=None,
+        hooks=None,
+        migration=None,
     ):
         super().__init__(name=name, kind=ResourceKind.APPLICATION)
         assert os.path.isfile(manifest_path), f"{manifest_path} is not a file."
         self.manifest_path = manifest_path
         self.cluster_label_constraints = constraints or []
         self.labels = labels or {}
+        self.hooks = hooks or []
         self.migration = migration
 
     def _get_mutable_attributes(self):
@@ -986,6 +1008,7 @@ class ApplicationDefinition(ResourceDefinition):
             self.cluster_label_constraints
         )
         cmd += self._get_label_options(self.labels)
+        cmd += self._get_flag_str_options("-H", self.hooks)
         if self.migration is not None:
             cmd += [self._get_migration_flag(self.migration)]
         return cmd

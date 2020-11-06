@@ -44,9 +44,10 @@ stickiness: 0.1
 poll_interval: 30
 
 # "Complete" Hook-related parameters
-# complete_hook_ca_dest: "/etc/krake_ca/ca.pem"
-# complete_hook_env_token: "KRAKE_TOKEN"
-# complete_hook_env_complete: "KRAKE_COMPLETE_URL"
+complete_hook_user: "system:complete-hook"
+complete_hook_cert_dest: "/etc/krake_cert"
+complete_hook_env_token: "KRAKE_TOKEN"
+complete_hook_env_complete: "KRAKE_COMPLETE_URL"
 
 # Let the external endpoint being computed automatically using the private IP of the
 # Krake application VM and the port used by the Krake API.

@@ -30,11 +30,8 @@ from utils import (
     get_default_kubeconfig_path,
     MANIFEST_PATH,
     ResourceKind,
+    kubectl_cmd,
 )
-
-
-def kubectl_cmd(kubeconfig):
-    return f"kubectl --kubeconfig {kubeconfig}"
 
 
 def test_kubernetes_observer_deletion(minikube_clusters):

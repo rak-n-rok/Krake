@@ -87,6 +87,10 @@ services:
         target: "{{ krake.cert_dir }}/system:kubernetes.pem"
       - source: kubernetes-key
         target: "{{ krake.cert_dir }}/system:kubernetes-key.pem"
+      - source: complete-signing-cert
+        target: "{{ krake.cert_dir }}/system:complete-signing.pem"
+      - source: complete-signing-key
+        target: "{{ krake.cert_dir }}/system:complete-signing-key.pem"
 
   krake-ctrl-scheduler:
     image: krake:latest
@@ -149,6 +153,10 @@ secrets:
     file: "{{ krake.cert_dir }}/system:kubernetes.pem"
   kubernetes-key:
     file: "{{ krake.cert_dir }}/system:kubernetes-key.pem"
+  complete-signing-cert:
+    file: "{{ krake.cert_dir }}/system:complete-signing.pem"
+  complete-signing-key:
+    file: "{{ krake.cert_dir }}/system:complete-signing-key.pem"
 
   scheduler-config:
     file: "{{ krake.config.path }}/scheduler.yaml"
