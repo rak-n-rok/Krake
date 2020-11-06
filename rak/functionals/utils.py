@@ -14,6 +14,20 @@ KRAKE_HOMEDIR = "/home/krake"
 ROK_INSTALL_DIR = f"{KRAKE_HOMEDIR}/.local/bin"
 
 
+def kubectl_cmd(kubeconfig):
+    """Builds the kubectl command to communicate with the cluster that can be reached by
+    the provided kubeconfig file.
+
+    Args:
+        kubeconfig (str): path to the kubeconfig file.
+
+    Returns:
+        str: the base kubectl command to use for communicating with the cluster.
+
+    """
+    return f"kubectl --kubeconfig {kubeconfig}"
+
+
 class Response(object):
     """The response of a command
 
@@ -358,6 +372,7 @@ class ApplicationDefinition(NamedTuple):
         manifest_path (str): path to the manifest file to use for the creation.
         constraints (list(str)): optional list of cluster label constraints
             to use for the creation of the application.
+        hooks (list[str]): list of hooks name to apply to the application.
         migration (bool): optional migration flag indicating whether the
             application should be able to migrate.
 
@@ -367,16 +382,18 @@ class ApplicationDefinition(NamedTuple):
     manifest_path: str
     constraints: list = []
     migration: bool = None
+    hooks: list = []
     kind: str = "Application"
 
     def create_resource(self):
         """Create the application."""
         migration_flag = self._get_migration_flag(self.migration)
         constraints = " ".join(f"-L {constraint}" for constraint in self.constraints)
+        hooks = " ".join(f"-H {hook}" for hook in self.hooks)
 
         error_message = f"The Application {self.name} could not be created."
         run(
-            f"rok kube app create {migration_flag} {constraints} "
+            f"rok kube app create {migration_flag} {constraints} {hooks} "
             f"-f {self.manifest_path} {self.name}",
             condition=check_return_code(error_message),
         )

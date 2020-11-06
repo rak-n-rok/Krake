@@ -27,15 +27,12 @@ from utils import (
     check_resource_deleted,
     check_return_code,
     check_spec_container_image,
+    kubectl_cmd,
 )
 
 KRAKE_HOMEDIR = "/home/krake"
 CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
 MANIFEST_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals"
-
-
-def kubectl_cmd(kubeconfig):
-    return f"kubectl --kubeconfig {kubeconfig}"
 
 
 def test_kubernetes_observer_deletion(minikube_clusters):
