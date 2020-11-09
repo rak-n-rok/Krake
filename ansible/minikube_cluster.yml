@@ -191,19 +191,19 @@
         path: "{{ home_dir }}/.kube/config"
         state: touch
 
-    # The error code 65 is raised when no minikube cluster is present yet.
+    # The error code 85 is raised when no minikube cluster is present yet.
     - name: Stop Minikube
       become_user: ubuntu
       command: minikube stop
       register: minikube_status
-      failed_when: "minikube_status.rc != 65 and minikube_status.rc != 0"
+      failed_when: "minikube_status.rc != 85 and minikube_status.rc != 0"
 
     # The error code 7 is raised when a minikube cluster was present
     # and has been stopped beforehand.
     - name: Get Minikube status
       command: minikube status
       register: minikube_status
-      failed_when: "minikube_status.rc != 65 and minikube_status.rc != 7"
+      failed_when: "minikube_status.rc != 85 and minikube_status.rc != 7"
 
     - name: Start Minikube
       become: yes

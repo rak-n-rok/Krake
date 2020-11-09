@@ -5,8 +5,8 @@ flavor: M.mem+
 
 # Minikube and kubectl configuration parameters
 minikube_install_dir: /usr/local/bin
-minikube_version: v1.11.0
-kubectl_version: v1.18.3
+minikube_version: v1.15.1
+kubectl_version: v1.19.4
 
 # Keystone configuration parameters
 kube_api_config: /etc/kubernetes/manifests/kube-apiserver.yaml
