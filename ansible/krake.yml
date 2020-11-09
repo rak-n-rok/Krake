@@ -58,11 +58,8 @@
     - name: Gathering facts
       setup:
 
-    # Replace default mirror with a faster one
-    - name: Copy sources.list
-      copy:
-        src: "{{ playbook_dir }}/files/krake/sources.list"
-        dest: /etc/apt/sources.list
+    - import_role:
+        name: update_system
 
     - name: Install system packages
       apt:
@@ -71,6 +68,7 @@
         name: "{{ packages }}"
       vars:
         packages:
+          - acl
           - jq
           - haveged
           - python3-pip

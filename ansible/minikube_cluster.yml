@@ -65,6 +65,9 @@
     - name: Gathering facts
       setup:
 
+    - import_role:
+        name: update_system
+
     - name: Install system packages
       apt:
         update_cache: yes

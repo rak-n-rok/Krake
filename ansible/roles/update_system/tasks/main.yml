@@ -1,0 +1,29 @@
+# Inspired from
+# https://www.cyberciti.biz/faq/ansible-apt-update-all-packages-on-ubuntu-debian-linux/
+- name: Update apt repository and cache
+  become: true
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Upgrade all packages
+  become: true
+  apt:
+    upgrade: dist
+
+- name: Check if a reboot is needed
+  become: true
+  register: reboot_required_file
+  stat:
+    path: /var/run/reboot-required
+    get_md5: no
+
+- name: Reboot the machine if the kernel has been updated
+  become: true
+  reboot:
+    connect_timeout: 5
+    reboot_timeout: 300
+    pre_reboot_delay: 0
+    post_reboot_delay: 30
+    test_command: uptime
+  when: reboot_required_file.stat.exists
