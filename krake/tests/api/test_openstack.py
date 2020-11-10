@@ -395,11 +395,11 @@ async def test_magnum_cluster_template_immutable(aiohttp_client, config, db):
 
     data = MagnumClusterFactory(status__template="template1")
     await db.put(data)
-    data.spec.template = "template2"
+    data.status.template = "template2"
 
     resp = await client.put(
         f"/openstack/namespaces/{data.metadata.namespace}"
-        f"/magnumclusters/{data.metadata.name}",
+        f"/magnumclusters/{data.metadata.name}/status",
         json=data.serialize(),
     )
     assert resp.status == 200

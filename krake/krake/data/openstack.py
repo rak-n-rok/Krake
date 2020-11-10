@@ -171,7 +171,7 @@ class MagnumClusterStatus(Status):
 
     state: MagnumClusterState = MagnumClusterState.PENDING
     project: ResourceRef = None
-    template: str = None
+    template: str = field(default=None, metadata={"immutable": True})
     cluster_id: str = None
     node_count: int = None
     api_address: str = None
