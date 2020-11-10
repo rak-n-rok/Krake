@@ -1145,7 +1145,9 @@ async def test_kubernetes_application_update(aiohttp_server, config, db, loop):
         stored1.metadata.labels["foo"] = "bar"
         kubernetes_api = KubernetesApi(client)
         received = await kubernetes_api.update_application(
-            name=app.metadata.name, namespace=app.metadata.namespace, body=app
+            name=stored1.metadata.name,
+            namespace=stored1.metadata.namespace,
+            body=stored1,
         )
         assert stored1.metadata.modified < received.metadata.modified
 

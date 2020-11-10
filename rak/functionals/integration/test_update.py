@@ -23,6 +23,7 @@ from utils import (
     check_return_code,
     check_spec_container_image,
     check_spec_replicas,
+    check_http_code_in_output,
     ClusterDefinition,
 )
 
@@ -258,3 +259,43 @@ def test_update_cluster_labels(minikube_clusters):
             "lbl": "second",
             "other": "value",
         }
+
+
+def test_update_no_changes(minikube_clusters):
+    """In the test environment, attempt to update the Cluster with the same kubeconfig,
+    and the Application with the same manifest file. As the update does not change any
+    field of the resources, the update should be rejected in both cases.
+
+    1. the Cluster is updated with the same kubeconfig, it should return an HTTP 400
+       error code.
+    2. the Application is updated with the same manifest file, it should return an HTTP
+    400 error code.
+
+    Args:
+        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+
+    """
+    minikube_cluster = random.choice(minikube_clusters)
+
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
+
+    environment = create_simple_environment(
+        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
+    )
+
+    with Environment(environment) as resources:
+        cluster = resources["Cluster"][0]
+        app = resources["Application"][0]
+
+        # 1. "Update" the Cluster (no change is sent)
+        run(
+            f"rok kube cluster update {cluster.name} -f {kubeconfig_path}",
+            condition=check_http_code_in_output(400),
+        )
+
+        # 2. "Update" the Application (no change is sent)
+        run(
+            f"rok kube app update {app.name} -f {manifest_path}",
+            condition=check_http_code_in_output(400),
+        )

@@ -1,3 +1,4 @@
+from datetime import datetime
 from operator import attrgetter
 
 from krake.data.core import resource_ref, ResourceRef
@@ -174,6 +175,20 @@ async def test_update_project(aiohttp_client, config, db):
         Project, namespace=data.metadata.namespace, name=project.metadata.name
     )
     assert stored == project
+
+
+async def test_update_project_no_changes(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = ProjectFactory()
+    await db.put(data)
+
+    resp = await client.put(
+        f"/openstack/namespaces/{data.metadata.namespace}"
+        f"/projects/{data.metadata.name}",
+        json=data.serialize(),
+    )
+    assert resp.status == 400
 
 
 async def test_update_project_rbac(rbac_allow, config, aiohttp_client):
@@ -376,6 +391,20 @@ async def test_magnum_cluster_update(aiohttp_client, config, db):
     assert stored.spec == cluster.spec
 
 
+async def test_magnum_cluster_update_no_changes(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = MagnumClusterFactory(spec__node_count=5, spec__master_count=1)
+    await db.put(data)
+
+    resp = await client.put(
+        f"/openstack/namespaces/{data.metadata.namespace}"
+        f"/magnumclusters/{data.metadata.name}",
+        json=data.serialize(),
+    )
+    assert resp.status == 400
+
+
 async def test_update_magnum_cluster_rbac(rbac_allow, config, aiohttp_client):
     config.authorization = "RBAC"
     client = await aiohttp_client(create_app(config))
@@ -405,6 +434,14 @@ async def test_magnum_cluster_template_immutable(aiohttp_client, config, db):
     assert resp.status == 200
     cluster = MagnumCluster.deserialize(await resp.json())
     assert cluster.status.template == "template1"
+
+    data.metadata.modified = datetime.now()
+    resp = await client.put(
+        f"/openstack/namespaces/{data.metadata.namespace}"
+        f"/magnumclusters/{data.metadata.name}",
+        json=data.serialize(),
+    )
+    assert resp.status == 200
 
     stored = await db.get(
         cluster, namespace=data.metadata.namespace, name=cluster.metadata.name
