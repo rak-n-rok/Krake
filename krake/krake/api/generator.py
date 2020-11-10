@@ -352,6 +352,11 @@ def _make_update_handler(operation, logger):
                     content_type="application/json",
                 )
 
+        if body == entity:
+            raise web.HTTPBadRequest(
+                text="The body contained no update.", content_type="application/json"
+            )
+
         entity.update(body)
         entity.metadata.modified = datetime.now()
 

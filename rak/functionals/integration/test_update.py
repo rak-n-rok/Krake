@@ -23,6 +23,7 @@ from utils import (
     check_return_code,
     check_spec_container_image,
     check_spec_replicas,
+    check_http_code_in_output,
     ClusterDefinition,
 )
 
@@ -258,3 +259,35 @@ def test_update_cluster_labels(minikube_clusters):
             "lbl": "second",
             "other": "value",
         }
+
+
+def test_update_no_changes(minikube_clusters):
+    """In the test environment, update the Cluster with a new kubeconfig. The kubeconfig
+     as stored on the API is then compared to the given one.
+
+    1. the Cluster is updated with another kubeconfig
+    2. the new state of the Cluster on the API is checked, to see if the kubeconfig
+    changed.
+    3. the cluster is updated back to its original configuration.
+
+    Args:
+        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+
+    """
+    minikube_cluster, other_cluster = random.sample(
+        minikube_clusters, len(minikube_clusters)
+    )
+
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    environment = {
+        0: [ClusterDefinition(name=minikube_cluster, kubeconfig_path=kubeconfig_path)]
+    }
+
+    with Environment(environment) as resources:
+        cluster = resources["Cluster"][0]
+
+        # 1. "Update" the Cluster (no change is sent)
+        run(
+            f"rok kube cluster update {cluster.name} -f {kubeconfig_path}",
+            condition=check_http_code_in_output(400),
+        )

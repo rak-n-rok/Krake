@@ -212,6 +212,20 @@ async def test_update_app(aiohttp_client, config, db):
     assert stored == app
 
 
+async def test_update_app_no_changes(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = ApplicationFactory(status__state=ApplicationState.PENDING)
+    await db.put(data)
+
+    resp = await client.put(
+        f"/kubernetes/namespaces/{data.metadata.namespace}"
+        f"/applications/{data.metadata.name}",
+        json=data.serialize(),
+    )
+    assert resp.status == 400
+
+
 async def test_update_app_rbac(rbac_allow, config, aiohttp_client):
     config.authorization = "RBAC"
     client = await aiohttp_client(create_app(config=config))
@@ -656,6 +670,20 @@ async def test_update_cluster(aiohttp_client, config, db):
         Cluster, namespace=data.metadata.namespace, name=cluster.metadata.name
     )
     assert stored == cluster
+
+
+async def test_update_cluster_no_changes(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = ClusterFactory(spec__custom_resources=[])
+    await db.put(data)
+
+    resp = await client.put(
+        f"/kubernetes/namespaces/{data.metadata.namespace}"
+        f"/clusters/{data.metadata.name}",
+        json=data.serialize(),
+    )
+    assert resp.status == 400
 
 
 async def test_update_cluster_rbac(rbac_allow, config, aiohttp_client):
