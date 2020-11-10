@@ -12,7 +12,15 @@ from webargs.aiohttpparser import use_kwargs
 
 from krake.data.core import WatchEvent, WatchEventType, ListMetadata
 from ..utils import camel_to_snake_case, get_field
-from .helpers import load, session, Heartbeat, use_schema, HttpReason, HttpReasonCode
+from .helpers import (
+    load,
+    session,
+    Heartbeat,
+    use_schema,
+    HttpReason,
+    HttpReasonCode,
+    json_error,
+)
 from .auth import protected
 from .database import EventType
 
@@ -353,9 +361,7 @@ def _make_update_handler(operation, logger):
                 )
 
         if body == entity:
-            raise web.HTTPBadRequest(
-                text="The body contained no update.", content_type="application/json"
-            )
+            raise json_error(web.HTTPBadRequest, "The body contained no update.")
 
         entity.update(body)
         entity.metadata.modified = datetime.now()
