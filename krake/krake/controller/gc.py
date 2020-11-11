@@ -83,9 +83,9 @@ class DependencyCycleException(DependencyException):
 
     """
 
-    def __init__(self, resource, cycle, *args, **kwargs):
+    def __init__(self, resource, cycle, *args):
         message = f"Cycle in dependency graph for resource {str(resource)}"
-        super().__init__(message, *args, **kwargs)
+        super().__init__(message, *args)
         self.cycle = cycle
 
 
@@ -101,9 +101,9 @@ class ResourceWithDependentsException(DependencyException):
 
     """
 
-    def __init__(self, dependents, *args, **kwargs):
+    def __init__(self, dependents, *args):
         message = "Cannot remove a resource which holds dependents"
-        super().__init__(message, *args, **kwargs)
+        super().__init__(message, *args)
         self.dependents = dependents
 
 
