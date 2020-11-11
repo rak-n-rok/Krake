@@ -477,6 +477,8 @@ class Observer(object):
 class ControllerError(Exception):
     """Base class for exceptions during handling of a resource."""
 
+    code = None
+
     def __init__(self, message):
         super().__init__(message)
         self.message = message

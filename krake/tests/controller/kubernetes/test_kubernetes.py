@@ -1614,7 +1614,7 @@ async def test_kubernetes_controller_error_handling(aiohttp_server, config, db, 
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
     assert stored.status.state == ApplicationState.FAILED
-    assert stored.status.reason.code == ReasonCode.INVALID_RESOURCE
+    assert stored.status.reason.code == ReasonCode.UNSUPPORTED_KIND
 
 
 async def test_kubernetes_api_error_handling(aiohttp_server, config, db, loop):

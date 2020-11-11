@@ -19,9 +19,27 @@ logger = logging.getLogger(__name__)
 
 
 class InvalidResourceError(ControllerError):
-    """Raised in case of invalid kubernetes resource definition."""
+    """Raised when the structure resource definition present in the manifest is invalid
+    (missing elements or invalid field type).
+    """
 
     code = ReasonCode.INVALID_RESOURCE
+
+
+class InvalidCustomResourceError(ControllerError):
+    """Raised when a custom resource provided has an invalid structure or does not exist
+    on an actual cluster.
+    """
+
+    code = ReasonCode.INVALID_CUSTOM_RESOURCE
+
+
+class UnsupportedResourceError(ControllerError):
+    """Raised when the kind of a Kubernetes resource in a manifest is not supported by
+    the Kubernetes controller.
+    """
+
+    code = ReasonCode.UNSUPPORTED_KIND
 
 
 class ApiAdapter(object):
@@ -230,7 +248,7 @@ class KubernetesClient(object):
                     custom_resource
                 )
             except ApiException as err:
-                raise InvalidResourceError(err_resp=err)
+                raise InvalidCustomResourceError(err)
 
             # Custom resource api version should be always first item in versions
             # field
@@ -271,7 +289,7 @@ class KubernetesClient(object):
                 custom_resource_apis = await self.custom_resource_apis
                 resource_api = custom_resource_apis[kind]
             except KeyError:
-                raise InvalidResourceError(f"{kind} resources are not supported")
+                raise UnsupportedResourceError(f"{kind} resources are not supported")
 
         return resource_api
 

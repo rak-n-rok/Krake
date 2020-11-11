@@ -1,11 +1,13 @@
 from textwrap import dedent
 
+import pytest
 from aiohttp import web
 import json
 import pytz
 import yaml
 
 from krake.api.app import create_app
+from krake.controller.kubernetes.client import InvalidCustomResourceError
 from krake.controller.kubernetes.kubernetes import ResourceDelta
 from krake.data.core import resource_ref
 from krake.data.kubernetes import Application, ApplicationState
@@ -695,3 +697,55 @@ async def test_app_custom_resource_deletion(aiohttp_server, config, db, loop):
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
     assert stored is None
+
+
+async def test_app_custom_resource_error_handling(aiohttp_server, config, db, loop):
+    routes = web.RouteTableDef()
+
+    # Determine scope, version, group and plural of custom resource definition
+    @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
+    async def _(request):
+        return web.Response(status=404)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(
+        spec__kubeconfig=make_kubeconfig(kubernetes_server),
+        spec__custom_resources=["crontabs.stable.example.com"],
+    )
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
+        spec__manifest=list(
+            yaml.safe_load_all(
+                dedent(
+                    """
+                    ---
+                    apiVersion: stable.example.com/v1
+                    kind: CronTab
+                    metadata:
+                        name: cron
+                    spec:
+                        cronSpec: "* * * * */5"
+                        image: cron-image
+                    """
+                )
+            )
+        ),
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        controller = KubernetesController(server_endpoint(api_server), worker_count=0)
+        await controller.prepare(client)
+
+        with pytest.raises(InvalidCustomResourceError, match="404"):
+            await controller.resource_received(app)
