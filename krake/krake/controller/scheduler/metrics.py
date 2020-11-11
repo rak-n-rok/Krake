@@ -31,9 +31,9 @@ Abstraction is provided by :class:`Provider`.
 """
 import asyncio
 from typing import NamedTuple
-from aiohttp import ClientSession, ClientError, ClientTimeout
+from aiohttp import ClientError, ClientTimeout
 
-from krake.data.core import MetricsProvider, Metric
+from krake.data.core import Metric
 from yarl import URL
 
 
@@ -107,6 +107,7 @@ class Provider(object):
     """
 
     registry = {}
+    type = None
 
     def __init_subclass__(cls, **kwargs):
         """Collect the :class:`Provider` subclasses into :attr:`registry`.
@@ -122,6 +123,12 @@ class Provider(object):
         cls.registry[cls.type] = cls
 
     def __new__(mcls, *args, **kwargs):
+        """Get the Provider class depending on the given metrics provider type.
+
+        Returns:
+              Provider: the instantiated Provider client to use.
+
+        """
         provider_type = kwargs["metrics_provider"].spec.type
         return object.__new__(mcls.registry[provider_type])
 
@@ -145,11 +152,17 @@ class Provider(object):
 class Prometheus(Provider):
     """Prometheus metrics provider client. It creates and handles queries to the given
     prometheus server and evaluates requested metric values.
+
+    Args:
+        session (aiohttp.ClientSession): Aiohttp session
+        metrics_provider (krake.data.core.MetricsProvider): Metrics provider definition,
+            to use for getting information for fetching the queries.
+
     """
 
     type = "prometheus"
 
-    def __init__(self, session: ClientSession, metrics_provider: MetricsProvider):
+    def __init__(self, session, metrics_provider):
         self.session = session
         self.metrics_provider = metrics_provider
 
@@ -204,6 +217,12 @@ class Prometheus(Provider):
 class Static(Provider):
     """Static metrics provider client. It simply returns the value configured
     in the metric's :class:`krake.data.core.StaticSpec`.
+
+    Args:
+        session (aiohttp.ClientSession): Aiohttp session
+        metrics_provider (krake.data.core.MetricsProvider): Metrics provider definition,
+            to use for getting information for fetching the queries.
+
     """
 
     type = "static"

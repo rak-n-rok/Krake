@@ -164,7 +164,7 @@ async def test_custom_resource_cached_property(aiohttp_server):
             content_type="application/json",
         )
 
-    # Determine scope, version, group and plural of custome resource definition
+    # Determine scope, version, group and plural of custom resource definition
     @routes_a.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
     async def _(request):
         if request.match_info["name"] == crd_name:
@@ -246,7 +246,7 @@ async def test_custom_resource_cached_property(aiohttp_server):
 async def test_app_custom_resource_creation(aiohttp_server, config, db, loop):
     routes = web.RouteTableDef()
 
-    # Determine scope, version, group and plural of custome resource definition
+    # Determine scope, version, group and plural of custom resource definition
     @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
     async def _(request):
         if request.match_info["name"] == "crontabs.stable.example.com":
@@ -334,7 +334,7 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
     deleted = set()
     patched = set()
 
-    # Determine scope, version, group and plural of custome resource definition
+    # Determine scope, version, group and plural of custom resource definition
     @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
     async def _(request):
         if request.match_info["name"] == "crontabs.stable.example.com":
@@ -478,7 +478,7 @@ async def test_app_custom_resource_migration(aiohttp_server, config, db, loop):
     """
     routes = web.RouteTableDef()
 
-    # Determine scope, version, group and plural of custome resource definition
+    # Determine scope, version, group and plural of custom resource definition
     @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
     async def _(request):
         if request.match_info["name"] == "crontabs.stable.example.com":
@@ -622,7 +622,7 @@ async def test_app_custom_resource_deletion(aiohttp_server, config, db, loop):
     kubernetes_app = web.Application()
     routes = web.RouteTableDef()
 
-    # Determine scope, version, group and plural of custome resource definition
+    # Determine scope, version, group and plural of custom resource definition
     @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
     async def _(request):
         if request.match_info["name"] == "crontabs.stable.example.com":
