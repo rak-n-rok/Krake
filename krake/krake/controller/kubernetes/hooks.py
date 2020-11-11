@@ -17,8 +17,8 @@ from typing import NamedTuple
 
 import OpenSSL
 import yarl
-from krake.controller import Observer, ControllerError
-from krake.controller.kubernetes.client import KubernetesClient
+from krake.controller import Observer
+from krake.controller.kubernetes.client import KubernetesClient, InvalidResourceError
 from krake.utils import camel_to_snake_case
 from kubernetes_asyncio.client.rest import ApiException
 from yarl import URL
@@ -33,16 +33,8 @@ from kubernetes_asyncio.client import (
 )
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 
-from krake.data.core import ReasonCode
-
 
 logger = logging.getLogger(__name__)
-
-
-class InvalidResourceError(ControllerError):
-    """Raised in case of invalid kubernetes resource definition."""
-
-    code = ReasonCode.INVALID_RESOURCE
 
 
 class Hook(Enum):
@@ -670,7 +662,11 @@ class Complete(object):
                     inject(sub_resource, sub_resources_to_mangle)
 
                 else:
-                    raise InvalidResourceError
+                    message = (
+                        f"The sub-resource to mangle {sub_resources_to_mangle!r} has an"
+                        "invalid type, should be in '[dict, list]'"
+                    )
+                    raise InvalidResourceError(message)
 
     def configmap(self, cfg_name, namespace, ca_certs=None):
         """Create a complete hook configmap resource.
