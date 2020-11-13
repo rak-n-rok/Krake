@@ -13,13 +13,11 @@ from krake.utils import aenumerate
 {% endfor %}
 from krake.test_utils import with_timeout
 
-{% if api_def.import_classes %}
+{% if api_def.import_factory_classes %}
 from tests.factories.{{ api_def.name }} import {{ " " }}
-{%- for module_path, classes in api_def.import_classes.items() -%}
+{%- for module_path, classes in api_def.import_factory_classes.items() -%}
     {%- for cls in classes -%}
-        {%- if not "List" in cls.__name__ -%}
-            {{ cls.__name__ }}Factory{{ ", " if not loop.last }}
-        {%- endif -%}
+        {{ cls.__name__ }}Factory{{ ", " if not loop.last }}
     {%- endfor -%}
 {%- endfor %}
 {% endif %}

@@ -72,6 +72,7 @@ class ApiDef(object):
         self.name = name
         self.resources = []
         self._import_classes = None
+        self._import_factory_classes = None
 
     @property
     def import_classes(self):
@@ -94,6 +95,28 @@ class ApiDef(object):
         for cls in classes:
             self._import_classes[cls.__module__].append(cls)
         return self._import_classes
+
+    @property
+    def import_factory_classes(self):
+        """Get the reference of all classes for which a Factory will need to be imported
+        by the current ApiDef from the class:`Resource` defined in it.
+
+        Returns:
+            dict[str, list]: all classes for the current ApiDef, which will need a
+                Factory, separated by a different list for each module:
+                "<module_path>: <list_of_classes>".
+
+        """
+        if self._import_factory_classes:
+            return self._import_factory_classes
+
+        self._import_factory_classes = defaultdict(list)
+        for module_path, classes in self.import_classes.items():
+            for cls in classes:
+                if "List" not in cls.__name__:
+                    self._import_factory_classes[module_path].append(cls)
+
+        return self._import_factory_classes
 
     def resource(self, template):
         """Decorator method that is used to transform a given class into a
