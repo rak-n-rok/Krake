@@ -7,7 +7,7 @@ from argparse import Action
 import black
 from jinja2 import FileSystemLoader, Environment, TemplateNotFound
 
-from krake.apidefs.definitions import ApiDef
+from .apidefs.definitions import ApiDef
 
 
 def is_api_def(obj):

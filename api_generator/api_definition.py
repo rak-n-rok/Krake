@@ -23,7 +23,7 @@ from functools import partial
 
 import inspect
 
-from krake.api_generator.utils import (
+from .utils import (
     add_templates_dir,
     add_template_path,
     StoreDict,
@@ -33,7 +33,7 @@ from krake.api_generator.utils import (
 )
 from typing import NamedTuple, List
 
-from krake.apidefs.definitions import Scope
+from .apidefs.definitions import Scope
 from krake.data.serializable import ApiObject
 
 

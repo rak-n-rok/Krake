@@ -1,4 +1,4 @@
-from krake.api_generator.utils import (
+from .utils import (
     is_api_def,
     add_templates_dir,
     get_data_classes,

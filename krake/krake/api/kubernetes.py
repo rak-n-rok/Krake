@@ -5,7 +5,6 @@ from aiohttp import web
 from datetime import datetime
 from uuid import uuid4
 
-from krake.apidefs.definitions import ListQuery
 from webargs.aiohttpparser import use_kwargs
 
 from krake.api.auth import protected
@@ -18,6 +17,7 @@ from krake.api.helpers import (
     HttpReason,
     HttpReasonCode,
     make_create_request_schema,
+    ListQuery,
 )
 from krake.data.core import WatchEvent, WatchEventType, ListMetadata
 from krake.data.kubernetes import (

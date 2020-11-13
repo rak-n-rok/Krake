@@ -27,6 +27,13 @@ class CoreApi(ApiClient):
 
     """
 
+    plurals = {
+        "Metric": "Metrics",
+        "MetricsProvider": "MetricsProviders",
+        "Role": "Roles",
+        "RoleBinding": "RoleBindings",
+    }
+
     async def create_metric(self, body):
         """Create the specified Metric.
 

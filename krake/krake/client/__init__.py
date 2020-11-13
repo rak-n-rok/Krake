@@ -127,11 +127,16 @@ class ApiClient(object):
     Attributes:
         client (krake.client.Client): the lower-level client to use to create the actual
             connections.
+        plurals (dict[str, str]): contains the name of the resources handled by the
+            current API and their corresponding names in plural:
+            "<name_in_singular>": "<name_in_plural>"
 
     Args:
         client (krake.client.Client): client to use for the HTTP communications.
 
     """
+
+    plurals = {}
 
     def __init__(self, client):
         self.client = client
