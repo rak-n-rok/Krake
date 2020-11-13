@@ -7,6 +7,22 @@ from argparse import Action
 import black
 from jinja2 import FileSystemLoader, Environment, TemplateNotFound
 
+from krake.apidefs.definitions import ApiDef
+
+
+def is_api_def(obj):
+    """Check if the given object is an instance of :class:`ApiDef`.
+
+    Args:
+        obj: the object to check.
+
+    Returns:
+        bool: True if the given object is an instance of ApiDef, or one of its inherited
+            class.
+
+    """
+    return isinstance(obj, ApiDef)
+
 
 def get_data_classes(data_path, condition=None):
     """Get a list of references to the objects defined in the given module. The classes
