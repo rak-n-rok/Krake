@@ -31,7 +31,7 @@ async def test_list_all_{{ operation.signature_name }}_rbac(rbac_allow, config, 
     async with rbac_allow(
         "{{ operation.resource.api }}",
         "{{ operation.resource.plural|lower }}",
-        "list"{{ namespace_none(operation) }}
+        "list"
     ):
         resp = await client.get("{{ operation.path }}")
         assert resp.status == 200

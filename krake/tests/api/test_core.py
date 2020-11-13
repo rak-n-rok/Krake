@@ -56,7 +56,7 @@ async def test_create_metric_rbac(rbac_allow, config, aiohttp_client):
     resp = await client.post("/core/metrics")
     assert resp.status == 403
 
-    async with rbac_allow("core", "metrics", "create", namespace=None):
+    async with rbac_allow("core", "metrics", "create"):
         resp = await client.post("/core/metrics")
         assert resp.status == 415
 
@@ -116,7 +116,7 @@ async def test_delete_metric_rbac(rbac_allow, config, aiohttp_client):
     resp = await client.delete("/core/metrics/my-resource")
     assert resp.status == 403
 
-    async with rbac_allow("core", "metrics", "delete", namespace=None):
+    async with rbac_allow("core", "metrics", "delete"):
         resp = await client.delete("/core/metrics/my-resource")
         assert resp.status == 404
 
@@ -161,7 +161,7 @@ async def test_list_metrics_rbac(rbac_allow, config, aiohttp_client):
     resp = await client.get("/core/metrics")
     assert resp.status == 403
 
-    async with rbac_allow("core", "metrics", "list", namespace=None):
+    async with rbac_allow("core", "metrics", "list"):
         resp = await client.get("/core/metrics")
         assert resp.status == 200
 
@@ -239,7 +239,7 @@ async def test_read_metric_rbac(rbac_allow, config, aiohttp_client):
     resp = await client.get("/core/metrics/my-resource")
     assert resp.status == 403
 
-    async with rbac_allow("core", "metrics", "get", namespace=None):
+    async with rbac_allow("core", "metrics", "get"):
         resp = await client.get("/core/metrics/my-resource")
         assert resp.status == 404
 
@@ -296,7 +296,7 @@ async def test_update_metric_rbac(rbac_allow, config, aiohttp_client):
     resp = await client.put("/core/metrics/my-resource")
     assert resp.status == 403
 
-    async with rbac_allow("core", "metrics", "update", namespace=None):
+    async with rbac_allow("core", "metrics", "update"):
         resp = await client.put("/core/metrics/my-resource")
         assert resp.status == 415
 
@@ -327,7 +327,7 @@ async def test_create_metrics_provider_rbac(rbac_allow, config, aiohttp_client):
     resp = await client.post("/core/metricsproviders")
     assert resp.status == 403
 
-    async with rbac_allow("core", "metricsproviders", "create", namespace=None):
+    async with rbac_allow("core", "metricsproviders", "create"):
         resp = await client.post("/core/metricsproviders")
         assert resp.status == 415
 
@@ -387,7 +387,7 @@ async def test_delete_metrics_provider_rbac(rbac_allow, config, aiohttp_client):
     resp = await client.delete("/core/metricsproviders/my-resource")
     assert resp.status == 403
 
-    async with rbac_allow("core", "metricsproviders", "delete", namespace=None):
+    async with rbac_allow("core", "metricsproviders", "delete"):
         resp = await client.delete("/core/metricsproviders/my-resource")
         assert resp.status == 404
 
@@ -432,7 +432,7 @@ async def test_list_metrics_providers_rbac(rbac_allow, config, aiohttp_client):
     resp = await client.get("/core/metricsproviders")
     assert resp.status == 403
 
-    async with rbac_allow("core", "metricsproviders", "list", namespace=None):
+    async with rbac_allow("core", "metricsproviders", "list"):
         resp = await client.get("/core/metricsproviders")
         assert resp.status == 200
 
@@ -512,7 +512,7 @@ async def test_read_metrics_provider_rbac(rbac_allow, config, aiohttp_client):
     resp = await client.get("/core/metricsproviders/my-resource")
     assert resp.status == 403
 
-    async with rbac_allow("core", "metricsproviders", "get", namespace=None):
+    async with rbac_allow("core", "metricsproviders", "get"):
         resp = await client.get("/core/metricsproviders/my-resource")
         assert resp.status == 404
 
@@ -569,7 +569,7 @@ async def test_update_metrics_provider_rbac(rbac_allow, config, aiohttp_client):
     resp = await client.put("/core/metricsproviders/my-resource")
     assert resp.status == 403
 
-    async with rbac_allow("core", "metricsproviders", "update", namespace=None):
+    async with rbac_allow("core", "metricsproviders", "update"):
         resp = await client.put("/core/metricsproviders/my-resource")
         assert resp.status == 415
 
@@ -599,7 +599,7 @@ async def test_create_role_rbac(rbac_allow, config, aiohttp_client):
     resp = await client.post("/core/roles")
     assert resp.status == 403
 
-    async with rbac_allow("core", "roles", "create", namespace=None):
+    async with rbac_allow("core", "roles", "create"):
         resp = await client.post("/core/roles")
         assert resp.status == 415
 
@@ -657,7 +657,7 @@ async def test_delete_role_rbac(rbac_allow, config, aiohttp_client):
     resp = await client.delete("/core/roles/my-resource")
     assert resp.status == 403
 
-    async with rbac_allow("core", "roles", "delete", namespace=None):
+    async with rbac_allow("core", "roles", "delete"):
         resp = await client.delete("/core/roles/my-resource")
         assert resp.status == 404
 
@@ -702,7 +702,7 @@ async def test_list_roles_rbac(rbac_allow, config, aiohttp_client):
     resp = await client.get("/core/roles")
     assert resp.status == 403
 
-    async with rbac_allow("core", "roles", "list", namespace=None):
+    async with rbac_allow("core", "roles", "list"):
         resp = await client.get("/core/roles")
         assert resp.status == 200
 
@@ -780,7 +780,7 @@ async def test_read_role_rbac(rbac_allow, config, aiohttp_client):
     resp = await client.get("/core/roles/my-resource")
     assert resp.status == 403
 
-    async with rbac_allow("core", "roles", "get", namespace=None):
+    async with rbac_allow("core", "roles", "get"):
         resp = await client.get("/core/roles/my-resource")
         assert resp.status == 404
 
@@ -837,7 +837,7 @@ async def test_update_role_rbac(rbac_allow, config, aiohttp_client):
     resp = await client.put("/core/roles/my-resource")
     assert resp.status == 403
 
-    async with rbac_allow("core", "roles", "update", namespace=None):
+    async with rbac_allow("core", "roles", "update"):
         resp = await client.put("/core/roles/my-resource")
         assert resp.status == 415
 
@@ -867,7 +867,7 @@ async def test_create_role_binding_rbac(rbac_allow, config, aiohttp_client):
     resp = await client.post("/core/rolebindings")
     assert resp.status == 403
 
-    async with rbac_allow("core", "rolebindings", "create", namespace=None):
+    async with rbac_allow("core", "rolebindings", "create"):
         resp = await client.post("/core/rolebindings")
         assert resp.status == 415
 
@@ -927,7 +927,7 @@ async def test_delete_role_binding_rbac(rbac_allow, config, aiohttp_client):
     resp = await client.delete("/core/rolebindings/my-resource")
     assert resp.status == 403
 
-    async with rbac_allow("core", "rolebindings", "delete", namespace=None):
+    async with rbac_allow("core", "rolebindings", "delete"):
         resp = await client.delete("/core/rolebindings/my-resource")
         assert resp.status == 404
 
@@ -972,7 +972,7 @@ async def test_list_role_bindings_rbac(rbac_allow, config, aiohttp_client):
     resp = await client.get("/core/rolebindings")
     assert resp.status == 403
 
-    async with rbac_allow("core", "rolebindings", "list", namespace=None):
+    async with rbac_allow("core", "rolebindings", "list"):
         resp = await client.get("/core/rolebindings")
         assert resp.status == 200
 
@@ -1050,7 +1050,7 @@ async def test_read_role_binding_rbac(rbac_allow, config, aiohttp_client):
     resp = await client.get("/core/rolebindings/my-resource")
     assert resp.status == 403
 
-    async with rbac_allow("core", "rolebindings", "get", namespace=None):
+    async with rbac_allow("core", "rolebindings", "get"):
         resp = await client.get("/core/rolebindings/my-resource")
         assert resp.status == 404
 
@@ -1109,6 +1109,6 @@ async def test_update_role_binding_rbac(rbac_allow, config, aiohttp_client):
     resp = await client.put("/core/rolebindings/my-resource")
     assert resp.status == 403
 
-    async with rbac_allow("core", "rolebindings", "update", namespace=None):
+    async with rbac_allow("core", "rolebindings", "update"):
         resp = await client.put("/core/rolebindings/my-resource")
         assert resp.status == 415

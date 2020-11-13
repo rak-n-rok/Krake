@@ -47,7 +47,7 @@ async def test_delete_{{ operation.signature_name }}_rbac(rbac_allow, config, ai
     async with rbac_allow(
         "{{ operation.resource.api }}",
         "{{ operation.resource.plural|lower }}",
-        "delete"{{ namespace_none(operation) }}
+        "delete"
     ):
         resp = await client.delete(
             "{{ operation.path.format(namespace="testing", name="my-resource") }}"

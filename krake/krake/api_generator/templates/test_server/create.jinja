@@ -29,7 +29,7 @@ async def test_create_{{ operation.signature_name }}_rbac(rbac_allow, config, ai
     async with rbac_allow(
         "{{ operation.resource.api }}",
         "{{ operation.resource.plural|lower }}",
-        "create"{{ namespace_none(operation) }}
+        "create"
     ):
         resp = await client.post("{{ operation.path.format(namespace="testing", name="{name}") }}")
         assert resp.status == 415

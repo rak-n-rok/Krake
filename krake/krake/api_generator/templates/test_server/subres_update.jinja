@@ -40,7 +40,7 @@ async def test_update_{{ operation.signature_name }}_rbac(rbac_allow, config, ai
     async with rbac_allow(
         "{{ operation.resource.api }}",
         "{{ operation.subresource.resource_name }}",
-        "update"{{ namespace_none(operation) }}
+        "update"
     ):
         resp = await client.put("{{ operation.path.format(namespace="testing", name="my-resource") }}")
         assert resp.status == 415

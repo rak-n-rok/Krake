@@ -23,7 +23,7 @@ async def test_read_{{ operation.signature_name }}_rbac(rbac_allow, config, aioh
     async with rbac_allow(
         "{{ operation.resource.api }}",
         "{{ operation.resource.plural|lower }}",
-        "get"{{ namespace_none(operation) }}
+        "get"
     ):
         resp = await client.get(
             "{{ operation.path.format(namespace="testing", name="my-resource") }}"
