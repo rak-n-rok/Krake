@@ -31,10 +31,29 @@ To use a specific generator:
 import argparse
 
 import krake.api_generator.api_definition as api_definition
-import krake.api_generator.api_client as api_client
-import krake.api_generator.api_server as api_server
-import krake.api_generator.test_client as test_client
-import krake.api_generator.test_server as test_server
+from krake.api_generator.api_or_test_generator import ApiOrTestGenerator
+
+
+def add_generators(parsers):
+    api_client = ApiOrTestGenerator(
+        "api_client", "api_client/main.jinja", "API client code"
+    )
+    api_client.add_apidef_subparser(parsers)
+
+    api_server = ApiOrTestGenerator(
+        "api_server", "api_server/main.jinja", "API server-side code"
+    )
+    api_server.add_apidef_subparser(parsers)
+
+    test_client = ApiOrTestGenerator(
+        "test_client", "test_client/main.jinja", "unit tests for the API client"
+    )
+    test_client.add_apidef_subparser(parsers)
+
+    test_server = ApiOrTestGenerator(
+        "test_server", "test_client/main.jinja", "unit tests for the API server code"
+    )
+    test_server.add_apidef_subparser(parsers)
 
 
 if __name__ == "__main__":
@@ -42,10 +61,7 @@ if __name__ == "__main__":
     subparsers = parser.add_subparsers()
 
     api_definition.add_apidef_subparser(subparsers)
-    api_client.add_apidef_subparser(subparsers)
-    api_server.add_apidef_subparser(subparsers)
-    test_client.add_apidef_subparser(subparsers)
-    test_server.add_apidef_subparser(subparsers)
+    add_generators(subparsers)
 
     args = parser.parse_args()
 
