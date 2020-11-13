@@ -18,8 +18,6 @@ For example:
     python -m krake.api_generator api_client krake.apidefs.core
 
 """
-import os
-
 from krake.api_generator.utils import (
     add_templates_dir,
     get_data_classes,
@@ -52,7 +50,7 @@ def generate_api_client(
     data_path,
     templates_dir,
     no_black,
-    template_path="main.jinja",
+    template_path="api_client/main.jinja",
     operations=None,
     resources=None,
 ):
@@ -106,8 +104,7 @@ def add_apidef_subparser(subparsers):
             "Syntax: '<path>.<to>.<module>'. Example: 'krake.api.apidefs.foo'."
         ),
     )
-    default = os.path.join(get_default_template_dir(), "api_client")
-    add_templates_dir(parser=parser, default=default)
+    add_templates_dir(parser=parser, default=get_default_template_dir())
 
     add_no_black_formatting(parser=parser)
 

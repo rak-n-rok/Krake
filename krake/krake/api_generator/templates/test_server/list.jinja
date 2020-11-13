@@ -31,7 +31,7 @@ async def test_list_{{ operation.signature_name }}_rbac(rbac_allow, config, aioh
     async with rbac_allow(
         "{{ operation.resource.api }}",
         "{{ operation.resource.plural|lower }}",
-        "list"{{ namespace_none(operation) }}
+        "list"
     ):
         resp = await client.get("{{ operation.path.format(namespace="testing", name="{name}") }}")
         assert resp.status == 200
