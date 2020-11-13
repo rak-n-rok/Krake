@@ -26,6 +26,10 @@ from krake.api_generator.utils import (
     get_default_template_dir,
     render_and_print,
     add_no_black_formatting,
+    add_operations_to_keep,
+    filter_operations,
+    add_resources_to_keep,
+    filter_resources,
 )
 from krake.apidefs.definitions import ApiDef
 
@@ -44,7 +48,14 @@ def is_api_def(obj):
     return isinstance(obj, ApiDef)
 
 
-def generate_api_server(data_path, templates_dir, no_black, template_path="main.jinja"):
+def generate_api_server(
+    data_path,
+    templates_dir,
+    no_black,
+    template_path="main.jinja",
+    operations=None,
+    resources=None,
+):
     """From a given Krake API definition path, print a Python file that contains the
     code of an implementation of the server side for this API definition, to be included
     in Krake.
@@ -55,11 +66,21 @@ def generate_api_server(data_path, templates_dir, no_black, template_path="main.
         templates_dir (str): path of the directory in which the template is stored.
         no_black (bool): if True, the black formatting will not be used.
         template_path (str): name of the template.
+        operations (list[str]): list of names of operations that the generator should
+            display. If empty, all operations are processed and displayed.
+        resources (list[str]): list of names of resources that the generator should
+            display. If empty, all resources are processed and displayed.
 
     """
     api_definitions = get_data_classes(data_path, condition=is_api_def)
     assert len(api_definitions) == 1, "Only one API should be defined."
     api_definition = api_definitions[0]
+
+    if resources:
+        filter_resources(api_definition, resources)
+
+    if operations:
+        filter_operations(api_definition, operations)
 
     parameters = {"api_def": api_definition}
     render_and_print(templates_dir, template_path, parameters, no_black=no_black)
@@ -89,5 +110,8 @@ def add_apidef_subparser(subparsers):
     add_templates_dir(parser=parser, default=default)
 
     add_no_black_formatting(parser=parser)
+
+    add_operations_to_keep(parser=parser)
+    add_resources_to_keep(parser=parser)
 
     parser.set_defaults(generator=generate_api_server)
