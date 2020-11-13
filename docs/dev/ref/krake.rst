@@ -28,18 +28,11 @@ krake.api
     application. It exchanges objects with the various clients defined in
     krake.client_. These objects are the ones defined in krake.data_.
 
-krake.apidef
-    .. _krake.apidef:
-
-    This module contains the definitions of the resources accessible via the
-    API. Operations to access these resources are defined there.
-
 krake.client
     .. _krake.client:
 
     This module contains all the necessary logic for any kind of client to
-    communicate with the API described in the krake.api_ module. All routes
-    are automatically generated using the definitions of krake.apidef_.
+    communicate with the API described in the krake.api_ module.
 
 krake.controller
     This module contains the base controller and the definition for several
@@ -123,35 +116,10 @@ Middlewares
     :members:
     :show-inheritance:
 
-API Generator
-~~~~~~~~~~~~~
-
-.. automodule:: krake.api.generator
-    :members:
-    :show-inheritance:
-
-API Definitions
----------------
-
-.. automodule:: krake.apidefs
-    :members:
-    :show-inheritance:
-
-.. automodule:: krake.apidefs.definitions
-    :members:
-    :show-inheritance:
-
 Client
 ------
 
 .. automodule:: krake.client
-    :members:
-    :show-inheritance:
-
-Client Generator
-~~~~~~~~~~~~~~~~
-
-.. automodule:: krake.client.generator
     :members:
     :show-inheritance:
 
