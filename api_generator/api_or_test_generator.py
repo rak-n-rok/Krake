@@ -1,4 +1,4 @@
-from krake.api_generator.utils import (
+from .utils import (
     is_api_def,
     add_templates_dir,
     get_data_classes,
@@ -98,7 +98,7 @@ class ApiOrTestGenerator(object):
         parser.add_argument(
             "data_path",
             help=(
-                "Path to the module to parse for API definitions."
+                "Path to the module to parse for API definitions. "
                 "Syntax: '<path>.<to>.<module>'. Example: 'krake.api.apidefs.foo'."
             ),
         )

@@ -1,9 +1,10 @@
+from krake.api.helpers import ListQuery
 from {{ api_def.module_path }} import (
 {%- for cls_name in api_def.import_classes %}
     {{ cls_name }},
 {%- endfor %}
 )
-from .definitions import ApiDef, Scope, operation, subresource, ListQuery
+from .definitions import ApiDef, Scope, operation, subresource
 
 
 {{ api_def.name }} = ApiDef("{{ api_def.name }}")

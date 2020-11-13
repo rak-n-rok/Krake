@@ -1,3 +1,4 @@
+from krake.api.helpers import ListQuery
 from krake.data.openstack import (
     MagnumCluster,
     MagnumClusterList,
@@ -5,7 +6,7 @@ from krake.data.openstack import (
     Project,
     ProjectList,
 )
-from .definitions import ApiDef, Scope, operation, subresource, ListQuery
+from .definitions import ApiDef, Scope, operation, subresource
 
 
 openstack = ApiDef("openstack")

@@ -18,6 +18,8 @@ class OpenStackApi(ApiClient):
 
     """
 
+    plurals = {"MagnumCluster": "MagnumClusters", "Project": "Projects"}
+
     async def create_magnum_cluster(self, body, namespace):
         """Create the specified MagnumCluster.
 

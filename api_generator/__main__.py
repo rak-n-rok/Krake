@@ -30,8 +30,8 @@ To use a specific generator:
 """
 import argparse
 
-import krake.api_generator.api_definition as api_definition
-from krake.api_generator.api_or_test_generator import ApiOrTestGenerator
+from .api_definition import add_apidef_subparser
+from .api_or_test_generator import ApiOrTestGenerator
 
 
 def add_generators(parsers):
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Code generator for the Krake API.")
     subparsers = parser.add_subparsers()
 
-    api_definition.add_apidef_subparser(subparsers)
+    add_apidef_subparser(subparsers)
     add_generators(subparsers)
 
     args = parser.parse_args()

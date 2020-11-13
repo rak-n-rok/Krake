@@ -17,8 +17,8 @@ from krake.api.helpers import (
     HttpReasonCode,
     make_create_request_schema,
     json_error,
+    ListQuery,
 )
-from krake.apidefs.definitions import ListQuery
 from krake.data.core import WatchEvent, WatchEventType, ListMetadata
 from krake.data.openstack import (
     ProjectList,

@@ -1,3 +1,4 @@
+from krake.api.helpers import ListQuery
 from krake.data.core import (
     GlobalMetric,
     GlobalMetricList,
@@ -8,7 +9,7 @@ from krake.data.core import (
     RoleBinding,
     RoleBindingList,
 )
-from .definitions import ApiDef, Scope, operation, ListQuery
+from .definitions import ApiDef, Scope, operation
 
 
 core = ApiDef("core")

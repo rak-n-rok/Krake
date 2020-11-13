@@ -18,6 +18,8 @@ class KubernetesApi(ApiClient):
 
     """
 
+    plurals = {"Application": "Applications", "Cluster": "Clusters"}
+
     async def create_application(self, body, namespace):
         """Create the specified Application.
 

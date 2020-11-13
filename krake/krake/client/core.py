@@ -27,6 +27,13 @@ class CoreApi(ApiClient):
 
     """
 
+    plurals = {
+        "GlobalMetric": "GlobalMetrics",
+        "GlobalMetricsProvider": "GlobalMetricsProviders",
+        "Role": "Roles",
+        "RoleBinding": "RoleBindings",
+    }
+
     async def create_global_metric(self, body):
         """Create the specified GlobalMetric.
 

@@ -24,6 +24,12 @@ class {{ api_def.name|title }}Api(ApiClient):
 
     """
 
+    plurals = {
+    {% for resource in api_def.resources %}
+        "{{ resource.singular }}": "{{ resource.plural }}",
+    {% endfor %}
+    }
+
 {% for resource in api_def.resources %}
     {% for operation in resource.operations %}
         {#- The macro is used to be able to apply the "indent" filter -#}

@@ -38,14 +38,6 @@ from krake import (
     ConfigurationOptionMapper,
 )
 from krake.client.core import CoreApi
-from krake.apidefs.core import (
-    RoleBindingResource,
-    RoleResource,
-    GlobalMetricsProviderResource,
-    GlobalMetricResource,
-)
-from krake.apidefs.kubernetes import ApplicationResource, ClusterResource
-from krake.apidefs.openstack import ProjectResource, MagnumClusterResource
 from krake.client.openstack import OpenStackApi
 from krake.controller import Controller, run, Reflector, create_ssl_context
 from krake.data.config import ControllerConfiguration
@@ -271,20 +263,9 @@ class GarbageCollector(Controller):
         self.worker_count = worker_count
 
         self.resources = {
-            CoreApi: [
-                (Role, RoleResource),
-                (RoleBinding, RoleBindingResource),
-                (GlobalMetric, GlobalMetricResource),
-                (GlobalMetricsProvider, GlobalMetricsProviderResource),
-            ],
-            KubernetesApi: [
-                (Application, ApplicationResource),
-                (Cluster, ClusterResource),
-            ],
-            OpenStackApi: [
-                (Project, ProjectResource),
-                (MagnumCluster, MagnumClusterResource),
-            ],
+            CoreApi: [Role, RoleBinding, GlobalMetric, GlobalMetricsProvider],
+            KubernetesApi: [Application, Cluster],
+            OpenStackApi: [Project, MagnumCluster],
         }
         self.graph = DependencyGraph()
 
@@ -300,18 +281,19 @@ class GarbageCollector(Controller):
             api = api_cls(self.client)
 
             # For each selected resource of the current API
-            for kind, client_resource in kind_list:
+            for kind in kind_list:
                 self.apis[(kind.api, kind.kind)] = api
 
-                resource_plural = camel_to_snake_case(client_resource.plural)
+                resource_plural = api_cls.plurals[kind.kind]
+                snake_plural = camel_to_snake_case(resource_plural)
 
                 # Handle namespaced and non-namespaced resources
-                if hasattr(api, f"list_all_{resource_plural}"):
-                    list_resources = getattr(api, f"list_all_{resource_plural}")
-                    watch_resources = getattr(api, f"watch_all_{resource_plural}")
+                if hasattr(api, f"list_all_{snake_plural}"):
+                    list_resources = getattr(api, f"list_all_{snake_plural}")
+                    watch_resources = getattr(api, f"watch_all_{snake_plural}")
                 else:
-                    list_resources = getattr(api, f"list_{resource_plural}")
-                    watch_resources = getattr(api, f"watch_{resource_plural}")
+                    list_resources = getattr(api, f"list_{snake_plural}")
+                    watch_resources = getattr(api, f"watch_{snake_plural}")
 
                 reflector = Reflector(
                     listing=list_resources,
@@ -321,7 +303,7 @@ class GarbageCollector(Controller):
                     on_update=self.on_received_update,
                     on_delete=self.on_received_deleted,
                     loop=self.loop,
-                    resource_plural=client_resource.plural,
+                    resource_plural=resource_plural,
                 )
                 self.reflectors.append(reflector)
 
