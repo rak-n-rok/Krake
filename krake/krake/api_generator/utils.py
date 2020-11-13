@@ -20,8 +20,8 @@ def get_data_classes(data_path, condition=None):
             "krake.data.my_api".
 
     Returns:
-        list[type]: the list of references to the objects extracted from the module at
-            the given path.
+        list[krake.apidefs.definitions.ApiDef]: the list of API definitions extracted
+            from the module at the given path.
 
     Raises:
         SystemExit: if the given module path is not valid.
@@ -137,7 +137,7 @@ def add_template_path(parser, default=None, **kwargs):
     add_option(
         parser,
         name="--template-path",
-        help=f"Relative path of the template in the template directory.",
+        help="Relative path of the template in the template directory.",
         default=default,
         **kwargs,
     )
@@ -216,3 +216,110 @@ def render_and_print(templates_dir, template_path, parameters, no_black=False):
         output = black.format_str(output, mode=black.FileMode())
 
     print(output)
+
+
+def add_operations_to_keep(parser, **kwargs):
+    """Add an "--operations" option for the given parser, which can be reused several
+    times. The resulting list of strings can then be used for a list of operations to
+    display.
+
+    Args:
+        parser (argparse.ArgumentParser): parser to which the option will be added.
+        **kwargs (dict): additional arguments to give to the parser.
+
+    """
+    add_option(
+        parser,
+        short="-o",
+        name="--operations",
+        help=(
+            "Names of operations from the API definition resources (any case) that"
+            " will be displayed by the generator. Can be used several times. Empty to"
+            " keep all operations."
+        ),
+        action="append",
+        **kwargs,
+    )
+
+
+def _keep_given_operations(resource, operations):
+    """From the provided resource, remove all operations which are not in the provided
+    operations list.
+
+    Args:
+        resource: API definition resource or subresource.
+        operations (list[str]): list of operations name to keep.
+
+    """
+    for res_operation in list(resource.operations):
+        if res_operation.name.lower() not in operations:
+            resource.operations.remove(res_operation)
+
+
+def filter_operations(api_definition, keep_operations):
+    """From an API definition, remove all operations on all resources and sub-resources
+    that are not in the provided operations.
+
+    Args:
+        api_definition (krake.apidefs.definitions.ApiDef): API definition extracted from
+            a module file.
+        keep_operations (list[str]): list of operations name to keep.
+
+    """
+    if len(set(keep_operations)) != len(keep_operations):
+        sys.exit("Error: some operations to keep are duplicates.")
+
+    keep_operations = [op.lower() for op in keep_operations]
+
+    for resource in api_definition.resources:
+        _keep_given_operations(resource, keep_operations)
+
+        for sub_resource in resource.subresources:
+            _keep_given_operations(sub_resource, keep_operations)
+
+
+def add_resources_to_keep(parser, **kwargs):
+    """Add an "--resources" option for the given parser, which can be reused several
+    times. The resulting list of strings can then be used for a list of resources to
+    display.
+
+    Args:
+        parser (argparse.ArgumentParser): parser to which the option will be added.
+        **kwargs (dict): additional arguments to give to the parser.
+
+    """
+    add_option(
+        parser,
+        short="-r",
+        name="--resources",
+        help=(
+            "Names of resources from the API definition (any case) that will be"
+            " displayed by the generator. Can be used several times. Empty to keep all"
+            " resources."
+        ),
+        action="append",
+        **kwargs,
+    )
+
+
+def filter_resources(api_definition, keep_resources):
+    """From an API definition, remove all resources on all resources and sub-resources
+    that are not in the provided resources.
+
+    Args:
+        api_definition (krake.apidefs.definitions.ApiDef): API definition extracted from
+            a module file.
+        keep_resources (list[str]): list of resources name to keep.
+
+    """
+    if len(set(keep_resources)) != len(keep_resources):
+        sys.exit("Error: some resources to keep are duplicates.")
+
+    keep_resources = [op.lower() for op in keep_resources]
+
+    for resource in list(api_definition.resources):
+        if (
+            resource.singular.lower() not in keep_resources
+            and resource.snake_case_singular.lower() not in keep_resources
+        ):
+            api_definition.resources.remove(resource)
