@@ -5,11 +5,11 @@ import logging
 import dataclasses
 import json
 from functools import partial
-from datetime import datetime
 from uuid import uuid4
 from aiohttp import web
 from webargs.aiohttpparser import use_kwargs
 
+from krake import utils
 from krake.data.core import WatchEvent, WatchEventType, ListMetadata
 from ..utils import camel_to_snake_case, get_field
 from .helpers import load, session, Heartbeat, use_schema, HttpReason, HttpReasonCode
@@ -297,7 +297,7 @@ def _make_create_handler(operation, logger):
                 text=json.dumps(reason.serialize()), content_type="application/json"
             )
 
-        now = datetime.now()
+        now = utils.now()
 
         body.metadata.namespace = namespace
         body.metadata.uid = str(uuid4())
@@ -353,7 +353,7 @@ def _make_update_handler(operation, logger):
                 )
 
         entity.update(body)
-        entity.metadata.modified = datetime.now()
+        entity.metadata.modified = utils.now()
 
         # Resource is in "deletion in progress" state and all finalizers have
         # been removed. Delete the resource from database.
@@ -395,7 +395,7 @@ def _make_delete_handler(operation, logger):
 
         # TODO: Should be update "modified" here?
         # Resource marked as deletion, to be deleted by the Garbage Collector
-        entity.metadata.deleted = datetime.now()
+        entity.metadata.deleted = utils.now()
         entity.metadata.finalizers.append("cascade_deletion")
 
         await session(request).put(entity)

@@ -69,8 +69,8 @@ The script needs Krake to be installed to be launched.
 
 import argparse
 import asyncio
+from krake import utils
 import sys
-from datetime import datetime
 from typing import NamedTuple
 from uuid import uuid4
 
@@ -209,7 +209,7 @@ async def insert_resource(resource, db_host, db_port, force=False):
 
             await session.delete(stored)
 
-        now = datetime.now()
+        now = utils.now()
         if not to_store.metadata.uid:
             to_store.metadata.uid = str(uuid4())
         if not to_store.metadata.created:

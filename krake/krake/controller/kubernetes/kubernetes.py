@@ -2,11 +2,13 @@ import asyncio
 import logging
 from contextlib import suppress
 from copy import deepcopy
-from datetime import datetime
 from functools import partial
 
 from aiohttp import ClientResponseError
 from krake.controller.kubernetes.client import KubernetesClient
+
+from krake import utils
+
 from kubernetes_asyncio.client.rest import ApiException
 from typing import NamedTuple, Tuple
 
@@ -260,7 +262,7 @@ class KubernetesController(Controller):
 
         # The Application needs to be processed (thus accepted) by the Kubernetes
         # Controller
-        app.status.kube_controller_triggered = datetime.now()
+        app.status.kube_controller_triggered = utils.now()
         assert app.metadata.modified is not None
 
         app = await self.kubernetes_api.update_application_status(

@@ -1,6 +1,7 @@
 import asyncio
 import re
 import dataclasses
+from datetime import datetime, timezone
 
 
 def camel_to_snake_case(name):
@@ -58,3 +59,13 @@ class cached_property(object):
 
         value = obj.__dict__[self.func.__name__] = self.func(obj)
         return value
+
+
+def now():
+    """Returns the current time in the UTC timezone.
+
+    Returns:
+        datetime.datetime: the current time (UTC timezone)
+
+    """
+    return datetime.now(timezone.utc)
