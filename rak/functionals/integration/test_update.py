@@ -198,7 +198,28 @@ def test_update_cluster_kubeconfig(minikube_clusters):
         response = run(f"rok kube cluster get {cluster.name} -o json")
 
         cluster_details = response.json
-        assert cluster_details["spec"]["kubeconfig"] == other_content
+        # As rok processes the kubeconfig file, the actual value in the Cluster resource
+        # is different from the given file.
+        resp_kubeconfig = cluster_details["spec"]["kubeconfig"]
+        kubeconfig_cluster = resp_kubeconfig["clusters"][0]
+
+        with open(kubeconfig_path, "r") as f:
+            original_kubeconfig = yaml.safe_load(f)
+
+        # The kubeconfig file used in the Cluster resource is not anymore the one used
+        # when it was created.
+        assert kubeconfig_cluster["name"] != original_kubeconfig["clusters"][0]["name"]
+        assert (
+            kubeconfig_cluster["cluster"]["server"]
+            != original_kubeconfig["clusters"][0]["cluster"]["server"]
+        )
+        # Instead, the kubeconfig now points to the other kubeconfig file, used during
+        # the update.
+        assert kubeconfig_cluster["name"] == other_content["clusters"][0]["name"]
+        assert (
+            kubeconfig_cluster["cluster"]["server"]
+            == other_content["clusters"][0]["cluster"]["server"]
+        )
 
 
 def test_update_cluster_labels(minikube_clusters):
