@@ -12,7 +12,15 @@ from webargs.aiohttpparser import use_kwargs
 from krake import utils
 from krake.data.core import WatchEvent, WatchEventType, ListMetadata
 from ..utils import camel_to_snake_case, get_field
-from .helpers import load, session, Heartbeat, use_schema, HttpReason, HttpReasonCode
+from .helpers import (
+    load,
+    session,
+    Heartbeat,
+    use_schema,
+    HttpReason,
+    HttpReasonCode,
+    json_error,
+)
 from .auth import protected
 from .database import EventType
 
@@ -351,6 +359,14 @@ def _make_update_handler(operation, logger):
                     ),
                     content_type="application/json",
                 )
+
+        # FIXME: if a user updates an immutable field, (such as the created timestamp),
+        #  the request is accepted and the API returns 200. The `modified` timestamp
+        #  will also still be updated, even though no change from the request on
+        #  immutable fields will be applied.
+        #  Changes to immutable fields should be rejected, see Krake issue #410
+        if body == entity:
+            raise json_error(web.HTTPBadRequest, "The body contained no update.")
 
         entity.update(body)
         entity.metadata.modified = utils.now()

@@ -4,7 +4,12 @@ from krake.api.app import create_app
 from krake.api.helpers import HttpReason, HttpReasonCode
 from krake.data.core import Role, RoleBinding, RoleList, RoleBindingList, resource_ref
 
-from tests.factories.core import RoleFactory, RoleBindingFactory
+from tests.factories.core import (
+    RoleFactory,
+    RoleBindingFactory,
+    MetricFactory,
+    MetricsProviderFactory,
+)
 
 
 # -----------------------------------------------------------------------------
@@ -133,6 +138,16 @@ async def test_delete_role_rbac(rbac_allow, aiohttp_client, config, db):
         assert resp.status == 404
 
 
+async def test_update_role_no_changes(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = RoleFactory()
+    await db.put(data)
+
+    resp = await client.put(f"/core/roles/{data.metadata.name}", json=data.serialize())
+    assert resp.status == 400
+
+
 # -----------------------------------------------------------------------------
 # Role Bindings
 # -----------------------------------------------------------------------------
@@ -254,3 +269,37 @@ async def test_delete_role_binding_rbac(rbac_allow, aiohttp_client, config, db):
     async with rbac_allow("core", "rolebindings", "delete", namespace=None):
         resp = await client.delete("/core/rolebindings/mybinding")
         assert resp.status == 404
+
+
+async def test_update_role_binding_no_changes(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = RoleBindingFactory()
+    await db.put(data)
+
+    resp = await client.put(
+        f"/core/rolebindings/{data.metadata.name}", json=data.serialize()
+    )
+    assert resp.status == 400
+
+
+async def test_update_metrics_no_changes(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = MetricFactory()
+    await db.put(data)
+
+    resp = await client.put(f"/core/metric/{data.metadata.name}", json=data.serialize())
+    assert resp.status == 400
+
+
+async def test_update_metrics_provider_no_changes(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = MetricsProviderFactory()
+    await db.put(data)
+
+    resp = await client.put(
+        f"/core/metricsprovider/{data.metadata.name}", json=data.serialize()
+    )
+    assert resp.status == 400

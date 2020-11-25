@@ -61,6 +61,11 @@ create
     ``-n | --namespace`` (optional):
         The namespace to which the Cluster has to be added. If none is given, the user namespace is selected.
 
+    ``-c | --context`` (optional):
+        The name of the context to use from the kubeconfig file. Only one context can be
+        chosen at a time. If not context is specified, the current context of the
+        kubeconfig file is chosen.
+
     ``-R | --custom-resource`` (optional):
         The name of custom resources definition in form: ``<plural>.<group>`` which is supported by the cluster. Can be specified multiple times.
 
@@ -72,6 +77,43 @@ list
 
     ``-n | --namespace`` (optional):
         The namespace from which the Clusters have to be listed. If none is given, the user namespace is selected.
+
+get
+    Request information about a specific Cluster.
+
+    ``name``:
+        The name of the Cluster to fetch.
+    ``-n | --namespace`` (optional):
+        The namespace from which the Clusters have to be retrieved. If none is given,
+        the user namespace is selected.
+
+update
+    Request a change of the current state of an existing Cluster.
+
+    ``name``:
+        The name of the Cluster to update.
+
+    ``-f | --file``:
+        The path to the manifest file that describes the Cluster with the updated
+        fields.
+
+    ``-n | --namespace`` (optional):
+        The namespace from which the Clusters have to be taken. If none is given, the
+        user namespace is selected.
+
+    ``-c | --context`` (optional):
+        The name of the context to use from the kubeconfig file. Only one context can be
+        chosen at a time. If not context is specified, the current context of the
+        kubeconfig file is chosen.
+
+    ``-R | --custom-resource`` (optional):
+        The name of custom resources definition in form: ``<plural>.<group>`` which is
+        supported by the cluster. Can be specified multiple times.
+
+    ``-m | --metric`` (optional):
+        The name and weight of cluster metric in form: ``<name> <weight>``. Can be
+        specified multiple times.
+
 
 delete
     Request the deletion of a specific Cluster from a namespace.

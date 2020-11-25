@@ -23,6 +23,7 @@ from utils import (
     check_return_code,
     check_spec_container_image,
     check_spec_replicas,
+    check_http_code_in_output,
     ClusterDefinition,
 )
 
@@ -167,7 +168,6 @@ def test_update_cluster_kubeconfig(minikube_clusters):
     1. the Cluster is updated with another kubeconfig
     2. the new state of the Cluster on the API is checked, to see if the kubeconfig
     changed.
-    3. the cluster is updated back to its original configuration.
 
     Args:
         minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
@@ -198,10 +198,28 @@ def test_update_cluster_kubeconfig(minikube_clusters):
         response = run(f"rok kube cluster get {cluster.name} -o json")
 
         cluster_details = response.json
-        assert cluster_details["spec"]["kubeconfig"] == other_content
+        # As rok processes the kubeconfig file, the actual value in the Cluster resource
+        # is different from the given file.
+        resp_kubeconfig = cluster_details["spec"]["kubeconfig"]
+        kubeconfig_cluster = resp_kubeconfig["clusters"][0]
 
-        # 3. Revert its state back
-        run(f"rok kube cluster update {cluster.name} -o {kubeconfig_path}")
+        with open(kubeconfig_path, "r") as f:
+            original_kubeconfig = yaml.safe_load(f)
+
+        # The kubeconfig file used in the Cluster resource is not anymore the one used
+        # when it was created.
+        assert kubeconfig_cluster["name"] != original_kubeconfig["clusters"][0]["name"]
+        assert (
+            kubeconfig_cluster["cluster"]["server"]
+            != original_kubeconfig["clusters"][0]["cluster"]["server"]
+        )
+        # Instead, the kubeconfig now points to the other kubeconfig file, used during
+        # the update.
+        assert kubeconfig_cluster["name"] == other_content["clusters"][0]["name"]
+        assert (
+            kubeconfig_cluster["cluster"]["server"]
+            == other_content["clusters"][0]["cluster"]["server"]
+        )
 
 
 def test_update_cluster_labels(minikube_clusters):
@@ -262,3 +280,43 @@ def test_update_cluster_labels(minikube_clusters):
             "lbl": "second",
             "other": "value",
         }
+
+
+def test_update_no_changes(minikube_clusters):
+    """In the test environment, attempt to update the Cluster with the same kubeconfig,
+    and the Application with the same manifest file. As the update does not change any
+    field of the resources, the update should be rejected in both cases.
+
+    1. the Cluster is updated with the same kubeconfig, it should return an HTTP 400
+       error code.
+    2. the Application is updated with the same manifest file, it should return an HTTP
+    400 error code.
+
+    Args:
+        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+
+    """
+    minikube_cluster = random.choice(minikube_clusters)
+
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
+
+    environment = create_simple_environment(
+        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
+    )
+
+    with Environment(environment) as resources:
+        cluster = resources["Cluster"][0]
+        app = resources["Application"][0]
+
+        # 1. "Update" the Cluster (no change is sent)
+        run(
+            f"rok kube cluster update {cluster.name} -f {kubeconfig_path}",
+            condition=check_http_code_in_output(400),
+        )
+
+        # 2. "Update" the Application (no change is sent)
+        run(
+            f"rok kube app update {app.name} -f {manifest_path}",
+            condition=check_http_code_in_output(400),
+        )

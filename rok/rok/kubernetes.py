@@ -9,7 +9,6 @@ import sys
 from argparse import FileType
 from base64 import b64encode
 
-import requests
 import yaml
 
 from .parser import (
@@ -307,8 +306,78 @@ class ClusterTable(BaseTable):
     metrics = Cell("spec.metrics")
 
 
+def replace_file_attr(spec, attr):
+    """Load file references as base64-encoded string
+
+    Deletes the file-reference attribute and add a new ``{attr}-data``
+    attribute with the base64-encoded content of the referenced file.
+
+    Attr:
+        spec (dict): Resource specification
+        attr (str): Name of the attribute
+
+    """
+    if attr in spec:
+        with open(spec[attr], "rb") as fd:
+            data = b64encode(fd.read()).decode()
+        del spec[attr]
+        spec[f"{attr}-data"] = data
+
+
+def create_cluster_config(kubeconfig, context_name=None):
+    """From the provided kubeconfig, create a new kubeconfig that only contains the
+    context provided. If no context is provided, the current one is used instead.
+
+    Args:
+        kubeconfig (_io.TextIOWrapper): the content of the provided kubeconfig file.
+        context_name (str): the name of the context to use for the extraction.
+
+    Returns:
+        dict[str, Any]: the newly created kubeconfig, with only the provided context.
+
+    """
+    config = yaml.safe_load(kubeconfig)
+
+    def find_resource_by_name(kind, name):
+        for resource in config[kind]:
+            if resource["name"] == name:
+                return resource
+        raise ValueError(f"Resource {name!r} of kind {kind!r} not found")
+
+    if not context_name:
+        current_context = find_resource_by_name("contexts", config["current-context"])
+        context_name = current_context["name"]
+
+    try:
+        context = find_resource_by_name("contexts", context_name)
+    except ValueError:
+        sys.exit(
+            f"Error: the context {context_name!r} is not present in the provided"
+            " kubeconfig file"
+        )
+
+    cluster = find_resource_by_name("clusters", context["context"]["cluster"])
+    user = find_resource_by_name("users", context["context"]["user"])
+
+    # Replace the path of the certificates with the actual certificates to prevent
+    # non-found files in Krake.
+    replace_file_attr(cluster["cluster"], "certificate-authority")
+    replace_file_attr(user["user"], "client-certificate")
+    replace_file_attr(user["user"], "client-key")
+
+    cluster_config = config.copy()
+    cluster_config["clusters"] = [cluster]
+    cluster_config["contexts"] = [context]
+    cluster_config["users"] = [user]
+    cluster_config["current-context"] = context["name"]
+
+    return cluster_config, cluster["name"]
+
+
 @cluster.command("create", help="Register an existing Kubernetes cluster")
-@argument("--context", "-c", dest="contexts", action="append")
+@argument(
+    "--context", "-c", help="Name of the context inside the kubeconfig file to use."
+)
 @argument(
     "kubeconfig",
     type=FileType(),
@@ -322,80 +391,23 @@ class ClusterTable(BaseTable):
 @depends("config", "session")
 @printer(table=ClusterTable(many=False))
 def create_cluster(
-    config, session, namespace, kubeconfig, contexts, metrics, labels, custom_resources
+    config, session, namespace, kubeconfig, context, metrics, labels, custom_resources
 ):
-    def find_resource_by_name(kind, name):
-        for resource in config[kind]:
-            if resource["name"] == name:
-                return resource
-        raise ValueError(f"Resource {name!r} of kind {kind!r} not found")
-
-    def replace_file_attr(spec, attr):
-        """Load file references as base64-encoded string
-
-        Deletes the file-reference attribute and add a new ``{attr}-data``
-        attribute with the base64-encoded content of the referenced file.
-
-        Attr:
-            spec (dict): Resource specification
-            attr (str): Name of the attribute
-
-        """
-        if attr in spec:
-            with open(spec[attr], "rb") as fd:
-                data = b64encode(fd.read()).decode()
-            del spec[attr]
-            spec[f"{attr}-data"] = data
-
     if namespace is None:
         namespace = config["user"]
 
-    config = yaml.safe_load(kubeconfig)
+    cluster_config, cluster_name = create_cluster_config(kubeconfig, context)
 
-    if not contexts:
-        current_context = find_resource_by_name("contexts", config["current-context"])
-        contexts = [current_context["name"]]
-
-    error = False
-    for context_name in contexts:
-        context = find_resource_by_name("contexts", context_name)
-        cluster = find_resource_by_name("clusters", context["context"]["cluster"])
-        user = find_resource_by_name("users", context["context"]["user"])
-
-        replace_file_attr(cluster["cluster"], "certificate-authority")
-        replace_file_attr(user["user"], "client-certificate")
-        replace_file_attr(user["user"], "client-key")
-
-        cluster_config = config.copy()
-        cluster_config["clusters"] = [cluster]
-        cluster_config["contexts"] = [context]
-        cluster_config["users"] = [user]
-        cluster_config["current-context"] = context["name"]
-        to_create = {
-            "metadata": {"name": cluster["name"], "labels": labels},
-            "spec": {
-                "kubeconfig": cluster_config,
-                "metrics": metrics,
-                "custom_resources": custom_resources,
-            },
-        }
-        try:
-            resp = session.post(
-                f"/kubernetes/namespaces/{namespace}/clusters", json=to_create
-            )
-        except requests.exceptions.HTTPError as err:
-            if err.response.status_code == 409:
-                print(
-                    f"The cluster {cluster['name']!r} already exists"
-                    f" in namespace {namespace!r}"
-                )
-                error = True
-                continue
-            raise
-
-        return resp.json()
-
-    sys.exit(error)
+    to_create = {
+        "metadata": {"name": cluster_name, "labels": labels},
+        "spec": {
+            "kubeconfig": cluster_config,
+            "metrics": metrics,
+            "custom_resources": custom_resources,
+        },
+    }
+    resp = session.post(f"/kubernetes/namespaces/{namespace}/clusters", json=to_create)
+    return resp.json()
 
 
 @cluster.command("list", help="List Kubernetes clusters")
@@ -441,6 +453,9 @@ def get_cluster(config, session, namespace, name):
 @cluster.command("update", help="Update Kubernetes cluster")
 @argument("name", help="Kubernetes cluster name")
 @argument("-f", "--file", type=FileType(), help="Kubernetes kubeconfig file")
+@argument(
+    "--context", "-c", help="Name of the context inside the kubeconfig file to use."
+)
 @arg_custom_resources
 @arg_metric
 @arg_namespace
@@ -449,7 +464,7 @@ def get_cluster(config, session, namespace, name):
 @depends("config", "session")
 @printer(table=ClusterTable())
 def update_cluster(
-    config, session, name, namespace, file, metrics, labels, custom_resources
+    config, session, name, namespace, file, context, metrics, labels, custom_resources
 ):
     if namespace is None:
         namespace = config["user"]
@@ -463,8 +478,7 @@ def update_cluster(
     cluster = resp.json()
 
     if file:
-        kubeconfig = yaml.safe_load(file)
-        cluster["spec"]["kubeconfig"] = kubeconfig
+        cluster["spec"]["kubeconfig"], _ = create_cluster_config(file, context)
 
     if labels:
         cluster["metadata"]["labels"] = labels

@@ -399,6 +399,33 @@ def allow_404(response):
         assert "404" in response.output, error_message
 
 
+def check_http_code_in_output(http_code, error_message=None):
+    """Create a callable to ensure that the given HTTP error code is present in the
+    output of the response.
+
+    Args:
+        http_code (int): the HTTP error code to check.
+        error_message (str, optional): the message that will be displayed if the check
+            fails.
+
+    Returns:
+        callable: a condition that will check its given response against the parameters
+            of the current function.
+
+    """
+
+    def validate(response):
+        message = error_message
+        if message is None:
+            message = (
+                f"The response got an HTTP code different"
+                f"from {http_code}: {response.output}"
+            )
+        assert str(http_code) in response.output, message
+
+    return validate
+
+
 class ApplicationDefinition(NamedTuple):
     """Definition of an Application resource for the test environment
     :class:`Environment`.
