@@ -46,8 +46,9 @@ from utils import (
     check_app_state,
     check_empty_list,
     check_return_code,
-    create_multiple_cluster_environment,
     create_simple_environment,
+    create_default_environment,
+    create_cluster_info,
 )
 import random
 
@@ -483,10 +484,10 @@ def test_unreachable_metrics_provider(minikube_clusters):
     # The two clusters and metrics used in this test (randomly ordered)
     num_clusters = 2
     clusters = random.sample(minikube_clusters, num_clusters)
-    # metric_names = ["heat_demand_zone_unreachable"]
-    # weights = [1]
+    metric_names = ["heat_demand_zone_unreachable"]
+    weights = [1]
 
-    metrics_by_cluster = None  # create_cluster_info(clusters, metric_names, weights)
+    metrics_by_cluster = create_cluster_info(clusters, metric_names, weights)
 
     # Determine to which cluster we expect the application to be scheduled.
     # (The cluster without the metric is expected to be chosen by the scheduler.)
@@ -494,8 +495,7 @@ def test_unreachable_metrics_provider(minikube_clusters):
 
     # 1. Create one application, one cluster without metrics, and one with
     #     the metric `heat_demand_zone_unreachable`.
-    environment = None
-    # create_default_environment(clusters, metrics=metrics_by_cluster)
+    environment = create_default_environment(clusters, metrics=metrics_by_cluster)
     with Environment(environment) as resources:
         app = resources["Application"][0]
 
