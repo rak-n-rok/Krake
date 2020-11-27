@@ -42,10 +42,8 @@ import time
 from utils import (
     Environment,
     run,
-    check_app_state,
     check_empty_list,
     check_return_code,
-    create_multiple_cluster_environment,
     create_simple_environment,
     create_default_environment,
     create_cluster_info,
@@ -325,8 +323,9 @@ def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
             `CONSTRAINT_EXPRESSIONS`) and two Minikube clusters (from a config file)
             with cluster labels (randomly selected from: `location=DE`,
             `location=IT`) and randomly selected metrics.
-        2. Ensure that the application was scheduled to the requested cluster;
-
+        2. Ensure that the application was scheduled to the cluster, which the
+            application selected through its cluster label constraints. The cluster
+            label constraints have priority over the rank calculated from the metrics.
 
     Args:
         minikube_clusters (list): Names of the Minikube backend.
