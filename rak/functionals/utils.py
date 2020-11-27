@@ -79,7 +79,7 @@ def run(command, retry=10, interval=1, condition=None, input=None, env_vars=None
         interval (int, optional): Interval in seconds between two retries
         condition (callable, optional): Condition that has to be met.
         input (str, optional): input given through stdin to the command.
-        env_vars (dict, optional): key-value pairs of additional environment
+        env_vars (dict[str: str], optional): key-value pairs of additional environment
             variables that need to be set. ROK_INSTALL_DIR will always be added
             to the PATH.
 
@@ -444,7 +444,7 @@ class ApplicationDefinition(NamedTuple):
     Args:
         name (str): name of the Application to create.
         manifest_path (str): path to the manifest file to use for the creation.
-        constraints (list(str)): optional list of cluster label constraints
+        constraints (list[str]): optional list of cluster label constraints
             to use for the creation of the application.
         migration (bool): optional migration flag indicating whether the
             application should be able to migrate.
@@ -467,7 +467,7 @@ class ApplicationDefinition(NamedTuple):
         """Generate a command for creating the Application.
 
         Returns:
-            list(str): the command to create the Application.
+            list[str]: the command to create the Application.
 
         """
         cmd = f"rok kube app create -f {self.manifest_path} {self.name}".split()
@@ -528,7 +528,7 @@ class ApplicationDefinition(NamedTuple):
         """Update the application with the provided information.
 
         Args:
-            cluster_labels (list(str)): optional list of cluster label constraints
+            cluster_labels (list[str]): optional list of cluster label constraints
                 to give the application, e.g. ['location=DE']
             migration (bool): Optional flag indicating which migration flag should
                 be given to the update command.
@@ -548,7 +548,7 @@ class ApplicationDefinition(NamedTuple):
         """Generate a command for updating the application.
 
         Args:
-            cluster_labels (list(str)): optional list of cluster label constraints
+            cluster_labels (list[str]): optional list of cluster label constraints
                 to give the application, e.g. ['location=DE']
             migration (bool): Optional flag indicating which migration flag should
                 be given to the update command.
@@ -558,7 +558,7 @@ class ApplicationDefinition(NamedTuple):
             labels (dict[str: str]): dict of labels with which to update the app.
 
         Returns:
-            list(str): the command to update the Application.
+            list[str]: the command to update the Application.
 
         """
         cmd = f"rok kube app update {self.name}".split()
@@ -571,11 +571,11 @@ class ApplicationDefinition(NamedTuple):
     def _get_cluster_label_options(self, cluster_label_constraints):
         """
         Args:
-            cluster_label_constraints (list(str)): list of cluster label constraints
+            cluster_label_constraints (list[str]): list of cluster label constraints
                 to give the application, e.g. ['location is DE']
 
         Returns:
-            list(str): ['-L', constr_1, '-L', constr_2, ..., '-L', constr_n]
+            list[str]: ['-L', constr_1, '-L', constr_2, ..., '-L', constr_n]
                 for all n constraints in cluster_label_constraints.
 
         """
@@ -602,10 +602,10 @@ class ApplicationDefinition(NamedTuple):
 
         Args:
             flag (str):
-            values (list(str)):
+            values (list[str]):
 
         Returns:
-            list(str): [flag, val1, flag, val_2, ..., flag, val_n]
+            list[str]: [flag, val1, flag, val_2, ..., flag, val_n]
                 for all n values in values.
         """
         if not values:
@@ -717,7 +717,7 @@ class ClusterDefinition(NamedTuple):
     Args:
         name (str): name of the Application to create.
         kubeconfig_path (str): path to the kubeconfig file to use for the creation.
-        labels (list(str)): list of cluster labels to use for the creation.
+        labels (list[str]): list of cluster labels to use for the creation.
 
     """
 
@@ -774,7 +774,7 @@ class ClusterDefinition(NamedTuple):
         """Update the cluster with the provided information.
 
         Args:
-            labels (list(str)): optional list of labels
+            labels (list[str]): optional list of labels
                 to give the cluster, e.g. ['location=DE']
             metrics (dict[str: float]): optional dict with metrics and their weights
                 to give the cluster
@@ -786,7 +786,7 @@ class ClusterDefinition(NamedTuple):
         """Generate a command for updating the cluster.
 
         Args:
-            labels (list(str)): optional list of labels
+            labels (list[str]): optional list of labels
                 to give the cluster, e.g. ['location=DE']
             metrics (dict[str: float]): optional dict with metrics and their weights
                 to give the cluster.
@@ -1208,20 +1208,20 @@ def create_default_environment(
     `MANIFEST_PATH/DEFAULT_MANIFEST`. This file is assumed to exist.
 
     Args:
-        cluster_names (list(str)): cluster names
-        metrics (dict(str: dict(str: str)), optional):
+        cluster_names (list[str]): cluster names
+        metrics (dict[str: dict[str: str]], optional):
             Cluster names and their metrics.
             keys: the same names as in `cluster_names`
             values: dict of metrics
                 keys: metric names
                 values: weight of the metrics
-        cluster_labels (dict(str: dict(str: str)), optional):
+        cluster_labels (dict[str: dict[str: str]], optional):
             Cluster names and their cluster labels.
             keys: the same names as in `cluster_names`
             values: dict of cluster labels
                 keys: cluster labels
                 values: value of the cluster labels
-        app_cluster_constraints (list(str), optional):
+        app_cluster_constraints (list[str], optional):
             list of cluster constraints, e.g. ["location != DE"]
         app_migration (bool, optional): migration flag indicating whether the
             application should be able to migrate. If not provided, none is
@@ -1276,7 +1276,7 @@ def create_cluster_info(cluster_names, sub_keys, values):
 
     If sub_keys is not a list, the list will be constructed as follows:
         sub_keys = [sub_keys] * len(values)
-    This is useful when the seb-key should be the same for all clusters.
+    This is useful when the sub-key should be the same for all clusters.
 
     The ith cluster will get the ith sub-key with the ith value.
     Caveat: If there are fewer sub-keys and values than clusters,
@@ -1286,14 +1286,14 @@ def create_cluster_info(cluster_names, sub_keys, values):
         Each cluster can only have one <sub-key, value> pair using this method.
 
     Args:
-        cluster_names (list(str)): The keys in the return dict.
+        cluster_names (list[str]): The keys in the return dict.
         sub_keys: The keys in the second level dicts in the return dict.
             If type(sub_keys) isn't list, a list will be created as such:
                 sub_keys = [sub_keys] * len(values)
         values (list): The values in the second level dicts in the return dict.
 
     Returns:
-        dict(str: dict) with same length as cluster_names.
+        dict[str: dict] with same length as cluster_names.
             The first `len(values)` <key, value> pairs will be:
                 cluster_names[i]: {sub_keys[i]: values[i]}
             The last `len(cluster_names) - len(values)` <key: value> pairs will be:
