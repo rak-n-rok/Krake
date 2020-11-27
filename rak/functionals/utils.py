@@ -1315,7 +1315,7 @@ def create_default_environment(
     `create_multiple_cluster_environment()`.
 
     The kubeconfig file that will be used for `cluster_name` in `cluster_names`
-    is `CLUSTERS_CONFIGS/cluster_name`. This file is assumed to exist.
+    is given by get_default_kubeconfig_path(). This file is assumed to exist.
 
     The manifest file that will be used for the application is
     `MANIFEST_PATH/DEFAULT_MANIFEST`. This file is assumed to exist.
@@ -1344,7 +1344,7 @@ def create_default_environment(
         dict: an environment definition to use to create a test environment.
 
     """
-    kubeconfig_paths = {c: os.path.join(CLUSTERS_CONFIGS, c) for c in cluster_names}
+    kubeconfig_paths = {c: get_default_kubeconfig_path(c) for c in cluster_names}
     manifest_path = os.path.join(MANIFEST_PATH, DEFAULT_MANIFEST)
     return create_multiple_cluster_environment(
         kubeconfig_paths=kubeconfig_paths,
@@ -1355,6 +1355,19 @@ def create_default_environment(
         app_cluster_constraints=app_cluster_constraints,
         app_migration=app_migration,
     )
+
+
+def get_default_kubeconfig_path(cluster_name):
+    """Return the default kubeconfig_path for the given cluster.
+
+    Args:
+        cluster_name (str): The name of a cluster
+
+    Returns:
+        str: The default path for the clusters kubeconfig file.
+
+    """
+    return os.path.join(CLUSTERS_CONFIGS, cluster_name)
 
 
 def create_cluster_info(cluster_names, sub_keys, values):
