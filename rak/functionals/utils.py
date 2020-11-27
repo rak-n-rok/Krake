@@ -471,13 +471,29 @@ class ApplicationDefinition(NamedTuple):
 
         """
         cmd = f"rok kube app create -f {self.manifest_path} {self.name}".split()
-        cmd += self._get_cluster_label_options(self.constraints)
+        cmd += self._get_cluster_label_constraint_options(self.constraints)
         if self.migration is not None:
             cmd += [self._get_migration_flag(self.migration)]
         return cmd
 
     @staticmethod
     def _get_migration_flag(migration):
+        """
+        Determines the migration cli option for a 'rok kube app create'
+        or 'rok kube app update' command, based on the value of the flag 'migration'.
+
+        Depending on the value of 'migration', the cli option is determined as such:
+            True: "--enable-migration"
+            False: "--disable-migration"
+            None: ""
+
+        Args:
+            migration (bool, optional): Flag indicating the desired migration cli option
+
+        Returns:
+            str: The migration cli option.
+
+        """
         if migration is False:
             migration_flag = "--disable-migration"
         elif migration is True:
@@ -562,14 +578,23 @@ class ApplicationDefinition(NamedTuple):
 
         """
         cmd = f"rok kube app update {self.name}".split()
-        cmd += self._get_cluster_label_options(cluster_labels)
+        cmd += self._get_cluster_label_constraint_options(cluster_labels)
         cmd += self._get_label_options(labels)
         if migration is not None:
             cmd += [self._get_migration_flag(migration)]
         return cmd
 
-    def _get_cluster_label_options(self, cluster_label_constraints):
+    def _get_cluster_label_constraint_options(self, cluster_label_constraints):
         """
+        Convenience method for generating cluster label constraints lists for
+        rok cli commands.
+
+        Example:
+            If provided the argument labels=["constraint1", "constraint2"},
+            this method will return the list ["-L", "constraint1", "-L", "constraint2"],
+            which can be used when constructing a cli command like
+            "rok kube app create -L constraint1 -L constraint2 ..."
+
         Args:
             cluster_label_constraints (list[str]): list of cluster label constraints
                 to give the application, e.g. ['location is DE']
