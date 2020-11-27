@@ -21,18 +21,16 @@ import time
 
 from utils import (
     run,
-    check_app_state,
     Environment,
-    create_simple_environment,
+    ApplicationDefinition,
+    create_default_environment,
     check_resource_deleted,
     check_return_code,
     check_spec_container_image,
+    get_default_kubeconfig_path,
+    MANIFEST_PATH,
     ResourceKind,
 )
-
-KRAKE_HOMEDIR = "/home/krake"
-CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
-MANIFEST_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals"
 
 
 def kubectl_cmd(kubeconfig):
@@ -54,13 +52,9 @@ def test_kubernetes_observer_deletion(minikube_clusters):
 
     """
     minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    kubeconfig_path = get_default_kubeconfig_path(minikube_cluster)
 
-    manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
-    environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
-    )
-
+    environment = create_default_environment([minikube_cluster])
     with Environment(environment):
         # 1. Delete a resource on the cluster
         error_message = "The deployment echo-demo could not be deleted"
@@ -94,13 +88,9 @@ def test_kubernetes_observer_update_on_cluster(minikube_clusters):
 
     """
     minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    kubeconfig_path = get_default_kubeconfig_path(minikube_cluster)
 
-    manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
-    environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
-    )
-
+    environment = create_default_environment([minikube_cluster])
     with Environment(environment):
         # 1. Update a resource on the cluster
         patch = {
@@ -171,19 +161,15 @@ def test_kubernetes_observer_additional_resource(minikube_clusters):
 
     """
     minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    kubeconfig_path = get_default_kubeconfig_path(minikube_cluster)
 
-    manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
-    environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
-    )
-
+    environment = create_default_environment([minikube_cluster])
     with Environment(environment) as resources:
-        application_name = resources[ResourceKind.APPLICATION][0].name
+        app = resources[ResourceKind.APPLICATION][0]
 
         # 1. Read the state of the Application on the API and on the cluster to
         # be able to compare afterwards
-        before_response = run(f"rok kube app get {application_name} -o json")
+        before_response = app.get_resource()
 
         error_message = "The Application echo-demo could not be found on the cluster."
         response = run(
@@ -217,9 +203,9 @@ def test_kubernetes_observer_additional_resource(minikube_clusters):
             assert deployment_names == {"echo-demo", "nginx-deployment"}
 
             # Compare the Application data before and after having added the resource
-            after_response = run(f"rok kube app get {application_name} -o json")
-            app_before = before_response.json
-            app_after = after_response.json
+            after_response = app.get_resource()
+            app_before = before_response
+            app_after = after_response
             # The application is rescheduled, so the "kube_controller_triggered"
             # timestamp is updated. The test would break if the timestamp was not the
             # same on the "before" and "after" outputs.
@@ -273,13 +259,9 @@ def test_kubernetes_observer_update_on_api(minikube_clusters):
 
     """
     minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    kubeconfig_path = get_default_kubeconfig_path(minikube_cluster)
 
-    manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
-    environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
-    )
-
+    environment = create_default_environment([minikube_cluster])
     with Environment(environment):
         # 1. Update the Application on the API
         run(f"rok kube app update echo-demo -f {MANIFEST_PATH}/echo-demo-update.yaml")
@@ -320,24 +302,15 @@ def test_kubernetes_observer_delete_on_api(minikube_clusters):
 
     """
     minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    kubeconfig_path = get_default_kubeconfig_path(minikube_cluster)
 
-    manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
-    environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
-    )
-
+    environment = create_default_environment([minikube_cluster])
     with Environment(environment) as resources:
-        application_name = resources[ResourceKind.APPLICATION][0].name
+        app = resources[ResourceKind.APPLICATION][0]
 
         # 1. Delete the Application on the API
-        run(f"rok kube app delete {application_name}")
-        run(
-            f"rok kube app get {application_name}",
-            condition=check_resource_deleted(
-                f"Unable to observe the application {application_name} deleted"
-            ),
-        )
+        app.delete_resource()
+        app.check_deleted()
 
         # 2. Check that resource has NOT been put back up on the cluster by the
         # observer's doing
@@ -349,13 +322,10 @@ def test_kubernetes_observer_delete_on_api(minikube_clusters):
         )
 
         # 3. Create the resource again but with other specs
-        run(f"rok kube app create echo-demo -f {MANIFEST_PATH}/echo-demo-update.yaml")
-        run(
-            f"rok kube app get {application_name} -o json",
-            condition=check_app_state(
-                "RUNNING", "Unable to observe the application in a RUNNING state"
-            ),
-        )
+        new_manifest_path = f"{MANIFEST_PATH}/echo-demo-update.yaml"
+        new_app = ApplicationDefinition(name=app.name, manifest_path=new_manifest_path)
+        new_app.create_resource()
+        new_app.check_created()
 
         # 4. Check that the resource has not been reverted to its previous state due to
         # the observer.
@@ -387,13 +357,9 @@ def test_kubernetes_observer_recreated(minikube_clusters):
 
     """
     minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    kubeconfig_path = get_default_kubeconfig_path(minikube_cluster)
 
-    manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
-    environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
-    )
-
+    environment = create_default_environment([minikube_cluster])
     with Environment(environment):
         # 1. Update a resource on the API
         run(f"rok kube app update echo-demo -f {MANIFEST_PATH}/echo-demo-update.yaml")
