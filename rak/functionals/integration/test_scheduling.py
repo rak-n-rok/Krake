@@ -72,7 +72,7 @@ CONSTRAINT_EXPRESSIONS = {
 
 
 def test_create_cluster_and_app(minikube_clusters):
-    """Basic end to end testing
+    """Basic end-to-end testing
 
     1. Create cluster and application;
     2. Check that the application is in RUNNING state;
@@ -177,7 +177,7 @@ def test_create_on_other_namespace(minikube_clusters):
 
 
 def test_scheduler_cluster_label_constraints(minikube_clusters):
-    """Basic end to end testing of application cluster label constraints
+    """Basic end-to-end testing of application cluster label constraints
 
     The test repeatedly creates an application and two clusters with the
     labels `location=DE` and `location=IT` randomly assigned to the clusters.
@@ -234,7 +234,7 @@ def test_scheduler_cluster_label_constraints(minikube_clusters):
 
 
 def test_scheduler_clusters_with_metrics(minikube_clusters):
-    """Basic end to end testing of clusters metrics
+    """Basic end-to-end testing of clusters metrics
 
     Cluster metrics and metrics provider are tested multiple times (3) as follows:
 
@@ -277,7 +277,7 @@ def test_scheduler_clusters_with_metrics(minikube_clusters):
 
 
 def test_scheduler_clusters_one_with_metrics(minikube_clusters):
-    """Basic end to end testing of clusters metrics
+    """Basic end-to-end testing of clusters metrics
 
     Cluster metrics and metrics provider are tested multiple times (3) as follows:
 
@@ -314,7 +314,7 @@ def test_scheduler_clusters_one_with_metrics(minikube_clusters):
 
 
 def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
-    """Basic end to end testing of application cluster label constraints with
+    """Basic end-to-end testing of application cluster label constraints with
     metrics
 
     Test iterates over the `CONSTRAINT_EXPRESSIONS` and applies workflow as follows:
@@ -367,7 +367,7 @@ def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
 
 
 def test_unreachable_metrics_provider(minikube_clusters):
-    """Basic end to end testing of unreachable metrics provider
+    """Basic end-to-end testing of unreachable metrics provider
 
     Test applies workflow as follows:
 
