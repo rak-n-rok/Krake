@@ -608,8 +608,17 @@ class ApplicationDefinition(NamedTuple):
 
     def _get_label_options(self, labels):
         """
+        Convenience method for generating label lists for rok cli commands.
+
+        Example:
+            If provided the argument labels={"label1": "value1", "label2": "value2"},
+            this method will return the list
+            ["-l", "label1=value1", "-l", "label2=value2"],
+            which can be used when constructing a cli command like
+            "rok kube app create -l label1=value1 -l label2=value2 ..."
+
         Args:
-            labels (dict(str: str)): dict of application labels and their values
+            labels (dict(str: str)): dict of resource labels and their values
 
         Returns:
             list(str):
@@ -625,9 +634,16 @@ class ApplicationDefinition(NamedTuple):
         """
         Convenience method for generating option lists for cli commands.
 
+        Example:
+            If provided the arguments flag="-L" and
+            values=["location is not DE", "foo=bar"], this method will return
+            the list ["-L", "location is not DE", "-L", "foo=bar"],
+            which can be used when constructing a cli command like
+            "rok kube app create -L location is not DE -L foo=bar ..."
+
         Args:
-            flag (str):
-            values (list[str]):
+            flag (str): The cli argument flag. The same flag is used for all values.
+            values (list[str]): The values of the cli arguments
 
         Returns:
             list[str]: [flag, val1, flag, val_2, ..., flag, val_n]
