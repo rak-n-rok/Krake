@@ -871,20 +871,14 @@ class Environment(object):
             in the given order after all Krake resources have been deleted. Their
             signature should be "handler(dict) -> void". The given dict contains the
             definition of all resources managed by the Environment.
+        creation_delay (int, optional): The number of seconds that should
+            be allowed before concluding that a resource could not be created.
 
     """
 
     def __init__(
         self, resources, before_handlers=None, after_handlers=None, creation_delay=10
     ):
-        """
-
-        Args:
-            resources: The resources in the environment
-                (see explanation in class doc string)
-            creation_delay (int, optional): The number of seconds that should
-                be allowed before concluding that a resource could not be created.
-        """
         # Dictionary: "priority: list of resources to create"
         self.res_to_create = resources
         self.resources = defaultdict(list)
