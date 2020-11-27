@@ -1,8 +1,6 @@
 # Configure OpenVPN as gateway to Krake subnet
 domain ip {
     chain INPUT {
-        # Allow incoming IP and UDP packets on OpenVPN port
-        proto udp dport 1194 ACCEPT;
     }
     table filter {
         chain FORWARD {

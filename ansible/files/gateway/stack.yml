@@ -74,16 +74,6 @@ resources:
         - { get_param: common_secgroup }
         - { get_resource: security_group }
 
-  security_group:
-    type: OS::Neutron::SecurityGroup
-    properties:
-      name: { get_param: gateway_secgroup }
-      description: Allow ingress on UDP port 1194 (OpenVPN)
-      rules:
-        - protocol: udp
-          port_range_min: 1194
-          port_range_max: 1194
-
   floating_ip:
     type: OS::Neutron::FloatingIP
     properties:
