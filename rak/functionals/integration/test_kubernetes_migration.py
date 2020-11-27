@@ -43,18 +43,14 @@ import time
 
 from utils import (
     Environment,
-    create_multiple_cluster_environment,
+    create_default_environment,
+    create_cluster_info,
     get_scheduling_score,
     set_static_metrics,
     get_static_metrics,
     ResourceKind,
 )
 
-KRAKE_HOMEDIR = "/home/krake"
-GIT_DIR = "git/krake"
-TEST_DIR = "rak/functionals"
-CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
-MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}"
 METRICS = [
     "electricity_cost_1",
     "latency_1",
@@ -91,15 +87,8 @@ def test_kubernetes_migration_cluster_constraints(minikube_clusters):
     countries = random.sample(COUNTRY_CODES, len(clusters))
 
     # 1. Create the application, without cluster constraints and migration flag;
-    kubeconfig_paths = {c: f"{CLUSTERS_CONFIGS}/{c}" for c in clusters}
-    cluster_labels = dict(zip(clusters, [[f"location={cc}"] for cc in countries]))
-    environment = create_multiple_cluster_environment(
-        kubeconfig_paths,
-        cluster_labels=cluster_labels,
-        app_name="echo-demo",
-        manifest_path=f"{MANIFEST_PATH}/echo-demo.yaml",
-    )
-
+    cluster_labels = create_cluster_info(clusters, "location", countries)
+    environment = create_default_environment(clusters, cluster_labels=cluster_labels)
     with Environment(environment) as resources:
         app = resources[ResourceKind.APPLICATION][0]
 
@@ -150,14 +139,8 @@ def test_kubernetes_migration_at_cluster_constraint_update(minikube_clusters):
     countries = random.sample(COUNTRY_CODES, len(clusters))
 
     # 1. Create the application, without cluster constraints and migration flag;
-    kubeconfig_paths = {c: f"{CLUSTERS_CONFIGS}/{c}" for c in clusters}
-    cluster_labels = dict(zip(clusters, [[f"location={cc}"] for cc in countries]))
-    environment = create_multiple_cluster_environment(
-        kubeconfig_paths,
-        cluster_labels=cluster_labels,
-        app_name="echo-demo",
-        manifest_path=f"{MANIFEST_PATH}/echo-demo.yaml",
-    )
+    cluster_labels = create_cluster_info(clusters, "location", countries)
+    environment = create_default_environment(clusters, cluster_labels=cluster_labels)
 
     with Environment(environment) as resources:
         app = resources[ResourceKind.APPLICATION][0]
@@ -218,15 +201,10 @@ def test_kubernetes_no_migration_cluster_constraints(minikube_clusters):
     expected_countries = all_countries[:2]
 
     # 1. Create the application, with cluster constraints and migration false;
-    kubeconfig_paths = {c: f"{CLUSTERS_CONFIGS}/{c}" for c in all_clusters}
-    cluster_labels = dict(
-        zip(all_clusters, [[f"location={cc}"] for cc in all_countries])
-    )
-    environment = create_multiple_cluster_environment(
-        kubeconfig_paths,
+    cluster_labels = create_cluster_info(all_clusters, "location", all_countries)
+    environment = create_default_environment(
+        all_clusters,
         cluster_labels=cluster_labels,
-        app_name="echo-demo",
-        manifest_path=f"{MANIFEST_PATH}/echo-demo.yaml",
         # We place the application on the second cluster initially
         app_cluster_constraints=[f"location={expected_countries[1]}"],
         app_migration=False,
@@ -303,13 +281,8 @@ def test_kubernetes_no_migration_metrics(minikube_clusters):
 
     # 3. Create the application, without cluster constraints but with
     # --disable-migration flag;
-    kubeconfig_paths = {c: f"{CLUSTERS_CONFIGS}/{c}" for c in clusters}
-    environment = create_multiple_cluster_environment(
-        kubeconfig_paths,
-        metrics=metric_weights,
-        app_name="echo-demo",
-        manifest_path=f"{MANIFEST_PATH}/echo-demo.yaml",
-        app_migration=False,
+    environment = create_default_environment(
+        clusters, metrics=metric_weights, app_migration=False
     )
 
     with Environment(environment) as resources:
@@ -391,13 +364,7 @@ def test_kubernetes_auto_metrics_migration(minikube_clusters):
     assert score_cluster_1 > score_cluster_2
 
     # 3. Create the application, without cluster constraints and migration flag;
-    kubeconfig_paths = {c: f"{CLUSTERS_CONFIGS}/{c}" for c in clusters}
-    environment = create_multiple_cluster_environment(
-        kubeconfig_paths,
-        metrics=metric_weights,
-        app_name="echo-demo",
-        manifest_path=f"{MANIFEST_PATH}/echo-demo.yaml",
-    )
+    environment = create_default_environment(clusters, metrics=metric_weights)
 
     with Environment(environment) as resources:
         app = resources[ResourceKind.APPLICATION][0]
@@ -562,13 +529,7 @@ def test_kubernetes_metrics_migration(minikube_clusters):
     assert score_cluster_1_init > score_cluster_2_init, f"debug_info: {debug_info}"
 
     # 3. Create the application, without cluster constraints and migration flag;
-    kubeconfig_paths = {c: f"{CLUSTERS_CONFIGS}/{c}" for c in clusters}
-    environment = create_multiple_cluster_environment(
-        kubeconfig_paths,
-        metrics=metric_weights,
-        app_name="echo-demo",
-        manifest_path=f"{MANIFEST_PATH}/echo-demo.yaml",
-    )
+    environment = create_default_environment(clusters, metrics=metric_weights)
 
     with Environment(environment) as resources:
         app = resources[ResourceKind.APPLICATION][0]
@@ -744,13 +705,7 @@ def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
     assert score_cluster_1_init > score_cluster_2_init
 
     # 3. Create the application, without cluster constraints and migration flag;
-    kubeconfig_paths = {c: f"{CLUSTERS_CONFIGS}/{c}" for c in clusters}
-    environment = create_multiple_cluster_environment(
-        kubeconfig_paths,
-        metrics=metric_weights,
-        app_name="echo-demo",
-        manifest_path=f"{MANIFEST_PATH}/echo-demo.yaml",
-    )
+    environment = create_default_environment(clusters, metrics=metric_weights)
 
     with Environment(environment) as resources:
         app = resources[ResourceKind.APPLICATION][0]
@@ -865,13 +820,7 @@ def test_kubernetes_metrics_migration_at_update(minikube_clusters):
     assert score_cluster_1 > score_cluster_2
 
     # 3. Create the application, without cluster constraints and migration flag;
-    kubeconfig_paths = {c: f"{CLUSTERS_CONFIGS}/{c}" for c in clusters}
-    environment = create_multiple_cluster_environment(
-        kubeconfig_paths,
-        metrics=metric_weights,
-        app_name="echo-demo",
-        manifest_path=f"{MANIFEST_PATH}/echo-demo.yaml",
-    )
+    environment = create_default_environment(clusters, metrics=metric_weights)
 
     with Environment(environment) as resources:
         app = resources[ResourceKind.APPLICATION][0]
@@ -988,13 +937,7 @@ def test_kubernetes_stickiness_migration(minikube_clusters):
     assert score_cluster_1 > score_cluster_2
 
     # 3. Create the application, without cluster constraints and migration flag;
-    kubeconfig_paths = {c: f"{CLUSTERS_CONFIGS}/{c}" for c in clusters}
-    environment = create_multiple_cluster_environment(
-        kubeconfig_paths,
-        metrics=metric_weights,
-        app_name="echo-demo",
-        manifest_path=f"{MANIFEST_PATH}/echo-demo.yaml",
-    )
+    environment = create_default_environment(clusters, metrics=metric_weights)
 
     with Environment(environment) as resources:
         app = resources[ResourceKind.APPLICATION][0]
