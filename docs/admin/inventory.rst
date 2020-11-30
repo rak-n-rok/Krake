@@ -42,7 +42,8 @@ gateway
   SSH jump host that is used to access the OpenStack instances. By
   default, no OpenStack server has a floating IP assigned except hosts in
   the **gateways** group. All other hosts use the **gateway** host variable to
-  define a SSH jump host.
+  define a SSH jump host. Wireguard is also installed on the gateway, see
+  :ref:`admin/setup:Access through the gateway`
 
 authorized_keys - optional
     List of additional authorized SSH keys, which can be used for accessing the hosts.
@@ -58,7 +59,28 @@ gateways
     network
         Inventory name of the network on which this SSH jump host should be deployed
     vpn_cidr
-        VPN Classless Inter-Domain Routing definition (e.g. 10.9.0.0/24)
+        VPN Classless Inter-Domain Routing definition (e.g. 10.9.0.0/24). This will
+        define the wireguard network. Each peer on this network (the gateway and users
+        or administrators of the deployment) will have a specific address on this
+        network.
+    wireguard_peers
+        List of all wireguard peer for whom access should be granted on the gateway.
+        Several peers can be added. A wireguard configuration file will be created for
+        each peer.
+
+        name
+            The name of the peer. This string is used to differentiate the different
+            peers from each other. It will also be given to the wireguard network
+            interface. The value can be arbitrary, but should be unique per deployment,
+            or over deployment if you plan on managing several ones with the same
+            machine.
+        public_key
+            The wireguard public key of the peer.
+        IP
+            Set the IP that will be given to the current peer in the wireguard network.
+            Each peer should be given a different IP to prevent conflicts. The IP can
+            be chosen in the ``vpn_cidr`` network, as long as it is not the IP given to
+            the gateway (which is the first in the network by default).
 
 networks
  Networks group define "virtual" hosts. These hosts exist purely for provisioning purpose. No machines are associated with them.

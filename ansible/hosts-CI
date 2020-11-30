@@ -43,6 +43,7 @@ all:
         krake-$CI_PIPELINE_ID-gateway:
           network: krake-$CI_PIPELINE_ID-network
           vpn_cidr: 10.9.0.0/24
+          wireguard_peers: []
 
     minikube_clusters:
       hosts:

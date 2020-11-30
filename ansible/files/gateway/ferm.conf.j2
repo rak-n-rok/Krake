@@ -1,6 +1,8 @@
 # Configure OpenVPN as gateway to Krake subnet
 domain ip {
     chain INPUT {
+        # Allow incoming IP and UDP packets on wireguard port
+        proto udp dport {{ wireguard_port }} ACCEPT;
     }
     table filter {
         chain FORWARD {

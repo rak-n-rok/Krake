@@ -61,6 +61,8 @@ devstack.yml
 gateways.yml
     flavor
         Flavor manage the sizing for the compute, memory and storage capacity of the host
+    wireguard_port:
+        Port on which the wireguard service will listen to on the gateway.
 
 krake_apps.yml
     flavor

@@ -19,6 +19,7 @@
           subnet: "{{ hostvars[network]['subnet_name'] }}"
           common_secgroup: "{{ hostvars[network]['common_secgroup_name'] }}"
           use_config_drive: "{{ use_config_drive }}"
+          wireguard_port: "{{ wireguard_port }}"
       register: stack
 
     - name: Update host variables of gateway
@@ -47,8 +48,10 @@
   roles:
     - authorized-keys
   vars:
-
     authorized_user: ubuntu
+    wg_conf_dir: "/etc/wireguard"
+    wg_pub_key_path: "{{ wg_conf_dir }}/publickey"
+    wg_priv_key_path: "{{ wg_conf_dir }}/privatekey"
   tasks:
 
     - name: Wait for gateway to show up
@@ -68,7 +71,81 @@
         name: "{{ packages }}"
       vars:
         packages:
+          - wireguard
           - ferm
+
+    - name: Check if wireguard private key was generated
+      stat:
+        path: "{{ wg_priv_key_path }}"
+      register: private_key
+
+    - name: Generate wireguard private key on the gateway
+      shell: "umask 0077 && wg genkey > {{ wg_priv_key_path | quote }}"
+      when: not private_key.stat.exists
+
+    - name: Generate the server and client wireguard configurations
+      tags:
+        - wireguard_clients
+      block:
+
+      - name: Read the private key
+        become: true
+        slurp:
+          src: "{{ wg_priv_key_path }}"
+        register: wg_private_key_b64
+
+      - set_fact:
+          wg_private_key: "{{ wg_private_key_b64.content | b64decode }}"
+
+      - name: Check if public key was generated
+        stat:
+          path: "{{ wg_pub_key_path }}"
+        register: public_key
+
+      - name: Generate wireguard public key on the gateway
+        shell: "wg pubkey < {{ wg_priv_key_path|quote }} > {{ wg_pub_key_path|quote }}"
+        when: not public_key.stat.exists
+
+      - name: Read the public key
+        become: true
+        slurp:
+          src: "{{ wg_pub_key_path }}"
+        register: wg_public_key_b64
+
+      - set_fact:
+          wg_public_key: "{{ wg_public_key_b64.content | b64decode }}"
+
+      - name: Create wireguard configuration on the gateway
+        become: yes
+        template:
+          src: "{{ playbook_dir }}/files/gateway/server_wg0.conf.j2"
+          dest: /etc/wireguard/wg0.conf
+          mode: '0640'
+        vars:
+          wg_gateway_ip: "{{ vpn_cidr | network_hosts | first }}"
+        register: gateway_conf_updated
+
+      - name: Create the wireguard for each peer in host file
+        become: no
+        delegate_to: localhost
+        run_once: yes
+        template:
+          src: "{{ playbook_dir }}/files/gateway/client_wg0.conf.j2"
+          dest: "{{ client_wg_path }}"
+          mode: '0640'
+        vars:
+          private_subnet_cidr: "{{ hostvars[network]['subnet_cidr'] }}"
+          client_wg_path: "{{ etc_dir }}/wg_{{ item['name'] }}.conf"
+          gateway_ip: "{{ hostvars[gateway].public_ip }}"
+        loop: "{{ wireguard_peers }}"
+
+    - name: Start and enable the wireguard service if the configuration changed
+      become: yes
+      service:
+        name: wg-quick@wg0
+        state: restarted
+        enabled: yes
+      when: gateway_conf_updated is defined
 
     # --------------
     # Firewall Setup
