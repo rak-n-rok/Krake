@@ -108,7 +108,7 @@ def test_kubernetes_migration_cluster_constraints(minikube_clusters):
 
         # 3. Update the cluster constraints to match the other cluster;
         other_index = 0 if clusters[0] != cluster_name else 1
-        app.update(cluster_labels=[f"location={countries[other_index]}"])
+        app.update_resource(cluster_labels=[f"location={countries[other_index]}"])
 
         # 4. Ensure that the application was rescheduled to the requested cluster;
         app.check_running_on(clusters[other_index], within=10)
@@ -174,7 +174,7 @@ def test_kubernetes_migration_at_cluster_constraint_update(minikube_clusters):
             # 3a. Update a cluster label constraints of the application to match
             # the other cluster.
             other_index = 0 if clusters[0] != old_running_on else 1
-            app.update(cluster_labels=[f"location={countries[other_index]}"])
+            app.update_resource(cluster_labels=[f"location={countries[other_index]}"])
             num_updates += 1
 
             # 3b. sleep 20 seconds
@@ -238,14 +238,14 @@ def test_kubernetes_no_migration_cluster_constraints(minikube_clusters):
         app.check_running_on(expected_clusters[1], within=0)
 
         # 3. Update the cluster constraints to match the first cluster;
-        app.update(cluster_labels=[f"location={expected_countries[0]}"])
+        app.update_resource(cluster_labels=[f"location={expected_countries[0]}"])
 
         # 4. Wait and
         # ensure that the application was NOT rescheduled to the requested cluster;
         app.check_running_on(expected_clusters[1], after_delay=10)
 
         # 5. Update the migration constraint to allow migration;
-        app.update(migration=True)
+        app.update_resource(migration=True)
 
         # 6. Ensure that the application was rescheduled to the requested cluster;
         app.check_running_on(expected_clusters[0], within=10)
@@ -337,7 +337,7 @@ def test_kubernetes_no_migration_metrics(minikube_clusters):
         app.check_running_on(clusters[0], after_delay=RESCHEDULING_INTERVAL + 10)
 
         # 7. Update the migration constraint to allow migration;
-        app.update(migration=True)
+        app.update_resource(migration=True)
 
         # 8. Ensure that the application was rescheduled to cluster 2;
         app.check_running_on(clusters[1], within=10)
@@ -668,7 +668,8 @@ def test_kubernetes_metrics_migration(minikube_clusters):
             f"Two migrations took place only {elapsed} seconds apart. "
             f"Expected at least {RESCHEDULING_INTERVAL} seconds. "
             f"The first migration happened at {migration_one} and the second "
-            f"at {migration_two}. debug_info: {debug_info} app_info: {app.get()}"
+            f"at {migration_two}. "
+            f"debug_info: {debug_info} app_info: {app.get_resource()}"
         )
 
         # 10. Ensure that the time elapsed between the last change of the metrics
@@ -921,7 +922,7 @@ def test_kubernetes_metrics_migration_at_update(minikube_clusters):
         assert score_second < score_first
 
         # 9. Update the application with a label (not in itself causing migration)
-        app.update(labels={"foo": second_cluster})
+        app.update_resource(labels={"foo": second_cluster})
 
         # 10. Ensure that the migration to cluster 1 takes place in a timely fashion and
         # remember its timestamp.
