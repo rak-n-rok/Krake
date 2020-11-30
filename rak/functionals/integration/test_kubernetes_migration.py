@@ -47,6 +47,7 @@ from utils import (
     get_scheduling_score,
     set_static_metrics,
     get_static_metrics,
+    ResourceKind,
 )
 
 KRAKE_HOMEDIR = "/home/krake"
@@ -100,7 +101,7 @@ def test_kubernetes_migration_cluster_constraints(minikube_clusters):
     )
 
     with Environment(environment) as resources:
-        app = resources["Application"][0]
+        app = resources[ResourceKind.APPLICATION][0]
 
         # 2. Ensure the application was scheduled to a cluster;
         cluster_name = app.get_running_on()
@@ -159,7 +160,7 @@ def test_kubernetes_migration_at_cluster_constraint_update(minikube_clusters):
     )
 
     with Environment(environment) as resources:
-        app = resources["Application"][0]
+        app = resources[ResourceKind.APPLICATION][0]
 
         # 2. Ensure the application was scheduled to a cluster;
         cluster_name = app.get_running_on()
@@ -232,7 +233,7 @@ def test_kubernetes_no_migration_cluster_constraints(minikube_clusters):
     )
 
     with Environment(environment) as resources:
-        app = resources["Application"][0]
+        app = resources[ResourceKind.APPLICATION][0]
 
         # 2. Ensure that the application was scheduled to the requested cluster;
         app.check_running_on(expected_clusters[1], within=0)
@@ -312,7 +313,7 @@ def test_kubernetes_no_migration_metrics(minikube_clusters):
     )
 
     with Environment(environment) as resources:
-        app = resources["Application"][0]
+        app = resources[ResourceKind.APPLICATION][0]
 
         # 4. Ensure that the application was scheduled to the first cluster;
         app.check_running_on(clusters[0], within=0)
@@ -399,7 +400,7 @@ def test_kubernetes_auto_metrics_migration(minikube_clusters):
     )
 
     with Environment(environment) as resources:
-        app = resources["Application"][0]
+        app = resources[ResourceKind.APPLICATION][0]
 
         # 4. Ensure that the application was scheduled to the first cluster;
         app.check_running_on(clusters[0], within=0)
@@ -570,7 +571,7 @@ def test_kubernetes_metrics_migration(minikube_clusters):
     )
 
     with Environment(environment) as resources:
-        app = resources["Application"][0]
+        app = resources[ResourceKind.APPLICATION][0]
 
         # 4. Ensure that the application was scheduled to cluster 1;
         app.check_running_on(
@@ -752,7 +753,7 @@ def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
     )
 
     with Environment(environment) as resources:
-        app = resources["Application"][0]
+        app = resources[ResourceKind.APPLICATION][0]
 
         # 4. Ensure that the application was scheduled to cluster 1;
         app.check_running_on(first_cluster, within=0)
@@ -873,7 +874,7 @@ def test_kubernetes_metrics_migration_at_update(minikube_clusters):
     )
 
     with Environment(environment) as resources:
-        app = resources["Application"][0]
+        app = resources[ResourceKind.APPLICATION][0]
 
         # 4. Ensure that the application was scheduled to cluster 1;
         first_cluster = clusters[0]
@@ -996,7 +997,7 @@ def test_kubernetes_stickiness_migration(minikube_clusters):
     )
 
     with Environment(environment) as resources:
-        app = resources["Application"][0]
+        app = resources[ResourceKind.APPLICATION][0]
 
         # 4. Ensure that the application was scheduled to cluster 1;
         app.check_running_on(cluster_1, within=0)

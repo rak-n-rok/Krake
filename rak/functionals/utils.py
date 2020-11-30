@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from enum import Enum
 import itertools
 import json
 import logging
@@ -460,6 +461,11 @@ def check_http_code_in_output(http_code, error_message=None):
     return validate
 
 
+class ResourceKind(Enum):
+    APPLICATION = "application"
+    CLUSTER = "cluster"
+
+
 class ResourceDefinition(ABC):
     """Definition of a resource for the test environment :class:`Environment`.
 
@@ -468,7 +474,7 @@ class ResourceDefinition(ABC):
 
     Args:
         name (str): name of the resource
-        kind (str): resource kind, e.g., "Cluster" or "Application"
+        kind (ResourceKind): resource kind
 
     """
 
@@ -658,7 +664,9 @@ class ApplicationDefinition(ResourceDefinition):
     """
 
     def __init__(self, name, manifest_path, constraints=None, migration=None):
-        super(ApplicationDefinition, self).__init__(name=name, kind="Application")
+        super(ApplicationDefinition, self).__init__(
+            name=name, kind=ResourceKind.APPLICATION
+        )
         assert os.path.isfile(manifest_path)
         self.manifest_path = manifest_path
         self.constraints = constraints or []
@@ -843,7 +851,7 @@ class ClusterDefinition(ResourceDefinition):
     """
 
     def __init__(self, name, kubeconfig_path, labels=None, metrics=None):
-        super(ClusterDefinition, self).__init__(name=name, kind="Cluster")
+        super(ClusterDefinition, self).__init__(name=name, kind=ResourceKind.CLUSTER)
         assert os.path.isfile(kubeconfig_path)
         self.kubeconfig_path = kubeconfig_path
         self.labels = labels or {}
@@ -1041,14 +1049,13 @@ class Environment(object):
         Args:
             resources (list[ResourceDefinition]): list of ResourceDefinition's
                 to look through
-            kind (str): 'Cluster' or 'Application' depending on which kind of resource
-                is sought.
+            kind (ResourceKind): the kind of resource which is sought.
             name (str): the name of the resource that is sought.
 
         Returns:
             ResourceDefinition: If found, the sought resource.
-                if kind == "Cluster": ClusterDefinition
-                If kind == "Application": ApplicationDefinition
+                if kind == ResourceKind.CLUSTER: ClusterDefinition
+                If kind == ResourceKind.APPLICATION: ApplicationDefinition
 
         Raises:
             AssertionError if not exactly one resource was found.
