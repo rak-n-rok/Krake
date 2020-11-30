@@ -27,6 +27,7 @@ from utils import (
     check_resource_deleted,
     check_return_code,
     check_spec_container_image,
+    ResourceKind,
 )
 
 KRAKE_HOMEDIR = "/home/krake"
@@ -178,7 +179,7 @@ def test_kubernetes_observer_additional_resource(minikube_clusters):
     )
 
     with Environment(environment) as resources:
-        application_name = resources["Application"][0].name
+        application_name = resources[ResourceKind.APPLICATION][0].name
 
         # 1. Read the state of the Application on the API and on the cluster to
         # be able to compare afterwards
@@ -327,7 +328,7 @@ def test_kubernetes_observer_delete_on_api(minikube_clusters):
     )
 
     with Environment(environment) as resources:
-        application_name = resources["Application"][0].name
+        application_name = resources[ResourceKind.APPLICATION][0].name
 
         # 1. Delete the Application on the API
         run(f"rok kube app delete {application_name}")
