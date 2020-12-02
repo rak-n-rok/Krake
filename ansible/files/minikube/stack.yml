@@ -64,7 +64,7 @@ resources:
     properties:
       name: { get_param: instance_name }
       flavor: { get_param: flavor }
-      image: fb5d1087-430c-47ae-abfe-5723778acd6a # Ubuntu 18.04 LTS x64
+      image: e8984d8c-8ae6-498e-8f4a-33afe681615f  # Ubuntu 20.04 LTS x64
       config_drive: { get_param: use_config_drive }
       key_name: { get_param: key }
       networks:
