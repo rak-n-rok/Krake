@@ -177,6 +177,7 @@
     # Directory on the VM for the bind mount, to store the configuration files of Krake
     configuration_dir: /etc/krake
     authorized_user: krake
+    rok_configuration_dir: /etc/rok
 
   tasks:
 
@@ -371,8 +372,6 @@
     - name: Krake rok deployment
       tags:
         - krake-rok-deployment
-      vars:
-        rok_configuration_dir: /etc/rok
       block:
 
         - name: Create configuration certificates sub-directory
@@ -435,6 +434,49 @@
             --api-host localhost
             {% if api_port is defined %} --api-port {{ api_port }} {% endif %}
             {{ git_dir }}/rok.yaml.template
+
+    - name: Local rok deployment
+      tags:
+        - local-rok-access
+      vars:
+        local_rok_conf: "rok_configurations/{{ inventory_hostname }}"
+        local_rok_certs: "{{ local_rok_conf }}/certs"
+      block:
+
+        - name: Create rok configuration directory
+          delegate_to: localhost
+          become: no
+          file:
+            path: "{{ item }}"
+            state: directory
+          loop:
+            - "{{ local_rok_conf }}"
+            - "{{ local_rok_certs }}"
+
+        - name: Download rok certificates
+          fetch:
+            src: "{{ rok_configuration_dir }}/certs/{{ item }}"
+            dest: "{{ local_rok_certs }}/"
+            flat: yes
+          with_items:
+            - "ca.pem"
+            - "system:admin.pem"
+            - "system:admin-key.pem"
+          when: enable_tls is defined and enable_tls
+
+        - name: Create Krake rok configuration file
+          delegate_to: localhost
+          become: no
+          script: >
+            ../krake/scripts/krake_generate_config
+            --dst {{ local_rok_conf }}
+            {% if enable_tls is defined and enable_tls %} --tls-enabled {% endif %}
+            {% if enable_tls is defined and enable_tls %}
+            --cert-dir certs {% endif %}
+            --api-host {{ private_ip }}
+            {% if api_port is defined %} --api-port {{ api_port }} {% endif %}
+            ../rok.yaml.template
+
 
 - name: Generate cluster config
   become: yes
