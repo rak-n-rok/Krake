@@ -513,11 +513,11 @@ class ResourceDefinition(ABC):
         )
 
     @abstractmethod
-    def creation_acceptance_criteria(self):
+    def creation_acceptance_criteria(self, error_message=None):
         """Verify that the resource has been properly created.
 
         Args:
-            error_message (str): error message to display in case of failure
+            error_message (str, optional): error message to display in case of failure
 
         Raises:
             AssertionError: if the resource failed to be created properly
@@ -546,20 +546,26 @@ class ResourceDefinition(ABC):
             delay (int, optional): The number of seconds that should be allowed
                 before giving up.
         """
-        run(self.get_command(), condition=self.deletion_acceptance_criteria())
+        run(
+            self.get_command(),
+            condition=self.deletion_acceptance_criteria(),
+            interval=1,
+            retry=delay,
+        )
 
-    def deletion_acceptance_criteria(self):
+    def deletion_acceptance_criteria(self, error_message=None):
         """Verify that the resource has been properly deleted.
 
         Args:
-            error_message (str): error message to display in case of failure
+            error_message (str, optional): error message to display in case of failure
 
         Raises:
             AssertionError: if the resource failed to be deleted properly
         """
-        error_message = (
-            f"Unable to observe the {self.kind} resource {self.name} being deleted"
-        )
+        if not error_message:
+            error_message = (
+                f"Unable to observe the {self.kind} resource {self.name} being deleted"
+            )
         return check_resource_deleted(error_message=error_message)
 
     def get_resource(self):
@@ -707,8 +713,8 @@ class ApplicationDefinition(ResourceDefinition):
             raise RuntimeError("migration must be None, False or True.")
         return migration_flag
 
-    def creation_acceptance_criteria(self):
-        return check_app_created_and_up()
+    def creation_acceptance_criteria(self, error_message=None):
+        return check_app_created_and_up(error_message=error_message)
 
     def delete_command(self):
         return f"rok kube app delete {self.name}".split()
@@ -890,8 +896,9 @@ class ClusterDefinition(ResourceDefinition):
             metrics_options += ["-m", metric, str(weight)]
         return metrics_options
 
-    def creation_acceptance_criteria(self):
-        error_message = f"The cluster {self.name} was not properly created."
+    def creation_acceptance_criteria(self, error_message=None):
+        if not error_message:
+            error_message = f"The cluster {self.name} was not properly created."
         return check_resource_exists(error_message=error_message)
 
     def delete_command(self):
