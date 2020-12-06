@@ -169,7 +169,7 @@ def test_kubernetes_observer_additional_resource(minikube_clusters):
 
         # 1. Read the state of the Application on the API and on the cluster to
         # be able to compare afterwards
-        before_response = app.get_resource()
+        app_before = app.get_resource()
 
         error_message = "The Application echo-demo could not be found on the cluster."
         response = run(
@@ -203,9 +203,7 @@ def test_kubernetes_observer_additional_resource(minikube_clusters):
             assert deployment_names == {"echo-demo", "nginx-deployment"}
 
             # Compare the Application data before and after having added the resource
-            after_response = app.get_resource()
-            app_before = before_response
-            app_after = after_response
+            app_after = app.get_resource()
             # The application is rescheduled, so the "kube_controller_triggered"
             # timestamp is updated. The test would break if the timestamp was not the
             # same on the "before" and "after" outputs.
