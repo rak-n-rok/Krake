@@ -673,9 +673,7 @@ class ApplicationDefinition(ResourceDefinition):
     def __init__(
         self, name, manifest_path, constraints=None, labels=None, migration=None
     ):
-        super(ApplicationDefinition, self).__init__(
-            name=name, kind=ResourceKind.APPLICATION
-        )
+        super().__init__(name=name, kind=ResourceKind.APPLICATION)
         assert os.path.isfile(manifest_path)
         self.manifest_path = manifest_path
         self.constraints = constraints or []
@@ -862,7 +860,7 @@ class ClusterDefinition(ResourceDefinition):
     """
 
     def __init__(self, name, kubeconfig_path, labels=None, metrics=None):
-        super(ClusterDefinition, self).__init__(name=name, kind=ResourceKind.CLUSTER)
+        super().__init__(name=name, kind=ResourceKind.CLUSTER)
         assert os.path.isfile(kubeconfig_path)
         self.kubeconfig_path = kubeconfig_path
         self.labels = labels or {}
