@@ -641,7 +641,7 @@ class ResourceDefinition(ABC):
             values=["location is not DE", "foo=bar"], this method will return
             the list ["-L", "location is not DE", "-L", "foo=bar"],
             which can be used when constructing a cli command like
-            "rok kube app create -L location is not DE -L foo=bar ..."
+            "rok kube app create -L 'location is not DE' -L foo=bar ..."
 
         Args:
             flag (str): The cli argument flag. The same flag is used for all values.
