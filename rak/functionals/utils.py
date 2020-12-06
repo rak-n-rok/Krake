@@ -665,22 +665,27 @@ class ApplicationDefinition(ResourceDefinition):
         manifest_path (str): path to the manifest file to use for the creation.
         constraints (list[str]): optional list of cluster label constraints
             to use for the creation of the application.
+        labels (dict[str: str]): dict of application labels and their values
         migration (bool): optional migration flag indicating whether the
             application should be able to migrate.
     """
 
-    def __init__(self, name, manifest_path, constraints=None, migration=None):
+    def __init__(
+        self, name, manifest_path, constraints=None, labels=None, migration=None
+    ):
         super(ApplicationDefinition, self).__init__(
             name=name, kind=ResourceKind.APPLICATION
         )
         assert os.path.isfile(manifest_path)
         self.manifest_path = manifest_path
         self.constraints = constraints or []
+        self.labels = labels or {}
         self.migration = migration
 
     def creation_command(self):
         cmd = f"rok kube app create -f {self.manifest_path} {self.name}".split()
         cmd += self._get_cluster_label_constraint_options(self.constraints)
+        cmd += self._get_label_options(self.labels)
         if self.migration is not None:
             cmd += [self._get_migration_flag(self.migration)]
         return cmd
