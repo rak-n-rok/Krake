@@ -472,9 +472,11 @@ class ResourceDefinition(ABC):
     Describes how to create, update and delete a resource with the rok utility.
     Also defines checks to perform to test whether these actions were successful.
 
-    Args:
+    Attributes:
         name (str): name of the resource
         kind (ResourceKind): resource kind
+        _mutable_attributes (list[str]): list of the attributes of the
+            ResourceDefinition which can be modified by its update_resource() method.
 
     """
 
@@ -482,6 +484,31 @@ class ResourceDefinition(ABC):
         assert name
         self.name = name
         self.kind = kind
+        self._mutable_attributes = self._get_mutable_attributes()
+
+    @abstractmethod
+    def _get_mutable_attributes(self):
+        """
+        Retrieve the attributes of this ResourceDefinition which can be changed
+        using its update_resource() method.
+
+        Returns:
+            list[str]: list of attributes of this ResourceDefinition which can be
+                modified by its update_resource() method.
+        """
+        pass
+
+    @abstractmethod
+    def _get_actual_mutable_attribute_values(self):
+        """Retrieve the attributes returned by self._get_mutable_attributes() from the
+        actual resource.
+
+        Returns:
+            dict[str: object]: dict with the attributes returned by
+                self._get_mutable_attributes() as keys and the actual resource's values
+                of those attributes as values.
+        """
+        pass
 
     def create_resource(self):
         """Create the resource.
@@ -594,7 +621,207 @@ class ResourceDefinition(ABC):
         Args:
             **kwargs: keyword arguments matching the arguments of update_command().
         """
+        for attr in kwargs:
+            # we do not allow updating name and kind attributes
+            msg = f"Attriute {attr} is immutable"
+            assert attr != "kind" and attr != "name", msg
+            # we only allow updating existing attributes
+            msg = f"Attriute {attr} is not an attribute of {self.__class__.__name__}"
+            assert hasattr(self, attr), msg
         run(self.update_command(**kwargs))
+        # After updating the values of the actual resource we want to synchronize the
+        # values of this ResourceDefinition with the values of the actual resource.
+        expected = dict.fromkeys(self._mutable_attributes)
+        expected.update(kwargs)
+        self._sync_resource(expected)
+
+    def _sync_resource(self, attributes):
+        """Assert that the provided attribute values do not conflict with the values of
+        the attributes of the actual resource and set the attributes of the
+        ResourceDefinition to those values.
+
+        The values are said to conflict, if the actual resource, after having been
+        updated with the values in 'attributes', would have a different set of
+        values than it does.
+
+        Args:
+            attributes (dict[str, object]): dict with the mutable attributes of this
+                ResourceDefinition as keys and their expected values as values.
+
+        Raises:
+            AssertionError: if the provided values conflict with the values of
+            the actual resource.
+
+        """
+        actual_attributes = self._verify_resource(attributes)
+        [
+            setattr(self, k, actual_attributes[k])
+            for k, v in attributes.items()
+            if v is not None
+        ]
+
+    def _verify_resource(self, expected):
+        """Verify that expected values of the mutable attributes of this
+        ResourceDefinition match the values of the attributes of the actual resource.
+
+        Args:
+            expected (dict[str, object]): dict with the mutable attributes of this
+                ResourceDefinition as keys and their expected values as values.
+                A value of None signalizes that no expectation exists.
+
+        Returns:
+            dict[str: object]: dict with the mutable attributes of this
+                ResourceDefinition as keys and their actual values as values.
+
+        Raises:
+            AssertionError: if the provided values do not match the values of the
+                actual resource.
+
+        """
+        class_name = self.__class__.__name__
+        msg = (
+            f"Mutable attributes of {class_name} ({self._mutable_attributes.sort()}) "
+            f"are not equal to the expected. Were: {list(expected.keys()).sort()}"
+        )
+        assert self._mutable_attributes.sort() == list(expected.keys()).sort(), msg
+
+        # get the attributes from the actual resource
+        observed = self._get_actual_mutable_attribute_values()
+        msg = (
+            f"Mutable attributes of {class_name} ({self._mutable_attributes.sort()}) "
+            f"are not equal to the observed: Were: {list(observed.keys()).sort()}"
+        )
+        assert self._mutable_attributes.sort() == list(observed.keys()).sort(), msg
+
+        # For each attribute in self._mutable_attributes, assert that each
+        # expected value does not conflict with the actual.
+        # Note that the expected values might be a subset of the actual values,
+        # without there being a conflict, so we cannot just check for equality.
+        # Instead we use the _verify_*() methods for the corresponding type of each
+        # attribute.
+        empty_update = True
+        for attr in self._mutable_attributes:
+            if expected[attr] is None:
+                continue
+            empty_update = False
+            verify_method_name = "_verify_" + type(expected[attr]).__name__
+            msg = f"{class_name} does not have the attribute {verify_method_name}"
+            assert hasattr(self, verify_method_name), msg
+            verify_method = getattr(self, verify_method_name)
+            verify_method(expected[attr], observed[attr])
+
+        msg = (
+            "We were asked to verify a 0 of the mutable attributes. "
+            "Empty updates are not allowed."
+        )
+        assert not empty_update, msg
+
+        # We return the actual values. These might be a superset of the expected ones.
+        return observed
+
+    @staticmethod
+    def _verify_str(expected, observed):
+        """Verify that 'expected' does not conflict with 'observed'.
+
+        They are said to conflict if 'expected' is neither None nor equal to 'observed'.
+
+        Args:
+            expected (str): the expected string or None
+            observed (str): the string to verify
+
+        Raises:
+            AssertionError: if the verification failed
+
+        """
+        # We only want to verify the string, if we received an expectation for it.
+        if expected is not None:
+            msg = f"expected was of type '{type(expected)}' instead of 'str'."
+            assert type(expected) == str, msg
+            msg = f"observed ({observed}) was not equal to expected ({expected})."
+            assert expected == observed, msg
+
+    @staticmethod
+    def _verify_list(expected, observed):
+        """Verify that the values in 'expected' do not conflict with the values
+        in 'observed'.
+
+        The values are said to conflict unless all keys in 'expected' are present
+        in 'observed'.
+
+        Args:
+            expected (list): a list (or None) of elements expected to be
+                present in observed
+            observed (list): the list to verify
+
+        Raises:
+            AssertionError: if the verification failed
+
+        """
+        # We only want to verify the list, if we received an expectation for it.
+        if expected is not None:
+            msg = f"expected was of type '{type(expected)}' instead of 'list'."
+            assert type(expected) == list, msg
+            msg = (
+                f"observed ({observed}) did not contain all elements of "
+                f"expected ({expected})."
+            )
+            assert all(e in observed for e in expected), msg
+
+    @staticmethod
+    def _verify_bool(expected, observed):
+        """Verify that 'expected' does not conflict with 'observed'.
+
+        They are said to conflict if 'expected' is not None and not equal to 'observed'.
+
+        Verify that expected is either None or equal to observed.
+
+        Args:
+            expected (bool): the expected boolean value of observed or None
+            observed (bool): the list to verify
+
+        Raises:
+            AssertionError: if the verification failed
+
+        """
+        # We only want to verify the bool, if we received an expectation for it.
+        if expected is not None:
+            msg = f"expected was of type '{type(expected)}' instead of 'bool'."
+            assert type(expected) == bool, msg
+            msg = f"observed ({observed}) was not equal to expected ({expected})."
+            assert expected == observed, msg
+
+    @staticmethod
+    def _verify_dict(expected, observed):
+        """Verify that the values in 'expected' do not conflict with the values
+        in 'observed'.
+
+        The values are said to conflict unless all keys in expected are present
+        in observed and have the same values as they do in observed.
+
+        Args:
+            expected (dict[str: object]): dict (or None) which values must not
+                conflict with the values for the same key in observed
+            observed (dict[str: object]): dict of the mutable values of this resource
+
+        Raises:
+            AssertionError: if the expected values conflicts with the corresponding
+                value in observed
+        """
+        if not expected:
+            expected = {}
+        msg = f"expected was of type '{type(expected)}' instead of 'dict'."
+        assert type(expected) == dict, msg
+        # We only want to verify the keys for which we received an expectation.
+        for expected_key, expected_value in expected.items():
+            msg = (
+                f"observed ({observed}) did not contain expected's key {expected_key}."
+            )
+            assert expected_key in observed, msg
+            msg = (
+                f"observed[{expected_key}] == {observed[expected_key]}) != "
+                f"{expected_value}."
+            )
+            assert expected_value == observed[expected_key], msg
 
     @abstractmethod
     def update_command(self, **kwargs):
@@ -663,7 +890,7 @@ class ApplicationDefinition(ResourceDefinition):
     Args:
         name (str): name of the application
         manifest_path (str): path to the manifest file to use for the creation.
-        constraints (list[str]): optional list of cluster label constraints
+        constraints (list[str], optional): list of cluster label constraints
             to use for the creation of the application.
         labels (dict[str: str]): dict of application labels and their values
         migration (bool): optional migration flag indicating whether the
@@ -674,15 +901,30 @@ class ApplicationDefinition(ResourceDefinition):
         self, name, manifest_path, constraints=None, labels=None, migration=None
     ):
         super().__init__(name=name, kind=ResourceKind.APPLICATION)
-        assert os.path.isfile(manifest_path)
+        assert os.path.isfile(manifest_path), f"{manifest_path} is not a file."
         self.manifest_path = manifest_path
-        self.constraints = constraints or []
+        self.cluster_label_constraints = constraints or []
         self.labels = labels or {}
         self.migration = migration
 
+    def _get_mutable_attributes(self):
+        return ["cluster_label_constraints", "labels", "migration"]
+
+    def _get_actual_mutable_attribute_values(self):
+        app = self.get_resource()
+        return {
+            "cluster_label_constraints": app["spec"]["constraints"]["cluster"][
+                "labels"
+            ],
+            "labels": app["metadata"]["labels"],
+            "migration": app["spec"]["constraints"]["migration"],
+        }
+
     def creation_command(self):
         cmd = f"rok kube app create -f {self.manifest_path} {self.name}".split()
-        cmd += self._get_cluster_label_constraint_options(self.constraints)
+        cmd += self._get_cluster_label_constraint_options(
+            self.cluster_label_constraints
+        )
         cmd += self._get_label_options(self.labels)
         if self.migration is not None:
             cmd += [self._get_migration_flag(self.migration)]
@@ -722,12 +964,14 @@ class ApplicationDefinition(ResourceDefinition):
     def delete_command(self):
         return f"rok kube app delete {self.name}".split()
 
-    def update_command(self, cluster_labels=None, migration=None, labels=None):
+    def update_command(
+        self, cluster_label_constraints=None, migration=None, labels=None
+    ):
         """Get a command for updating the application.
 
         Args:
-            cluster_labels (list[str]): optional list of cluster label constraints
-                to give the application, e.g. ['location=DE']
+            cluster_label_constraints (list[str], optional): list of cluster label
+                constraints to give the application, e.g. ['location=DE']
             migration (bool, optional): Flag indicating which migration flag should
                 be given to the update command.
                     True: --enable-migration
@@ -739,7 +983,7 @@ class ApplicationDefinition(ResourceDefinition):
             list[str]: the command to update the application, as a list of its parts.
         """
         cmd = f"rok kube app update {self.name}".split()
-        cmd += self._get_cluster_label_constraint_options(cluster_labels)
+        cmd += self._get_cluster_label_constraint_options(cluster_label_constraints)
         cmd += self._get_label_options(labels)
         if migration is not None:
             cmd += [self._get_migration_flag(migration)]
@@ -861,10 +1105,20 @@ class ClusterDefinition(ResourceDefinition):
 
     def __init__(self, name, kubeconfig_path, labels=None, metrics=None):
         super().__init__(name=name, kind=ResourceKind.CLUSTER)
-        assert os.path.isfile(kubeconfig_path)
+        assert os.path.isfile(kubeconfig_path), f"{kubeconfig_path} is not a file."
         self.kubeconfig_path = kubeconfig_path
         self.labels = labels or {}
         self.metrics = metrics or {}
+
+    def _get_mutable_attributes(self):
+        return ["labels", "metrics"]
+
+    def _get_actual_mutable_attribute_values(self):
+        cluster = self.get_resource()
+        return {
+            "labels": cluster["metadata"]["labels"],
+            "metrics": cluster["spec"]["metrics"],
+        }
 
     def creation_command(self):
         cmd = "rok kube cluster create".split()

@@ -98,7 +98,9 @@ def test_kubernetes_migration_cluster_constraints(minikube_clusters):
 
         # 3. Update the cluster constraints to match the other cluster;
         other_index = 0 if clusters[0] != cluster_name else 1
-        app.update_resource(cluster_labels=[f"location={countries[other_index]}"])
+        app.update_resource(
+            cluster_label_constraints=[f"location={countries[other_index]}"]
+        )
 
         # 4. Ensure that the application was rescheduled to the requested cluster;
         app.check_running_on(clusters[other_index], within=10)
@@ -158,7 +160,9 @@ def test_kubernetes_migration_at_cluster_constraint_update(minikube_clusters):
             # 3a. Update a cluster label constraints of the application to match
             # the other cluster.
             other_index = 0 if clusters[0] != old_running_on else 1
-            app.update_resource(cluster_labels=[f"location={countries[other_index]}"])
+            app.update_resource(
+                cluster_label_constraints=[f"location={countries[other_index]}"]
+            )
             num_updates += 1
 
             # 3b. sleep 20 seconds
@@ -217,7 +221,9 @@ def test_kubernetes_no_migration_cluster_constraints(minikube_clusters):
         app.check_running_on(expected_clusters[1], within=0)
 
         # 3. Update the cluster constraints to match the first cluster;
-        app.update_resource(cluster_labels=[f"location={expected_countries[0]}"])
+        app.update_resource(
+            cluster_label_constraints=[f"location={expected_countries[0]}"]
+        )
 
         # 4. Wait and
         # ensure that the application was NOT rescheduled to the requested cluster;
