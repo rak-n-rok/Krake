@@ -623,10 +623,10 @@ class ResourceDefinition(ABC):
         """
         for attr in kwargs:
             # we do not allow updating name and kind attributes
-            msg = f"Attriute {attr} is immutable"
+            msg = f"Attribute '{attr}' is immutable"
             assert attr != "kind" and attr != "name", msg
             # we only allow updating existing attributes
-            msg = f"Attriute {attr} is not an attribute of {self.__class__.__name__}"
+            msg = f"'{attr}' is not an attribute of {self.__class__.__name__}"
             assert hasattr(self, attr), msg
         run(self.update_command(**kwargs))
         # After updating the values of the actual resource we want to synchronize the
