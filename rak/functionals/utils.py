@@ -674,7 +674,8 @@ class ResourceDefinition(ABC):
         self._update_resource_definition(kwargs)
 
         # update the actual resource
-        run(self.update_command(**kwargs))
+        msg = f"The {self.kind} {self.name} could not be updated."
+        run(self.update_command(**kwargs), condition=check_return_code(msg))
 
         # After updating the values of the actual resource we want to verify
         # that its values match this ResourceDefinition.
@@ -707,12 +708,13 @@ class ResourceDefinition(ABC):
         assert not empty_update, msg
 
     def _verify_resource(self):
-        """Verify that the values of the mutable attributes of this
-        ResourceDefinition equal the values of the attributes of the actual resource.
+        """Verify that the values of the mutable attributes of this ResourceDefinition
+        are equal to the values of the attributes of the actual resource.
 
         Raises:
-            AssertionError: if the provided values are not equal to the values of the
-                actual resource.
+            AssertionError: if the values of all mutable attributes of this
+                ResourceDefinition are not equal to the corresponding values of
+                the actual resource.
 
         """
         # get the values from this resource definition
@@ -794,6 +796,15 @@ class ResourceDefinition(ABC):
         if not values:
             return []
         return list(itertools.chain(*[[flag, val] for val in values]))
+
+    def get_labels(self):
+        """Retrieve the labels from the actual resource.
+
+        Returns:
+            dict[str: str]: the labels of the resource
+        """
+        resource = self.get_resource()
+        return resource["metadata"]["labels"]
 
 
 class ApplicationDefinition(ResourceDefinition):
