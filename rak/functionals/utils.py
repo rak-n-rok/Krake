@@ -499,6 +499,17 @@ class ResourceDefinition(ABC):
         pass
 
     @abstractmethod
+    def _get_default_values(self):
+        """Returns the default values of all mutable attributes for the
+        ResourceDefinition after creation.
+
+        Returns:
+            dict[str: object]: a dict with the mutable attributes as keys and their
+                default values as values.
+        """
+        pass
+
+    @abstractmethod
     def _get_actual_mutable_attribute_values(self):
         """Retrieve the attributes returned by self._get_mutable_attributes() from the
         actual resource.
@@ -513,8 +524,31 @@ class ResourceDefinition(ABC):
     def create_resource(self):
         """Create the resource.
         """
-        error_message = f"The {self.kind} resource {self.name} could not be created."
+        # Create the actual resource based on the initial values of this
+        # ResourceDefinition, since these are the values which should be used
+        # for the creation.
+        error_message = f"The {self.kind} {self.name} could not be created."
         run(self.creation_command(), condition=check_return_code(error_message))
+
+        # Update this ResourceDefinition with the default values of all mutable
+        # attributes for which none was provided. It is important to do this after
+        # creating the actual resource since we otherwise would create the resource
+        # with the default values, which would be unintended by the test methods.
+        self._set_default_values()
+
+        # Verify that the attributes of the actual resource and this ResourceDefinition
+        # are equal.
+        self._verify_resource()
+
+    def _set_default_values(self):
+        default_values = self._get_default_values()
+        attrs_needing_defaults = [
+            attr for attr in self._mutable_attributes if getattr(self, attr) is None
+        ]
+        for attr in attrs_needing_defaults:
+            msg = f"{self.kind} had default value 'None' for attribute '{attr}'."
+            assert default_values[attr] is not None, msg
+            setattr(self, attr, default_values[attr])
 
     @abstractmethod
     def creation_command(self):
@@ -628,200 +662,79 @@ class ResourceDefinition(ABC):
             # we only allow updating existing attributes
             msg = f"'{attr}' is not an attribute of {self.__class__.__name__}"
             assert hasattr(self, attr), msg
+
+        msg = (
+            f"The mutable attributes of {self.__class__.__name__} "
+            f"({self._mutable_attributes.sort()}) "
+            f"are not equal to the update parameters ({list(kwargs.keys()).sort()})"
+        )
+        assert self._mutable_attributes.sort() == list(kwargs.keys()).sort(), msg
+
+        # update this ResourceDefinition object
+        self._update_resource_definition(kwargs)
+
+        # update the actual resource
         run(self.update_command(**kwargs))
-        # After updating the values of the actual resource we want to synchronize the
-        # values of this ResourceDefinition with the values of the actual resource.
-        expected = dict.fromkeys(self._mutable_attributes)
-        expected.update(kwargs)
-        self._sync_resource(expected)
 
-    def _sync_resource(self, attributes):
-        """Assert that the provided attribute values do not conflict with the values of
-        the attributes of the actual resource and set the attributes of the
-        ResourceDefinition to those values.
+        # After updating the values of the actual resource we want to verify
+        # that its values match this ResourceDefinition.
+        self._verify_resource()
 
-        The values are said to conflict, if the actual resource, after having been
-        updated with the values in 'attributes', would have a different set of
-        values than it does.
+    def _update_resource_definition(self, attributes):
+        """Update this ResourceDefinition object with the given attribute values
 
         Args:
             attributes (dict[str, object]): dict with the mutable attributes of this
-                ResourceDefinition as keys and their expected values as values.
-
-        Raises:
-            AssertionError: if the provided values conflict with the values of
-            the actual resource.
+                ResourceDefinition as keys and their new values as values.
+                A value of None signalizes that no update should be performed.
 
         """
-        actual_attributes = self._verify_resource(attributes)
-        [
-            setattr(self, k, actual_attributes[k])
-            for k, v in attributes.items()
-            if v is not None
-        ]
-
-    def _verify_resource(self, expected):
-        """Verify that expected values of the mutable attributes of this
-        ResourceDefinition match the values of the attributes of the actual resource.
-
-        Args:
-            expected (dict[str, object]): dict with the mutable attributes of this
-                ResourceDefinition as keys and their expected values as values.
-                A value of None signalizes that no expectation exists.
-
-        Returns:
-            dict[str: object]: dict with the mutable attributes of this
-                ResourceDefinition as keys and their actual values as values.
-
-        Raises:
-            AssertionError: if the provided values do not match the values of the
-                actual resource.
-
-        """
-        class_name = self.__class__.__name__
-        msg = (
-            f"Mutable attributes of {class_name} ({self._mutable_attributes.sort()}) "
-            f"are not equal to the expected. Were: {list(expected.keys()).sort()}"
-        )
-        assert self._mutable_attributes.sort() == list(expected.keys()).sort(), msg
-
-        # get the attributes from the actual resource
-        observed = self._get_actual_mutable_attribute_values()
-        msg = (
-            f"Mutable attributes of {class_name} ({self._mutable_attributes.sort()}) "
-            f"are not equal to the observed: Were: {list(observed.keys()).sort()}"
-        )
-        assert self._mutable_attributes.sort() == list(observed.keys()).sort(), msg
-
-        # For each attribute in self._mutable_attributes, assert that each
-        # expected value does not conflict with the actual.
-        # Note that the expected values might be a subset of the actual values,
-        # without there being a conflict, so we cannot just check for equality.
-        # Instead we use the _verify_*() methods for the corresponding type of each
-        # attribute.
+        # For each attribute in 'attributes', set the corresponding attribute of this
+        # ResourceDefinition object.
         empty_update = True
-        for attr in self._mutable_attributes:
-            if expected[attr] is None:
+        for attr, attr_val in attributes.items():
+            if attr_val is None:
                 continue
             empty_update = False
-            verify_method_name = "_verify_" + type(expected[attr]).__name__
-            msg = f"{class_name} does not have the attribute {verify_method_name}"
-            assert hasattr(self, verify_method_name), msg
-            verify_method = getattr(self, verify_method_name)
-            verify_method(expected[attr], observed[attr])
+            # FIXME: krake#413: Note that the attributes that are dicts or lists might
+            # contain information needing to be kept and and that setattr() overwrites
+            setattr(self, attr, attr_val)
 
         msg = (
-            "We were asked to verify a 0 of the mutable attributes. "
+            "We were asked to update 0 of the mutable attributes. "
             "Empty updates are not allowed."
         )
         assert not empty_update, msg
 
-        # We return the actual values. These might be a superset of the expected ones.
-        return observed
-
-    @staticmethod
-    def _verify_str(expected, observed):
-        """Verify that 'expected' does not conflict with 'observed'.
-
-        They are said to conflict if 'expected' is neither None nor equal to 'observed'.
-
-        Args:
-            expected (str): the expected string or None
-            observed (str): the string to verify
+    def _verify_resource(self):
+        """Verify that the values of the mutable attributes of this
+        ResourceDefinition equal the values of the attributes of the actual resource.
 
         Raises:
-            AssertionError: if the verification failed
+            AssertionError: if the provided values are not equal to the values of the
+                actual resource.
 
         """
-        # We only want to verify the string, if we received an expectation for it.
-        if expected is not None:
-            msg = f"expected was of type '{type(expected)}' instead of 'str'."
-            assert type(expected) == str, msg
-            msg = f"observed ({observed}) was not equal to expected ({expected})."
-            assert expected == observed, msg
+        # get the values from this resource definition
+        expected = dict.fromkeys(self._mutable_attributes)
+        for attr in expected:
+            expected[attr] = getattr(self, attr)
 
-    @staticmethod
-    def _verify_list(expected, observed):
-        """Verify that the values in 'expected' do not conflict with the values
-        in 'observed'.
+        # get the attributes from the actual resource
+        observed = self._get_actual_mutable_attribute_values()
+        msg = (
+            f"Mutable attributes of the {self.__class__.__name__} "
+            f"({self._mutable_attributes.sort()}) "
+            f"are not equal to the observed ({list(observed.keys()).sort()})"
+        )
+        assert self._mutable_attributes.sort() == list(observed.keys()).sort(), msg
 
-        The values are said to conflict unless all keys in 'expected' are present
-        in 'observed'.
-
-        Args:
-            expected (list): a list (or None) of elements expected to be
-                present in observed
-            observed (list): the list to verify
-
-        Raises:
-            AssertionError: if the verification failed
-
-        """
-        # We only want to verify the list, if we received an expectation for it.
-        if expected is not None:
-            msg = f"expected was of type '{type(expected)}' instead of 'list'."
-            assert type(expected) == list, msg
-            msg = (
-                f"observed ({observed}) did not contain all elements of "
-                f"expected ({expected})."
-            )
-            assert all(e in observed for e in expected), msg
-
-    @staticmethod
-    def _verify_bool(expected, observed):
-        """Verify that 'expected' does not conflict with 'observed'.
-
-        They are said to conflict if 'expected' is not None and not equal to 'observed'.
-
-        Verify that expected is either None or equal to observed.
-
-        Args:
-            expected (bool): the expected boolean value of observed or None
-            observed (bool): the list to verify
-
-        Raises:
-            AssertionError: if the verification failed
-
-        """
-        # We only want to verify the bool, if we received an expectation for it.
-        if expected is not None:
-            msg = f"expected was of type '{type(expected)}' instead of 'bool'."
-            assert type(expected) == bool, msg
-            msg = f"observed ({observed}) was not equal to expected ({expected})."
-            assert expected == observed, msg
-
-    @staticmethod
-    def _verify_dict(expected, observed):
-        """Verify that the values in 'expected' do not conflict with the values
-        in 'observed'.
-
-        The values are said to conflict unless all keys in expected are present
-        in observed and have the same values as they do in observed.
-
-        Args:
-            expected (dict[str: object]): dict (or None) which values must not
-                conflict with the values for the same key in observed
-            observed (dict[str: object]): dict of the mutable values of this resource
-
-        Raises:
-            AssertionError: if the expected values conflicts with the corresponding
-                value in observed
-        """
-        if not expected:
-            expected = {}
-        msg = f"expected was of type '{type(expected)}' instead of 'dict'."
-        assert type(expected) == dict, msg
-        # We only want to verify the keys for which we received an expectation.
-        for expected_key, expected_value in expected.items():
-            msg = (
-                f"observed ({observed}) did not contain expected's key {expected_key}."
-            )
-            assert expected_key in observed, msg
-            msg = (
-                f"observed[{expected_key}] == {observed[expected_key]}) != "
-                f"{expected_value}."
-            )
-            assert expected_value == observed[expected_key], msg
+        msg = (
+            f"The attributes of the {self.kind} {self.name} was not equal to the "
+            f"ones of the actual resource. ResourceDefinition: {expected}. "
+            f"Actual resource: {observed}."
+        )
+        assert expected == observed, msg
 
     @abstractmethod
     def update_command(self, **kwargs):
@@ -909,6 +822,13 @@ class ApplicationDefinition(ResourceDefinition):
 
     def _get_mutable_attributes(self):
         return ["cluster_label_constraints", "labels", "migration"]
+
+    def _get_default_values(self):
+        defaults = dict.fromkeys(self._mutable_attributes)
+        defaults.update({"cluster_label_constraints": []})
+        defaults.update({"labels": {}})
+        defaults.update({"migration": True})
+        return defaults
 
     def _get_actual_mutable_attribute_values(self):
         app = self.get_resource()
@@ -1094,13 +1014,13 @@ class ApplicationDefinition(ResourceDefinition):
 class ClusterDefinition(ResourceDefinition):
     """Definition of a cluster resource for the test environment :class:`Environment`.
 
-    Args:
+    Attributes:
         name (str): name of the cluster
         kubeconfig_path (str): path to the kubeconfig file to use for the creation.
         labels (dict[str: str], optional): dict of cluster labels and their values
             to use for the creation.
-        metrics (dict[str: float], optional): dict of metrics and their weights
-            to use for the creation.
+        metrics (list[dict[str: object]], optional): list of dict of metrics and their
+            weights. Each dict has te two keys "name" and "weight".
     """
 
     def __init__(self, name, kubeconfig_path, labels=None, metrics=None):
@@ -1108,10 +1028,16 @@ class ClusterDefinition(ResourceDefinition):
         assert os.path.isfile(kubeconfig_path), f"{kubeconfig_path} is not a file."
         self.kubeconfig_path = kubeconfig_path
         self.labels = labels or {}
-        self.metrics = metrics or {}
+        self.metrics = metrics or []
 
     def _get_mutable_attributes(self):
         return ["labels", "metrics"]
+
+    def _get_default_values(self):
+        defaults = dict.fromkeys(self._mutable_attributes)
+        defaults.update({"labels": {}})
+        defaults.update({"metrics": []})
+        return defaults
 
     def _get_actual_mutable_attribute_values(self):
         cluster = self.get_resource()
@@ -1132,15 +1058,17 @@ class ClusterDefinition(ResourceDefinition):
         """Convenience method for generating metric lists for rok cli commands.
 
         Example:
-            If provided the argument
-            metrics={"metric_name1": 1.0, "metric_name2": 2.0},
+            If provided the argument metrics=
+            [{"name": "metric_name1", "weight": 1.0},
+            {"name": "metric_name2", "weight": 2.0}],
             this method will return the list
             ["-m", "metric_name1", "1.0", "-m", "metric_name2", "2.0"],
             which can be used when constructing a cli command like
             rok kube cluster create -m metric_name1 1.0 -m metric_name2 2.0 ...
 
         Args:
-            metrics (dict[str: float]): dict of metrics names and their weights
+            metrics (list[dict[str: object]]): list of dicts of metrics names
+                and their weights
 
         Returns:
             list[str]:
@@ -1149,8 +1077,8 @@ class ClusterDefinition(ResourceDefinition):
                 for all n key, value pairs in metrics.
         """
         metrics_options = []
-        for metric, weight in metrics.items():
-            metrics_options += ["-m", metric, str(weight)]
+        for metric in metrics:
+            metrics_options += ["-m", metric["name"], str(metric["weight"])]
         return metrics_options
 
     def creation_acceptance_criteria(self, error_message=None):
@@ -1167,8 +1095,8 @@ class ClusterDefinition(ResourceDefinition):
         Args:
             labels (dict[str: str], optional): dict of labels and their values to
                 give the cluster, e.g. {'location': 'DE'}
-            metrics (dict[str: float]): optional dict with metrics and their weights
-                to give the cluster.
+            metrics (list[dict[str: object]], optional): list of dicts with metrics
+                and their weights to update the cluster with.
 
         Returns:
              list[str]: the command to update the application, as a list of its parts.
@@ -1383,7 +1311,7 @@ def create_multiple_cluster_environment(
         metrics (dict[str: dict[str: float]], optional): mapping between
             Cluster names and metrics for the corresponding Cluster to create.
             The metrics are given as a dictionary with the metric names as keys
-            and the values of the metrics as values.
+            and the metric weights as values.
         app_name (str, optional): name of the Application to create.
         manifest_path (PathLike, optional): path to the manifest file that
             should be used to create the Application.
@@ -1410,7 +1338,7 @@ def create_multiple_cluster_environment(
                 name=cn,
                 kubeconfig_path=kcp,
                 labels=cluster_labels[cn],
-                metrics=metrics[cn],
+                metrics=_convert_to_metrics_list(metrics[cn]),
             )
             for cn, kcp in kubeconfig_paths.items()
         ]
@@ -1619,6 +1547,28 @@ def create_default_environment(
         app_cluster_constraints=app_cluster_constraints,
         app_migration=app_migration,
     )
+
+
+def _convert_to_metrics_list(metrics):
+    """Convert a dict of metrics names and weights as keys and values, into a list
+    of dicts with the two keys "name" and "weight" as keys and the metrics name and
+    metric weight as their corresponding values.
+
+    Examples:
+          metrics {"name1": 1.0, "name2": 2.0} results in the output
+          [{"name": "name1", "weight": 1.0}, {"name": "name2", "weight": 2.0}]
+
+    Args:
+        metrics (dict[str: float]): metrics to convert
+
+    Returns:
+        list[dict[str: object]]: list of dicts with the two keys "name" and "weight" as
+            keys and the metrics name and metric weight as their corresponding values.
+    """
+    metrics_list = []
+    for metric_name, metric_weight in metrics.items():
+        metrics_list.append({"name": metric_name, "weight": metric_weight})
+    return metrics_list
 
 
 def get_default_kubeconfig_path(cluster_name):
