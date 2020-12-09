@@ -1088,6 +1088,8 @@ class ClusterDefinition(ResourceDefinition):
                 for all n key, value pairs in metrics.
         """
         metrics_options = []
+        if metrics is None:
+            metrics = []
         for metric in metrics:
             metrics_options += ["-m", metric["name"], str(metric["weight"])]
         return metrics_options
