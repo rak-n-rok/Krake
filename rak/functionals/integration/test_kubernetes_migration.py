@@ -65,6 +65,11 @@ COUNTRY_CODES = [
 RESCHEDULING_INTERVAL = 60
 
 
+# FIXME: krake#405:
+@pytest.mark.skip(
+    reason="This test fails now and then. Probably due to the bug described in "
+    "issue 405. We decided to skip this test until 405 has been addressed."
+)
 def test_kubernetes_migration_cluster_constraints(minikube_clusters):
     """Check that an application scheduled on a cluster gets migrated
     (if neither --enable-migration nor --disable-migration has been used)
@@ -109,6 +114,11 @@ def test_kubernetes_migration_cluster_constraints(minikube_clusters):
         app.check_running_on(clusters[other_index], within=10)
 
 
+# FIXME: krake#405:
+@pytest.mark.skip(
+    reason="This test fails now and then. Probably due to the bug described in "
+    "issue 405. We decided to skip this test until 405 has been addressed."
+)
 def test_kubernetes_migration_at_cluster_constraint_update(minikube_clusters):
     """Check that an application scheduled on a cluster migrates at the time
     of an update of the application's cluster constraints.
