@@ -321,6 +321,12 @@
             - system:complete-signing
           when: enable_tls is defined and enable_tls
 
+        - name: Get a list of all Krake components's configuration files
+          find:
+            paths: "{{ git_dir }}/config"
+            patterns: "*.template"
+          register: template_files
+
         # The files generated overwrite the ones created
         - name: Generate the configuration files
           script: |
@@ -341,8 +347,8 @@
             {% if api_port is defined %} --api-port {{ api_port }} {% endif %} \
             {% if etcd_host is defined %} --etcd-host {{ etcd_host }} {% endif %} \
             {% if etcd_port is defined %} --etcd-port {{ etcd_port }} {% endif %} \
-            {% if worker_count is defined %} --worker-count {{ worker_count }} {% endif %} \
-            {% if debounce is defined %} --debounce {{ debounce }} {% endif %} \
+            --worker-count {{ worker_count }} \
+            --debounce {{ debounce }} \
             {% if reschedule_after is defined %} --reschedule-after {{ reschedule_after }} {% endif %} \
             {% if stickiness is defined %} --stickiness {{ stickiness }} {% endif %} \
             {% if poll_interval is defined %} --poll-interval {{ poll_interval }} {% endif %} \
@@ -351,10 +357,17 @@
             {% if complete_hook_env_token is defined %} --complete-hook-env-token {{ complete_hook_env_token }} {% endif %} \
             {% if complete_hook_env_complete is defined %} --complete-hook-env-complete {{ complete_hook_env_complete }} {% endif %} \
             {% if external_endpoint is defined or use_private_ip %} --external-endpoint {{ final_external_endpoint }} {% endif %} \
-            {{ git_dir }}/config/*template
+            {{ template_path }}
           vars:
+            template_path: "{{ item.path }}"
+            final_file: "{{ template_path | basename | splitext | first }}"
+            prefix: "{{ final_file | splitext | first }}"
+            worker_count: "{{ controllers[prefix]['worker_count'] | default(controllers['worker_count']) }}"
+            debounce: "{{ controllers[prefix]['debounce'] | default(controllers['debounce']) }}"
             external_endpoint_with_scheme: "{{ scheme }}://{{ external_host }}:{{ api_port }}"
             final_external_endpoint: "{% if external_endpoint is defined %}{{ external_endpoint }}{% elif use_private_ip %}{{ external_endpoint_with_scheme }}{% endif %}"
+          with_items:
+            - "{{ template_files.files }}"
 
         - name: Change permissions of the configuration directory
           become_user: root

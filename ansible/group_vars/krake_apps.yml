@@ -38,8 +38,16 @@ static_authentication_username: "system:admin"
 authorization_mode: RBAC
 
 ## Controllers parameters
-worker_count: 5
-debounce: 1.0
+controllers:
+  # Default parameters for the controllers
+  debounce: 1.0
+  worker_count: 5
+  # The parameters can also be set specifically for each controller, example:
+  # kubernetes:
+  #   worker_count: 10
+  # scheduler:
+  #   debounce: 2.0
+
 reschedule_after: 60
 stickiness: 0.1
 poll_interval: 30
