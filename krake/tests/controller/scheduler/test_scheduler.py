@@ -1,28 +1,26 @@
 import pytest
 import random
-from aiohttp import web, ClientSession, ClientConnectorError, ClientResponseError
+import time
+from aiohttp import web
 from copy import deepcopy
 from datetime import datetime, timezone, timedelta
 
 from krake.api.app import create_app
+from krake.client import Client
 from krake.client.kubernetes import KubernetesApi
-from krake.data.core import ResourceRef, MetricRef
+from krake.controller.scheduler import Scheduler
+from krake.controller.scheduler.constraints import match_cluster_constraints
 from krake.data.constraints import LabelConstraint
+from krake.data.core import ResourceRef, MetricRef
+from krake.data.core import resource_ref, ReasonCode
 from krake.data.kubernetes import Application, ApplicationState
 from krake.data.openstack import MagnumCluster, MagnumClusterState
-from krake.controller.scheduler import Scheduler, metrics
-from krake.controller.scheduler.constraints import match_cluster_constraints
-
-from krake.client import Client
-from krake.data.core import resource_ref, ReasonCode
 from krake.test_utils import server_endpoint, make_prometheus
 
+from tests.factories import fake
 from tests.factories.core import MetricsProviderFactory, MetricFactory
 from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
 from tests.factories.openstack import MagnumClusterFactory, ProjectFactory
-from tests.factories import fake
-
-import time
 
 
 async def test_kubernetes_reception(aiohttp_server, config, db, loop):
@@ -171,200 +169,6 @@ async def test_openstack_reception(aiohttp_server, config, db, loop):
     assert scheduled.metadata.uid not in scheduler.magnum_queue.dirty
     assert running.metadata.uid not in scheduler.magnum_queue.dirty
     assert deleted.metadata.uid not in scheduler.magnum_queue.dirty
-
-
-@pytest.mark.slow
-async def test_prometheus_provider_against_prometheus(prometheus, loop):
-    metric = MetricFactory(
-        spec__provider__name="my-provider",
-        spec__provider__metric=prometheus.exporter.metric,
-    )
-    metrics_provider = MetricsProviderFactory(
-        metadata__name="my-provider",
-        spec__type="prometheus",
-        spec__prometheus__url=server_endpoint(prometheus),
-    )
-
-    async with ClientSession() as session:
-        provider = metrics.Provider(metrics_provider=metrics_provider, session=session)
-        assert isinstance(provider, metrics.Prometheus)
-
-        value = await provider.query(metric)
-        assert 0 <= value <= 1.0
-
-
-async def test_prometheus_mock(aiohttp_client):
-    client = await aiohttp_client(make_prometheus({"my-metric": ["0.42", "1.0"]}))
-
-    resp = await client.get("/api/v1/query?query=my-metric")
-    body = await resp.json()
-    assert body["status"] == "success"
-    assert body["data"]["resultType"] == "vector"
-    assert len(body["data"]["result"]) == 1
-    result = body["data"]["result"][0]
-    assert "metric" in result
-    assert result["metric"]["__name__"] == "my-metric"
-    assert "value" in result
-    assert result["value"][1] == "0.42"
-
-    resp = await client.get("/api/v1/query?query=my-metric")
-    body = await resp.json()
-    assert body["data"]["result"][0]["value"][1] == "1.0"
-
-    resp = await client.get("/api/v1/query?query=my-metric")
-    body = await resp.json()
-    assert len(body["data"]["result"]) == 0
-
-
-async def test_prometheus_mock_update(aiohttp_client):
-    client = await aiohttp_client(make_prometheus({}))
-
-    resp = await client.post("/-/update", json={"metrics": {"my-metric": ["0.42"]}})
-    assert resp.status == 200
-
-    resp = await client.get("/api/v1/query?query=my-metric")
-    body = await resp.json()
-    assert len(body["data"]["result"]) == 1
-    assert body["data"]["result"][0]["value"][1] == "0.42"
-
-    resp = await client.get("/api/v1/query?query=my-metric")
-    body = await resp.json()
-    assert len(body["data"]["result"]) == 0
-
-
-async def test_prometheus_mock_update_validation(aiohttp_client):
-    client = await aiohttp_client(make_prometheus({}))
-
-    resp = await client.post("/-/update", data=b"invalid JSON")
-    assert resp.status == 400
-
-    resp = await client.post("/-/update", json=[])
-    assert resp.status == 400
-
-    resp = await client.post("/-/update", json={})
-    assert resp.status == 400
-
-    resp = await client.post("/-/update", json={"metrics": []})
-    assert resp.status == 400
-
-    resp = await client.post("/-/update", json={"metrics": {"my-metric": "text"}})
-    assert resp.status == 400
-
-    resp = await client.post("/-/update", json={"metrics": {"my-metric": ["1.0"]}})
-    assert resp.status == 200
-
-
-async def test_prometheus_mock_cycle_update(aiohttp_client):
-    client = await aiohttp_client(make_prometheus({}))
-
-    resp = await client.post(
-        "/-/update", json={"metrics": {"my-metric": ["0.42", "1.0"]}, "cycle": True}
-    )
-    assert resp.status == 200
-
-    for _ in range(2):
-        resp = await client.get("/api/v1/query?query=my-metric")
-        body = await resp.json()
-        assert len(body["data"]["result"]) == 1
-        assert body["data"]["result"][0]["value"][1] == "0.42"
-
-        resp = await client.get("/api/v1/query?query=my-metric")
-        body = await resp.json()
-        assert len(body["data"]["result"]) == 1
-        assert body["data"]["result"][0]["value"][1] == "1.0"
-
-
-async def test_prometheus_provider(aiohttp_server, loop):
-    prometheus = await aiohttp_server(make_prometheus({"my-metric": ["0.42"]}))
-
-    metric = MetricFactory(
-        spec__provider__name="my-provider", spec__provider__metric="my-metric"
-    )
-    metrics_provider = MetricsProviderFactory(
-        metadata__name="my-provider",
-        spec__type="prometheus",
-        spec__prometheus__url=server_endpoint(prometheus),
-    )
-
-    async with ClientSession() as session:
-        provider = metrics.Provider(metrics_provider=metrics_provider, session=session)
-        assert isinstance(provider, metrics.Prometheus)
-
-        value = await provider.query(metric)
-        assert value == 0.42
-
-
-async def test_prometheus_provider_unavailable(aiohttp_server, loop):
-    routes = web.RouteTableDef()
-
-    @routes.get("/api/v1/query")
-    async def _(request):
-        raise web.HTTPServiceUnavailable()
-
-    prometheus_app = web.Application()
-    prometheus_app.add_routes(routes)
-
-    prometheus = await aiohttp_server(prometheus_app)
-
-    metric = MetricFactory()
-    metrics_provider = MetricsProviderFactory(
-        metadata__name="my-provider",
-        spec__type="prometheus",
-        spec__prometheus__url=server_endpoint(prometheus),
-    )
-
-    async with ClientSession() as session:
-        provider = metrics.Provider(metrics_provider=metrics_provider, session=session)
-        assert isinstance(provider, metrics.Prometheus)
-
-        with pytest.raises(
-            metrics.MetricError, match=r"Failed to query Prometheus"
-        ) as err:
-            await provider.query(metric)
-
-        assert isinstance(err.value.__cause__, ClientResponseError)
-
-
-async def test_prometheus_provider_connection_error(aiohttp_server, loop):
-    # Spawn Prometheus mock server, fetch its HTTP address and close it again.
-    # This should raise an "aiohttp.ClientConnectorError" in the provider when
-    # it tries to connect to this endpoint.
-    prometheus = await aiohttp_server(web.Application())
-    url = server_endpoint(prometheus)
-    await prometheus.close()
-
-    metric = MetricFactory()
-    metrics_provider = MetricsProviderFactory(
-        spec__type="prometheus", spec__prometheus__url=url
-    )
-
-    async with ClientSession() as session:
-        provider = metrics.Provider(metrics_provider=metrics_provider, session=session)
-        assert isinstance(provider, metrics.Prometheus)
-
-        with pytest.raises(
-            metrics.MetricError, match=r"Failed to query Prometheus"
-        ) as err:
-            await provider.query(metric)
-
-        assert isinstance(err.value.__cause__, ClientConnectorError)
-
-
-async def test_static_provider(aiohttp_server):
-    metrics_provider = MetricsProviderFactory(
-        spec__type="static", spec__static__metrics={"my_metric": 0.42}
-    )
-    metric = MetricFactory(
-        spec__provider__name=metrics_provider.metadata.name,
-        spec__provider__metric="my_metric",
-    )
-
-    async with ClientSession() as session:
-        provider = metrics.Provider(metrics_provider=metrics_provider, session=session)
-        assert isinstance(provider, metrics.Static)
-
-        value = await provider.query(metric)
-        assert value == 0.42
 
 
 def test_kubernetes_match_cluster_label_constraints():
@@ -782,7 +586,7 @@ async def test_kubernetes_scheduling_error(aiohttp_server, config, db, loop):
 
 
 async def test_kubernetes_migration(aiohttp_server, config, db, loop):
-    """ Test that the app is migrated due to metrics changes if the time passed
+    """Test that the app is migrated due to metrics changes if the time passed
     since the last schedule was long enough."""
     prometheus = await aiohttp_server(
         make_prometheus(
@@ -905,7 +709,7 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
     "after scheduling decision was made (krake#405)."
 )
 async def test_kubernetes_migration_w_update(aiohttp_server, config, db, loop):
-    """ Test that the app is migrated due to an update even if the time passed
+    """Test that the app is migrated due to an update even if the time passed
     since the last schedule was shorter than the rescheduling interval."""
     prometheus = await aiohttp_server(
         make_prometheus(
