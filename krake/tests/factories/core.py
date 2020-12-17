@@ -23,9 +23,27 @@ from krake.data.core import (
     MetricRef,
 )
 
+_existing_names = set()
+
 
 def fuzzy_name():
-    return "-".join(fake.name().split()).lower()
+    """Creates a name in the form "<first_name>-<surname>". Ensures that the same name
+    will not be given twice.
+
+    Returns:
+        str: the new name generated.
+
+    """
+    max_tries = 300
+    for _ in range(max_tries):
+        name = "-".join(fake.name().split()).lower()
+        if name not in _existing_names:
+            _existing_names.add(name)
+            break
+    else:
+        raise ValueError(f"No new name could be found after {max_tries} attempts.")
+
+    return name
 
 
 def fuzzy_dict(size=None):

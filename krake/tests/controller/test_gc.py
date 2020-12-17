@@ -170,6 +170,12 @@ def test_update_resource_dependency_graph():
     )
     app_1_ref = resource_ref(app_1)
 
+    """     cluster_1 -- app_1
+          /
+    up_1 <
+          \
+            cluster_2
+    """
     graph = DependencyGraph()
     graph.add_resource(up_1_ref, up_1.metadata.owners)
     graph.add_resource(cluster_1_ref, cluster_1.metadata.owners)
@@ -177,6 +183,12 @@ def test_update_resource_dependency_graph():
     graph.add_resource(app_1_ref, app_1.metadata.owners)
 
     # Replace ownership
+    """     cluster_1
+          /
+    up_1 <
+          \
+            cluster_2 -- app_1
+    """
     app_1.metadata.owners = [cluster_2_ref]
     graph.update_resource(app_1_ref, app_1.metadata.owners)
 
@@ -184,6 +196,11 @@ def test_update_resource_dependency_graph():
     assert graph.get_direct_dependents(cluster_1_ref) == []
 
     # Remove ownership
+    """
+    up_1 -- cluster_1
+    ---------------------
+    cluster_2 -- app_1
+    """
     cluster_2.metadata.owners = []
     graph.update_resource(cluster_2_ref, cluster_2.metadata.owners)
 
@@ -191,6 +208,11 @@ def test_update_resource_dependency_graph():
     assert graph.get_direct_dependents(up_1_ref) == [cluster_1_ref]
 
     # Add new ownership
+    """
+    up_1 -- cluster_1
+    ---------------------------
+    up_2 -- cluster_2 -- app_1
+    """
     up_2 = UpperResourceFactory()
     up_2_ref = resource_ref(up_2)
     graph.add_resource(up_2_ref, up_2.metadata.owners)
