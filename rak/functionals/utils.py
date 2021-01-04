@@ -1056,6 +1056,14 @@ class ClusterDefinition(ResourceDefinition):
         return ["labels", "metrics"]
 
     def _get_default_values(self):
+        """Returns the default values for all mutable attributes of this resource
+        definition.
+
+        Returns:
+            dict[str: object]:
+                dict with the attributes in self._mutable_attributes as keys and
+                their default values as values.
+        """
         defaults = dict.fromkeys(self._mutable_attributes)
         defaults.update({"labels": {}})
         defaults.update({"metrics": []})
