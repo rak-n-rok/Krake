@@ -10,7 +10,7 @@ Complete
 ========
 
 
-The application `complete` hook gives ability to signals job completion.
+The application `complete` hook gives the ability to signals job completion.
 
 The Krake Kubernetes controller calls the application `complete`
 hook before the deployment of the application on a Kubernetes
@@ -19,8 +19,8 @@ cluster. The hook is disabled by default. The user can enable this hook with the
 
 See also :ref:`user/rok-documentation:Rok documentation`.
 
-The complete hook injects the ``KRAKE_TOKEN`` environment variable which stores the
-Krake authentication token and the ``KRAKE_COMPLETE_URL`` environment variable which
+The complete hook injects the ``KRAKE_TOKEN`` environment variable, which stores the
+Krake authentication token, and the ``KRAKE_COMPLETE_URL`` environment variable, which
 stores the Krake `complete` hook URL for a given application.
 
 By default, this URL is the Krake API endpoint as specified in the Kubernetes Controller

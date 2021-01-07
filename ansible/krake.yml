@@ -294,7 +294,8 @@
             {{ git_dir }}/support/pki {{ item }}
             --dest-dir {{ configuration_dir }}/certs
             --host {{ external_host }}
-            --host {{ api_host }} --ignore
+            --host {{ api_host }}
+            --ignore
           loop:
             - system:api-server
             - system:scheduler
@@ -338,7 +339,7 @@
             {% if complete_hook_cert_dest is defined %} --complete-hook-cert-dest {{ complete_hook_cert_dest }} {% endif %} \
             {% if complete_hook_env_token is defined %} --complete-hook-env-token {{ complete_hook_env_token }} {% endif %} \
             {% if complete_hook_env_complete is defined %} --complete-hook-env-complete {{ complete_hook_env_complete }} {% endif %} \
-            --external-endpoint {% if external_endpoint is defined %}{{ external_endpoint }}{% else %}{{ api_endpoint }}{% endif %} \
+            --external-endpoint {% if external_endpoint is defined %}{{ external_endpoint }}{% endif %} \
             {{ git_dir }}/config/*template
 
         - name: Change permissions of the configuration directory

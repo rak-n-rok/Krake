@@ -153,8 +153,6 @@ command-line options. The arguments and available options are:
     URL of the Krake API, which will be given to the Application. See
     :ref:`dev/hooks:Complete`. Default: ``"KRAKE_COMPLETE_URL"``.
 
-
-
 ``--external-endpoint`` (str)
     If set, replaces the value of the URL host and port of the endpoint given to the
     Applications which have the 'complete' hook enabled. See :ref:`dev/hooks:Complete`.
