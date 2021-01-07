@@ -16,6 +16,7 @@
 # Default Ansible inventory
 /ansible/hosts
 /ansible/hosts.yml
+/ansible/rok_configurations
 
 # Public keys managed by Ansible
 /ansible/public_keys/**
@@ -45,8 +46,6 @@ __pycache__/
 /kubernetes.yaml
 /magnum.yaml
 /scheduler.yaml
-
-/ansible/hosts.yml
 
 # Krake dot env configuration variables file
 .env

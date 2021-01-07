@@ -19,6 +19,7 @@
           subnet: "{{ hostvars[network]['subnet_name'] }}"
           common_secgroup: "{{ hostvars[network]['common_secgroup_name'] }}"
           use_config_drive: "{{ use_config_drive }}"
+          wireguard_port: "{{ wireguard_port }}"
       register: stack
 
     - name: Update host variables of gateway
@@ -47,8 +48,10 @@
   roles:
     - authorized-keys
   vars:
-
     authorized_user: ubuntu
+    wg_conf_dir: "/etc/wireguard"
+    wg_pub_key_path: "{{ wg_conf_dir }}/publickey"
+    wg_priv_key_path: "{{ wg_conf_dir }}/privatekey"
   tasks:
 
     - name: Wait for gateway to show up
@@ -68,120 +71,81 @@
         name: "{{ packages }}"
       vars:
         packages:
-          - openvpn
+          - wireguard
           - ferm
 
-    - name: Create 'openvpn' group
-      group:
-        name: openvpn
-        system: true
-        state: present
+    - name: Check if wireguard private key was generated
+      stat:
+        path: "{{ wg_priv_key_path }}"
+      register: private_key
 
-    - name: Create user 'openvpn'
-      user:
-        name: openvpn
-        group: openvpn
-        create_home: false
-        system: true
-        shell: /bin/bash
-        state: present
+    - name: Generate wireguard private key on the gateway
+      shell: "umask 0077 && wg genkey > {{ wg_priv_key_path | quote }}"
+      when: not private_key.stat.exists
 
-    - name: Create /etc/openvpn/server/krake directory
-      file:
-        path: /etc/openvpn/server/krake
-        state: directory
+    - name: Generate the server and client wireguard configurations
+      tags:
+        - wireguard_clients
+      block:
 
-    - name: Copy OpenVPN server configuration
-      vars:
-        # OpenVPN subnet
-        vpn_server_ip: "{{ vpn_cidr | network_hosts | first }}"
-        vpn_network_address: "{{ vpn_cidr | network_address }}"
-        vpn_netmask: "{{ vpn_cidr | netmask }}"
+      - name: Read the private key
+        become: true
+        slurp:
+          src: "{{ wg_priv_key_path }}"
+        register: wg_private_key_b64
 
-        # OpenStack subnet
-        private_network_address: "{{ hostvars[network]['subnet_cidr'] | network_address }}"
-        private_netmask: "{{ hostvars[network]['subnet_cidr'] | netmask }}"
-      template:
-        src: "{{ playbook_dir }}/files/gateway/server.conf.j2"
-        dest: /etc/openvpn/server/krake/server.conf
+      - set_fact:
+          wg_private_key: "{{ wg_private_key_b64.content | b64decode }}"
 
-    # TODO: Generally, the CA key should not be stored on the VPN server for
-    #   security reasons. But since this gateway is potentially shared between
-    #   developers, it would be quite inconvenient to share a local CA key
-    #   across developers.
-    - name: Generate OpenSSL private key for CA certificate
-      openssl_privatekey:
-        path: /etc/openvpn/server/krake/ca.key
+      - name: Check if public key was generated
+        stat:
+          path: "{{ wg_pub_key_path }}"
+        register: public_key
 
-    - name: Generate OpenSSL CA certificate signing request (CSR)
-      openssl_csr:
-        path: /etc/openvpn/server/krake/ca.csr
-        privatekey_path: /etc/openvpn/server/krake/ca.key
-        common_name: "{{ inventory_hostname }}-ca"
-        subject:
-          C: DE
-          ST: Saxony
-          L: Dresden
-          O: CLOUD&HEAT Technology GmbH
-          CN: "{{ inventory_hostname }}-ca"
-        basic_constraints:
-          - CA:TRUE
+      - name: Generate wireguard public key on the gateway
+        shell: "wg pubkey < {{ wg_priv_key_path|quote }} > {{ wg_pub_key_path|quote }}"
+        when: not public_key.stat.exists
 
-    - name: Generate OpenSSL CA certificate
-      openssl_certificate:
-        path: /etc/openvpn/server/krake/ca.crt
-        privatekey_path: /etc/openvpn/server/krake/ca.key
-        csr_path: /etc/openvpn/server/krake/ca.csr
-        provider: selfsigned
+      - name: Read the public key
+        become: true
+        slurp:
+          src: "{{ wg_pub_key_path }}"
+        register: wg_public_key_b64
 
-    - name: Generate OpenSSL private key for server certificate
-      openssl_privatekey:
-        path: /etc/openvpn/server/krake/server.key
+      - set_fact:
+          wg_public_key: "{{ wg_public_key_b64.content | b64decode }}"
 
-    - name: Generate OpenSSL server certificate signing request (CSR)
-      openssl_csr:
-        path: /etc/openvpn/server/krake/server.csr
-        privatekey_path: /etc/openvpn/server/krake/server.key
-        common_name: "{{ inventory_hostname }}"
-        subject:
-          C: DE
-          ST: Saxony
-          L: Dresden
-          O: CLOUD&HEAT Technology GmbH
-          CN: "{{ inventory_hostname }}"
-        basic_constraints:
-          - CA:FALSE
-        key_usage:
-          - digitalSignature
-          - keyEncipherment
-        extended_key_usage:
-          - serverAuth
+      - name: Create wireguard configuration on the gateway
+        become: yes
+        template:
+          src: "{{ playbook_dir }}/files/gateway/server_wg0.conf.j2"
+          dest: /etc/wireguard/wg0.conf
+          mode: '0640'
+        vars:
+          wg_gateway_ip: "{{ vpn_cidr | network_hosts | first }}"
+        register: gateway_conf_updated
 
-    - name: Sign OpenSSL server certificate
-      openssl_certificate:
-        path: /etc/openvpn/server/krake/server.crt
-        privatekey_path: /etc/openvpn/server/krake/server.key
-        csr_path: /etc/openvpn/server/krake/server.csr
-        ownca_path: /etc/openvpn/server/krake/ca.crt
-        ownca_privatekey_path: /etc/openvpn/server/krake/ca.key
-        provider: ownca
+      - name: Create the wireguard for each peer in host file
+        become: no
+        delegate_to: localhost
+        run_once: yes
+        template:
+          src: "{{ playbook_dir }}/files/gateway/client_wg0.conf.j2"
+          dest: "{{ client_wg_path }}"
+          mode: '0640'
+        vars:
+          private_subnet_cidr: "{{ hostvars[network]['subnet_cidr'] }}"
+          client_wg_path: "{{ etc_dir }}/wg_{{ item['name'] }}.conf"
+          gateway_ip: "{{ hostvars[gateway].public_ip }}"
+        loop: "{{ wireguard_peers }}"
 
-    - name: Generate Diffie-Hellman parameters with 2048 bits
-      openssl_dhparam:
-        path: /etc/openvpn/server/krake/dh2048.pem
-        size: 2048
-
-    - name: Create symbolic for OpenVPN server configuration
-      file:
-        src: krake/server.conf
-        dest: /etc/openvpn/server/krake.conf
-        state: link
-
-    - name: Start OpenVPN server service
-      systemd:
-        name: openvpn-server@krake
+    - name: Start and enable the wireguard service if the configuration changed
+      become: yes
+      service:
+        name: wg-quick@wg0
         state: restarted
-        enabled: true
+        enabled: yes
+      when: gateway_conf_updated is defined
 
     # --------------
     # Firewall Setup

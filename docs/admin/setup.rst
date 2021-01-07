@@ -123,3 +123,64 @@ Each sub-directory groups files based on Ansible best practices recommendations.
 +-----------------------+------------------------------------------------------+
 | utils/                | Krake Ansible helper scripts                         |
 +-----------------------+------------------------------------------------------+
+
+
+Access through the gateway
+==========================
+
+To compartmentalize the infrastructure, all machines deployed by Krake are present on
+the same OpenStack private network. Only the gateway is associated with a floating IP
+and can thus be accessed externally. All other machines can be reached through the
+gateway.
+
+To simplify this process, the wireguard_ VPN is installed on the gateway when deployed.
+After the deployment, for each wireguard peer set for the gateway in the host file (see
+:ref:`admin/inventory:Inventory structure`), a wireguard configuration file is created
+in the etc directory where the inventory files are created (``ansible/.etc`` by
+default). The files names have the following syntax: ``wg_<peer_name>.conf``.
+
+To use this file you have to:
+
+    0. install wireguard locally;
+
+    1. open it and change the ``REPLACEME`` placeholder with the private key that
+       corresponds to the peer;
+
+    2. bring the wireguard interface up by using:
+
+        .. code:: bash
+
+            $ wg-quick up <path_to_file>/wg_<peer_name>.conf
+
+            # Example:
+            $ wg-quick up ansible/.etc/wg_my-peer.conf
+
+    3. you can now SSH into the other machines on the private network:
+
+        .. code:: bash
+
+            $ ssh ubuntu@<krake_VM_private_ip>
+
+
+The wireguard interface can be brought down by using:
+
+.. code:: bash
+
+    $ wg-quick down <path_to_file>/wg_<peer_name>.conf
+
+    # Example:
+    $ wg-quick down ansible/.etc/wg_my-peer.conf
+
+
+.. important::
+
+    If several Krake deployments are managed from a single machine, the peer names
+    should have a different value, to avoid conflicts with the wireguard network
+    interfaces.
+
+    If several network interfaces are up at the same time, then the Krake private
+    networks should not overlap. So if one has for instance the CIDR ``192.168.0.0/24``,
+    another deployment should use something independent, such as ``192.168.1.0/24``.
+
+
+.. _wireguard: https://www.wireguard.com/

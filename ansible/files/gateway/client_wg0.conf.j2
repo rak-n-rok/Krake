@@ -1,0 +1,8 @@
+[Interface]
+PrivateKey = REPLACEME
+Address = {{ item['IP'] }}
+
+[Peer]
+PublicKey = {{ wg_public_key }}
+Endpoint = {{ gateway_ip }}:{{ wireguard_port }}
+AllowedIPs = {{ vpn_cidr }}, {{ private_subnet_cidr }}

@@ -50,6 +50,12 @@ parameters:
     default: false
     description: Control if a config Drive should be used to pass the Metadata to the server
 
+  wireguard_port:
+    type: number
+    default: 51820
+    description: UDP port for wireguard. A security group will be added allowing public
+      communication over this port.
+
 resources:
 
   instance:
@@ -78,11 +84,11 @@ resources:
     type: OS::Neutron::SecurityGroup
     properties:
       name: { get_param: gateway_secgroup }
-      description: Allow ingress on UDP port 1194 (OpenVPN)
+      description: Allow ingress on UDP port used by wireguard
       rules:
         - protocol: udp
-          port_range_min: 1194
-          port_range_max: 1194
+          port_range_min: { get_param: wireguard_port }
+          port_range_max: { get_param: wireguard_port }
 
   floating_ip:
     type: OS::Neutron::FloatingIP

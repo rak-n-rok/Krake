@@ -43,6 +43,14 @@ all:
         krake-gateway:
           network: krake-network
           vpn_cidr: 10.9.0.0/24
+          # Configuration for wireguard: each peer defined in this list will be given
+          # access to the wireguard network and be able to communicate with the VMs
+          # through the gateway.
+          wireguard_peers:
+          - name: <peer_name>  # Arbitrary name, to differentiate all peers.
+            public_key: <wireguard_public_key>
+            # IP of this peer in the wireguard network. Unique for each peer.
+            IP: <peer_IP_in_wireguard_network>
 
     minikube_clusters:
       hosts:
