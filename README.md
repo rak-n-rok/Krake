@@ -29,9 +29,19 @@ development setup. Advanced topics are covered in the
 
 ### Requirements
 
+#### Krake deployment
+
 - [etcdv3][etcd]
 - [Python][python] >= 3.6
 - [Setup at least one Minikube VM][minikube]
+
+#### Testing
+
+- Zookeeper, Kafka and KSQL, for instance with the
+  [Confluent Platform][confluent_packages]. The following commands need to be available:
+    * `zookeeper-server-start`;
+    * `kafka-server-start`;
+    * `ksql-server-start`.
 
 
 ### Installation
@@ -256,3 +266,4 @@ transformed to an open source project in September 2019.
 [sphinx]: http://www.sphinx-doc.org/
 [krake-matrix]: https://riot.im/app/#/room/#krake:matrix.org
 [virtualenv]: https://virtualenv.pypa.io/en/stable
+[confluent_packages]: https://docs.confluent.io/platform/current/installation/available_packages.html

@@ -303,6 +303,26 @@ class PrometheusSpec(Serializable):
     url: str
 
 
+@MetricsProviderSpec.register("kafka")
+class KafkaSpec(Serializable):
+    """Specifications to connect to a KSQL database, and retrieve a specific row from a
+    specific table.
+
+    Attributes:
+        comparison_column (str): name of the column where the value will be compared to
+            the metric name, to select the right metric.
+        value_column (str): name of the column where the value of a metric is stored.
+        table (str): the name of the KSQL table where the metric is defined.
+        url (str): endpoint of the KSQL database.
+
+    """
+
+    comparison_column: str
+    value_column: str
+    table: str
+    url: str
+
+
 @MetricsProviderSpec.register("static")
 class StaticSpec(Serializable):
     metrics: Dict[str, float]

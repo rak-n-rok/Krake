@@ -201,6 +201,81 @@ class Prometheus(Provider):
         raise MetricError(f"Metric {metric_name!r} not in Prometheus response")
 
 
+class Kafka(Provider):
+    """Kafka metrics provider client for KSQL. It creates and handles queries to the
+    given KSQL database and evaluates requested metric values.
+    """
+
+    type = "kafka"
+
+    def __init__(self, session: ClientSession, metrics_provider: MetricsProvider):
+        self.session = session
+        self.metrics_provider = metrics_provider
+
+    async def query(self, metric):
+        """Sends a KSQL query to a KSQL database, in order to fetch the current value
+        of the provided metrics.
+
+        The value is taken from a specific row on a specific table, using a query like
+        the following:
+
+        SELECT <value_column> FROM <table>
+        WHERE <comparison_column> = '<metric_name>';
+
+        To get the right row, the value of all rows on the column "<comparison_column>"
+        is compared with the metric name. The row that matches is then selected, and the
+        value on this row at the column "<value_column>" is returned by KSQL. The
+        response is then parsed accordingly. All parameters except the metric name are
+        defined in the Kafka metric provider. The name is the one of the current metric,
+        bound to a cluster.
+
+        Args:
+            metric (Metric): Metric description.
+
+        Returns:
+            float: Metric value fetched from the KSQL database.
+
+        Raises:
+            MetricError: if the database is unreachable or the response cannot be
+            parsed.
+
+        """
+        metric_name = metric.spec.provider.metric
+        kafka_spec = self.metrics_provider.spec.kafka
+
+        url = URL(kafka_spec.url) / "query"
+
+        query = (
+            f"SELECT {kafka_spec.value_column} FROM {kafka_spec.table}"
+            f" WHERE {kafka_spec.comparison_column} = '{metric_name}';"
+        )
+        request = {"ksql": query, "streamsProperties": {}}
+
+        try:
+            # The value of 20 is only here to prevent a long timeout of 5 minutes
+            # by default with aiohttp.
+            # TODO: The mechanism of fetching metrics will be changed with the issue
+            #  #326, so this timeout should be modified at this moment. This timeout
+            #  allows the integration tests to last not too long.
+            wait_time = 20
+            timeout = ClientTimeout(total=wait_time)
+            async with self.session.post(url, json=request, timeout=timeout) as resp:
+                resp.raise_for_status()
+                body = await resp.json()
+        except (ClientError, asyncio.TimeoutError) as err:
+            raise MetricError("Failed to query Kafka") from err
+
+        try:
+            resp_row = body[1]["row"]
+            return float(resp_row["columns"][0])
+        except (IndexError, KeyError) as err:
+            message = (
+                f"The value of the metric {metric_name!r}"
+                f" cannot be read from the KSQL response"
+            )
+            raise MetricError(message) from err
+
+
 class Static(Provider):
     """Static metrics provider client. It simply returns the value configured
     in the metric's :class:`krake.data.core.StaticSpec`.
