@@ -34,4 +34,5 @@ spec:
           echo "apply 'chmod +x' to /tmp/hook-script.py"
           chmod +x /tmp/hook-script.py
           echo "execute hook-script.py now"
+          sleep 2
           /tmp/hook-script.py

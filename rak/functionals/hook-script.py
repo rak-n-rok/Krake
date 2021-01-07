@@ -4,7 +4,6 @@ in a Deployment that belongs to a Krake Application.
 """
 import os.path
 import requests
-import time
 
 endpoint_env = "KRAKE_COMPLETE_URL"
 token_env = "KRAKE_TOKEN"
@@ -15,7 +14,6 @@ default_key_path = "/etc/krake_cert/key.pem"
 
 def main():
     print("Start script's main")
-    time.sleep(2)
 
     cert_and_key = None
     ca = False
