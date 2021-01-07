@@ -706,13 +706,13 @@ def client_ssl_context(pki):
 
 @pytest.fixture
 def hooks_config(pki):
-    """
+    """Generate the configuration for using the hooks of the KubernetesController.
 
     Args:
-        pki (PublicKeyRepository):
+        pki (PublicKeyRepository): Already-prepared certificate environment.
 
     Returns:
-        HooksConfiguration:
+        HooksConfiguration: the generated configuration.
 
     """
     client_cert = pki.gencert("test-complete-hook-signing", is_intermediate=True)

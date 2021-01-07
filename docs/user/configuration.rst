@@ -338,7 +338,7 @@ hooks (string)
             certificates for the hook. Not needed if TLS is not enabled. Example:
             ``/etc/krake/certs/system:complete-signing-key.pem``
         cert_dest (path)
-            Set the path to the certificate authority in deployed Application. Example: ``/etc/krake_cert``
+            Set the path to the certificate authority on the deployed Application. Example: ``/etc/krake_cert``
         env_token (string)
             Name of the environment variable, which stores Krake authentication token. Example: ``KRAKE_TOKEN``
         env_complete (string)

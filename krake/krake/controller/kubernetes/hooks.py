@@ -400,10 +400,10 @@ async def unregister_observer(controller, app, **kwargs):
 
 
 def utc_difference():
-    """
+    """Get the difference in seconds between the current time and the current UTC time.
 
     Returns:
-        int:
+        int: the time difference in seconds.
 
     """
     delta = datetime.now() - datetime.utcnow()
