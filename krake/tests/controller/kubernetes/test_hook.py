@@ -27,7 +27,17 @@ from tests.controller.kubernetes import nginx_manifest
 
 async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
     """Verify that the Controller mangled the received Application to add elements of
-    the "complete" hook if it had been enabled
+    the "complete" hook if it had been enabled.
+
+    Conditions:
+     * TLS:  disabled
+     * RBAC: disabled
+     * extras: none, this is the most simple case.
+
+    Expectations:
+        Environment variables are added to the Deployment in the manifest file of the
+        deployed Application.
+
     """
     routes = web.RouteTableDef()
 
@@ -87,6 +97,15 @@ async def test_complete_hook_disable_by_user(
 ):
     """Verify that the Controller did not mangle the received Application to add
     elements of the "complete" hook if it had not been enabled.
+
+    Conditions:
+     * TLS:  disabled
+     * RBAC: disabled
+     * extras: complete hook not set by the user
+
+    Expectations:
+        No resource is added in the app's manifest.
+
     """
     routes = web.RouteTableDef()
 
@@ -145,6 +164,16 @@ async def test_complete_hook_tls(
     """Verify that the Controller mangled the received Application to add elements of
     the "complete" hook if it had been enabled when the communication with TLS was
     enabled.
+
+    Conditions:
+     * TLS:  enabled
+     * RBAC: disabled
+     * extras: none.
+
+    Expectations:
+        A ConfigMap is added in the manifest file, as well as its mounting point in the
+        Deployment of the ConfigMap.
+
     """
     routes = web.RouteTableDef()
 
@@ -213,6 +242,10 @@ async def test_complete_hook_tls(
 
     assert len(stored.status.manifest) == 2
     for resource in stored.status.manifest:
+        # Ensure all resources (provided and generated) are created in the same
+        # namespace.
+        assert resource["metadata"]["namespace"] == "secondary"
+
         if resource["kind"] != "Deployment":
             assert resource["kind"] == "ConfigMap"
             continue
@@ -232,6 +265,17 @@ async def test_complete_hook_default_namespace(
     """Verify that the Controller mangled the received Application to add elements of
     the "complete" hook if it had been enabled, even if the resources have been created
     without any namespace.
+
+    Conditions:
+     * TLS:  disabled
+     * RBAC: disabled
+     * extras: no Kubernetes namespace is specified in the manifest file provided to
+       create the Application.
+
+    Expectations:
+        The Kubernetes resources are created, and they do not any namespace added to
+        them.
+
     """
     deployment_created = False
 
@@ -327,6 +371,18 @@ def get_hook_environment_value(application):
 async def test_complete_hook_sending(aiohttp_server, config, db, loop, hooks_config):
     """Send a hook using ONLY the information present in the environment of the
     Deployment, without TLS enabled.
+
+    Conditions:
+     * TLS:  disabled
+     * RBAC: disabled
+     * extras: send a request to the "complete" hook endpoint instead of checking the
+       created resources.
+
+    Expectations:
+        The information present on the DEPLOYED Kubernetes resources are enough to use
+        the "complete" hook endpoint, and the request sent to this endpoint led to the
+        deletion of the Application on the API.
+
     """
     routes = web.RouteTableDef()
 
@@ -386,6 +442,18 @@ async def test_complete_hook_sending_tls(
 ):
     """Send a hook using ONLY the information present in the environment of the
     Deployment, with TLS enabled.
+
+    Conditions:
+     * TLS:  enabled
+     * RBAC: disabled
+     * extras: send a request to the "complete" hook endpoint instead of checking the
+       created resources.
+
+    Expectations:
+        The information present on the DEPLOYED Kubernetes resources are enough to use
+        the "complete" hook endpoint, and the request sent to this endpoint led to the
+        deletion of the Application on the API.
+
     """
     routes = web.RouteTableDef()
 
@@ -504,6 +572,18 @@ async def test_complete_hook_sending_tls_rbac(
 ):
     """Send a hook using ONLY the information present in the environment of the
     Deployment, with TLS enabled and RBAC set on the API.
+
+    Conditions:
+     * TLS:  enabled
+     * RBAC: enabled
+     * extras: send a request to the "complete" hook endpoint instead of checking the
+       created resources.
+
+    Expectations:
+        The information present on the DEPLOYED Kubernetes resources are enough to use
+        the "complete" hook endpoint, and the request sent to this endpoint led to the
+        deletion of the Application on the API.
+
     """
     config.authorization = "RBAC"
     config.authentication.strategy.static.enabled = False
@@ -646,6 +726,19 @@ async def test_complete_hook_reschedule(
 ):
     """Attempt to reschedule an Application augmented with the "complete" hook. Enable
     TLS to use the "full-featured" hook (with the ConfigMap containing a certificate).
+
+    Conditions:
+     * TLS:  enabled
+     * RBAC: disabled
+     * extras: instead of checking the content of the manifest file in the Application,
+       give the Application a second time to the Kubernetes controller, to trigger it to
+       handle the Application as if it was rescheduled. Have TLS enabled to generate a
+       ConfigMap on the Application.
+
+    Expectations:
+        The rescheduling should occur without any interference of the resources
+        generated by the "complete" hook.
+
     """
     routes = web.RouteTableDef()
 
