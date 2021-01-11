@@ -11,6 +11,7 @@ krake:
   config:
     path: /etc/krake
   cert_dir: $cert_dir
+  enable_tls: $tls_enabled
 
 # Krake ETCD database
 etcd:
