@@ -261,15 +261,14 @@
             {% if cert_dir is defined %} --cert-dir {{ cert_dir }} {% endif %} \
             {{ git_dir }}/docker/docker.yaml.template
 
-        - name: Configure docker infrastructure bundles
-          command: "{{ git_dir }}/docker/generate --config {{ git_dir }}/docker/docker.yaml {{ git_dir }}/docker/krake {{ git_dir }}/docker/prometheus"
+        - name: Configure the docker infrastructure
+          command: "{{ git_dir }}/docker/generate --config {{ git_dir }}/docker/docker.yaml {{ git_dir }}/docker/krake"
 
         - name: Remove Krake infrastructure
           docker_compose:
             project_src: "{{ git_dir }}/docker"
             files:
               - "{{ git_dir }}/docker/krake/docker-compose.yaml"
-              - "{{ git_dir }}/docker/prometheus/docker-compose.yaml"
             state: absent
 
         - name: Remove Krake image
@@ -383,7 +382,6 @@
             project_src: "{{ git_dir }}/docker"
             files:
               - "{{ git_dir }}/docker/krake/docker-compose.yaml"
-              - "{{ git_dir }}/docker/prometheus/docker-compose.yaml"
             state: present
             build: no
 
@@ -395,8 +393,6 @@
             < {{ git_dir }}/{{ item }}
           loop:
             - "bootstrapping/base_roles.yaml"
-            - "docker/prometheus/bootstrap.yaml"
-            - "support/static_metrics.yaml"
 
     - name: Krake rok deployment
       tags:
