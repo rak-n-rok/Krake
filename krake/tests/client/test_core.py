@@ -220,6 +220,7 @@ async def test_connect_ssl(aiohttp_server, config, loop, pki):
         "allow_anonymous": True,
         "strategy": {
             "keystone": {"enabled": False, "endpoint": "localhost"},
+            "keycloak": {"enabled": False, "endpoint": "endpoint", "realm": "krake"},
             "static": {"enabled": False, "name": "test-user"},
         },
     }

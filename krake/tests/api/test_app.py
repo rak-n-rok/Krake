@@ -149,6 +149,7 @@ async def test_cors_setup_rbac(aiohttp_client, db, config, loop, pki):
         "allow_anonymous": False,
         "strategy": {
             "keystone": {"enabled": False, "endpoint": "localhost"},
+            "keycloak": {"enabled": False, "endpoint": "endpoint", "realm": "krake"},
             "static": {"enabled": False, "name": "test-user"},
         },
     }

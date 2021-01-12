@@ -12,6 +12,7 @@ async def test_static_auth(aiohttp_client, config):
         "allow_anonymous": True,
         "strategy": {
             "keystone": {"enabled": False, "endpoint": "localhost"},
+            "keycloak": {"enabled": False, "endpoint": "localhost", "realm": "krake"},
             "static": {"enabled": True, "name": "test-user"},
         },
     }
@@ -108,6 +109,7 @@ async def test_keystone_auth(keystone, aiohttp_client, config):
         "allow_anonymous": True,
         "strategy": {
             "keystone": {"enabled": True, "endpoint": keystone.auth_url},
+            "keycloak": {"enabled": False, "endpoint": "endpoint", "realm": "krake"},
             "static": {"enabled": False, "name": "test-user"},
         },
     }
@@ -121,11 +123,98 @@ async def test_keystone_auth(keystone, aiohttp_client, config):
     assert data["user"] == keystone.username
 
 
+@pytest.mark.slow
+async def test_keycloak(keycloak):
+    """Test the Keycloak fixture.
+    """
+    async with ClientSession() as session:
+        # Create a new authentication token
+        url = (
+            f"{keycloak.auth_url}/auth/realms/{keycloak.realm}"
+            f"/protocol/openid-connect/token"
+        )
+        resp = await session.post(
+            url,
+            data={
+                "grant_type": "password",
+                "username": keycloak.username,
+                "password": keycloak.password,
+                "client_id": keycloak.client_id,
+                "client_secret": keycloak.client_secret,
+            },
+        )
+        assert resp.status == 200
+        data = await resp.json()
+        token = data["access_token"]
+
+        url = (
+            f"{keycloak.auth_url}/auth/realms/{keycloak.realm}"
+            f"/protocol/openid-connect/userinfo"
+        )
+        resp = await session.post(url, data={"access_token": token})
+        data = await resp.json()
+        assert data["preferred_username"] == keycloak.username
+
+
+@pytest.mark.slow
+async def test_keycloak_auth(keycloak, aiohttp_client, config):
+    """Using the keycloak fixture, test the API's Keycloak authentication.
+    """
+    async with ClientSession() as session:
+        # Create a new authentication token
+        url = (
+            f"{keycloak.auth_url}/auth/realms/{keycloak.realm}"
+            f"/protocol/openid-connect/token"
+        )
+        resp = await session.post(
+            url,
+            data={
+                "grant_type": "password",
+                "username": keycloak.username,
+                "password": keycloak.password,
+                "client_id": keycloak.client_id,
+                "client_secret": keycloak.client_secret,
+            },
+        )
+        assert resp.status == 200
+        data = await resp.json()
+        token = data["access_token"]
+
+    # Use the issued token to access Krake API
+    authentication = {
+        "allow_anonymous": True,
+        "strategy": {
+            "keystone": {"enabled": False, "endpoint": "localhost"},
+            "keycloak": {
+                "enabled": True,
+                "endpoint": keycloak.auth_url,
+                "realm": keycloak.realm,
+            },
+            "static": {"enabled": False, "name": "test-user"},
+        },
+    }
+    config.authentication = AuthenticationConfiguration.deserialize(authentication)
+
+    # Valid token
+    client = await aiohttp_client(create_app(config=config))
+    resp = await client.get("/me", headers={"Authorization": token})
+    assert resp.status == 200
+
+    data = await resp.json()
+    assert data["user"] == keycloak.username
+
+    # Invalid token
+    client = await aiohttp_client(create_app(config=config))
+    resp = await client.get("/me", headers={"Authorization": "SomeInvalidToken"})
+    assert resp.status == 401
+
+
 async def test_deny_anonymous_requests(aiohttp_client, config):
     authentication = {
         "allow_anonymous": False,
         "strategy": {
             "keystone": {"enabled": False, "endpoint": "localhost"},
+            "keycloak": {"enabled": False, "endpoint": "endpoint", "realm": "krake"},
             "static": {"enabled": False, "name": "test-user"},
         },
     }
@@ -143,6 +232,7 @@ async def test_client_anonymous_cert_auth(aiohttp_client, config, pki):
         "allow_anonymous": True,
         "strategy": {
             "keystone": {"enabled": False, "endpoint": "localhost"},
+            "keycloak": {"enabled": False, "endpoint": "endpoint", "realm": "krake"},
             "static": {"enabled": False, "name": "test-user"},
         },
     }
@@ -178,6 +268,7 @@ async def test_client_cert_auth(aiohttp_client, config, pki):
         "allow_anonymous": True,
         "strategy": {
             "keystone": {"enabled": False, "endpoint": "localhost"},
+            "keycloak": {"enabled": False, "endpoint": "endpoint", "realm": "krake"},
             "static": {"enabled": False, "name": "test-user"},
         },
     }

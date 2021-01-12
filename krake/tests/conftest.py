@@ -1,8 +1,11 @@
 import asyncio
 import os
 import random
+import signal
 import sys
 import subprocess
+import urllib
+from io import BytesIO
 from tempfile import TemporaryDirectory
 from pathlib import Path
 from typing import NamedTuple
@@ -10,6 +13,8 @@ import time
 import logging.config
 from textwrap import dedent
 import json
+from zipfile import ZipFile
+
 import requests
 import pytest
 import aiohttp
@@ -213,6 +218,11 @@ def config(etcd_server, user):
             "allow_anonymous": True,
             "strategy": {
                 "keystone": {"enabled": False, "endpoint": "http://localhost"},
+                "keycloak": {
+                    "enabled": False,
+                    "endpoint": "no_endpoint",
+                    "realm": "krake",
+                },
                 "static": {"enabled": True, "name": user},
             },
         },
@@ -369,6 +379,89 @@ def keystone():
             finally:
                 time.sleep(1)
                 proc.terminate()
+
+
+class KeycloakInfo(NamedTuple):
+    port: int
+    realm: str
+    client_id: str
+    client_secret: str
+    grant_type: str
+    username: str
+    password: str
+
+    @property
+    def auth_url(self):
+        return f"http://localhost:{self.port}"
+
+
+@pytest.fixture
+def keycloak():
+    """Fixture to create a Keycloak instance running in the background. The instance is
+    stopped after a test that uses this fixture finished.
+
+    Returns:
+        KeycloakInfo: the different values needed to connect to the running instance.
+
+    """
+    version = "11.0.2"
+    with TemporaryDirectory() as tempdir:
+
+        url = urllib.request.urlopen(
+            f"https://downloads.jboss.org/keycloak/{version}/keycloak-{version}.zip"
+        )
+
+        # Download Keycloak's zip and directly unzip the downloaded file.
+        # See https://stackoverflow.com/questions/42326428/zipfile-in-python-file-permission  # noqa
+        zip_unix_system = 3
+        with ZipFile(BytesIO(url.read())) as zf:
+            for info in zf.infolist():
+                extracted_path = zf.extract(info, tempdir)
+
+                if info.create_system == zip_unix_system:
+                    unix_attributes = info.external_attr >> 16
+                    if unix_attributes:
+                        os.chmod(extracted_path, unix_attributes)
+
+        keycloak_dir = Path(tempdir) / f"keycloak-{version}"
+        subprocess.check_call(
+            [
+                "support/keycloak",
+                "--temp-dir",
+                tempdir,
+                "init",
+                "--keycloak-dir",
+                keycloak_dir,
+            ]
+        )
+
+        process = subprocess.Popen(
+            ["support/keycloak", "--temp-dir", tempdir, "credentials"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        out, _ = process.communicate()
+        keycloak_cred = json.loads(out)
+
+        info = KeycloakInfo(**keycloak_cred)
+
+        with subprocess.Popen(
+            f"support/keycloak --temp-dir {tempdir}", shell=True, preexec_fn=os.setsid
+        ) as proc:
+            try:
+                wait_for_url(
+                    f"http://localhost:{info.port}/auth/realms/{info.realm}/",
+                    timeout=60,
+                )
+                yield info
+            except TimeoutError:
+                print("The URL could not be reached before the timeout.")
+            finally:
+                pid = proc.pid
+                time.sleep(1)
+                proc.terminate()
+                os.killpg(os.getpgid(pid), signal.SIGTERM)
+                time.sleep(1)
 
 
 class RecordsContext(object):

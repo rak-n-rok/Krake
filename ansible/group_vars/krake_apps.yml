@@ -22,8 +22,14 @@ etcd_peer_port: 2380
 enable_tls: true
 cert_dir: '/etc/krake/certs'
 allow_anonymous: false
+# keystone
 keystone_authentication_enabled: false
 keystone_authentication_endpoint: "http://localhost:5000/v3"
+# keycloak
+keycloak_authentication_enabled: false
+keycloak_authentication_endpoint: "http://localhost:9080"
+keycloak_authentication_realm: "krake"
+# static
 static_authentication_enabled: false
 static_authentication_username: "system:admin"
 

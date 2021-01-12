@@ -35,12 +35,12 @@ Authentication
 --------------
 .. _authentication:
 
-To authenticate the user, four different mechanisms can be used: static, Keystone, TLS
-or anonymous. When a request is received by the API, all the mechanisms enabled in this
-list will attempt to authenticate the user that sent the request. If the first failed,
-the second will try, and so on, until all failed, and an HTTP error "Unauthorized
-(401)" will be sent back to the API. The first that succeeds returns the user that has
-been authenticated. It is then used during the authorization process.
+To authenticate the user, five different mechanisms can be used: static, Keystone,
+Keycloak, TLS or anonymous. When a request is received by the API, all the mechanisms
+enabled in this list will attempt to authenticate the user that sent the request. If the
+first failed, the second will try, and so on, until all failed, and an HTTP error
+"Unauthorized (401)" will be sent back to the API. The first that succeeds returns the
+user that has been authenticated. It is then used during the authorization process.
 
 The order of priority between the authentication mechanisms is as follow (if the
 mechanisms are enabled):
@@ -56,6 +56,12 @@ Keystone:
     sent along with any request to the API as the value of the ``Authorization`` header
     in the HTTP request. See :ref:`admin/security:Keystone authentication` for more
     information.
+
+Keycloak:
+    authenticate incoming requests on the API using a Keycloak server. A token must
+    first be requested to the Keycloak server. This token should then be sent along with
+    any request to the API as the value of the ``Authorization`` header in the HTTP
+    request. See :ref:`admin/security:Keycloak authentication` for more information.
 
 TLS:
     authenticate incoming requests on the API using the common name attribute of
@@ -227,6 +233,112 @@ TLS support:
 
     $ curl --cacert ./tmp/pki/ca.pem -H "Accept: application/json" -H
             "Authorization: $TOKEN" https://localhost:8443/me
+
+
+Keycloak authentication
+=======================
+
+The Keycloak authentication uses a Keycloak_ service to obtain the identity of a user.
+The workflow to send a request to the API is as follow if Keycloak authentication is
+enabled:
+
+ 0. (the user must be registered in Keycloak;)
+ 1. the user sends a request to the Keycloak server to obtain a token;
+ 2. an HTTP request is sent to the API, with this token used in the header.
+
+
+Step 1
+------
+
+Query
+~~~~~
+
+To request a token to the server, multiple ways are supported by Keycloak. If the server
+has been set up for direct access grants, you can use the following example by replacing
+the values with the corresponding ones for your setup:
+
+.. code:: bash
+
+    $ curl -s http://localhost:9080/auth/realms/krake/protocol/openid-connect/token \
+        -d 'grant_type=password' \
+        -d 'username=<username>' \
+        -d 'password=<password>' \
+        -d 'client_id=<client_name>' \
+        -d 'client_secret=<client_secret>'
+
+For the ``support/keycloak`` script, you can use the following command to get a token:
+
+.. code:: bash
+
+    $ support/keycloak token
+
+
+Internally, something similar to the following is used, with all values set by the
+script:
+
+.. code:: bash
+
+    $ curl -s http://localhost:9080/auth/realms/krake/protocol/openid-connect/token \
+        -d 'grant_type=password' \
+        -d 'username=krake' \
+        -d 'password=krake' \
+        -d 'client_id=krake_client' \
+        -d 'client_secret=AVeryCoolAndSecureSecret'
+
+
+Response
+~~~~~~~~
+
+Using the cURL queries, you will get a JSON with the following structure:
+
+.. code-block:: json
+
+    {
+        "access_token":"XXXXXXXXXXXXXXXX",
+        "expires_in":60,
+        "refresh_expires_in":1800,
+        "refresh_token":"<refresh_token>",
+        "token_type":"bearer",
+        "not-before-policy":0,
+        "session_state":"9c22a6df-0997-4d3d-a540-239f85346008",
+        "scope":"profile email"
+    }
+
+
+From this output, you can obtain your token from the ``access_token`` field. A
+suggestion is to keep it in your shell as environment variable, for instance:
+
+.. code:: bash
+
+    $ TOKEN=XXXXXXXXXXXXXXXXXXXXXX
+
+
+With the ``support/keycloak`` direct command, you get the token directly, thus you could
+simply use:
+
+.. code:: bash
+
+    $ TOKEN=$(support/keycloak token)
+
+
+Step 2
+------
+
+Using your token, you can then communicate with the Krake API:
+
+.. code:: bash
+
+    $ curl -k -H "Accept: application/json" -H "Authorization: $TOKEN" \
+            <scheme>://<krake_api>/<query>
+
+For instance, to get the current authenticated user on Krake installed locally, with
+TLS support:
+
+.. code:: bash
+
+    $ curl --cacert ./tmp/pki/ca.pem -H "Accept: application/json" -H
+            "Authorization: $TOKEN" https://localhost:8443/me
+
 
 Certificate authentication
 ==========================
@@ -412,7 +524,7 @@ Then, enable the TLS support on the API:
       client_ca: <path_to_your_client_ca>
 
 
-If you want to use Keystone authentication additionally, you should set the Keystone
+If you want to use Keystone or Keycloak authentication additionally, you should set the
 configuration as well:
 
 .. code:: yaml
@@ -420,11 +532,18 @@ configuration as well:
     authentication:
       # ...
 
-      # Keystone authentication
       strategy:
+        # Keystone authentication
         keystone:
           enabled: true
           endpoint: <your_keystone_endpoint>
+
+        # Keycloak authentication
+        keycloak:
+          enabled: true
+          endpoint: <your_keystone_endpoint>
+          realm: <your_keycloak_realm>
+
 
 
 Configuration of the authorization:
@@ -553,3 +672,4 @@ naturally be modified if the administrator should have another name.
     cannot be created through the API, but must be added to the database directly.
 
 .. _Keystone: https://docs.openstack.org/keystone/latest/
+.. _Keycloak: https://www.keycloak.org/

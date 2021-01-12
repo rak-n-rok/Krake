@@ -47,6 +47,22 @@ class KeystoneAuthenticationConfiguration(Serializable):
     )
 
 
+class KeycloakAuthenticationConfiguration(Serializable):
+    enabled: bool = field(
+        default=False, metadata={"help": "If true, enables the Keycloak authentication"}
+    )
+    endpoint: str = field(
+        default="http://localhost:9080",
+        metadata={"help": "Endpoint to connect to the Keycloak service"},
+    )
+    realm: str = field(
+        default="krake",
+        metadata={
+            "help": "Keycloak realm against which the user should be authenticated"
+        },
+    )
+
+
 class StaticAuthenticationConfiguration(Serializable):
     enabled: bool = field(
         default=False, metadata={"help": "If true, enables the static authentication"}
@@ -61,6 +77,7 @@ class StaticAuthenticationConfiguration(Serializable):
 
 class StrategyConfiguration(Serializable):
     keystone: KeystoneAuthenticationConfiguration
+    keycloak: KeycloakAuthenticationConfiguration
     static: StaticAuthenticationConfiguration
 
 

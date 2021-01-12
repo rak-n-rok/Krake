@@ -310,6 +310,9 @@
             {% if allow_anonymous is defined and allow_anonymous %} --allow-anonymous {% endif %} \
             {% if keystone_authentication_enabled is defined and keystone_authentication_enabled %} --keystone-authentication-enabled {% endif %} \
             {% if keystone_authentication_endpoint is defined %} --keystone-authentication-endpoint {{ keystone_authentication_endpoint }} {% endif %} \
+            {% if keycloak_authentication_enabled is defined and keycloak_authentication_enabled %} --keycloak-authentication-enabled {% endif %} \
+            {% if keycloak_authentication_endpoint is defined %} --keycloak-authentication-endpoint {{ keycloak_authentication_endpoint }} {% endif %} \
+            {% if keycloak_authentication_realm is defined %} --keycloak-authentication-realm {{ keycloak_authentication_realm }} {% endif %} \
             {% if static_authentication_enabled is defined and static_authentication_enabled %} --static-authentication-enabled {% endif %} \
             {% if static_authentication_username is defined %} --static-authentication-username {{ static_authentication_username }} {% endif %} \
             {% if authorization_mode is defined %} --authorization-mode {{ authorization_mode }} {% endif %} \

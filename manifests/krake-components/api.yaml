@@ -21,6 +21,10 @@ data:
         keystone:
           enabled: False
           endpoint: http://localhost:5000/v3
+        keycloak:
+          enabled: False
+          endpoint: http://localhost:9080/
+          realm: krake
         static:
           enabled: True
           name: system:admin
