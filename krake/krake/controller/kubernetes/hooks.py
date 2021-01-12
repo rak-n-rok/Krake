@@ -419,8 +419,8 @@ def generate_certificate(config):
             complete hook.
 
     Returns:
-        (str, str): the content of the certificate created and its corresponding key as
-            strings.
+        CertificatePair: the content of the certificate created and its corresponding
+            key.
 
     """
     with open(config.intermediate_src, "rb") as f:
@@ -455,7 +455,7 @@ def generate_certificate(config):
 
     cert_dump = crypto.dump_certificate(crypto.FILETYPE_PEM, client_cert).decode()
     key_dump = crypto.dump_privatekey(crypto.FILETYPE_PEM, client_key).decode()
-    return cert_dump, key_dump
+    return CertificatePair(cert=cert_dump, key=key_dump)
 
 
 @listen.on(Hook.ApplicationMangling)
@@ -485,10 +485,13 @@ async def complete(app, api_endpoint, ssl_context, config):
     app.status.token = app.status.token if app.status.token else token_urlsafe()
 
     # Generate only once the certificate and key for a specific Application
-    generated_cert_key = app.status.complete_cert, app.status.complete_key
-    if ssl_context and generated_cert_key == (None, None):
-        generated_cert_key = generate_certificate(config.complete)
-        app.status.complete_cert, app.status.complete_key = generated_cert_key
+    generated_cert = CertificatePair(
+        cert=app.status.complete_cert, key=app.status.complete_key
+    )
+    if ssl_context and generated_cert == (None, None):
+        generated_cert = generate_certificate(config.complete)
+        app.status.complete_cert = generated_cert.cert
+        app.status.complete_key = generated_cert.key
 
     hook = Complete(
         api_endpoint,
@@ -504,7 +507,7 @@ async def complete(app, api_endpoint, ssl_context, config):
         app.status.token,
         app.status.mangling,
         config.complete.intermediate_src,
-        generated_cert_key,
+        generated_cert,
     )
 
 
@@ -513,6 +516,19 @@ class SubResource(NamedTuple):
     name: str
     body: dict
     path: tuple
+
+
+class CertificatePair(NamedTuple):
+    """Tuple which contains a certificate and its corresponding key.
+
+    Attributes:
+        cert (str): content of a certificate.
+        key (str): content of the key that corresponds to the certificate.
+
+    """
+
+    cert: str
+    key: str
 
 
 class Complete(object):
@@ -557,7 +573,7 @@ class Complete(object):
         self.env_complete = env_complete
 
     def mangle_app(
-        self, name, namespace, token, mangling, intermediate_src, generated_cert_key
+        self, name, namespace, token, mangling, intermediate_src, generated_cert
     ):
         """Mangle given application and injects complete hook resources and
         sub-resources into mangling object by :meth:`mangle`.
@@ -574,7 +590,7 @@ class Complete(object):
             mangling (list): Application resources
             intermediate_src (str): content of the certificate that is used to sign new
                 certificates for the complete hook.
-            generated_cert_key ((str, str)): tuple that contains the content of the
+            generated_cert (CertificatePair): tuple that contains the content of the
                 new signed certificate for the Application, and the content of its
                 corresponding key.
 
@@ -601,7 +617,7 @@ class Complete(object):
                     cfg_name,
                     namespace,
                     intermediate_src=intermediate_src,
-                    generated_cert_key=generated_cert_key,
+                    generated_cert=generated_cert,
                     ca_certs=ca_certs,
                 )
                 for namespace in resource_namespaces
@@ -766,7 +782,7 @@ class Complete(object):
         namespace,
         ca_certs=None,
         intermediate_src=None,
-        generated_cert_key=None,
+        generated_cert=None,
     ):
         """Create a complete hook configmap resource.
 
@@ -779,7 +795,7 @@ class Complete(object):
             ca_certs (list): Krake CA list
             intermediate_src (str): content of the certificate that is used to sign new
                 certificates for the complete hook.
-            generated_cert_key ((str, str)): tuple that contains the content of the
+            generated_cert (CertificatePair): tuple that contains the content of the
                 new signed certificate for the Application, and the content of its
                 corresponding key.
 
@@ -797,8 +813,11 @@ class Complete(object):
             intermediate_src_content = f.read()
         ca_certs_pem += intermediate_src_content
 
-        cert, key = generated_cert_key
-        data = {self.ca_name: ca_certs_pem, self.cert_name: cert, self.key_name: key}
+        data = {
+            self.ca_name: ca_certs_pem,
+            self.cert_name: generated_cert.cert,
+            self.key_name: generated_cert.key,
+        }
         return self.attribute_map(
             V1ConfigMap(
                 api_version="v1",
