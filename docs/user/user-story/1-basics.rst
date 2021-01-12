@@ -20,13 +20,34 @@ Introduction to the ``rok`` CLI
 Register a cluster
 ==================
 
-- Create a Kubernetes ``Cluster`` using its associated Kubernetes ``kubeconfig`` file.
+- Register a Kubernetes cluster using its associated Kubernetes ``kubeconfig`` file.
 
 .. prompt:: bash $ auto
 
     $ rok kube cluster list  # No Cluster resource is present
-    $ rok kube cluster create clusters/config/minikube-cluster-demoenv-1
-    $ rok kube cluster list  # One Cluster resource with name "minikube-cluster-demoenv-1"
+    $ rok kube cluster create clusters/config/minikube-cluster-1
+    $ rok kube cluster list  # One Cluster resource with name "minikube-cluster-1"
+
+.. note::
+
+    The command uses the word ``create`` but no actual Kubernetes cluster is created
+    here. Instead, Krake is made aware that the Kubernetes cluster exists, through its
+    kubeconfig file. However, a Krake resource called a ``Cluster`` (from the
+    ``kubernetes`` API of Krake) is created by the command. It contains multiple pieces
+    of information, in particular the content of the kubeconfig file itself. The
+    resource helps to store the information needed to connect to the actual Kubernetes
+    cluster.
+
+
+.. important::
+
+    In the following, a **Kubernetes cluster** refers to an actual cluster, which has
+    been already installed and prepared. This can be the Minikube clusters deployed by
+    the Krake test environment.
+
+    A **Krake Kubernetes Cluster** is a resource in the Krake database, which contains
+    the kubeconfig file of the corresponding Kubernetes cluster.
+
 
 Spawn the demo application
 ==========================
@@ -42,7 +63,7 @@ Spawn the demo application
 - Check application information:
 
   - Application Status is ``RUNNING``.
-  - Application is running on ``minikube-cluster-demoenv-1``.
+  - Application is running on ``minikube-cluster-1``.
 
 .. prompt:: bash $ auto
 
@@ -60,14 +81,14 @@ Spawn the demo application
 
 .. prompt:: bash $ auto
 
-    $ kubectl --kubeconfig clusters/config/minikube-cluster-demoenv-1 get deployments
+    $ kubectl --kubeconfig clusters/config/minikube-cluster-1 get deployments
     NAME        READY   UP-TO-DATE   AVAILABLE   AGE
     echo-demo   1/1     1            1           3h34m
-    $ kubectl --kubeconfig clusters/config/minikube-cluster-demoenv-1 get services
+    $ kubectl --kubeconfig clusters/config/minikube-cluster-1 get services
     NAME         TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)          AGE
     echo-demo    NodePort    10.98.78.74   <none>        8080:32235/TCP   3h34m
     kubernetes   ClusterIP   10.96.0.1     <none>        443/TCP          27h
-    $ kubectl --kubeconfig clusters/config/minikube-cluster-demoenv-1 get po
+    $ kubectl --kubeconfig clusters/config/minikube-cluster-1 get po
     NAME                         READY   STATUS    RESTARTS   AGE
     echo-demo-6dc5d84869-4hcd8   1/1     Running   0          3h34m
 
@@ -119,10 +140,10 @@ Update resources
 
 .. prompt:: bash $ auto
 
-    $ kubectl --kubeconfig clusters/config/minikube-cluster-demoenv-1 get deployments
+    $ kubectl --kubeconfig clusters/config/minikube-cluster-1 get deployments
     NAME        READY   UP-TO-DATE   AVAILABLE   AGE
     echo-demo   2/2     2            2           42m
-    $ kubectl --kubeconfig clusters/config/minikube-cluster-demoenv-1 get po
+    $ kubectl --kubeconfig clusters/config/minikube-cluster-1 get po
     NAME                         READY   STATUS        RESTARTS   AGE
     echo-demo-6dc5d84869-2v6jh   1/1     Running       0          7s
     echo-demo-6dc5d84869-l7fm2   1/1     Running       0          42m
@@ -130,11 +151,11 @@ Update resources
 Delete resources
 ================
 
-- Issue the following commands to delete the ``echo-demo`` Kubernetes ``Application`` and the ``minikube-cluster-demoenv-1`` Kubernetes ``Cluster``.
+- Issue the following commands to delete the ``echo-demo`` Kubernetes ``Application`` and the ``minikube-cluster-1`` Kubernetes ``Cluster``.
 
 .. prompt:: bash $ auto
 
     $ rok kube app delete echo-demo
     $ rok kube app list  # No Application resource is present
-    $ rok kube cluster delete minikube-cluster-demoenv-1
+    $ rok kube cluster delete minikube-cluster-1
     $ rok kube cluster list  # No Cluster resource is present
