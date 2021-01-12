@@ -12,6 +12,28 @@ Goal: Explore the metrics mechanisms.
 Introduction
 ============
 
+Metrics in the Krake sense have two meanings. The first one is an actual value for some
+parameter, which can be measured or computed in the real world. For instance the current
+space available on a data center, its latency, the amount of green energy used by the
+data center could all be metrics. This value may be dynamic and change over time.
+``Metrics`` are also resources in Krake. They represent actual metrics, are stored in
+the database, and define a few elements, such as the minimum and maximum values (Krake
+only considers numbers for the metrics).
+
+The Krake scheduler can use these metrics to compute the score of a Krake Kubernetes
+``Cluster``. Each cluster is associated with a list of metrics and their respective
+weights for this cluster. This list is defined by the user who added the ``Cluster``
+resource into Krake. A higher weight means that the metric has a higher influence in the
+score: a metrics with a low value, but a high weight may have more impact on the score
+than a metric with medium value but low weight.
+
+For Krake to fetch the current value of a metric, a user needs to define where and how
+it can be requested. ``MetricsProvider`` resources can be created for this purpose. They
+have different types, to support different technologies. There is for example a support
+for Prometheus_. The ``MetricsProvider`` resource will define the URL of the Prometheus
+instance and some other metadata, and afterwards, Krake's scheduler can automatically
+fetch the current value of the metrics for the score's computation.
+
 The static providers are simple metric providers usually only set during tests. They
 allow a Krake resource to be associated with simple metrics, for which the value can be
 fetched easily, without having to set up a whole infrastructure.
@@ -44,6 +66,9 @@ directly set inside its definition:
           electricity_cost_1: 0.9  # Set the value that will be provided for this metric
           green_energy_ratio_1: 0.1  # Set the value that will be provided for this metric
       type: static
+
+To get additional information about the metrics and metrics providers, please read the
+documentation about them, see :ref:`dev/scheduling:Metrics and Metric Providers`.
 
 
 Preparation
@@ -239,3 +264,6 @@ Cleanup
     $ rok kube app delete echo-demo
     $ rok kube cluster delete minikube-cluster-1
     $ rok kube cluster delete minikube-cluster-2
+
+
+.. _Prometheus: https://prometheus.io/

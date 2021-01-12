@@ -32,7 +32,7 @@ Register a cluster
 
     The command uses the word ``create`` but no actual Kubernetes cluster is created
     here. Instead, Krake is made aware that the Kubernetes cluster exists, through its
-    kubeconfig file. However, a Krake resource called a ``Cluster`` (from the
+    kubeconfig file. However, a Krake resource called a ``Cluster`` (handled by the
     ``kubernetes`` API of Krake) is created by the command. It contains multiple pieces
     of information, in particular the content of the kubeconfig file itself. The
     resource helps to store the information needed to connect to the actual Kubernetes

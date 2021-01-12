@@ -44,6 +44,13 @@ development setup. Advanced topics are covered in the
     * `ksql-server-start`.
 
 
+Optional requirement:
+
+- [CFSSL][cfssl], also available in the official repository of the main distributions.
+- [Prometheus][prometheus], also available in the official repository of the main
+  distributions.
+
+
 ### Installation
 
 As Krake is not yet on the Python Package Index (PyPI), the repository first
@@ -267,3 +274,4 @@ transformed to an open source project in September 2019.
 [krake-matrix]: https://riot.im/app/#/room/#krake:matrix.org
 [virtualenv]: https://virtualenv.pypa.io/en/stable
 [confluent_packages]: https://docs.confluent.io/platform/current/installation/available_packages.html
+[cfssl]: https://github.com/cloudflare/cfssl
