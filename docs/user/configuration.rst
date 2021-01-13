@@ -90,6 +90,10 @@ command-line options. The arguments and available options are:
     Name of the user that will authenticate through static authentication. See
     :ref:`admin/security:Authentication`. Default: ``"system:admin"``.
 
+``--cors-origin``
+    URL or wildcard for the 'Access-Control-Allow-Origin' of the CORS system on the API.
+    Default: ``*``.
+
 ``--authorization-mode``
     Authorization mode to use for the requests sent to the API.
     Only 'RBAC' should be used in production. See :ref:`admin/security:Authorization`.
@@ -305,6 +309,10 @@ authentication
                 Set the static method as authentication method. Example: ``true``
             name (string)
                 This is the name of the user that will be set as sending all requests. Example: ``system``
+
+    cors-origin (string), default ``*``
+        For the CORS mechanism of Krake. Set the default allowed URL, which corresponds
+        to the ``Access-Control-Allow-Origin`` response header.
 
 authorization (enumeration)
     This parameter defines the mode for allowing users to perform specific actions (e.g. "create" or "delete" a resource). Three modes are available: ``RBAC``, ``always-allow``, ``always-deny``.

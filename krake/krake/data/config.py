@@ -84,6 +84,10 @@ class StrategyConfiguration(Serializable):
 
 
 class AuthenticationConfiguration(Serializable):
+    cors_origin: str = field(
+        default="*",
+        metadata={"help": "Set the 'Access-Control-Allow-Origin' CORS field."},
+    )
     allow_anonymous: bool = field(
         default=False,
         metadata={"help": "If set, Krake will accept anonymous requests."},
