@@ -541,7 +541,7 @@ class ResourceDefinition(ABC):
         self._verify_resource()
 
     def _set_default_values(self):
-        """Checks which attributes of this resource definition which have not yet been set
+        """Checks which attributes of this resource definition have not yet been set
         and sets them to their default values returned by self._get_default_values().
         Only the attributes returned by self._get_mutable_attributes() are taken into
         account.
