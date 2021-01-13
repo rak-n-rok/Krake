@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import suppress
 from copy import deepcopy
 from textwrap import dedent
@@ -7,6 +8,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer as Server
 import pytz
 import yaml
+from krake import utils
 from krake.data.config import TlsClientConfiguration, TlsServerConfiguration
 from kubernetes_asyncio.client import V1Status, V1Service, V1ServiceSpec, V1ServicePort
 
@@ -966,6 +968,92 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
     assert stored is None
+
+
+async def test_app_management_no_error_logs(aiohttp_server, config, db, loop, caplog):
+    """Ensure that the Kubernetes Controller does not log any error during the lifecycle
+    of an Application. For instance, errors can appear on the "asyncio" logs, but no
+    exception was raised. Three phases of the lifecycle are simulated:
+
+        1. Deployment on a cluster;
+        2. Observation of the resource's state on the cluster;
+        3. Deletion of the resources.
+
+    After all these steps, the logs are read to verify that no error occurs which did
+    not raise any exception.
+    """
+    # The asyncio logger needs to be enabled as it is disabled by default.
+    asyncio_logger = logging.getLogger("asyncio")
+    asyncio_logger.disabled = False
+
+    deployment_manifest = deepcopy(nginx_manifest[0])
+    actual_state = 0
+
+    routes = web.RouteTableDef()
+
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
+    async def _(request):
+        nonlocal actual_state
+        if actual_state == 2:
+            return web.json_response(deployment_manifest)
+        return web.Response(status=404)
+
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
+    async def _(request):
+        return web.Response(status=200)
+
+    @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
+    async def _(request):
+        return web.Response(status=200)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
+        spec__manifest=[deployment_manifest],
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        # The time step prevents the observer from running on parallel, it should only
+        # observe when requested in the test.
+        controller = KubernetesController(
+            server_endpoint(api_server), worker_count=0, time_step=1000
+        )
+        await controller.prepare(client)
+
+        # 1. Deploy the resource
+        actual_state = 1
+        await controller.resource_received(app)
+
+        # 2. Observe the resource
+        actual_state = 2
+        observer, task = controller.observers[app.metadata.uid]
+        await observer.observe_resource()
+
+        # 3. Delete the resource
+        actual_state = 3
+
+        stored = await db.get(
+            Application, namespace=app.metadata.namespace, name=app.metadata.name
+        )
+        stored.metadata.deleted = utils.now()
+        stored.metadata.finalizers = ["kubernetes_resources_deletion"]
+
+        await controller.resource_received(stored)
+
+    for record in caplog.records:
+        assert record.levelname != "ERROR"
 
 
 async def test_register_service():
