@@ -21,6 +21,7 @@ etcd_peer_port: 2380
 # Authentication-related parameters
 enable_tls: true
 cert_dir: '/etc/krake/certs'
+# cors_origin: "example.com"
 allow_anonymous: false
 # keystone
 keystone_authentication_enabled: false

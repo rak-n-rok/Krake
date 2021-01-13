@@ -205,6 +205,12 @@ def user():
 
 @pytest.fixture
 def config(etcd_server, user):
+    """Create a configuration for the API component.
+
+    Returns:
+        ApiConfiguration: the generated configuration.
+
+    """
     etcd_host, etcd_port = etcd_server
 
     config = {

@@ -111,6 +111,7 @@ async def test_transaction_error(aiohttp_client, db, config, loop):
 
 
 async def test_cors_setup(aiohttp_client, db, config, loop):
+    config.authentication.cors_origin = "http://valid.com"
     app = create_app(config=config)
     client = await aiohttp_client(app)
 
@@ -120,7 +121,7 @@ async def test_cors_setup(aiohttp_client, db, config, loop):
         headers={
             "Access-Control-Request-Method": "GET",
             "Access-Control-Request-Headers": "X-Requested-With",
-            "Origin": "http://example.com",
+            "Origin": "http://valid.com",
         },
     )
     assert resp.status == 200
@@ -131,12 +132,27 @@ async def test_cors_setup(aiohttp_client, db, config, loop):
         headers={
             "Access-Control-Request-Method": "PATCH",
             "Access-Control-Request-Headers": "X-Requested-With",
-            "Origin": "http://example.com",
+            "Origin": "http://valid.com",
         },
     )
     data = await resp.text()
-    assert "PATCH" in data and "CORS" in data
     assert resp.status == 403
+    assert "CORS" in data and "PATCH" in data
+
+    # Request refused because of an invalid origin URL.
+    resp = await client.options(
+        "/",
+        headers={
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "X-Requested-With",
+            "Origin": "http://invalid-website.com",
+        },
+    )
+    data = await resp.text()
+    assert resp.status == 403
+    assert "CORS" in data
+    assert "origin" in data
+    assert "http://invalid-website.com" in data
 
 
 async def test_cors_setup_rbac(aiohttp_client, db, config, loop, pki):

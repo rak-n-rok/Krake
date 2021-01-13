@@ -124,10 +124,12 @@ def cors_setup(app):
         app (web.Application): Web application
 
     """
+    cors_origin = app["config"].authentication.cors_origin
+
     cors = aiohttp_cors.setup(
         app,
         defaults={
-            "*": aiohttp_cors.ResourceOptions(
+            cors_origin: aiohttp_cors.ResourceOptions(
                 allow_credentials=True,
                 allow_headers="*",
                 allow_methods=["DELETE", "GET", "OPTIONS", "POST", "PUT"],
