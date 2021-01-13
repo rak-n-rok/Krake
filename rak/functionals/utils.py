@@ -707,9 +707,9 @@ class ResourceDefinition(ABC):
                 continue
             empty_update = False
             # FIXME: krake#413: Note that the attributes that are dicts or lists might
-            # contain information needing to be kept. However, the following call to
-            # setattr() overwrites this information, which is unwanted behaviour
-            # (see krake#413).
+            #  contain information needing to be kept. However, the following call to
+            #  setattr() overwrites this information, which is unwanted behaviour
+            #  (see krake#413).
             setattr(self, attr, attr_val)
 
         msg = (
