@@ -33,6 +33,7 @@ setup(
     extras_require={
         "dev": {
             "factory-boy==2.*",
+            "mock==4.*",
             "prometheus-async==19.*",
             "prometheus-client==0.7.*",
             "pytest==6.*",
