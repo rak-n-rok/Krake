@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import List, Dict, Union
 import pytest
 from dataclasses import field
+from krake.data.config import HooksConfiguration
 from krake.data.core import Metadata
 from marshmallow import ValidationError
 
@@ -446,3 +447,97 @@ def test_label_validation_reject_value(label_value):
 
     with pytest.raises(ValidationError, match="Label value"):
         Metadata.deserialize(data.serialize())
+
+
+def test_external_endpoint_validation_valid(hooks_config):
+    """Test the validation of the external endpoint used in the "complete" hook with
+    URL that are valid.
+    """
+    config_dict = hooks_config.serialize()
+
+    config_dict["complete"]["external_endpoint"] = "http://1.2.3.4"
+    HooksConfiguration.deserialize(config_dict)
+
+    config_dict["complete"]["external_endpoint"] = "http://1.2.3.4:8080"
+    HooksConfiguration.deserialize(config_dict)
+
+    config_dict["complete"]["external_endpoint"] = "http://host.com"
+    HooksConfiguration.deserialize(config_dict)
+
+    config_dict["complete"]["external_endpoint"] = "http://host.com:8080"
+    HooksConfiguration.deserialize(config_dict)
+
+
+def test_external_endpoint_validation_invalid(hooks_config):
+    """Test the validation of the external endpoint used in the "complete" hook with
+    URL that are invalid.
+    """
+    config_dict = hooks_config.serialize()
+
+    config_dict["complete"]["external_endpoint"] = "host.com"
+    with pytest.raises(ValidationError, match="A scheme should be provided"):
+        HooksConfiguration.deserialize(config_dict)
+
+    config_dict["complete"]["external_endpoint"] = "socket://host.com"
+    with pytest.raises(ValidationError, match="scheme 'socket' is not supported"):
+        HooksConfiguration.deserialize(config_dict)
+
+    config_dict["complete"]["external_endpoint"] = "http:/host.com"
+    with pytest.raises(ValidationError, match="A scheme should be provided"):
+        HooksConfiguration.deserialize(config_dict)
+
+    # With port
+
+    config_dict["complete"]["external_endpoint"] = "$host.com:8080"
+    with pytest.raises(ValidationError, match="A scheme should be provided"):
+        HooksConfiguration.deserialize(config_dict)
+
+    config_dict["complete"]["external_endpoint"] = "socket://host.com:8080"
+    with pytest.raises(ValidationError, match="scheme 'socket' is not supported"):
+        HooksConfiguration.deserialize(config_dict)
+
+    config_dict["complete"]["external_endpoint"] = "http:/host.com:8080"
+    with pytest.raises(ValidationError, match="A scheme should be provided"):
+        HooksConfiguration.deserialize(config_dict)
+
+    config_dict["complete"]["external_endpoint"] = "$host.com:8080"
+    with pytest.raises(ValidationError, match="A scheme should be provided"):
+        HooksConfiguration.deserialize(config_dict)
+
+    # With path
+
+    config_dict["complete"]["external_endpoint"] = "$host.com/path/to/krake"
+    with pytest.raises(ValidationError, match="A scheme should be provided"):
+        HooksConfiguration.deserialize(config_dict)
+
+    config_dict["complete"]["external_endpoint"] = "socket://host.com/path/to/krake"
+    with pytest.raises(ValidationError, match="scheme 'socket' is not supported"):
+        HooksConfiguration.deserialize(config_dict)
+
+    config_dict["complete"]["external_endpoint"] = "http:/host.com/path/to/krake"
+    with pytest.raises(ValidationError, match="A scheme should be provided"):
+        HooksConfiguration.deserialize(config_dict)
+
+    config_dict["complete"]["external_endpoint"] = "$host.com/path/to/krake"
+    with pytest.raises(ValidationError, match="A scheme should be provided"):
+        HooksConfiguration.deserialize(config_dict)
+
+    # With port and path
+
+    config_dict["complete"]["external_endpoint"] = "$host.com:8080/path/to/krake"
+    with pytest.raises(ValidationError, match="A scheme should be provided"):
+        HooksConfiguration.deserialize(config_dict)
+
+    config_dict["complete"][
+        "external_endpoint"
+    ] = "socket://host.com:8080/path/to/krake"
+    with pytest.raises(ValidationError, match="scheme 'socket' is not supported"):
+        HooksConfiguration.deserialize(config_dict)
+
+    config_dict["complete"]["external_endpoint"] = "http:/host.com:8080/path/to/krake"
+    with pytest.raises(ValidationError, match="A scheme should be provided"):
+        HooksConfiguration.deserialize(config_dict)
+
+    config_dict["complete"]["external_endpoint"] = "$host.com:8080/path/to/krake"
+    with pytest.raises(ValidationError, match="A scheme should be provided"):
+        HooksConfiguration.deserialize(config_dict)

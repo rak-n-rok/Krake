@@ -21,7 +21,6 @@ etcd:
 
 # Krake API
 api:
-  ip: $api_ip
   host: $api_host
   port: $api_port
 

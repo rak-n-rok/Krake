@@ -5,7 +5,6 @@ define when the hook will be executed.
 """
 import asyncio
 import logging
-import os
 import random
 from collections import defaultdict
 from contextlib import suppress
@@ -879,14 +878,6 @@ class Complete(object):
 
         """
         api_url = URL(api_endpoint)
-
-        # FIXME: Krake host IP address is temporary loaded from environment
-        #  variable "KRAKE_HOST", if present. This should be removed when
-        #  DNS service takes place.
-        api_host = os.environ.get("KRAKE_HOST")
-        if api_host is not None:
-            api_url = api_url.with_host(api_host)
-
         return str(
             api_url.with_path(
                 f"/kubernetes/namespaces/{namespace}/applications/{name}/complete"

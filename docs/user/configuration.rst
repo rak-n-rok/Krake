@@ -83,9 +83,6 @@ command-line options. The arguments and available options are:
     Only 'RBAC' should be used in production. See :ref:`admin/security:Authorization`.
     Default: ``always-allow``.
 
-``--api-ip <api_ip>`` (Address)
-    Host IP address of the API for the controllers. Default: ``"127.0.0.1"``.
-
 ``--api-host <api_host>`` (Address)
     Host that will be used to create the endpoint of the API for the
     controllers. Default: ``"localhost"``.

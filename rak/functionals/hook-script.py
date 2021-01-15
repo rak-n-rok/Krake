@@ -21,9 +21,19 @@ def main():
     if os.path.isfile(default_cert_path) and os.path.isfile(default_key_path):
         cert_and_key = (default_cert_path, default_key_path)
         ca = default_ca_bundle
+        print(f"CA:                  {ca}")
+        print(f"Certificate:         {cert_and_key[0]}")
+        print(f"key:                 {cert_and_key[1]}")
+    else:
+        print("CA:                  none")
+        print("Certificate:         none")
+        print("key:                 none")
 
     endpoint = os.getenv(endpoint_env)
     token = os.getenv(token_env)
+
+    print(f"KRAKE_COMPLETE_URL:  {endpoint}")
+    print(f"KRAKE_TOKEN:         {token}")
 
     response = requests.put(
         endpoint, verify=ca, json={"token": token}, cert=cert_and_key

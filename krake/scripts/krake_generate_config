@@ -267,15 +267,6 @@ if __name__ == "__main__":
         default="always-allow",
         choices=["RBAC", "always-allow", "always-deny"],
     )
-    # FIXME: Krake host IP address is temporary loaded from environment
-    #  variable "KRAKE_HOST" in the application controller.
-    #  This should be removed when DNS service takes place.
-    add_option(
-        parser,
-        "--api-ip",
-        "API host IP address for the controllers.",
-        default="127.0.0.1",
-    )
     add_option(
         parser,
         "--api-host",
