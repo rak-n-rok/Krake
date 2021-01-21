@@ -19,7 +19,7 @@ import OpenSSL
 import yarl
 from krake.controller import Observer, ControllerError
 
-from krake.utils import camel_to_snake_case
+from krake.utils import camel_to_snake_case, get_kubernetes_resource_idx
 from kubernetes_asyncio.client.rest import ApiException
 from yarl import URL
 from secrets import token_urlsafe
@@ -705,34 +705,6 @@ def update_last_applied_manifest_from_spec(app):
             )
 
     app.status.last_applied_manifest = new_last_applied_manifest
-
-
-def get_kubernetes_resource_idx(manifest, resource_api, resource_kind, resource_name):
-    """Get a resource identified by its resource api, kind and name, from a manifest
-    file
-
-    Args:
-        manifest (dict): Manifest file to get the resource from
-        resource_api (str): API Version of the resource to find
-        resource_kind (str): Kind of the resource to find
-        resource_name (str): Name of the resource to find
-
-    Raises:
-        IndexError: If the resource is not present in the manifest
-
-    Returns:
-        int: Position of the resource in the manifest
-
-    """
-    for idx, found_resource in enumerate(manifest):
-        if (
-            found_resource["apiVersion"] == resource_api
-            and found_resource["kind"] == resource_kind
-            and found_resource["metadata"]["name"] == resource_name
-        ):
-            return idx
-
-    raise IndexError
 
 
 class KubernetesObserver(Observer):
