@@ -72,6 +72,17 @@ cache:
     - apt-get install -y --no-install-recommends openjdk-11-jre
     - java --version
 
+    # Download zookeeper, kafka and ksql
+    - apt update
+    - apt-get install software-properties-common -y
+    - wget -qO - https://packages.confluent.io/deb/6.0/archive.key | apt-key add -
+    - add-apt-repository "deb [arch=amd64] https://packages.confluent.io/deb/6.0 stable main"
+    - apt update
+    - apt install zookeeper confluent-kafka confluent-ksqldb -y
+    - which zookeeper-server-start
+    - which kafka-server-start
+    - which ksql-server-start
+
     - pip install tox
     - tox -- --cov krake/krake --no-cov-on-fail --cov-report= --runslow krake/tests
   tags:

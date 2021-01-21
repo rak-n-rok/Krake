@@ -1,9 +1,11 @@
 """Some utilities for testing Krake components"""
 import asyncio
-from itertools import cycle
+import re
+from itertools import cycle, count
 from functools import wraps
 from time import time
 from aiohttp import web
+from krake.api.helpers import json_error
 
 
 def with_timeout(timeout):
@@ -157,5 +159,190 @@ def make_prometheus(metrics):
     app = web.Application()
     app.add_routes(routes)
     app["series"] = {name: iter(value) for name, value in metrics.items()}
+
+    return app
+
+
+def parse_ksql_query(query):
+    """Read the parameters of the provided KSQL query.
+
+    Args:
+        query (str): the query given as string.
+
+    Returns:
+        (str, str, str, str): a tuple that contains: the name of the table, the name of
+            the column that holds the metrics value, the name of the column that is used
+            for comparison with the metric name, and the name to compare to.
+
+    """
+    query_pattern = "SELECT (\\w+) FROM (\\w+) WHERE (\\w+) *= *'(.+)';"
+    match_group = re.match(query_pattern, query, re.IGNORECASE)
+
+    assert match_group is not None, f"The query {query!r} has an invalid format."
+    value_column, table, comparison_column, metric_name = match_group.groups()
+
+    message = (
+        "The column for the metric names and the one for the metrics values"
+        " cannot be the same."
+    )
+    assert value_column != comparison_column, message
+
+    return table, value_column, comparison_column, metric_name
+
+
+def make_kafka(table, columns, rows):
+    """Create a KSQL mock instance, with a single table. The name of the columns of the
+    table as well as its name are provided as parameters. Then, the provided rows are
+    inserted into the table. For each element of a row, several values can be specified
+    in a list. Each query for the value will fetch the next element in this list.
+
+    Example:
+        To create the following mock "my_metrics" table:
+
+        metric_names | value
+        -------------+-------------------
+           met_1     | 0.5
+           met_2     | 10 (then value 55)
+           met_3     | 1 (then value 2)
+
+        The following code can be used:
+
+        .. code:: python
+
+            columns = ["metric_names", "value"]
+            rows = [
+                ["met_1", [0.5]],
+                ["met_2", [10, 55]],
+                ["met_3", [1, 2]],
+            ]
+            kafka = await aiohttp_server(make_kafka("my_metrics", columns, rows))
+
+        To get the values of the metric, a query must be sent like the following:
+
+        .. code:: python
+
+            # To fetch the value of the first metric:
+            query = "SELECT value FROM my_metrics where metric_name = 'met_1';"
+            request = {"ksql": query, "streamsProperties": {}}
+            resp = await client.post("/query", json=request)
+            body = await resp.json()
+
+            expected_resp = [
+              {
+                "header": {
+                  "queryId": "query_<counter>",
+                  "schema": "`VALUE` STRING"
+                }
+              },
+              {
+                "row": {
+                  "columns": [0.5]  # <-- the expected value.
+                }
+              }
+            ]
+            assert body == expected_resp
+
+            # To fetch the value of the second metric, the value returned will be `10`:
+            query = "SELECT value FROM my_metrics where metric_name = 'met_2';"
+
+            # With a second call: of the same query, the returned value will be `55`
+            # A third call will only return the "header" part (thus be "empty").
+
+    Args:
+        table (str): name to give to the table.
+        columns (list[str]): list of the names of the columns to add in the table.
+        rows (list[list[str|list[Any]]]): list of the rows to add in the table. Each row
+            is then a list of value. Each value can be either a simple element, or a
+            list of values.
+
+    Returns:
+        web.Application: the aiohttp Application created as KSQL mock database.
+
+    """
+
+    counter = count()
+
+    routes = web.RouteTableDef()
+
+    @routes.post("/query")
+    async def _(request):
+        data = await request.json()
+
+        assert (
+            request.headers["Content-Type"] == "application/json"
+        ), "The content type in the query's headers should be JSON."
+        assert "ksql" in data, "The 'ksql' parameter is missing from the query's data."
+
+        query = data["ksql"]
+        table_name, value_column, comparison_column, metric_name = parse_ksql_query(
+            query
+        )
+        assert table_name == request.app["table_name"]
+
+        header = {
+            "header": {
+                "queryId": f"query_{next(counter)}",
+                "schema": f"`{value_column.upper()}` STRING",
+            }
+        }
+
+        rows = request.app["rows"]
+        columns = request.app["columns"]
+
+        if value_column not in columns:
+            result = {
+                "@type": "statement_error",
+                "error_code": 40001,
+                "message": f"SELECT column '{value_column}' " f"cannot be resolved.",
+                "statementText": query,
+                "entities": [],
+            }
+            raise json_error(web.HTTPBadRequest, result)
+
+        elif comparison_column not in columns:
+            result = {
+                "@type": "statement_error",
+                "error_code": 40001,
+                "message": (
+                    f"WHERE column '{comparison_column}' " f"cannot be resolved."
+                ),
+                "statementText": query,
+                "entities": [],
+            }
+            raise json_error(web.HTTPBadRequest, result)
+
+        else:
+            comp_index = columns.index(comparison_column)
+            value_index = columns.index(value_column)
+
+            try:
+                for i, row in enumerate(rows):
+                    if row[comp_index] == metric_name:
+                        stored_value = next(row[value_index])
+                        break
+                else:
+                    raise ValueError()
+            except (StopIteration, ValueError):
+                # StopIteration is raised when all values for the requested metrics have
+                # been returned already (i.e. the corresponding row iterator).
+                result = [header]
+            else:
+                resp_row = {"row": {"columns": [stored_value]}}
+                result = [header, resp_row]
+
+        return web.json_response(result)
+
+    app = web.Application()
+    app.add_routes(routes)
+
+    # Create a iterator for each element of each row which has been given as list.
+    # Otherwise, simply the value will be given directly without iteration.
+    iter_rows = [
+        [iter(value) if type(value) is list else value for value in row] for row in rows
+    ]
+
+    app["rows"] = iter_rows
+    app["columns"] = columns
+    app["table_name"] = table
 
     return app

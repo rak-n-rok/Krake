@@ -21,6 +21,7 @@ from krake.data.core import (
     PrometheusSpec,
     StaticSpec,
     MetricRef,
+    KafkaSpec,
 )
 
 _existing_names = set()
@@ -179,6 +180,16 @@ class PrometheusSpecFactory(Factory):
     url = fuzzy.FuzzyAttribute(fake.url)
 
 
+class KafkaSpecFactory(Factory):
+    class Meta:
+        model = KafkaSpec
+
+    comparison_column = fuzzy.FuzzyAttribute(fake.word)
+    value_column = fuzzy.FuzzyAttribute(fake.word)
+    table = fuzzy.FuzzyAttribute(fake.word)
+    url = fuzzy.FuzzyAttribute(fake.url)
+
+
 class StaticSpecFactory(Factory):
     class Meta:
         model = StaticSpec
@@ -201,10 +212,15 @@ class MetricsProviderSpecFactory(Factory):
             return self.type == "prometheus"
 
         @lazy_attribute
+        def is_kafka(self):
+            return self.type == "kafka"
+
+        @lazy_attribute
         def is_static(self):
             return self.type == "static"
 
     prometheus = Maybe("is_prometheus", SubFactory(PrometheusSpecFactory), MISSING)
+    kafka = Maybe("is_kafka", SubFactory(KafkaSpecFactory), MISSING)
     static = Maybe("is_static", SubFactory(StaticSpecFactory), MISSING)
 
     @lazy_attribute

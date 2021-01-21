@@ -264,11 +264,13 @@ Examples:
 
 By design, the Krake metric resource (called ``Metric``) is a core api object, that
 contains its value normalization interval (min, max) and metrics provider name, from
-which the metric current value should be requested. For the moment, Krake supports two
-types of metrics providers:
+which the metric current value should be requested. For the moment, Krake supports the
+following types of metrics providers:
 
 - **Prometheus** metrics provider, which can be used to fetch the current value of a
   metric from a Prometheus_ server;
+- **Kafka** metrics provider, which can be used to fetch the current value of a metric
+  from a KSQL_ database;
 - **Static** metrics provider, which returns always the same value when a metric
   is fetched. Different metrics can be configured to be given by a Static provider,
   each with their respective value. The static provider was mostly designed for testing
@@ -294,18 +296,32 @@ Example
       min: 0.0
       provider:
         metric: heat_demand_zone_1  # name on the provider
-        name: <metrics provider name> # here, either prometheus or static_provider
+        name: <metrics provider name> # for instance prometheus or static_provider
 
     ---
     # Prometheus metrics provider
     api: core
     kind: MetricsProvider
     metadata:
-      name: prometheus
+      name: prometheus_provider
     spec:
       type: prometheus  # specify here the type of MetricsProvider
       prometheus:
         url: http://localhost:9090
+
+    ---
+    # Kafka metrics provider
+    api: core
+    kind: MetricsProvider
+    metadata:
+      name: kafka_provider
+    spec:
+      type: kafka
+      kafka:
+        comparison_column: my_comp_col  # Name of the column where the metrics names are stored
+        table: my_table  # Name of the table in which the metrics are stored
+        url: http://localhost:8080
+        value_column: my_value_col  # Name of the column where the metrics values are stored
 
     ---
     # Static metrics provider
@@ -321,19 +337,23 @@ Example
           electricity_cost_1: 0.1
 
 
-In the example above, both metrics providers could be used to fetch the
-``heat_demand_zone_1`` metric. By specifying the name `prometheus`` or
-``static_provider`` in ``spec.provider.metric`` of the ``Metric`` resource, the value
-would be fetched from either the Prometheus provider, or the Static provider (and
-always have the value 0.9).
+In the example above, all metrics providers could be used to fetch the
+``heat_demand_zone_1`` metric. By specifying a name in ``spec.provider.metric`` of the
+``Metric`` resource, the value would be fetched from a different provider:
+
+- ``prometheus_provider`` for the Prometheus provider;
+- ``kafka_provider`` for the Kafka provider;
+- ``static_provider`` for the Static provider (and the metric would always have the
+  value ``0.9``).
 
 .. note::
     A metric contains two "names", but they can be different. ``metadata.name`` is the
     name of the Metric resource as stored by the Krake API. In the database, there can
     not be two resources of the same kind with the exact same name.
 
-    However, two metrics, taken from two different Prometheus servers could have the
-    exact same name. This name is given by ``spec.provider.metric``.
+    However (if we take for instance the case of Prometheus), two metrics, taken from
+    two different Prometheus servers could have the exact same name. This name is given
+    by ``spec.provider.metric``.
 
     So two Krake Metrics resources could be called ``latency_from_A`` and
     ``latency_from_B`` in the database, but their name could
@@ -456,3 +476,4 @@ Example:
 
 
 .. _Prometheus: https://prometheus.io/
+.. _KSQL: https://github.com/confluentinc/ksql

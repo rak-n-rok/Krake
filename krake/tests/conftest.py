@@ -8,7 +8,7 @@ import urllib
 from io import BytesIO
 from tempfile import TemporaryDirectory
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, List
 import time
 import logging.config
 from textwrap import dedent
@@ -847,3 +847,358 @@ async def prometheus(prometheus_exporter, loop):
                 )
             finally:
                 prometheus.terminate()
+
+
+def write_properties(properties, file_path):
+    """Create a file with the provided parameters: each key-value pair is written as:
+    "<key>=<value>", one line per key.
+
+    Args:
+        properties (dict[str, Any]): dictionary that contains the parameters to write.
+        file_path (pathlib.Path): name of the file in which the properties will be
+            written.
+    """
+    with open(file_path, "w") as f:
+        for key, value in properties.items():
+            f.write(f"{key}={value}\n")
+
+
+class Zookeeper(NamedTuple):
+    """Contains the information to connect to a Zookeeper instance.
+
+    Attributes:
+        host (str): host of the Zookeeper instance.
+        port (int): port of the Zookeeper instance.
+
+    """
+
+    host: str
+    port: int
+
+
+async def write_command_to_port(host, port, command=b"dump"):
+    """Send a byte string to a specific port on the provided host. Read the complete
+    output and return it.
+
+    Args:
+        host (str): the host to which the command should be sent.
+        port (int): the port on which the command should be sent.
+        command (bytes): the command to send.
+
+    Returns:
+        bytes: the output read from the host.
+
+    """
+    # If the process that listens at the endpoint is not ready, the socket connector
+    # raises an OSError.
+    # FIXME: the OSError may be changed with another error, for instance
+    #  ConnectionRefusedError. This works locally but not on the pipeline.
+    with suppress(OSError):
+        reader, writer = await asyncio.open_connection(host, port)
+        writer.write(command)
+        await writer.drain()
+        data = await reader.read()
+        writer.close()
+        return data
+
+
+@pytest.fixture
+async def zookeeper(tmp_path, loop):
+    if not shutil.which("zookeeper-server-start"):
+        pytest.skip("Executable 'zookeeper-server-start' not found")
+
+    zookeeper_port = 30007
+    properties = {
+        "4lw.commands.whitelist": "*",  # Allows sending all commands to Zookeeper
+        "admin.enableServer": False,
+        "clientPort": zookeeper_port,
+        "dataDir": tmp_path,
+        "maxClientCnxns": 0,
+    }
+    properties_path = tmp_path / "zookeeper.properties"
+    write_properties(properties, properties_path)
+
+    command = ["zookeeper-server-start", properties_path]
+
+    with subprocess.Popen(command) as zookeeper:
+        try:
+            timeout = 5
+            start = loop.time()
+            # Wait for the Zookeeper instance to be ready.
+            while True:
+                data = await write_command_to_port("localhost", zookeeper_port)
+                if data:
+                    break
+
+                if loop.time() - start > timeout:
+                    raise TimeoutError("The instance was not ready before the timeout")
+                await asyncio.sleep(0.25)
+
+            yield Zookeeper(host="localhost", port=zookeeper_port)
+        finally:
+            zookeeper.terminate()
+
+
+class Kafka(NamedTuple):
+    """Contains the information to connect to a Kafka instance.
+
+    Attributes:
+        host (str): host of the Kafka instance.
+        port (int): port of the Kafka instance.
+
+    """
+
+    host: str
+    port: int
+
+
+@pytest.fixture
+async def kafka(zookeeper, tmp_path, loop):
+    if not shutil.which("kafka-server-start"):
+        pytest.skip("Executable 'kafka-server-start' not found")
+
+    broker_id = 42
+    kafka_host = "localhost"
+    kafka_port = 31007
+    properties = {
+        "auto.create.topics.enable": True,
+        "broker.id": broker_id,
+        "delete.topic.enable": True,
+        "listeners": f"PLAINTEXT://{kafka_host}:{kafka_port}",
+        "log.cleaner.enable": True,
+        "log.dirs": tmp_path,
+        "offsets.topic.replication.factor": 1,  # Allows having only one broker
+        "transaction.state.log.replication.factor": 1,  # Allows having only one broker
+        "transaction.state.log.min.isr": 1,  # Allows having only one broker
+        "zookeeper.connect": f"{zookeeper.host}:{zookeeper.port}",
+        "zookeeper.connection.timeout.ms": 6000,
+    }
+    properties_path = tmp_path / "kafka.properties"
+    write_properties(properties, properties_path)
+
+    command = ["kafka-server-start", properties_path]
+
+    with subprocess.Popen(command) as kafka:
+        try:
+            timeout = 10
+            start = loop.time()
+            # Wait for the Kafka instance to be ready.
+            while True:
+                dump_return = await write_command_to_port(
+                    zookeeper.host, zookeeper.port
+                )
+
+                # If the ID appears in the list of broker IDs in the Zookeeper status,
+                # it means the broker is ready.
+                if f"/brokers/ids/{broker_id}".encode() in dump_return:
+                    break
+
+                if loop.time() - start > timeout:
+                    raise TimeoutError("The instance was not ready before the timeout")
+
+                await asyncio.sleep(1)
+
+            yield Kafka(host=kafka_host, port=kafka_port)
+        finally:
+            kafka.terminate()
+
+
+class KsqlMetric(NamedTuple):
+    """Entry in a KSQL table, where each row corresponds to a metric and its value. The
+    value can be updated any time by a new input from Kafka.
+
+    Attributes:
+        name (str): name attribute of an entry in the KSQL database.
+        value (int): value attribute of an entry in the KSQL database.
+
+    """
+
+    name: str
+    value: int
+
+
+class KafkaTable(NamedTuple):
+    """Data about a KSQL table that contains the value of different metrics, one per
+    row.
+
+    Attributes:
+        metrics (list[KsqlMetric]): definitions of the metrics inserted into the
+            database.
+        comparison_column (str): name of the KSQL column which contains the metrics
+            names, and thus whose content is compared to the name of the chosen metric.
+        value_column (str): name of the KSQL column which contains the current value of
+            all metrics.
+        table (str): name of the table in which the metrics have been added (so this
+            table has at least two columns, namely "<comparison_column>" and
+            "<value_column>").
+
+    """
+
+    metrics: List[KsqlMetric]
+    comparison_column: str
+    value_column: str
+    table: str
+
+
+class KsqlServer(NamedTuple):
+    """Contains the information to connect to a KSQL database.
+
+    Attributes:
+        host (str): host of the KSQL database.
+        port (int): port of the KSQL database.
+        kafka_table (KafkaTable): information regarding the KSQL table present in the
+            KSQL database.
+        scheme (str): scheme to connect to the KSQL database.
+
+    """
+
+    host: str
+    port: int
+    kafka_table: KafkaTable
+    scheme: str = "http"
+
+
+async def send_command(client, url, command):
+    """Send a KSQL command to the provided URL.
+
+    Args:
+        client (aiohttp.ClientSession): client to use for sending the command.
+        url (str): URL to which the command should be sent.
+        command (dict): command to send to the KSQL database.
+
+    """
+    resp = await client.post(url + "/ksql", json=command)
+    assert resp.status == 200, f"The following command failed: {command!r}"
+
+
+async def insert_entries(url):
+    """Prepare a KSQL database by adding a stream, a table constructed from the stream,
+    and by sending some elements to the stream. The stream has two columns: the metric
+    name, and the number of time it appeared in the stream.
+
+    Args:
+        url (str): URL of the KSQL database.
+
+    Returns:
+        KafkaTable: necessary information regarding all elements inserted in the
+            database.
+
+    """
+    value_column = "num_write"
+    comparison_column = "zone"
+    table = "heat_demand_zones_metrics"
+    metrics = [
+        KsqlMetric(name="heat_demand_1", value=2),  # Because it is inserted twice.
+        KsqlMetric(name="heat_demand_2", value=1),
+    ]
+
+    base_command = {"ksql": None, "streamsProperties": {}}
+    build_commands = [
+        (
+            "CREATE STREAM heat_demand_zones"
+            f" ({comparison_column} STRING KEY, value INTEGER) WITH"
+            " (kafka_topic='heat_demand_zones', value_format='json', partitions=1);"
+        ),
+        (
+            f"CREATE TABLE {table} AS SELECT {comparison_column}, COUNT(*)"
+            f" AS {value_column}"
+            f" FROM heat_demand_zones GROUP BY {comparison_column} EMIT CHANGES;"
+        ),  # Table from the stream, counts the number of inserted entries for each zone
+    ]
+
+    insert_commands = [
+        (
+            f"INSERT INTO heat_demand_zones ({comparison_column}, value) VALUES"
+            f" ('{metrics[0].name}', 84);"
+        ),
+        (
+            f"INSERT INTO heat_demand_zones ({comparison_column}, value) VALUES"
+            f" ('{metrics[1].name}', 23);"
+        ),
+        (
+            f"INSERT INTO heat_demand_zones ({comparison_column}, value) VALUES"
+            f" ('{metrics[0].name}', 17);"
+        ),
+    ]
+    async with aiohttp.ClientSession() as client:
+        for command in build_commands:
+            base_command["ksql"] = command
+            await send_command(client, url, base_command)
+
+        # Between the creation of the stream/table and the insertion of entries, some
+        # time is necessary.
+        await asyncio.sleep(15)
+
+        for command in insert_commands:
+            base_command["ksql"] = command
+            await send_command(client, url, base_command)
+
+    return KafkaTable(
+        metrics=metrics,
+        comparison_column=comparison_column,
+        value_column=value_column,
+        table=table,
+    )
+
+
+@pytest.fixture
+async def ksql(kafka, tmp_path, loop):
+    """Start a KSQL database. Insert some dummy metrics inside. The state of the
+    database at the end of this fixture is the following:
+
+     * a stream called "heat_demand_zones", with the following attributes:
+         * zone (as string): the name of the zone;
+         * value (as integer): an arbitrary value;
+     * a table created from the stream, it has the following attributes:
+         * zone (as string): same as for the stream;
+         * num_write (as integer): the amount of time an entry was added for the current
+           zone.
+     * Three entries added to the stream:
+         * two for the zone "heat_demand_1";
+         * one for the zone "heat_demand_2".
+
+    """
+
+    if not shutil.which("ksql-server-start"):
+        pytest.skip("Executable 'ksql-server-start' not found")
+
+    ksql_host = "0.0.0.0"
+    ksql_port = 32007
+    url = f"http://{ksql_host}:{ksql_port}"
+    properties = {
+        "listeners": url,
+        "ksql.logging.processing.topic.auto.create": "true",
+        "ksql.logging.processing.stream.auto.create": "true",
+        "bootstrap.servers": f"{kafka.host}:{kafka.port}",
+        "compression.type": "snappy",
+        "ksql.streams.state.dir": tmp_path,
+    }
+    properties_path = tmp_path / "ksql-server.properties"
+    write_properties(properties, properties_path)
+
+    command = ["ksql-server-start", properties_path]
+
+    with subprocess.Popen(command) as ksql:
+        try:
+            timeout = 30
+            start = loop.time()
+            # Wait for the KSQL instance to be ready.
+            while True:
+                resp = None
+                async with aiohttp.ClientSession() as client:
+                    try:
+                        resp = await client.get(url + "/info")
+                    except aiohttp.ClientConnectorError:
+                        pass
+
+                if resp and resp.status == 200:
+                    break
+                if loop.time() - start > timeout:
+                    raise TimeoutError("The instance was not ready before the timeout")
+
+                await asyncio.sleep(1)
+
+            kafka_table = await insert_entries(url)
+            yield KsqlServer(host=ksql_host, port=ksql_port, kafka_table=kafka_table)
+        finally:
+            ksql.terminate()
