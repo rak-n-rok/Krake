@@ -190,13 +190,13 @@ class KubernetesController(Controller):
         if scheme == "https" and self.ssl_context is None:
             logger.warning(
                 "The scheme of the 'complete' hook external endpoint is set to 'https'"
-                " even though TLS is disabled"
+                " even though TLS is disabled. Forcing the usage of 'http'."
             )
             scheme = "http"
         if scheme == "http" and self.ssl_context is not None:
             logger.warning(
                 "The scheme of the 'complete' hook external endpoint is set to 'http'"
-                " even though TLS is enabled"
+                " even though TLS is enabled. Forcing the usage of 'https'."
             )
             scheme = "https"
 

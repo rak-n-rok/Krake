@@ -113,9 +113,6 @@ krake_apps.yml
         IP, its port and the "http" or "https" scheme depending on the status of TLS on
         the Krake API (enabled or disabled).
 
-
-
-
 magnum_clusters.yml
     prometheus_port
         Prometheus server port
