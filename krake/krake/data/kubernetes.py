@@ -8,6 +8,7 @@ from marshmallow import ValidationError
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 from kubernetes_asyncio.config import ConfigException
 
+from krake.utils import get_kubernetes_resource_idx
 from . import persistent
 from .serializable import Serializable, ApiObject
 from .core import Metadata, ListMetadata, Status, ResourceRef, MetricRef
@@ -157,8 +158,6 @@ def _validate_observer_schema(observer_schema, manifest):
         ObserverSchemaError: If the observer_schema is not valid
 
     """
-
-    from krake.controller.kubernetes import get_kubernetes_resource_idx
 
     for resource_observer_schema in observer_schema:
 
