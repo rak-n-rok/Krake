@@ -24,131 +24,139 @@ class Constraints(Serializable):
     migration: bool = True
 
 
-def _validate_observer_schema(observer_schema, manifest):
-    """Validation method for observer_schema
+class ObserverSchemaError(Exception):
+    pass
 
-    Attributes:
-        observer_schema (list[dict], optional): List of dictionaries of fields that
-            should be observed by the Kubernetes Observer.
+
+def _validate_observer_schema_dict(partial_schema, first_level=False):
+    """Together with :func:`_validate_observer_schema_list``, this function is
+    called recursively to validate a partial ``observer_schema``.
+
+    Args:
+        partial_schema (dict): Partial observer_schema to validate
+        first_level (bool, optional): Boolean to indicate if the validation is performed
+            on the first level dictionary of the resource, as additional checks should
+            then be performed
 
     Raises:
-        SyntaxError: If the observer_schema is not valid
+        AssertionError: If the partial observer_schema is not valid
+
+    In case of ``first_level`` dictionary (i.e. complete ``observer_schema`` for a
+    resource), the keys necessary for identifying the resource have to be present.
 
     """
+    if first_level:
+        try:
+            partial_schema.pop("apiVersion")
+        except KeyError:
+            raise AssertionError("apiVersion is not defined")
 
-    def _validate_observer_schema_dict(observer_schema_dict, first_level=False):
-        """Together with :func:`_validate_observer_schema_list``, this function is
-        called recursively to validate a partial ``observer_schema``.
+        try:
+            partial_schema.pop("kind")
+        except KeyError:
+            raise AssertionError("kind is not defined")
 
-        Args:
-            observer_schema_dict (dict): Partial observer_schema to validate
-            first_level (bool, optional): Boolean to indicate if the validation is
-                performed on the first level dictionary of the resource, as additional
-                checks should then be performed
+        try:
+            metadata = partial_schema.pop("metadata")
+            assert isinstance(metadata, dict)
+        except (KeyError, AssertionError):
+            raise AssertionError("metadata dictionary is not defined")
 
-        Raises:
-            AssertionError: If the partial observer_schema is not valid
+        try:
+            metadata.pop("name")
+        except KeyError:
+            raise AssertionError("name is not defined in the metadata dictionary")
 
-        In case of ``first_level`` dictionary (i.e. complete ``observer_schema`` for a
-        resource), the keys necessary for identifying the resource have to be present.
+        _validate_observer_schema_dict(metadata)
 
-        """
-        if first_level:
-            try:
-                observer_schema_dict.pop("apiVersion")
-            except KeyError:
-                raise AssertionError("apiVersion is not defined")
+    for key, value in partial_schema.items():
 
-            try:
-                observer_schema_dict.pop("kind")
-            except KeyError:
-                raise AssertionError("kind is not defined")
+        if isinstance(value, dict):
+            _validate_observer_schema_dict(value)
 
-            try:
-                metadata = observer_schema_dict.pop("metadata")
-                assert isinstance(metadata, dict)
-            except (KeyError, AssertionError):
-                raise AssertionError("metadata dictionary is not defined")
+        elif isinstance(value, list):
+            _validate_observer_schema_list(value)
 
-            try:
-                metadata.pop("name")
-            except KeyError:
-                raise AssertionError("name is not defined in the metadata dictionary")
+        else:
+            assert value is None, f"Value of '{key}' is not 'None'"
 
-            _validate_observer_schema_dict(metadata)
 
-        for key, value in observer_schema_dict.items():
+def _validate_observer_schema_list(partial_schema):
+    """Together with :func:`_validate_observer_schema_dict``, this function is called
+    recursively to validate a partial ``observer_schema``.
 
-            if isinstance(value, dict):
-                _validate_observer_schema_dict(value)
+    Args:
+        partial_schema (list): Partial observer_schema to validate
 
-            elif isinstance(value, list):
-                _validate_observer_schema_list(value)
+    Raises:
+        AssertionError: If the partial observer_schema is not valid
 
-            else:
-                assert value is None, f"Value of '{key}' is not 'None'"
+    Especially, this function checks that the list control dictionary is present and
+    well-formed.
 
-    def _validate_observer_schema_list(observer_schema_list):
-        """Together with :func:`_validate_observer_schema_dict``, this function is
-        called recursively to validate a partial ``observer_schema``.
+    """
+    assert isinstance(
+        partial_schema[-1], dict
+    ), "Special list control dictionary not found"
+    assert (
+        "observer_schema_list_min_length" in partial_schema[-1]
+        and "observer_schema_list_max_length" in partial_schema[-1]
+    ), "Special list control dictionary malformed"
 
-        Args:
-            observer_schema_list (list): Partial observer_schema to validate
+    observer_schema_list_min_length = partial_schema[-1][
+        "observer_schema_list_min_length"
+    ]
+    observer_schema_list_max_length = partial_schema[-1][
+        "observer_schema_list_max_length"
+    ]
 
-        Raises:
-            AssertionError: If the partial observer_schema is not valid
+    assert isinstance(
+        observer_schema_list_min_length, int
+    ), "observer_schema_list_min_length should be an integer"
+    assert isinstance(
+        observer_schema_list_max_length, int
+    ), "observer_schema_list_max_length should be an integer"
 
-        Especially, this function checks that the list control dictionary is present and
-        well-formed.
+    assert (
+        observer_schema_list_min_length >= 0
+    ), "Invalid value for observer_schema_list_min_length"
+    assert (
+        observer_schema_list_max_length >= -1
+    ), "Invalid value for observer_schema_list_max_length"
 
-        """
-        assert isinstance(
-            observer_schema_list[-1], dict
-        ), "Special list control dictionary not found"
-        assert (
-            "observer_schema_list_min_length" in observer_schema_list[-1]
-            and "observer_schema_list_max_length" in observer_schema_list[-1]
-        ), "Special list control dictionary malformed"
-
-        observer_schema_list_min_length = observer_schema_list[-1][
-            "observer_schema_list_min_length"
-        ]
-        observer_schema_list_max_length = observer_schema_list[-1][
-            "observer_schema_list_max_length"
-        ]
-
-        assert isinstance(
-            observer_schema_list_min_length, int
-        ), "observer_schema_list_min_length should be an integer"
-        assert isinstance(
-            observer_schema_list_max_length, int
-        ), "observer_schema_list_max_length should be an integer"
-
-        assert (
-            observer_schema_list_min_length >= 0
-        ), "Invalid value for observer_schema_list_min_length"
-        assert (
-            observer_schema_list_max_length >= -1
-        ), "Invalid value for observer_schema_list_max_length"
+    if observer_schema_list_max_length != 0:
         assert observer_schema_list_max_length >= observer_schema_list_min_length, (
             "observer_schema_list_max_length is inferior to "
             "observer_schema_list_min_length"
         )
-        assert observer_schema_list_max_length >= len(observer_schema_list[:-1]), (
+        assert observer_schema_list_max_length >= len(partial_schema[:-1]), (
             "observer_schema_list_max_length is inferior to the number of observed "
             "elements"
         )
 
-        for value in observer_schema_list[:-1]:
+    for value in partial_schema[:-1]:
 
-            if isinstance(value, dict):
-                _validate_observer_schema_dict(value)
+        if isinstance(value, dict):
+            _validate_observer_schema_dict(value)
 
-            elif isinstance(value, list):
-                _validate_observer_schema_list(value)
+        elif isinstance(value, list):
+            _validate_observer_schema_list(value)
 
-            else:
-                assert value is None, "Element of a list is not 'None'"
+        else:
+            assert value is None, "Element of a list is not 'None'"
+
+
+def _validate_observer_schema(observer_schema, manifest):
+    """Validation method for observer_schema
+
+    Args:
+        observer_schema (list[dict]): List of dictionaries of fields that should be
+            observed by the Kubernetes Observer.
+
+    Raises:
+        ObserverSchemaError: If the observer_schema is not valid
+
+    """
 
     from krake.controller.kubernetes import get_kubernetes_resource_idx
 
@@ -159,7 +167,7 @@ def _validate_observer_schema(observer_schema, manifest):
                 deepcopy(resource_observer_schema), first_level=True
             )
         except AssertionError as e:
-            raise SyntaxError(e)
+            raise ObserverSchemaError(e)
 
         try:
             get_kubernetes_resource_idx(
@@ -169,7 +177,7 @@ def _validate_observer_schema(observer_schema, manifest):
                 resource_observer_schema["metadata"]["name"],
             )
         except IndexError:
-            raise SyntaxError("Observed resource must be in manifest")
+            raise ObserverSchemaError("Observed resource must be in manifest")
 
 
 class ApplicationSpec(Serializable):
@@ -198,12 +206,12 @@ class ApplicationSpec(Serializable):
 
         If a custom :attr:`observer_schema` is specified by the user, it needs to be
         validated, i.e. verify that resources are correctly identified and refer to
-        resources defined in :attr:`manifest`, that fields are correctly idenfitied and
-        that all special control dictionary are corretly defined.
+        resources defined in :attr:`manifest`, that fields are correctly identified and
+        that all special control dictionary are correctly defined.
 
         This validation cannot be achieved directly using a ``validate`` metadata, as
-        this must be a zero-argument callable, with no access to the other attributes of
-        the dataclass.
+        ``validate`` must be a zero-argument callable, with no access to the other
+        attributes of the dataclass.
 
         """
         _validate_observer_schema(self.observer_schema, self.manifest)

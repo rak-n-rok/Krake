@@ -1,7 +1,7 @@
 import pytest
 import yaml
 
-from krake.data.kubernetes import ApplicationSpec
+from krake.data.kubernetes import ApplicationSpec, ObserverSchemaError
 
 kubernetes_manifest = list(
     yaml.safe_load_all(
@@ -27,6 +27,12 @@ def test_observer_schema_init_valid_custom():
     """Validate that custom observer_schema are correctly initialized when they are valid
     """
 
+    # In this custom observer schema:
+    # - `spec.type` is present in the manifest but not observed
+    # - `spec.clusterIP` is not present in the manifest but is observed.
+    # - the `spec.ports` lists has a first element partially observed, and accept up to
+    # 2 additional elements.
+    # The observer schema is correctly formed.
     valid_custom_observer_schema1 = list(
         yaml.safe_load_all(
             """---
@@ -44,8 +50,25 @@ def test_observer_schema_init_valid_custom():
         )
     )
 
-    # Minimum valid observer_schema for a resource
+    # Set the observer_schema_list_max_length to 0, meaning that the list doesn't have a
+    # maximum length
     valid_custom_observer_schema2 = list(
+        yaml.safe_load_all(
+            """---
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: nginx-demo
+    spec:
+      ports:
+      - observer_schema_list_min_length: 1
+        observer_schema_list_max_length: 0
+    """
+        )
+    )
+
+    # Minimum valid observer_schema for a resource
+    valid_custom_observer_schema3 = list(
         yaml.safe_load_all(
             """---
     apiVersion: v1
@@ -67,6 +90,12 @@ def test_observer_schema_init_valid_custom():
     )
 
     assert application_spec.observer_schema == valid_custom_observer_schema2
+
+    application_spec = ApplicationSpec(
+        manifest=kubernetes_manifest, observer_schema=valid_custom_observer_schema3
+    )
+
+    assert application_spec.observer_schema == valid_custom_observer_schema3
 
 
 def test_observer_schema_init_invalid_custom():
@@ -304,6 +333,7 @@ def test_observer_schema_init_invalid_custom():
         )
     )
 
+    # Test a valid observer schema, but the resource is not present in the manifest.
     valid_custom_observer_schema = list(
         yaml.safe_load_all(
             """---
@@ -315,21 +345,27 @@ def test_observer_schema_init_invalid_custom():
         )
     )
 
-    with pytest.raises(SyntaxError, match=r"Special list control dictionary not found"):
+    with pytest.raises(
+        ObserverSchemaError, match=r"Special list control dictionary not found"
+    ):
         app_spec_1 = ApplicationSpec(
             manifest=kubernetes_manifest,
             observer_schema=invalid_custom_observer_schema1,
         )
         ApplicationSpec.deserialize(app_spec_1.serialize())
 
-    with pytest.raises(SyntaxError, match=r"Special list control dictionary malformed"):
+    with pytest.raises(
+        ObserverSchemaError, match=r"Special list control dictionary malformed"
+    ):
         app_spec_2 = ApplicationSpec(
             manifest=kubernetes_manifest,
             observer_schema=invalid_custom_observer_schema2,
         )
         ApplicationSpec.deserialize(app_spec_2.serialize())
 
-    with pytest.raises(SyntaxError, match=r"Special list control dictionary malformed"):
+    with pytest.raises(
+        ObserverSchemaError, match=r"Special list control dictionary malformed"
+    ):
         app_spec_3 = ApplicationSpec(
             manifest=kubernetes_manifest,
             observer_schema=invalid_custom_observer_schema3,
@@ -337,7 +373,8 @@ def test_observer_schema_init_invalid_custom():
         ApplicationSpec.deserialize(app_spec_3.serialize())
 
     with pytest.raises(
-        SyntaxError, match=r"observer_schema_list_min_length should be an integer"
+        ObserverSchemaError,
+        match=r"observer_schema_list_min_length should be an integer",
     ):
         app_spec_4 = ApplicationSpec(
             manifest=kubernetes_manifest,
@@ -346,7 +383,8 @@ def test_observer_schema_init_invalid_custom():
         ApplicationSpec.deserialize(app_spec_4.serialize())
 
     with pytest.raises(
-        SyntaxError, match=r"observer_schema_list_max_length should be an integer"
+        ObserverSchemaError,
+        match=r"observer_schema_list_max_length should be an integer",
     ):
         app_spec_5 = ApplicationSpec(
             manifest=kubernetes_manifest,
@@ -355,7 +393,7 @@ def test_observer_schema_init_invalid_custom():
         ApplicationSpec.deserialize(app_spec_5.serialize())
 
     with pytest.raises(
-        SyntaxError, match=r"Invalid value for observer_schema_list_min_length"
+        ObserverSchemaError, match=r"Invalid value for observer_schema_list_min_length"
     ):
         app_spec_6 = ApplicationSpec(
             manifest=kubernetes_manifest,
@@ -364,7 +402,7 @@ def test_observer_schema_init_invalid_custom():
         ApplicationSpec.deserialize(app_spec_6.serialize())
 
     with pytest.raises(
-        SyntaxError, match=r"Invalid value for observer_schema_list_max_length"
+        ObserverSchemaError, match=r"Invalid value for observer_schema_list_max_length"
     ):
         app_spec_7 = ApplicationSpec(
             manifest=kubernetes_manifest,
@@ -375,7 +413,7 @@ def test_observer_schema_init_invalid_custom():
     msg = (
         "observer_schema_list_max_length is inferior to the number of observed elements"
     )
-    with pytest.raises(SyntaxError, match=msg):
+    with pytest.raises(ObserverSchemaError, match=msg):
         app_spec_8 = ApplicationSpec(
             manifest=kubernetes_manifest,
             observer_schema=invalid_custom_observer_schema8,
@@ -385,28 +423,28 @@ def test_observer_schema_init_invalid_custom():
     msg = (
         "observer_schema_list_max_length is inferior to observer_schema_list_min_length"
     )
-    with pytest.raises(SyntaxError, match=msg):
+    with pytest.raises(ObserverSchemaError, match=msg):
         app_spec_9 = ApplicationSpec(
             manifest=kubernetes_manifest,
             observer_schema=invalid_custom_observer_schema9,
         )
         ApplicationSpec.deserialize(app_spec_9.serialize())
 
-    with pytest.raises(SyntaxError, match="apiVersion is not defined"):
+    with pytest.raises(ObserverSchemaError, match="apiVersion is not defined"):
         app_spec_10 = ApplicationSpec(
             manifest=kubernetes_manifest,
             observer_schema=invalid_custom_observer_schema10,
         )
         ApplicationSpec.deserialize(app_spec_10.serialize())
 
-    with pytest.raises(SyntaxError, match="kind is not defined"):
+    with pytest.raises(ObserverSchemaError, match="kind is not defined"):
         app_spec_11 = ApplicationSpec(
             manifest=kubernetes_manifest,
             observer_schema=invalid_custom_observer_schema11,
         )
         ApplicationSpec.deserialize(app_spec_11.serialize())
 
-    with pytest.raises(SyntaxError, match="metadata dictionary is not defined"):
+    with pytest.raises(ObserverSchemaError, match="metadata dictionary is not defined"):
         app_spec_12 = ApplicationSpec(
             manifest=kubernetes_manifest,
             observer_schema=invalid_custom_observer_schema12,
@@ -414,7 +452,7 @@ def test_observer_schema_init_invalid_custom():
         ApplicationSpec.deserialize(app_spec_12.serialize())
 
     with pytest.raises(
-        SyntaxError, match="name is not defined in the metadata dictionary"
+        ObserverSchemaError, match="name is not defined in the metadata dictionary"
     ):
         app_spec_13 = ApplicationSpec(
             manifest=kubernetes_manifest,
@@ -422,22 +460,24 @@ def test_observer_schema_init_invalid_custom():
         )
         ApplicationSpec.deserialize(app_spec_13.serialize())
 
-    with pytest.raises(SyntaxError, match="Value of 'port' is not 'None'"):
+    with pytest.raises(ObserverSchemaError, match="Value of 'port' is not 'None'"):
         app_spec_14 = ApplicationSpec(
             manifest=kubernetes_manifest,
             observer_schema=invalid_custom_observer_schema14,
         )
         ApplicationSpec.deserialize(app_spec_14.serialize())
 
-    with pytest.raises(SyntaxError, match="Element of a list is not 'None'"):
+    with pytest.raises(ObserverSchemaError, match="Element of a list is not 'None'"):
         app_spec_15 = ApplicationSpec(
             manifest=kubernetes_manifest,
             observer_schema=invalid_custom_observer_schema15,
         )
         ApplicationSpec.deserialize(app_spec_15.serialize())
 
-    with pytest.raises(SyntaxError, match="Observed resource must be in manifest"):
-        app_spec_17 = ApplicationSpec(
+    with pytest.raises(
+        ObserverSchemaError, match="Observed resource must be in manifest"
+    ):
+        app_spec_16 = ApplicationSpec(
             manifest=[], observer_schema=valid_custom_observer_schema
         )
-        ApplicationSpec.deserialize(app_spec_17.serialize())
+        ApplicationSpec.deserialize(app_spec_16.serialize())
