@@ -831,18 +831,3 @@ async def test_complete_hook_reschedule(
     # Ensure that the rescheduling kept the resources created by the "complete"
     # hook.
     assert stored.status.manifest == previous_manifest
-
-    assert len(stored.status.manifest) == 2
-    for resource in stored.status.manifest:
-        # Ensure all resources (provided and generated) are created in the same
-        # namespace.
-        assert resource["metadata"]["namespace"] == "secondary"
-
-        if resource["kind"] != "Deployment":
-            assert resource["kind"] == "ConfigMap"
-            continue
-
-        for container in resource["spec"]["template"]["spec"]["containers"]:
-            assert "volumeMounts" in container
-            assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
-            assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
