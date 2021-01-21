@@ -148,20 +148,20 @@ Example of a minimal observer schema for the ``Service`` resource:
 Observed fields
 ---------------
 
-A field value will be observed if it's defined in the observer schema. Its value should
+A field value will be observed if it is defined in the observer schema. Its value should
 be ``null`` (in YAML), except for fields used for the resource identification.
 
 In the example above:
 
-- the ``spec.type`` of the Service is not observed, as it's not present in the custom
-observer schema. Its original value is specified in the manifest file, but Krake doesn't
-guarantee this value to remain.
-- the ``spec.app.selector`` of the ``Service`` is observed as it's present in the custom
-manifest file. Krake guarantee that its original value will remain the same, by
-observing the value and reverting any changes which were not made through Krake.
-- the ``spec.sessionAffinity`` of the ``Service`` is observed. As it's not present in
-the manifest, the Kubernetes API will initialize it. Once it has been initialized by
-Kubernetes, Krake guarantee that its value will not be modified outside of Krake.
+- the ``spec.type`` of the Service is not observed, as it is not present in the custom
+  observer schema. Its original value is specified in the manifest file, but Krake
+  doesn't guarantee this value to remain.
+- the ``spec.app.selector`` of the ``Service`` is observed as it is present in the
+  custom observer schema. Krake guarantee that its original value will remain the same, by
+  observing the value and reverting any changes which were not made through Krake.
+- the ``spec.sessionAffinity`` of the ``Service`` is observed. As it is not present in
+  the manifest, the Kubernetes API will initialize it. Once it has been initialized by
+  Kubernetes, Krake guarantee that its value will not be modified outside of Krake.
 
 
 .. warning::
@@ -180,8 +180,8 @@ Kubernetes, Krake guarantee that its value will not be modified outside of Krake
 List length control
 -------------------
 
-A List's length is controlled though the used of a special control dictionary, placed
-added as the last element of a list. The minimum and maximum length of the list must be
+A list's length is controlled though the used of a special control dictionary, added as
+the last element of a list. The minimum and maximum length of the list must be
 specified.
 
 In the example ``Service``'s custom observer schema, the number of ``ports`` must be
@@ -198,7 +198,7 @@ its value remains unchanged.
 
 .. tip::
 
-    Krake doesn't allowed to set a minimum list length value below the number of element
+    Krake doesn't allow to set a minimum list length value below the number of element
     specified in the manifest file.
 
 .. tip::
@@ -215,5 +215,6 @@ its value remains unchanged.
 Usage
 =====
 
-A custom observer schema is specified in ``rok`` with the argument ``-o`` or
-``--observer_schema``.
+A custom observer schema can be specified in ``rok`` with the argument ``-o`` or
+``--observer_schema``. If none is provided, a default observer schema is generated and
+all fields defined in ``spec.manifest`` are observed
