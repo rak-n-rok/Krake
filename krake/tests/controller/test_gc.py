@@ -1,4 +1,5 @@
 import asyncio
+from asyncio.subprocess import PIPE, STDOUT
 from contextlib import suppress
 from itertools import count
 
@@ -223,6 +224,33 @@ def test_update_resource_dependency_graph():
 
     assert graph.get_direct_dependents(cluster_2_ref) == [app_1_ref]
     assert graph.get_direct_dependents(up_2_ref) == [cluster_2_ref]
+
+
+@with_timeout(3)
+async def test_main_help(loop):
+    """Verify that the help for the Garbage Collector is displayed, and contains the
+    elements added by the argparse formatters (default value and expected types of the
+    parameters).
+    """
+    command = "python -m krake.controller.gc -h"
+    # The loop parameter is mandatory otherwise the test fails if started with others.
+    process = await asyncio.create_subprocess_exec(
+        *command.split(" "), stdout=PIPE, stderr=STDOUT, loop=loop
+    )
+    stdout, _ = await process.communicate()
+    output = stdout.decode()
+
+    to_check = [
+        "Garbage Collector for Krake",
+        "usage:",
+        "optional arguments:",
+        "default:",  # Present if the default value of the arguments are displayed
+        "str",  # Present if the type of the arguments are displayed
+        "int",
+    ]
+
+    for expression in to_check:
+        assert expression in output
 
 
 async def test_resources_reception(aiohttp_server, config, db, loop):

@@ -2,6 +2,7 @@ import asyncio
 import ssl
 
 from aiohttp import web
+from asyncio.subprocess import PIPE, STDOUT
 
 from krake.api import __version__ as version
 from krake.api.app import create_app
@@ -10,6 +11,7 @@ from krake.api.database import revision, TransactionError
 from krake.data import Key
 from krake.data.config import AuthenticationConfiguration, TlsServerConfiguration
 from krake.data.serializable import Serializable
+from krake.test_utils import with_timeout
 
 
 async def test_index(aiohttp_client, no_db_config):
@@ -92,6 +94,33 @@ async def test_transaction_retry(aiohttp_client, db, config, loop):
     body = await resp.json()
     updated = Book.deserialize(body)
     assert updated == book
+
+
+@with_timeout(3)
+async def test_main_help(loop):
+    """Verify that the help for the Krake API main is displayed, and contains the
+    elements added by the argparse formatters (default value and expected types of the
+    parameters).
+    """
+    command = "python -m krake.api -h"
+    # The loop parameter is mandatory otherwise the test fails if started with others.
+    process = await asyncio.create_subprocess_exec(
+        *command.split(" "), stdout=PIPE, stderr=STDOUT, loop=loop
+    )
+    stdout, _ = await process.communicate()
+    output = stdout.decode()
+
+    to_check = [
+        "Krake API server",
+        "usage:",
+        "optional arguments:",
+        "default:",  # Present if the default value of the arguments are displayed
+        "str",  # Present if the type of the arguments are displayed
+        "int",
+    ]
+
+    for expression in to_check:
+        assert expression in output
 
 
 async def test_transaction_error(aiohttp_client, db, config, loop):
