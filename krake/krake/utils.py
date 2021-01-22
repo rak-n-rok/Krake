@@ -1,7 +1,17 @@
 import asyncio
 import re
 import dataclasses
+from argparse import MetavarTypeHelpFormatter, ArgumentDefaultsHelpFormatter
 from datetime import datetime, timezone
+
+
+class KrakeArgumentFormatter(ArgumentDefaultsHelpFormatter, MetavarTypeHelpFormatter):
+    """Custom formatter class which allows argparse help to display both the default
+    value and the expected type (str, int...) for each arguments.
+
+    To use for the ``formatter_class`` parameter of the
+    :class:`argparse.ArgumentParser` constructor.
+    """
 
 
 def camel_to_snake_case(name):

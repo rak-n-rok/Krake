@@ -5,6 +5,7 @@ from textwrap import dedent
 
 from aiohttp import web
 from aiohttp.test_utils import TestServer as Server
+from asyncio.subprocess import PIPE, STDOUT
 import pytz
 import yaml
 from krake.data.config import TlsClientConfiguration, TlsServerConfiguration
@@ -20,7 +21,7 @@ from krake.controller.kubernetes import (
     unregister_service,
 )
 from krake.client import Client
-from krake.test_utils import server_endpoint
+from krake.test_utils import server_endpoint, with_timeout
 
 from tests.factories.fake import fake
 from tests.factories.kubernetes import (
@@ -29,6 +30,33 @@ from tests.factories.kubernetes import (
     make_kubeconfig,
 )
 from tests.controller.kubernetes import nginx_manifest, hooks_config
+
+
+@with_timeout(3)
+async def test_main_help(loop):
+    """Verify that the help for the Kubernetes Controller is displayed, and contains the
+    elements added by the argparse formatters (default value and expected types of the
+    parameters).
+    """
+    command = "python -m krake.controller.kubernetes -h"
+    # The loop parameter is mandatory otherwise the test fails if started with others.
+    process = await asyncio.create_subprocess_exec(
+        *command.split(" "), stdout=PIPE, stderr=STDOUT, loop=loop
+    )
+    stdout, _ = await process.communicate()
+    output = stdout.decode()
+
+    to_check = [
+        "Kubernetes application controller",
+        "usage:",
+        "optional arguments:",
+        "default:",  # Present if the default value of the arguments are displayed
+        "str",  # Present if the type of the arguments are displayed
+        "int",
+    ]
+
+    for expression in to_check:
+        assert expression in output
 
 
 async def test_app_reception(aiohttp_server, config, db, loop):

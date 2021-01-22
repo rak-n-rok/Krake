@@ -26,7 +26,7 @@ Configuration is loaded from the ``controllers.scheduler`` section:
 """
 import logging
 import pprint
-from argparse import ArgumentParser, MetavarTypeHelpFormatter
+from argparse import ArgumentParser
 
 from krake import (
     setup_logging,
@@ -35,6 +35,7 @@ from krake import (
     load_yaml_config,
 )
 from krake.data.config import SchedulerConfiguration
+from krake.utils import KrakeArgumentFormatter
 
 from ...controller import create_ssl_context, run
 from .scheduler import Scheduler
@@ -43,7 +44,7 @@ logger = logging.getLogger("krake.controller.scheduler")
 
 
 parser = ArgumentParser(
-    description="Krake scheduler", formatter_class=MetavarTypeHelpFormatter
+    description="Krake scheduler", formatter_class=KrakeArgumentFormatter
 )
 parser.add_argument("-c", "--config", type=str, help="Path to configuration YAML file")
 

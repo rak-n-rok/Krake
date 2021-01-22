@@ -27,7 +27,7 @@ The configuration should have the following structure:
 
 import logging
 import pprint
-from argparse import ArgumentParser, MetavarTypeHelpFormatter
+from argparse import ArgumentParser
 from collections import defaultdict
 from copy import deepcopy
 
@@ -46,7 +46,7 @@ from krake.data.core import resource_ref
 from krake.client.kubernetes import KubernetesApi
 from krake.data.kubernetes import Application, Cluster
 from krake.data.openstack import Project, MagnumCluster
-from krake.utils import camel_to_snake_case
+from krake.utils import camel_to_snake_case, KrakeArgumentFormatter
 
 logger = logging.getLogger("krake.controller.garbage_collector")
 
@@ -498,7 +498,7 @@ class GarbageCollector(Controller):
 
 
 parser = ArgumentParser(
-    description="Garbage Collector for Krake", formatter_class=MetavarTypeHelpFormatter
+    description="Garbage Collector for Krake", formatter_class=KrakeArgumentFormatter
 )
 parser.add_argument("-c", "--config", type=str, help="Path to configuration YAML file")
 

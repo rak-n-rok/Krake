@@ -7,9 +7,10 @@
 """
 import logging
 import pprint
-from argparse import ArgumentParser, MetavarTypeHelpFormatter
+from argparse import ArgumentParser
 from aiohttp import web
 from krake.data.config import ApiConfiguration
+from krake.utils import KrakeArgumentFormatter
 
 from .. import load_yaml_config, setup_logging, ConfigurationOptionMapper, search_config
 from .app import create_app
@@ -19,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 parser = ArgumentParser(
-    description="Krake API server", formatter_class=MetavarTypeHelpFormatter
+    description="Krake API server", formatter_class=KrakeArgumentFormatter
 )
 parser.add_argument("--config", "-c", type=str, help="Path to configuration file")
 
