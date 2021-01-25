@@ -43,17 +43,14 @@ import time
 
 from utils import (
     Environment,
-    create_multiple_cluster_environment,
+    create_default_environment,
+    create_cluster_info,
     get_scheduling_score,
     set_static_metrics,
     get_static_metrics,
+    ResourceKind,
 )
 
-KRAKE_HOMEDIR = "/home/krake"
-GIT_DIR = "git/krake"
-TEST_DIR = "rak/functionals"
-CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
-MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}"
 METRICS = [
     "electricity_cost_1",
     "latency_1",
@@ -90,17 +87,10 @@ def test_kubernetes_migration_cluster_constraints(minikube_clusters):
     countries = random.sample(COUNTRY_CODES, len(clusters))
 
     # 1. Create the application, without cluster constraints and migration flag;
-    kubeconfig_paths = {c: f"{CLUSTERS_CONFIGS}/{c}" for c in clusters}
-    cluster_labels = dict(zip(clusters, [[f"location={cc}"] for cc in countries]))
-    environment = create_multiple_cluster_environment(
-        kubeconfig_paths,
-        cluster_labels=cluster_labels,
-        app_name="echo-demo",
-        manifest_path=f"{MANIFEST_PATH}/echo-demo.yaml",
-    )
-
+    cluster_labels = create_cluster_info(clusters, "location", countries)
+    environment = create_default_environment(clusters, cluster_labels=cluster_labels)
     with Environment(environment) as resources:
-        app = resources["Application"][0]
+        app = resources[ResourceKind.APPLICATION][0]
 
         # 2. Ensure the application was scheduled to a cluster;
         cluster_name = app.get_running_on()
@@ -108,7 +98,9 @@ def test_kubernetes_migration_cluster_constraints(minikube_clusters):
 
         # 3. Update the cluster constraints to match the other cluster;
         other_index = 0 if clusters[0] != cluster_name else 1
-        app.update(cluster_labels=[f"location={countries[other_index]}"])
+        app.update_resource(
+            cluster_label_constraints=[f"location={countries[other_index]}"]
+        )
 
         # 4. Ensure that the application was rescheduled to the requested cluster;
         app.check_running_on(clusters[other_index], within=10)
@@ -149,17 +141,11 @@ def test_kubernetes_migration_at_cluster_constraint_update(minikube_clusters):
     countries = random.sample(COUNTRY_CODES, len(clusters))
 
     # 1. Create the application, without cluster constraints and migration flag;
-    kubeconfig_paths = {c: f"{CLUSTERS_CONFIGS}/{c}" for c in clusters}
-    cluster_labels = dict(zip(clusters, [[f"location={cc}"] for cc in countries]))
-    environment = create_multiple_cluster_environment(
-        kubeconfig_paths,
-        cluster_labels=cluster_labels,
-        app_name="echo-demo",
-        manifest_path=f"{MANIFEST_PATH}/echo-demo.yaml",
-    )
+    cluster_labels = create_cluster_info(clusters, "location", countries)
+    environment = create_default_environment(clusters, cluster_labels=cluster_labels)
 
     with Environment(environment) as resources:
-        app = resources["Application"][0]
+        app = resources[ResourceKind.APPLICATION][0]
 
         # 2. Ensure the application was scheduled to a cluster;
         cluster_name = app.get_running_on()
@@ -174,7 +160,9 @@ def test_kubernetes_migration_at_cluster_constraint_update(minikube_clusters):
             # 3a. Update a cluster label constraints of the application to match
             # the other cluster.
             other_index = 0 if clusters[0] != old_running_on else 1
-            app.update(cluster_labels=[f"location={countries[other_index]}"])
+            app.update_resource(
+                cluster_label_constraints=[f"location={countries[other_index]}"]
+            )
             num_updates += 1
 
             # 3b. sleep 20 seconds
@@ -217,35 +205,32 @@ def test_kubernetes_no_migration_cluster_constraints(minikube_clusters):
     expected_countries = all_countries[:2]
 
     # 1. Create the application, with cluster constraints and migration false;
-    kubeconfig_paths = {c: f"{CLUSTERS_CONFIGS}/{c}" for c in all_clusters}
-    cluster_labels = dict(
-        zip(all_clusters, [[f"location={cc}"] for cc in all_countries])
-    )
-    environment = create_multiple_cluster_environment(
-        kubeconfig_paths,
+    cluster_labels = create_cluster_info(all_clusters, "location", all_countries)
+    environment = create_default_environment(
+        all_clusters,
         cluster_labels=cluster_labels,
-        app_name="echo-demo",
-        manifest_path=f"{MANIFEST_PATH}/echo-demo.yaml",
         # We place the application on the second cluster initially
         app_cluster_constraints=[f"location={expected_countries[1]}"],
         app_migration=False,
     )
 
     with Environment(environment) as resources:
-        app = resources["Application"][0]
+        app = resources[ResourceKind.APPLICATION][0]
 
         # 2. Ensure that the application was scheduled to the requested cluster;
         app.check_running_on(expected_clusters[1], within=0)
 
         # 3. Update the cluster constraints to match the first cluster;
-        app.update(cluster_labels=[f"location={expected_countries[0]}"])
+        app.update_resource(
+            cluster_label_constraints=[f"location={expected_countries[0]}"]
+        )
 
         # 4. Wait and
         # ensure that the application was NOT rescheduled to the requested cluster;
         app.check_running_on(expected_clusters[1], after_delay=10)
 
         # 5. Update the migration constraint to allow migration;
-        app.update(migration=True)
+        app.update_resource(migration=True)
 
         # 6. Ensure that the application was rescheduled to the requested cluster;
         app.check_running_on(expected_clusters[0], within=10)
@@ -302,17 +287,12 @@ def test_kubernetes_no_migration_metrics(minikube_clusters):
 
     # 3. Create the application, without cluster constraints but with
     # --disable-migration flag;
-    kubeconfig_paths = {c: f"{CLUSTERS_CONFIGS}/{c}" for c in clusters}
-    environment = create_multiple_cluster_environment(
-        kubeconfig_paths,
-        metrics=metric_weights,
-        app_name="echo-demo",
-        manifest_path=f"{MANIFEST_PATH}/echo-demo.yaml",
-        app_migration=False,
+    environment = create_default_environment(
+        clusters, metrics=metric_weights, app_migration=False
     )
 
     with Environment(environment) as resources:
-        app = resources["Application"][0]
+        app = resources[ResourceKind.APPLICATION][0]
 
         # 4. Ensure that the application was scheduled to the first cluster;
         app.check_running_on(clusters[0], within=0)
@@ -337,7 +317,7 @@ def test_kubernetes_no_migration_metrics(minikube_clusters):
         app.check_running_on(clusters[0], after_delay=RESCHEDULING_INTERVAL + 10)
 
         # 7. Update the migration constraint to allow migration;
-        app.update(migration=True)
+        app.update_resource(migration=True)
 
         # 8. Ensure that the application was rescheduled to cluster 2;
         app.check_running_on(clusters[1], within=10)
@@ -390,16 +370,10 @@ def test_kubernetes_auto_metrics_migration(minikube_clusters):
     assert score_cluster_1 > score_cluster_2
 
     # 3. Create the application, without cluster constraints and migration flag;
-    kubeconfig_paths = {c: f"{CLUSTERS_CONFIGS}/{c}" for c in clusters}
-    environment = create_multiple_cluster_environment(
-        kubeconfig_paths,
-        metrics=metric_weights,
-        app_name="echo-demo",
-        manifest_path=f"{MANIFEST_PATH}/echo-demo.yaml",
-    )
+    environment = create_default_environment(clusters, metrics=metric_weights)
 
     with Environment(environment) as resources:
-        app = resources["Application"][0]
+        app = resources[ResourceKind.APPLICATION][0]
 
         # 4. Ensure that the application was scheduled to the first cluster;
         app.check_running_on(clusters[0], within=0)
@@ -561,16 +535,10 @@ def test_kubernetes_metrics_migration(minikube_clusters):
     assert score_cluster_1_init > score_cluster_2_init, f"debug_info: {debug_info}"
 
     # 3. Create the application, without cluster constraints and migration flag;
-    kubeconfig_paths = {c: f"{CLUSTERS_CONFIGS}/{c}" for c in clusters}
-    environment = create_multiple_cluster_environment(
-        kubeconfig_paths,
-        metrics=metric_weights,
-        app_name="echo-demo",
-        manifest_path=f"{MANIFEST_PATH}/echo-demo.yaml",
-    )
+    environment = create_default_environment(clusters, metrics=metric_weights)
 
     with Environment(environment) as resources:
-        app = resources["Application"][0]
+        app = resources[ResourceKind.APPLICATION][0]
 
         # 4. Ensure that the application was scheduled to cluster 1;
         app.check_running_on(
@@ -668,7 +636,8 @@ def test_kubernetes_metrics_migration(minikube_clusters):
             f"Two migrations took place only {elapsed} seconds apart. "
             f"Expected at least {RESCHEDULING_INTERVAL} seconds. "
             f"The first migration happened at {migration_one} and the second "
-            f"at {migration_two}. debug_info: {debug_info} app_info: {app.get()}"
+            f"at {migration_two}. "
+            f"debug_info: {debug_info} app_info: {app.get_resource()}"
         )
 
         # 10. Ensure that the time elapsed between the last change of the metrics
@@ -742,16 +711,10 @@ def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
     assert score_cluster_1_init > score_cluster_2_init
 
     # 3. Create the application, without cluster constraints and migration flag;
-    kubeconfig_paths = {c: f"{CLUSTERS_CONFIGS}/{c}" for c in clusters}
-    environment = create_multiple_cluster_environment(
-        kubeconfig_paths,
-        metrics=metric_weights,
-        app_name="echo-demo",
-        manifest_path=f"{MANIFEST_PATH}/echo-demo.yaml",
-    )
+    environment = create_default_environment(clusters, metrics=metric_weights)
 
     with Environment(environment) as resources:
-        app = resources["Application"][0]
+        app = resources[ResourceKind.APPLICATION][0]
 
         # 4. Ensure that the application was scheduled to cluster 1;
         app.check_running_on(first_cluster, within=0)
@@ -863,16 +826,10 @@ def test_kubernetes_metrics_migration_at_update(minikube_clusters):
     assert score_cluster_1 > score_cluster_2
 
     # 3. Create the application, without cluster constraints and migration flag;
-    kubeconfig_paths = {c: f"{CLUSTERS_CONFIGS}/{c}" for c in clusters}
-    environment = create_multiple_cluster_environment(
-        kubeconfig_paths,
-        metrics=metric_weights,
-        app_name="echo-demo",
-        manifest_path=f"{MANIFEST_PATH}/echo-demo.yaml",
-    )
+    environment = create_default_environment(clusters, metrics=metric_weights)
 
     with Environment(environment) as resources:
-        app = resources["Application"][0]
+        app = resources[ResourceKind.APPLICATION][0]
 
         # 4. Ensure that the application was scheduled to cluster 1;
         first_cluster = clusters[0]
@@ -921,7 +878,7 @@ def test_kubernetes_metrics_migration_at_update(minikube_clusters):
         assert score_second < score_first
 
         # 9. Update the application with a label (not in itself causing migration)
-        app.update(labels={"foo": second_cluster})
+        app.update_resource(labels={"foo": second_cluster})
 
         # 10. Ensure that the migration to cluster 1 takes place in a timely fashion and
         # remember its timestamp.
@@ -986,16 +943,10 @@ def test_kubernetes_stickiness_migration(minikube_clusters):
     assert score_cluster_1 > score_cluster_2
 
     # 3. Create the application, without cluster constraints and migration flag;
-    kubeconfig_paths = {c: f"{CLUSTERS_CONFIGS}/{c}" for c in clusters}
-    environment = create_multiple_cluster_environment(
-        kubeconfig_paths,
-        metrics=metric_weights,
-        app_name="echo-demo",
-        manifest_path=f"{MANIFEST_PATH}/echo-demo.yaml",
-    )
+    environment = create_default_environment(clusters, metrics=metric_weights)
 
     with Environment(environment) as resources:
-        app = resources["Application"][0]
+        app = resources[ResourceKind.APPLICATION][0]
 
         # 4. Ensure that the application was scheduled to cluster 1;
         app.check_running_on(cluster_1, within=0)

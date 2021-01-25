@@ -1,10 +1,12 @@
+from abc import ABC, abstractmethod
+from enum import Enum
+import itertools
 import json
 import logging
 import os
 import subprocess
 import time
 from collections import defaultdict
-from typing import NamedTuple
 
 from dataclasses import MISSING
 
@@ -16,6 +18,13 @@ STICKINESS_WEIGHT = 0.1
 
 _ETCD_STATIC_PROVIDER_KEY = "/core/metricsprovider/static_provider"
 _ETCDCTL_ENV = {"ETCDCTL_API": "3"}
+
+GIT_DIR = "git/krake"
+TEST_DIR = "rak/functionals"
+CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
+MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}"
+DEFAULT_MANIFEST = "echo-demo.yaml"
+DEFAULT_KUBE_APP_NAME = "echo-demo"
 
 
 class Response(object):
@@ -71,7 +80,7 @@ def run(command, retry=10, interval=1, condition=None, input=None, env_vars=None
         interval (int, optional): Interval in seconds between two retries
         condition (callable, optional): Condition that has to be met.
         input (str, optional): input given through stdin to the command.
-        env_vars (dict, optional): key-value pairs of additional environment
+        env_vars (dict[str, str], optional): key-value pairs of additional environment
             variables that need to be set. ROK_INSTALL_DIR will always be added
             to the PATH.
 
@@ -181,8 +190,11 @@ def check_app_state(state, error_message, reason=None):
     return validate
 
 
-def check_app_created_and_up():
-    err_msg_fmt = "App was not up and running. Error: {details}"
+def check_app_created_and_up(error_message=""):
+    if not error_message:
+        error_message = "App was not up and running."
+
+    err_msg_fmt = error_message + " Error: {details}"
 
     def validate(response):
         try:
@@ -264,6 +276,29 @@ def check_empty_list(error_message):
             assert response.json == [], error_message
         except json.JSONDecodeError:
             raise AssertionError(error_message)
+
+    return validate
+
+
+def check_resource_exists(error_message=""):
+    """Create a callable to verify that a resource exists.
+
+    To be used with the :meth:`run` function. The callable will raise an
+    :class:`AssertionError` if the chosen resource does not exist.
+
+    Args:
+        error_message (str, optional): the message that will be displayed on failure.
+
+    Returns:
+        callable: a condition that will check its given response against the parameters
+            of the current function.
+
+    """
+
+    def validate(response):
+        assert response.returncode == 0
+        assert "Error 404" not in response.output, error_message
+        assert "not found" not in response.output, error_message
 
     return validate
 
@@ -367,14 +402,16 @@ def check_app_running_on(expected_cluster, error_message):
     def validate(response):
         try:
             app_details = response.json
-            observed_cluster = app_details["status"]["running_on"].get("name", None)
-            scheduled_to = app_details["status"]["scheduled_to"].get("name", None)
+            running_on_dict = app_details["status"]["running_on"] or {}
+            running_on = running_on_dict.get("name", None)
+            scheduled_to_dict = app_details["status"]["scheduled_to"] or {}
+            scheduled_to = scheduled_to_dict.get("name", None)
             msg = (
                 error_message + f" App state: {app_details['status']['state']}, "
                 f"App scheduled_to: {scheduled_to}, "
-                f"Observed cluster: {observed_cluster}"
+                f"App running_on: {running_on}"
             )
-            assert observed_cluster == expected_cluster, msg
+            assert running_on == expected_cluster, msg
         except (KeyError, json.JSONDecodeError):
             raise AssertionError(error_message)
 
@@ -426,55 +463,434 @@ def check_http_code_in_output(http_code, error_message=None):
     return validate
 
 
-class ApplicationDefinition(NamedTuple):
+class ResourceKind(Enum):
+    APPLICATION = "application"
+    CLUSTER = "cluster"
+
+
+class ResourceDefinition(ABC):
+    """Definition of a resource for the test environment :class:`Environment`.
+
+    Describes how to create, update and delete a resource with the rok utility.
+    Also defines checks to perform to test whether these actions were successful.
+
+    Attributes:
+        name (str): name of the resource
+        kind (ResourceKind): resource kind
+        _mutable_attributes (list[str]): list of the attributes of the
+            ResourceDefinition which can be modified by its update_resource() method.
+    """
+
+    def __init__(self, name, kind):
+        assert name
+        self.name = name
+        self.kind = kind
+        self._mutable_attributes = self._get_mutable_attributes()
+
+    @abstractmethod
+    def _get_mutable_attributes(self):
+        """
+        Retrieve the attributes of this ResourceDefinition which can be changed
+        using its update_resource() method.
+
+        Returns:
+            list[str]: list of attributes of this ResourceDefinition which can be
+                modified by its update_resource() method.
+        """
+        pass
+
+    @abstractmethod
+    def _get_default_values(self):
+        """Returns the default values of all mutable attributes for the
+        ResourceDefinition after creation.
+
+        Returns:
+            dict[str, object]: a dict with the mutable attributes as keys and their
+                default values as values.
+        """
+        pass
+
+    @abstractmethod
+    def _get_actual_mutable_attribute_values(self):
+        """Retrieve the attributes returned by self._get_mutable_attributes() from the
+        actual resource.
+
+        Returns:
+            dict[str, object]: dict with the attributes returned by
+                self._get_mutable_attributes() as keys and the actual resource's values
+                of those attributes as values.
+        """
+        pass
+
+    def create_resource(self):
+        """Create the resource.
+        """
+        # Create the actual resource based on the initial values of this
+        # ResourceDefinition, since these are the values which should be used
+        # for the creation.
+        error_message = f"The {self.kind} {self.name} could not be created."
+        run(self.creation_command(), condition=check_return_code(error_message))
+
+        # Update this ResourceDefinition with the default values of all mutable
+        # attributes for which none was provided. It is important to do this after
+        # creating the actual resource since we otherwise would create the resource
+        # with the default values, which would be unintended by the test methods.
+        self._set_default_values()
+
+        # Verify that the attributes of the actual resource and this ResourceDefinition
+        # are equal.
+        self._verify_resource()
+
+    def _set_default_values(self):
+        """Checks which attributes of this resource definition have not yet been set
+        and sets them to their default values returned by self._get_default_values().
+        Only the attributes returned by self._get_mutable_attributes() are taken into
+        account.
+
+        Raises:
+            AssertionError: If any of the default values is None.
+
+        """
+        default_values = self._get_default_values()
+        attrs_needing_defaults = [
+            attr for attr in self._mutable_attributes if getattr(self, attr) is None
+        ]
+        for attr in attrs_needing_defaults:
+            msg = f"{self.kind} had default value 'None' for attribute '{attr}'."
+            assert default_values[attr] is not None, msg
+            setattr(self, attr, default_values[attr])
+
+    @abstractmethod
+    def creation_command(self):
+        """Get the command for creating the resource.
+
+        Returns:
+            list[str]: the command to create the resource, as a list of its parts.
+        """
+        pass
+
+    def check_created(self, delay=10):
+        """Run the command for checking if the resource has been created.
+
+        Args:
+            delay (int, optional): The number of seconds that should be allowed
+                before giving up.
+        """
+        run(
+            self.get_command(),
+            condition=self.creation_acceptance_criteria(),
+            interval=1,
+            retry=delay,
+        )
+
+    @abstractmethod
+    def creation_acceptance_criteria(self, error_message=None):
+        """Verify that the resource has been properly created.
+
+        Args:
+            error_message (str, optional): error message to display in case of failure
+
+        Raises:
+            AssertionError: if the resource failed to be created properly
+        """
+        pass
+
+    def delete_resource(self):
+        """Delete the resource."""
+        # The 404 HTTP code is allowed for the cases where the resource has been deleted
+        # during the test.
+        run(self.delete_command(), condition=allow_404)
+
+    @abstractmethod
+    def delete_command(self):
+        """Get the command for deleting the resource.
+
+        Returns:
+            list[str]: the command to delete the resource, as a list of its parts.
+        """
+        pass
+
+    def check_deleted(self, delay=10):
+        """Run the command for checking if the resource has been deleted.
+
+        Args:
+            delay (int, optional): The number of seconds that should be allowed
+                before giving up.
+        """
+        run(
+            self.get_command(),
+            condition=self.deletion_acceptance_criteria(),
+            interval=1,
+            retry=delay,
+        )
+
+    def deletion_acceptance_criteria(self, error_message=None):
+        """Verify that the resource has been properly deleted.
+
+        Args:
+            error_message (str, optional): error message to display in case of failure
+
+        Raises:
+            AssertionError: if the resource failed to be deleted properly
+        """
+        if not error_message:
+            error_message = (
+                f"Unable to observe the {self.kind} resource {self.name} being deleted"
+            )
+        return check_resource_deleted(error_message=error_message)
+
+    def get_resource(self):
+        """Get the resource by executing the rok cli command.
+
+        Returns:
+            dict: the resource as a dict built from the output of the
+                executed command returned by self.get_command().
+        """
+
+        response = run(self.get_command())
+        return response.json
+
+    @abstractmethod
+    def get_command(self):
+        """Generate a command for getting the resource.
+
+        Returns:
+            list[str]: the command to get the resource, as a list of its parts.
+        """
+        pass
+
+    def update_resource(self, **kwargs):
+        """Update the resource with the provided information.
+
+        Args:
+            **kwargs: keyword arguments matching the arguments of update_command().
+        """
+        for attr in kwargs:
+            # we do not allow updating name and kind attributes
+            msg = f"Attribute '{attr}' is immutable"
+            assert attr != "kind" and attr != "name", msg
+            # we only allow updating existing attributes
+            msg = f"'{attr}' is not an attribute of {self.__class__.__name__}"
+            assert hasattr(self, attr), msg
+
+        msg = (
+            f"The mutable attributes of {self.__class__.__name__} "
+            f"({self._mutable_attributes.sort()}) "
+            f"are not equal to the update parameters ({list(kwargs.keys()).sort()})"
+        )
+        assert self._mutable_attributes.sort() == list(kwargs.keys()).sort(), msg
+
+        # update this ResourceDefinition object
+        self._update_resource_definition(kwargs)
+
+        # update the actual resource
+        msg = f"The {self.kind} {self.name} could not be updated."
+        run(self.update_command(**kwargs), condition=check_return_code(msg))
+
+        # After updating the values of the actual resource we want to verify
+        # that its values match this ResourceDefinition.
+        self._verify_resource()
+
+    def _update_resource_definition(self, attributes):
+        """Update this ResourceDefinition object with the given attribute values
+
+        Args:
+            attributes (dict[str, object]): dict with the mutable attributes of this
+                ResourceDefinition as keys and their new values as values.
+                A value of None signalizes that no update should be performed.
+
+        """
+        # For each attribute in 'attributes', set the corresponding attribute of this
+        # ResourceDefinition object.
+        empty_update = True
+        for attr, attr_val in attributes.items():
+            if attr_val is None:
+                continue
+            empty_update = False
+            # FIXME: krake#413: Note that the attributes that are dicts or lists might
+            #  contain information needing to be kept. However, the following call to
+            #  setattr() overwrites this information, which is unwanted behaviour
+            #  (see krake#413).
+            setattr(self, attr, attr_val)
+
+        msg = (
+            "We were asked to update 0 of the mutable attributes. "
+            "Empty updates are not allowed."
+        )
+        assert not empty_update, msg
+
+    def _verify_resource(self):
+        """Verify that the values of the mutable attributes of this ResourceDefinition
+        are equal to the values of the attributes of the actual resource.
+
+        Raises:
+            AssertionError: if the values of all mutable attributes of this
+                ResourceDefinition are not equal to the corresponding values of
+                the actual resource.
+
+        """
+        # get the values from this resource definition
+        expected = dict.fromkeys(self._mutable_attributes)
+        for attr in expected:
+            expected[attr] = getattr(self, attr)
+
+        # get the attributes from the actual resource
+        observed = self._get_actual_mutable_attribute_values()
+        msg = (
+            f"Mutable attributes of the {self.__class__.__name__} "
+            f"({self._mutable_attributes.sort()}) "
+            f"are not equal to the observed ({list(observed.keys()).sort()})"
+        )
+        assert self._mutable_attributes.sort() == list(observed.keys()).sort(), msg
+
+        msg = (
+            f"The attributes of the {self.kind} {self.name} was not equal to the "
+            f"ones of the actual resource. ResourceDefinition: {expected}. "
+            f"Actual resource: {observed}."
+        )
+        assert expected == observed, msg
+
+    @abstractmethod
+    def update_command(self, **kwargs):
+        """Get a command for updating the application.
+
+        Args:
+            **kwargs: the arguments necessary to update the resource.
+
+        Returns:
+            list[str]: the command to update the resource, as a list of its parts.
+        """
+        pass
+
+    @staticmethod
+    def _get_label_options(labels):
+        """
+        Convenience method for generating label lists for rok cli commands.
+
+        Example:
+            If provided the argument labels={"label1": "value1", "label2": "value2"},
+            this method will return the list
+            ["-l", "label1=value1", "-l", "label2=value2"],
+            which can be used when constructing a cli command like
+            "rok kube app create -l label1=value1 -l label2=value2 ..."
+
+        Args:
+            labels (dict[str, str]): dict of resource labels and their values
+
+        Returns:
+            list[str]:
+                ['-l', key_1=value_1, '-l', key_2=value_2, ..., '-l', key_n=value_n]
+                for all n key, value pairs in labels.
+        """
+        labels = [k + "=" + v for k, v in labels.items()] if labels else []
+        return ResourceDefinition._get_flag_str_options("-l", labels)
+
+    @staticmethod
+    def _get_flag_str_options(flag, values):
+        """
+        Convenience method for generating option lists for cli commands.
+
+        Example:
+            If provided the arguments flag="-L" and
+            values=["location is not DE", "foo=bar"], this method will return
+            the list ["-L", "location is not DE", "-L", "foo=bar"],
+            which can be used when constructing a cli command like
+            "rok kube app create -L 'location is not DE' -L foo=bar ..."
+
+        Args:
+            flag (str): The cli argument flag. The same flag is used for all values.
+            values (list[str]): The values of the cli arguments
+
+        Returns:
+            list[str]: [flag, val1, flag, val_2, ..., flag, val_n]
+                for all n values in values.
+        """
+        if not values:
+            return []
+        return list(itertools.chain(*[[flag, val] for val in values]))
+
+    def get_labels(self):
+        """Retrieve the labels from the actual resource.
+
+        Returns:
+            dict[str, str]: the labels of the resource
+        """
+        resource = self.get_resource()
+        return resource["metadata"]["labels"]
+
+
+class ApplicationDefinition(ResourceDefinition):
     """Definition of an Application resource for the test environment
     :class:`Environment`.
 
-    Describes how to create and delete an Application with the rok utility. Also defines
-    the checks to perform to test if these two actions were successful.
-
     Args:
-        name (str): name of the Application to create.
+        name (str): name of the application
         manifest_path (str): path to the manifest file to use for the creation.
-        constraints (list(str)): optional list of cluster label constraints
+        constraints (list[str], optional): list of cluster label constraints
             to use for the creation of the application.
-        migration (bool): optional migration flag indicating whether the
+        labels (dict[str, str]): dict of application labels and their values
+        migration (bool, optional): migration flag indicating whether the
             application should be able to migrate.
-
     """
 
-    name: str
-    manifest_path: str
-    constraints: list = []
-    migration: bool = None
-    kind: str = "Application"
+    def __init__(
+        self, name, manifest_path, constraints=None, labels=None, migration=None
+    ):
+        super().__init__(name=name, kind=ResourceKind.APPLICATION)
+        assert os.path.isfile(manifest_path), f"{manifest_path} is not a file."
+        self.manifest_path = manifest_path
+        self.cluster_label_constraints = constraints or []
+        self.labels = labels or {}
+        self.migration = migration
 
-    def create_resource(self):
-        """Create the application.
-        """
-        error_message = f"The Application {self.name} could not be created."
-        run(self.creation_command(), condition=check_return_code(error_message))
+    def _get_mutable_attributes(self):
+        return ["cluster_label_constraints", "labels", "migration"]
+
+    def _get_default_values(self):
+        defaults = dict.fromkeys(self._mutable_attributes)
+        defaults.update({"cluster_label_constraints": []})
+        defaults.update({"labels": {}})
+        defaults.update({"migration": True})
+        return defaults
+
+    def _get_actual_mutable_attribute_values(self):
+        app = self.get_resource()
+        return {
+            "cluster_label_constraints": app["spec"]["constraints"]["cluster"][
+                "labels"
+            ],
+            "labels": app["metadata"]["labels"],
+            "migration": app["spec"]["constraints"]["migration"],
+        }
 
     def creation_command(self):
-        """Generate a command for creating the Application.
-
-        Returns:
-            str: the command to create the Application.
-
-        """
-        migration_flag = self._get_migration_flag(self.migration)
-        constraints = (
-            " ".join(f"-L {constraint}" for constraint in self.constraints)
-            if self.constraints
-            else ""
+        cmd = f"rok kube app create -f {self.manifest_path} {self.name}".split()
+        cmd += self._get_cluster_label_constraint_options(
+            self.cluster_label_constraints
         )
-        return (
-            f"rok kube app create {migration_flag} {constraints} "
-            f"-f {self.manifest_path} {self.name}"
-        )
+        cmd += self._get_label_options(self.labels)
+        if self.migration is not None:
+            cmd += [self._get_migration_flag(self.migration)]
+        return cmd
 
     @staticmethod
     def _get_migration_flag(migration):
+        """
+        Determines the migration cli option for a 'rok kube app create'
+        or 'rok kube app update' command, based on the value of the flag 'migration'.
+
+        Depending on the value of 'migration', the cli option is determined as such:
+            True: "--enable-migration"
+            False: "--disable-migration"
+            None: ""
+
+        Args:
+            migration (bool, optional): Flag indicating the desired migration cli option
+
+        Returns:
+            str: The migration cli option.
+
+        """
         if migration is False:
             migration_flag = "--disable-migration"
         elif migration is True:
@@ -485,86 +901,58 @@ class ApplicationDefinition(NamedTuple):
             raise RuntimeError("migration must be None, False or True.")
         return migration_flag
 
-    def check_created(self):
-        """Run the command for checking if the Application has been created."""
-        run(
-            self.get_command(), condition=check_app_created_and_up(),
-        )
-
-    def delete_resource(self):
-        """Delete the actual Application."""
-        # The 404 HTTP code is allowed for the cases where the resource has been deleted
-        # during the test.
-        run(self.delete_command(), condition=allow_404)
+    def creation_acceptance_criteria(self, error_message=None):
+        return check_app_created_and_up(error_message=error_message)
 
     def delete_command(self):
-        """Generate a command for deleting the application.
+        return f"rok kube app delete {self.name}".split()
 
-        Returns:
-            str: the command to delete the application.
-
-        """
-        return f"rok kube app delete {self.name}"
-
-    def check_deleted(self):
-        """Run the command for checking if the Application has been deleted."""
-        error_message = f"Unable to observe the application {self.name} deleted"
-        run(
-            self.get_command(), condition=check_resource_deleted(error_message),
-        )
-
-    def update(self, cluster_labels=None, migration=None, labels=None):
-        """Update the application with the provided information.
+    def update_command(
+        self, cluster_label_constraints=None, migration=None, labels=None
+    ):
+        """Get a command for updating the application.
 
         Args:
-            cluster_labels (list(str)): optional list of cluster label constraints
-                to give the application, e.g. ['location=DE']
-            migration (bool): Optional flag indicating which migration flag should
+            cluster_label_constraints (list[str], optional): list of cluster label
+                constraints to give the application, e.g. ['location=DE']
+            migration (bool, optional): Flag indicating which migration flag should
                 be given to the update command.
                     True: --enable-migration
                     False: --disable-migration
                     None: (No flag)
-            labels (dict[str: str]): dict of labels with which to update the app.
-
-        """
-        run(
-            self.update_command(
-                cluster_labels=cluster_labels, migration=migration, labels=labels
-            )
-        )
-
-    def update_command(self, cluster_labels=None, migration=None, labels=None):
-        """Generate a command for updating the application.
-
-        Args:
-            cluster_labels (list(str)): optional list of cluster label constraints
-                to give the application, e.g. ['location=DE']
-            migration (bool): Optional flag indicating which migration flag should
-                be given to the update command.
-                    True: --enable-migration
-                    False: --disable-migration
-                    None: (No flag)
-            labels (dict[str: str]): dict of labels with which to update the app.
+            labels (dict[str, str]): dict of labels with which to update the app.
 
         Returns:
-            str: the command to update the Application.
+            list[str]: the command to update the application, as a list of its parts.
+        """
+        cmd = f"rok kube app update {self.name}".split()
+        cmd += self._get_cluster_label_constraint_options(cluster_label_constraints)
+        cmd += self._get_label_options(labels)
+        if migration is not None:
+            cmd += [self._get_migration_flag(migration)]
+        return cmd
+
+    def _get_cluster_label_constraint_options(self, cluster_label_constraints):
+        """
+        Convenience method for generating cluster label constraints lists for
+        rok cli commands.
+
+        Example:
+            If provided the argument labels=["constraint1", "constraint2"},
+            this method will return the list ["-L", "constraint1", "-L", "constraint2"],
+            which can be used when constructing a cli command like
+            "rok kube app create -L constraint1 -L constraint2 ..."
+
+        Args:
+            cluster_label_constraints (list[str]): list of cluster label constraints
+                to give the application, e.g. ['location is DE']
+
+        Returns:
+            list[str]: ['-L', constr_1, '-L', constr_2, ..., '-L', constr_n]
+                for all n constraints in cluster_label_constraints.
 
         """
-        migration_flag = self._get_migration_flag(migration)
-        clc_options = (
-            " ".join(f"-L {constraint}" for constraint in cluster_labels)
-            if cluster_labels
-            else ""
-        )
-        label_options = (
-            " ".join(f"-l {label}={value}" for label, value in labels.items())
-            if labels
-            else ""
-        )
-        return (
-            f"rok kube app update "
-            f"{clc_options} {migration_flag} {label_options} {self.name}"
-        )
+        return self._get_flag_str_options("-L", cluster_label_constraints)
 
     def check_running_on(
         self, cluster_name, within=10, after_delay=0, error_message=""
@@ -602,24 +990,8 @@ class ApplicationDefinition(NamedTuple):
             condition=check_app_running_on(cluster_name, error_message),
         )
 
-    def get(self):
-        """Get the application by executing the 'rok kube app get' command.
-
-        Returns:
-            dict: the application as a dict built from the output of the
-                executed command.
-        """
-
-        response = run(self.get_command())
-        return response.json
-
     def get_command(self):
-        """Generate a command for getting the application.
-
-        Returns:
-            str: the command to get the application
-        """
-        return f"rok kube app get {self.name} -o json"
+        return f"rok kube app get {self.name} -o json".split()
 
     def get_running_on(self, strict=False):
         """Run the command for getting the application and return the name of
@@ -633,7 +1005,7 @@ class ApplicationDefinition(NamedTuple):
             str: the name of the cluster the application is running on or None
             if scheduled_to != running_on
         """
-        app_dict = self.get()
+        app_dict = self.get_resource()
         running_on = app_dict["status"]["running_on"]["name"]
         if strict:
             scheduled_to = app_dict["status"]["scheduled_to"]["name"]
@@ -649,7 +1021,7 @@ class ApplicationDefinition(NamedTuple):
         Returns:
             str: the name of the cluster the application is scheduled to
         """
-        app_dict = self.get()
+        app_dict = self.get_resource()
         return app_dict["status"]["scheduled_to"]["name"]
 
     def get_state(self):
@@ -658,96 +1030,109 @@ class ApplicationDefinition(NamedTuple):
         Returns:
             str: the current state of the application
         """
-        app_dict = self.get()
+        app_dict = self.get_resource()
         return app_dict["status"]["state"]
 
 
-class ClusterDefinition(NamedTuple):
+class ClusterDefinition(ResourceDefinition):
     """Definition of a cluster resource for the test environment :class:`Environment`.
 
-    Describes how to create and delete a cluster with the rok utility. Also defines
-    the checks to perform to test if the deletion was successful.
-
-    Args:
-        name (str): name of the Application to create.
+    Attributes:
+        name (str): name of the cluster
         kubeconfig_path (str): path to the kubeconfig file to use for the creation.
-        labels (list(str)): list of cluster labels to use for the creation.
-
+        labels (dict[str, str], optional): dict of cluster labels and their values
+            to use for the creation.
+        metrics (list[dict[str, object]], optional): list of dict of metrics and their
+            weights. Each dict has te two keys "name" and "weight".
     """
 
-    name: str
-    kubeconfig_path: str
-    labels: list = []
-    kind: str = "Cluster"
-    metrics: dict = {}
+    def __init__(self, name, kubeconfig_path, labels=None, metrics=None):
+        super().__init__(name=name, kind=ResourceKind.CLUSTER)
+        assert os.path.isfile(kubeconfig_path), f"{kubeconfig_path} is not a file."
+        self.kubeconfig_path = kubeconfig_path
+        self.labels = labels or {}
+        self.metrics = metrics or []
 
-    def create_resource(self):
-        """Create the Cluster."""
+    def _get_mutable_attributes(self):
+        return ["labels", "metrics"]
 
-        error_message = f"The Cluster {self.name} could not be created."
-        run(self.creation_command(), condition=check_return_code(error_message))
+    def _get_default_values(self):
+        """Returns the default values for all mutable attributes of this resource
+        definition.
+
+        Returns:
+            dict[str, object]:
+                dict with the attributes in self._mutable_attributes as keys and
+                their default values as values.
+        """
+        defaults = dict.fromkeys(self._mutable_attributes)
+        defaults.update({"labels": {}})
+        defaults.update({"metrics": []})
+        return defaults
+
+    def _get_actual_mutable_attribute_values(self):
+        cluster = self.get_resource()
+        return {
+            "labels": cluster["metadata"]["labels"],
+            "metrics": cluster["spec"]["metrics"],
+        }
 
     def creation_command(self):
-        """Generate a command for creating the cluster.
+        cmd = "rok kube cluster create".split()
+        cmd += self._get_label_options(self.labels)
+        cmd += self._get_metrics_options(self.metrics)
+        cmd += [self.kubeconfig_path]
+        return cmd
+
+    @staticmethod
+    def _get_metrics_options(metrics):
+        """Convenience method for generating metric lists for rok cli commands.
+
+        Example:
+            If provided the argument metrics=
+            [{"name": "metric_name1", "weight": 1.0},
+            {"name": "metric_name2", "weight": 2.0}],
+            this method will return the list
+            ["-m", "metric_name1", "1.0", "-m", "metric_name2", "2.0"],
+            which can be used when constructing a cli command like
+            rok kube cluster create -m metric_name1 1.0 -m metric_name2 2.0 ...
+
+        Args:
+            metrics (list[dict[str, object]]): list of dicts of metrics names
+                and their weights
 
         Returns:
-            str: the command to create the cluster.
-
+            list[str]:
+                ['-m', 'key_1', 'value_1', '-m', 'key_2', 'value_2', ...,
+                '-m', 'key_n', 'value_n']
+                for all n key, value pairs in metrics.
         """
-        label_flags = " ".join(f"-l {label}" for label in self.labels)
-        metric_flags = " ".join(
-            f"-m {metric} {weight}" for metric, weight in self.metrics.items()
-        )
-        return (
-            f"rok kube cluster create {label_flags} {metric_flags} "
-            f"{self.kubeconfig_path}"
-        )
+        metrics_options = []
+        if metrics is None:
+            metrics = []
+        for metric in metrics:
+            metrics_options += ["-m", metric["name"], str(metric["weight"])]
+        return metrics_options
 
-    def delete_resource(self):
-        """Delete the actual Cluster."""
-        # The 404 HTTP code is allowed for the cases where the resource has been deleted
-        # during the test.
-        run(self.delete_command(), condition=allow_404)
+    def creation_acceptance_criteria(self, error_message=None):
+        if not error_message:
+            error_message = f"The cluster {self.name} was not properly created."
+        return check_resource_exists(error_message=error_message)
 
     def delete_command(self):
-        """Generate a command for deleting the cluster.
-
-        Returns:
-            str: the command to delete the cluster."""
-        return f"rok kube cluster delete {self.name}"
-
-    def check_deleted(self):
-        """Run the command for checking if the Cluster has been deleted."""
-        error_message = f"Unable to observe the cluster {self.name} deleted"
-        run(
-            f"rok kube cluster get {self.name}",
-            condition=check_resource_deleted(error_message),
-        )
-
-    def update(self, labels=None, metrics=None):
-        """Update the cluster with the provided information.
-
-        Args:
-            labels (list(str)): optional list of labels
-                to give the cluster, e.g. ['location=DE']
-            metrics (dict[str: float]): optional dict with metrics and their weights
-                to give the cluster
-
-        """
-        run(self.update_command(labels=labels, metrics=metrics))
+        return f"rok kube cluster delete {self.name}".split()
 
     def update_command(self, labels=None, metrics=None):
-        """Generate a command for updating the cluster.
+        """Get a command for updating the cluster.
 
         Args:
-            labels (list(str)): optional list of labels
-                to give the cluster, e.g. ['location=DE']
-            metrics (dict[str: float]): optional dict with metrics and their weights
-                to give the cluster.
+            labels (dict[str, str], optional): dict of labels and their values to
+                give the cluster, e.g. {'location': 'DE'}
+            metrics (list[dict[str, object]], optional): list of dicts with metrics
+                and their weights to update the cluster with.
 
         Returns:
-            str: the command to update the cluster.
-
+             list[str]: the command to update the application, as a list of its parts.
         """
         if not (labels or metrics):
             msg = (
@@ -756,13 +1141,13 @@ class ClusterDefinition(NamedTuple):
             )
             raise AssertionError(msg)
 
-        metric_opts = (
-            " ".join(f"-m {metric} {weight}" for metric, weight in metrics.items())
-            if metrics
-            else ""
-        )
-        label_opts = " ".join(f"-l {label}" for label in labels) if labels else ""
-        return f"rok kube cluster update {label_opts} {metric_opts} {self.name}"
+        cmd = f"rok kube cluster update {self.name}".split()
+        cmd += self._get_label_options(labels)
+        cmd += self._get_metrics_options(metrics)
+        return cmd
+
+    def get_command(self):
+        return f"rok kube cluster get {self.name} -o json".split()
 
 
 class Environment(object):
@@ -825,13 +1210,18 @@ class Environment(object):
             in the given order after all Krake resources have been deleted. Their
             signature should be "handler(dict) -> void". The given dict contains the
             definition of all resources managed by the Environment.
+        creation_delay (int, optional): The number of seconds that should
+            be allowed before concluding that a resource could not be created.
 
     """
 
-    def __init__(self, resources, before_handlers=None, after_handlers=None):
+    def __init__(
+        self, resources, before_handlers=None, after_handlers=None, creation_delay=10
+    ):
         # Dictionary: "priority: list of resources to create"
         self.res_to_create = resources
         self.resources = defaultdict(list)
+        self.creation_delay = creation_delay
 
         self.before_handlers = before_handlers if before_handlers else []
         self.after_handlers = after_handlers if after_handlers else []
@@ -855,8 +1245,7 @@ class Environment(object):
         # Check for each resource if it has been created
         for _, resource_list in sorted(self.res_to_create.items(), reverse=True):
             for resource in resource_list:
-                if hasattr(resource, "check_created"):
-                    resource.check_created()
+                resource.check_created(delay=self.creation_delay)
 
         return self.resources
 
@@ -877,20 +1266,21 @@ class Environment(object):
             handler(self.resources)
 
     @classmethod
-    def get_resource(cls, resources, kind, name):
+    def get_resource_definition(cls, resources, kind, name):
         """
         If there exists exactly one resource in 'resources' of kind 'kind'
         with name 'name', return it. Otherwise raise AssertionError.
         Args:
-            resources (list): list of ClusterDefinition and ApplicationDefinition
-                objects.
-            kind (str): 'Cluster' or 'Application' depending on which kind of resource
-                is sought.
+            resources (list[ResourceDefinition]): list of ResourceDefinition's
+                to look through
+            kind (ResourceKind): the kind of resource which is sought.
             name (str): the name of the resource that is sought.
 
         Returns:
-            If found, the sought resource
-            (either of type ClusterDefinition or ApplicationDefinition).
+            ResourceDefinition: If found, the sought resource.
+                if kind == ResourceKind.CLUSTER: ClusterDefinition
+                If kind == ResourceKind.APPLICATION: ApplicationDefinition
+
         Raises:
             AssertionError if not exactly one resource was found.
 
@@ -902,7 +1292,7 @@ class Environment(object):
                 f"(expected one)."
             )
             if len(found) != 0:
-                msg += f" They were: {', '.join(found)}"
+                msg += f" They were: {', '.join(str(rd) for rd in found)}"
             raise AssertionError(msg)
         return found[0]
 
@@ -943,30 +1333,36 @@ def create_multiple_cluster_environment(
     one Application and multiple Clusters.
 
     Args:
-        kubeconfig_paths (dict[str: PathLike]): mapping between Cluster
+        kubeconfig_paths (dict[str, PathLike]): mapping between Cluster
             names and path to the kubeconfig file for the corresponding Cluster
             to create.
-        cluster_labels (dict[str: List[str]], optional): mapping between
+        cluster_labels (dict[str, dict[str, str]], optional): mapping between
             Cluster names and labels for the corresponding Cluster to create.
-        metrics (dict[str: List[str]], optional): mapping between
+            The labels are given as a dictionary with the label names as keys
+            and the label values as values.
+        metrics (dict[str, dict[str, float]], optional): mapping between
             Cluster names and metrics for the corresponding Cluster to create.
+            The metrics are given as a dictionary with the metric names as keys
+            and the metric weights as values.
         app_name (str, optional): name of the Application to create.
         manifest_path (PathLike, optional): path to the manifest file that
             should be used to create the Application.
-        app_cluster_constraints (List[str], optional): list of cluster constraints
+        app_cluster_constraints (list[str], optional): list of cluster constraints
             for the Application to create.
         app_migration (bool, optional): migration flag indicating whether the
             application should be able to migrate.
 
     Returns:
-        dict[int: List[NamedTuple]]: an environment definition to use to create
+        dict[int, list[ResourceDefinition]]: an environment definition to use to create
             a test environment.
 
     """
     if not cluster_labels:
-        cluster_labels = {cn: [] for cn in kubeconfig_paths}
+        cluster_labels = {cn: {} for cn in kubeconfig_paths}
     if not metrics:
         metrics = {cn: {} for cn in kubeconfig_paths}
+    if not app_cluster_constraints:
+        app_cluster_constraints = []
 
     env = {
         10: [
@@ -974,7 +1370,7 @@ def create_multiple_cluster_environment(
                 name=cn,
                 kubeconfig_path=kcp,
                 labels=cluster_labels[cn],
-                metrics=metrics[cn],
+                metrics=_convert_to_metrics_list(metrics[cn]),
             )
             for cn, kcp in kubeconfig_paths.items()
         ]
@@ -996,9 +1392,9 @@ def get_scheduling_score(cluster, values, weights, scheduled_to=None):
 
     Args:
         cluster (str): cluster name
-        values (dict[str: float]): Dictionary of the metric values. The dictionary keys
+        values (dict[str, float]): Dictionary of the metric values. The dictionary keys
             are the names of the metrics and the dictionary values the metric values.
-        weights (dict[str: dict[str: float]]): Dictionary of cluster weights.
+        weights (dict[str, dict[str, float]]): Dictionary of cluster weights.
             The keys are the names of the clusters and each value is a dictionary in
             itself, with the metric names as keys and the cluster's weights as values.
         scheduled_to (str): name of the cluster to which the application being
@@ -1059,7 +1455,7 @@ def get_static_metrics():
     """Retrieve metrics from the etcd database.
 
     Returns:
-         dict[str: float]
+         dict[str, float]
             Dict with the metrics names as keys and metric values as values.
 
     """
@@ -1072,7 +1468,7 @@ def set_static_metrics(values):
      values to the provided metrics.
 
     Args:
-        values (dict[str: float]): Dictionary with the metrics names as keys and
+        values (dict[str, float]): Dictionary with the metrics names as keys and
             metric values as values.
 
     """
@@ -1101,7 +1497,7 @@ def check_static_metrics(expected_metrics, error_message=""):
     from the given ones.
 
     Args:
-        expected_metrics (dict[str: float]): Dictionary with the metrics names as
+        expected_metrics (dict[str, float]): Dictionary with the metrics names as
             keys and metric values as values.
         error_message (str): the message that will be displayed if the
             check fails.
@@ -1127,3 +1523,161 @@ def check_static_metrics(expected_metrics, error_message=""):
             raise AssertionError(error_message + f"Error: {e}")
 
     return validate
+
+
+def create_default_environment(
+    cluster_names,
+    metrics=None,
+    cluster_labels=None,
+    app_cluster_constraints=None,
+    app_migration=None,
+):
+    """Create and return a test environment definition with one application and
+    len(cluster_names) clusters using default kubeconfig and manifest files.
+
+    This method is a convenience method wrapping
+    `create_multiple_cluster_environment()`.
+
+    The kubeconfig file that will be used for `cluster_name` in `cluster_names`
+    is given by get_default_kubeconfig_path(). This file is assumed to exist.
+
+    The manifest file that will be used for the application is
+    `MANIFEST_PATH/DEFAULT_MANIFEST`. This file is assumed to exist.
+
+    Args:
+        cluster_names (list[str]): cluster names
+        metrics (dict[str, dict[str, float]], optional):
+            Cluster names and their metrics.
+            keys: the same names as in `cluster_names`
+            values: dict of metrics
+                keys: metric names
+                values: weight of the metrics
+        cluster_labels (dict[str, dict[str, str]], optional):
+            Cluster names and their cluster labels.
+            keys: the same names as in `cluster_names`
+            values: dict of cluster labels
+                keys: cluster labels
+                values: value of the cluster labels
+        app_cluster_constraints (list[str], optional):
+            list of cluster constraints, e.g. ["location != DE"]
+        app_migration (bool, optional): migration flag indicating whether the
+            application should be able to migrate. If not provided, none is
+            provided when creating the application.
+
+    Returns:
+        dict: an environment definition to use to create a test environment.
+
+    """
+    kubeconfig_paths = {c: get_default_kubeconfig_path(c) for c in cluster_names}
+    manifest_path = os.path.join(MANIFEST_PATH, DEFAULT_MANIFEST)
+    return create_multiple_cluster_environment(
+        kubeconfig_paths=kubeconfig_paths,
+        metrics=metrics,
+        cluster_labels=cluster_labels,
+        app_name=DEFAULT_KUBE_APP_NAME,
+        manifest_path=manifest_path,
+        app_cluster_constraints=app_cluster_constraints,
+        app_migration=app_migration,
+    )
+
+
+def _convert_to_metrics_list(metrics):
+    """Convert a dict of metrics names and weights as keys and values, into a list
+    of dicts with the two keys "name" and "weight" as keys and the metrics name and
+    metric weight as their corresponding values.
+
+    Examples:
+          metrics {"name1": 1.0, "name2": 2.0} results in the output
+          [{"name": "name1", "weight": 1.0}, {"name": "name2", "weight": 2.0}]
+
+    Args:
+        metrics (dict[str, float]): metrics to convert
+
+    Returns:
+        list[dict[str, object]]: list of dicts with the two keys "name" and "weight" as
+            keys and the metrics name and metric weight as their corresponding values.
+    """
+    metrics_list = []
+    for metric_name, metric_weight in metrics.items():
+        metrics_list.append({"name": metric_name, "weight": metric_weight})
+    return metrics_list
+
+
+def get_default_kubeconfig_path(cluster_name):
+    """Return the default kubeconfig_path for the given cluster.
+
+    Args:
+        cluster_name (str): The name of a cluster
+
+    Returns:
+        str: The default path for the clusters kubeconfig file.
+
+    """
+    return os.path.join(CLUSTERS_CONFIGS, cluster_name)
+
+
+def create_cluster_info(cluster_names, sub_keys, values):
+    """
+    Convenience method for preparing the input parameters cluster_labels and metrics
+    of `create_default_environment()`.
+
+    The sub-keys can for example be thought of as
+    metric names (and `values` their weights) or
+    cluster label names (and `values` their values).
+
+    Example:
+        Sample input:
+            cluster_names = ["cluster1", "cluster2", "cluster3"]
+            sub_keys = ["m1", "m2"]
+            values = [3, 4]
+        Return value:
+            {
+                "cluster1": {
+                    "m1": 3,
+                },
+                "cluster2": {
+                    "m2": 4,
+                },
+                "cluster3": {},
+            }
+
+    If sub_keys is not a list, the list will be constructed as follows:
+        sub_keys = [sub_keys] * len(values)
+    This is useful when the sub-key should be the same for all clusters.
+
+    The ith cluster will get the ith sub-key with the ith value.
+    Caveat: If there are fewer sub-keys and values than clusters,
+    the last cluster(s) will not become any <sub-key, value> pairs at all.
+
+    Limitation:
+        Each cluster can only have one <sub-key, value> pair using this method.
+
+    Args:
+        cluster_names (list[str]): The keys in the return dict.
+        sub_keys: The keys in the second level dicts in the return dict.
+            If type(sub_keys) isn't list, a list will be created as such:
+                sub_keys = [sub_keys] * len(values)
+        values (list): The values in the second level dicts in the return dict.
+
+    Returns:
+        dict[str, dict] with same length as cluster_names.
+            The first `len(values)` <key, value> pairs will be:
+                cluster_names[i]: {sub_keys[i]: values[i]}
+            The last `len(cluster_names) - len(values)` <key: value> pairs will be:
+                cluster_names[i]: {}
+
+    Asserts:
+        len(cluster_names) >= len(values)
+        len(sub_keys) == len(values) if type(sub_keys) is list
+
+    """
+    if not type(sub_keys) is list:
+        sub_keys = [sub_keys] * len(values)
+
+    assert len(cluster_names) >= len(values)
+    assert len(sub_keys) == len(values)
+
+    cluster_dicts = [{sub_keys[i]: values[i]} for i in range(len(values))]
+    cluster_dicts += [{}] * (len(cluster_names) - len(values))
+
+    return dict(zip(cluster_names, cluster_dicts))
