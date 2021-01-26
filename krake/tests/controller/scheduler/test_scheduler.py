@@ -523,6 +523,307 @@ async def test_kubernetes_select_cluster_sticky_without_metric():
     assert selected == cluster_A
 
 
+async def test_kubernetes_select_cluster_all_unreachable_metric(
+    aiohttp_server, config, db, loop
+):
+    """Test scheduler picks a cluster even if all metrics providers are unreachable"""
+    clusters = [
+        ClusterFactory(spec__metrics=[MetricRef(name="unreachable", weight=1)]),
+        ClusterFactory(spec__metrics=[MetricRef(name="unreachable", weight=0.1)]),
+    ]
+    random.shuffle(clusters)
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=False,
+        spec__constraints=None,
+    )
+    endpoint = "http://dummyurl"
+    async with Client(url=endpoint, loop=loop) as client:
+        scheduler = Scheduler(endpoint, worker_count=0)
+        await scheduler.prepare(client)
+        selected = await scheduler.select_kubernetes_cluster(app, clusters)
+
+    assert selected in clusters
+
+
+async def test_kubernetes_select_cluster_some_unreachable_metric(
+    aiohttp_server, config, db, loop
+):
+    """Test scheduler picks cluster from those with metrics from reachable providers"""
+    prometheus = await aiohttp_server(make_prometheus({"heat-demand": ["0.4"] * 2}))
+
+    cluster_wo_metric = ClusterFactory(spec__metrics=[])
+    cluster_w_unreachable = ClusterFactory(
+        spec__metrics=[MetricRef(name="unreachable", weight=1)]
+    )
+    cluster_w_metric = ClusterFactory(
+        spec__metrics=[MetricRef(name="heat-demand", weight=1)]
+    )
+
+    metric = MetricFactory(
+        metadata__name="heat-demand",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus-zone-1",
+        spec__provider__metric="heat-demand",
+    )
+    metrics_provider = MetricsProviderFactory(
+        metadata__name="prometheus-zone-1",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=False,
+        spec__constraints=None,
+    )
+    await db.put(metric)
+    await db.put(metrics_provider)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        selected = await scheduler.select_kubernetes_cluster(
+            app, [cluster_wo_metric, cluster_w_unreachable, cluster_w_metric]
+        )
+
+    assert selected == cluster_w_metric
+
+
+async def test_kubernetes_select_cluster_sticky_all_unreachable_metric(
+    aiohttp_server, config, db, loop
+):
+    """Test that stickiness has highest priority if no metrics provider is reachable"""
+    cluster_wo_metric = ClusterFactory(spec__metrics=[])
+    current_wo_metric = ClusterFactory(spec__metrics=[])
+    cluster1_w_metric = ClusterFactory(
+        spec__metrics=[MetricRef(name="unreachable", weight=1)]
+    )
+    cluster2_w_metric = ClusterFactory(
+        spec__metrics=[MetricRef(name="unreachable", weight=1)]
+    )
+    clusters = [
+        cluster_wo_metric,
+        current_wo_metric,
+        cluster1_w_metric,
+        cluster2_w_metric,
+    ]
+    random.shuffle(clusters)
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=True,
+        status__scheduled_to=resource_ref(current_wo_metric),
+        spec__constraints=None,
+    )
+    endpoint = "http://dummyurl"
+    async with Client(url=endpoint, loop=loop) as client:
+        scheduler = Scheduler(endpoint, worker_count=0)
+        await scheduler.prepare(client)
+        selected = await scheduler.select_kubernetes_cluster(app, clusters)
+
+    assert selected == current_wo_metric
+
+
+async def test_kubernetes_select_cluster_sticky_others_with_metric(
+    aiohttp_server, config, db, loop
+):
+    """Test that metric has higher priority than stickiness"""
+    prometheus = await aiohttp_server(
+        make_prometheus({"heat-demand": 2 * ["0.4"], "some-metric": 2 * ["1.0"]})
+    )
+
+    current_wo_metric = ClusterFactory(spec__metrics=[])
+    cluster_wo_metric = ClusterFactory(spec__metrics=[])
+    cluster_w_metric1 = ClusterFactory(
+        spec__metrics=[
+            MetricRef(name="heat-demand", weight=0.9),
+            MetricRef(name="some-metric", weight=1),
+        ]
+    )
+    cluster_w_metric2 = ClusterFactory(
+        spec__metrics=[
+            MetricRef(name="heat-demand", weight=0.5),
+            MetricRef(name="some-metric", weight=1),
+        ]
+    )
+    clusters = [
+        current_wo_metric,
+        cluster_wo_metric,
+        cluster_w_metric1,
+        cluster_w_metric2,
+    ]
+    random.shuffle(clusters)
+
+    metric = MetricFactory(
+        metadata__name="heat-demand",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus-zone-1",
+        spec__provider__metric="heat-demand",
+    )
+    some_metric = MetricFactory(
+        metadata__name="some-metric",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus-zone-1",
+        spec__provider__metric="some-metric",
+    )
+    metrics_provider = MetricsProviderFactory(
+        metadata__name="prometheus-zone-1",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=True,
+        status__scheduled_to=resource_ref(current_wo_metric),
+        spec__constraints=None,
+    )
+    await db.put(metric)
+    await db.put(some_metric)
+    await db.put(metrics_provider)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        selected = await scheduler.select_kubernetes_cluster(app, clusters)
+
+    assert selected == cluster_w_metric2
+
+
+async def test_kubernetes_select_cluster_sticky_reachable_metric(
+    aiohttp_server, config, db, loop
+):
+    """Test that stickiness is taken into account when metrics are used"""
+    prometheus = await aiohttp_server(make_prometheus({"heat-demand": 2 * ["0.4"]}))
+
+    cluster_wo_metric = ClusterFactory(spec__metrics=[])
+    current_w_metric = ClusterFactory(
+        spec__metrics=[MetricRef(name="heat-demand", weight=0.99)]
+    )
+    cluster_w_metric = ClusterFactory(
+        spec__metrics=[MetricRef(name="heat-demand", weight=1)]
+    )
+
+    clusters = [cluster_wo_metric, current_w_metric, cluster_w_metric]
+    random.shuffle(clusters)
+
+    metric = MetricFactory(
+        metadata__name="heat-demand",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus-zone-1",
+        spec__provider__metric="heat-demand",
+    )
+    metrics_provider = MetricsProviderFactory(
+        metadata__name="prometheus-zone-1",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=True,
+        status__scheduled_to=resource_ref(current_w_metric),
+        spec__constraints=None,
+    )
+    await db.put(metric)
+    await db.put(metrics_provider)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        selected = await scheduler.select_kubernetes_cluster(app, clusters)
+
+    assert selected == current_w_metric
+
+
+async def test_kubernetes_select_cluster_sticky_to_unreachable_all_unreachable_metric(
+    aiohttp_server, config, db, loop
+):
+    """Test that also clusters with unreachable metrics providers are considered"""
+    cluster_wo_metric = ClusterFactory(spec__metrics=[])
+    current_w_unreachable = ClusterFactory(
+        spec__metrics=[MetricRef(name="unreachable", weight=0.99)]
+    )
+    cluster_w_unreachable = ClusterFactory(
+        spec__metrics=[MetricRef(name="unreachable", weight=1)]
+    )
+    clusters = [cluster_wo_metric, current_w_unreachable, cluster_w_unreachable]
+    random.shuffle(clusters)
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=True,
+        status__scheduled_to=resource_ref(current_w_unreachable),
+        spec__constraints=None,
+    )
+
+    endpoint = "http://dummyurl"
+    async with Client(url=endpoint, loop=loop) as client:
+        scheduler = Scheduler(endpoint, worker_count=0)
+        await scheduler.prepare(client)
+        selected = await scheduler.select_kubernetes_cluster(app, clusters)
+
+    assert selected == current_w_unreachable
+
+
+async def test_kubernetes_select_cluster_sticky_unreachable_metric(
+    aiohttp_server, config, db, loop
+):
+    """Test metrics have higher priority than stickiness also if current cluster
+    has unreachable metrics."""
+    prometheus = await aiohttp_server(make_prometheus({"heat-demand": 2 * ["0.4"]}))
+
+    cluster_wo_metric = ClusterFactory(spec__metrics=[])
+    current_w_unreachable = ClusterFactory(
+        spec__metrics=[MetricRef(name="unreachable", weight=1)]
+    )
+    cluster_w_metric = ClusterFactory(
+        spec__metrics=[MetricRef(name="heat-demand", weight=1)]
+    )
+    clusters = [cluster_wo_metric, current_w_unreachable, cluster_w_metric]
+    random.shuffle(clusters)
+
+    metric = MetricFactory(
+        metadata__name="heat-demand",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus-zone-1",
+        spec__provider__metric="heat-demand",
+    )
+    metrics_provider = MetricsProviderFactory(
+        metadata__name="prometheus-zone-1",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=True,
+        status__scheduled_to=resource_ref(current_w_unreachable),
+        spec__constraints=None,
+    )
+    await db.put(metric)
+    await db.put(metrics_provider)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        selected = await scheduler.select_kubernetes_cluster(app, clusters)
+
+    assert selected == cluster_w_metric
+
+
 async def test_kubernetes_scheduling(aiohttp_server, config, db, loop):
     prometheus = await aiohttp_server(make_prometheus({"heat_demand_zone_1": ["0.25"]}))
 
