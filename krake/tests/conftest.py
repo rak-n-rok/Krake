@@ -922,7 +922,7 @@ async def zookeeper(tmp_path, loop):
 
     with subprocess.Popen(command) as zookeeper:
         try:
-            timeout = 5
+            timeout = 10
             start = loop.time()
             # Wait for the Zookeeper instance to be ready.
             while True:
@@ -980,7 +980,7 @@ async def kafka(zookeeper, tmp_path, loop):
 
     with subprocess.Popen(command) as kafka:
         try:
-            timeout = 10
+            timeout = 20
             start = loop.time()
             # Wait for the Kafka instance to be ready.
             while True:
@@ -1180,7 +1180,7 @@ async def ksql(kafka, tmp_path, loop):
 
     with subprocess.Popen(command) as ksql:
         try:
-            timeout = 30
+            timeout = 60
             start = loop.time()
             # Wait for the KSQL instance to be ready.
             while True:
