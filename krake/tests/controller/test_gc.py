@@ -1,4 +1,6 @@
 import asyncio
+import multiprocessing
+import time
 from contextlib import suppress
 from itertools import count
 
@@ -15,6 +17,7 @@ from krake.controller.gc import (
     GarbageCollector,
     ResourceWithDependentsException,
     DependencyCycleException,
+    main,
 )
 
 from tests.factories.core import MetadataFactory
@@ -222,6 +225,56 @@ def test_update_resource_dependency_graph():
 
     assert graph.get_direct_dependents(cluster_2_ref) == [app_1_ref]
     assert graph.get_direct_dependents(up_2_ref) == [cluster_2_ref]
+
+
+@pytest.mark.slow
+def test_main(gc_config, log_to_file_config):
+    """Test the main function of the Garbage Collector, and verify that it starts,
+    display the right output and stops without issue.
+    """
+    log_config, file_path = log_to_file_config()
+
+    gc_config.api_endpoint = "http://my-krake-api:1234"
+    gc_config.log = log_config
+
+    def wrapper(configuration):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        main(configuration)
+
+    # Start the process and let it time to initialize
+    process = multiprocessing.Process(target=wrapper, args=(gc_config,))
+    process.start()
+    time.sleep(2)
+
+    # Stop and wait for the process to finish
+    process.terminate()
+    process.join()
+
+    assert not process.is_alive()
+    assert process.exitcode == 0
+
+    # Verify the output of the process
+    with open(file_path, "r") as f:
+        output = f.read()
+
+    assert "Controller started" in output
+    assert "Received signal, exiting..." in output
+    assert "Controller stopped" in output
+
+    # Verify that all "ERROR" lines in the output are only errors that logs the lack of
+    # connectivity to the API.
+    attempted_connectivity = False
+    for line in output.split("\n"):
+        if "ERROR" in output:
+            message = (
+                f"In line {line!r}, an error occurred which was different from the"
+                f" error from connecting to the API."
+            )
+            assert "Cannot connect to host my-krake-api:1234" in output, message
+            attempted_connectivity = True
+
+    assert attempted_connectivity
 
 
 async def test_resources_reception(aiohttp_server, config, db, loop):
