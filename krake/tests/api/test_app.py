@@ -1,10 +1,15 @@
 import asyncio
+import multiprocessing
 import ssl
+import sys
+import time
 
+import pytest
 from aiohttp import web
 from asyncio.subprocess import PIPE, STDOUT
 
 from krake.api import __version__ as version
+from krake.api.__main__ import main
 from krake.api.app import create_app
 from krake.api.helpers import session, HttpReason, HttpReasonCode
 from krake.api.database import revision, TransactionError
@@ -12,6 +17,38 @@ from krake.data import Key
 from krake.data.config import AuthenticationConfiguration, TlsServerConfiguration
 from krake.data.serializable import Serializable
 from krake.test_utils import with_timeout
+
+
+@pytest.mark.slow
+def test_main(config, tmp_path):
+    """Test the main function of the API, and verify that it starts, display the right
+    output and stops without issue.
+    """
+    config.port = 1234
+    config.log = {"version": 1, "level": "INFO"}
+
+    file_path = tmp_path / "test.txt"
+
+    def wrapper(configuration):
+        sys.stdout = open(file_path, "w")
+        main(configuration)
+
+    # Start the process and let it time to initialize
+    process = multiprocessing.Process(target=wrapper, args=(config,))
+    process.start()
+    time.sleep(2)
+
+    # Stop and wait for the process to finish
+    process.terminate()
+    process.join()
+
+    assert not process.is_alive()
+    assert process.exitcode == 0
+
+    with open(file_path, "r") as f:
+        output = f.read()
+
+    assert "Running on http://0.0.0.0:1234" in output
 
 
 async def test_index(aiohttp_client, no_db_config):
