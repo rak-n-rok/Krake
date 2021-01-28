@@ -20,7 +20,7 @@ Demo Environment
 The demo environment is comprised of 3 virtual machines in the same private network:
 
 - The Krake VM: It runs all the Krake components in docker containers, as well as a Prometheus Server to simulate scheduling data for the backends.
-- The two Minikube VMs ``minikube-cluster-demoenv-1`` and ``minikube-cluster-demoenv-2``: They run an all-in-one Kubernetes "cluster". They are used as backends by Krake to deploy the users' applications.
+- The two Minikube VMs ``minikube-cluster-1`` and ``minikube-cluster-2``: They run an all-in-one Kubernetes "cluster". They are used as backends by Krake to deploy the users' applications.
 
 .. note::
     Scenario :ref:`user/user-story/4-openstack:OpenStack backends` additionally requires to have an OpenStack project at hand.
@@ -30,8 +30,8 @@ On the Krake VM, the two Kubernetes clusters ``kubeconfig`` files are present:
 .. prompt:: bash $ auto
 
     $ ll clusters/config/
-    $ cat clusters/config/minikube-cluster-demoenv-1
-    $ cat clusters/config/minikube-cluster-demoenv-2
+    $ cat clusters/config/minikube-cluster-1
+    $ cat clusters/config/minikube-cluster-2
 
 .. note::
     Unless stated otherwise (generally in the prompt), all commands are run on the Krake VM, with the ``krake`` user.

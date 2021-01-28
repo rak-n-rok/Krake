@@ -22,7 +22,7 @@ Test constraints, metrics and metrics providers are globally defined as follows:
                 min: 0.0
                 provider:
                     static_provider
-            latency_1:
+            green_energy_ratio_1:
                 max: 1.0
                 min: 0.0
                 provider:
@@ -51,9 +51,14 @@ from utils import (
     ResourceKind,
 )
 
+KRAKE_HOMEDIR = "/home/krake"
+GIT_DIR = "git/krake"
+TEST_DIR = "rak/functionals"
+CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
+MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}"
 METRICS = [
     "electricity_cost_1",
-    "latency_1",
+    "green_energy_ratio_1",
 ]
 COUNTRY_CODES = [
     l1 + l2
@@ -266,10 +271,7 @@ def test_kubernetes_no_migration_metrics(minikube_clusters):
     metrics = random.sample(METRICS, num_clusters)
 
     # 1. Set the metrics provided by the metrics provider
-    metric_values = {
-        metrics[0]: 0.01,
-        metrics[1]: 0.1,
-    }
+    metric_values = {metrics[0]: 0.01, metrics[1]: 0.1}
     set_static_metrics(metric_values)
 
     # 2. Set the cluster weights so that the score of cluster 1 is higher than
@@ -299,10 +301,7 @@ def test_kubernetes_no_migration_metrics(minikube_clusters):
 
         # 5. Change the metrics so that the score of cluster 2 is higher than
         # the score of cluster 1;
-        metric_values = {
-            metrics[0]: 0.2,
-            metrics[1]: 0.01,
-        }
+        metric_values = {metrics[0]: 0.2, metrics[1]: 0.01}
         set_static_metrics(metric_values)
         score_cluster_1 = get_scheduling_score(
             clusters[0], metric_values, metric_weights, scheduled_to=clusters[0]
@@ -350,10 +349,7 @@ def test_kubernetes_auto_metrics_migration(minikube_clusters):
     metrics = random.sample(METRICS, num_clusters)
 
     # 1. Set the metrics provided by the metrics provider
-    metric_values = {
-        metrics[0]: 0.01,
-        metrics[1]: 0.1,
-    }
+    metric_values = {metrics[0]: 0.01, metrics[1]: 0.1}
     set_static_metrics(metric_values)
 
     # 2. Set the cluster weights so that the score of cluster 1 is higher than
@@ -380,10 +376,7 @@ def test_kubernetes_auto_metrics_migration(minikube_clusters):
 
         # 5. Change the metrics so that the score of cluster 2 is higher than
         # the score of cluster 1;
-        metric_values = {
-            metrics[0]: 0.2,
-            metrics[1]: 0.01,
-        }
+        metric_values = {metrics[0]: 0.2, metrics[1]: 0.01}
         set_static_metrics(metric_values)
         score_cluster_1 = get_scheduling_score(
             clusters[0], metric_values, metric_weights, scheduled_to=clusters[0]
@@ -426,14 +419,8 @@ def _get_metrics_triggering_migration(source, target, metrics, weights):
         (metric names as keys and metric values as values).
 
     """
-    metrics_set_1 = {
-        metrics[0]: 0.01,
-        metrics[1]: 0.2,
-    }
-    metrics_set_2 = {
-        metrics[0]: 0.2,
-        metrics[1]: 0.01,
-    }
+    metrics_set_1 = {metrics[0]: 0.01, metrics[1]: 0.2}
+    metrics_set_2 = {metrics[0]: 0.2, metrics[1]: 0.01}
     source_score = get_scheduling_score(
         source, metrics_set_1, weights, scheduled_to=source
     )
@@ -501,10 +488,7 @@ def test_kubernetes_metrics_migration(minikube_clusters):
     metrics = random.sample(METRICS, num_clusters)
 
     # 1. Set the metrics provided by the metrics provider
-    metric_values_init = {
-        metrics[0]: 0.01,
-        metrics[1]: 0.1,
-    }
+    metric_values_init = {metrics[0]: 0.01, metrics[1]: 0.1}
     set_static_metrics(metric_values_init)
 
     first_cluster = clusters[0]
@@ -684,10 +668,7 @@ def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
     metrics = random.sample(METRICS, num_clusters)
 
     # 1. Set the metrics provided by the metrics provider
-    metric_values_init = {
-        metrics[0]: 0.01,
-        metrics[1]: 0.1,
-    }
+    metric_values_init = {metrics[0]: 0.01, metrics[1]: 0.1}
     set_static_metrics(metric_values_init)
 
     first_cluster = clusters[0]
@@ -806,10 +787,7 @@ def test_kubernetes_metrics_migration_at_update(minikube_clusters):
     metrics = random.sample(METRICS, num_clusters)
 
     # 1. Set the metrics provided by the metrics provider
-    metric_values = {
-        metrics[0]: 0.01,
-        metrics[1]: 0.1,
-    }
+    metric_values = {metrics[0]: 0.01, metrics[1]: 0.1}
     set_static_metrics(metric_values)
 
     # 2. Set the cluster weights so that the score of cluster 1 is higher than
@@ -846,7 +824,7 @@ def test_kubernetes_metrics_migration_at_update(minikube_clusters):
 
         # check that the scores are as we expect
         score_first = get_scheduling_score(
-            first_cluster, metric_values, metric_weights, scheduled_to=first_cluster,
+            first_cluster, metric_values, metric_weights, scheduled_to=first_cluster
         )
         score_second = get_scheduling_score(
             second_cluster, metric_values, metric_weights, scheduled_to=first_cluster
@@ -870,7 +848,7 @@ def test_kubernetes_metrics_migration_at_update(minikube_clusters):
 
         # check that the scores are as we expect
         score_first = get_scheduling_score(
-            first_cluster, metric_values, metric_weights, scheduled_to=second_cluster,
+            first_cluster, metric_values, metric_weights, scheduled_to=second_cluster
         )
         score_second = get_scheduling_score(
             second_cluster, metric_values, metric_weights, scheduled_to=second_cluster
@@ -921,10 +899,7 @@ def test_kubernetes_stickiness_migration(minikube_clusters):
     metrics = random.sample(METRICS, num_clusters)
 
     # 1. Set the metrics provided by the metrics provider
-    metric_values = {
-        metrics[0]: 0.01,
-        metrics[1]: 0.1,
-    }
+    metric_values = {metrics[0]: 0.01, metrics[1]: 0.1}
     set_static_metrics(metric_values)
 
     # 2. Set the cluster weights so that the score of cluster 1 is higher than
@@ -953,10 +928,7 @@ def test_kubernetes_stickiness_migration(minikube_clusters):
 
         # 5. Change the metrics so that if it hadn't been for stickiness
         # the score of cluster 2 would have been higher than the score of cluster 1;
-        metric_values = {
-            metrics[0]: 0.02,
-            metrics[1]: 0.01,
-        }
+        metric_values = {metrics[0]: 0.02, metrics[1]: 0.01}
         set_static_metrics(metric_values)
         # Since the app is running on cluster_1, score_cluster_1 should be higher...
         score_cluster_1 = get_scheduling_score(

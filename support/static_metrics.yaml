@@ -16,7 +16,7 @@ spec:
   static:
     metrics:
       electricity_cost_1: 0.9
-      latency_1: 0.1
+      green_energy_ratio_1: 0.1
   type: static
 
 ---
@@ -42,10 +42,10 @@ spec:
 api: core
 kind: Metric
 metadata:
-  name: latency_1
+  name: green_energy_ratio_1
 spec:
   max: 1.0
   min: 0.0
   provider:
-    metric: latency_1
+    metric: green_energy_ratio_1
     name: static_provider

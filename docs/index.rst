@@ -10,6 +10,7 @@ Welcome to Krake's documentation!
    :maxdepth: 3
    :caption: Contents:
 
+   quickstart
    user/index
    admin/index
    dev/index

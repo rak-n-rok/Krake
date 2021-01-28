@@ -27,11 +27,11 @@ Introduction to Scheduling mechanisms
 
 .. prompt:: bash $ auto
 
-    $ watch kubectl --kubeconfig clusters/config/minikube-cluster-demoenv-1 get all
+    $ watch kubectl --kubeconfig clusters/config/minikube-cluster-1 get all
 
 .. prompt:: bash $ auto
 
-    $ watch kubectl --kubeconfig clusters/config/minikube-cluster-demoenv-2 get all
+    $ watch kubectl --kubeconfig clusters/config/minikube-cluster-2 get all
 
 Preparation
 ===========
@@ -44,8 +44,8 @@ Preparation
 
 .. prompt:: bash $ auto
 
-    $ rok kube cluster create clusters/config/minikube-cluster-demoenv-1 -l location=DE
-    $ rok kube cluster create clusters/config/minikube-cluster-demoenv-2 -l location=SK
+    $ rok kube cluster create clusters/config/minikube-cluster-1 -l location=DE
+    $ rok kube cluster create clusters/config/minikube-cluster-2 -l location=SK
 
 Spawn the demo application
 ==========================
@@ -65,18 +65,18 @@ Observe a migration
 .. prompt:: bash $ auto
 
     $ rok kube app update echo-demo -L location=SK
-    $ rok kube app get echo-demo -o json | jq .status.running_on  # The Application is now running on "minikube-cluster-demoenv-2"
+    $ rok kube app get echo-demo -o json | jq .status.running_on  # The Application is now running on "minikube-cluster-2"
 
 Cleanup
 =======
 
-- Delete the ``echo-demo`` Kubernetes ``Application`` and both Kubernetes ``Clusters``
+- Delete the ``echo-demo`` Kubernetes ``Application`` and both Krake Kubernetes ``Clusters``
 
 .. prompt:: bash $ auto
 
     $ rok kube app delete echo-demo
-    $ rok kube cluster delete minikube-cluster-demoenv-1
-    $ rok kube cluster delete minikube-cluster-demoenv-2
+    $ rok kube cluster delete minikube-cluster-1
+    $ rok kube cluster delete minikube-cluster-2
 
 
 .. _Kubernetes: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set
