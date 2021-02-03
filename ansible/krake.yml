@@ -201,11 +201,13 @@
             checksum: true
             perms: true
             rsync_opts:
-              - --inplace
               - --itemize-changes
               - "--exclude=.git/"
               - "--exclude=.gitlab/"
               - "--exclude=.idea"
+              - "--exclude=ansible"
+              - "--exclude=docs"
+              - "--exclude=manifests"
               - "--exclude-from={{ repo_dir }}/.gitignore"
             src: "{{ repo_dir }}"
             dest: "{{ git_dir }}"
