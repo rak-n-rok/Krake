@@ -210,7 +210,7 @@
             src: "{{ repo_dir }}"
             dest: "{{ git_dir }}"
             delete: yes
-            use_ssh_args: false
+            use_ssh_args: true
 
         # rsync does not honour become_user
         - name: Set correct permissions
