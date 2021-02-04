@@ -202,7 +202,6 @@
             perms: true
             compress: false
             rsync_opts:
-              - --whole-file
               - --itemize-changes
               - "--exclude=.git/"
               - "--exclude=.gitlab/"
