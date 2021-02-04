@@ -194,11 +194,11 @@
         - synchronize
         - code
       block:
-        
+
         - name: Read-write git checkout from github
           git:
             repo: https://gitlab.com/rak-n-rok/krake
-            dest: "{{ git_dir }}/.."
+            dest: "{{ git_dir }}"
 
     - name: Install pip and dependencies
       tags:
