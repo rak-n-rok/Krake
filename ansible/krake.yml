@@ -195,13 +195,10 @@
         - code
       block:
         
-        - name: Copy files
-          copy:
-            src: "{{ repo_dir }}"
-            dest: "{{ git_dir }}"
-            owner: krake
-            group: krake
-            mode: preserve
+        - name: Read-write git checkout from github
+          git:
+            repo: https://gitlab.com/rak-n-rok/krake
+            dest: "{{ git_dir }}/.."
 
     - name: Install pip and dependencies
       tags:
