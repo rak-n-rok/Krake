@@ -200,7 +200,6 @@
             dirs: true
             checksum: true
             perms: true
-            compress: false
             rsync_opts:
               - --itemize-changes
               - "--exclude=.git/"
