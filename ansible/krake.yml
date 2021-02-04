@@ -194,35 +194,14 @@
         - synchronize
         - code
       block:
-        # rsync is executed on the localhost
-        - name: Copy files with rsync
-          synchronize:
-            dirs: true
-            checksum: true
-            perms: true
-            rsync_opts:
-              - --itemize-changes
-              - "--exclude=.git/"
-              - "--exclude=.gitlab/"
-              - "--exclude=.idea"
-              - "--exclude=ansible/"
-              - "--exclude=docs/"
-              - "--exclude=manifests/"
-              - "--exclude-from={{ repo_dir }}/.gitignore"
+        
+        - name: Copy files
+          copy:
             src: "{{ repo_dir }}"
             dest: "{{ git_dir }}"
-            delete: yes
-            use_ssh_args: true
-
-        # rsync does not honour become_user
-        - name: Set correct permissions
-          become_user: root
-          file:
-            recurse: true
-            path: "{{ git_dir }}"
-            state: directory
             owner: krake
             group: krake
+            mode: preserve
 
     - name: Install pip and dependencies
       tags:
