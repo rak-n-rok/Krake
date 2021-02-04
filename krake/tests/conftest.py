@@ -876,11 +876,12 @@ class Zookeeper(NamedTuple):
     port: int
 
 
-async def write_command_to_port(host, port, command=b"dump"):
+async def write_command_to_port(loop, host, port, command=b"dump"):
     """Send a byte string to a specific port on the provided host. Read the complete
     output and return it.
 
     Args:
+        loop (asyncio.AbstractEventLoop): the current loop.
         host (str): the host to which the command should be sent.
         port (int): the port on which the command should be sent.
         command (bytes): the command to send.
@@ -894,10 +895,9 @@ async def write_command_to_port(host, port, command=b"dump"):
     # FIXME: the OSError may be changed with another error, for instance
     #  ConnectionRefusedError. This works locally but not on the pipeline.
     with suppress(OSError):
-        reader, writer = await asyncio.open_connection(host, port)
+        reader, writer = await asyncio.open_connection(host, port, loop=loop)
         writer.write(command)
-        await writer.drain()
-        data = await reader.read()
+        data = await reader.read(512)
         writer.close()
         return data
 
@@ -926,7 +926,7 @@ async def zookeeper(tmp_path, loop):
             start = loop.time()
             # Wait for the Zookeeper instance to be ready.
             while True:
-                data = await write_command_to_port("localhost", zookeeper_port)
+                data = await write_command_to_port(loop, "localhost", zookeeper_port)
                 if data:
                     break
 
@@ -985,7 +985,7 @@ async def kafka(zookeeper, tmp_path, loop):
             # Wait for the Kafka instance to be ready.
             while True:
                 dump_return = await write_command_to_port(
-                    zookeeper.host, zookeeper.port
+                    loop, zookeeper.host, zookeeper.port
                 )
 
                 # If the ID appears in the list of broker IDs in the Zookeeper status,
