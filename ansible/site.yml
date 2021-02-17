@@ -9,5 +9,5 @@
 #
 - import_playbook: network.yml
 - import_playbook: gateway.yml
-- import_playbook: minikube_cluster.yml
+#- import_playbook: minikube_cluster.yml
 - import_playbook: krake.yml

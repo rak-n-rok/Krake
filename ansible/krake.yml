@@ -195,21 +195,11 @@
         - code
       block:
         # rsync is executed on the localhost
-        - name: Copy files with rsync
-          synchronize:
-            dirs: true
-            checksum: true
-            perms: true
-            rsync_opts:
-              - --itemize-changes
-              - "--exclude=.git/"
-              - "--exclude=.gitlab/"
-              - "--exclude=.idea"
-              - "--exclude-from={{ repo_dir }}/.gitignore"
-            src: "{{ repo_dir }}"
+        - name: Read-write git checkout from github
+          git:
+            repo: https://gitlab.com/rak-n-rok/krake
             dest: "{{ git_dir }}"
-            delete: yes
-            use_ssh_args: true
+            version: "{% if specific_commit is defined %} {{ specific_commit }} {% else %} HEAD {% endif %}"
 
         # rsync does not honour become_user
         - name: Set correct permissions

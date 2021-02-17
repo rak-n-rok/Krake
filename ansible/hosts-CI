@@ -78,7 +78,9 @@ all:
           #   - public_keys/my
           #   - public_keys/another
 
-    # The networks group define "virtual" hosts. These hosts exist purly for
+          specific_commit: $CI_COMMIT_SHA
+
+    # The networks group define "virtual" hosts. These hosts exist purely for
     # provisioning purpose. No machines are associated with them.
     networks:
       hosts:
