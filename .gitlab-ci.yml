@@ -1,6 +1,4 @@
 stages:
-  - test
-  - coverage
   - e2e
 
 variables:
@@ -87,77 +85,6 @@ cache:
     - tox -- --cov krake/krake --no-cov-on-fail --cov-report= --runslow krake/tests
   tags:
     - docker
-
-
-unittests-krake-3.6:
-  <<: *unittests-krake
-  image: python:3.6
-  variables:
-    TOXENV: py36
-    COVERAGE_FILE: krake/.coverage.py36
-
-
-unittests-krake-3.7:
-  <<: *unittests-krake
-  image: python:3.7
-  variables:
-    TOXENV: py37
-    COVERAGE_FILE: krake/.coverage.py37
-
-
-unittests-krake-3.8:
-  <<: *unittests-krake
-  image: python:3.8
-  variables:
-    TOXENV: py38
-    COVERAGE_FILE: krake/.coverage.py38
-
-
-flake8-krake:
-  stage: test
-  image: python:3.6
-  only:
-    - tags
-    - branches
-    - merge_requests
-    - schedules
-  script:
-    - pip install flake8
-    - flake8 krake/krake
-  tags:
-    - docker
-
-
-flake8-rok:
-  stage: test
-  image: python:3.6
-  only:
-    - tags
-    - branches
-    - merge_requests
-    - schedules
-  script:
-    - pip install flake8
-    - flake8 rok/rok
-  tags:
-    - docker
-
-
-# Combine code coverage reports from previous tox runs for all different
-# Python environments. Report code coverage for Krake Python package and exit
-# with non-zero if the code coverage ratio is under 85%.
-coverage-krake:
-  stage: coverage
-  image: python:3.6
-  script:
-    - pip install coverage
-    - coverage combine krake/.coverage.*
-    - coverage report --fail-under 85
-  only:
-    - tags
-    - branches
-    - merge_requests
-    - schedules
 
 
 # Following job is for end to end testing. We provisioning the staging

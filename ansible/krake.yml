@@ -213,6 +213,7 @@
             - krake
             - rak
             - rok
+            - rok.yaml.template
             - support
 
         # rsync does not honour become_user
