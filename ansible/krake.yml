@@ -195,10 +195,37 @@
         - code
       block:
 
-        - name: Read-write git checkout from github
-          git:
-            repo: https://gitlab.com/rak-n-rok/krake
-            dest: "{{ git_dir }}"
+        - name: Copy files with rsync
+          synchronize:
+            dirs: true
+            checksum: true
+            perms: true
+            compress: false
+            rsync_opts:
+              - --whole-file
+              - --itemize-changes
+            src: "{{ repo_dir }}/{{ item }}"
+            dest: "{{ git_dir }}/"
+            delete: yes
+            use_ssh_args: true
+          loop:
+            - bootstrapping
+            - config
+            - docker
+            - krake
+            - rak
+            - rok
+            - support
+
+        # rsync does not honour become_user
+        - name: Set correct permissions
+          become_user: root
+          file:
+            recurse: true
+            path: "{{ git_dir }}"
+            state: directory
+            owner: krake
+            group: krake
 
     - name: Install pip and dependencies
       tags:
