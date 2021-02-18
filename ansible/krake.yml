@@ -200,9 +200,7 @@
             dirs: true
             checksum: true
             perms: true
-            compress: false
             rsync_opts:
-              - --whole-file
               - --itemize-changes
             src: "{{ repo_dir }}/{{ item }}"
             dest: "{{ git_dir }}/"
