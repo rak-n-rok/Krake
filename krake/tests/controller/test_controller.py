@@ -1,13 +1,16 @@
 import asyncio
 import sys
+import logging
+import pytest
 from contextlib import suppress
 from functools import partial
 from unittest.mock import Mock
 
-import pytest
-from aiohttp import ClientConnectorError, web
+from aiohttp import web
 from krake.client.core import CoreApi
 from krake.test_utils import server_endpoint, with_timeout
+from aiohttp import ClientConnectorError
+from krake.data.config import TlsClientConfiguration
 from tests.factories.kubernetes import ApplicationFactory, ApplicationStatusFactory
 from krake.controller import (
     WorkQueue,
@@ -17,6 +20,8 @@ from krake.controller import (
     BurstWindow,
     Observer,
     sigmoid_delay,
+    create_ssl_context,
+    _extract_ssl_config,
 )
 from krake.data.core import WatchEvent, WatchEventType, ListMetadata, RoleList
 from krake.data.kubernetes import ApplicationState
@@ -155,6 +160,172 @@ async def test_queue_delayed_put(loop):
     assert queue.empty()
 
 
+async def test_queue_multiple_puts(loop):
+    """Verify the behavior of the queue after a key was inserted, then its value was
+    replaced. The queue should behave as if the key was inserted once, as the second
+    insertion should not change the normal behavior of the queue."""
+    queue = WorkQueue(loop=loop, debounce=0)
+
+    await queue.put("key", 1)
+    await queue.put("key", 2)
+
+    key, value = await queue.get()
+    assert value == 2
+
+    # After a get(), if only one key is inserted (even after replacing it), the get()
+    # method should hang for a while. To carry on with the test, the wait_for function
+    # is used.
+    # As the get() method should only be stopped because of the timeout, what is
+    # verified here is that the only exception raised is a TimeoutError.
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(queue.get(), loop=loop, timeout=1)
+
+    # Free the key from the queue
+    await queue.done(key)
+
+    # After the key was freed, no other key was added, so the get() method should hang
+    # again, and should be stopped only because of a timeout.
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(queue.get(), loop=loop, timeout=1)
+
+
+async def test_queue_active(loop):
+    queue = WorkQueue(loop=loop, debounce=0)
+
+    await queue.put("key", 1)
+    await queue.get()
+
+    await queue.put("key", 2)
+    await queue.done("key")
+
+    # Check that the key isn't removed from the active set when the done method is
+    # called while a new value is present in the dirty dictionary.
+    assert "key" in queue.active
+
+    # Consequently, check that the key is added only once to the queue.
+    await queue.put("key", 3)
+    assert queue.queue.qsize() == 1
+
+
+async def test_queue_cancel_simple(loop):
+    """Attempt the canceling of a unique key. This should leave the queue and its timers
+    empty
+    """
+    queue = WorkQueue(loop=loop, debounce=0)
+
+    # Add a large value to be sure it will not be removed during the test
+    await queue.put("key", 1, delay=10 ** 10)
+
+    assert queue.empty()
+    assert queue.size() == 0
+    assert len(queue.timers) == 1
+
+    await queue.cancel("key")
+
+    assert queue.empty()
+    assert queue.size() == 0
+    assert len(queue.timers) == 0
+
+
+async def test_queue_cancel_multiple_keys(loop):
+    """Attempt the canceling of multiple keys."""
+    queue = WorkQueue(loop=loop, debounce=0)
+
+    # Add a large value to be sure it will not be removed during the test
+    await queue.put("key_1", 1, delay=10 ** 10)
+    await queue.put("key_2", 2, delay=10 ** 10)
+
+    assert queue.empty()
+    assert queue.size() == 0
+    assert len(queue.timers) == 2
+
+    await queue.cancel("key_1")
+
+    assert queue.empty()
+    assert queue.size() == 0
+    assert len(queue.timers) == 1
+
+    await queue.cancel("key_2")
+
+    assert queue.empty()
+    assert queue.size() == 0
+    assert len(queue.timers) == 0
+
+
+async def test_queue_cancel_workflow(loop):
+    """Attempt adding a key, updating it, canceling it, then add a new value."""
+    queue = WorkQueue(loop=loop, debounce=0)
+    await queue.put("key", 1, delay=10 ** 10)
+    assert len(queue.timers) == 1
+
+    await queue.put("key", 2, delay=10 ** 10)
+    assert len(queue.timers) == 1
+
+    await queue.cancel("key")
+    assert len(queue.timers) == 0
+
+    await queue.put("key", 3)
+    assert len(queue.timers) == 0
+    assert not queue.empty()
+
+    key, value = await queue.get()
+    assert (key, value) == ("key", 3)
+
+
+async def test_queue_cancel_non_existent_key(loop):
+    """Ensure that cancelling a key not present in the queue does not raise any error.
+    """
+    queue = WorkQueue(loop=loop, debounce=0)
+    assert queue.empty()
+
+    await queue.cancel("key")
+
+    assert queue.empty()
+    assert len(queue.timers) == 0
+
+    # Add another key and try to cancel a non-existing key again. The behavior should
+    # not change in any way.
+    await queue.put("other_key", 1)
+
+    await queue.cancel("key")
+
+    assert queue.size() == 1
+    assert len(queue.timers) == 0
+
+
+async def test_queue_close(loop):
+    """Test the close() method of the WorkQueue, which cancel all its timers."""
+    queue = WorkQueue(loop=loop, debounce=0)
+    await queue.put("key_1", 1, delay=10 ** 10)
+    await queue.put("key_2", 2, delay=10 ** 11)
+    assert len(queue.timers) == 2
+    assert queue.empty()
+
+    await queue.close()
+    assert len(queue.timers) == 0
+    assert queue.empty()
+
+
+async def test_queue_full(loop):
+    """Test the full() method of the WorkQueue, which checks if the amount of elements
+    in the queue is equal to its maximum size.
+    """
+    queue = WorkQueue(maxsize=2, loop=loop, debounce=0)
+    assert not queue.full()
+
+    await queue.put("key_1", 1)
+    assert not queue.full()
+
+    await queue.put("key_2", 2)
+    assert queue.full()
+
+    _, _ = await queue.get()
+    assert not queue.full()
+
+    await queue.put("key_3", 3)
+    assert queue.full()
+
+
 async def test_executor(loop):
     # Do not use a unittest.Mock because run() needs to be asynchronous
     class SimpleController(object):
@@ -170,6 +341,40 @@ async def test_executor(loop):
         await executor
 
     assert controller.called_count == 1
+
+
+def test_create_endpoint_https_without_ssl(loop, caplog):
+    """Test creating a controller with an endpoint with the "https" scheme, but with TLS
+    disabled. A warning should appear in the logs.
+    """
+    api_endpoint = "https://host.com:1234"
+
+    _ = Controller(api_endpoint, loop=loop, ssl_context=None)
+
+    for record in caplog.records:
+        if record.levelname == logging.WARNING:
+            assert "forced to scheme 'http'" in record.message
+
+
+def test_create_endpoint_http_with_ssl(pki, loop, caplog):
+    """Test creating a controller with an endpoint with the "http" scheme, but with TLS
+    enabled. A warning should appear in the logs.
+    """
+    client_cert = pki.gencert("client")
+    client_tls = TlsClientConfiguration(
+        enabled=True,
+        client_ca=pki.ca.cert,
+        client_cert=client_cert.cert,
+        client_key=client_cert.key,
+    )
+    ssl_context = create_ssl_context(client_tls)
+
+    api_endpoint = "http://host.com:1234"
+    _ = Controller(api_endpoint, loop=loop, ssl_context=ssl_context)
+
+    for record in caplog.records:
+        if record.levelname == logging.WARNING:
+            assert "forced to scheme 'https'" in record.message
 
 
 class BackgroundTask(object):
@@ -333,6 +538,48 @@ async def test_controller_retry(loop):
     assert values_gathered == {1, 3, 5, 7}
 
 
+async def test_controller_retry_error_handling(loop, caplog):
+    """This test ensures that any exception occurring inside the retry() method of the
+    Controller is still logged, and that is does not stop the method. The test ensures
+    also that its still stops as expected when the maximum amounts of retries have been
+    attempted.
+    """
+    caplog.set_level(logging.INFO)
+
+    class ErrorTaskException(Exception):
+        pass
+
+    class ErrorTask(object):
+        async def run(self):
+            raise ErrorTaskException("Raise an error on purpose")
+
+    class SimpleController(Controller):
+        def prepare(self):
+            self.register_task(ErrorTask().run)
+
+    controller = SimpleController(api_endpoint="http://localhost:8080", loop=loop)
+    controller.max_retry = 2
+    controller.burst_time = 1
+    controller.prepare()
+    with pytest.raises(RuntimeError):
+        task_tuple = controller.tasks[0]
+        # The task is a tuple (coroutine, name)
+        await controller.retry(task_tuple[0])
+
+    error_count = 0
+    for record in caplog.records:
+        if record.levelname == "ERROR":
+            assert record.message == "Raise an error on purpose"
+            error_count += 1
+
+    # The number of retries has been set to 2 (max_retry), and the task fails very fast
+    # (the exception is directly raised), so the burst time of 1 is not exceeded. Thus,
+    # a first try is attempted, it fails directly, then a second one, which also
+    # directly fails. Thus, the burst window raises a RuntimeError and breaks the loop,
+    # and the error from the background task is raised twice.
+    assert error_count == 2
+
+
 async def test_reflector_list(loop):
     # Test the list functionality of the Reflector. Give the received values to a
     # SimpleWorker.
@@ -353,7 +600,7 @@ async def test_reflector_list(loop):
     await receiver.done
 
 
-async def test_reflector_watch(loop):
+async def test_reflector_watch_multiple(loop):
     # Test the watch functionality of the Reflector. Give the received values to a
     # SimpleWorker.
     items = [ApplicationFactory() for _ in range(3)]
@@ -392,6 +639,65 @@ async def test_reflector_watch(loop):
 
     assert receiver.done.done()
     await receiver.done
+
+
+async def test_reflector_watch_events(loop):
+    """Test the watch functionality of the Reflector. Ensure each watch event type is
+    actually handled and by a different function.
+    """
+    items = [ApplicationFactory() for _ in range(3)]
+    receiver_added = SimpleWorker({items[0].metadata.uid}, loop)
+    receiver_modified = SimpleWorker({items[1].metadata.uid}, loop)
+    receiver_deleted = SimpleWorker({items[2].metadata.uid}, loop)
+
+    class Watcher(object):
+        def __init__(self, apps):
+            self.items = list(apps)
+
+        async def __aenter__(self):
+            return self.watch()
+
+        async def __aexit__(self, *exc):
+            pass
+
+        async def watch(self):
+            types = [
+                WatchEventType.ADDED,
+                WatchEventType.MODIFIED,
+                WatchEventType.DELETED,
+            ]
+            for item, watch_event_type in zip(self.items, types):
+                yield WatchEvent(type=watch_event_type, object=item)
+
+    async def on_add(resource):
+        await receiver_added.resource_received(resource=resource)
+
+    async def on_update(resource):
+        await receiver_modified.resource_received(resource=resource)
+
+    async def on_delete(resource):
+        await receiver_deleted.resource_received(resource=resource)
+
+    reflector = Reflector(
+        listing=None,
+        watching=partial(Watcher, items),
+        on_add=on_add,
+        on_update=on_update,
+        on_delete=on_delete,
+    )
+
+    async with reflector.client_watch() as watcher:
+        await reflector.watch_resource(watcher)
+
+    # Each handler should have been called after its corresponding event was received.
+    assert receiver_added.done.done()
+    await receiver_added.done
+
+    assert receiver_modified.done.done()
+    await receiver_modified.done
+
+    assert receiver_deleted.done.done()
+    await receiver_deleted.done
 
 
 @pytest.mark.slow
@@ -636,37 +942,60 @@ async def test_observer(loop):
     await is_res_updated
 
 
-async def test_multiple_puts(loop):
-    queue = WorkQueue(loop=loop, debounce=0)
+@pytest.mark.slow
+async def test_observer_run(loop):
+    """Test the run() method of the Observer. Ensure its polls the status of the
+    observed resources several times.
+    """
+    count = 0
+    is_res_updated = loop.create_future()
 
-    await queue.put("key", 1)
-    await queue.put("key", 2)
+    app = ApplicationFactory(status__state=ApplicationState.RUNNING)
+    real_world_status = ApplicationStatusFactory(state=ApplicationState.RUNNING)
 
-    key, value = await queue.get()
-    assert value == 2
+    async def on_res_update(resource):
+        nonlocal count
+        count += 1
+        if count == 3:
+            is_res_updated.set_result(resource)
 
-    with pytest.raises(asyncio.TimeoutError):
-        await asyncio.wait_for(queue.get(), loop=loop, timeout=0)
+    async def new_poll_resources():
+        # change the real world status compared to the one registered, to trigger the
+        # call to on_res_update
+        return real_world_status
 
-    await queue.done(key)
+    observer = Observer(app, on_res_update, time_step=1)
+    observer.poll_resource = new_poll_resources
 
-    with pytest.raises(asyncio.TimeoutError):
-        await asyncio.wait_for(queue.get(), loop=loop, timeout=0)
+    # Run the task 4 seconds to let it do several loops.
+    run_task = loop.create_task(observer.run())
+    await asyncio.sleep(4)
+
+    run_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await run_task
+
+    # Ensure that the on_res_update function has been called 3 times (see the content of
+    # on_res_update()): as there was a 4 seconds sleep, and the time_step of the
+    # Observer is 1 seconds, only 3 loops of the Observer.run() method could finish.
+    assert count == 3
+
+    assert is_res_updated.done()
+    await is_res_updated
 
 
-async def test_active(loop):
-    queue = WorkQueue(loop=loop, debounce=0)
+@pytest.mark.parametrize("invalid_attr", ["client_ca", "client_cert", "client_key"])
+def test_extract_ssl_config_error_handling(pki, invalid_attr):
+    """Test the error handling in the _extract_ssl_config utility function."""
+    client_cert = pki.gencert("client")
+    client_tls = TlsClientConfiguration(
+        enabled=True,
+        client_ca=pki.ca.cert,
+        client_cert=client_cert.cert,
+        client_key=client_cert.key,
+    )
 
-    await queue.put("key", 1)
-    await queue.get()
+    setattr(client_tls, invalid_attr, "/path/to/nothing")
 
-    await queue.put("key", 2)
-    await queue.done("key")
-
-    # Check that the key isn't removed from the active set when the done method is
-    # called while a new value is present in the dirty dictionary.
-    assert "key" in queue.active
-
-    # Consequently, check that the key is added only once to the queue.
-    await queue.put("key", 3)
-    assert queue.queue.qsize() == 1
+    with pytest.raises(FileNotFoundError, match="/path/to/nothing"):
+        _extract_ssl_config(client_tls)
