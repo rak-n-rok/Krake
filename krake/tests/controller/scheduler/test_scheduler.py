@@ -19,6 +19,7 @@ from krake.controller.scheduler.constraints import (
     match_cluster_constraints,
     match_project_constraints,
 )
+from krake.controller.scheduler.scheduler import NoProjectFound
 from krake.data.constraints import LabelConstraint
 from krake.data.core import ResourceRef, MetricRef
 from krake.data.core import resource_ref, ReasonCode
@@ -315,7 +316,7 @@ def test_kubernetes_match_empty_cluster_constraints():
     assert match_cluster_constraints(app3, cluster)
 
 
-async def test_kubernetes_rank(aiohttp_server, config, db, loop):
+async def test_kubernetes_score(aiohttp_server, config, db, loop):
     prometheus = await aiohttp_server(make_prometheus({"test_metric_1": ["0.42"]}))
 
     app = ApplicationFactory(status__is_scheduled=False)
@@ -357,14 +358,14 @@ async def test_kubernetes_rank(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        ranked_clusters = await scheduler.rank_kubernetes_clusters(app, clusters)
+        clusters_scores = await scheduler.rank_kubernetes_clusters(app, clusters)
 
-    for ranked, cluster in zip(ranked_clusters, clusters):
-        assert ranked.rank is not None
+    for ranked, cluster in zip(clusters_scores, clusters):
+        assert ranked.score is not None
         assert ranked.cluster == cluster
 
 
-async def test_kubernetes_rank_sticky(aiohttp_server, config, db, loop):
+async def test_kubernetes_score_sticky(aiohttp_server, config, db, loop):
     cluster_A = ClusterFactory(
         metadata__name="A", spec__metrics=[MetricRef(name="metric-1", weight=1.0)]
     )
@@ -401,25 +402,25 @@ async def test_kubernetes_rank_sticky(aiohttp_server, config, db, loop):
         ranked = await scheduler.rank_kubernetes_clusters(
             pending_app, [cluster_A, cluster_B]
         )
-        assert ranked[0].rank == 0.75
-        assert ranked[1].rank == 0.75
+        assert ranked[0].score == 0.75
+        assert ranked[1].score == 0.75
 
-        # Rank clusters where application is already scheduled to one of the
-        # clusters, hence a stickiness metric should be added to the rank of
+        # Compute the score of the clusters where application is already scheduled to
+        # one of the clusters, hence a stickiness metric should be added to the score of
         # cluster "A".
         ranked = await scheduler.rank_kubernetes_clusters(
             scheduled_app, [cluster_A, cluster_B]
         )
 
-        assert ranked[0].rank == pytest.approx(0.75 / 1.1 + 0.1 / 1.1)
-        assert ranked[1].rank == 0.75
-        assert ranked[0].rank > ranked[1].rank
+        assert ranked[0].score == pytest.approx(0.75 / 1.1 + 0.1 / 1.1)
+        assert ranked[1].score == 0.75
+        assert ranked[0].score > ranked[1].score
 
         assert ranked[0].cluster == cluster_A
         assert ranked[1].cluster == cluster_B
 
 
-async def test_kubernetes_rank_with_metrics_only():
+async def test_kubernetes_score_with_metrics_only():
     app = ApplicationFactory(status__is_scheduled=False)
     clusters = [ClusterFactory(spec__metrics=[]), ClusterFactory(spec__metrics=[])]
 
@@ -428,7 +429,7 @@ async def test_kubernetes_rank_with_metrics_only():
         await scheduler.rank_kubernetes_clusters(app, clusters)
 
 
-async def test_kubernetes_rank_missing_metric(aiohttp_server, db, config, loop):
+async def test_kubernetes_score_missing_metric(aiohttp_server, db, config, loop):
     """Test the error handling of the Scheduler in the case of fetching a metric
     referenced in a Cluster but not present in the database.
     """
@@ -443,9 +444,9 @@ async def test_kubernetes_rank_missing_metric(aiohttp_server, db, config, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        ranked = await scheduler.rank_kubernetes_clusters(app, [cluster])
+        scored = await scheduler.rank_kubernetes_clusters(app, [cluster])
 
-    assert len(ranked) == 0
+    assert len(scored) == 0
 
     stored_cluster = await db.get(
         Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
@@ -457,7 +458,7 @@ async def test_kubernetes_rank_missing_metric(aiohttp_server, db, config, loop):
     assert single_metric_reason.code == ReasonCode.UNKNOWN_METRIC
 
 
-async def test_kubernetes_rank_missing_metrics_provider(
+async def test_kubernetes_score_missing_metrics_provider(
     aiohttp_server, config, db, loop
 ):
     """Test the error handling of the Scheduler in the case of fetching a metric
@@ -483,9 +484,9 @@ async def test_kubernetes_rank_missing_metrics_provider(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        ranked = await scheduler.rank_kubernetes_clusters(app, clusters)
+        scored = await scheduler.rank_kubernetes_clusters(app, clusters)
 
-    assert len(ranked) == 0
+    assert len(scored) == 0
 
     cluster = clusters[0]
     stored_cluster = await db.get(
@@ -499,7 +500,7 @@ async def test_kubernetes_rank_missing_metrics_provider(
     )
 
 
-async def test_kubernetes_rank_multiple_failing_metric(
+async def test_kubernetes_score_multiple_failing_metric(
     aiohttp_server, db, config, loop
 ):
     """Test the error handling of the Scheduler in the case of several errors related to
@@ -572,9 +573,9 @@ async def test_kubernetes_rank_multiple_failing_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        ranked = await scheduler.rank_kubernetes_clusters(app, clusters)
+        scored = await scheduler.rank_kubernetes_clusters(app, clusters)
 
-    assert len(ranked) == 0
+    assert len(scored) == 0
 
     # 1st cluster:
     # - 1st metric: defined metric provider not present in the database
@@ -617,7 +618,7 @@ async def test_kubernetes_rank_multiple_failing_metric(
     )
 
 
-async def test_kubernetes_rank_failing_metrics_provider(
+async def test_kubernetes_score_failing_metrics_provider(
     aiohttp_server, config, db, loop
 ):
     """Test the error handling of the Scheduler in the case of fetching the value of a
@@ -660,9 +661,9 @@ async def test_kubernetes_rank_failing_metrics_provider(
     async with Client(url=server_endpoint(api), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(api), worker_count=0)
         await scheduler.prepare(client)
-        ranked = await scheduler.rank_kubernetes_clusters(app, clusters)
+        scored = await scheduler.rank_kubernetes_clusters(app, clusters)
 
-    assert len(ranked) == 0
+    assert len(scored) == 0
 
     cluster = clusters[0]
     stored_cluster = await db.get(
@@ -1707,7 +1708,7 @@ def test_openstack_not_match_project_label_constraints():
     assert not match_project_constraints(cluster, project)
 
 
-async def test_openstack_rank(aiohttp_server, config, db, loop):
+async def test_openstack_score(aiohttp_server, config, db, loop):
     prometheus = await aiohttp_server(make_prometheus({"test_metric_1": ["0.42"]}))
 
     cluster = MagnumClusterFactory(status__is_scheduled=False)
@@ -1749,14 +1750,14 @@ async def test_openstack_rank(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        ranked_projects = await scheduler.rank_openstack_projects(cluster, projects)
+        projects_scores = await scheduler.rank_openstack_projects(cluster, projects)
 
-    for ranked, project in zip(ranked_projects, projects):
-        assert ranked.rank is not None
+    for ranked, project in zip(projects_scores, projects):
+        assert ranked.score is not None
         assert ranked.project == project
 
 
-async def test_openstack_rank_with_metrics_only():
+async def test_openstack_score_with_metrics_only():
     cluster = MagnumClusterFactory(status__is_scheduled=False)
     projects = [ProjectFactory(spec__metrics=[]), ProjectFactory(spec__metrics=[])]
 
@@ -1765,7 +1766,7 @@ async def test_openstack_rank_with_metrics_only():
         await scheduler.rank_openstack_projects(cluster, projects)
 
 
-async def test_openstack_rank_missing_metric(aiohttp_server, db, config, loop):
+async def test_openstack_score_missing_metric(aiohttp_server, db, config, loop):
     """Test the error handling of the Scheduler in the case of fetching a metric
     referenced in a Project but not present in the database.
     """
@@ -1780,9 +1781,9 @@ async def test_openstack_rank_missing_metric(aiohttp_server, db, config, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        ranked = await scheduler.rank_openstack_projects(cluster, [project])
+        scored = await scheduler.rank_openstack_projects(cluster, [project])
 
-    assert len(ranked) == 0
+    assert len(scored) == 0
 
     stored_project = await db.get(
         Project, namespace=project.metadata.namespace, name=project.metadata.name
@@ -1794,11 +1795,13 @@ async def test_openstack_rank_missing_metric(aiohttp_server, db, config, loop):
     assert single_metric_reason.code == ReasonCode.UNKNOWN_METRIC
 
 
-async def test_openstack_rank_multiple_failing_metric(aiohttp_server, db, config, loop):
+async def test_openstack_score_multiple_failing_metric(
+    aiohttp_server, db, config, loop
+):
     """Test the error handling of the Scheduler in the case of several errors related to
     metrics referenced in two different Projects. The issues are the following:
 
-    1st Project:
+    1st Project:test_select_no_matching_project
     - 1st metric: defined metric provider not present in the database
     - 2nd metric: not present in the database
 
@@ -1865,9 +1868,9 @@ async def test_openstack_rank_multiple_failing_metric(aiohttp_server, db, config
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        ranked = await scheduler.rank_openstack_projects(cluster, projects)
+        scored = await scheduler.rank_openstack_projects(cluster, projects)
 
-    assert len(ranked) == 0
+    assert len(scored) == 0
 
     # 1st project:
     # - 1st metric: defined metric provider not present in the database
@@ -1910,7 +1913,7 @@ async def test_openstack_rank_multiple_failing_metric(aiohttp_server, db, config
     )
 
 
-async def test_openstack_rank_missing_metrics_provider(
+async def test_openstack_score_missing_metrics_provider(
     aiohttp_server, config, db, loop
 ):
     """Test the error handling of the Scheduler in the case of fetching a metric
@@ -1935,9 +1938,9 @@ async def test_openstack_rank_missing_metrics_provider(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        ranked = await scheduler.rank_openstack_projects(cluster, projects)
+        scored = await scheduler.rank_openstack_projects(cluster, projects)
 
-    assert len(ranked) == 0
+    assert len(scored) == 0
 
     project = projects[0]
     stored_project = await db.get(
@@ -1951,7 +1954,7 @@ async def test_openstack_rank_missing_metrics_provider(
     )
 
 
-async def test_openstack_rank_failing_metrics_provider(
+async def test_openstack_score_failing_metrics_provider(
     aiohttp_server, config, db, loop
 ):
     """Test the error handling of the Scheduler in the case of fetching the value of a
@@ -1992,9 +1995,9 @@ async def test_openstack_rank_failing_metrics_provider(
     async with Client(url=server_endpoint(api), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(api), worker_count=0)
         await scheduler.prepare(client)
-        ranked = await scheduler.rank_openstack_projects(cluster, projects)
+        scored = await scheduler.rank_openstack_projects(cluster, projects)
 
-    assert len(ranked) == 0
+    assert len(scored) == 0
 
     project = projects[0]
     stored_project = await db.get(
@@ -2073,6 +2076,49 @@ async def test_select_project_not_deleted():
         selected = await scheduler.select_openstack_project(cluster, projects)
 
         assert selected == projects[index]
+
+
+async def test_select_no_matching_project(aiohttp_server, config, db, loop):
+    """Ensure that an exception is raised if not matching Project is found for a
+    MagnumCluster.
+    """
+    routes = web.RouteTableDef()
+
+    @routes.get("/api/v1/query")
+    async def _(request):
+        raise web.HTTPServiceUnavailable()
+
+    prometheus_app = web.Application()
+    prometheus_app.add_routes(routes)
+
+    prometheus = await aiohttp_server(prometheus_app)
+
+    cluster = MagnumClusterFactory(status__is_scheduled=False, spec__constraints=None)
+    project = ProjectFactory(spec__metrics=[MetricRef(name="my-metric", weight=1)])
+    metric = GlobalMetricFactory(
+        metadata__name="my-metric",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="my-provider",
+        spec__provider__metric="my-metric",
+    )
+    provider = GlobalMetricsProviderFactory(
+        metadata__name="my-provider",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+    await db.put(metric)
+    await db.put(provider)
+    await db.put(project)
+
+    api = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(api), worker_count=0)
+        await scheduler.prepare(client)
+
+        with pytest.raises(NoProjectFound, match="No OpenStack project available"):
+            await scheduler.select_openstack_project(cluster, [project])
 
 
 async def test_select_project_with_constraints_without_metric():
