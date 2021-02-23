@@ -15,7 +15,10 @@ from krake.client import Client
 from krake.client.kubernetes import KubernetesApi
 from krake.controller.scheduler import Scheduler
 from krake.controller.scheduler.__main__ import main
-from krake.controller.scheduler.constraints import match_cluster_constraints
+from krake.controller.scheduler.constraints import (
+    match_cluster_constraints,
+    match_project_constraints,
+)
 from krake.data.constraints import LabelConstraint
 from krake.data.core import ResourceRef, MetricRef
 from krake.data.core import resource_ref, ReasonCode
@@ -1681,7 +1684,7 @@ def test_openstack_match_project_label_constraints():
     cluster = MagnumClusterFactory(
         spec__constraints__project__labels=[LabelConstraint.parse("location is IT")]
     )
-    assert Scheduler.match_project_constraints(cluster, project)
+    assert match_project_constraints(cluster, project)
 
 
 def test_openstack_match_empty_project_label_constraints():
@@ -1690,9 +1693,9 @@ def test_openstack_match_empty_project_label_constraints():
     cluster2 = MagnumClusterFactory(spec__constraints__project=None)
     cluster3 = MagnumClusterFactory(spec__constraints__project__labels=None)
 
-    assert Scheduler.match_project_constraints(cluster1, project)
-    assert Scheduler.match_project_constraints(cluster2, project)
-    assert Scheduler.match_project_constraints(cluster3, project)
+    assert match_project_constraints(cluster1, project)
+    assert match_project_constraints(cluster2, project)
+    assert match_project_constraints(cluster3, project)
 
 
 def test_openstack_not_match_project_label_constraints():
@@ -1701,7 +1704,7 @@ def test_openstack_not_match_project_label_constraints():
         spec__constraints__project__labels=[LabelConstraint.parse("location is IT")]
     )
 
-    assert not Scheduler.match_project_constraints(cluster, project)
+    assert not match_project_constraints(cluster, project)
 
 
 async def test_openstack_rank(aiohttp_server, config, db, loop):

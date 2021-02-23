@@ -25,7 +25,7 @@ from krake.data.kubernetes import (
     ClusterState,
 )
 
-from .constraints import match_cluster_constraints
+from .constraints import match_cluster_constraints, match_project_constraints
 from .metrics import MetricError, fetch_query, MetricsProviderError
 from .. import Controller, ControllerError, Reflector, WorkQueue
 
@@ -445,89 +445,6 @@ class Scheduler(Controller):
             await self.queue.put(app.metadata.uid, app, delay=self.reschedule_after)
 
     @staticmethod
-    def match_cluster_constraints(app, cluster):
-        """Evaluate if all application constraints labels match cluster labels.
-
-        Args:
-            app (krake.data.kubernetes.Application): Application that should be
-                bound.
-            cluster (krake.data.kubernetes.Cluster): Cluster to which the
-                application should be bound.
-
-        Returns:
-            bool: True if the cluster fulfills all application cluster constraints
-
-        """
-        if not app.spec.constraints:
-            return True
-
-        # Cluster constraints
-        if app.spec.constraints.cluster:
-            # Label constraints for the cluster
-            if app.spec.constraints.cluster.labels:
-                for constraint in app.spec.constraints.cluster.labels:
-                    if constraint.match(cluster.metadata.labels or {}):
-                        logger.debug(
-                            "Cluster %s matches constraint %r",
-                            resource_ref(cluster),
-                            constraint,
-                        )
-                    else:
-                        logger.debug(
-                            "Cluster %s does not match constraint %r",
-                            resource_ref(cluster),
-                            constraint,
-                        )
-                        return False
-
-        logger.debug(
-            "Cluster %s fulfills constraints of application %r",
-            resource_ref(cluster),
-            resource_ref(app),
-        )
-
-        return True
-
-    @staticmethod
-    def match_project_constraints(cluster, project):
-        """Evaluate if all application constraints labels match project labels.
-
-        Args:
-            cluster (krake.data.openstack.MagnumCluster): Cluster that is scheduled
-            project (krake.data.kubernetes.project): Project to which the
-                cluster should be bound.
-
-        Returns:
-            bool: True if the project fulfills all project constraints
-
-        """
-        if not cluster.spec.constraints:
-            return True
-
-        # project constraints
-        if cluster.spec.constraints.project:
-            # Label constraints for the project
-            if cluster.spec.constraints.project.labels:
-                for constraint in cluster.spec.constraints.project.labels:
-                    if constraint.match(project.metadata.labels or {}):
-                        logger.debug(
-                            "Project %s matches constraint %r",
-                            resource_ref(project),
-                            constraint,
-                        )
-                    else:
-                        logger.debug(
-                            "Project %s does not match constraint %r",
-                            resource_ref(project),
-                            constraint,
-                        )
-                        return False
-
-        logger.debug("Project %s fulfills constraints of %r", project, cluster)
-
-        return True
-
-    @staticmethod
     def select_maximum(ranked):
         """From a list of ClusterRank, get the one with the best rank. If several
         ClusterRank have the same rank, one of them is chosen randomly.
@@ -650,7 +567,7 @@ class Scheduler(Controller):
         matching = [
             project
             for project in projects
-            if self.match_project_constraints(cluster, project)
+            if match_project_constraints(cluster, project)
         ]
 
         if not matching:
