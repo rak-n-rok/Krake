@@ -1,6 +1,8 @@
 import asyncio
 import json
+from contextlib import suppress
 
+import pytest
 from aiohttp import web
 from copy import deepcopy
 
@@ -1215,6 +1217,65 @@ async def test_observer_on_delete(aiohttp_server, config, db, loop):
         await controller.resource_received(app)
         # The observer task should be cancelled
         assert app.metadata.uid not in controller.observers
+
+
+@pytest.mark.slow
+async def test_observer_creation_deletion(aiohttp_server, config, db, loop):
+    """Test the creation and cleanup of the observers when Applications are received by
+    the reflector.
+    """
+    routes = web.RouteTableDef()
+
+    @routes.get("/api/v1/namespaces/secondary/services/nginx-demo")
+    async def _(_):
+        return web.json_response(service_response)
+
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
+    async def _(_):
+        return web.json_response(deployment_response)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    scheduled_apps = [
+        ApplicationFactory(
+            status__state=ApplicationState.RUNNING,
+            status__mangled_observer_schema=mangled_observer_schema,
+            status__last_observed_manifest=initial_last_observed_manifest,
+            status__running_on=resource_ref(cluster),
+            spec__manifest=nginx_manifest,
+            metadata__finalizers=["kubernetes_resources_deletion"],
+        )
+        for _ in range(2)
+    ]
+    await db.put(cluster)
+    for scheduled in scheduled_apps:
+        await db.put(scheduled)
+
+    server = await aiohttp_server(create_app(config))
+
+    controller = KubernetesController(
+        server_endpoint(server), worker_count=0, time_step=1
+    )
+
+    run_task = None
+    try:
+        run_task = loop.create_task(controller.run())
+
+        # Wait for the observers to poll their resource.
+        await asyncio.sleep(3)
+
+        assert len(controller.observers) == 2
+    finally:
+        # Trigger the cleanup
+        if run_task is not None:
+            run_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await run_task
+
+    assert len(controller.observers) == 0
 
 
 def test_update_last_applied_manifest_from_spec():

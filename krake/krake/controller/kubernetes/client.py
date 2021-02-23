@@ -275,7 +275,7 @@ class KubernetesClient(object):
                     custom_resource
                 )
             except ApiException as err:
-                raise InvalidResourceError(err_resp=err)
+                raise InvalidResourceError(str(err))
 
             # Custom resource api version should be always first item in versions
             # field
@@ -320,6 +320,37 @@ class KubernetesClient(object):
 
         return resource_api
 
+    def _get_immutables(self, resource):
+        """From a resource manifest, look for the kind, name and namespace of the
+        resource. If the latter is not present, the default namespace of the cluster is
+        used instead.
+
+        Args:
+            resource (dict[str, Any]): the manifest file translated in dict of the
+                resource from which the fields will be extracted.
+
+        Returns:
+            (str, str, str): the kind, name and namespace of the resource.
+
+        Raises:
+            InvalidResourceError: if the kind or the name is not present.
+
+        """
+        metadata = resource["metadata"]
+        namespace = metadata.get("namespace", self.default_namespace)
+
+        try:
+            kind = resource["kind"]
+        except KeyError:
+            raise InvalidResourceError('Resource must define "kind"')
+
+        try:
+            name = metadata["name"]
+        except KeyError:
+            raise InvalidResourceError('Resource must define "metadata.name"')
+
+        return kind, name, namespace
+
     async def apply(self, resource):
         """Apply the given resource on the cluster using its internal data as reference.
 
@@ -331,20 +362,9 @@ class KubernetesClient(object):
             object: response from the cluster as given by the Kubernetes client.
 
         """
-        metadata = resource["metadata"]
-        namespace = metadata.get("namespace", self.default_namespace)
-
-        try:
-            kind = resource["kind"]
-        except KeyError:
-            raise InvalidResourceError('Resource must define "kind"')
+        kind, name, namespace = self._get_immutables(resource)
 
         resource_api = await self.get_resource_api(kind)
-
-        try:
-            name = metadata["name"]
-        except KeyError:
-            raise InvalidResourceError('Resource must define "metadata.name"')
 
         try:
             resp = await resource_api.read(kind, name=name, namespace=namespace)
@@ -377,21 +397,9 @@ class KubernetesClient(object):
                 cluster as given by the Kubernetes client.
 
         """
-        metadata = resource["metadata"]
-        namespace = metadata.get("namespace", self.default_namespace)
-
-        try:
-            kind = resource["kind"]
-        except KeyError:
-            raise InvalidResourceError('Resource must define "kind"')
+        kind, name, namespace = self._get_immutables(resource)
 
         resource_api = await self.get_resource_api(kind)
-
-        try:
-            name = metadata["name"]
-        except KeyError:
-            raise InvalidResourceError('Resource must define "metadata.name"')
-
         try:
             resp = await resource_api.delete(kind, name=name, namespace=namespace)
         except ApiException as err:
