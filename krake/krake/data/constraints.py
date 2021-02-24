@@ -87,11 +87,11 @@ class LabelConstraint(object):
 
         return self._as_tuple() == other._as_tuple()
 
-    def __hash__(self, other):
+    def __hash__(self):
         return hash(self._as_tuple())
 
     def __repr__(self):
-        return f"<{self.__class__.__name__} {self.__str__()}>"
+        return f"<{self.__class__.__name__} {self.__str__()!r}>"
 
     def expression(self):
         """Returns an expression representing the constraint.
