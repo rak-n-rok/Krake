@@ -243,11 +243,95 @@ class ConfigurationOptionMapper(object):
             str: the message that can be displayed.
 
         """
+
+        def _get_field_errors(messages):
+            """Generate a list of all fields with errors, along with the corresponding
+            error.
+
+            When validated, all validation errors for the nested fields are nested as
+            well in the exception.
+
+            Take the following example:
+
+            .. code:: python
+
+                class SimpleNested(Serializable):
+                    attr: str
+
+                class MultipleNested(Serializable):
+                    a: int
+                    b: SimpleNested
+
+                class MyClass(Serializable):
+                    first: str
+                    second: SimpleNested
+                    third: MultipleNested
+
+            If each field has a validation error in MyClass, then the resulting
+            "message" attribute of the validation exception will be similar to:
+
+            .. code:: python
+
+                my_dict = {
+                    "first": ["Not a valid string"]
+                    "second": {
+                        "attr": ["Not a valid string"]
+                    },
+                    "third": {
+                        "a": ["Not a valid integer"],
+                        "b": ["Not a valid bool"]
+                    },
+                }
+
+            So the current closure goes recursively through the dictionary to get each
+            different error and concatenate the fields names when nested:
+
+            .. code:: python
+
+                assert _get_field_errors(my_dict) == [
+                    ("first", ["Not a valid string"]),
+                    ("second.attr", ["Not a valid string"]),
+                    ("third.a", ["Not a valid integer"]),
+                    ("third.b", ["Not a valid bool"]),
+                ]
+
+            Args:
+                messages (dict[str, dict|list]): the dictionary of errors as provided by
+                    marshmallow.
+
+            Returns:
+                list[(str, list[str])]: a list of tuples. Each tuple corresponds to one
+                    attribute or nested attribute for which a validation error was
+                    raised. The tuple all follow the signature:
+                    ("<field_name>", ["<error_1>",... ,"[<error_n>]").
+
+            """
+            errors = []
+            for field, nested in messages.items():
+
+                if type(nested) is dict:
+                    nested_results = _get_field_errors(nested)
+
+                    # Concatenate the current field name with the one extracted from the
+                    # layer below before adding it to the list of returned errors.
+                    for field_error in nested_results:
+                        formatted_tuple = field + "." + field_error[0], field_error[1]
+                        errors.append(formatted_tuple)
+
+                # Stop condition / non-nested dictionary.
+                elif type(nested) is list:
+                    errors.append((field, nested))
+
+                else:
+                    raise NotImplementedError("TODO")
+
+            return errors
+
         message = "Parsing configuration failed with error(s): \n"
 
         lines = [
-            f" - field '{field}': " + ", ".join(errors)
-            for field, errors in err.messages.items()
+            f" - field {field!r}: " + ", ".join(errors)
+            for field, errors in _get_field_errors(err.messages)
         ]
         return message + "\n".join(lines)
 
