@@ -752,7 +752,7 @@ class Scheduler(Controller):
             logger.error(err)
             return
 
-        for metric, value, weight in fetched:
+        for metric, weight, value in fetched:
             logger.debug(
                 "Received metric %r with value %r for %r", metric, value, resource
             )
