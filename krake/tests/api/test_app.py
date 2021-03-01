@@ -364,7 +364,10 @@ async def test_unknown_auth_strategy(aiohttp_client, config):
 
 async def test_error_logging(aiohttp_client, config, caplog):
     """Ensure that an exception occurring inside the API is properly logged."""
+    # Get an additional WARNING otherwise
+    config.authentication.cors_origin = "http://example.com"
     config.etcd.host = "wrong_endpoint"
+
     client = await aiohttp_client(create_app(config=config))
 
     resp = await client.get("/core/globalmetrics")
