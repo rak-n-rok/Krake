@@ -433,6 +433,42 @@ async def test_delete_event_reception(aiohttp_server, config, db, loop):
         assert gc.queue.size() == 0
 
 
+async def test_handle_resource(aiohttp_server, config, db, loop):
+    """Verify that the handle_resource method handles the resources the right way."""
+    server = await aiohttp_server(create_app(config))
+    gc = GarbageCollector(server_endpoint(server), worker_count=0, loop=loop)
+
+    cluster = ClusterFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__finalizers=["cascade_deletion"],
+        metadata__owners=[],
+    )
+
+    await db.put(cluster)
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        await gc.prepare(client)
+
+        # Get the reflectors that was created for the Cluster resources.
+        cluster_reflector = next(
+            filter(lambda r: r.resource_plural == "Clusters", gc.reflectors), None
+        )
+        reflector_task = loop.create_task(cluster_reflector())
+
+        await gc.handle_resource(run_once=True)
+
+        reflector_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await reflector_task
+
+    # The resource was deleted on the API as no finalizer is left on the resource
+    stored = await db.get(
+        Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+    )
+    assert stored is None
+    assert gc.queue.empty()
+
+
 async def is_marked_for_deletion(resource, db):
     """Check that a resource present on the database has been marked for deletion.
 
