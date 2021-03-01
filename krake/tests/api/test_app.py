@@ -4,9 +4,9 @@ import ssl
 import sys
 import time
 
-import pytest
 from aiohttp import web
 from asyncio.subprocess import PIPE, STDOUT
+import pytest
 
 from krake.api import __version__ as version
 from krake.api.__main__ import main
@@ -17,6 +17,8 @@ from krake.data import Key
 from krake.data.config import AuthenticationConfiguration, TlsServerConfiguration
 from krake.data.serializable import Serializable
 from krake.test_utils import with_timeout
+
+from tests.factories.core import RoleFactory, RoleBindingFactory
 
 
 @pytest.mark.slow
@@ -57,6 +59,48 @@ async def test_index(aiohttp_client, no_db_config):
     assert resp.status == 200
     data = await resp.json()
     assert data["version"] == version
+
+
+async def test_me_route(aiohttp_client, db, config):
+    """Ensures that the user given by the `/me` endpoint is the right one, and that it
+    is sent along with the corresponding :class:`krake.data.core.Role` instance names.
+    """
+    authentication = {
+        "allow_anonymous": False,
+        "strategy": {
+            "keystone": {"enabled": False, "endpoint": "localhost"},
+            "keycloak": {"enabled": False, "endpoint": "localhost", "realm": "krake"},
+            "static": {"enabled": True, "name": "foo-user"},
+        },
+    }
+    config.authentication = AuthenticationConfiguration.deserialize(authentication)
+
+    client = await aiohttp_client(create_app(config=config))
+
+    roles = [RoleFactory() for _ in range(10)]
+    binding_1 = RoleBindingFactory(
+        users=["foo-user"], roles=[role.metadata.name for role in roles[:4]]
+    )
+    binding_2 = RoleBindingFactory(
+        users=["foo-user"], roles=[role.metadata.name for role in roles[4:8]]
+    )
+    # Add an additional RoleBinding for other roles. It should NOT be returned by the
+    # endpoint.
+    binding_3 = RoleBindingFactory(
+        users=["another-one"], roles=[role.metadata.name for role in roles[8:]]
+    )
+    for role in roles:
+        await db.put(role)
+    await db.put(binding_1)
+    await db.put(binding_2)
+    await db.put(binding_3)
+
+    resp = await client.get("/me")
+    assert resp.status == 200
+
+    data = await resp.json()
+    assert data["user"] == "foo-user"
+    assert data["roles"] == sorted([role.metadata.name for role in roles[:8]])
 
 
 async def test_transaction_retry(aiohttp_client, db, config, loop):
@@ -306,3 +350,25 @@ async def test_cors_setup_rbac(aiohttp_client, db, config, loop, pki):
     data = await resp.text()
     assert "PATCH" in data and "CORS" in data
     assert resp.status == 403
+
+
+async def test_unknown_auth_strategy(aiohttp_client, config):
+    """Ensure that setting an authorization mode that is not supported raises an
+    exception.
+    """
+    config.authorization = "invalid"
+
+    with pytest.raises(ValueError, match="Unknown authorization strategy 'invalid'"):
+        create_app(config=config)
+
+
+async def test_error_logging(aiohttp_client, config, caplog):
+    """Ensure that an exception occurring inside the API is properly logged."""
+    config.etcd.host = "wrong_endpoint"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.get("/core/globalmetrics")
+    assert resp.status == 500
+
+    for record in caplog.records:
+        assert record.levelname == "ERROR"
