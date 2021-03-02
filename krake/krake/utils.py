@@ -36,13 +36,6 @@ def get_field(cls, name):
     raise AttributeError(f"{cls} does not have field {name!r}")
 
 
-async def aenumerate(iterable):
-    i = 0
-    async for item in iterable:
-        yield i, item
-        i += 1
-
-
 class cached_property(object):
     """A property that is only computed once per instance and then replaces itself
     with an ordinary attribute. Deleting the attribute resets the property.

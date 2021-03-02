@@ -353,6 +353,13 @@ def make_kafka(table, columns, rows):
     return app
 
 
+async def aenumerate(iterable):
+    i = 0
+    async for item in iterable:
+        yield i, item
+        i += 1
+
+
 class HandlerDeactivator(object):
     """Context manager used in the tests to temporarly remove a Handler from a Hook.
 

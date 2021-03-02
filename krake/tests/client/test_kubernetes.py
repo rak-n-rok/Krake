@@ -11,7 +11,7 @@ from krake.data.kubernetes import (
     ClusterList,
     Cluster,
 )
-from krake.test_utils import with_timeout
+from krake.test_utils import with_timeout, aenumerate
 
 from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
 
@@ -152,13 +152,6 @@ async def test_read_application(aiohttp_server, config, db, loop):
             namespace=data.metadata.namespace, name=data.metadata.name
         )
         assert received == data
-
-
-async def aenumerate(iterable):
-    i = 0
-    async for item in iterable:
-        yield i, item
-        i += 1
 
 
 @with_timeout(3)

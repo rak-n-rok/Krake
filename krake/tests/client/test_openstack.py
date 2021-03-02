@@ -6,8 +6,7 @@ from krake.client import Client
 from krake.client.openstack import OpenStackApi
 from krake.data.core import ListMetadata, WatchEventType, resource_ref
 from krake.data.openstack import Project, MagnumCluster, MagnumClusterBinding
-from krake.utils import aenumerate
-from krake.test_utils import with_timeout
+from krake.test_utils import with_timeout, aenumerate
 
 from tests.factories.openstack import ProjectFactory, MagnumClusterFactory
 
