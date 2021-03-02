@@ -225,8 +225,14 @@ class MagnumClusterController(Controller):
         self.kubernetes_api = None
         self.reflector = None
 
-    async def consume(self):
+    async def consume(self, run_once=False):
         """Continuously retrieve new elements from the worker queue to be processed.
+
+        Args:
+            run_once (bool, optional): if True, the function only handles one resource,
+                then stops. Otherwise, continue to handle each new resource on the
+                queue indefinitely.
+
         """
         while True:
             key, cluster = await self.queue.get()
@@ -234,6 +240,8 @@ class MagnumClusterController(Controller):
                 await self.process_cluster(cluster)
             finally:
                 await self.queue.done(key)
+            if run_once:
+                break  # Only used for tests
 
     async def process_cluster(self, cluster):
         """Process a Magnum cluster: if the given cluster is marked for deletion, delete
