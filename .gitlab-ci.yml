@@ -169,6 +169,7 @@ e2e-tests:
   stage: e2e
   image: python:3.6
   artifacts:
+    when: on_failure
     paths:
       - ansible/E2E_logs/krake_logs.tar.gz
   only:
