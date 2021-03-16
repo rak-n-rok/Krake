@@ -118,7 +118,29 @@ def is_generic_subtype(cls, base):
     return issubclass(_get_origin(cls), _get_origin(base))
 
 
-if sys.version_info >= (3, 7):
+if sys.version_info >= (3, 9):
+
+    def _is_generic(cls):
+        if hasattr(cls, "__origin__"):
+            return cls.__origin__ is not None
+
+        return isinstance(cls, typing._SpecialForm)
+
+    def _is_base_generic(cls):
+        if hasattr(cls, "__args__"):
+            return False
+
+        if not hasattr(cls, "__origin__"):
+            if not isinstance(cls, typing._SpecialForm):
+                return False
+
+        return True
+
+    def _get_origin(cls):
+        return cls.__origin__
+
+
+elif sys.version_info >= (3, 7):
 
     def _is_generic(cls):
         if isinstance(cls, typing._GenericAlias):
