@@ -12,6 +12,7 @@ from krake.controller import (
     Controller,
     BurstWindow,
     Observer,
+    sigmoid_delay,
 )
 from krake.data.core import WatchEvent, WatchEventType
 from krake.data.kubernetes import ApplicationState
@@ -469,12 +470,24 @@ async def test_reflector_retry(loop):
     # When the connection was possible, the growth of the delay was reset. It means
     # the first half of the delays is increasing from ~0 to a higher value, then on the
     # second half, the delays are reset, and the delays are again increasing from ~0 to
-    # a higher value. The value computed should be close on both half, respectively the
-    # 1st and 5th values, then the 2nd and 6th, and so on...
-    for i in range(0, 4):
-        # As we deal with floating values, and computation times, the values are close
-        # but not equal, hence the use of approx().
-        assert delays[i + 4] == pytest.approx(delays[i], rel=0.007, abs=0.007)
+    # a higher value.
+    cumulative_sum = 0
+    for i in range(4):
+        # We ensure first that the delays before and after the reset are higher than the
+        # computed delay. This should always be the case, as the delays are the sum of
+        # the sigmoid delay and the compute between two attempts. This should hold true
+        # for all attempts, hence testing inside a loop.
+        assert delays[i] > cumulative_sum
+        assert delays[i + 4] > cumulative_sum
+
+        cumulative_sum += sigmoid_delay(i)
+
+        # The current delay should however always be smaller than the next delay,
+        # because of the sigmoid delay which is higher than one (and because of the
+        # compute time). This should hold true for all attempts, hence testing inside a
+        # loop.
+        assert cumulative_sum > delays[i]
+        assert cumulative_sum > delays[i + 4]
 
 
 async def test_observer(loop):
