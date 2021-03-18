@@ -55,6 +55,10 @@ rules:
   - "magnumclusters"
   - "applications"
   - "clusters"
+  - "roles"
+  - "rolebindings"
+  - "metrics"
+  - "metricsproviders"
   verbs:
   - list
   - get

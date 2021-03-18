@@ -16,8 +16,9 @@ from krake.controller.gc import (
     ResourceWithDependentsException,
     DependencyCycleException,
 )
+from krake.utils import get_namespace_as_kwargs
 
-from tests.factories.core import MetadataFactory
+from tests.factories.core import MetadataFactory, RoleBindingFactory, RoleFactory
 from tests.factories.fake import fake
 from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
 from tests.factories.openstack import ProjectFactory
@@ -366,9 +367,8 @@ async def is_marked_for_deletion(resource, db):
 
     """
     cls = resource.__class__
-    stored = await db.get(
-        cls, namespace=resource.metadata.namespace, name=resource.metadata.name
-    )
+    kwargs = get_namespace_as_kwargs(resource.metadata.namespace)
+    stored = await db.get(cls, name=resource.metadata.name, **kwargs)
     marked = (
         "cascade_deletion" in stored.metadata.finalizers
         and stored.metadata.deleted is not None
@@ -388,9 +388,8 @@ async def is_completely_deleted(resource, db):
 
     """
     cls = resource.__class__
-    stored = await db.get(
-        cls, namespace=resource.metadata.namespace, name=resource.metadata.name
-    )
+    kwargs = get_namespace_as_kwargs(resource.metadata.namespace)
+    stored = await db.get(cls, name=resource.metadata.name, **kwargs)
     return stored is None
 
 
@@ -450,6 +449,54 @@ async def test_cascade_deletion(aiohttp_server, config, db, loop):
         # Ensure that the Cluster is deleted from the database
         assert await is_completely_deleted(cluster, db)
         await gc.on_received_deleted(cluster)  # Simulate DELETED event
+
+        assert not gc.graph._relationships
+
+
+async def test_cascade_deletion_non_namespaced(aiohttp_server, config, db, loop):
+    """Verify that resources without namespace are still handled by the Garbage
+    Collector.
+    """
+    server = await aiohttp_server(create_app(config))
+    gc = GarbageCollector(server_endpoint(server))
+
+    role = RoleFactory(
+        metadata__namespace=None,
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__finalizers=["cascade_deletion"],
+    )
+    role_ref = resource_ref(role)
+    gc.graph.add_resource(role_ref, role.metadata.owners)
+    await db.put(role)
+
+    role_binding = RoleBindingFactory(
+        metadata__namespace=None,
+        metadata__owners=[role_ref],  # The role is normally not added as owner
+        metadata__finalizers=["cascade_deletion"],
+    )
+    gc.graph.add_resource(resource_ref(role_binding), role_binding.metadata.owners)
+    await db.put(role_binding)
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        await gc.prepare(client)
+
+        await gc.resource_received(role)
+
+        # Ensure that the RoleBinding is marked as deleted
+        marked, stored_role_binding = await is_marked_for_deletion(role_binding, db)
+        assert marked
+
+        # Ensure that the RoleBinding is deleted from database
+        await gc.resource_received(role_binding)
+
+        assert await is_completely_deleted(role_binding, db)
+
+        await gc.on_received_deleted(role_binding)  # Simulate DELETED event
+        await gc.resource_received(role)
+
+        # Ensure that the Role is deleted from the database
+        assert await is_completely_deleted(role, db)
+        await gc.on_received_deleted(role)  # Simulate DELETED event
 
         assert not gc.graph._relationships
 

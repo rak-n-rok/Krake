@@ -12,7 +12,7 @@ from .serializable import Serializable, ApiObject, PolymorphicContainer
 
 class ResourceRef(Serializable):
     api: str
-    namespace: str
+    namespace: str = field(default=None)
     kind: str
     name: str
 

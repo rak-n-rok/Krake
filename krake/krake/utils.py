@@ -69,3 +69,23 @@ def now():
 
     """
     return datetime.now(timezone.utc)
+
+
+def get_namespace_as_kwargs(namespace):
+    """Create keyword arguments using the provided namespace. If it is None, then return
+    empty keywords arguments.
+
+    Mostly for the case of having namespaced or non-namespaced resources in the same
+    function or method.
+
+    Args:
+        namespace (str): the given namespace.
+
+    Returns:
+        dict[str, str]: The generated keywords arguments.
+
+    """
+    kwargs = {}
+    if namespace:
+        kwargs["namespace"] = namespace
+    return kwargs
