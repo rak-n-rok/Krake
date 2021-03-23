@@ -315,6 +315,26 @@ def test_polymorphic_update():
     assert spec.bool is update.bool
 
 
+def test_polymorphic_equality():
+    """Verify the equality check of the :class:`PolymorphicContainer`."""
+    # Inequality checks
+    spec1 = DataSpec(type="float", float=FloatSpec(min=0, max=1.0))
+    spec2 = DataSpec(type="float", float=FloatSpec(min=100, max=200))
+    assert spec1 != spec2
+    assert spec2 != spec1
+
+    spec3 = DataSpec(type="bool", bool=BoolSpec())
+    assert spec2 != spec3
+    assert spec3 != spec2
+
+    # Equality checks
+    spec4 = DataSpec(type="float", float=FloatSpec(min=0, max=1.0))
+    assert spec1 == spec4
+
+    spec5 = DataSpec(type="bool", bool=BoolSpec())
+    assert spec3 == spec5
+
+
 def test_is_generic():
     assert is_generic(List)
     assert is_generic(List[int])
