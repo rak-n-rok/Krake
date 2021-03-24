@@ -37,8 +37,16 @@ from krake.data.core import MetricsProvider, Metric
 from yarl import URL
 
 
-class MetricError(Exception):
+class BaseMetricError(Exception):
+    """Base exception class for all errors related to metrics or metrics providers."""
+
+
+class MetricError(BaseMetricError):
     """Raised when evaluation of metric value fails"""
+
+
+class MetricsProviderError(BaseMetricError):
+    """Raised when the connection to a metric provider fails."""
 
 
 class QueryResult(NamedTuple):
@@ -186,7 +194,10 @@ class Prometheus(Provider):
                 resp.raise_for_status()
                 body = await resp.json()
         except (ClientError, asyncio.TimeoutError) as err:
-            raise MetricError("Failed to query Prometheus") from err
+            metric_provider_name = self.metrics_provider.metadata.name
+            raise MetricsProviderError(
+                f"Failed to query Prometheus with provider {metric_provider_name!r}"
+            ) from err
 
         # @see https://prometheus.io/docs/prometheus/latest/querying/api/
         for result in body["data"]["result"]:
@@ -263,7 +274,10 @@ class Kafka(Provider):
                 resp.raise_for_status()
                 body = await resp.json()
         except (ClientError, asyncio.TimeoutError) as err:
-            raise MetricError("Failed to query Kafka") from err
+            metric_provider_name = self.metrics_provider.metadata.name
+            raise MetricsProviderError(
+                f"Failed to query Kafka with provider {metric_provider_name!r}"
+            ) from err
 
         try:
             resp_row = body[1]["row"]

@@ -171,6 +171,12 @@ class ReasonCode(IntEnum):
     OPENSTACK_ERROR = 80
     INVALID_CLUSTER_TEMPLATE = 81
 
+    # Related to Metrics and Metric Provider
+    INVALID_METRIC = 91
+    UNREACHABLE_METRICS_PROVIDER = 92
+    UNKNOWN_METRIC = 93
+    UNKNOWN_METRICS_PROVIDER = 94
+
 
 class Reason(Serializable):
     code: ReasonCode

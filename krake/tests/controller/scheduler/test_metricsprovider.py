@@ -152,7 +152,7 @@ async def test_prometheus_provider_unavailable(aiohttp_server, loop):
         assert isinstance(provider, metrics.Prometheus)
 
         with pytest.raises(
-            metrics.MetricError, match=r"Failed to query Prometheus"
+            metrics.MetricsProviderError, match=r"Failed to query Prometheus"
         ) as err:
             await provider.query(metric)
 
@@ -177,7 +177,7 @@ async def test_prometheus_provider_connection_error(aiohttp_server, loop):
         assert isinstance(provider, metrics.Prometheus)
 
         with pytest.raises(
-            metrics.MetricError, match=r"Failed to query Prometheus"
+            metrics.MetricsProviderError, match=r"Failed to query Prometheus"
         ) as err:
             await provider.query(metric)
 
@@ -203,8 +203,7 @@ async def test_static_provider(aiohttp_server):
 
 @pytest.mark.slow
 async def test_kafka_provider_against_kafka(ksql, loop):
-    """Test that the Kafka Provider works against an actual KSQL database.
-    """
+    """Test that the Kafka Provider works against an actual KSQL database."""
     heat_demand_1_metric = ksql.kafka_table.metrics[0]
     metric = MetricFactory(
         spec__provider__name="my-provider",
@@ -229,8 +228,7 @@ async def test_kafka_provider_against_kafka(ksql, loop):
 
 
 async def test_kafka_mock(aiohttp_client):
-    """Test the KSQL mock database.
-    """
+    """Test the KSQL mock database."""
     columns = ["id", "value"]
     rows = [["first_id", [0.42, 1.0]]]
     client = await aiohttp_client(make_kafka("my_table", columns, rows))
@@ -264,8 +262,7 @@ async def test_kafka_mock(aiohttp_client):
 
 
 async def test_kafka_provider(aiohttp_server, loop):
-    """Test the Kafka provider against the KSQL mock database.
-    """
+    """Test the Kafka provider against the KSQL mock database."""
     columns = ["id", "value"]
     rows = [["first_id", [0.42, 1.0]]]
     kafka = await aiohttp_server(make_kafka("my_table", columns, rows))
@@ -319,7 +316,9 @@ async def test_kafka_provider_unavailable(aiohttp_server, loop):
         provider = metrics.Provider(metrics_provider=metrics_provider, session=session)
         assert isinstance(provider, metrics.Kafka)
 
-        with pytest.raises(metrics.MetricError, match=r"Failed to query Kafka") as err:
+        with pytest.raises(
+            metrics.MetricsProviderError, match=r"Failed to query Kafka"
+        ) as err:
             await provider.query(metric)
 
         assert isinstance(err.value.__cause__, ClientResponseError)
@@ -346,7 +345,9 @@ async def test_kafka_provider_connection_error(aiohttp_server, loop):
         provider = metrics.Provider(metrics_provider=metrics_provider, session=session)
         assert isinstance(provider, metrics.Kafka)
 
-        with pytest.raises(metrics.MetricError, match=r"Failed to query Kafka") as err:
+        with pytest.raises(
+            metrics.MetricsProviderError, match=r"Failed to query Kafka"
+        ) as err:
             await provider.query(metric)
 
         assert isinstance(err.value.__cause__, ClientConnectorError)
