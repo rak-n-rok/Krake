@@ -37,23 +37,29 @@ from krake import (
     load_yaml_config,
     ConfigurationOptionMapper,
 )
+from krake.client.core import CoreApi
+from krake.apidefs.core import (
+    RoleBindingResource,
+    RoleResource,
+    MetricsProviderResource,
+    MetricResource,
+)
 from krake.apidefs.kubernetes import ApplicationResource, ClusterResource
 from krake.apidefs.openstack import ProjectResource, MagnumClusterResource
 from krake.client.openstack import OpenStackApi
 from krake.controller import Controller, run, Reflector, create_ssl_context
 from krake.data.config import ControllerConfiguration
-from krake.data.core import resource_ref
+from krake.data.core import resource_ref, RoleBinding, Role, MetricsProvider, Metric
 from krake.client.kubernetes import KubernetesApi
 from krake.data.kubernetes import Application, Cluster
 from krake.data.openstack import Project, MagnumCluster
-from krake.utils import camel_to_snake_case
+from krake.utils import camel_to_snake_case, get_namespace_as_kwargs
 
 logger = logging.getLogger("krake.controller.garbage_collector")
 
 
 class DependencyException(Exception):
-    """Base class for dependency exceptions.
-    """
+    """Base class for dependency exceptions."""
 
 
 class DependencyCycleException(DependencyException):
@@ -255,6 +261,12 @@ class GarbageCollector(Controller):
         self.worker_count = worker_count
 
         self.resources = {
+            CoreApi: [
+                (Role, RoleResource),
+                (RoleBinding, RoleBindingResource),
+                (Metric, MetricResource),
+                (MetricsProvider, MetricsProviderResource),
+            ],
             KubernetesApi: [
                 (Application, ApplicationResource),
                 (Cluster, ClusterResource),
@@ -282,8 +294,14 @@ class GarbageCollector(Controller):
                 self.apis[(kind.api, kind.kind)] = api
 
                 resource_plural = camel_to_snake_case(client_resource.plural)
-                list_resources = getattr(api, f"list_all_{resource_plural}")
-                watch_resources = getattr(api, f"watch_all_{resource_plural}")
+
+                # Handle namespaced and non-namespaced resources
+                if hasattr(api, f"list_all_{resource_plural}"):
+                    list_resources = getattr(api, f"list_all_{resource_plural}")
+                    watch_resources = getattr(api, f"watch_all_{resource_plural}")
+                else:
+                    list_resources = getattr(api, f"list_{resource_plural}")
+                    watch_resources = getattr(api, f"watch_{resource_plural}")
 
                 reflector = Reflector(
                     listing=list_resources,
@@ -365,9 +383,9 @@ class GarbageCollector(Controller):
         """
         for dependency_ref in resource.metadata.owners:
             get_resource = self.get_api_method(dependency_ref, "read")
-            dependency = await get_resource(
-                namespace=dependency_ref.namespace, name=dependency_ref.name
-            )
+
+            kwargs = get_namespace_as_kwargs(dependency_ref.namespace)
+            dependency = await get_resource(name=dependency_ref.name, **kwargs)
             if self.is_in_deletion(dependency):
                 await self.queue.put(dependency.metadata.uid, dependency)
 
@@ -447,14 +465,17 @@ class GarbageCollector(Controller):
         """Request the deletion of a list of resources.
 
         Args:
-            dependents (list): the list of resources to delete.
+            dependents (list[krake.data.core.ResourceRef]): the list of resources to
+                delete.
 
         """
         for dependent in dependents:
             delete_resource = self.get_api_method(dependent, "delete")
 
             logger.info("Mark dependent as deleted: %s", dependent)
-            await delete_resource(namespace=dependent.namespace, name=dependent.name)
+
+            kwargs = get_namespace_as_kwargs(dependent.namespace)
+            await delete_resource(name=dependent.name, **kwargs)
 
     async def _remove_cascade_deletion_finalizer(self, resource):
         """Update the given resource to remove its garbage-collector-specific
@@ -470,11 +491,9 @@ class GarbageCollector(Controller):
         finalizer = resource.metadata.finalizers.pop(-1)
         assert finalizer == "cascade_deletion"
         logger.info("Resource ready for deletion: %s", resource_ref(resource))
-        await update_resource(
-            namespace=resource.metadata.namespace,
-            name=resource.metadata.name,
-            body=resource,
-        )
+
+        kwargs = get_namespace_as_kwargs(resource.metadata.namespace)
+        await update_resource(name=resource.metadata.name, body=resource, **kwargs)
 
     def _clean_cycle(self, cycle):
         """Remove all resources that belong to a dependency cycle from the dependency
