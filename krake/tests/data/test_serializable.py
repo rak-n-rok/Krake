@@ -442,11 +442,22 @@ def test_label_validation(label_value):
         {"p" * 300 + "/" + "k" * 60: "value"},
     ],
 )
-def test_label_validation_reject_key(label_value):
-    # Test that invalid label keys raise an exception.
+def test_label_validation_reject_str_key(label_value):
+    # Test that invalid strings as label keys raise an exception.
     data = MetadataFactory(labels=label_value)
 
     with pytest.raises(ValidationError, match="Label key"):
+        Metadata.deserialize(data.serialize())
+
+
+@pytest.mark.parametrize(
+    "label_value", [{True: "value"}, {None: "value"}, {10: "value"}, {0.1: "value"}]
+)
+def test_label_validation_reject_key(label_value):
+    """Test that invalid types as label keys raise an exception."""
+    data = MetadataFactory(labels=label_value)
+
+    with pytest.raises(ValidationError, match="expected string or bytes-like object"):
         Metadata.deserialize(data.serialize())
 
 
@@ -462,8 +473,8 @@ def test_label_validation_reject_key(label_value):
         {"key": "v" * 70},
     ],
 )
-def test_label_validation_reject_value(label_value):
-    # Test that invalid label values raise an exception.
+def test_label_validation_reject_str_value(label_value):
+    # Test that invalid strings as label values raise an exception.
     data = MetadataFactory(labels=label_value)
 
     with pytest.raises(ValidationError, match="Label value"):
@@ -537,3 +548,83 @@ def test_external_endpoint_validation_invalid_scheme(hooks_config, endpoint):
     config_dict["complete"]["external_endpoint"] = endpoint
     with pytest.raises(ValidationError, match="scheme 'socket' is not supported"):
         HooksConfiguration.deserialize(config_dict)
+
+
+@pytest.mark.parametrize(
+    "label_value",
+    [
+        {"key": True},
+        {"key": None},
+        {"key": []},
+        {"key": [None, True]},
+        {"key": ["foo", "bar"]},
+        {"key": {"invalid": "value"}},
+    ],
+)
+def test_label_validation_reject_value(label_value):
+    """Test that invalid types as label values raise an exception."""
+    data = MetadataFactory(labels=label_value)
+
+    with pytest.raises(ValidationError, match="expected string or bytes-like object"):
+        Metadata.deserialize(data.serialize())
+
+
+def test_label_multiple_errors():
+    """"Test that invalid types as label values raise an exception."""
+
+    # 1. Label value is wrong
+    data = MetadataFactory(labels={"key1": [None, True]})
+    with pytest.raises(
+        ValidationError, match="expected string or bytes-like object"
+    ) as info:
+        Metadata.deserialize(data.serialize())
+
+    label_errors = info.value.messages["labels"]
+    assert len(label_errors) == 1
+    all_keys = list(label_errors[0].keys())
+    assert len(all_keys) == 1
+    assert all_keys[0] == "[None, True]"
+
+    # 2. Label key and values are wrong
+    data = MetadataFactory(labels={False: True})
+    with pytest.raises(
+        ValidationError, match="expected string or bytes-like object"
+    ) as info:
+        Metadata.deserialize(data.serialize())
+
+    label_errors = info.value.messages["labels"]
+    assert len(label_errors) == 2
+    # Take the only key of each dictionary in list label_errors:
+    # name of the invalid key or value
+    error_keys = {list(d)[0] for d in label_errors if len(list(d)) == 1}
+    assert error_keys == {"False", "True"}
+
+    # 3. Different issues:
+    #    - 1st label: invalid value
+    #    - 2nd label: valid
+    #    - 3rd label: invalid key
+    data = MetadataFactory(
+        labels={"key1": ["a", "b"], "key2": "valid", "$$": "valid", True: True}
+    )
+    with pytest.raises(ValidationError) as info:
+        Metadata.deserialize(data.serialize())
+
+    label_errors = info.value.messages["labels"]
+    assert len(label_errors) == 4
+
+    true_counter = 0
+    for error_dict in label_errors:
+        assert len(error_dict) == 1
+        key = list(error_dict)[0]
+
+        if key == "['a', 'b']":
+            assert error_dict[key] == "expected string or bytes-like object"
+        elif key == "True":
+            assert error_dict[key] == "expected string or bytes-like object"
+            true_counter += 1
+        elif key == "$$":
+            assert "Label key '$$' does not match the regex" in error_dict[key]
+        else:
+            assert False, "Another element of the labels was invalid."
+
+    assert true_counter == 2
