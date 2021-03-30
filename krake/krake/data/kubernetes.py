@@ -19,13 +19,13 @@ class ClusterConstraints(Serializable):
 
 
 class Constraints(Serializable):
-    cluster: ClusterConstraints = None
+    cluster: ClusterConstraints
     migration: bool = True
 
 
 class ApplicationSpec(Serializable):
     manifest: List[dict]
-    constraints: Constraints = None
+    constraints: Constraints
     hooks: List[str] = field(default_factory=list)
 
 
