@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from functools import partial
 from unittest.mock import Mock
 
@@ -252,10 +253,15 @@ async def test_controller_run(loop):
     assert values_gathered == {1, 2, 3, 4, 5, 6}  # Each task is restarted 3 times.
     assert controller.task_1 is None
 
+    if sys.version_info < (3, 9):
+        all_tasks_method = asyncio.Task.all_tasks
+    else:
+        all_tasks_method = asyncio.all_tasks
+
     # Ensure that all remaining tasks of the retry mechanism of the Controller
     # ("gathered" in the run method) are cancelled because of the errors that occurred
     # in background tasks "task_1" and "task_2".
-    for task in asyncio.Task.all_tasks():
+    for task in all_tasks_method():
         # Choose only the task with a waiter, otherwise we also choose the current test
         # coroutine
         if not task.done() and task._fut_waiter is not None:
