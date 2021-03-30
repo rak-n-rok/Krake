@@ -2,13 +2,21 @@ from operator import attrgetter
 
 from krake.api.app import create_app
 from krake.api.helpers import HttpReason, HttpReasonCode
-from krake.data.core import Role, RoleBinding, RoleList, RoleBindingList, resource_ref
+from krake.data.core import (
+    Role,
+    RoleBinding,
+    RoleList,
+    RoleBindingList,
+    resource_ref,
+    MetricsProvider,
+)
 
 from tests.factories.core import (
     RoleFactory,
     RoleBindingFactory,
     MetricFactory,
     MetricsProviderFactory,
+    MetricsProviderSpecFactory,
 )
 
 
@@ -303,3 +311,33 @@ async def test_update_metrics_provider_no_changes(aiohttp_client, config, db):
         f"/core/metricsprovider/{data.metadata.name}", json=data.serialize()
     )
     assert resp.status == 400
+
+
+async def test_update_metrics_provider_with_changes(aiohttp_client, config, db):
+    """Ensure that updates in the MetricsProvider's PolymorphicContainer are considered
+    as well.
+    """
+    client = await aiohttp_client(create_app(config=config))
+
+    data = MetricsProviderFactory(spec__type="prometheus")
+    await db.put(data)
+
+    # Modifying only an attribute from the contained specs.
+    data.spec.prometheus.url += "/other/path"
+
+    resp = await client.put(
+        f"/core/metricsprovider/{data.metadata.name}", json=data.serialize()
+    )
+    assert resp.status == 200
+    received = MetricsProvider.deserialize(await resp.json())
+    assert received.spec.prometheus.url == data.spec.prometheus.url
+
+    # Modifying the whole spec to a different type.
+    data.spec = MetricsProviderSpecFactory(type="kafka")
+
+    resp = await client.put(
+        f"/core/metricsprovider/{data.metadata.name}", json=data.serialize()
+    )
+    assert resp.status == 200
+    received = MetricsProvider.deserialize(await resp.json())
+    assert received.spec == data.spec

@@ -801,6 +801,15 @@ class PolymorphicContainer(Serializable):
             {"__qualname__": f"{cls.__name__}.Schema", "__model__": cls},
         )
 
+        # HACK:
+        #   dataclasses.dataclass() checks if the class implements its own
+        #   __eq__ method (by checking directly its presence in __dict__). We
+        #   want to use the same __eq__() implementation for every subclass.
+        #   Therefore, we put an explicit reference to PolymorphicContainer.__eq__()
+        #   into the class' __dict__.
+        if "__eq__" not in cls.__dict__:
+            cls.__eq__ = PolymorphicContainer.__eq__
+
     def __init__(self, **kwargs):
         # Add the subfield as attribute
         type_ = kwargs["type"]
@@ -833,3 +842,17 @@ class PolymorphicContainer(Serializable):
         self.type = overwrite.type
         value = getattr(overwrite, overwrite.type)
         setattr(self, overwrite.type, value)
+
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+
+        # If the other element has no "type", it cannot be a PolymorphicContainer.
+        # If it has no container with the same type as the current object, then it is
+        # not a container of the same type, thus they are different.
+        if not hasattr(other, "type") or not hasattr(other, self.type):
+            return False
+
+        return self.type == other.type and getattr(self, self.type) == getattr(
+            other, other.type
+        )
