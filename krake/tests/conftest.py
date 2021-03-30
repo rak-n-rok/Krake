@@ -137,7 +137,7 @@ async def await_for_url(url, loop, timeout=5):
             return resp
 
 
-@pytest.fixture("session")
+@pytest.fixture(scope="session")
 def etcd_server():
     def check_etcd_health(response):
         with suppress(json.decoder.JSONDecodeError):
@@ -248,7 +248,7 @@ class KeystoneInfo(NamedTuple):
         return f"http://{self.host}:{self.port}/v3"
 
 
-@pytest.fixture("session")
+@pytest.fixture(scope="session")
 def keystone():
     pytest.importorskip("keystone")
 
@@ -687,7 +687,7 @@ class PublicKeyRepository(object):
         return data
 
 
-@pytest.fixture("session")
+@pytest.fixture(scope="session")
 def pki():
     """Public key infrastructure fixture"""
     if not shutil.which("cfssl"):
