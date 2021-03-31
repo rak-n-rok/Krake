@@ -48,6 +48,7 @@ from utils import (
     get_scheduling_score,
     set_static_metrics,
     get_static_metrics,
+    get_other_cluster,
     ResourceKind,
 )
 
@@ -388,19 +389,6 @@ def test_kubernetes_auto_metrics_migration(minikube_clusters):
         app.check_running_on(clusters[1], within=RESCHEDULING_INTERVAL + 10)
 
 
-def _get_other_cluster(this_cluster, clusters):
-    """Return the cluster in clusters, which is not this_cluster.
-
-    Args:
-        this_cluster (str): name of this_cluster
-        clusters (list): list of two cluster names.
-
-    Returns:
-        the name of the other cluster.
-    """
-    return clusters[0] if clusters[1] == this_cluster else clusters[1]
-
-
 def _get_metrics_triggering_migration(source, target, metrics, weights):
     """Returns the metrics that the static metrics provider need to return in
     order for a migration to be triggered from the source to the target cluster.
@@ -489,7 +477,7 @@ def test_kubernetes_metrics_migration(minikube_clusters):
     set_static_metrics(metric_values_init)
 
     first_cluster = clusters[0]
-    second_cluster = _get_other_cluster(first_cluster, clusters)
+    second_cluster = get_other_cluster(first_cluster, clusters)
 
     # 2. Set the cluster weights so that the score of cluster 1 is higher than
     # the score of cluster 2.
@@ -669,7 +657,7 @@ def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
     set_static_metrics(metric_values_init)
 
     first_cluster = clusters[0]
-    second_cluster = _get_other_cluster(first_cluster, clusters)
+    second_cluster = get_other_cluster(first_cluster, clusters)
 
     # 2. Set the cluster weights so that the score of cluster 1 is higher than
     # the score of cluster 2.
@@ -810,7 +798,7 @@ def test_kubernetes_metrics_migration_at_update(minikube_clusters):
         first_cluster = clusters[0]
         app.check_running_on(first_cluster, within=0)
 
-        second_cluster = _get_other_cluster(first_cluster, clusters)
+        second_cluster = get_other_cluster(first_cluster, clusters)
 
         # 5. Change the metrics so that score of cluster 2 is higher than the score
         # of cluster 1.

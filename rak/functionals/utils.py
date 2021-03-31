@@ -1266,6 +1266,29 @@ class ClusterDefinition(ResourceDefinition):
     def get_command(self):
         return f"rok kube cluster get {self.name} -o json".split()
 
+    def get_state(self):
+        """Run the command for getting the cluster and return its state.
+
+        Returns:
+            str: the current state of the cluster, serialized as string.
+
+        """
+        app_dict = self.get_resource()
+        return app_dict["status"]["state"]
+
+    def get_metrics_reasons(self):
+        """Run the command for getting the cluster and return the reasons for the
+        metrics failure if there was any.
+
+        Returns:
+            dict[str, dict[str, str]]: the serialized reasons for the metrics failure,
+                with the name of the metrics as key, and the deserialized reasons as
+                values.
+
+        """
+        app_dict = self.get_resource()
+        return app_dict["status"]["metrics_reasons"]
+
 
 class Environment(object):
     """Context manager to use for starting tests on a specific test environment. This
@@ -1638,6 +1661,19 @@ def check_static_metrics(expected_metrics, error_message=""):
             raise AssertionError(error_message + f"Error: {e}")
 
     return validate
+
+
+def get_other_cluster(this_cluster, clusters):
+    """Return the cluster in clusters, which is not this_cluster.
+
+    Args:
+        this_cluster (str): name of this_cluster
+        clusters (list): list of two cluster names.
+
+    Returns:
+        the name of the other cluster.
+    """
+    return clusters[0] if clusters[1] == this_cluster else clusters[1]
 
 
 def create_default_environment(
