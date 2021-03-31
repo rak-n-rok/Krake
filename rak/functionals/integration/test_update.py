@@ -63,8 +63,8 @@ def test_update_application_manifest(minikube_clusters):
         minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
     )
 
-    with Environment(environment) as resources:
-        app = resources[ResourceKind.APPLICATION][0]
+    with Environment(environment) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
 
         # 1. Update the Application
         error_message = f"The Application {app.name} could not be updated."
@@ -132,8 +132,8 @@ def test_update_application_labels(minikube_clusters):
         minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
     )
 
-    with Environment(environment) as resources:
-        app = resources[ResourceKind.APPLICATION][0]
+    with Environment(environment) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
 
         # 1. Update the Application
         first_labels = {"location": "DE", "lbl": "first"}
@@ -177,8 +177,8 @@ def test_update_cluster_kubeconfig(minikube_clusters):
     with open(other_kubeconfig_path, "r") as file:
         other_content = yaml.safe_load(file)
 
-    with Environment(environment) as resources:
-        cluster = resources[ResourceKind.CLUSTER][0]
+    with Environment(environment) as env:
+        cluster = env.resources[ResourceKind.CLUSTER][0]
 
         # 1. Update the Cluster
         run(f"rok kube cluster update {cluster.name} -f {other_kubeconfig_path}")
@@ -235,8 +235,8 @@ def test_update_cluster_labels(minikube_clusters):
         minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
     )
 
-    with Environment(environment) as resources:
-        cluster = resources[ResourceKind.CLUSTER][0]
+    with Environment(environment) as env:
+        cluster = env.resources[ResourceKind.CLUSTER][0]
 
         # 1. Update the Cluster
         first_labels = {"location": "DE", "lbl": "first"}
@@ -276,9 +276,9 @@ def test_update_no_changes(minikube_clusters):
         minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
     )
 
-    with Environment(environment) as resources:
-        cluster = resources[ResourceKind.CLUSTER][0]
-        app = resources[ResourceKind.APPLICATION][0]
+    with Environment(environment) as env:
+        cluster = env.resources[ResourceKind.CLUSTER][0]
+        app = env.resources[ResourceKind.APPLICATION][0]
 
         # 1. "Update" the Cluster (no change is sent)
         run(

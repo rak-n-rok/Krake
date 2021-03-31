@@ -1347,8 +1347,9 @@ class Environment(object):
         """Create all given resources and check that they have been actually created.
 
         Returns:
-            dict: all resources that have been created in the environment, with their
-                kind as string as key.
+            Environment: the current environment, after having been populated with the
+                resources to create.
+
         """
         for handler in self.before_handlers:
             handler(self.resources)
@@ -1364,7 +1365,7 @@ class Environment(object):
             for resource in resource_list:
                 resource.check_created(delay=self.creation_delay)
 
-        return self.resources
+        return self
 
     def __exit__(self, *exceptions):
         """Delete all given resources and check that they have been actually deleted."""
@@ -1382,14 +1383,11 @@ class Environment(object):
         for handler in self.after_handlers:
             handler(self.resources)
 
-    @classmethod
-    def get_resource_definition(cls, resources, kind, name):
+    def get_resource_definition(self, kind, name):
         """
         If there exists exactly one resource in 'resources' of kind 'kind'
         with name 'name', return it. Otherwise raise AssertionError.
         Args:
-            resources (list[ResourceDefinition]): list of ResourceDefinition's
-                to look through
             kind (ResourceKind): the kind of resource which is sought.
             name (str): the name of the resource that is sought.
 
@@ -1402,7 +1400,7 @@ class Environment(object):
             AssertionError if not exactly one resource was found.
 
         """
-        found = [r for r in resources if r.kind == kind and r.name == name]
+        found = [r for r in self.resources[kind] if r.name == name]
         if len(found) != 1:
             msg = (
                 f"Found {len(found)} resources of kind {kind} with name {name} "

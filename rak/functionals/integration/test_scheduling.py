@@ -90,8 +90,8 @@ def test_create_cluster_and_app(minikube_clusters):
     # 1. Create cluster and application
     # 2. Check that the application is in RUNNING state
     # (Checks 1-2 are performed automatically when entering the environment);
-    with Environment(environment) as resources:
-        app = resources[ResourceKind.APPLICATION][0]
+    with Environment(environment) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
 
         # 3. Ensure that the application was scheduled to the cluster;
         app.check_running_on(cluster)
@@ -142,8 +142,8 @@ def test_create_on_other_namespace(minikube_clusters):
         environment,
         before_handlers=[create_namespace],
         after_handlers=[delete_namespace],
-    ) as resources:
-        app = resources[ResourceKind.APPLICATION][0]
+    ) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
 
         # 2. Ensure that the k8s resources were deployed to the right namespace
         error_message = (
@@ -227,8 +227,8 @@ def test_scheduler_cluster_label_constraints(minikube_clusters):
                 cluster_labels=cluster_labels,
                 app_cluster_constraints=[app_cluster_constraint],
             )
-            with Environment(environment) as resources:
-                app = resources[ResourceKind.APPLICATION][0]
+            with Environment(environment) as env:
+                app = env.resources[ResourceKind.APPLICATION][0]
 
                 # 3. Ensure that the application was scheduled to the requested cluster;
                 app.check_running_on(clusters[expected_index])
@@ -270,8 +270,8 @@ def test_scheduler_clusters_with_metrics(minikube_clusters):
         #     selected metric assigned to each cluster and an application.
         cluster_metrics = create_cluster_info(clusters, metric_names, weights)
         environment = create_default_environment(clusters, metrics=cluster_metrics)
-        with Environment(environment) as resources:
-            app = resources[ResourceKind.APPLICATION][0]
+        with Environment(environment) as env:
+            app = env.resources[ResourceKind.APPLICATION][0]
 
             # 2. Ensure that the application was scheduled to the expected cluster;
             app.check_running_on(expected_cluster)
@@ -307,8 +307,8 @@ def test_scheduler_clusters_one_with_metrics(minikube_clusters):
         #     selected metric assigned to one cluster and an application.
         metrics_by_cluster = create_cluster_info(clusters, metric_names, weights)
         environment = create_default_environment(clusters, metrics=metrics_by_cluster)
-        with Environment(environment) as resources:
-            app = resources[ResourceKind.APPLICATION][0]
+        with Environment(environment) as env:
+            app = env.resources[ResourceKind.APPLICATION][0]
 
             # 2. Ensure that the application was scheduled to the expected cluster;
             app.check_running_on(expected_cluster)
@@ -360,8 +360,8 @@ def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
                 cluster_labels=cluster_labels,
                 app_cluster_constraints=[app_cluster_constraint],
             )
-            with Environment(environment) as resources:
-                app = resources[ResourceKind.APPLICATION][0]
+            with Environment(environment) as env:
+                app = env.resources[ResourceKind.APPLICATION][0]
 
                 # 2. Ensure that the application was scheduled to the requested cluster;
                 app.check_running_on(clusters[expected_index])
@@ -403,8 +403,8 @@ def test_one_unreachable_metrics_provider(minikube_clusters):
     # 1. Create one application, one cluster without metrics, and one with
     #     the metric `heat_demand_zone_unreachable`.
     environment = create_default_environment(clusters, metrics=metrics_by_cluster)
-    with Environment(environment, creation_delay=30) as resources:
-        app = resources[ResourceKind.APPLICATION][0]
+    with Environment(environment, creation_delay=30) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
 
         # 2. Ensure that the application was scheduled to the expected cluster;
         app.check_running_on(expected_cluster)
@@ -418,7 +418,7 @@ def test_all_unreachable_metrics_provider(minikube_clusters):
         1. Create one application, one cluster without metrics, and one with
             the metric `heat_demand_zone_unreachable`.
             Any cluster might be chosen by the scheduler.
-        2. Ensure that although all metrics providers are unreachble, the scheduler
+        2. Ensure that although all metrics providers are unreachable, the scheduler
             manages to schedule the application to one of the matching clusters.
 
     Args:
@@ -436,10 +436,10 @@ def test_all_unreachable_metrics_provider(minikube_clusters):
     # 1. Create one application, one cluster without metrics, and one with
     #     the metric `heat_demand_zone_unreachable`.
     environment = create_default_environment(clusters, metrics=metrics_by_cluster)
-    with Environment(environment, creation_delay=20) as resources:
-        app = resources[ResourceKind.APPLICATION][0]
+    with Environment(environment, creation_delay=20) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
 
-        # 2. Ensure that although all metrics providers are unreachble, the scheduler
+        # 2. Ensure that although all metrics providers are unreachable, the scheduler
         #    manages to schedule the application to one of the matching clusters.
         # The app may run on any of the clusters.
         running_on = app.get_running_on()
