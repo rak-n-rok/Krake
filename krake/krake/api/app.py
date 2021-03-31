@@ -19,11 +19,13 @@ Example:
         web.run_app(app)
 
 """
+import aiohttp_cors
 import logging
 import ssl
 
-import aiohttp_cors
 from aiohttp import web, ClientSession
+from functools import partial
+from krake.api.database import Session
 
 from krake.data.core import RoleBinding
 from . import __version__ as version
@@ -92,11 +94,7 @@ def create_app(config):
         middlewares=[
             middlewares.error_log(),
             authentication,
-            middlewares.database(
-                host=config.etcd.host,
-                port=config.etcd.port,
-                retry=config.etcd.retry_transactions,
-            ),
+            middlewares.retry_transaction(retry=config.etcd.retry_transactions),
         ],
     )
     app["config"] = config
@@ -105,6 +103,9 @@ def create_app(config):
 
     # Cleanup contexts
     app.cleanup_ctx.append(http_session)
+    app.cleanup_ctx.append(
+        partial(db_session, host=config.etcd.host, port=config.etcd.port)
+    )
 
     # Routes
     app.add_routes(routes)
@@ -136,6 +137,23 @@ def cors_setup(app):
     )
     for route in app.router.routes():
         cors.add(route)
+
+
+async def db_session(app, host, port):
+    """Async generator creating a database :class:`krake.api.database.Session` that can
+    be used by other components (middleware, route handlers) or by the requests
+    handlers. The database session is available under the ``db`` key of the application.
+
+    This function should be used as cleanup context (see
+    :attr:`aiohttp.web.Application.cleanup_ctx`).
+
+    Args:
+        app (aiohttp.web.Application): Web application
+
+    """
+    async with Session(host=host, port=port) as session:
+        app["db"] = session
+        yield
 
 
 async def http_session(app):

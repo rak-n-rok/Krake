@@ -178,16 +178,39 @@ class Session(object):
         self.host = host
         self.port = port
         self.loop = loop
-        self.client = None
+        self._client = None
 
     async def __aenter__(self):
-        # FIXME: AioClient does not take "loop" as argument
-        self.client = EtcdClient(host=self.host, port=self.port)
         return self
 
     async def __aexit__(self, *exc):
-        await self.client.close()
-        self.client = None
+        if self._client:
+            await self._client.close()
+            self._client = None
+
+    @property
+    def client(self):
+        """Lazy loading of the etcd client. It is only created when the first request is
+        performed.
+
+        Returns:
+            EtcdClient: the client to connect to the database.
+        """
+        # It allows for the API to be started without any connection to the database.
+        # Without this lazy loading, when the API is started, if the connection is not
+        # possible, the API will raise an exception and stop, as the connection is
+        # created at startup.
+        # With the lazy loading, the API can be started. A future request will attempt
+        # the creation of the client. If an issue occurs then, the exception will be
+        # raised, the client will not be created, and will be created in another
+        # attempt, if the database is now accessible.
+        # As long as the client has been created once, a disconnection from the
+        # database will raise an exception, but not stop the API.
+        if not self._client:
+            # FIXME: AioClient does not take "loop" as argument
+            self._client = EtcdClient(host=self.host, port=self.port)
+
+        return self._client
 
     async def get(self, cls, **kwargs):
         """Fetch an serializable object from the etcd server specified by its
