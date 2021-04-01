@@ -7,6 +7,7 @@ variables:
   ETCD_VER: v3.3.13
   PROMETHEUS_VER: 2.12.0
   CFSSL_VER: 1.4.1
+  CONFLUENT_VER: "6.1"
 
   # Change pip's cache directory to be inside the project directory since we
   # can only cache local items.
@@ -75,8 +76,8 @@ cache:
     # Download zookeeper, kafka and ksql
     - apt update
     - apt-get install software-properties-common -y
-    - wget -qO - https://packages.confluent.io/deb/6.0/archive.key | apt-key add -
-    - add-apt-repository "deb [arch=amd64] https://packages.confluent.io/deb/6.0 stable main"
+    - wget -qO - https://packages.confluent.io/deb/${CONFLUENT_VER}/archive.key | apt-key add -
+    - add-apt-repository "deb [arch=amd64] https://packages.confluent.io/deb/${CONFLUENT_VER} stable main"
     - apt update
     - apt install zookeeper confluent-kafka confluent-ksqldb -y
     - which zookeeper-server-start
