@@ -228,6 +228,124 @@ def check_app_created_and_up(error_message=""):
     return validate
 
 
+def check_metrics_provider_content(error_message, name, type, type_details=None):
+    """Create a callable to verify the content of a metrics provider in a response
+    from the krake API.
+
+    To be used with the :meth:`run` function. The callable will raise an
+    :class:`AssertionError` if the content of the metrics provider in the
+    response is different from the given one.
+
+    Args:
+        error_message (str): the message that will be displayed if the check fails.
+        name (str): the expected name of the metrics provider
+        type (str): the expected type of the metrics provider
+        type_details (str): the expected details of the metrics provider, i.e.,
+            the value of spec.<type>.
+
+    Returns:
+        callable: a condition that will check its given response against the parameters
+            of the current function.
+
+    Raises:
+        AssertionError: if the content of the metrics provider in the response is
+            different from the given one.
+    """
+    assert type in ["prometheus", "static", "kafka"], (
+        error_message + f" Invalid mp type '{type}'."
+    )
+    assert type_details, error_message + " No type_details were provided."
+    expected_mp = {
+        "api": "core",
+        "kind": "MetricsProvider",
+        "metadata": {
+            "name": name,
+        },
+        "spec": {
+            "type": type,
+            type: type_details,
+        },
+    }
+
+    def validate(response):
+        observed_mp = response.json
+
+        details = (
+            f"\nExpected spec: {expected_mp['spec']}.\n"
+            f"Observed: {observed_mp['spec']}."
+        )
+        assert observed_mp["spec"] == expected_mp["spec"], error_message + details
+
+        details = (
+            f"\nExpected name: {name}.\nObserved: {observed_mp['metadata']['name']}."
+        )
+        assert observed_mp["metadata"]["name"] == name, error_message + details
+
+    return validate
+
+
+def check_metric_content(error_message, name, mp_name, min, max, mp_metric_name=None):
+    """Create a callable to verify the content of a metric in a response from the
+    krake API.
+
+    To be used with the :meth:`run` function. The callable will raise an
+    :class:`AssertionError` if the content of the metric in the response is different
+    from the given one.
+
+    Args:
+        error_message (str): message that will be displayed if the check fails.
+        name (str): expected name of the metric
+        mp_name (str): expected name of the metric's metrics provider
+        mp_metric_name (str): expected name of the metric's metrics provider's metric
+        min (float): expected minimum value of the metric
+        max (float): expected maximum value of the metric
+
+    Returns:
+        callable: a condition that will check its given response against the parameters
+            of the current function.
+
+    Raises:
+        AssertionError: if the content of the metric in the response is different
+            from the given one.
+    """
+
+    if not mp_metric_name:
+        mp_metric_name = name
+
+    expected_metric = {
+        "api": "core",
+        "kind": "Metric",
+        "metadata": {"name": name},
+        "spec": {
+            "max": float(max),
+            "min": float(min),
+            "provider": {
+                "metric": mp_metric_name,
+                "name": mp_name,
+            },
+        },
+    }
+
+    def validate(response):
+        observed_metric = response.json
+
+        details = (
+            f"\nExpected spec: {expected_metric['spec']}.\n"
+            f"Observed: {observed_metric['spec']}."
+        )
+        assert observed_metric["spec"] == expected_metric["spec"], (
+            error_message + details
+        )
+
+        details = (
+            f"\nExpected name: {name}."
+            f"\nObserved: {observed_metric['metadata']['name']}."
+        )
+        assert observed_metric["metadata"]["name"] == name, error_message + details
+
+    return validate
+
+
 def check_return_code(error_message, expected_code=0):
     """Create a callable to verify the return code of a response.
 
@@ -523,8 +641,7 @@ class ResourceDefinition(ABC):
         pass
 
     def create_resource(self):
-        """Create the resource.
-        """
+        """Create the resource."""
         # Create the actual resource based on the initial values of this
         # ResourceDefinition, since these are the values which should be used
         # for the creation.
