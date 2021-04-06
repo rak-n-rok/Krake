@@ -41,15 +41,21 @@ from krake.client.core import CoreApi
 from krake.apidefs.core import (
     RoleBindingResource,
     RoleResource,
-    MetricsProviderResource,
-    MetricResource,
+    GlobalMetricsProviderResource,
+    GlobalMetricResource,
 )
 from krake.apidefs.kubernetes import ApplicationResource, ClusterResource
 from krake.apidefs.openstack import ProjectResource, MagnumClusterResource
 from krake.client.openstack import OpenStackApi
 from krake.controller import Controller, run, Reflector, create_ssl_context
 from krake.data.config import ControllerConfiguration
-from krake.data.core import resource_ref, RoleBinding, Role, MetricsProvider, Metric
+from krake.data.core import (
+    resource_ref,
+    RoleBinding,
+    Role,
+    GlobalMetricsProvider,
+    GlobalMetric,
+)
 from krake.client.kubernetes import KubernetesApi
 from krake.data.kubernetes import Application, Cluster
 from krake.data.openstack import Project, MagnumCluster
@@ -264,8 +270,8 @@ class GarbageCollector(Controller):
             CoreApi: [
                 (Role, RoleResource),
                 (RoleBinding, RoleBindingResource),
-                (Metric, MetricResource),
-                (MetricsProvider, MetricsProviderResource),
+                (GlobalMetric, GlobalMetricResource),
+                (GlobalMetricsProvider, GlobalMetricsProviderResource),
             ],
             KubernetesApi: [
                 (Application, ApplicationResource),

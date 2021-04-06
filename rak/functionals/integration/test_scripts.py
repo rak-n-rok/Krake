@@ -154,7 +154,7 @@ def test_generate(krake_container):
 
 TEST_BOOTSTRAP = {
     "api": "core",
-    "kind": "Metric",
+    "kind": "GlobalMetric",
     "metadata": {"name": "test"},
     "spec": {
         "max": "5.0",
@@ -190,7 +190,7 @@ def test_bootstrap(krake_container, etcd_container, etcd_container_port):
     krake = client.containers.get(krake_container)
     etcd = client.containers.get(etcd_container)
     record_name = TEST_BOOTSTRAP["metadata"]["name"]
-    record_path = "/core/metric/" + record_name
+    record_path = "/core/globalmetrics/" + record_name
 
     bootstrap_cmd = [
         "krake_bootstrap_db",
@@ -255,7 +255,7 @@ def test_bootstrap_from_stdin(krake_container, etcd_container, etcd_container_po
     """
     etcd = client.containers.get(etcd_container)
     record_name = TEST_BOOTSTRAP["metadata"]["name"]
-    record_path = "/core/metric/" + record_name
+    record_path = "/core/globalmetrics/" + record_name
 
     bootstrap_cmd = [
         "docker",
@@ -348,8 +348,8 @@ def test_bootstrap_rollback_invalid(
     krake = client.containers.get(krake_container)
     etcd = client.containers.get(etcd_container)
     record_paths = (
-        "/core/metric/" + TEST_BOOTSTRAP["metadata"]["name"],
-        "/core/metric/" + TEST_BOOTSTRAP_INVALID["metadata"]["name"],
+        "/core/globalmetrics/" + TEST_BOOTSTRAP["metadata"]["name"],
+        "/core/globalmetrics/" + TEST_BOOTSTRAP_INVALID["metadata"]["name"],
     )
 
     bootstrap_cmd = [
@@ -407,7 +407,7 @@ def test_bootstrap_rollback_invalid(
 
 TEST_BOOTSTRAP_PRESENT = {
     "api": "core",
-    "kind": "Metric",
+    "kind": "GlobalMetric",
     "metadata": {"name": "test_present"},
     "spec": {
         "max": "5.0",
@@ -453,8 +453,8 @@ def test_bootstrap_rollback_present(
     krake = client.containers.get(krake_container)
     etcd = client.containers.get(etcd_container)
     record_paths = (
-        "/core/metric/" + TEST_BOOTSTRAP["metadata"]["name"],
-        "/core/metric/" + TEST_BOOTSTRAP_PRESENT["metadata"]["name"],
+        "/core/globalmetrics/" + TEST_BOOTSTRAP["metadata"]["name"],
+        "/core/globalmetrics/" + TEST_BOOTSTRAP_PRESENT["metadata"]["name"],
     )
 
     bootstrap_cmd = [
@@ -553,7 +553,7 @@ def test_bootstrap_rollback_present(
         [
             "etcdctl",
             "del",
-            "/core/metric/" + TEST_BOOTSTRAP_PRESENT["metadata"]["name"],
+            "/core/globalmetrics/" + TEST_BOOTSTRAP_PRESENT["metadata"]["name"],
         ],
     )
     exec_container(krake, ["rm", bootstrap])

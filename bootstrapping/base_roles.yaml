@@ -57,8 +57,8 @@ rules:
   - "clusters"
   - "roles"
   - "rolebindings"
-  - "metrics"
-  - "metricsproviders"
+  - "globalmetrics"
+  - "globalmetricsproviders"
   verbs:
   - list
   - get
@@ -90,8 +90,8 @@ rules:
   namespaces:
   - ''
   resources:
-    - "metrics"
-    - "metricsproviders"
+    - "globalmetrics"
+    - "globalmetricsproviders"
   verbs:
   - get
 

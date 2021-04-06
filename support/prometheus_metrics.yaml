@@ -9,7 +9,7 @@
 ##########################
 
 api: core
-kind: Metric
+kind: GlobalMetric
 metadata:
   name: heat_demand_zone_1
 spec:
@@ -23,7 +23,7 @@ spec:
 
 
 api: core
-kind: Metric
+kind: GlobalMetric
 metadata:
   name: heat_demand_zone_2
 spec:
@@ -37,7 +37,7 @@ spec:
 
 
 api: core
-kind: Metric
+kind: GlobalMetric
 metadata:
   name: heat_demand_zone_3
 spec:
@@ -51,7 +51,7 @@ spec:
 
 
 api: core
-kind: Metric
+kind: GlobalMetric
 metadata:
   name: heat_demand_zone_4
 spec:
@@ -65,7 +65,7 @@ spec:
 
 
 api: core
-kind: Metric
+kind: GlobalMetric
 metadata:
   name: heat_demand_zone_5
 spec:
@@ -83,7 +83,7 @@ spec:
 ####################################
 
 api: core
-kind: MetricsProvider
+kind: GlobalMetricsProvider
 metadata:
   name: prometheus
 spec:

@@ -168,10 +168,10 @@ Development and tests
 ---------------------
 
 To test the migration, ``support/prometheus`` or ``support/prometheus-mock`` script can
-be used, or simply static metrics. However, in this case, ``Metric`` and
-``MetricsProvider`` objects need to be created. Two bootstrap definition files are
-present in ``support/`` for adding Prometheus and static metrics and metrics provider,
-respectively ``prometheus_metrics.yaml`` and ``static_metrics.yaml``.
+be used, or simply static metrics. However, in this case, ``GlobalMetric`` and
+``GlobalMetricsProvider`` objects need to be created. Two bootstrap definition files
+are present in ``support/`` for adding Prometheus and static metrics and metrics
+provider, respectively ``prometheus_metrics.yaml`` and ``static_metrics.yaml``.
 
 They can be easily processed using:
 

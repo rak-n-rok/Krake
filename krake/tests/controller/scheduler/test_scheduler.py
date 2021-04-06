@@ -23,7 +23,7 @@ from krake.data.openstack import (
 from krake.test_utils import server_endpoint, make_prometheus
 
 from tests.factories import fake
-from tests.factories.core import MetricsProviderFactory, MetricFactory
+from tests.factories.core import GlobalMetricsProviderFactory, GlobalMetricFactory
 from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
 from tests.factories.openstack import MagnumClusterFactory, ProjectFactory
 
@@ -238,23 +238,23 @@ async def test_kubernetes_rank(aiohttp_server, config, db, loop):
         ClusterFactory(spec__metrics=[MetricRef(name="test-metric-2", weight=1.0)]),
     ]
     metrics = [
-        MetricFactory(
+        GlobalMetricFactory(
             metadata__name="test-metric-1",
             spec__provider__name="test-prometheus",
             spec__provider__metric="test_metric_1",
         ),
-        MetricFactory(
+        GlobalMetricFactory(
             metadata__name="test-metric-2",
             spec__provider__name="test-static",
             spec__provider__metric="test_metric_2",
         ),
     ]
-    prometheus_provider = MetricsProviderFactory(
+    prometheus_provider = GlobalMetricsProviderFactory(
         metadata__name="test-prometheus",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
     )
-    static_provider = MetricsProviderFactory(
+    static_provider = GlobalMetricsProviderFactory(
         metadata__name="test-static",
         spec__type="static",
         spec__static__metrics={"test_metric_2": 0.5},
@@ -292,12 +292,12 @@ async def test_kubernetes_rank_sticky(aiohttp_server, config, db, loop):
     )
     pending_app = ApplicationFactory(status__state=ApplicationState.PENDING)
 
-    static_provider = MetricsProviderFactory(
+    static_provider = GlobalMetricsProviderFactory(
         metadata__name="static-provider",
         spec__type="static",
         spec__static__metrics={"my_metric": 0.75},
     )
-    metric = MetricFactory(
+    metric = GlobalMetricFactory(
         metadata__name="metric-1",
         spec__provider__name="static-provider",
         spec__provider__metric="my_metric",
@@ -383,7 +383,7 @@ async def test_kubernetes_rank_missing_metrics_provider(
     for cluster in clusters:
         await db.put(cluster)
 
-    metric = MetricFactory(
+    metric = GlobalMetricFactory(
         metadata__name="my-metric",
         spec__min=0,
         spec__max=1,
@@ -457,14 +457,14 @@ async def test_kubernetes_rank_multiple_failing_metric(
         await db.put(cluster)
 
     metrics = [
-        MetricFactory(
+        GlobalMetricFactory(
             metadata__name="existent-metric",
             spec__min=0,
             spec__max=1,
             spec__provider__name="my-provider",
             spec__provider__metric="my-metric",
         ),
-        MetricFactory(
+        GlobalMetricFactory(
             metadata__name="also-existent",
             spec__min=0,
             spec__max=1,
@@ -472,7 +472,7 @@ async def test_kubernetes_rank_multiple_failing_metric(
             spec__provider__metric="my-other-metric",
         ),
     ]
-    provider = MetricsProviderFactory(
+    provider = GlobalMetricsProviderFactory(
         metadata__name="my-provider",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
@@ -552,7 +552,7 @@ async def test_kubernetes_rank_failing_metrics_provider(
     clusters = [ClusterFactory(spec__metrics=[MetricRef(name="my-metric", weight=1)])]
     await db.put(clusters[0])
     metrics = [
-        MetricFactory(
+        GlobalMetricFactory(
             metadata__name="my-metric",
             spec__min=0,
             spec__max=1,
@@ -560,7 +560,7 @@ async def test_kubernetes_rank_failing_metrics_provider(
             spec__provider__metric="my-metric",
         )
     ]
-    provider = MetricsProviderFactory(
+    provider = GlobalMetricsProviderFactory(
         metadata__name="my-provider",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
@@ -595,14 +595,14 @@ async def test_kubernetes_prefer_cluster_with_metrics(aiohttp_server, config, db
 
     cluster_miss = ClusterFactory(spec__metrics=[])
     cluster = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand", weight=1)])
-    metric = MetricFactory(
+    metric = GlobalMetricFactory(
         metadata__name="heat-demand",
         spec__min=0,
         spec__max=1,
         spec__provider__name="prometheus-zone-1",
         spec__provider__metric="my_metric",
     )
-    metrics_provider = MetricsProviderFactory(
+    metrics_provider = GlobalMetricsProviderFactory(
         metadata__name="prometheus-zone-1",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
@@ -705,14 +705,14 @@ async def test_kubernetes_select_cluster_all_unreachable_metric(
     for cluster in clusters:
         await db.put(cluster)
 
-    metric = MetricFactory(
+    metric = GlobalMetricFactory(
         metadata__name="unreachable",
         spec__min=0,
         spec__max=1,
         spec__provider__name="my-provider",
         spec__provider__metric="my-metric",
     )
-    provider = MetricsProviderFactory(
+    provider = GlobalMetricsProviderFactory(
         metadata__name="my-provider",
         spec__type="prometheus",
         spec__prometheus__url="http://dummyurl",
@@ -754,14 +754,14 @@ async def test_kubernetes_select_cluster_some_unreachable_metric(
     await db.put(cluster_wo_metric)
     await db.put(cluster_w_unreachable)
 
-    metric = MetricFactory(
+    metric = GlobalMetricFactory(
         metadata__name="heat-demand",
         spec__min=0,
         spec__max=1,
         spec__provider__name="prometheus-zone-1",
         spec__provider__metric="heat-demand",
     )
-    metrics_provider = MetricsProviderFactory(
+    metrics_provider = GlobalMetricsProviderFactory(
         metadata__name="prometheus-zone-1",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
@@ -808,14 +808,14 @@ async def test_kubernetes_select_cluster_sticky_all_unreachable_metric(
     for cluster in clusters:
         await db.put(cluster)
 
-    metric = MetricFactory(
+    metric = GlobalMetricFactory(
         metadata__name="unreachable",
         spec__min=0,
         spec__max=1,
         spec__provider__name="my-provider",
         spec__provider__metric="my-metric",
     )
-    provider = MetricsProviderFactory(
+    provider = GlobalMetricsProviderFactory(
         metadata__name="my-provider",
         spec__type="prometheus",
         spec__prometheus__url="http://dummyurl",
@@ -869,21 +869,21 @@ async def test_kubernetes_select_cluster_sticky_others_with_metric(
     ]
     random.shuffle(clusters)
 
-    metric = MetricFactory(
+    metric = GlobalMetricFactory(
         metadata__name="heat-demand",
         spec__min=0,
         spec__max=1,
         spec__provider__name="prometheus-zone-1",
         spec__provider__metric="heat-demand",
     )
-    some_metric = MetricFactory(
+    some_metric = GlobalMetricFactory(
         metadata__name="some-metric",
         spec__min=0,
         spec__max=1,
         spec__provider__name="prometheus-zone-1",
         spec__provider__metric="some-metric",
     )
-    metrics_provider = MetricsProviderFactory(
+    metrics_provider = GlobalMetricsProviderFactory(
         metadata__name="prometheus-zone-1",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
@@ -925,14 +925,14 @@ async def test_kubernetes_select_cluster_sticky_reachable_metric(
     clusters = [cluster_wo_metric, current_w_metric, cluster_w_metric]
     random.shuffle(clusters)
 
-    metric = MetricFactory(
+    metric = GlobalMetricFactory(
         metadata__name="heat-demand",
         spec__min=0,
         spec__max=1,
         spec__provider__name="prometheus-zone-1",
         spec__provider__metric="heat-demand",
     )
-    metrics_provider = MetricsProviderFactory(
+    metrics_provider = GlobalMetricsProviderFactory(
         metadata__name="prometheus-zone-1",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
@@ -972,14 +972,14 @@ async def test_kubernetes_select_cluster_sticky_to_unreachable_all_unreachable_m
         await db.put(cluster)
     random.shuffle(clusters)
 
-    metric = MetricFactory(
+    metric = GlobalMetricFactory(
         metadata__name="unreachable",
         spec__min=0,
         spec__max=1,
         spec__provider__name="my-provider",
         spec__provider__metric="my-metric",
     )
-    provider = MetricsProviderFactory(
+    provider = GlobalMetricsProviderFactory(
         metadata__name="my-provider",
         spec__type="prometheus",
         spec__prometheus__url="http://dummyurl",
@@ -1023,14 +1023,14 @@ async def test_kubernetes_select_cluster_sticky_unreachable_metric(
     for cluster in clusters:
         await db.put(cluster)
 
-    metric = MetricFactory(
+    metric = GlobalMetricFactory(
         metadata__name="heat-demand",
         spec__min=0,
         spec__max=1,
         spec__provider__name="prometheus-zone-1",
         spec__provider__metric="heat-demand",
     )
-    metrics_provider = MetricsProviderFactory(
+    metrics_provider = GlobalMetricsProviderFactory(
         metadata__name="prometheus-zone-1",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
@@ -1065,14 +1065,14 @@ async def test_kubernetes_scheduling(aiohttp_server, config, db, loop):
         status__state=ApplicationState.PENDING,
         status__is_scheduled=False,
     )
-    metric = MetricFactory(
+    metric = GlobalMetricFactory(
         metadata__name="heat-demand",
         spec__min=0,
         spec__max=1,
         spec__provider__name="prometheus-zone-1",
         spec__provider__metric="heat_demand_zone_1",
     )
-    metrics_provider = MetricsProviderFactory(
+    metrics_provider = GlobalMetricsProviderFactory(
         metadata__name="prometheus-zone-1",
         spec__type="prometheus",
         spec__prometheus__url=f"http://{prometheus.host}:{prometheus.port}",
@@ -1135,21 +1135,21 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
         status__state=ApplicationState.PENDING,
         status__is_scheduled=False,
     )
-    metric1 = MetricFactory(
+    metric1 = GlobalMetricFactory(
         metadata__name="heat-demand-1",
         spec__min=0,
         spec__max=1,
         spec__provider__name="prometheus",
         spec__provider__metric="heat_demand_1",
     )
-    metric2 = MetricFactory(
+    metric2 = GlobalMetricFactory(
         metadata__name="heat-demand-2",
         spec__min=0,
         spec__max=1,
         spec__provider__name="prometheus",
         spec__provider__metric="heat_demand_2",
     )
-    metrics_provider = MetricsProviderFactory(
+    metrics_provider = GlobalMetricsProviderFactory(
         metadata__name="prometheus",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
@@ -1258,21 +1258,21 @@ async def test_kubernetes_migration_w_update(aiohttp_server, config, db, loop):
         status__state=ApplicationState.PENDING,
         status__is_scheduled=False,
     )
-    metric1 = MetricFactory(
+    metric1 = GlobalMetricFactory(
         metadata__name="heat-demand-1",
         spec__min=0,
         spec__max=1,
         spec__provider__name="prometheus",
         spec__provider__metric="heat_demand_1",
     )
-    metric2 = MetricFactory(
+    metric2 = GlobalMetricFactory(
         metadata__name="heat-demand-2",
         spec__min=0,
         spec__max=1,
         spec__provider__name="prometheus",
         spec__provider__metric="heat_demand_2",
     )
-    metrics_provider = MetricsProviderFactory(
+    metrics_provider = GlobalMetricsProviderFactory(
         metadata__name="prometheus",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
@@ -1357,21 +1357,21 @@ async def test_kubernetes_no_migration(aiohttp_server, config, db, loop):
         status__state=ApplicationState.PENDING,
         status__is_scheduled=False,
     )
-    metric1 = MetricFactory(
+    metric1 = GlobalMetricFactory(
         metadata__name="heat-demand-1",
         spec__min=0,
         spec__max=1,
         spec__provider__name="prometheus",
         spec__provider__metric="heat_demand_1",
     )
-    metric2 = MetricFactory(
+    metric2 = GlobalMetricFactory(
         metadata__name="heat-demand-2",
         spec__min=0,
         spec__max=1,
         spec__provider__name="prometheus",
         spec__provider__metric="heat_demand_2",
     )
-    metrics_provider = MetricsProviderFactory(
+    metrics_provider = GlobalMetricsProviderFactory(
         metadata__name="prometheus",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
@@ -1436,21 +1436,21 @@ async def test_kubernetes_application_update(aiohttp_server, config, db, loop):
         status__state=ApplicationState.PENDING,
         status__is_scheduled=False,
     )
-    metric1 = MetricFactory(
+    metric1 = GlobalMetricFactory(
         metadata__name="heat-demand-1",
         spec__min=0,
         spec__max=1,
         spec__provider__name="prometheus",
         spec__provider__metric="heat_demand_1",
     )
-    metric2 = MetricFactory(
+    metric2 = GlobalMetricFactory(
         metadata__name="heat-demand-2",
         spec__min=0,
         spec__max=1,
         spec__provider__name="prometheus",
         spec__provider__metric="heat_demand_2",
     )
-    metrics_provider = MetricsProviderFactory(
+    metrics_provider = GlobalMetricsProviderFactory(
         metadata__name="prometheus",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
@@ -1532,21 +1532,21 @@ async def test_kubernetes_application_reschedule_no_update(
         status__state=ApplicationState.PENDING,
         status__is_scheduled=False,
     )
-    metric1 = MetricFactory(
+    metric1 = GlobalMetricFactory(
         metadata__name="heat-demand-1",
         spec__min=0,
         spec__max=1,
         spec__provider__name="prometheus",
         spec__provider__metric="heat_demand_1",
     )
-    metric2 = MetricFactory(
+    metric2 = GlobalMetricFactory(
         metadata__name="heat-demand-2",
         spec__min=0,
         spec__max=1,
         spec__provider__name="prometheus",
         spec__provider__metric="heat_demand_2",
     )
-    metrics_provider = MetricsProviderFactory(
+    metrics_provider = GlobalMetricsProviderFactory(
         metadata__name="prometheus",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
@@ -1630,23 +1630,23 @@ async def test_openstack_rank(aiohttp_server, config, db, loop):
         ProjectFactory(spec__metrics=[MetricRef(name="test-metric-2", weight=1.0)]),
     ]
     metrics = [
-        MetricFactory(
+        GlobalMetricFactory(
             metadata__name="test-metric-1",
             spec__provider__name="test-prometheus",
             spec__provider__metric="test_metric_1",
         ),
-        MetricFactory(
+        GlobalMetricFactory(
             metadata__name="test-metric-2",
             spec__provider__name="test-static",
             spec__provider__metric="test_metric_2",
         ),
     ]
-    prometheus_provider = MetricsProviderFactory(
+    prometheus_provider = GlobalMetricsProviderFactory(
         metadata__name="test-prometheus",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
     )
-    static_provider = MetricsProviderFactory(
+    static_provider = GlobalMetricsProviderFactory(
         metadata__name="test-static",
         spec__type="static",
         spec__static__metrics={"test_metric_2": 0.5},
@@ -1750,14 +1750,14 @@ async def test_openstack_rank_multiple_failing_metric(aiohttp_server, db, config
         await db.put(project)
 
     metrics = [
-        MetricFactory(
+        GlobalMetricFactory(
             metadata__name="existent-metric",
             spec__min=0,
             spec__max=1,
             spec__provider__name="my-provider",
             spec__provider__metric="my-metric",
         ),
-        MetricFactory(
+        GlobalMetricFactory(
             metadata__name="also-existent",
             spec__min=0,
             spec__max=1,
@@ -1765,7 +1765,7 @@ async def test_openstack_rank_multiple_failing_metric(aiohttp_server, db, config
             spec__provider__metric="my-other-metric",
         ),
     ]
-    provider = MetricsProviderFactory(
+    provider = GlobalMetricsProviderFactory(
         metadata__name="my-provider",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
@@ -1835,7 +1835,7 @@ async def test_openstack_rank_missing_metrics_provider(
     projects = [ProjectFactory(spec__metrics=[MetricRef(name="my-metric", weight=1)])]
     for project in projects:
         await db.put(project)
-    metric = MetricFactory(
+    metric = GlobalMetricFactory(
         metadata__name="my-metric",
         spec__min=0,
         spec__max=1,
@@ -1886,14 +1886,14 @@ async def test_openstack_rank_failing_metrics_provider(
     projects = [ProjectFactory(spec__metrics=[MetricRef(name="my-metric", weight=1)])]
     for project in projects:
         await db.put(project)
-    metric = MetricFactory(
+    metric = GlobalMetricFactory(
         metadata__name="my-metric",
         spec__min=0,
         spec__max=1,
         spec__provider__name="my-provider",
         spec__provider__metric="my-metric",
     )
-    provider = MetricsProviderFactory(
+    provider = GlobalMetricsProviderFactory(
         metadata__name="my-provider",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
@@ -1927,14 +1927,14 @@ async def test_prefer_projects_with_metrics(aiohttp_server, config, db, loop):
 
     project_miss = ProjectFactory(spec__metrics=[])
     project = ProjectFactory(spec__metrics=[MetricRef(name="heat-demand", weight=1)])
-    metric = MetricFactory(
+    metric = GlobalMetricFactory(
         metadata__name="heat-demand",
         spec__min=0,
         spec__max=1,
         spec__provider__name="prometheus-zone-1",
         spec__provider__metric="my_metric",
     )
-    metrics_provider = MetricsProviderFactory(
+    metrics_provider = GlobalMetricsProviderFactory(
         metadata__name="prometheus-zone-1",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
@@ -2019,14 +2019,14 @@ async def test_openstack_scheduling(aiohttp_server, config, db, loop):
         status__state=MagnumClusterState.PENDING,
         status__is_scheduled=False,
     )
-    metric = MetricFactory(
+    metric = GlobalMetricFactory(
         metadata__name="heat-demand",
         spec__min=0,
         spec__max=1,
         spec__provider__name="prometheus-zone-1",
         spec__provider__metric="heat_demand_zone_1",
     )
-    metrics_provider = MetricsProviderFactory(
+    metrics_provider = GlobalMetricsProviderFactory(
         metadata__name="prometheus-zone-1",
         spec__type="prometheus",
         spec__prometheus__url=f"http://{prometheus.host}:{prometheus.port}",

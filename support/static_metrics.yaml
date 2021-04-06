@@ -9,7 +9,7 @@
 
 
 api: core
-kind: MetricsProvider
+kind: GlobalMetricsProvider
 metadata:
   name: static_provider
 spec:
@@ -27,7 +27,7 @@ spec:
 ######################
 
 api: core
-kind: Metric
+kind: GlobalMetric
 metadata:
   name: electricity_cost_1
 spec:
@@ -40,7 +40,7 @@ spec:
 ---
 
 api: core
-kind: Metric
+kind: GlobalMetric
 metadata:
   name: green_energy_ratio_1
 spec:

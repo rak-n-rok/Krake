@@ -820,8 +820,8 @@ class Scheduler(Controller):
         fetching = []
         for metric_spec in metrics:
             try:
-                metric = await self.core_api.read_metric(name=metric_spec.name)
-                metrics_provider = await self.core_api.read_metrics_provider(
+                metric = await self.core_api.read_global_metric(name=metric_spec.name)
+                metrics_provider = await self.core_api.read_global_metrics_provider(
                     name=metric.spec.provider.name
                 )
                 fetching.append(

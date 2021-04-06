@@ -21,11 +21,11 @@ from .formatters import (
     dict_formatter,
 )
 
-MP_BASE_URL = "/core/metricsprovider"
-METRIC_BASE_URL = "/core/metric"
+GLOBAL_METRICS_PROVIDER_BASE_URL = "/core/globalmetricsproviders"
+GLOBAL_METRIC_BASE_URL = "/core/globalmetrics"
 
 
-class _MetricsProviderType(Enum):
+class _GlobalMetricsProviderType(Enum):
     PROMETHEUS = "prometheus"
     STATIC = "static"
     KAFKA = "kafka"
@@ -34,32 +34,32 @@ class _MetricsProviderType(Enum):
 core = ParserSpec("core", aliases=[], help="Manage core resources")
 
 
-# ################ Managing metrics providers
+# ################ Managing global metrics providers
 
 
-metricsprovider = core.subparser(
-    "metricsprovider", aliases=["mp"], help="Manage metrics providers"
+globalmetricsprovider = core.subparser(
+    "globalmetricsprovider", aliases=["gmp"], help="Manage global metrics providers"
 )
 
 
-class MetricsProviderListTable(BaseTable):
+class GlobalMetricsProviderListTable(BaseTable):
     mp_type = Cell("spec.type", name="type")
 
 
-class MetricsProviderTable(MetricsProviderListTable):
+class GlobalMetricsProviderTable(GlobalMetricsProviderListTable):
     def draw(self, table, data, file):
-        mp_type_str = _MetricsProviderType(data["spec"]["type"])
+        mp_type_str = _GlobalMetricsProviderType(data["spec"]["type"])
 
         mp_attrs = {
-            _MetricsProviderType.PROMETHEUS: {"url": None},
-            _MetricsProviderType.STATIC: {"metrics": dict_formatter},
-            _MetricsProviderType.KAFKA: dict.fromkeys(
+            _GlobalMetricsProviderType.PROMETHEUS: {"url": None},
+            _GlobalMetricsProviderType.STATIC: {"metrics": dict_formatter},
+            _GlobalMetricsProviderType.KAFKA: dict.fromkeys(
                 ["url", "comparison_column", "value_column", "table"]
             ),
         }
 
         try:
-            mp_type = _MetricsProviderType(mp_type_str)
+            mp_type = _GlobalMetricsProviderType(mp_type_str)
         except ValueError:
             mp_type = None
 
@@ -74,76 +74,77 @@ class MetricsProviderTable(MetricsProviderListTable):
         else:
             data["spec"][
                 "type"
-            ] = f"ERROR: invalid metrics provider type: '{mp_type_str}'"
+            ] = f"ERROR: invalid global metrics provider type: '{mp_type_str}'"
 
         super().draw(table, data, file)
 
 
-@metricsprovider.command("list", help="List metrics providers")
+@globalmetricsprovider.command("list", help="List global metrics providers")
 @arg_formatting
 @depends("session")
-@printer(table=MetricsProviderListTable(many=True))
-def list_metricsproviders(session):
-    url = MP_BASE_URL
+@printer(table=GlobalMetricsProviderListTable(many=True))
+def list_globalmetricsproviders(session):
+    url = GLOBAL_METRICS_PROVIDER_BASE_URL
     resp = session.get(url)
     body = resp.json()
     return body["items"]
 
 
-@metricsprovider.command("create", help="Create a metrics provider")
-@argument("--name", required=True, help="Metrics provider name")
+@globalmetricsprovider.command("create", help="Create a global metrics provider")
+@argument("--name", required=True, help="Global metrics provider name")
 @argument(
     "--url",
-    help=f"Metrics provider url. "
-    f"Not valid together with --type {_MetricsProviderType.STATIC}.",
+    help=f"Global metrics provider url. "
+    f"Not valid together with --type {_GlobalMetricsProviderType.STATIC}.",
 )
 @argument(
     "--type",
     dest="mp_type",
     required=True,
-    help=f"Metrics provider type. Valid types: "
-    f"{', '.join(t.value for t in _MetricsProviderType)}",
+    help=f"Global metrics provider type. Valid types: "
+    f"{', '.join(t.value for t in _GlobalMetricsProviderType)}",
 )
 @argument(
     "-m",
     "--metric",
     action=MetricAction,
     dest="metrics",
-    help=f"Metric name and value. Can be specified multiple times. "
-    f"Only valid together with --type {_MetricsProviderType.STATIC}.",
+    help=f"Name and value of a global metric the provider provides. "
+    f"Can be specified multiple times. "
+    f"Only valid together with --type {_GlobalMetricsProviderType.STATIC}.",
 )
 @argument(
     "--table",
-    help=f"Name of the KSQL table. Only valid together with --type "
-    f"{_MetricsProviderType.KAFKA.value}.",
+    help=f"Name of the KSQL table. Only valid together with "
+    f"--type {_GlobalMetricsProviderType.KAFKA.value}.",
 )
 @argument(
     "--comparison-column",
     help=f"Name of the column whose value will be compared to the metric name "
     f"when selecting a metric. Only valid together with --type "
-    f"{_MetricsProviderType.KAFKA.value}.",
+    f"{_GlobalMetricsProviderType.KAFKA.value}.",
 )
 @argument(
     "--value-column",
     help=f"Name of the column where the value of a metric is stored. "
-    f"Only valid together with --type {_MetricsProviderType.KAFKA.value}.",
+    f"Only valid together with --type {_GlobalMetricsProviderType.KAFKA.value}.",
 )
 @arg_formatting
 @depends("session")
-@printer(table=MetricsProviderTable())
-def create_metricsprovider(
+@printer(table=GlobalMetricsProviderTable())
+def create_globalmetricsprovider(
     session, name, url, mp_type, metrics, comparison_column, value_column, table
 ):
-    _validate_for_create_mp(
+    _validate_for_create_gmp(
         mp_type, metrics, url, comparison_column, value_column, table
     )
 
-    mp_type = _MetricsProviderType(mp_type)
-    if mp_type == _MetricsProviderType.PROMETHEUS:
+    mp_type = _GlobalMetricsProviderType(mp_type)
+    if mp_type == _GlobalMetricsProviderType.PROMETHEUS:
         type_dict = {"url": url}
-    elif mp_type == _MetricsProviderType.STATIC:
+    elif mp_type == _GlobalMetricsProviderType.STATIC:
         type_dict = {"metrics": {m["name"]: m["weight"] for m in metrics}}
-    elif mp_type == _MetricsProviderType.KAFKA:
+    elif mp_type == _GlobalMetricsProviderType.KAFKA:
         type_dict = {
             "url": url,
             "comparison_column": comparison_column,
@@ -151,11 +152,11 @@ def create_metricsprovider(
             "table": table,
         }
     else:
-        raise SystemExit(f"Invalid metrics provider type: '{mp_type}'")
+        raise SystemExit(f"Invalid global metrics provider type: '{mp_type}'")
 
     mp = {
         "api": "core",
-        "kind": "MetricsProvider",
+        "kind": "GlobalMetricsProvider",
         "metadata": {
             "name": name,
         },
@@ -165,15 +166,15 @@ def create_metricsprovider(
         },
     }
 
-    resp = session.post(MP_BASE_URL, json=mp)
+    resp = session.post(GLOBAL_METRICS_PROVIDER_BASE_URL, json=mp)
     return resp.json()
 
 
-def _validate_for_create_mp(
+def _validate_for_create_gmp(
     mp_type_str, metrics, url, comparison_column, value_column, table
 ):
     """Validate the provided parameters as input parameters for the
-    create_metricsprovider() method.
+    create_globalmetricsprovider() method.
 
     Args:
         mp_type_str (str): the value provided with the --type argument
@@ -191,48 +192,52 @@ def _validate_for_create_mp(
          SystemExit: if the parameters are invalid
     """
     try:
-        mp_type = _MetricsProviderType(mp_type_str)
+        mp_type = _GlobalMetricsProviderType(mp_type_str)
     except ValueError:
-        raise SystemExit(f"Invalid metrics provider type: '{mp_type_str}'")
+        raise SystemExit(f"Invalid global metrics provider type: '{mp_type_str}'")
 
     required_parameters = {
-        _MetricsProviderType.PROMETHEUS: {
+        _GlobalMetricsProviderType.PROMETHEUS: {
             "url": url,
         },
-        _MetricsProviderType.STATIC: {
+        _GlobalMetricsProviderType.STATIC: {
             "metric": metrics,
         },
-        _MetricsProviderType.KAFKA: {
+        _GlobalMetricsProviderType.KAFKA: {
             "url": url,
             "comparison-column": comparison_column,
             "value-column": value_column,
             "table": table,
         },
     }
-    err_msg_fmt = "Metrics provider type '{mp_type}' requires --{attr} to be specified"
+    err_msg_fmt = (
+        "Global metrics provider type '{mp_type}' " "requires --{attr} to be specified"
+    )
     for var_name, var in required_parameters[mp_type].items():
         if not var:
             raise SystemExit(err_msg_fmt.format(mp_type=mp_type_str, attr=var_name))
 
 
-@metricsprovider.command("get", help="Get a metrics provider")
-@argument("name", help="Metrics provider name")
+@globalmetricsprovider.command("get", help="Get a global metrics provider")
+@argument("name", help="Global metrics provider name")
 @arg_formatting
 @depends("session")
-@printer(table=MetricsProviderTable())
-def get_metricsprovider(session, name):
-    resp = session.get(f"{MP_BASE_URL}/{name}", raise_for_status=False)
+@printer(table=GlobalMetricsProviderTable())
+def get_globalmetricsprovider(session, name):
+    resp = session.get(
+        f"{GLOBAL_METRICS_PROVIDER_BASE_URL}/{name}", raise_for_status=False
+    )
     if resp.status_code == 404:
-        raise SystemExit(f"Error 404: Metrics provider {name!r} not found")
+        raise SystemExit(f"HttpError 404: GlobalMetricsProvider {name!r} not found")
     resp.raise_for_status()
     return resp.json()
 
 
-def _validate_for_update_mp(
+def _validate_for_update_gmp(
     mp_type_str, metrics, url, comparison_column, value_column, table
 ):
     """Validate the provided parameters as input parameters for the
-    update_metricsprovider() method.
+    update_globalmetricsprovider() method.
 
     Args:
         mp_type_str (str): the value provided with the --type argument
@@ -250,56 +255,60 @@ def _validate_for_update_mp(
          SystemExit: if the parameters are invalid
     """
     try:
-        mp_type = _MetricsProviderType(mp_type_str)
+        mp_type = _GlobalMetricsProviderType(mp_type_str)
     except ValueError:
-        raise SystemExit(f"Invalid metrics provider type: '{mp_type_str}'")
+        raise SystemExit(f"Invalid global metrics provider type: '{mp_type_str}'")
 
     required_parameters = {
-        _MetricsProviderType.PROMETHEUS: {
+        _GlobalMetricsProviderType.PROMETHEUS: {
             "url": url,
         },
-        _MetricsProviderType.STATIC: {
+        _GlobalMetricsProviderType.STATIC: {
             "metric": metrics,
         },
-        _MetricsProviderType.KAFKA: {},
+        _GlobalMetricsProviderType.KAFKA: {},
     }
-    err_msg_fmt = "Metrics provider type '{mp_type}' requires --{attr} to be specified"
+    err_msg_fmt = (
+        "Global metrics provider type '{mp_type}' requires --{attr} to be specified"
+    )
     for var_name, var in required_parameters[mp_type].items():
         if not var:
             raise SystemExit(err_msg_fmt.format(mp_type=mp_type_str, attr=var_name))
 
     disallowed_parameters = {
-        _MetricsProviderType.PROMETHEUS: {
+        _GlobalMetricsProviderType.PROMETHEUS: {
             "metric": metrics,
             "comparison-column": comparison_column,
             "value-column": value_column,
             "table": table,
         },
-        _MetricsProviderType.STATIC: {
+        _GlobalMetricsProviderType.STATIC: {
             "url": url,
             "comparison-column": comparison_column,
             "value-column": value_column,
             "table": table,
         },
-        _MetricsProviderType.KAFKA: {
+        _GlobalMetricsProviderType.KAFKA: {
             "metric": metrics,
         },
     }
     err_msg_fmt = (
-        "--{attr} is not a valid argument for metrics providers of type {mp_type}"
+        "--{attr} is not a valid argument for "
+        "global metrics providers of type {mp_type}"
     )
     for var_name, var in disallowed_parameters[mp_type].items():
         if var:
             raise SystemExit(err_msg_fmt.format(mp_type=mp_type_str, attr=var_name))
 
 
-@metricsprovider.command("update", help="Update metrics provider")
-@argument("name", help="Metrics provider name")
+@globalmetricsprovider.command("update", help="Update global metrics provider")
+@argument("name", help="Global metrics provider name")
 @argument(
     "--url",
     dest="mp_url",
-    help=f"Metrics provider url. "
-    f"Not valid for metrics providers of type {_MetricsProviderType.STATIC}",
+    help=f"Global metrics provider url. "
+    f"Not valid for global metrics providers of type "
+    f"{_GlobalMetricsProviderType.STATIC}",
 )
 @argument(
     "--metric",
@@ -307,31 +316,33 @@ def _validate_for_update_mp(
     dest="metrics",
     action=MetricAction,
     help=(
-        f"Metric name and value. Can be specified multiple times. "
-        f"Only valid for metrics providers of type {_MetricsProviderType.STATIC}."
+        f"Name and value of a global metric to be updated. "
+        f"Can be specified multiple times. "
+        f"Only valid for global metrics providers of type "
+        f"{_GlobalMetricsProviderType.STATIC}."
     ),
 )
 @argument(
     "--table",
-    help=f"Name of the KSQL table. Only valid for metrics providers of type "
-    f"{_MetricsProviderType.KAFKA.value}.",
+    help=f"Name of the KSQL table. Only valid for global metrics providers of type "
+    f"{_GlobalMetricsProviderType.KAFKA.value}.",
 )
 @argument(
     "--comparison-column",
     help=f"Name of the column whose value will be compared to the metric name "
-    f"when selecting a metric. Only valid for metrics providers of type "
-    f"{_MetricsProviderType.KAFKA.value}.",
+    f"when selecting a metric. Only valid for global metrics providers of type "
+    f"{_GlobalMetricsProviderType.KAFKA.value}.",
 )
 @argument(
     "--value-column",
     help=f"Name of the column where the value of a metric is stored. "
-    f"Only valid for metrics providers of type "
-    f"{_MetricsProviderType.KAFKA.value}.",
+    f"Only valid for global metrics providers of type "
+    f"{_GlobalMetricsProviderType.KAFKA.value}.",
 )
 @arg_formatting
 @depends("session")
-@printer(table=MetricsProviderTable())
-def update_metricsprovider(
+@printer(table=GlobalMetricsProviderTable())
+def update_globalmetricsprovider(
     session,
     name,
     mp_url,
@@ -340,15 +351,15 @@ def update_metricsprovider(
     value_column,
     table,
 ):
-    url = f"{MP_BASE_URL}/{name}"
+    url = f"{GLOBAL_METRICS_PROVIDER_BASE_URL}/{name}"
     resp = session.get(url, raise_for_status=False)
     if resp.status_code == 404:
-        raise SystemExit(f"HttpError 404: Metrics provider {name!r} not found")
+        raise SystemExit(f"HttpError 404: GlobalMetricsProvider {name!r} not found")
     resp.raise_for_status()
     mp = resp.json()
     mp_type = mp["spec"]["type"]
 
-    _validate_for_update_mp(
+    _validate_for_update_gmp(
         mp_type, metrics, mp_url, comparison_column, value_column, table
     )
 
@@ -372,18 +383,18 @@ def update_metricsprovider(
     return resp.json()
 
 
-@metricsprovider.command("delete", help="Delete metrics provider")
-@argument("name", help="Metrics provider name")
+@globalmetricsprovider.command("delete", help="Delete global metrics provider")
+@argument("name", help="Global metrics provider name")
 @arg_formatting
 @depends("session")
-@printer(table=MetricsProviderTable())
-def delete_metricsprovider(session, name):
+@printer(table=GlobalMetricsProviderTable())
+def delete_globalmetricsprovider(session, name):
     resp = session.delete(
-        f"{MP_BASE_URL}/{name}",
+        f"{GLOBAL_METRICS_PROVIDER_BASE_URL}/{name}",
         raise_for_status=False,
     )
     if resp.status_code == 404:
-        raise SystemExit(f"Error 404: Metrics provider {name!r} not found")
+        raise SystemExit(f"HttpError 404: GlobalMetricsProvider {name!r} not found")
     resp.raise_for_status()
 
     if resp.status_code == 204:
@@ -391,65 +402,67 @@ def delete_metricsprovider(session, name):
     return resp.json()
 
 
-# ################ Managing metrics
+# ################ Managing global metrics
 
 
-metric = core.subparser("metric", help="Manage metrics")
+global_metric = core.subparser(
+    "globalmetric", aliases=["gm"], help="Manage global metrics"
+)
 
 
-class MetricListTable(BaseTable):
+class GlobalMetricListTable(BaseTable):
     provider = Cell("spec.provider.name")
     min = Cell("spec.min")
     max = Cell("spec.max")
 
 
-class MetricTable(MetricListTable):
+class GlobalMetricTable(GlobalMetricListTable):
     pass
 
 
-@metric.command("list", help="List metrics")
+@global_metric.command("list", help="List global metrics")
 @arg_formatting
 @depends("session")
-@printer(table=MetricListTable(many=True))
-def list_metrics(session):
-    resp = session.get(METRIC_BASE_URL)
+@printer(table=GlobalMetricListTable(many=True))
+def list_globalmetrics(session):
+    resp = session.get(GLOBAL_METRIC_BASE_URL)
     body = resp.json()
     return body["items"]
 
 
-@metric.command("create", help="Create a metric")
-@argument("--name", required=True, help="Metric name")
-@argument("--mp-name", required=True, help="Metrics provider name")
-@argument("--min", required=True, help="Metric minimum value")
-@argument("--max", required=True, help="Metric maximum value")
+@global_metric.command("create", help="Create a global metric")
+@argument("--name", required=True, help="Global metric name")
+@argument("--gmp-name", required=True, help="Global metrics provider name")
+@argument("--min", required=True, help="Minimum value of the global metric")
+@argument("--max", required=True, help="Maximum value of the global metric")
 @argument(
     "--metric-name",
-    help="Name of the metric which the metrics provider provides. "
-    "As default the name of the created metric resource is used.",
+    help="Name of the global metric which the global metrics provider provides. "
+    "As default the name of the created global metric resource is used.",
 )
 @arg_formatting
 @depends("session")
-@printer(table=MetricTable())
-def create_metric(session, name, mp_name, min, max, metric_name=None):
-    """Create a Metric resource.
+@printer(table=GlobalMetricTable())
+def create_globalmetric(session, name, gmp_name, min, max, metric_name=None):
+    """Create a GlobalMetric resource.
 
     Args:
         session (requests.Session): the session used to connect to the krake API
-        name (str): Name of the metric
-        mp_name (str): Name of the metrics provider
-        min (str): The minimum value of the metric
-        max (str): The maximum value of the metric
-        metric_name (str): The name used to identify the metric at the endpoint
-            of the metrics provider
+        name (str): Name of the global metric
+        mp_name (str): Name of the global metrics provider
+        min (str): The minimum value of the global metric
+        max (str): The maximum value of the global metric
+        metric_name (str): The name used to identify the global metric at the endpoint
+            of the global metrics provider
 
     Returns:
-        dict(str, object): The created Metric resource in json representation
+        dict(str, object): The created GlobalMetric resource in json representation
     """
     if not metric_name:
         metric_name = name
     metric = {
         "api": "core",
-        "kind": "Metric",
+        "kind": "GlobalMetric",
         "metadata": {
             "name": name,
         },
@@ -458,72 +471,72 @@ def create_metric(session, name, mp_name, min, max, metric_name=None):
             "min": min,
             "provider": {
                 "metric": metric_name,
-                "name": mp_name,
+                "name": gmp_name,
             },
         },
     }
 
-    resp = session.post(METRIC_BASE_URL, json=metric)
+    resp = session.post(GLOBAL_METRIC_BASE_URL, json=metric)
     return resp.json()
 
 
-@metric.command("get", help="Get a metric")
-@argument("name", help="Metric name")
+@global_metric.command("get", help="Get a global metric")
+@argument("name", help="Global metric name")
 @arg_formatting
 @depends("session")
-@printer(table=MetricTable())
-def get_metric(session, name):
-    resp = session.get(f"{METRIC_BASE_URL}/{name}", raise_for_status=False)
+@printer(table=GlobalMetricTable())
+def get_globalmetric(session, name):
+    resp = session.get(f"{GLOBAL_METRIC_BASE_URL}/{name}", raise_for_status=False)
     if resp.status_code == 404:
-        raise SystemExit(f"Error 404: Metric {name!r} not found")
+        raise SystemExit(f"HttpError 404: GlobalMetric {name!r} not found")
     resp.raise_for_status()
     return resp.json()
 
 
-@metric.command("update", help="Update metric")
-@argument("name", help="Metric name")
-@argument("--max", help="Metric maximum value'")
-@argument("--min", help="Metric minimum value'")
-@argument("--mp-name", help="Metrics provider name'")
+@global_metric.command("update", help="Update global metric")
+@argument("name", help="Global metric name")
+@argument("--min", help="Minimum value of the global metric")
+@argument("--max", help="Maximum value of the global metric")
+@argument("--gmp-name", help="Global metrics provider name'")
 @argument(
     "--metric-name",
-    help="Name of the metric which the metrics provider provides. ",
+    help="Name of the global metric which the global metrics provider provides.",
 )
 @arg_formatting
 @depends("session")
-@printer(table=MetricTable())
-def update_metric(session, name, max, min, mp_name, metric_name):
-    """Update a Metric resource.
+@printer(table=GlobalMetricTable())
+def update_globalmetric(session, name, max, min, gmp_name, metric_name):
+    """Update a GlobalMetric resource.
 
     Args:
         session (requests.Session): the session used to connect to the krake API
-        name (str): Name of the metric
-        max (str): The maximum value of the metric
-        min (str): The minimum value of the metric
-        mp_name (str): Name of the metrics provider
-        metric_name (str): The name used to identify the metric at the endpoint
-            of the metrics provider
+        name (str): Name of the global metric
+        max (str): The maximum value of the global metric
+        min (str): The minimum value of the global metric
+        gmp_name (str): Name of the global metrics provider
+        metric_name (str): The name used to identify the global metric at the endpoint
+            of the global metrics provider
 
     Returns:
-        dict(str, object): The updated Metric resource in json representation
+        dict(str, object): The updated GlobalMetric resource in json representation
     """
-    if not (max or min or mp_name or metric_name):
+    if not (max or min or gmp_name or metric_name):
         raise SystemExit(
             "Either --mp-name, --metric-name, --min or --max must be specified."
         )
 
-    url = f"{METRIC_BASE_URL}/{name}"
+    url = f"{GLOBAL_METRIC_BASE_URL}/{name}"
     resp = session.get(url, raise_for_status=False)
     if resp.status_code == 404:
-        raise SystemExit(f"HttpError 404: Metric {name!r} not found")
+        raise SystemExit(f"HttpError 404: GlobalMetric {name!r} not found")
     resp.raise_for_status()
     metric = resp.json()
     if max:
         metric["spec"]["max"] = max
     if min:
         metric["spec"]["min"] = min
-    if mp_name:
-        metric["spec"]["provider"]["name"] = mp_name
+    if gmp_name:
+        metric["spec"]["provider"]["name"] = gmp_name
     if metric_name:
         metric["spec"]["provider"]["metric"] = metric_name
 
@@ -536,15 +549,15 @@ def update_metric(session, name, max, min, mp_name, metric_name):
     return resp.json()
 
 
-@metric.command("delete", help="Delete metric")
-@argument("name", help="Metric name")
+@global_metric.command("delete", help="Delete global metric")
+@argument("name", help="Global metric name")
 @arg_formatting
 @depends("session")
-@printer(table=MetricTable())
-def delete_metric(session, name):
-    resp = session.delete(f"{METRIC_BASE_URL}/{name}", raise_for_status=False)
+@printer(table=GlobalMetricTable())
+def delete_globalmetric(session, name):
+    resp = session.delete(f"{GLOBAL_METRIC_BASE_URL}/{name}", raise_for_status=False)
     if resp.status_code == 404:
-        raise SystemExit(f"Error 404: Metric {name!r} not found")
+        raise SystemExit(f"HttpError 404: GlobalMetric {name!r} not found")
     resp.raise_for_status()
 
     if resp.status_code == 204:

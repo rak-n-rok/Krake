@@ -13,10 +13,10 @@ from krake.data.core import (
     RoleBinding,
     Reason,
     ReasonCode,
-    Metric,
+    GlobalMetric,
     MetricSpec,
     MetricSpecProvider,
-    MetricsProvider,
+    GlobalMetricsProvider,
     MetricsProviderSpec,
     PrometheusSpec,
     StaticSpec,
@@ -165,9 +165,9 @@ class MetricSpecFactory(Factory):
     provider = SubFactory(MetricSpecProviderFactory)
 
 
-class MetricFactory(Factory):
+class GlobalMetricFactory(Factory):
     class Meta:
-        model = Metric
+        model = GlobalMetric
 
     metadata = SubFactory(MetadataFactory)
     spec = SubFactory(MetricSpecFactory)
@@ -237,9 +237,9 @@ class MetricsProviderSpecFactory(Factory):
         return model_class(*args, **kwargs)
 
 
-class MetricsProviderFactory(Factory):
+class GlobalMetricsProviderFactory(Factory):
     class Meta:
-        model = MetricsProvider
+        model = GlobalMetricsProvider
 
     metadata = SubFactory(MetadataFactory)
     spec = SubFactory(MetricsProviderSpecFactory)

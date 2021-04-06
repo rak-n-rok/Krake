@@ -285,19 +285,19 @@ class MetricSpec(Serializable):
     provider: MetricSpecProvider
 
 
-@persistent("/core/metric/{name}")
-class Metric(ApiObject):
+@persistent("/core/globalmetrics/{name}")
+class GlobalMetric(ApiObject):
     api: str = "core"
-    kind: str = "Metric"
+    kind: str = "GlobalMetric"
     metadata: Metadata
     spec: MetricSpec
 
 
-class MetricList(ApiObject):
+class GlobalMetricList(ApiObject):
     api: str = "core"
-    kind: str = "MetricList"
+    kind: str = "GlobalMetricList"
     metadata: ListMetadata
-    items: List[Metric]
+    items: List[GlobalMetric]
 
 
 class MetricsProviderSpec(PolymorphicContainer):
@@ -334,19 +334,19 @@ class StaticSpec(Serializable):
     metrics: Dict[str, float]
 
 
-@persistent("/core/metricsprovider/{name}")
-class MetricsProvider(ApiObject):
+@persistent("/core/globalmetricsproviders/{name}")
+class GlobalMetricsProvider(ApiObject):
     api: str = "core"
-    kind: str = "MetricsProvider"
+    kind: str = "GlobalMetricsProvider"
     metadata: Metadata
     spec: MetricsProviderSpec
 
 
-class MetricsProviderList(ApiObject):
+class GlobalMetricsProviderList(ApiObject):
     api: str = "core"
-    kind: str = "MetricsProviderList"
+    kind: str = "GlobalMetricsProviderList"
     metadata: ListMetadata
-    items: List[MetricsProvider]
+    items: List[GlobalMetricsProvider]
 
 
 class MetricRef(Serializable):

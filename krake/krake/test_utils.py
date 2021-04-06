@@ -140,7 +140,7 @@ def make_prometheus(metrics):
                 raise ValueError("'metrics' must be a dictionary")
             metrics = body["metrics"]
             if not isinstance(metrics, dict):
-                raise ValueError("Metric must be a dictionary")
+                raise ValueError("Metrics must be a dictionary")
             for value in metrics.values():
                 if not isinstance(value, list):
                     raise ValueError("Metric values must be a list")
