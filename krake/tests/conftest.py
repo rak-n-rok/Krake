@@ -386,7 +386,7 @@ def keystone():
         ]
         with subprocess.Popen(command) as proc:
             try:
-                wait_for_url(f"http://{host}:{port}/v3")
+                wait_for_url(f"http://{host}:{port}/v3", timeout=7)
                 info = KeystoneInfo(
                     host=host,
                     port=port,
