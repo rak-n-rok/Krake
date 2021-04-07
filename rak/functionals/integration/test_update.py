@@ -19,12 +19,14 @@ import yaml
 from utils import (
     run,
     Environment,
-    create_simple_environment,
     check_return_code,
     check_spec_container_image,
     check_spec_replicas,
     check_http_code_in_output,
+)
+from resource_definitions import (
     ClusterDefinition,
+    create_simple_environment,
     ResourceKind,
 )
 

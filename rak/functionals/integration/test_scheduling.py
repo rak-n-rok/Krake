@@ -38,21 +38,23 @@ Test constraints, metrics and metrics providers are globally defined as follows:
     `heat_demand_zone_unreachable`.
 """
 
+import random
 import time
 from utils import (
     Environment,
     run,
     check_empty_list,
     check_return_code,
-    create_simple_environment,
-    create_default_environment,
     create_cluster_info,
     get_other_cluster,
+)
+from resource_definitions import (
+    create_simple_environment,
+    create_default_environment,
+    ResourceKind,
     CLUSTERS_CONFIGS,
     MANIFEST_PATH,
-    ResourceKind,
 )
-import random
 
 METRICS = [
     "heat_demand_zone_1",
