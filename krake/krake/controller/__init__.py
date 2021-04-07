@@ -17,7 +17,7 @@ from contextlib import suppress
 from krake.data.core import WatchEventType, resource_ref
 from yarl import URL
 import ssl
-from aiohttp import ClientConnectorError
+from aiohttp import ClientError
 
 from krake.client import Client
 
@@ -235,7 +235,7 @@ class Reflector(object):
 
     Args:
         listing (coroutine): the coroutine used to get the list of resources currently
-            stored by the API. Its signature is: ``() -> ApplicationList``.
+            stored by the API. Its signature is: ``() -> <Resource>List``.
         watching (coroutine): the coroutine used to watch updates on the resources, as
             as sent by the API. Its signature is: ``() -> watching object``. This
             watching object should be able to be used as context manager, and as
@@ -345,7 +345,8 @@ class Reflector(object):
             start = self.loop.time()
             try:
                 await self.list_and_watch()
-            except ClientConnectorError as err:
+            except ClientError as err:
+                # Catch every kind of errors raised by aiohttp.
                 logger.error(err)
 
             elapsed = self.loop.time() - start
@@ -547,7 +548,7 @@ class Controller(object):
     async def cleanup(self):
         """Unregister all background tasks that are attributes
         """
-        raise NotImplementedError("Implement clean_background_tasks")
+        raise NotImplementedError("Implement cleanup")
 
     def create_endpoint(self, api_endpoint):
         """Ensure the scheme (HTTP/HTTPS) of the endpoint to connect to the
