@@ -778,3 +778,14 @@ class ClusterDefinition(ResourceDefinition):
         """
         cluster_dict = self.get_resource()
         return cluster_dict["status"]["metrics_reasons"]
+
+    def get_metrics(self):
+        """Run the command for getting the cluster and return its metrics.
+
+        Returns:
+            list[dict[str, str]]: list of metrics, where each metric is a dict with
+                its name under the key 'name', and its value under the key 'weight'.
+
+        """
+        cluster_dict = self.get_resource()
+        return cluster_dict["spec"]["metrics"]

@@ -14,9 +14,11 @@ from krake.data.core import (
     Reason,
     ReasonCode,
     GlobalMetric,
+    Metric,
     MetricSpec,
     MetricSpecProvider,
     GlobalMetricsProvider,
+    MetricsProvider,
     MetricsProviderSpec,
     PrometheusSpec,
     StaticSpec,
@@ -189,6 +191,14 @@ class MetricSpecFactory(Factory):
     provider = SubFactory(MetricSpecProviderFactory)
 
 
+class MetricFactory(Factory):
+    class Meta:
+        model = Metric
+
+    metadata = SubFactory(MetadataFactory)
+    spec = SubFactory(MetricSpecFactory)
+
+
 class GlobalMetricFactory(BaseNonNamespaced, Factory):
     class Meta:
         model = GlobalMetric
@@ -261,6 +271,14 @@ class MetricsProviderSpecFactory(Factory):
         return model_class(*args, **kwargs)
 
 
+class MetricsProviderFactory(Factory):
+    class Meta:
+        model = MetricsProvider
+
+    metadata = SubFactory(MetadataFactory)
+    spec = SubFactory(MetricsProviderSpecFactory)
+
+
 class GlobalMetricsProviderFactory(BaseNonNamespaced, Factory):
     class Meta:
         model = GlobalMetricsProvider
@@ -275,3 +293,4 @@ class MetricRefFactory(Factory):
 
     weight = fuzzy.FuzzyFloat(0, 1.0)
     name = fuzzy.FuzzyAttribute(fake.word)
+    namespaced = False

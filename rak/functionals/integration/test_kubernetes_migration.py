@@ -15,8 +15,8 @@ Test constraints, metrics and metrics providers are globally defined as follows:
 
     Cluster metrics and metrics provider were initialized by
     bootstrapping (see: `krake_bootstrap_db`) `support/static_metrics.yaml`.
-    This defines two valid metrics and one valid metrics provider as follows:
-        metrics:
+    This defines three valid metrics and two valid metrics providers as follows:
+        global metrics:
             electricity_cost_1:
                 max: 1.0
                 min: 0.0
@@ -28,8 +28,18 @@ Test constraints, metrics and metrics providers are globally defined as follows:
                 provider:
                     static_provider
 
-        metrics_provider:
+        namespaced metrics:
+            existing_namespaced_metric:
+                max: 1.0
+                min: 0.0
+                provider:
+                    static_provider_w_namespace
+
+        global metrics providers:
             static_provider
+
+        namespaced metrics providers:
+            static_provider_w_namespace
 
     The configured stickiness is assumed to be 0.1.
 
@@ -47,6 +57,7 @@ from utils import (
     set_static_metrics,
     get_static_metrics,
     get_other_cluster,
+    GLOBAL_STATIC_METRICS,
 )
 from environment import Environment, create_default_environment
 from resource_definitions import ResourceKind
@@ -57,7 +68,7 @@ GIT_DIR = "git/krake"
 TEST_DIR = "rak/functionals"
 CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
 MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}"
-METRICS = ["electricity_cost_1", "green_energy_ratio_1"]
+METRICS = GLOBAL_STATIC_METRICS
 COUNTRY_CODES = [
     l1 + l2
     for l1, l2 in itertools.product(string.ascii_uppercase, string.ascii_uppercase)

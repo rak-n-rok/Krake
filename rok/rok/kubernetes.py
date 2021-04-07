@@ -19,6 +19,7 @@ from .parser import (
     arg_labels,
     arg_namespace,
     arg_metric,
+    arg_global_metric,
 )
 from .fixtures import depends
 from .formatters import (
@@ -503,13 +504,22 @@ def create_cluster_config(kubeconfig, context_name=None):
 )
 @arg_custom_resources
 @arg_metric
+@arg_global_metric
 @arg_namespace
 @arg_labels
 @arg_formatting
 @depends("config", "session")
 @printer(table=ClusterTable(many=False))
 def create_cluster(
-    config, session, namespace, kubeconfig, context, metrics, labels, custom_resources
+    config,
+    session,
+    namespace,
+    kubeconfig,
+    context,
+    metrics,
+    global_metrics,
+    labels,
+    custom_resources,
 ):
     if namespace is None:
         namespace = config["user"]
@@ -520,7 +530,7 @@ def create_cluster(
         "metadata": {"name": cluster_name, "labels": labels},
         "spec": {
             "kubeconfig": cluster_config,
-            "metrics": metrics,
+            "metrics": metrics + global_metrics,
             "custom_resources": custom_resources,
         },
     }

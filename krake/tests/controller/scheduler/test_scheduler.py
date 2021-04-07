@@ -32,7 +32,12 @@ from krake.data.openstack import (
 from krake.test_utils import server_endpoint, make_prometheus, with_timeout
 
 from tests.factories import fake
-from tests.factories.core import GlobalMetricsProviderFactory, GlobalMetricFactory
+from tests.factories.core import (
+    GlobalMetricsProviderFactory,
+    MetricsProviderFactory,
+    GlobalMetricFactory,
+    MetricFactory,
+)
 from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
 from tests.factories.openstack import MagnumClusterFactory, ProjectFactory
 
@@ -317,11 +322,28 @@ def test_kubernetes_match_empty_cluster_constraints():
 
 async def test_kubernetes_score(aiohttp_server, config, db, loop):
     prometheus = await aiohttp_server(make_prometheus({"test_metric_1": ["0.42"]}))
+    global_prometheus = await aiohttp_server(
+        make_prometheus({"test_metric_1": ["0.42"]})
+    )
 
     app = ApplicationFactory(status__is_scheduled=False)
     clusters = [
-        ClusterFactory(spec__metrics=[MetricRef(name="test-metric-1", weight=1.0)]),
-        ClusterFactory(spec__metrics=[MetricRef(name="test-metric-2", weight=1.0)]),
+        ClusterFactory(
+            spec__metrics=[
+                MetricRef(name="test-metric-1", weight=1.0, namespaced=False)
+            ]
+        ),
+        ClusterFactory(
+            spec__metrics=[
+                MetricRef(name="test-metric-2", weight=1.0, namespaced=False)
+            ]
+        ),
+        ClusterFactory(
+            spec__metrics=[MetricRef(name="test-metric-1", weight=1.0, namespaced=True)]
+        ),
+        ClusterFactory(
+            spec__metrics=[MetricRef(name="test-metric-2", weight=1.0, namespaced=True)]
+        ),
     ]
     metrics = [
         GlobalMetricFactory(
@@ -334,23 +356,45 @@ async def test_kubernetes_score(aiohttp_server, config, db, loop):
             spec__provider__name="test-static",
             spec__provider__metric="test_metric_2",
         ),
+        MetricFactory(
+            metadata__name="test-metric-1",
+            spec__provider__name="test-prometheus",
+            spec__provider__metric="test_metric_1",
+        ),
+        MetricFactory(
+            metadata__name="test-metric-2",
+            spec__provider__name="test-static",
+            spec__provider__metric="test_metric_2",
+        ),
     ]
-    prometheus_provider = GlobalMetricsProviderFactory(
-        metadata__name="test-prometheus",
-        spec__type="prometheus",
-        spec__prometheus__url=server_endpoint(prometheus),
-    )
-    static_provider = GlobalMetricsProviderFactory(
-        metadata__name="test-static",
-        spec__type="static",
-        spec__static__metrics={"test_metric_2": 0.5},
-    )
+    providers = [
+        MetricsProviderFactory(
+            metadata__name="test-prometheus",
+            spec__type="prometheus",
+            spec__prometheus__url=server_endpoint(prometheus),
+        ),
+        MetricsProviderFactory(
+            metadata__name="test-static",
+            spec__type="static",
+            spec__static__metrics={"test_metric_2": 0.5},
+        ),
+        GlobalMetricsProviderFactory(
+            metadata__name="test-prometheus",
+            spec__type="prometheus",
+            spec__prometheus__url=server_endpoint(global_prometheus),
+        ),
+        GlobalMetricsProviderFactory(
+            metadata__name="test-static",
+            spec__type="static",
+            spec__static__metrics={"test_metric_2": 0.5},
+        ),
+    ]
 
     for metric in metrics:
         await db.put(metric)
 
-    await db.put(prometheus_provider)
-    await db.put(static_provider)
+    for provider in providers:
+        await db.put(provider)
 
     server = await aiohttp_server(create_app(config))
 
@@ -368,10 +412,12 @@ async def test_kubernetes_score(aiohttp_server, config, db, loop):
 
 async def test_kubernetes_score_sticky(aiohttp_server, config, db, loop):
     cluster_A = ClusterFactory(
-        metadata__name="A", spec__metrics=[MetricRef(name="metric-1", weight=1.0)]
+        metadata__name="A",
+        spec__metrics=[MetricRef(name="metric-1", weight=1.0, namespaced=False)],
     )
     cluster_B = ClusterFactory(
-        metadata__name="B", spec__metrics=[MetricRef(name="metric-1", weight=1.0)]
+        metadata__name="B",
+        spec__metrics=[MetricRef(name="metric-1", weight=1.0, namespaced=False)],
     )
 
     scheduled_app = ApplicationFactory(
@@ -439,10 +485,20 @@ async def test_kubernetes_score_missing_metric(aiohttp_server, db, config, loop)
     referenced in a Cluster but not present in the database.
     """
     app = ApplicationFactory(status__is_scheduled=False)
-    cluster = ClusterFactory(
-        spec__metrics=[MetricRef(name="non-existent-metric", weight=1)]
-    )
-    await db.put(cluster)
+    clusters = [
+        ClusterFactory(
+            spec__metrics=[
+                MetricRef(name="non-existent-metric", weight=1, namespaced=False)
+            ]
+        ),
+        ClusterFactory(
+            spec__metrics=[
+                MetricRef(name="non-existent-metric", weight=1, namespaced=True)
+            ]
+        ),
+    ]
+    for cluster in clusters:
+        await db.put(cluster)
 
     server = await aiohttp_server(create_app(config))
 
@@ -453,14 +509,17 @@ async def test_kubernetes_score_missing_metric(aiohttp_server, db, config, loop)
 
     assert len(scored) == 0
 
-    stored_cluster = await db.get(
-        Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
-    )
-    assert stored_cluster.status.state == ClusterState.FAILING_METRICS
-    assert len(stored_cluster.status.metrics_reasons) == 1
+    for cluster in clusters:
+        stored_cluster = await db.get(
+            Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        )
+        assert stored_cluster.status.state == ClusterState.FAILING_METRICS
+        assert len(stored_cluster.status.metrics_reasons) == 1
 
-    single_metric_reason = stored_cluster.status.metrics_reasons["non-existent-metric"]
-    assert single_metric_reason.code == ReasonCode.UNKNOWN_METRIC
+        single_metric_reason = stored_cluster.status.metrics_reasons[
+            "non-existent-metric"
+        ]
+        assert single_metric_reason.code == ReasonCode.UNKNOWN_METRIC
 
 
 async def test_kubernetes_score_missing_metrics_provider(
@@ -471,18 +530,35 @@ async def test_kubernetes_score_missing_metrics_provider(
     present in the database.
     """
     app = ApplicationFactory(status__is_scheduled=False)
-    clusters = [ClusterFactory(spec__metrics=[MetricRef(name="my-metric", weight=1)])]
+    clusters = [
+        ClusterFactory(
+            spec__metrics=[MetricRef(name="my-metric", weight=1, namespaced=False)]
+        ),
+        ClusterFactory(
+            spec__metrics=[MetricRef(name="my-metric", weight=1, namespaced=True)]
+        ),
+    ]
     for cluster in clusters:
         await db.put(cluster)
 
-    metric = GlobalMetricFactory(
-        metadata__name="my-metric",
-        spec__min=0,
-        spec__max=1,
-        spec__provider__name="non-existent-provider",
-        spec__provider__metric="non-existent-metric",
-    )
-    await db.put(metric)
+    metrics = [
+        GlobalMetricFactory(
+            metadata__name="my-metric",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="non-existent-provider",
+            spec__provider__metric="non-existent-metric",
+        ),
+        MetricFactory(
+            metadata__name="my-metric",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="non-existent-provider",
+            spec__provider__metric="non-existent-metric",
+        ),
+    ]
+    for metric in metrics:
+        await db.put(metric)
 
     server = await aiohttp_server(create_app(config))
 
@@ -493,16 +569,16 @@ async def test_kubernetes_score_missing_metrics_provider(
 
     assert len(scored) == 0
 
-    cluster = clusters[0]
-    stored_cluster = await db.get(
-        Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
-    )
-    assert stored_cluster.status.state == ClusterState.FAILING_METRICS
-    assert len(stored_cluster.status.metrics_reasons) == 1
-    assert (
-        stored_cluster.status.metrics_reasons["my-metric"].code
-        == ReasonCode.UNKNOWN_METRICS_PROVIDER
-    )
+    for cluster in clusters:
+        stored_cluster = await db.get(
+            Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        )
+        assert stored_cluster.status.state == ClusterState.FAILING_METRICS
+        assert len(stored_cluster.status.metrics_reasons) == 1
+        assert (
+            stored_cluster.status.metrics_reasons["my-metric"].code
+            == ReasonCode.UNKNOWN_METRICS_PROVIDER
+        )
 
 
 async def test_kubernetes_score_multiple_failing_metric(
@@ -534,14 +610,14 @@ async def test_kubernetes_score_multiple_failing_metric(
     clusters = [
         ClusterFactory(
             spec__metrics=[
-                MetricRef(name="non-existent-metric", weight=1),
-                MetricRef(name="existent-metric", weight=1),
+                MetricRef(name="non-existent-metric", weight=1, namespaced=False),
+                MetricRef(name="existent-metric", weight=1, namespaced=False),
             ]
         ),
         ClusterFactory(
             spec__metrics=[
-                MetricRef(name="also-existent", weight=1),
-                MetricRef(name="again-non-existent", weight=1),
+                MetricRef(name="also-existent", weight=1, namespaced=False),
+                MetricRef(name="again-non-existent", weight=1, namespaced=False),
             ]
         ),
     ]
@@ -641,10 +717,14 @@ async def test_kubernetes_score_failing_metrics_provider(
     prometheus = await aiohttp_server(prometheus_app)
 
     app = ApplicationFactory(status__is_scheduled=False)
-    clusters = [ClusterFactory(spec__metrics=[MetricRef(name="my-metric", weight=1)])]
+    clusters = [
+        ClusterFactory(
+            spec__metrics=[MetricRef(name="my-metric", weight=1, namespaced=True)]
+        )
+    ]
     await db.put(clusters[0])
     metrics = [
-        GlobalMetricFactory(
+        MetricFactory(
             metadata__name="my-metric",
             spec__min=0,
             spec__max=1,
@@ -652,7 +732,7 @@ async def test_kubernetes_score_failing_metrics_provider(
             spec__provider__metric="my-metric",
         )
     ]
-    provider = GlobalMetricsProviderFactory(
+    provider = MetricsProviderFactory(
         metadata__name="my-provider",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
@@ -682,11 +762,15 @@ async def test_kubernetes_score_failing_metrics_provider(
     )
 
 
-async def test_kubernetes_prefer_cluster_with_metrics(aiohttp_server, config, db, loop):
+async def test_kubernetes_prefer_cluster_with_global_metrics(
+    aiohttp_server, config, db, loop
+):
     prometheus = await aiohttp_server(make_prometheus({"my_metric": ["0.4"]}))
 
     cluster_miss = ClusterFactory(spec__metrics=[])
-    cluster = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand", weight=1)])
+    cluster = ClusterFactory(
+        spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)]
+    )
     metric = GlobalMetricFactory(
         metadata__name="heat-demand",
         spec__min=0,
@@ -695,6 +779,47 @@ async def test_kubernetes_prefer_cluster_with_metrics(aiohttp_server, config, db
         spec__provider__metric="my_metric",
     )
     metrics_provider = GlobalMetricsProviderFactory(
+        metadata__name="prometheus-zone-1",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=False,
+        spec__constraints=None,
+    )
+    await db.put(metric)
+    await db.put(metrics_provider)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        selected = await scheduler.select_kubernetes_cluster(
+            app, (cluster_miss, cluster)
+        )
+
+    assert selected == cluster
+
+
+async def test_kubernetes_prefer_cluster_with_namespaced_metrics(
+    aiohttp_server, config, db, loop
+):
+    prometheus = await aiohttp_server(make_prometheus({"my_metric": ["0.4"]}))
+
+    cluster_miss = ClusterFactory(spec__metrics=[])
+    cluster = ClusterFactory(
+        spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=True)]
+    )
+    metric = MetricFactory(
+        metadata__name="heat-demand",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus-zone-1",
+        spec__provider__metric="my_metric",
+    )
+    metrics_provider = MetricsProviderFactory(
         metadata__name="prometheus-zone-1",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
@@ -815,27 +940,49 @@ async def test_kubernetes_select_cluster_all_unreachable_metric(
 ):
     """Test scheduler picks a cluster even if all metrics providers are unreachable"""
     clusters = [
-        ClusterFactory(spec__metrics=[MetricRef(name="unreachable", weight=1)]),
-        ClusterFactory(spec__metrics=[MetricRef(name="unreachable", weight=0.1)]),
+        ClusterFactory(
+            spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=False)]
+        ),
+        ClusterFactory(
+            spec__metrics=[MetricRef(name="unreachable", weight=0.1, namespaced=True)]
+        ),
     ]
     for cluster in clusters:
         await db.put(cluster)
 
-    metric = GlobalMetricFactory(
-        metadata__name="unreachable",
-        spec__min=0,
-        spec__max=1,
-        spec__provider__name="my-provider",
-        spec__provider__metric="my-metric",
-    )
-    provider = GlobalMetricsProviderFactory(
-        metadata__name="my-provider",
-        spec__type="prometheus",
-        spec__prometheus__url="http://dummyurl",
-    )
+    metrics = [
+        GlobalMetricFactory(
+            metadata__name="unreachable",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="my-provider",
+            spec__provider__metric="my-metric",
+        ),
+        MetricFactory(
+            metadata__name="unreachable",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="my-provider",
+            spec__provider__metric="my-metric",
+        ),
+    ]
+    providers = [
+        GlobalMetricsProviderFactory(
+            metadata__name="my-provider",
+            spec__type="prometheus",
+            spec__prometheus__url="http://dummyurl",
+        ),
+        MetricsProviderFactory(
+            metadata__name="my-provider",
+            spec__type="prometheus",
+            spec__prometheus__url="http://dummyurl",
+        ),
+    ]
 
-    await db.put(metric)
-    await db.put(provider)
+    for metric in metrics:
+        await db.put(metric)
+    for provider in providers:
+        await db.put(provider)
 
     random.shuffle(clusters)
 
@@ -861,10 +1008,10 @@ async def test_kubernetes_select_cluster_some_unreachable_metric(
 
     cluster_wo_metric = ClusterFactory(spec__metrics=[])
     cluster_w_unreachable = ClusterFactory(
-        spec__metrics=[MetricRef(name="unreachable", weight=1)]
+        spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=False)]
     )
     cluster_w_metric = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand", weight=1)]
+        spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)]
     )
     await db.put(cluster_w_metric)
     await db.put(cluster_wo_metric)
@@ -909,10 +1056,10 @@ async def test_kubernetes_select_cluster_sticky_all_unreachable_metric(
     cluster_wo_metric = ClusterFactory(spec__metrics=[])
     current_wo_metric = ClusterFactory(spec__metrics=[])
     cluster1_w_metric = ClusterFactory(
-        spec__metrics=[MetricRef(name="unreachable", weight=1)]
+        spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=False)]
     )
     cluster2_w_metric = ClusterFactory(
-        spec__metrics=[MetricRef(name="unreachable", weight=1)]
+        spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=True)]
     )
     clusters = [
         cluster_wo_metric,
@@ -924,21 +1071,38 @@ async def test_kubernetes_select_cluster_sticky_all_unreachable_metric(
     for cluster in clusters:
         await db.put(cluster)
 
-    metric = GlobalMetricFactory(
-        metadata__name="unreachable",
-        spec__min=0,
-        spec__max=1,
-        spec__provider__name="my-provider",
-        spec__provider__metric="my-metric",
-    )
-    provider = GlobalMetricsProviderFactory(
-        metadata__name="my-provider",
-        spec__type="prometheus",
-        spec__prometheus__url="http://dummyurl",
-    )
-
-    await db.put(metric)
-    await db.put(provider)
+    metrics = [
+        GlobalMetricFactory(
+            metadata__name="unreachable",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="my-provider",
+            spec__provider__metric="my-metric",
+        ),
+        MetricFactory(
+            metadata__name="unreachable",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="my-provider",
+            spec__provider__metric="my-metric",
+        ),
+    ]
+    providers = [
+        GlobalMetricsProviderFactory(
+            metadata__name="my-provider",
+            spec__type="prometheus",
+            spec__prometheus__url="http://dummyurl",
+        ),
+        MetricsProviderFactory(
+            metadata__name="my-provider",
+            spec__type="prometheus",
+            spec__prometheus__url="http://dummyurl",
+        ),
+    ]
+    for metric in metrics:
+        await db.put(metric)
+    for provider in providers:
+        await db.put(provider)
 
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING,
@@ -967,14 +1131,14 @@ async def test_kubernetes_select_cluster_sticky_others_with_metric(
     cluster_wo_metric = ClusterFactory(spec__metrics=[])
     cluster_w_metric1 = ClusterFactory(
         spec__metrics=[
-            MetricRef(name="heat-demand", weight=0.9),
-            MetricRef(name="some-metric", weight=1),
+            MetricRef(name="heat-demand", weight=0.9, namespaced=False),
+            MetricRef(name="some-metric", weight=1, namespaced=False),
         ]
     )
     cluster_w_metric2 = ClusterFactory(
         spec__metrics=[
-            MetricRef(name="heat-demand", weight=0.5),
-            MetricRef(name="some-metric", weight=1),
+            MetricRef(name="heat-demand", weight=0.5, namespaced=False),
+            MetricRef(name="some-metric", weight=1, namespaced=False),
         ]
     )
     clusters = [
@@ -1032,10 +1196,10 @@ async def test_kubernetes_select_cluster_sticky_reachable_metric(
 
     cluster_wo_metric = ClusterFactory(spec__metrics=[])
     current_w_metric = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand", weight=0.99)]
+        spec__metrics=[MetricRef(name="heat-demand", weight=0.99, namespaced=False)]
     )
     cluster_w_metric = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand", weight=1)]
+        spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)]
     )
 
     clusters = [cluster_wo_metric, current_w_metric, cluster_w_metric]
@@ -1078,10 +1242,10 @@ async def test_kubernetes_select_cluster_sticky_to_unreachable_all_unreachable_m
     """Test that also clusters with unreachable metrics providers are considered"""
     cluster_wo_metric = ClusterFactory(spec__metrics=[])
     current_w_unreachable = ClusterFactory(
-        spec__metrics=[MetricRef(name="unreachable", weight=0.99)]
+        spec__metrics=[MetricRef(name="unreachable", weight=0.99, namespaced=False)]
     )
     cluster_w_unreachable = ClusterFactory(
-        spec__metrics=[MetricRef(name="unreachable", weight=1)]
+        spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=False)]
     )
     clusters = [cluster_wo_metric, current_w_unreachable, cluster_w_unreachable]
     for cluster in clusters:
@@ -1129,10 +1293,10 @@ async def test_kubernetes_select_cluster_sticky_unreachable_metric(
 
     cluster_wo_metric = ClusterFactory(spec__metrics=[])
     current_w_unreachable = ClusterFactory(
-        spec__metrics=[MetricRef(name="unreachable", weight=1)]
+        spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=False)]
     )
     cluster_w_metric = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand", weight=1)]
+        spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)]
     )
     clusters = [cluster_wo_metric, current_w_unreachable, cluster_w_metric]
     random.shuffle(clusters)
@@ -1174,7 +1338,9 @@ async def test_kubernetes_select_cluster_sticky_unreachable_metric(
 async def test_kubernetes_scheduling(aiohttp_server, config, db, loop):
     prometheus = await aiohttp_server(make_prometheus({"heat_demand_zone_1": ["0.25"]}))
 
-    cluster = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand", weight=1)])
+    cluster = ClusterFactory(
+        spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)]
+    )
     app = ApplicationFactory(
         spec__constraints__cluster__labels=[],
         spec__constraints__cluster__custom_resources=[],
@@ -1242,8 +1408,12 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
         )
     )
 
-    cluster1 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-1", weight=1)])
-    cluster2 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-2", weight=1)])
+    cluster1 = ClusterFactory(
+        spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)]
+    )
+    cluster2 = ClusterFactory(
+        spec__metrics=[MetricRef(name="heat-demand-2", weight=1, namespaced=False)]
+    )
     app = ApplicationFactory(
         metadata__modified=datetime.now(timezone.utc),
         spec__constraints__cluster__labels=[],
@@ -1365,8 +1535,12 @@ async def test_kubernetes_migration_w_update(aiohttp_server, config, db, loop):
         )
     )
 
-    cluster1 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-1", weight=1)])
-    cluster2 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-2", weight=1)])
+    cluster1 = ClusterFactory(
+        spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)]
+    )
+    cluster2 = ClusterFactory(
+        spec__metrics=[MetricRef(name="heat-demand-2", weight=1, namespaced=False)]
+    )
     app = ApplicationFactory(
         metadata__modified=datetime.now(timezone.utc),
         spec__constraints__cluster__labels=[],
@@ -1463,8 +1637,12 @@ async def test_kubernetes_no_migration(aiohttp_server, config, db, loop):
         )
     )
 
-    cluster1 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-1", weight=1)])
-    cluster2 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-2", weight=1)])
+    cluster1 = ClusterFactory(
+        spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)]
+    )
+    cluster2 = ClusterFactory(
+        spec__metrics=[MetricRef(name="heat-demand-2", weight=1, namespaced=False)]
+    )
     app = ApplicationFactory(
         metadata__modified=datetime.now(timezone.utc),
         spec__constraints__cluster__labels=[],
@@ -1543,8 +1721,12 @@ async def test_kubernetes_application_update(aiohttp_server, config, db, loop):
         )
     )
 
-    cluster1 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-1", weight=1)])
-    cluster2 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-2", weight=1)])
+    cluster1 = ClusterFactory(
+        spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)]
+    )
+    cluster2 = ClusterFactory(
+        spec__metrics=[MetricRef(name="heat-demand-2", weight=1, namespaced=False)]
+    )
     app = ApplicationFactory(
         metadata__modified=datetime.now(timezone.utc),
         spec__constraints__cluster__labels=[],
@@ -1639,8 +1821,12 @@ async def test_kubernetes_application_reschedule_no_update(
         )
     )
 
-    cluster1 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-1", weight=1)])
-    cluster2 = ClusterFactory(spec__metrics=[MetricRef(name="heat-demand-2", weight=1)])
+    cluster1 = ClusterFactory(
+        spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)]
+    )
+    cluster2 = ClusterFactory(
+        spec__metrics=[MetricRef(name="heat-demand-2", weight=1, namespaced=False)]
+    )
     app = ApplicationFactory(
         metadata__modified=datetime.now(timezone.utc),
         spec__constraints__cluster__labels=[],
@@ -1742,8 +1928,16 @@ async def test_openstack_score(aiohttp_server, config, db, loop):
 
     cluster = MagnumClusterFactory(status__is_scheduled=False)
     projects = [
-        ProjectFactory(spec__metrics=[MetricRef(name="test-metric-1", weight=1.0)]),
-        ProjectFactory(spec__metrics=[MetricRef(name="test-metric-2", weight=1.0)]),
+        ProjectFactory(
+            spec__metrics=[
+                MetricRef(name="test-metric-1", weight=1.0, namespaced=False)
+            ]
+        ),
+        ProjectFactory(
+            spec__metrics=[
+                MetricRef(name="test-metric-2", weight=1.0, namespaced=False)
+            ]
+        ),
     ]
     metrics = [
         GlobalMetricFactory(
@@ -1807,7 +2001,9 @@ async def test_openstack_score_missing_metric(aiohttp_server, db, config, loop):
     """
     cluster = MagnumClusterFactory(status__is_scheduled=False)
     project = ProjectFactory(
-        spec__metrics=[MetricRef(name="non-existent-metric", weight=1)]
+        spec__metrics=[
+            MetricRef(name="non-existent-metric", weight=1, namespaced=False)
+        ]
     )
     await db.put(project)
 
@@ -1859,14 +2055,14 @@ async def test_openstack_score_multiple_failing_metric(
     projects = [
         ProjectFactory(
             spec__metrics=[
-                MetricRef(name="non-existent-metric", weight=1),
-                MetricRef(name="existent-metric", weight=1),
+                MetricRef(name="non-existent-metric", weight=1, namespaced=False),
+                MetricRef(name="existent-metric", weight=1, namespaced=False),
             ]
         ),
         ProjectFactory(
             spec__metrics=[
-                MetricRef(name="also-existent", weight=1),
-                MetricRef(name="again-non-existent", weight=1),
+                MetricRef(name="also-existent", weight=1, namespaced=False),
+                MetricRef(name="again-non-existent", weight=1, namespaced=False),
             ]
         ),
     ]
@@ -1956,7 +2152,11 @@ async def test_openstack_score_missing_metrics_provider(
     present in the database.
     """
     cluster = MagnumClusterFactory(status__is_scheduled=False)
-    projects = [ProjectFactory(spec__metrics=[MetricRef(name="my-metric", weight=1)])]
+    projects = [
+        ProjectFactory(
+            spec__metrics=[MetricRef(name="my-metric", weight=1, namespaced=False)]
+        )
+    ]
     for project in projects:
         await db.put(project)
     metric = GlobalMetricFactory(
@@ -2007,7 +2207,11 @@ async def test_openstack_score_failing_metrics_provider(
     prometheus = await aiohttp_server(prometheus_app)
 
     cluster = MagnumClusterFactory(status__is_scheduled=False)
-    projects = [ProjectFactory(spec__metrics=[MetricRef(name="my-metric", weight=1)])]
+    projects = [
+        ProjectFactory(
+            spec__metrics=[MetricRef(name="my-metric", weight=1, namespaced=False)]
+        )
+    ]
     for project in projects:
         await db.put(project)
     metric = GlobalMetricFactory(
@@ -2050,7 +2254,9 @@ async def test_prefer_projects_with_metrics(aiohttp_server, config, db, loop):
     prometheus = await aiohttp_server(make_prometheus({"my_metric": ["0.4"]}))
 
     project_miss = ProjectFactory(spec__metrics=[])
-    project = ProjectFactory(spec__metrics=[MetricRef(name="heat-demand", weight=1)])
+    project = ProjectFactory(
+        spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)]
+    )
     metric = GlobalMetricFactory(
         metadata__name="heat-demand",
         spec__min=0,
@@ -2196,7 +2402,9 @@ async def test_select_project_with_constraints_without_metric(
 async def test_openstack_scheduling(aiohttp_server, config, db, loop):
     prometheus = await aiohttp_server(make_prometheus({"heat_demand_zone_1": ["0.25"]}))
 
-    project = ProjectFactory(spec__metrics=[MetricRef(name="heat-demand", weight=1)])
+    project = ProjectFactory(
+        spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)]
+    )
     cluster = MagnumClusterFactory(
         spec__constraints__project__labels=[],
         status__state=MagnumClusterState.PENDING,

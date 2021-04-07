@@ -38,6 +38,16 @@ from krake import (
     ConfigurationOptionMapper,
 )
 from krake.client.core import CoreApi
+from krake.apidefs.core import (
+    RoleBindingResource,
+    RoleResource,
+    GlobalMetricsProviderResource,
+    GlobalMetricResource,
+    MetricsProviderResource,
+    MetricResource,
+)
+from krake.apidefs.kubernetes import ApplicationResource, ClusterResource
+from krake.apidefs.openstack import ProjectResource, MagnumClusterResource
 from krake.client.openstack import OpenStackApi
 from krake.controller import Controller, run, Reflector, create_ssl_context
 from krake.data.config import ControllerConfiguration
@@ -47,6 +57,8 @@ from krake.data.core import (
     Role,
     GlobalMetricsProvider,
     GlobalMetric,
+    MetricsProvider,
+    Metric,
 )
 from krake.client.kubernetes import KubernetesApi
 from krake.data.kubernetes import Application, Cluster
@@ -263,7 +275,9 @@ class GarbageCollector(Controller):
         self.worker_count = worker_count
 
         self.resources = {
-            CoreApi: [Role, RoleBinding, GlobalMetric, GlobalMetricsProvider],
+            CoreApi: [Role, RoleBinding,
+                      GlobalMetric, GlobalMetricsProvider,
+                      Metric, MetricsProvider],
             KubernetesApi: [Application, Cluster],
             OpenStackApi: [Project, MagnumCluster],
         }

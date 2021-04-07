@@ -889,6 +889,232 @@ class OpenstackHandler(Handler):
             async for metrics in self.fetch_metrics(project, project.spec.metrics)
         ]
 
+    @staticmethod
+    def metrics_reason_from_err(error):
+        """Convert an error as exception into an instance of :class:`Reason`. Also
+        generates an appropriate message if necessary.
+
+        Args:
+            error (Exception): error that occurred which has to be converted into a
+                reason.
+
+        Returns:
+            Reason: reason generated from the provided error.
+
+        """
+        message = None
+        if isinstance(error, MetricsProviderError):
+            reason_code = ReasonCode.UNREACHABLE_METRICS_PROVIDER
+        elif isinstance(error, MetricError):
+            reason_code = ReasonCode.INVALID_METRIC
+        elif isinstance(error, ClientError):
+            resource_name = error.request_info.url.path.split("/")[-1]
+            if "metricsprovider" in error.request_info.url.path:
+                reason_code = ReasonCode.UNKNOWN_METRICS_PROVIDER
+                message = (
+                    f"The metrics provider {resource_name!r} was not found in the Krake"
+                    f" database."
+                )
+            else:
+                reason_code = ReasonCode.UNKNOWN_METRIC
+                message = (
+                    f"The metric {resource_name!r} was not found in the Krake database."
+                )
+        else:
+            raise error
+
+        final_message = message if message else str(error)
+        return Reason(code=reason_code, message=final_message)
+
+    async def update_resource_status(self, resource, metrics, reasons):
+        """Update the status of the provided resource with the new list of reasons for
+        metrics which failed.
+
+        Args:
+            resource (krake.data.serializable.ApiObject): the resource to updated.
+            metrics (list[krake.data.core.MetricRef]): the list of metrics for which the
+                scheduler attempted to fetch the current value.
+            reasons (list[Reason]): the list of reasons for the metrics failing which
+                were found. For each metric in the :args:`metrics` argument, there
+                should be one element in this argument: the reason for the metric
+                failing, or None if it did not fail.
+
+        """
+        assert len(metrics) == len(reasons)
+
+        if resource.kind == "Cluster":
+            resource.status.state = ClusterState.FAILING_METRICS
+            update_status_client = self.kubernetes_api.update_cluster_status
+        elif resource.kind == "Project":
+            resource.status.state = ProjectState.FAILING_METRICS
+            update_status_client = self.openstack_api.update_project_status
+        else:
+            raise ValueError(f"Unsupported kind: {resource.kind}.")
+
+        # Add to resource only if a failure occurred.
+        resource.status.metrics_reasons = {}
+        for i, reason in enumerate(reasons):
+            if reason:
+                resource.status.metrics_reasons[metrics[i].name] = reason
+
+        await update_status_client(
+            namespace=resource.metadata.namespace,
+            name=resource.metadata.name,
+            body=resource,
+        )
+
+    async def fetch_metrics(self, resource, metrics):
+        """Async generator for fetching metrics by the given list of metric
+        references.
+
+        If a :class:`MetricError` or `ClientError` occurs, the generator stops
+        which means resources where an error during metric fetching occurs can
+        be skipped by:
+
+        .. code:: python
+
+            ranked = [
+                self.rank_foo()
+                for foo in foos
+                async for metrics in self.fetch_metrics(foo, foo.spec.metrics)
+            ]
+
+        Args:
+            resource (krake.data.serializable.ApiObject): API resource to which
+                the metrics belong.
+            metrics (list[krake.data.core.MetricRef]): References to metrics
+                that should be fetched.
+
+        Yields:
+            list[krake.controller.scheduler.metrics.QueryResult]: List of fetched
+                metrics with their value and weight.
+
+        """
+        assert metrics, "Got empty list of metric references"
+
+        errors = []
+        reasons = []
+        fetching = []
+        for metric_spec in metrics:
+            try:
+                # we do not know if the metric is a global or namespaced metric
+                if metric_spec.namespaced:
+                    metric = await self.core_api.read_metric(
+                        namespace=resource.metadata.namespace,
+                        name=metric_spec.name,
+                    )
+                    metrics_provider = await self.core_api.read_metrics_provider(
+                        namespace=resource.metadata.namespace,
+                        name=metric.spec.provider.name,
+                    )
+                else:
+                    metric = await self.core_api.read_global_metric(
+                        name=metric_spec.name
+                    )
+                    metrics_provider = await self.core_api.read_global_metrics_provider(
+                        name=metric.spec.provider.name
+                    )
+                fetching.append(
+                    fetch_query(
+                        self.client.session,
+                        metric,
+                        metrics_provider,
+                        metric_spec.weight,
+                    )
+                )
+                reasons.append(None)  # Add an empty placeholder when no error occurred.
+            except ClientError as err:
+                reasons.append(self.metrics_reason_from_err(err))
+                errors.append(err)
+
+        fetched = await asyncio.gather(*fetching, return_exceptions=True)
+
+        # Convert the errors which occurred when fetching the value of the remaining
+        # metrics into Reason instances.
+        # For this, the next occurrence of "None" inside the "reasons" list is used.
+        # Each one of this occurrence corresponds to a task for fetching the metric. So
+        # if for example the 3rd element in "fetched" is an error, the 3rd "None" in
+        # "reasons" must be replaced.
+        none_reason_iter = (i for i, reason in enumerate(reasons) if reason is None)
+        for result in fetched:
+            # Get the index of the next "None" inside "reasons".
+            index_of_none = next(none_reason_iter)
+            if isinstance(result, Exception):
+                reasons[index_of_none] = self.metrics_reason_from_err(result)
+                errors.append(result)
+
+        stopped = False
+        try:
+            next(none_reason_iter)
+        except StopIteration:
+            stopped = True
+        assert stopped
+
+        if any(reasons):
+            # If there is any issue with a metric, skip stop the generator.
+            await self.update_resource_status(resource, metrics, reasons)
+            for error in errors:
+                if error:
+                    logger.error(error)
+            return
+
+        for metric, weight, value in fetched:
+            logger.debug(
+                "Received metric %r with value %r for %r", metric, value, resource
+            )
+
+        yield fetched
+
+    def calculate_kubernetes_cluster_rank(self, metrics, cluster, app):
+        """Calculate weighted sum of metrics values.
+
+        Args:
+            metrics (List[.metrics.QueryResult]): List of metric query results
+            cluster (krake.data.kubernetes.Cluster): Cluster that is ranked
+            app (krake.data.kubernetes.Application): Application object that
+                should be scheduled.
+
+        Returns:
+            ClusterRank: rank of the passed cluster based on metrics and
+            application.
+
+        """
+        sticky = self.calculate_kubernetes_cluster_stickiness(cluster, app)
+
+        if not metrics:
+            return ClusterRank(rank=sticky.weight * sticky.value, cluster=cluster)
+
+        norm = sum(metric.weight for metric in metrics) + sticky.weight
+        rank = (
+            sum(metric.value * metric.weight for metric in metrics)
+            + (sticky.value * sticky.weight)
+        ) / norm
+
+        return ClusterRank(rank=rank, cluster=cluster)
+
+    def calculate_kubernetes_cluster_stickiness(self, cluster, app):
+        """Return extra metric for clusters to make the application "stick" to
+        it by increasing its rank.
+
+        If the application is already scheduled to the passed cluster, a
+        stickiness of ``1.0`` with a configurable weight is returned.
+        Otherwise, a stickiness of ``0`` is returned.
+
+        Args:
+            cluster (krake.data.kubernetes.Cluster): Cluster that is ranked
+            app (krake.data.kubernetes.Application): Application object that
+                should be scheduled.
+
+        Returns:
+            Stickiness: Value and its weight that should be added to the
+            cluster rank.
+
+        """
+        if resource_ref(cluster) != app.status.scheduled_to:
+            return Stickiness(weight=0, value=0)
+
+        return Stickiness(weight=self.stickiness, value=1.0)
+
     def calculate_openstack_project_scores(self, metrics, project):
         """Calculate score of OpenStack project based on the given metrics.
 

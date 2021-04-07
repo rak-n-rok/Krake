@@ -46,6 +46,10 @@ from utils import (
     check_return_code,
     create_cluster_info,
     get_other_cluster,
+    get_scheduling_score,
+    set_static_metrics,
+    GLOBAL_STATIC_METRICS,
+    NAMESPACED_STATIC_METRICS,
 )
 from environment import (
     Environment,
@@ -239,6 +243,79 @@ def test_scheduler_cluster_label_constraints(minikube_clusters):
 
 
 def test_scheduler_clusters_with_metrics(minikube_clusters):
+    """Basic end-to-end testing of namespaced and global cluster metrics
+
+    Metrics and metrics provider are tested twice as follows:
+
+        1. Set the metric values to different values in each run
+        2. Create two Minikube clusters (from a config file) with both a global
+        metric and a namespaced metric and an application. The clusters have
+        different metric weights, which results in them having different scores.
+        3. Ensure that the application was scheduled to the cluster with the
+        highest score;
+
+    Args:
+        minikube_clusters (list): Names of the Minikube backend.
+
+    """
+    # The two clusters and metrics used in this test
+    num_clusters = 2
+    clusters = random.sample(minikube_clusters, num_clusters)
+    namespaced_metric_names = random.sample(NAMESPACED_STATIC_METRICS, 1)
+    global_metric_names = random.sample(GLOBAL_STATIC_METRICS, 1)
+
+    # Choose the metric weights for each cluster
+    metric_weights = {
+        clusters[0]: {
+            namespaced_metric_names[0]: {"weight": 1.5, "namespaced": True},
+            global_metric_names[0]: {"weight": 1.0, "namespaced": False},
+        },
+        clusters[1]: {
+            namespaced_metric_names[0]: {"weight": 1.0, "namespaced": True},
+            global_metric_names[0]: {"weight": 1.5, "namespaced": False},
+        },
+    }
+    prepared_weights = {
+        c: {m: metric_weights[c][m]["weight"]} for c in clusters for m in c
+    }
+
+    # Run the test twice and use different metric values in each iteration so
+    # that another cluster is picked in each iteration.
+    prev_max_score_cluster = None
+    for values in [[0.8, 0.7], [0.7, 0.8]]:
+
+        # 1. Set the metric values to different values in each run
+        namespaced_metric_value = {namespaced_metric_names[0]: values[0]}
+        global_metric_value = {global_metric_names[0]: values[1]}
+        set_static_metrics(namespaced_metric_value, globals=False)
+        set_static_metrics(global_metric_value, globals=True)
+
+        # Calculate the scores and determine the cluster with the highest score.
+        metric_values = dict(namespaced_metric_value, **global_metric_value)
+        scores = {
+            c: get_scheduling_score(c, metric_values, prepared_weights)
+            for c in clusters
+        }
+        max_score_cluster = max(scores, key=scores.get)
+
+        # (Sanity check that a different cluster is chosen in each iteration)
+        assert prev_max_score_cluster != max_score_cluster
+
+        # 2. Create two Minikube clusters (from a config file) with both a global
+        # metric and a namespaced metric and an application. The clusters have
+        # different metric weights, which results in them having different scores.
+        environment = create_default_environment(clusters, metrics=prepared_weights)
+        with Environment(environment) as env:
+            app = env.resources[ResourceKind.APPLICATION][0]
+
+            # 3. Ensure that the application was scheduled to the cluster with the
+            # highest score;
+            app.check_running_on(max_score_cluster, within=0)
+
+        prev_max_score_cluster = max_score_cluster
+
+
+def test_scheduler_clusters_with_global_metrics(minikube_clusters):
     """Basic end-to-end testing of clusters metrics
 
     Cluster metrics and metrics provider are tested multiple times (3) as follows:
@@ -281,7 +358,40 @@ def test_scheduler_clusters_with_metrics(minikube_clusters):
             app.check_running_on(expected_cluster)
 
 
-def test_scheduler_clusters_one_with_metrics(minikube_clusters):
+def test_scheduler_clusters_with_one_namespaced_metric(minikube_clusters):
+    """Basic end-to-end testing of clusters with namespaced metrics
+
+    Namespaced cluster metrics and metrics providers are tested as follows:
+
+        1. Create two Minikube clusters (from a config file) (one with a namespaced
+            metric and one without any) and an application.
+        2. Ensure that the app was scheduled to the cluster with the metric;
+
+    Args:
+        minikube_clusters (list): Names of the Minikube backend.
+
+    """
+
+    for _ in range(3):
+        # The two clusters and metrics used in this test (randomly ordered)
+        num_clusters = 2
+        num_metrics = num_clusters - 1
+        clusters = random.sample(minikube_clusters, num_clusters)
+        metric_names = random.sample(NAMESPACED_STATIC_METRICS, num_metrics)
+        weights = [1] * num_metrics
+
+        # 1. Create two Minikube clusters (from a config file) (one with a namespaced
+        #     metric and one without any) and an application.
+        cluster_metrics = create_cluster_info(clusters, metric_names, weights)
+        environment = create_default_environment(clusters, metrics=cluster_metrics)
+        with Environment(environment) as env:
+            app = env.resources[ResourceKind.APPLICATION][0]
+
+            # 2. Ensure that the app was scheduled to the cluster with the metric;
+            app.check_running_on(clusters[0])
+
+
+def test_scheduler_clusters_with_one_global_metric(minikube_clusters):
     """Basic end-to-end testing of clusters metrics
 
     Cluster metrics and metrics provider are tested multiple times (3) as follows:

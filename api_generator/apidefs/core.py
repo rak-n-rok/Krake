@@ -1,13 +1,17 @@
 from krake.api.helpers import ListQuery
 from krake.data.core import (
-    GlobalMetric,
-    GlobalMetricList,
-    GlobalMetricsProvider,
-    GlobalMetricsProviderList,
     Role,
     RoleList,
     RoleBinding,
     RoleBindingList,
+    GlobalMetric,
+    GlobalMetricsProvider,
+    GlobalMetricsProviderList,
+    GlobalMetricList,
+    Metric,
+    MetricsProvider,
+    MetricsProviderList,
+    MetricList,
 )
 from .definitions import ApiDef, Scope, operation
 
@@ -173,3 +177,97 @@ class RoleBindingResource:
         method = "DELETE"
         path = "/core/rolebindings/{name}"
         response = RoleBinding
+
+
+@core.resource
+class MetricResource:
+    singular = "Metric"
+    plural = "Metrics"
+    scope = Scope.NAMESPACED
+
+    @operation
+    class Create:
+        method = "POST"
+        path = "/core/namespaces/{namespace}/metrics"
+        body = Metric
+        response = Metric
+
+    @operation
+    class List(ListQuery):
+        number = "plural"
+        method = "GET"
+        path = "/core/namespaces/{namespace}/metrics"
+        response = MetricList
+
+    @operation
+    class ListAll(ListQuery):
+        number = "plural"
+        method = "GET"
+        path = "/core/metrics"
+        response = MetricList
+
+    @operation
+    class Read:
+        method = "GET"
+        path = "/core/namespaces/{namespace}/metrics/{name}"
+        response = Metric
+
+    @operation
+    class Update:
+        method = "PUT"
+        path = "/core/namespaces/{namespace}/metrics/{name}"
+        body = Metric
+        response = Metric
+
+    @operation
+    class Delete:
+        method = "DELETE"
+        path = "/core/namespaces/{namespace}/metrics/{name}"
+        response = Metric
+
+
+@core.resource
+class MetricsProviderResource:
+    singular = "MetricsProvider"
+    plural = "MetricsProviders"
+    scope = Scope.NAMESPACED
+
+    @operation
+    class Create:
+        method = "POST"
+        path = "/core/namespaces/{namespace}/metricsproviders"
+        body = MetricsProvider
+        response = MetricsProvider
+
+    @operation
+    class List(ListQuery):
+        number = "plural"
+        method = "GET"
+        path = "/core/namespaces/{namespace}/metricsproviders"
+        response = MetricsProviderList
+
+    @operation
+    class ListAll(ListQuery):
+        number = "plural"
+        method = "GET"
+        path = "/core/metricsproviders"
+        response = MetricsProviderList
+
+    @operation
+    class Read:
+        method = "GET"
+        path = "/core/namespaces/{namespace}/metricsproviders/{name}"
+        response = MetricsProvider
+
+    @operation
+    class Update:
+        method = "PUT"
+        path = "/core/namespaces/{namespace}/metricsproviders/{name}"
+        body = MetricsProvider
+        response = MetricsProvider
+
+    @operation
+    class Delete:
+        method = "DELETE"
+        path = "/core/namespaces/{namespace}/metricsproviders/{name}"
+        response = MetricsProvider

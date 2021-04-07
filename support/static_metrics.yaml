@@ -21,6 +21,18 @@ spec:
 
 ---
 
+api: core
+kind: MetricsProvider
+metadata:
+  name: static_provider_w_namespace
+  namespace: system:admin
+spec:
+  static:
+    metrics:
+      existing_nsed_metric: 0.9
+  type: static
+
+---
 
 ######################
 ### Static Metrics ###
@@ -49,3 +61,17 @@ spec:
   provider:
     metric: green_energy_ratio_1
     name: static_provider
+
+---
+
+api: core
+kind: Metric
+metadata:
+  name: existing_namespaced_metric
+  namespace: system:admin
+spec:
+  max: 1.0
+  min: 0.0
+  provider:
+    metric: existing_nsed_metric
+    name: static_provider_w_namespace

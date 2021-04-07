@@ -81,6 +81,8 @@ from krake.data.core import (
     RoleBinding,
     GlobalMetric,
     GlobalMetricsProvider,
+    Metric,
+    MetricsProvider,
     resource_ref,
 )
 from krake.data.serializable import Serializable
@@ -96,6 +98,8 @@ _handled_resources = {
         "RoleBinding": RoleBinding,
         "GlobalMetric": GlobalMetric,
         "GlobalMetricsProvider": GlobalMetricsProvider,
+        "Metric": Metric,
+        "MetricsProvider": MetricsProvider,
     }
 }
 
@@ -200,7 +204,10 @@ async def insert_resource(resource, db_host, db_port, force=False):
         return InsertionResult(error=err, message=message)
 
     async with Session(host=db_host, port=db_port) as session:
-        stored = await session.get(cls, name=instance.metadata.name)
+        kwargs = {"name": instance.metadata.name}
+        if instance.metadata.namespace:
+            kwargs["namespace"] = instance.metadata.namespace
+        stored = await session.get(cls, **kwargs)
 
         to_store = instance
         if stored:

@@ -389,12 +389,34 @@ class MetricSpec(Serializable):
     provider: MetricSpecProvider
 
 
+class BaseMetric(ApiObject):
+    api: str = "core"
+    kind: str = None
+    metadata: Metadata
+    spec: MetricSpec
+
+
 @persistent("/core/globalmetrics/{name}")
-class GlobalMetric(ApiObject):
+class GlobalMetric(BaseMetric):
     api: str = "core"
     kind: str = "GlobalMetric"
     metadata: Metadata
     spec: MetricSpec
+
+
+@persistent("/core/metrics/{namespace}/{name}")
+class Metric(BaseMetric):
+    api: str = "core"
+    kind: str = "Metric"
+    metadata: Metadata
+    spec: MetricSpec
+
+
+class MetricList(ApiObject):
+    api: str = "core"
+    kind: str = "MetricList"
+    metadata: ListMetadata
+    items: List[Metric]
 
 
 class GlobalMetricList(ApiObject):
@@ -438,12 +460,34 @@ class StaticSpec(Serializable):
     metrics: Dict[str, float]
 
 
+class BaseMetricsProvider(ApiObject):
+    api: str = "core"
+    kind: str = None
+    metadata: Metadata
+    spec: MetricsProviderSpec
+
+
 @persistent("/core/globalmetricsproviders/{name}")
-class GlobalMetricsProvider(ApiObject):
+class GlobalMetricsProvider(BaseMetricsProvider):
     api: str = "core"
     kind: str = "GlobalMetricsProvider"
     metadata: Metadata
     spec: MetricsProviderSpec
+
+
+@persistent("/core/metricsproviders/{namespace}/{name}")
+class MetricsProvider(BaseMetricsProvider):
+    api: str = "core"
+    kind: str = "MetricsProvider"
+    metadata: Metadata
+    spec: MetricsProviderSpec
+
+
+class MetricsProviderList(ApiObject):
+    api: str = "core"
+    kind: str = "MetricsProviderList"
+    metadata: ListMetadata
+    items: List[MetricsProvider]
 
 
 class GlobalMetricsProviderList(ApiObject):
@@ -456,3 +500,4 @@ class GlobalMetricsProviderList(ApiObject):
 class MetricRef(Serializable):
     name: str
     weight: float
+    namespaced: bool

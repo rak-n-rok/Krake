@@ -11,9 +11,19 @@ KRAKE_HOMEDIR = "/home/krake"
 ROK_INSTALL_DIR = f"{KRAKE_HOMEDIR}/.local/bin"
 STICKINESS_WEIGHT = 0.1
 
-_ETCD_STATIC_PROVIDER_KEY = "/core/globalmetricsproviders/static_provider"
+NAMESPACE = "system:admin"
+_ETCD_GLOBAL_STATIC_PROVIDER_KEY = "/core/globalmetricsproviders/static_provider"
+_ETCD_STATIC_PROVIDER_KEY = (
+    f"/core/metricsproviders/{NAMESPACE}/static_provider_w_namespace"
+)
+
+_ETCD_GLOBAL_METRIC_PREFIX = "/core/globalmetrics"
+_ETCD_METRIC_PREFIX = f"/core/metrics/{NAMESPACE}"
+
 _ETCDCTL_ENV = {"ETCDCTL_API": "3"}
 
+GLOBAL_STATIC_METRICS = ["electricity_cost_1", "green_energy_ratio_1"]
+NAMESPACED_STATIC_METRICS = ["existing_namespaced_metric"]
 
 def kubectl_cmd(kubeconfig):
     """Builds the kubectl command to communicate with the cluster that can be reached by
@@ -669,41 +679,88 @@ def _get_etcd_entry(key, condition=None):
         raise AssertionError(msg)
 
 
-def get_static_metrics():
-    """Retrieve metrics from the etcd database.
+def get_static_metrics(metrics=None, globals=True):
+    """Retrieve static metrics from the etcd database.
+
+    Args:
+        metrics (list[str], optional): list with metric names to retrieve. If no
+            metric names are given, all metrics the static metrics provider provides
+            are returned.
+        globals (bool, optional): flag indicating whether the global or namespaced
+            static metrics should be retrieved.
 
     Returns:
          dict[str, float]
             Dict with the metrics names as keys and metric values as values.
-
     """
-    static_provider = _get_etcd_entry(_ETCD_STATIC_PROVIDER_KEY)
-    return static_provider["spec"]["static"]["metrics"]
+    etcd_key = _ETCD_STATIC_PROVIDER_KEY
+    if globals:
+        etcd_key = _ETCD_GLOBAL_STATIC_PROVIDER_KEY
+
+    static_provider = _get_etcd_entry(etcd_key)
+    provider_metrics = static_provider["spec"]["static"]["metrics"]
+    if not metrics:
+        # No metric names were given. We return all metrics the provider is
+        # providing. The dict has the metric names of the metrics proivder as keys.
+        return provider_metrics
+
+    # We need to retrieve the metrics to be able to translate between the metric
+    # names given in 'metrics', and the metric names in the metrics provider.
+    etcd_metric_key_prefix = (
+        _ETCD_GLOBAL_METRIC_PREFIX if globals else _ETCD_METRIC_PREFIX
+    )
+
+    metric_values = {}
+    for metric_name in metrics:
+        metric = _get_etcd_entry("/".join([etcd_metric_key_prefix, metric_name]))
+        provider_metric_name = metric["spec"]["provider"]["metric"]
+        metric_values[metric_name] = provider_metrics[provider_metric_name]
+    return metric_values
 
 
-def set_static_metrics(values):
+def set_static_metrics(values, globals=True):
     """Modify the database entry for the static metrics provider by setting its
      values to the provided metrics.
 
     Args:
         values (dict[str, float]): Dictionary with the metrics names as keys and
             metric values as values.
+        globals (bool): flag indicating whether the global or namespaced
+            static metrics should be set.
 
     """
-    static_provider = _get_etcd_entry(_ETCD_STATIC_PROVIDER_KEY)
+    etcd_provider_key = (
+        _ETCD_GLOBAL_STATIC_PROVIDER_KEY if globals else _ETCD_STATIC_PROVIDER_KEY
+    )
+    static_provider = _get_etcd_entry(etcd_provider_key)
+
+    # we need to retrieve the metrics to be able to translate between the metric
+    # names given in values, and the metric names in the static provider.
+    etcd_metric_key_prefix = (
+        _ETCD_GLOBAL_METRIC_PREFIX if globals else _ETCD_METRIC_PREFIX
+    )
+
+    provider_metrics = {}
+    for metric_name, metric_value in values.items():
+        metric = _get_etcd_entry("/".join([etcd_metric_key_prefix, metric_name]))
+        provider_metric_name = metric["spec"]["provider"]["metric"]
+        provider_metrics[provider_metric_name] = metric_value
 
     # sanity check that we are only modifying existing metrics
     old_metrics = static_provider["spec"]["static"]["metrics"]
-    assert all([metric in old_metrics for metric in values])
+    err_msg = "The following metrics were not in old_metrics: "
+    err_msg += ", ".join(m for m in provider_metrics if m not in old_metrics)
+    err_msg += f" old_metrics: {old_metrics}. (values: {values}.)"
+    assert all([metric in old_metrics for metric in provider_metrics]), err_msg
 
     # set the new values
-    static_provider["spec"]["static"]["metrics"].update(values)
+    static_provider["spec"]["static"]["metrics"].update(provider_metrics)
 
     # update database with the updated static_provider
-    _put_etcd_entry(static_provider, key=_ETCD_STATIC_PROVIDER_KEY)
+    _put_etcd_entry(static_provider, key=etcd_provider_key)
 
     # make sure the changing of the values took place
-    _get_etcd_entry(_ETCD_STATIC_PROVIDER_KEY, condition=check_static_metrics(values))
+    _get_etcd_entry(etcd_provider_key, condition=check_static_metrics(provider_metrics))
 
 
 def check_static_metrics(expected_metrics, error_message=""):
