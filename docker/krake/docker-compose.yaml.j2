@@ -78,11 +78,6 @@ services:
     depends_on:
       - krake-api
     command: python3 -m krake.controller.kubernetes
-    environment:
-      # FIXME: Krake ip address is temporary loaded from
-      # environment variable "KRAKE_HOST", if present. This should
-      # be removed when DNS service takes place.
-      KRAKE_HOST: {{ api.ip }}
     secrets:
       - source: kubernetes-config
         target: "{{ krake.config.path }}/kubernetes.yaml"
@@ -92,6 +87,10 @@ services:
         target: "{{ krake.cert_dir }}/system:kubernetes.pem"
       - source: kubernetes-key
         target: "{{ krake.cert_dir }}/system:kubernetes-key.pem"
+      - source: complete-signing-cert
+        target: "{{ krake.cert_dir }}/system:complete-signing.pem"
+      - source: complete-signing-key
+        target: "{{ krake.cert_dir }}/system:complete-signing-key.pem"
 
   krake-ctrl-scheduler:
     image: krake:latest
@@ -154,6 +153,10 @@ secrets:
     file: "{{ krake.cert_dir }}/system:kubernetes.pem"
   kubernetes-key:
     file: "{{ krake.cert_dir }}/system:kubernetes-key.pem"
+  complete-signing-cert:
+    file: "{{ krake.cert_dir }}/system:complete-signing.pem"
+  complete-signing-key:
+    file: "{{ krake.cert_dir }}/system:complete-signing-key.pem"
 
   scheduler-config:
     file: "{{ krake.config.path }}/scheduler.yaml"

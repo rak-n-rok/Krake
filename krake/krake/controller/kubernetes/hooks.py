@@ -5,17 +5,18 @@ define when the hook will be executed.
 """
 import asyncio
 import logging
-import os
+import random
 from collections import defaultdict
 from contextlib import suppress
 from copy import deepcopy
+from datetime import datetime
 from functools import reduce
 from operator import getitem
 from enum import Enum, auto
 from inspect import iscoroutinefunction
+from OpenSSL import crypto
 from typing import NamedTuple
 
-import OpenSSL
 import yarl
 from krake.controller import Observer, ControllerError
 from krake.controller.kubernetes.client import KubernetesClient
@@ -397,6 +398,65 @@ async def unregister_observer(controller, app, **kwargs):
         await task
 
 
+def utc_difference():
+    """Get the difference in seconds between the current time and the current UTC time.
+
+    Returns:
+        int: the time difference in seconds.
+
+    """
+    delta = datetime.now() - datetime.utcnow()
+    return delta.seconds
+
+
+def generate_certificate(config):
+    """Create and sign a new certificate using the one defined in the complete hook
+    configuration as intermediate certificate.
+
+    Args:
+        config (krake.data.config.CompleteHookConfiguration): the configuration of the
+            complete hook.
+
+    Returns:
+        CertificatePair: the content of the certificate created and its corresponding
+            key.
+
+    """
+    with open(config.intermediate_src, "rb") as f:
+        intermediate_src = crypto.load_certificate(crypto.FILETYPE_PEM, f.read())
+    with open(config.intermediate_key_src, "rb") as f:
+        intermediate_key_src = crypto.load_privatekey(crypto.FILETYPE_PEM, f.read())
+
+    client_cert = crypto.X509()
+
+    # Set general information
+    client_cert.set_version(3)
+    client_cert.set_serial_number(random.randint(50000000000000, 100000000000000))
+    # If not set before, TLS will not accept to use this certificate in UTC cases, as
+    # the server time may be earlier.
+    time_offset = utc_difference() * -1
+    client_cert.gmtime_adj_notBefore(time_offset)
+    client_cert.gmtime_adj_notAfter(1 * 365 * 24 * 60 * 60)
+
+    # Set issuer and subject
+    intermediate_subject = intermediate_src.get_subject()
+    client_cert.set_issuer(intermediate_subject)
+    client_subj = crypto.X509Name(intermediate_subject)
+    client_subj.CN = config.hook_user
+    client_cert.set_subject(client_subj)
+
+    # Create and set the private key
+    client_key = crypto.PKey()
+    client_key.generate_key(crypto.TYPE_RSA, 2048)
+    client_cert.set_pubkey(client_key)
+
+    client_cert.sign(intermediate_key_src, "sha256")  # Should be done at the very end.
+
+    cert_dump = crypto.dump_certificate(crypto.FILETYPE_PEM, client_cert).decode()
+    key_dump = crypto.dump_privatekey(crypto.FILETYPE_PEM, client_key).decode()
+    return CertificatePair(cert=cert_dump, key=key_dump)
+
+
 @listen.on(Hook.ApplicationMangling)
 async def complete(app, api_endpoint, ssl_context, config):
     """Execute application complete hook defined by :class:`Complete`.
@@ -417,17 +477,36 @@ async def complete(app, api_endpoint, ssl_context, config):
     if "complete" not in app.spec.hooks:
         return
 
+    # Use the endpoint of the API only if the external endpoint has not been set.
+    if config.complete.external_endpoint:
+        api_endpoint = config.complete.external_endpoint
+
     app.status.token = app.status.token if app.status.token else token_urlsafe()
+
+    # Generate only once the certificate and key for a specific Application
+    generated_cert = CertificatePair(
+        cert=app.status.complete_cert, key=app.status.complete_key
+    )
+    if ssl_context and generated_cert == (None, None):
+        generated_cert = generate_certificate(config.complete)
+        app.status.complete_cert = generated_cert.cert
+        app.status.complete_key = generated_cert.key
 
     hook = Complete(
         api_endpoint,
         ssl_context,
-        ca_dest=config.complete.ca_dest,
+        hook_user=config.complete.hook_user,
+        cert_dest=config.complete.cert_dest,
         env_token=config.complete.env_token,
         env_complete=config.complete.env_complete,
     )
     hook.mangle_app(
-        app.metadata.name, app.metadata.namespace, app.status.token, app.status.mangling
+        app.metadata.name,
+        app.metadata.namespace,
+        app.status.token,
+        app.status.mangling,
+        config.complete.intermediate_src,
+        generated_cert,
     )
 
 
@@ -436,6 +515,19 @@ class SubResource(NamedTuple):
     name: str
     body: dict
     path: tuple
+
+
+class CertificatePair(NamedTuple):
+    """Tuple which contains a certificate and its corresponding key.
+
+    Attributes:
+        cert (str): content of a certificate.
+        key (str): content of the key that corresponds to the certificate.
+
+    """
+
+    cert: str
+    key: str
 
 
 class Complete(object):
@@ -447,41 +539,41 @@ class Complete(object):
     Pod creation defined in :args:`complete_resources` can be modified.
     Names of environment variables are defined in the application controller
     configuration file.
-    If TLS is enabled on Krake API, complete hook injects Kubernetes configmap
-    and volume definition for the Krake CA certificate.
-    CA certificate is loaded from configmap and stored as a file in injected
-    application volume. Filename is defined in the application controller configuration
-    file.
+    If TLS is enabled on the Krake API, the complete hook injects a Kubernetes configmap
+    and it corresponding volume and volume mount definitions for the Krake CA,
+    the client certificate with the right CN, and its key. The directory where the
+    configmap is mounted is defined in the configuration.
 
     Args:
         api_endpoint (str): the given API endpoint
         ssl_context (ssl.SSLContext): SSL context to communicate with the API endpoint
-        ca_dest (str, optional): Path path of the CA in deployed Application.
-            Defaults to /etc/krake_ca/ca.pem
+        cert_dest (str, optional): Path of the directory where the CA, client
+            certificate and key to the Krake API will be stored.
         env_token (str, optional): Name of the environment variable, which stores Krake
-            authentication token. Defaults to KRAKE_TOKEN
+            authentication token.
         env_complete (str, optional): Name of the environment variable,
-            which stores Krake complete hook URL. Defaults to KRAKE_COMPLETE_URL
+            which stores Krake complete hook URL.
 
     """
 
     complete_resources = ("Pod", "Deployment", "ReplicationController")
+    ca_name = "ca-bundle.pem"
+    cert_name = "cert.pem"
+    key_name = "key.pem"
 
     def __init__(
-        self,
-        api_endpoint,
-        ssl_context,
-        ca_dest="/etc/krake_ca/ca.pem",
-        env_token="KRAKE_TOKEN",
-        env_complete="KRAKE_COMPLETE_URL",
+        self, api_endpoint, ssl_context, hook_user, cert_dest, env_token, env_complete
     ):
         self.api_endpoint = api_endpoint
         self.ssl_context = ssl_context
-        self.ca_dest = ca_dest
+        self.hook_user = hook_user
+        self.cert_dest = cert_dest
         self.env_token = env_token
         self.env_complete = env_complete
 
-    def mangle_app(self, name, namespace, token, mangling):
+    def mangle_app(
+        self, name, namespace, token, mangling, intermediate_src, generated_cert
+    ):
         """Mangle given application and injects complete hook resources and
         sub-resources into mangling object by :meth:`mangle`.
 
@@ -495,6 +587,11 @@ class Complete(object):
             namespace (str): Application namespace
             token (str): Complete hook authentication token
             mangling (list): Application resources
+            intermediate_src (str): content of the certificate that is used to sign new
+                certificates for the complete hook.
+            generated_cert (CertificatePair): tuple that contains the content of the
+                new signed certificate for the Application, and the content of its
+                corresponding key.
 
         """
         cfg_name = "-".join([name, "krake", "configmap"])
@@ -515,7 +612,13 @@ class Complete(object):
         hook_resources = []
         if ca_certs:
             hook_resources = [
-                self.configmap(cfg_name, namespace, ca_certs=ca_certs)
+                self.configmap(
+                    cfg_name,
+                    namespace,
+                    intermediate_src=intermediate_src,
+                    generated_cert=generated_cert,
+                    ca_certs=ca_certs,
+                )
                 for namespace in resource_namespaces
             ]
 
@@ -672,36 +775,53 @@ class Complete(object):
                 else:
                     raise InvalidResourceError
 
-    def configmap(self, cfg_name, namespace, ca_certs=None):
+    def configmap(
+        self,
+        cfg_name,
+        namespace,
+        ca_certs=None,
+        intermediate_src=None,
+        generated_cert=None,
+    ):
         """Create a complete hook configmap resource.
 
-        Complete hook configmap stores Krake CAs to communicate with the Krake API
+        Complete hook configmap stores Krake CAs and client certificates to communicate
+        with the Krake API.
 
         Args:
             cfg_name (str): Configmap name
-            ca_certs (list): Krake CA list
             namespace (str): Kubernetes namespace where the ConfigMap will be created.
+            ca_certs (list): Krake CA list
+            intermediate_src (str): content of the certificate that is used to sign new
+                certificates for the complete hook.
+            generated_cert (CertificatePair): tuple that contains the content of the
+                new signed certificate for the Application, and the content of its
+                corresponding key.
 
         Returns:
             dict: complete hook configmaps resources
 
         """
-        ca_name = os.path.basename(self.ca_dest)
-
         ca_certs_pem = ""
         for ca_cert in ca_certs:
-            x509 = OpenSSL.crypto.load_certificate(
-                OpenSSL.crypto.FILETYPE_ASN1, ca_cert
-            )
-            ca_certs_pem += OpenSSL.crypto.dump_certificate(
-                OpenSSL.crypto.FILETYPE_PEM, x509
-            ).decode("utf-8")
+            x509 = crypto.load_certificate(crypto.FILETYPE_ASN1, ca_cert)
+            ca_certs_pem += crypto.dump_certificate(crypto.FILETYPE_PEM, x509).decode()
 
+        # Add the intermediate certificate into the chain
+        with open(intermediate_src, "r") as f:
+            intermediate_src_content = f.read()
+        ca_certs_pem += intermediate_src_content
+
+        data = {
+            self.ca_name: ca_certs_pem,
+            self.cert_name: generated_cert.cert,
+            self.key_name: generated_cert.key,
+        }
         return self.attribute_map(
             V1ConfigMap(
                 api_version="v1",
                 kind="ConfigMap",
-                data={ca_name: ca_certs_pem},
+                data=data,
                 metadata={"name": cfg_name, "namespace": namespace},
             )
         )
@@ -724,10 +844,8 @@ class Complete(object):
         if not ca_certs:
             return []
 
-        ca_dir = os.path.dirname(self.ca_dest)
-
         volume = V1Volume(name=volume_name, config_map={"name": cfg_name})
-        volume_mount = V1VolumeMount(name=volume_name, mount_path=ca_dir)
+        volume_mount = V1VolumeMount(name=volume_name, mount_path=self.cert_dest)
         return [
             SubResource(
                 group="volumes",
@@ -760,14 +878,6 @@ class Complete(object):
 
         """
         api_url = URL(api_endpoint)
-
-        # FIXME: Krake host IP address is temporary loaded from environment
-        #  variable "KRAKE_HOST", if present. This should be removed when
-        #  DNS service takes place.
-        api_host = os.environ.get("KRAKE_HOST")
-        if api_host is not None:
-            api_url = api_url.with_host(api_host)
-
         return str(
             api_url.with_path(
                 f"/kubernetes/namespaces/{namespace}/applications/{name}/complete"

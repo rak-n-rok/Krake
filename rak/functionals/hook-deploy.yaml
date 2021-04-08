@@ -1,0 +1,38 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: script-deploy
+spec:
+  selector:
+    matchLabels:
+      app: script-deploy
+  template:
+    metadata:
+      labels:
+        app: script-deploy
+    spec:
+      volumes:
+      - name: scripts-volume
+        configMap:
+          name: scripts-configmap
+      containers:
+      - name: script-deploy
+        image: nyurik/alpine-python3-requests
+        volumeMounts:
+          - mountPath: /opt
+            name: scripts-volume
+        env:
+          - name: HOME
+            value: /tmp
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "copy scripts to /tmp (configMap is read-only)"
+          cp /opt/hook-script.py /tmp
+          echo "apply 'chmod +x' to /tmp/hook-script.py"
+          chmod +x /tmp/hook-script.py
+          echo "execute hook-script.py now"
+          sleep 2
+          /tmp/hook-script.py

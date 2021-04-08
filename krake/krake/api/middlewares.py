@@ -104,7 +104,7 @@ def authentication(authenticators, allow_anonymous):
             # Set OPTIONS requests (only directed to the CORS handler) to be received,
             # even if authentication mechanisms are used.
             if not allow_anonymous and request.method != hdrs.METH_OPTIONS:
-                raise web.HTTPUnauthorized()
+                raise web.HTTPUnauthorized(reason="No user has been authenticated.")
             user = "system:anonymous"
 
         request["user"] = user

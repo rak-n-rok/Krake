@@ -1,5 +1,4 @@
 import yaml
-from krake.data.config import HooksConfiguration
 
 nginx_manifest = list(
     yaml.safe_load_all(
@@ -39,15 +38,4 @@ spec:
     targetPort: 80
 """
     )
-)
-
-
-hooks_config = HooksConfiguration.deserialize(
-    {
-        "complete": {
-            "ca_dest": "/etc/krake_ca/ca.pem",
-            "env_token": "KRAKE_TOKEN",
-            "env_complete": "KRAKE_COMPLETE_URL",
-        }
-    }
 )

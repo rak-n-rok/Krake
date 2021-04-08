@@ -360,6 +360,11 @@ name. This name can then be used along with the ``RBAC`` mode and a specific
     CA, and the certificates they use for communication must also be signed using this
     CA.
 
+.. note::
+    If an external endpoint is specified in the Kubernetes controller configuration for
+    the `complete` hook, then this host must also be specified in the certificate of the
+    API.
+
 _____
 
 
@@ -485,10 +490,33 @@ What you need:
      * ``system:kubernetes``
      * ``system:magnum``
      * ``system:admin``
+     * ``system:complete-signing``
      * an additional certificate is necessary for the API.
 
    These names are the ones present in the bootstrapping file called
    ``base_roles.yaml``. They can naturally be modified to follow your needs.
+
+The ``support/pki`` script can also generate them for testing purpose, example:
+
+.. code:: bash
+
+    $ support/pki system:admin
+
+
+The certificate with ``system:complete-signing`` will be used for signing new
+certificates, thus would need to be set for signing purposes:
+
+.. code:: bash
+
+    $ support/pki system:complete-signing --intermediate-ca
+
+If Krake is not deployed locally, you also need to set its external endpoint as TLS
+subject alternative names, for instance:
+
+
+.. code:: bash
+
+    $ support/pki system:api-server --host 1.2.3.4 --host example.com
 
 
 Configuration of the API
@@ -592,6 +620,8 @@ common names of the controller certificates must be:
  * ``system:gc`` for the garbage collector;
  * ``system:scheduler`` for the scheduler;
  * ``system:kubernetes`` for the Kubernetes controller;
+ * ``system:complete-signing`` for the signing certificate of the "complete" hook,
+   see :ref:`dev/hooks:Complete`.
  * ``system:magnum`` for the Magnum controller.
 
 

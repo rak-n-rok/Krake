@@ -6,6 +6,7 @@ import sys
 import subprocess
 import urllib
 from io import BytesIO
+from copy import deepcopy
 from tempfile import TemporaryDirectory
 from pathlib import Path
 from typing import NamedTuple, List
@@ -20,12 +21,17 @@ import pytest
 import aiohttp
 import shutil
 from aiohttp import web
+from krake.controller import create_ssl_context
 from prometheus_async import aio
 from prometheus_client import Gauge, CollectorRegistry, CONTENT_TYPE_LATEST
 from contextlib import suppress
 
 # Prepend package directory for working imports
-from krake.data.config import ApiConfiguration
+from krake.data.config import (
+    ApiConfiguration,
+    TlsClientConfiguration,
+    HooksConfiguration,
+)
 
 package_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, package_dir)
@@ -243,6 +249,17 @@ def base_config(user, etcd_host="localhost", etcd_port=2379):
 
 @pytest.fixture
 def config(etcd_server, user):
+    """Generate a default configuration for the API, which leverages a test instance of
+    etcd.
+
+    Args:
+        etcd_server ((str, int)): the information to connect to the etcd instance.
+        user (str): the name of the user for the static authentication.
+
+    Returns:
+        ApiConfiguration: the generated configuration.
+
+    """
     etcd_host, etcd_port = etcd_server
     config = base_config(user, etcd_host=etcd_host, etcd_port=etcd_port)
     return ApiConfiguration.deserialize(config, creation_ignored=True)
@@ -505,7 +522,29 @@ def rbac_allow(db, user):
     from tests.factories.core import RoleFactory, RoleBindingFactory
     from krake.data.core import Verb, RoleRule
 
-    def rbac_creator(api, resource, verb, namespace="testing"):
+    def rbac_creator(api, resource, verb, namespace="testing", override_user=None):
+        """Add a role and role binding for the provided resource in the given namespace.
+        This can then be leveraged to test the RBAC mechanism.
+
+        Args:
+            api (str): name of the API of the resource for which a role has to be given
+                permission:
+            resource (str): name of the resource's kind for which a role has to be given
+                permission:
+            verb (str, Verb): verb or name of the verb that corresponds to the action
+                which should be allowed on the resource.
+            namespace (str): namespace where the action is allowed.
+            override_user (str): if provided, change the user for which the permission
+                is added. Otherwise, use the tests default.
+
+        Returns:
+            RecordsContext: context manager in which the permission is added.
+
+        """
+        role_user = user
+        if override_user:
+            role_user = override_user
+
         if isinstance(verb, str):
             verb = Verb.__members__[verb]
 
@@ -520,7 +559,7 @@ def rbac_allow(db, user):
                 )
             ]
         )
-        binding = RoleBindingFactory(users=[user], roles=[role.metadata.name])
+        binding = RoleBindingFactory(users=[role_user], roles=[role.metadata.name])
 
         return RecordsContext(db, [role, binding])
 
@@ -549,6 +588,13 @@ class PublicKeyRepository(object):
         with PublicKeyRepository() as pki:
             cert = pki.gencert("me")
 
+    Three types of certificates can be created:
+
+     * a CA is always created;
+     * an intermediate certificate can be created, which cannot be used for client
+       authentication (cfssl "intermediate-ca" profile) OR;
+     * a certificate ready for client authentication (cfssl "krake-test-ca" profile).
+
     Attributes:
         ca (Certificate): Certificate Authority of this repository created by
             :meth:`genca`.
@@ -572,7 +618,19 @@ class PublicKeyRepository(object):
                         "client auth",
                     ],
                     "expiry": "8760h",
-                }
+                },
+                "intermediate-ca": {
+                    "usages": [
+                        "signing",
+                        "key encipherment",
+                        "server auth",
+                        "client auth",
+                        "cert sign",
+                        "crl sign",
+                    ],
+                    "ca_constraint": {"is_ca": True, "max_path_len": 1},
+                    "expiry": "8760h",
+                },
             }
         }
     }
@@ -608,11 +666,13 @@ class PublicKeyRepository(object):
             return None
         return Path(self._tempdir.name)
 
-    def gencert(self, name):
+    def gencert(self, name, is_intermediate=False):
         """Generate client certificate signed by the CA managed by this repository.
 
         Args:
             name (str): Common name of the certificate
+            is_intermediate (bool): if True, the certificate will be able to sign other
+                certificates, but cannot be used for client authentication.
 
         Returns:
             Certificate: Named tuple of paths to the certificate and
@@ -627,6 +687,10 @@ class PublicKeyRepository(object):
         client_cert_file = self.tempdir / f"{name}.pem"
         client_key_file = self.tempdir / f"{name}-key.pem"
 
+        profile = "krake-test-ca"
+        if is_intermediate:
+            profile = "intermediate-ca"
+
         if not client_key_file.exists():
             with client_csr_file.open("w") as fd:
                 json.dump(client_csr, fd, indent=4)
@@ -634,7 +698,7 @@ class PublicKeyRepository(object):
             certs = self.cfssl(
                 "gencert",
                 "-profile",
-                "krake",
+                profile,
                 "-config",
                 str(self.ca_config_file),
                 "-ca",
@@ -716,6 +780,71 @@ def pki():
 
     with PublicKeyRepository() as repo:
         yield repo
+
+
+@pytest.fixture
+def client_ssl_context(pki):
+    """Create a decorator to create an SSL context to be used by a
+    :class:`krake.client.Client`. It accepts a user as parameter for the certificate CN.
+
+    Args:
+        pki (PublicKeyRepository): the SSL components generated by the pki fixture.
+
+    Returns:
+        function: the generated decorator, which depends on the user provided.
+
+    """
+
+    def create_client_ssl_context(user):
+        """Generate an SSL context, with the CA, the certificate and key. The
+        certificate's CN has the provided user.
+
+        Args:
+            user (str): the CN for which the certificate should be generated.
+
+        Returns:
+            ssl.SSLContext: the created SSL context.
+
+        """
+        client_cert = pki.gencert(user)
+        client_tls = TlsClientConfiguration(
+            enabled=True,
+            client_ca=pki.ca.cert,
+            client_cert=client_cert.cert,
+            client_key=client_cert.key,
+        )
+        return create_ssl_context(client_tls)
+
+    return create_client_ssl_context
+
+
+@pytest.fixture
+def hooks_config(pki):
+    """Generate the configuration for using the hooks of the KubernetesController.
+
+    Args:
+        pki (PublicKeyRepository): Already-prepared certificate environment.
+
+    Returns:
+        HooksConfiguration: the generated configuration.
+
+    """
+    client_cert = pki.gencert("test-complete-hook-signing", is_intermediate=True)
+
+    return deepcopy(
+        HooksConfiguration.deserialize(
+            {
+                "complete": {
+                    "hook_user": "test-complete-hook-user",
+                    "intermediate_src": client_cert.cert,
+                    "intermediate_key_src": client_cert.key,
+                    "cert_dest": "/etc/krake_certs",
+                    "env_token": "KRAKE_TOKEN",
+                    "env_complete": "KRAKE_COMPLETE_URL",
+                }
+            }
+        )
+    )
 
 
 class PrometheusExporter(NamedTuple):

@@ -226,6 +226,36 @@ users:
   - system:kubernetes
 ---
 
+
+#####################
+### Complete hook ###
+#####################
+
+api: core
+kind: Role
+metadata:
+  name: role:system:complete-hook
+rules:
+- api: 'kubernetes'
+  namespaces:
+  - ''
+  resources:
+  - "applications/complete"
+  verbs:
+  - update
+---
+
+api: core
+kind: RoleBinding
+metadata:
+  name: rolebinding:system:complete-hook
+roles:
+- role:system:complete-hook
+users:
+  - system:complete-hook
+---
+
+
 #########################
 ### Magnum Controller ###
 #########################

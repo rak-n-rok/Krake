@@ -67,6 +67,26 @@ def create_api_endpoint(api_host=None, api_port=None, tls_enabled=None, **kwargs
     return f"{scheme}://{api_host}:{api_port}"
 
 
+@register("external_endpoint_key_and_value")
+def format_external_endpoint_key_and_value(external_endpoint=None, **kwargs):
+    """Add a line for the optional "external_endpoint" parameter of the "complete" hook.
+    If a value is given, the line is generated, with format: "key: <given_value>". If no
+    value is given, the line is kept empty.
+
+    Args:
+        external_endpoint (str|None): the value of the external endpoint, as it should
+            appear in the configuration. None if no external endpoint should be given.
+
+    Returns:
+        str: the line to add in the configuration if an endpoint has been defined, the
+            empty string otherwise.
+
+    """
+    if external_endpoint:
+        return f"external_endpoint: {external_endpoint}"
+    return ""
+
+
 def generate_substitution(options):
     """From the options, apply the registered handler to modify the given values or
     add the newly defined ones.
@@ -265,15 +285,6 @@ if __name__ == "__main__":
         default="always-allow",
         choices=["RBAC", "always-allow", "always-deny"],
     )
-    # FIXME: Krake host IP address is temporary loaded from environment
-    #  variable "KRAKE_HOST" in the application controller.
-    #  This should be removed when DNS service takes place.
-    add_option(
-        parser,
-        "--api-ip",
-        "API host IP address for the controllers.",
-        default="127.0.0.1",
-    )
     add_option(
         parser,
         "--api-host",
@@ -332,12 +343,22 @@ if __name__ == "__main__":
     )
     add_option(
         parser,
-        "--complete-hook-ca-dest",
+        "--complete-hook-user",
         (
-            "For the complete hook, set the path to the certificate, "
-            "which will be given to the Application."
+            "For the 'complete' hook, the name of the user defined in the CN of the"
+            " generated certificates. Should match the Roles in the database if RBAC is"
+            " enabled."
         ),
-        default="/etc/krake_ca/ca.pem",
+        default="system:complete-hook",
+    )
+    add_option(
+        parser,
+        "--complete-hook-cert-dest",
+        (
+            "For the complete hook, set the path to the directory, where the"
+            " certificates will be stored in the deployed Application."
+        ),
+        default="/etc/krake_cert",
     )
     add_option(
         parser,
@@ -358,6 +379,14 @@ if __name__ == "__main__":
             " which will be given to the Application."
         ),
         default="KRAKE_COMPLETE_URL",
+    )
+    parser.add_argument(
+        "--external-endpoint",
+        help=(
+            "If set, replaces the value of the URL host and port of the endpoint given"
+            " to the Applications which have the 'complete' hook enabled."
+        ),
+        default="",
     )
 
     args = vars(parser.parse_args())

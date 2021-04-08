@@ -3,6 +3,8 @@ from typing import List
 from dataclasses import field
 from krake.data.core import Role, RoleBinding
 from krake.data.serializable import Serializable
+from marshmallow import ValidationError
+from yarl import URL
 
 
 class TlsConfiguration(Serializable):
@@ -89,9 +91,70 @@ class AuthenticationConfiguration(Serializable):
     strategy: StrategyConfiguration
 
 
+def _validate_endpoint(endpoint):
+    """Ensure that the provided endpoint is a valid URL and that it has a supported
+    scheme.
+
+    Args:
+        endpoint (str): the endpoint to verify.
+
+    Returns:
+        True if the endpoint is valid.
+
+    Raises:
+        ValidationError: if the URL or its scheme is unsupported.
+
+    """
+    endpoint_url = URL(endpoint)
+
+    message = (
+        "A scheme should be provided with the external endpoint. Current value:"
+        f" {str(endpoint_url)!r}."
+    )
+    if not endpoint_url.scheme:
+        raise ValidationError(message)
+
+    # yarl considers the host (IP address or hostname) to be the scheme if a port
+    # and a path are added to the endpoint.
+    # Example: URL('1.2.3.4:80/test').scheme -> "1.2.3.4"
+    if not endpoint_url.host:
+        raise ValidationError(message)
+
+    scheme = endpoint_url.scheme
+    if scheme not in ["http", "https"]:
+        raise ValidationError(f"The provided scheme {scheme!r} is not supported.")
+
+    return True
+
+
 class CompleteHookConfiguration(Serializable):
-    ca_dest: str = field(
-        default="/etc/krake_ca/ca.pem",
+    hook_user: str = field(
+        default="system:complete-hook",
+        metadata={
+            "help": (
+                "Name of the 'complete' hook user put in the certificates given to"
+                " Applications. Needed if RBAC is enabled."
+            )
+        },
+    )
+    intermediate_src: str = field(
+        metadata={
+            "help": (
+                "Path to the certificate which will sign new certificates given to the"
+                " Applications."
+            )
+        }
+    )
+    intermediate_key_src: str = field(
+        metadata={
+            "help": (
+                "Path to the certificate key which will sign new certificates given"
+                " to the Applications."
+            )
+        }
+    )
+    cert_dest: str = field(
+        default="/etc/krake_certs/",
         metadata={
             "help": "Environment variable to be used in the Kubernetes Application"
         },
@@ -101,7 +164,7 @@ class CompleteHookConfiguration(Serializable):
         metadata={
             "help": (
                 "Name of the environment variable to be used in the Kubernetes"
-                "Application to access the token to identify the Application."
+                " Application to access the token to identify the Application."
             )
         },
     )
@@ -110,9 +173,21 @@ class CompleteHookConfiguration(Serializable):
         metadata={
             "help": (
                 "Name of the environment variable to be used in the Kubernetes"
-                "Application to access the actual API endpoint of Krake to notify"
-                "the end of job."
+                " Application to access the actual API endpoint of Krake to notify the"
+                " end of job."
             )
+        },
+    )
+    external_endpoint: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "URL that will be provided to the Application, which corresponds to the"
+                " API endpoint to notify the end of job. If not provided, the default"
+                " endpoint of the Krake API will be used. It should be set if the"
+                " KubernetesController is connected to the API with a private IP."
+            ),
+            "validate": _validate_endpoint,
         },
     )
 

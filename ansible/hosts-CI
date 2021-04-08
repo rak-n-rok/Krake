@@ -72,6 +72,8 @@ all:
           hostname: krake-$CI_PIPELINE_ID-app
           network: krake-$CI_PIPELINE_ID-network
 
+          use_private_ip: true
+
           # List of additional authorized SSH keys. Actually, every physical
           # host supports this configuration parameter.
           # authorized_keys:

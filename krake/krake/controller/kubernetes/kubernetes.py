@@ -12,6 +12,8 @@ from krake import utils
 from kubernetes_asyncio.client.rest import ApiException
 from typing import NamedTuple, Tuple
 
+from yarl import URL
+
 from .hooks import listen, Hook
 from krake.client.kubernetes import KubernetesApi
 from krake.controller import Controller, Reflector, ControllerError
@@ -121,7 +123,29 @@ class KubernetesController(Controller):
     """Controller responsible for :class:`krake.data.kubernetes.Application`
     resources in "SCHEDULED" and "DELETING" state.
 
+    Attributes:
+        kubernetes_api (KubernetesApi): Krake internal API to connect to the
+            "kubernetes" API of Krake.
+        reflector (Reflector): reflector for the resource of the "kubernetes" API of
+            Krake.
+        worker_count (int): the amount of worker function that should be run as
+            background tasks.
+        hooks (krake.data.config.HooksConfiguration): configuration to be used by the
+            hooks supported by the controller.
+        observer_time_step (float): for the Observers: the number of seconds between two
+            observations of the actual resource.
+        observers (dict[str, (Observer, Coroutine)]): mapping of all Applications' UID
+            to their respective Observer and task responsible for the Observer. The
+            signature is: ``<uid> --> <observer>, <reference_to_observer's_task>``.
+
     Args:
+        api_endpoint (str): URL to the API
+        loop (asyncio.AbstractEventLoop, optional): Event loop that should be
+            used.
+        ssl_context (ssl.SSLContext, optional): if given, this context will be
+            used to communicate with the API endpoint.
+        debounce (float, optional): value of the debounce for the
+            :class:`WorkQueue`.
         worker_count (int, optional): the amount of worker function that should be
             run as background tasks.
         time_step (float, optional): for the Observers: the number of seconds between
@@ -147,9 +171,39 @@ class KubernetesController(Controller):
 
         self.worker_count = worker_count
         self.hooks = hooks
+        self.check_external_endpoint()
 
         self.observer_time_step = time_step
         self.observers = {}
+
+    def check_external_endpoint(self):
+        """Ensure the scheme in the external endpoint (if provided) is matching the
+        scheme used by the Krake API ("https" or "http" if TLS is enabled or disabled
+        respectively).
+
+        If they are not, a warning is logged and the scheme is replaced in the endpoint.
+        """
+        if not self.hooks or not self.hooks.complete.external_endpoint:
+            return
+
+        endpoint_url = URL(self.hooks.complete.external_endpoint)
+        scheme = endpoint_url.scheme
+
+        if scheme == "https" and self.ssl_context is None:
+            logger.warning(
+                "The scheme of the 'complete' hook external endpoint is set to 'https'"
+                " even though TLS is disabled. Forcing the usage of 'http'."
+            )
+            scheme = "http"
+        if scheme == "http" and self.ssl_context is not None:
+            logger.warning(
+                "The scheme of the 'complete' hook external endpoint is set to 'http'"
+                " even though TLS is enabled. Forcing the usage of 'https'."
+            )
+            scheme = "https"
+
+        final_url = str(endpoint_url.with_scheme(scheme))
+        self.hooks.complete.external_endpoint = final_url
 
     @staticmethod
     def scheduled_or_deleting(app):
