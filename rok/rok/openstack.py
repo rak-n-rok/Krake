@@ -54,7 +54,7 @@ def list_projects(config, session, namespace, all):
 @argument(
     "--application-credential",
     nargs=2,
-    help="OpenStack a1uthentication credential and secret",
+    help="OpenStack authentication credential and secret",
 )
 @argument("--user-id", help="UUID of OpenStack user")
 @argument("--password", help="Password of OpenStack user")
