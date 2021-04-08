@@ -24,6 +24,7 @@ from krake.data.kubernetes import (
     Cluster,
     Constraints,
     ClusterConstraints,
+    ClusterStatus,
 )
 from krake.data.constraints import (
     EqualConstraint,
@@ -378,9 +379,19 @@ class ClusterSpecFactory(Factory):
         return [fuzzy_name() for _ in range(fake.pyint(1, 3))]
 
 
+class ClusterStatusFactory(Factory):
+    class Meta:
+        model = ClusterStatus
+
+    @lazy_attribute
+    def metrics_reasons(self):
+        return dict()
+
+
 class ClusterFactory(Factory):
     class Meta:
         model = Cluster
 
     metadata = SubFactory(MetadataFactory)
     spec = SubFactory(ClusterSpecFactory)
+    status = SubFactory(ClusterStatusFactory)

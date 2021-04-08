@@ -8,15 +8,25 @@ from functools import total_ordering
 from aiohttp import ClientError
 
 from krake import utils
-from krake.data.openstack import Project, MagnumClusterState, MagnumClusterBinding
+from krake.data.openstack import (
+    Project,
+    MagnumClusterState,
+    MagnumClusterBinding,
+    ProjectState,
+)
 from krake.client.openstack import OpenStackApi
 from krake.client.core import CoreApi
 from krake.client.kubernetes import KubernetesApi
 from krake.data.core import ReasonCode, resource_ref, Reason
-from krake.data.kubernetes import ApplicationState, Cluster, ClusterBinding
+from krake.data.kubernetes import (
+    ApplicationState,
+    Cluster,
+    ClusterBinding,
+    ClusterState,
+)
 
 from .constraints import match_cluster_constraints
-from .metrics import MetricError, fetch_query
+from .metrics import MetricError, fetch_query, MetricsProviderError
 from .. import Controller, ControllerError, Reflector, WorkQueue
 
 logger = logging.getLogger(__name__)
@@ -702,6 +712,80 @@ class Scheduler(Controller):
             async for metrics in self.fetch_metrics(project, project.spec.metrics)
         ]
 
+    @staticmethod
+    def metrics_reason_from_err(error):
+        """Convert an error as exception into an instance of :class:`Reason`. Also
+        generates an appropriate message if necessary.
+
+        Args:
+            error (Exception): error that occurred which has to be converted into a
+                reason.
+
+        Returns:
+            Reason: reason generated from the provided error.
+
+        """
+        message = None
+        if isinstance(error, MetricsProviderError):
+            reason_code = ReasonCode.UNREACHABLE_METRICS_PROVIDER
+        elif isinstance(error, MetricError):
+            reason_code = ReasonCode.INVALID_METRIC
+        elif isinstance(error, ClientError):
+            resource_name = error.request_info.url.path.split("/")[-1]
+            if "metricsprovider" in error.request_info.url.path:
+                reason_code = ReasonCode.UNKNOWN_METRICS_PROVIDER
+                message = (
+                    f"The metrics provider {resource_name!r} was not found in the Krake"
+                    f" database."
+                )
+            else:
+                reason_code = ReasonCode.UNKNOWN_METRIC
+                message = (
+                    f"The metric {resource_name!r} was not found in the Krake database."
+                )
+        else:
+            raise error
+
+        final_message = message if message else str(error)
+        return Reason(code=reason_code, message=final_message)
+
+    async def update_resource_status(self, resource, metrics, reasons):
+        """Update the status of the provided resource with the new list of reasons for
+        metrics which failed.
+
+        Args:
+            resource (krake.data.serializable.ApiObject): the resource to updated.
+            metrics (list[krake.data.core.MetricRef]): the list of metrics for which the
+                scheduler attempted to fetch the current value.
+            reasons (list[Reason]): the list of reasons for the metrics failing which
+                were found. For each metric in the :args:`metrics` argument, there
+                should be one element in this argument: the reason for the metric
+                failing, or None if it did not fail.
+
+        """
+        assert len(metrics) == len(reasons)
+
+        if resource.kind == "Cluster":
+            resource.status.state = ClusterState.FAILING_METRICS
+            update_status_client = self.kubernetes_api.update_cluster_status
+        elif resource.kind == "Project":
+            resource.status.state = ProjectState.FAILING_METRICS
+            update_status_client = self.openstack_api.update_project_status
+        else:
+            raise ValueError(f"Unsupported kind: {resource.kind}.")
+
+        # Add to resource only if a failure occurred.
+        resource.status.metrics_reasons = {}
+        for i, reason in enumerate(reasons):
+            if reason:
+                resource.status.metrics_reasons[metrics[i].name] = reason
+
+        await update_status_client(
+            namespace=resource.metadata.namespace,
+            name=resource.metadata.name,
+            body=resource,
+        )
+
     async def fetch_metrics(self, resource, metrics):
         """Async generator for fetching metrics by the given list of metric
         references.
@@ -721,19 +805,21 @@ class Scheduler(Controller):
         Args:
             resource (krake.data.serializable.ApiObject): API resource to which
                 the metrics belong.
-            metrics (List[krake.data.core.MetricRef]): References to metrics
+            metrics (list[krake.data.core.MetricRef]): References to metrics
                 that should be fetched.
 
         Yields:
-            List[Tuple[krake.core.Metric, float, float]]: List of fetched
+            list[krake.controller.scheduler.metrics.QueryResult]: List of fetched
                 metrics with their value and weight.
 
         """
         assert metrics, "Got empty list of metric references"
 
+        errors = []
+        reasons = []
         fetching = []
-        try:
-            for metric_spec in metrics:
+        for metric_spec in metrics:
+            try:
                 metric = await self.core_api.read_metric(name=metric_spec.name)
                 metrics_provider = await self.core_api.read_metrics_provider(
                     name=metric.spec.provider.name
@@ -746,10 +832,40 @@ class Scheduler(Controller):
                         metric_spec.weight,
                     )
                 )
-            fetched = await asyncio.gather(*fetching)
-        except (MetricError, ClientError) as err:
+                reasons.append(None)  # Add an empty placeholder when no error occurred.
+            except ClientError as err:
+                reasons.append(self.metrics_reason_from_err(err))
+                errors.append(err)
+
+        fetched = await asyncio.gather(*fetching, return_exceptions=True)
+
+        # Convert the errors which occurred when fetching the value of the remaining
+        # metrics into Reason instances.
+        # For this, the next occurrence of "None" inside the "reasons" list is used.
+        # Each one of this occurrence corresponds to a task for fetching the metric. So
+        # if for example the 3rd element in "fetched" is an error, the 3rd "None" in
+        # "reasons" must be replaced.
+        none_reason_iter = (i for i, reason in enumerate(reasons) if reason is None)
+        for result in fetched:
+            # Get the index of the next "None" inside "reasons".
+            index_of_none = next(none_reason_iter)
+            if isinstance(result, Exception):
+                reasons[index_of_none] = self.metrics_reason_from_err(result)
+                errors.append(result)
+
+        stopped = False
+        try:
+            next(none_reason_iter)
+        except StopIteration:
+            stopped = True
+        assert stopped
+
+        if any(reasons):
             # If there is any issue with a metric, skip stop the generator.
-            logger.error(err)
+            await self.update_resource_status(resource, metrics, reasons)
+            for error in errors:
+                if error:
+                    logger.error(error)
             return
 
         for metric, weight, value in fetched:
@@ -813,7 +929,8 @@ class Scheduler(Controller):
         """Calculate rank of OpenStack project based on the given metrics.
 
         Args:
-            metrics (List[krake.metrics.QueryResult]): List of metric query results
+            metrics (list[krake.controller.scheduler.metrics.QueryResult]): List of
+                metric query results.
             project (krake.data.openstack.Project): Project that is ranked
 
         Returns:

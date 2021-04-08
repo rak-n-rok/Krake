@@ -13,8 +13,13 @@ from krake.controller.scheduler.constraints import match_cluster_constraints
 from krake.data.constraints import LabelConstraint
 from krake.data.core import ResourceRef, MetricRef
 from krake.data.core import resource_ref, ReasonCode
-from krake.data.kubernetes import Application, ApplicationState
-from krake.data.openstack import MagnumCluster, MagnumClusterState
+from krake.data.kubernetes import Application, ApplicationState, Cluster, ClusterState
+from krake.data.openstack import (
+    MagnumCluster,
+    MagnumClusterState,
+    ProjectState,
+    Project,
+)
 from krake.test_utils import server_endpoint, make_prometheus
 
 from tests.factories import fake
@@ -337,28 +342,47 @@ async def test_kubernetes_rank_with_metrics_only():
         await scheduler.rank_kubernetes_clusters(app, clusters)
 
 
-async def test_kubernetes_rank_missing_metric(aiohttp_server, config, loop):
+async def test_kubernetes_rank_missing_metric(aiohttp_server, db, config, loop):
+    """Test the error handling of the Scheduler in the case of fetching a metric
+    referenced in a Cluster but not present in the database.
+    """
     app = ApplicationFactory(status__is_scheduled=False)
-    clusters = [
-        ClusterFactory(spec__metrics=[MetricRef(name="non-existent-metric", weight=1)]),
-        ClusterFactory(spec__metrics=[MetricRef(name="also-not-existing", weight=1)]),
-    ]
+    cluster = ClusterFactory(
+        spec__metrics=[MetricRef(name="non-existent-metric", weight=1)]
+    )
+    await db.put(cluster)
 
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        ranked = await scheduler.rank_kubernetes_clusters(app, clusters)
+        ranked = await scheduler.rank_kubernetes_clusters(app, [cluster])
 
     assert len(ranked) == 0
+
+    stored_cluster = await db.get(
+        Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+    )
+    assert stored_cluster.status.state == ClusterState.FAILING_METRICS
+    assert len(stored_cluster.status.metrics_reasons) == 1
+
+    single_metric_reason = stored_cluster.status.metrics_reasons["non-existent-metric"]
+    assert single_metric_reason.code == ReasonCode.UNKNOWN_METRIC
 
 
 async def test_kubernetes_rank_missing_metrics_provider(
     aiohttp_server, config, db, loop
 ):
+    """Test the error handling of the Scheduler in the case of fetching a metric
+    provider referenced in a metric referenced by a Cluster but the provider is not
+    present in the database.
+    """
     app = ApplicationFactory(status__is_scheduled=False)
     clusters = [ClusterFactory(spec__metrics=[MetricRef(name="my-metric", weight=1)])]
+    for cluster in clusters:
+        await db.put(cluster)
+
     metric = MetricFactory(
         metadata__name="my-metric",
         spec__min=0,
@@ -377,10 +401,142 @@ async def test_kubernetes_rank_missing_metrics_provider(
 
     assert len(ranked) == 0
 
+    cluster = clusters[0]
+    stored_cluster = await db.get(
+        Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+    )
+    assert stored_cluster.status.state == ClusterState.FAILING_METRICS
+    assert len(stored_cluster.status.metrics_reasons) == 1
+    assert (
+        stored_cluster.status.metrics_reasons["my-metric"].code
+        == ReasonCode.UNKNOWN_METRICS_PROVIDER
+    )
+
+
+async def test_kubernetes_rank_multiple_failing_metric(
+    aiohttp_server, db, config, loop
+):
+    """Test the error handling of the Scheduler in the case of several errors related to
+    metrics referenced in two different Clusters. The issues are the following:
+
+    1st cluster:
+    - 1st metric: defined metric provider not present in the database
+    - 2nd metric: not present in the database
+
+    2nd cluster:
+    - 1st metric: defined metric provider returns errors.
+    - 2nd metric: not present in the database.
+    """
+    routes = web.RouteTableDef()
+
+    @routes.get("/api/v1/query")
+    async def _(request):
+        raise web.HTTPServiceUnavailable()
+
+    prometheus_app = web.Application()
+    prometheus_app.add_routes(routes)
+
+    prometheus = await aiohttp_server(prometheus_app)
+
+    app = ApplicationFactory(status__is_scheduled=False)
+    clusters = [
+        ClusterFactory(
+            spec__metrics=[
+                MetricRef(name="non-existent-metric", weight=1),
+                MetricRef(name="existent-metric", weight=1),
+            ]
+        ),
+        ClusterFactory(
+            spec__metrics=[
+                MetricRef(name="also-existent", weight=1),
+                MetricRef(name="again-non-existent", weight=1),
+            ]
+        ),
+    ]
+    for cluster in clusters:
+        await db.put(cluster)
+
+    metrics = [
+        MetricFactory(
+            metadata__name="existent-metric",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="my-provider",
+            spec__provider__metric="my-metric",
+        ),
+        MetricFactory(
+            metadata__name="also-existent",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="non-existent-provider",
+            spec__provider__metric="my-other-metric",
+        ),
+    ]
+    provider = MetricsProviderFactory(
+        metadata__name="my-provider",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+    for metric in metrics:
+        await db.put(metric)
+    await db.put(provider)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        ranked = await scheduler.rank_kubernetes_clusters(app, clusters)
+
+    assert len(ranked) == 0
+
+    # 1st cluster:
+    # - 1st metric: defined metric provider not present in the database
+    # - 2nd metric: not present in the database
+    first_cluster = await db.get(
+        Cluster,
+        namespace=clusters[0].metadata.namespace,
+        name=clusters[0].metadata.name,
+    )
+    assert first_cluster.status.state == ClusterState.FAILING_METRICS
+    assert len(first_cluster.status.metrics_reasons) == 2
+
+    assert (
+        first_cluster.status.metrics_reasons["existent-metric"].code
+        == ReasonCode.UNREACHABLE_METRICS_PROVIDER
+    )
+    assert (
+        first_cluster.status.metrics_reasons["non-existent-metric"].code
+        == ReasonCode.UNKNOWN_METRIC
+    )
+
+    # 2nd cluster:
+    # - 1st metric: defined metric provider returns errors.
+    # - 2nd metric: not present in the database
+    second_cluster = await db.get(
+        Cluster,
+        namespace=clusters[1].metadata.namespace,
+        name=clusters[1].metadata.name,
+    )
+    assert second_cluster.status.state == ClusterState.FAILING_METRICS
+    assert len(second_cluster.status.metrics_reasons) == 2
+
+    assert (
+        second_cluster.status.metrics_reasons["also-existent"].code
+        == ReasonCode.UNKNOWN_METRICS_PROVIDER
+    )
+    assert (
+        second_cluster.status.metrics_reasons["again-non-existent"].code
+        == ReasonCode.UNKNOWN_METRIC
+    )
+
 
 async def test_kubernetes_rank_failing_metrics_provider(
     aiohttp_server, config, db, loop
 ):
+    """Test the error handling of the Scheduler in the case of fetching the value of a
+    metric (referenced by a Cluster) from its provider, but the connection has an issue.
+    """
     routes = web.RouteTableDef()
 
     @routes.get("/api/v1/query")
@@ -394,19 +550,23 @@ async def test_kubernetes_rank_failing_metrics_provider(
 
     app = ApplicationFactory(status__is_scheduled=False)
     clusters = [ClusterFactory(spec__metrics=[MetricRef(name="my-metric", weight=1)])]
-    metric = MetricFactory(
-        metadata__name="my-metric",
-        spec__min=0,
-        spec__max=1,
-        spec__provider__name="my-provider",
-        spec__provider__metric="my-metric",
-    )
+    await db.put(clusters[0])
+    metrics = [
+        MetricFactory(
+            metadata__name="my-metric",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="my-provider",
+            spec__provider__metric="my-metric",
+        )
+    ]
     provider = MetricsProviderFactory(
         metadata__name="my-provider",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
     )
-    await db.put(metric)
+    for metric in metrics:
+        await db.put(metric)
     await db.put(provider)
 
     api = await aiohttp_server(create_app(config))
@@ -417,6 +577,17 @@ async def test_kubernetes_rank_failing_metrics_provider(
         ranked = await scheduler.rank_kubernetes_clusters(app, clusters)
 
     assert len(ranked) == 0
+
+    cluster = clusters[0]
+    stored_cluster = await db.get(
+        Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+    )
+    assert stored_cluster.status.state == ClusterState.FAILING_METRICS
+    assert len(stored_cluster.status.metrics_reasons) == 1
+    assert (
+        stored_cluster.status.metrics_reasons["my-metric"].code
+        == ReasonCode.UNREACHABLE_METRICS_PROVIDER
+    )
 
 
 async def test_kubernetes_prefer_cluster_with_metrics(aiohttp_server, config, db, loop):
@@ -531,6 +702,25 @@ async def test_kubernetes_select_cluster_all_unreachable_metric(
         ClusterFactory(spec__metrics=[MetricRef(name="unreachable", weight=1)]),
         ClusterFactory(spec__metrics=[MetricRef(name="unreachable", weight=0.1)]),
     ]
+    for cluster in clusters:
+        await db.put(cluster)
+
+    metric = MetricFactory(
+        metadata__name="unreachable",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="my-provider",
+        spec__provider__metric="my-metric",
+    )
+    provider = MetricsProviderFactory(
+        metadata__name="my-provider",
+        spec__type="prometheus",
+        spec__prometheus__url="http://dummyurl",
+    )
+
+    await db.put(metric)
+    await db.put(provider)
+
     random.shuffle(clusters)
 
     app = ApplicationFactory(
@@ -538,9 +728,9 @@ async def test_kubernetes_select_cluster_all_unreachable_metric(
         status__is_scheduled=False,
         spec__constraints=None,
     )
-    endpoint = "http://dummyurl"
-    async with Client(url=endpoint, loop=loop) as client:
-        scheduler = Scheduler(endpoint, worker_count=0)
+    server = await aiohttp_server(create_app(config))
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
         selected = await scheduler.select_kubernetes_cluster(app, clusters)
 
@@ -560,6 +750,9 @@ async def test_kubernetes_select_cluster_some_unreachable_metric(
     cluster_w_metric = ClusterFactory(
         spec__metrics=[MetricRef(name="heat-demand", weight=1)]
     )
+    await db.put(cluster_w_metric)
+    await db.put(cluster_wo_metric)
+    await db.put(cluster_w_unreachable)
 
     metric = MetricFactory(
         metadata__name="heat-demand",
@@ -612,6 +805,24 @@ async def test_kubernetes_select_cluster_sticky_all_unreachable_metric(
         cluster2_w_metric,
     ]
     random.shuffle(clusters)
+    for cluster in clusters:
+        await db.put(cluster)
+
+    metric = MetricFactory(
+        metadata__name="unreachable",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="my-provider",
+        spec__provider__metric="my-metric",
+    )
+    provider = MetricsProviderFactory(
+        metadata__name="my-provider",
+        spec__type="prometheus",
+        spec__prometheus__url="http://dummyurl",
+    )
+
+    await db.put(metric)
+    await db.put(provider)
 
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING,
@@ -619,9 +830,9 @@ async def test_kubernetes_select_cluster_sticky_all_unreachable_metric(
         status__scheduled_to=resource_ref(current_wo_metric),
         spec__constraints=None,
     )
-    endpoint = "http://dummyurl"
-    async with Client(url=endpoint, loop=loop) as client:
-        scheduler = Scheduler(endpoint, worker_count=0)
+    server = await aiohttp_server(create_app(config))
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
         selected = await scheduler.select_kubernetes_cluster(app, clusters)
 
@@ -757,7 +968,25 @@ async def test_kubernetes_select_cluster_sticky_to_unreachable_all_unreachable_m
         spec__metrics=[MetricRef(name="unreachable", weight=1)]
     )
     clusters = [cluster_wo_metric, current_w_unreachable, cluster_w_unreachable]
+    for cluster in clusters:
+        await db.put(cluster)
     random.shuffle(clusters)
+
+    metric = MetricFactory(
+        metadata__name="unreachable",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="my-provider",
+        spec__provider__metric="my-metric",
+    )
+    provider = MetricsProviderFactory(
+        metadata__name="my-provider",
+        spec__type="prometheus",
+        spec__prometheus__url="http://dummyurl",
+    )
+
+    await db.put(metric)
+    await db.put(provider)
 
     app = ApplicationFactory(
         status__state=ApplicationState.PENDING,
@@ -766,9 +995,9 @@ async def test_kubernetes_select_cluster_sticky_to_unreachable_all_unreachable_m
         spec__constraints=None,
     )
 
-    endpoint = "http://dummyurl"
-    async with Client(url=endpoint, loop=loop) as client:
-        scheduler = Scheduler(endpoint, worker_count=0)
+    server = await aiohttp_server(create_app(config))
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
         selected = await scheduler.select_kubernetes_cluster(app, clusters)
 
@@ -791,6 +1020,8 @@ async def test_kubernetes_select_cluster_sticky_unreachable_metric(
     )
     clusters = [cluster_wo_metric, current_w_unreachable, cluster_w_metric]
     random.shuffle(clusters)
+    for cluster in clusters:
+        await db.put(cluster)
 
     metric = MetricFactory(
         metadata__name="heat-demand",
@@ -1448,12 +1679,100 @@ async def test_openstack_rank_with_metrics_only():
         await scheduler.rank_openstack_projects(cluster, projects)
 
 
-async def test_openstack_rank_missing_metric(aiohttp_server, config, loop):
+async def test_openstack_rank_missing_metric(aiohttp_server, db, config, loop):
+    """Test the error handling of the Scheduler in the case of fetching a metric
+    referenced in a Project but not present in the database.
+    """
+    cluster = MagnumClusterFactory(status__is_scheduled=False)
+    project = ProjectFactory(
+        spec__metrics=[MetricRef(name="non-existent-metric", weight=1)]
+    )
+    await db.put(project)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        ranked = await scheduler.rank_openstack_projects(cluster, [project])
+
+    assert len(ranked) == 0
+
+    stored_project = await db.get(
+        Project, namespace=project.metadata.namespace, name=project.metadata.name
+    )
+    assert stored_project.status.state == ProjectState.FAILING_METRICS
+    assert len(stored_project.status.metrics_reasons) == 1
+
+    single_metric_reason = stored_project.status.metrics_reasons["non-existent-metric"]
+    assert single_metric_reason.code == ReasonCode.UNKNOWN_METRIC
+
+
+async def test_openstack_rank_multiple_failing_metric(aiohttp_server, db, config, loop):
+    """Test the error handling of the Scheduler in the case of several errors related to
+    metrics referenced in two different Projects. The issues are the following:
+
+    1st Project:
+    - 1st metric: defined metric provider not present in the database
+    - 2nd metric: not present in the database
+
+    2nd Project:
+    - 1st metric: defined metric provider returns errors.
+    - 2nd metric: not present in the database.
+    """
+    routes = web.RouteTableDef()
+
+    @routes.get("/api/v1/query")
+    async def _(request):
+        raise web.HTTPServiceUnavailable()
+
+    prometheus_app = web.Application()
+    prometheus_app.add_routes(routes)
+
+    prometheus = await aiohttp_server(prometheus_app)
+
     cluster = MagnumClusterFactory(status__is_scheduled=False)
     projects = [
-        ProjectFactory(spec__metrics=[MetricRef(name="non-existent-metric", weight=1)]),
-        ProjectFactory(spec__metrics=[MetricRef(name="also-not-existing", weight=1)]),
+        ProjectFactory(
+            spec__metrics=[
+                MetricRef(name="non-existent-metric", weight=1),
+                MetricRef(name="existent-metric", weight=1),
+            ]
+        ),
+        ProjectFactory(
+            spec__metrics=[
+                MetricRef(name="also-existent", weight=1),
+                MetricRef(name="again-non-existent", weight=1),
+            ]
+        ),
     ]
+    for project in projects:
+        await db.put(project)
+
+    metrics = [
+        MetricFactory(
+            metadata__name="existent-metric",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="my-provider",
+            spec__provider__metric="my-metric",
+        ),
+        MetricFactory(
+            metadata__name="also-existent",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="non-existent-provider",
+            spec__provider__metric="my-other-metric",
+        ),
+    ]
+    provider = MetricsProviderFactory(
+        metadata__name="my-provider",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+    for metric in metrics:
+        await db.put(metric)
+    await db.put(provider)
 
     server = await aiohttp_server(create_app(config))
 
@@ -1464,12 +1783,58 @@ async def test_openstack_rank_missing_metric(aiohttp_server, config, loop):
 
     assert len(ranked) == 0
 
+    # 1st project:
+    # - 1st metric: defined metric provider not present in the database
+    # - 2nd metric: not present in the database
+    first_project = await db.get(
+        Project,
+        namespace=projects[0].metadata.namespace,
+        name=projects[0].metadata.name,
+    )
+    assert first_project.status.state == ProjectState.FAILING_METRICS
+    assert len(first_project.status.metrics_reasons) == 2
+
+    assert (
+        first_project.status.metrics_reasons["existent-metric"].code
+        == ReasonCode.UNREACHABLE_METRICS_PROVIDER
+    )
+    assert (
+        first_project.status.metrics_reasons["non-existent-metric"].code
+        == ReasonCode.UNKNOWN_METRIC
+    )
+
+    # 2nd project:
+    # - 1st metric: defined metric provider returns errors.
+    # - 2nd metric: not present in the database
+    second_project = await db.get(
+        Project,
+        namespace=projects[1].metadata.namespace,
+        name=projects[1].metadata.name,
+    )
+    assert second_project.status.state == ProjectState.FAILING_METRICS
+    assert len(second_project.status.metrics_reasons) == 2
+
+    assert (
+        second_project.status.metrics_reasons["also-existent"].code
+        == ReasonCode.UNKNOWN_METRICS_PROVIDER
+    )
+    assert (
+        second_project.status.metrics_reasons["again-non-existent"].code
+        == ReasonCode.UNKNOWN_METRIC
+    )
+
 
 async def test_openstack_rank_missing_metrics_provider(
     aiohttp_server, config, db, loop
 ):
+    """Test the error handling of the Scheduler in the case of fetching a metric
+    provider referenced in a metric referenced by a Project but the provider is not
+    present in the database.
+    """
     cluster = MagnumClusterFactory(status__is_scheduled=False)
     projects = [ProjectFactory(spec__metrics=[MetricRef(name="my-metric", weight=1)])]
+    for project in projects:
+        await db.put(project)
     metric = MetricFactory(
         metadata__name="my-metric",
         spec__min=0,
@@ -1488,10 +1853,24 @@ async def test_openstack_rank_missing_metrics_provider(
 
     assert len(ranked) == 0
 
+    project = projects[0]
+    stored_project = await db.get(
+        Project, namespace=project.metadata.namespace, name=project.metadata.name
+    )
+    assert stored_project.status.state == ProjectState.FAILING_METRICS
+    assert len(stored_project.status.metrics_reasons) == 1
+    assert (
+        stored_project.status.metrics_reasons["my-metric"].code
+        == ReasonCode.UNKNOWN_METRICS_PROVIDER
+    )
+
 
 async def test_openstack_rank_failing_metrics_provider(
     aiohttp_server, config, db, loop
 ):
+    """Test the error handling of the Scheduler in the case of fetching the value of a
+    metric (referenced by a Cluster) from its provider, but the connection has an issue.
+    """
     routes = web.RouteTableDef()
 
     @routes.get("/api/v1/query")
@@ -1505,6 +1884,8 @@ async def test_openstack_rank_failing_metrics_provider(
 
     cluster = MagnumClusterFactory(status__is_scheduled=False)
     projects = [ProjectFactory(spec__metrics=[MetricRef(name="my-metric", weight=1)])]
+    for project in projects:
+        await db.put(project)
     metric = MetricFactory(
         metadata__name="my-metric",
         spec__min=0,
@@ -1528,6 +1909,17 @@ async def test_openstack_rank_failing_metrics_provider(
         ranked = await scheduler.rank_openstack_projects(cluster, projects)
 
     assert len(ranked) == 0
+
+    project = projects[0]
+    stored_project = await db.get(
+        Project, namespace=project.metadata.namespace, name=project.metadata.name
+    )
+    assert stored_project.status.state == ProjectState.FAILING_METRICS
+    assert len(stored_project.status.metrics_reasons) == 1
+    assert (
+        stored_project.status.metrics_reasons["my-metric"].code
+        == ReasonCode.UNREACHABLE_METRICS_PROVIDER
+    )
 
 
 async def test_prefer_projects_with_metrics(aiohttp_server, config, db, loop):

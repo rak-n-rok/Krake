@@ -19,6 +19,7 @@ from krake.data.openstack import (
     MagnumCluster,
     Constraints,
     ProjectConstraints,
+    ProjectStatus,
 )
 from krake.data.constraints import (
     EqualConstraint,
@@ -133,12 +134,22 @@ class ProjectSpecFactory(Factory):
         return [MetricRefFactory() for _ in range(self.metric_count)]
 
 
+class ProjectStatusFactory(Factory):
+    class Meta:
+        model = ProjectStatus
+
+    @lazy_attribute
+    def metrics_reasons(self):
+        return dict()
+
+
 class ProjectFactory(Factory):
     class Meta:
         model = Project
 
     metadata = SubFactory(MetadataFactory)
     spec = SubFactory(ProjectSpecFactory)
+    status = SubFactory(ProjectStatusFactory)
 
 
 class MagnumClusterSpecFactory(Factory):

@@ -1,10 +1,10 @@
 from dataclasses import field
 from enum import Enum, auto
-from typing import List
+from typing import List, Dict
 
 from . import persistent
 from .serializable import PolymorphicContainer, Serializable, ApiObject
-from .core import Metadata, ListMetadata, Status, ResourceRef, MetricRef
+from .core import Metadata, ListMetadata, Status, ResourceRef, MetricRef, Reason
 from .constraints import LabelConstraint
 
 
@@ -92,12 +92,32 @@ class ProjectSpec(Serializable):
     metrics: List[MetricRef] = field(default_factory=list)
 
 
+class ProjectState(Enum):
+    ONLINE = auto()
+    FAILING_METRICS = auto()
+
+
+class ProjectStatus(Serializable):
+    """Status subresource of :class:`Project`.
+
+    Attributes:
+        state (ProjectState): Current state of the project.
+        metrics_reasons (dict[str, Reason]): mapping of the name of the metrics for
+            which an error occurred to the reason for which it occurred.
+
+    """
+
+    state: ProjectState = ProjectState.ONLINE
+    metrics_reasons: Dict[str, Reason] = field(default_factory=dict)
+
+
 @persistent("/openstack/projects/{namespace}/{name}")
 class Project(ApiObject):
     api: str = "openstack"
     kind: str = "Project"
     metadata: Metadata
     spec: ProjectSpec
+    status: ProjectStatus = field(metadata={"subresource": True})
 
 
 class ProjectList(ApiObject):

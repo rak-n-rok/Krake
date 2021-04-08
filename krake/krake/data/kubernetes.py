@@ -1,7 +1,7 @@
 """Data model definitions for Kubernetes-related resources"""
 from enum import Enum, auto
 from dataclasses import field
-from typing import List
+from typing import List, Dict
 from datetime import datetime
 from marshmallow import ValidationError
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
@@ -9,7 +9,7 @@ from kubernetes_asyncio.config import ConfigException
 
 from . import persistent
 from .serializable import Serializable, ApiObject
-from .core import Metadata, ListMetadata, Status, ResourceRef, MetricRef
+from .core import Metadata, ListMetadata, Status, ResourceRef, MetricRef, Reason
 from .constraints import LabelConstraint
 
 
@@ -138,12 +138,32 @@ class ClusterSpec(Serializable):
     metrics: List[MetricRef] = field(default_factory=list)
 
 
+class ClusterState(Enum):
+    ONLINE = auto()
+    FAILING_METRICS = auto()
+
+
+class ClusterStatus(Serializable):
+    """Status subresource of :class:`Cluster`.
+
+    Attributes:
+        state (ClusterState): Current state of the cluster.
+        metrics_reasons (dict[str, Reason]): mapping of the name of the metrics for
+            which an error occurred to the reason for which it occurred.
+
+    """
+
+    state: ClusterState = ClusterState.ONLINE
+    metrics_reasons: Dict[str, Reason] = field(default_factory=dict)
+
+
 @persistent("/kubernetes/clusters/{namespace}/{name}")
 class Cluster(ApiObject):
     api: str = "kubernetes"
     kind: str = "Cluster"
     metadata: Metadata
     spec: ClusterSpec
+    status: ClusterStatus = field(metadata={"subresource": True})
 
 
 class ClusterList(ApiObject):

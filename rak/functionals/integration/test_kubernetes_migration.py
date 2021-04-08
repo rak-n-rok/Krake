@@ -48,6 +48,7 @@ from utils import (
     get_scheduling_score,
     set_static_metrics,
     get_static_metrics,
+    get_other_cluster,
     ResourceKind,
 )
 
@@ -56,10 +57,7 @@ GIT_DIR = "git/krake"
 TEST_DIR = "rak/functionals"
 CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
 MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}"
-METRICS = [
-    "electricity_cost_1",
-    "green_energy_ratio_1",
-]
+METRICS = ["electricity_cost_1", "green_energy_ratio_1"]
 COUNTRY_CODES = [
     l1 + l2
     for l1, l2 in itertools.product(string.ascii_uppercase, string.ascii_uppercase)
@@ -94,8 +92,8 @@ def test_kubernetes_migration_cluster_constraints(minikube_clusters):
     # 1. Create the application, without cluster constraints and migration flag;
     cluster_labels = create_cluster_info(clusters, "location", countries)
     environment = create_default_environment(clusters, cluster_labels=cluster_labels)
-    with Environment(environment) as resources:
-        app = resources[ResourceKind.APPLICATION][0]
+    with Environment(environment) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
 
         # 2. Ensure the application was scheduled to a cluster;
         cluster_name = app.get_running_on()
@@ -149,8 +147,8 @@ def test_kubernetes_migration_at_cluster_constraint_update(minikube_clusters):
     cluster_labels = create_cluster_info(clusters, "location", countries)
     environment = create_default_environment(clusters, cluster_labels=cluster_labels)
 
-    with Environment(environment) as resources:
-        app = resources[ResourceKind.APPLICATION][0]
+    with Environment(environment) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
 
         # 2. Ensure the application was scheduled to a cluster;
         cluster_name = app.get_running_on()
@@ -219,8 +217,8 @@ def test_kubernetes_no_migration_cluster_constraints(minikube_clusters):
         app_migration=False,
     )
 
-    with Environment(environment) as resources:
-        app = resources[ResourceKind.APPLICATION][0]
+    with Environment(environment) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
 
         # 2. Ensure that the application was scheduled to the requested cluster;
         app.check_running_on(expected_clusters[1], within=0)
@@ -293,8 +291,8 @@ def test_kubernetes_no_migration_metrics(minikube_clusters):
         clusters, metrics=metric_weights, app_migration=False
     )
 
-    with Environment(environment) as resources:
-        app = resources[ResourceKind.APPLICATION][0]
+    with Environment(environment) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
 
         # 4. Ensure that the application was scheduled to the first cluster;
         app.check_running_on(clusters[0], within=0)
@@ -368,8 +366,8 @@ def test_kubernetes_auto_metrics_migration(minikube_clusters):
     # 3. Create the application, without cluster constraints and migration flag;
     environment = create_default_environment(clusters, metrics=metric_weights)
 
-    with Environment(environment) as resources:
-        app = resources[ResourceKind.APPLICATION][0]
+    with Environment(environment) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
 
         # 4. Ensure that the application was scheduled to the first cluster;
         app.check_running_on(clusters[0], within=0)
@@ -389,19 +387,6 @@ def test_kubernetes_auto_metrics_migration(minikube_clusters):
         # 6. Wait and ensure that the application was migrated to cluster 2;
         # sleep longer than the RESCHEDULING_INTERVAL s
         app.check_running_on(clusters[1], within=RESCHEDULING_INTERVAL + 10)
-
-
-def _get_other_cluster(this_cluster, clusters):
-    """Return the cluster in clusters, which is not this_cluster.
-
-    Args:
-        this_cluster (str): name of this_cluster
-        clusters (list): list of two cluster names.
-
-    Returns:
-        the name of the other cluster.
-    """
-    return clusters[0] if clusters[1] == this_cluster else clusters[1]
 
 
 def _get_metrics_triggering_migration(source, target, metrics, weights):
@@ -492,7 +477,7 @@ def test_kubernetes_metrics_migration(minikube_clusters):
     set_static_metrics(metric_values_init)
 
     first_cluster = clusters[0]
-    second_cluster = _get_other_cluster(first_cluster, clusters)
+    second_cluster = get_other_cluster(first_cluster, clusters)
 
     # 2. Set the cluster weights so that the score of cluster 1 is higher than
     # the score of cluster 2.
@@ -521,8 +506,8 @@ def test_kubernetes_metrics_migration(minikube_clusters):
     # 3. Create the application, without cluster constraints and migration flag;
     environment = create_default_environment(clusters, metrics=metric_weights)
 
-    with Environment(environment) as resources:
-        app = resources[ResourceKind.APPLICATION][0]
+    with Environment(environment) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
 
         # 4. Ensure that the application was scheduled to cluster 1;
         app.check_running_on(
@@ -672,7 +657,7 @@ def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
     set_static_metrics(metric_values_init)
 
     first_cluster = clusters[0]
-    second_cluster = _get_other_cluster(first_cluster, clusters)
+    second_cluster = get_other_cluster(first_cluster, clusters)
 
     # 2. Set the cluster weights so that the score of cluster 1 is higher than
     # the score of cluster 2.
@@ -694,8 +679,8 @@ def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
     # 3. Create the application, without cluster constraints and migration flag;
     environment = create_default_environment(clusters, metrics=metric_weights)
 
-    with Environment(environment) as resources:
-        app = resources[ResourceKind.APPLICATION][0]
+    with Environment(environment) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
 
         # 4. Ensure that the application was scheduled to cluster 1;
         app.check_running_on(first_cluster, within=0)
@@ -806,14 +791,14 @@ def test_kubernetes_metrics_migration_at_update(minikube_clusters):
     # 3. Create the application, without cluster constraints and migration flag;
     environment = create_default_environment(clusters, metrics=metric_weights)
 
-    with Environment(environment) as resources:
-        app = resources[ResourceKind.APPLICATION][0]
+    with Environment(environment) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
 
         # 4. Ensure that the application was scheduled to cluster 1;
         first_cluster = clusters[0]
         app.check_running_on(first_cluster, within=0)
 
-        second_cluster = _get_other_cluster(first_cluster, clusters)
+        second_cluster = get_other_cluster(first_cluster, clusters)
 
         # 5. Change the metrics so that score of cluster 2 is higher than the score
         # of cluster 1.
@@ -920,8 +905,8 @@ def test_kubernetes_stickiness_migration(minikube_clusters):
     # 3. Create the application, without cluster constraints and migration flag;
     environment = create_default_environment(clusters, metrics=metric_weights)
 
-    with Environment(environment) as resources:
-        app = resources[ResourceKind.APPLICATION][0]
+    with Environment(environment) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
 
         # 4. Ensure that the application was scheduled to cluster 1;
         app.check_running_on(cluster_1, within=0)

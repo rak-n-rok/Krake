@@ -164,8 +164,8 @@ def test_kubernetes_observer_additional_resource(minikube_clusters):
     kubeconfig_path = get_default_kubeconfig_path(minikube_cluster)
 
     environment = create_default_environment([minikube_cluster])
-    with Environment(environment) as resources:
-        app = resources[ResourceKind.APPLICATION][0]
+    with Environment(environment) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
 
         # 1. Read the state of the Application on the API and on the cluster to
         # be able to compare afterwards
@@ -303,8 +303,8 @@ def test_kubernetes_observer_delete_on_api(minikube_clusters):
     kubeconfig_path = get_default_kubeconfig_path(minikube_cluster)
 
     environment = create_default_environment([minikube_cluster])
-    with Environment(environment) as resources:
-        app = resources[ResourceKind.APPLICATION][0]
+    with Environment(environment) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
 
         # 1. Delete the Application on the API
         app.delete_resource()

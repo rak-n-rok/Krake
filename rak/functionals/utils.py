@@ -1266,6 +1266,29 @@ class ClusterDefinition(ResourceDefinition):
     def get_command(self):
         return f"rok kube cluster get {self.name} -o json".split()
 
+    def get_state(self):
+        """Run the command for getting the cluster and return its state.
+
+        Returns:
+            str: the current state of the cluster, serialized as string.
+
+        """
+        app_dict = self.get_resource()
+        return app_dict["status"]["state"]
+
+    def get_metrics_reasons(self):
+        """Run the command for getting the cluster and return the reasons for the
+        metrics failure if there was any.
+
+        Returns:
+            dict[str, dict[str, str]]: the serialized reasons for the metrics failure,
+                with the name of the metrics as key, and the deserialized reasons as
+                values.
+
+        """
+        app_dict = self.get_resource()
+        return app_dict["status"]["metrics_reasons"]
+
 
 class Environment(object):
     """Context manager to use for starting tests on a specific test environment. This
@@ -1347,8 +1370,9 @@ class Environment(object):
         """Create all given resources and check that they have been actually created.
 
         Returns:
-            dict: all resources that have been created in the environment, with their
-                kind as string as key.
+            Environment: the current environment, after having been populated with the
+                resources to create.
+
         """
         for handler in self.before_handlers:
             handler(self.resources)
@@ -1364,7 +1388,7 @@ class Environment(object):
             for resource in resource_list:
                 resource.check_created(delay=self.creation_delay)
 
-        return self.resources
+        return self
 
     def __exit__(self, *exceptions):
         """Delete all given resources and check that they have been actually deleted."""
@@ -1382,14 +1406,11 @@ class Environment(object):
         for handler in self.after_handlers:
             handler(self.resources)
 
-    @classmethod
-    def get_resource_definition(cls, resources, kind, name):
+    def get_resource_definition(self, kind, name):
         """
         If there exists exactly one resource in 'resources' of kind 'kind'
         with name 'name', return it. Otherwise raise AssertionError.
         Args:
-            resources (list[ResourceDefinition]): list of ResourceDefinition's
-                to look through
             kind (ResourceKind): the kind of resource which is sought.
             name (str): the name of the resource that is sought.
 
@@ -1402,7 +1423,7 @@ class Environment(object):
             AssertionError if not exactly one resource was found.
 
         """
-        found = [r for r in resources if r.kind == kind and r.name == name]
+        found = [r for r in self.resources[kind] if r.name == name]
         if len(found) != 1:
             msg = (
                 f"Found {len(found)} resources of kind {kind} with name {name} "
@@ -1640,6 +1661,19 @@ def check_static_metrics(expected_metrics, error_message=""):
             raise AssertionError(error_message + f"Error: {e}")
 
     return validate
+
+
+def get_other_cluster(this_cluster, clusters):
+    """Return the cluster in clusters, which is not this_cluster.
+
+    Args:
+        this_cluster (str): name of this_cluster
+        clusters (list): list of two cluster names.
+
+    Returns:
+        the name of the other cluster.
+    """
+    return clusters[0] if clusters[1] == this_cluster else clusters[1]
 
 
 def create_default_environment(

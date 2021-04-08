@@ -62,6 +62,7 @@ from krake.data.openstack import MagnumClusterState
 from krake.data.kubernetes import (
     Cluster as KubernetesCluster,
     ClusterSpec as KubernetesClusterSpec,
+    ClusterStatus as KubernetesClusterStatus,
 )
 from . import Controller, ControllerError, create_ssl_context, run, Reflector
 
@@ -680,6 +681,7 @@ class MagnumClusterController(Controller):
                 spec=KubernetesClusterSpec(
                     kubeconfig=kubeconfig, metrics=cluster.spec.metrics.copy()
                 ),
+                status=KubernetesClusterStatus(),
             )
             await self.kubernetes_api.create_cluster(
                 namespace=kube.metadata.namespace, body=kube

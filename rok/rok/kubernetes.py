@@ -301,9 +301,14 @@ def delete_application(config, session, namespace, name):
 cluster = kubernetes.subparser("cluster", help="Manage Kubernetes clusters")
 
 
-class ClusterTable(BaseTable):
+class ClusterTableList(BaseTable):
+    state = Cell("status.state")
+
+
+class ClusterTable(ClusterTableList):
     custom_resources = Cell("spec.custom_resources")
     metrics = Cell("spec.metrics")
+    failing_metrics = Cell("status.metrics_reasons", formatter=dict_formatter)
 
 
 def replace_file_attr(spec, attr):
@@ -417,7 +422,7 @@ def create_cluster(
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
-@printer(table=BaseTable(many=True))
+@printer(table=ClusterTableList(many=True))
 def list_clusters(config, session, namespace, all):
     if all:
         url = "/kubernetes/clusters"

@@ -120,6 +120,14 @@ rules:
   verbs:
   - update
 
+- api: 'kubernetes'
+  namespaces:
+  - ''
+  resources:
+  - "clusters/status"
+  verbs:
+  - update
+
 - api: 'openstack'
   namespaces:
     - ''
@@ -150,6 +158,14 @@ rules:
   - ''
   resources:
   - "magnumclusters/status"
+  verbs:
+  - update
+
+- api: 'openstack'
+  namespaces:
+  - ''
+  resources:
+  - "projects/status"
   verbs:
   - update
 ---
