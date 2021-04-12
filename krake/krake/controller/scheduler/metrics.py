@@ -8,9 +8,9 @@ Abstraction is provided by :class:`Provider`.
 
 .. code:: python
 
-    from krake.data.core import MetricsProvider
+    from krake.data.core import GlobalMetricsProvider
 
-    metrics_provider = MetricsProvider.deserialize({
+    metrics_provider = GlobalMetricsProvider.deserialize({
         "metadata": {
             "name": "prometheus-1"
         },
@@ -33,7 +33,7 @@ import asyncio
 from typing import NamedTuple
 from aiohttp import ClientSession, ClientError, ClientTimeout
 
-from krake.data.core import MetricsProvider, Metric
+from krake.data.core import GlobalMetricsProvider, GlobalMetric
 from yarl import URL
 
 
@@ -50,7 +50,7 @@ class MetricsProviderError(BaseMetricError):
 
 
 class QueryResult(NamedTuple):
-    metric: Metric
+    metric: GlobalMetric
     weight: float
     value: float
 
@@ -60,7 +60,7 @@ def normalize(metric, value):
     the specification of the metric.
 
     Args:
-        metric (Metric): Metric description
+        metric (GlobalMetric): Metric description
         value (float): Metric value
 
     Raises:
@@ -82,8 +82,8 @@ async def fetch_query(session, metric, provider, weight):
 
     Args:
         session (aiohttp.client.ClientSession): Aiohttp session
-        metric (Metric): Metric definition
-        provider (MetricsProvider): Metrics provider definition for metric
+        metric (GlobalMetric): Metric definition
+        provider (GlobalMetricsProvider): Metrics provider definition for metric
         weight (float): Weight of the metric
 
     Raises:
@@ -137,7 +137,7 @@ class Provider(object):
         """Returns the metric value using the metric provider.
 
         Args:
-            metric (Metric): Metric description.
+            metric (GlobalMetric): Metric description.
 
         Returns:
             Any: Metric value returned by the metrics provider.
@@ -157,7 +157,7 @@ class Prometheus(Provider):
 
     type = "prometheus"
 
-    def __init__(self, session: ClientSession, metrics_provider: MetricsProvider):
+    def __init__(self, session: ClientSession, metrics_provider: GlobalMetricsProvider):
         self.session = session
         self.metrics_provider = metrics_provider
 
@@ -165,7 +165,7 @@ class Prometheus(Provider):
         """Querying a metric from a Prometheus server.
 
         Args:
-            metric (Metric): Metric description
+            metric (GlobalMetric): Metric description
 
         Returns:
             float: Metric value fetched from Prometheus
@@ -219,7 +219,7 @@ class Kafka(Provider):
 
     type = "kafka"
 
-    def __init__(self, session: ClientSession, metrics_provider: MetricsProvider):
+    def __init__(self, session: ClientSession, metrics_provider: GlobalMetricsProvider):
         self.session = session
         self.metrics_provider = metrics_provider
 
@@ -241,7 +241,7 @@ class Kafka(Provider):
         bound to a cluster.
 
         Args:
-            metric (Metric): Metric description.
+            metric (GlobalMetric): Metric description.
 
         Returns:
             float: Metric value fetched from the KSQL database.
@@ -305,7 +305,7 @@ class Static(Provider):
         specification.
 
         Args:
-            metric (Metric): Metric description. Ignored by this method
+            metric (GlobalMetric): Metric description. Ignored by this method
 
         Returns:
             float: Metric value specified in the static metrics provider

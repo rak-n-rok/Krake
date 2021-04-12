@@ -1,8 +1,8 @@
 """This module defines E2e integration tests for the core resources of
 the Krake API:
 
-    MetricsProvider
-    Metric
+    GlobalMetricsProvider
+    GlobalMetric
 
 The tests are performed against the krake API, via the rok cli.
 """
@@ -26,7 +26,7 @@ class _MetricsProviderType(Enum):
 _GC_DELAY = 3
 
 
-def test_mp_crud():
+def test_gmp_crud():
     """Test basic metrics providers functionality over the rok cli.
     The test method performs the following tests for each type of metrics provider:
 
@@ -94,24 +94,24 @@ def test_mp_crud():
     }
     for mp_type in _MetricsProviderType:
         # 1. Delete a non-existent metrics provider and expect failure
-        name = f"e2e_test_{mp_type.value}_mp_2b_deleted"
+        name = f"e2e_test_{mp_type.value}_gmp_2b_deleted"
         error_message = f"The non-existent metrics provider {name} could be deleted."
         run(
-            f"rok core mp delete {name}",
+            f"rok core gmp delete {name}",
             condition=check_return_code(error_message, expected_code=1),
             retry=0,
         )
         # 2. Get a non-existent metrics provider and expect failure
         error_message = f"The non-existent metrics provider {name} could be retrieved."
         run(
-            f"rok core mp get {name}",
+            f"rok core gmp get {name}",
             condition=check_return_code(error_message, expected_code=1),
             retry=0,
         )
         # 3. Update a non-existent metrics provider and expect failure
         error_message = f"The non-existent metrics provider {name} could be updated."
         run(
-            f"rok core mp update --url {new_url} {name}",
+            f"rok core gmp update --url {new_url} {name}",
             condition=check_return_code(error_message, expected_code=1),
             retry=0,
         )
@@ -119,7 +119,7 @@ def test_mp_crud():
         error_message = f"The metrics provider {name} could not be created."
         expected_type_details = type_details[mp_type]["create"]
         run(
-            f"rok core mp create --name {name} --type {mp_type.value} "
+            f"rok core gmp create --name {name} --type {mp_type.value} "
             f"{create_args[mp_type]} -o json",
             condition=check_metrics_provider_content(
                 error_message,
@@ -132,7 +132,7 @@ def test_mp_crud():
         # 5. Get the metrics provider and check the content
         error_message = f"The metrics provider {name} could not be retrieved."
         run(
-            f"rok core mp get {name} -o json",
+            f"rok core gmp get {name} -o json",
             condition=check_metrics_provider_content(
                 error_message,
                 name=name,
@@ -145,7 +145,7 @@ def test_mp_crud():
         error_message = f"The metrics provider {name} could not be updated."
         expected_type_details = type_details[mp_type]["update"]
         run(
-            f"rok core mp update {name} {update_args[mp_type]} -o json",
+            f"rok core gmp update {name} {update_args[mp_type]} -o json",
             condition=check_metrics_provider_content(
                 error_message,
                 name=name,
@@ -157,7 +157,7 @@ def test_mp_crud():
         # 7. Get the metrics provider and check the content
         error_message = f"The metrics provider {name} could not be retrieved."
         run(
-            f"rok core mp get {name} -o json",
+            f"rok core gmp get {name} -o json",
             condition=check_metrics_provider_content(
                 error_message,
                 name=name,
@@ -171,7 +171,7 @@ def test_mp_crud():
             f"The metrics provider {name} was successfully updated without change."
         )
         run(
-            f"rok core mp update {name} {update_args[mp_type]} -o json",
+            f"rok core gmp update {name} {update_args[mp_type]} -o json",
             condition=check_return_code(error_message, expected_code=1),
             retry=0,
         )
@@ -183,7 +183,7 @@ def test_mp_crud():
             else _MetricsProviderType.PROMETHEUS
         )
         run(
-            f"rok core mp create --name {name} --type {other_mp_type.value} "
+            f"rok core gmp create --name {name} --type {other_mp_type.value} "
             f"{create_args[other_mp_type]} -o json",
             condition=check_return_code(error_message, expected_code=1),
             retry=0,
@@ -191,25 +191,25 @@ def test_mp_crud():
         # 10. Delete the metrics provider
         error_message = f"The metrics provider {name} could not be deleted."
         run(
-            f"rok core mp delete {name}",
+            f"rok core gmp delete {name}",
             condition=check_return_code(error_message),
             retry=0,
         )
         # 11. List the metrics providers and verify that the deleted one is not present
         time.sleep(_GC_DELAY)
         error_message = "The metrics providers could not be retrieved."
-        mps = run(
-            "rok core mp list -o json",
+        gmps = run(
+            "rok core gmp list -o json",
             condition=check_return_code(error_message),
             retry=0,
         ).json
         err_msg_fmt = "The list of metrics providers contains deleted ones: {name}"
-        for mp in mps:
-            observed_name = mp["metadata"]["name"]
+        for gmp in gmps:
+            observed_name = gmp["metadata"]["name"]
             assert observed_name != name, err_msg_fmt.format(name=observed_name)
 
 
-def test_metric_crud():
+def test_global_metric_crud():
     """Test basic metric functionality over the rok cli.
 
     1. Delete a non-existent metric and expect failure
@@ -226,33 +226,33 @@ def test_metric_crud():
     """
     # 1. Delete a non-existent metric and expect failure
     name = "e2e_test_metric_2_be_deleted"
-    error_message = f"The non-existent metric {name} could be deleted."
+    error_message = f"The non-existent global metric {name} could be deleted."
     run(
-        f"rok core metric delete {name}",
+        f"rok core globalmetric delete {name}",
         condition=check_return_code(error_message, expected_code=1),
         retry=0,
     )
     # 2. Get a non-existent metric and expect failure
-    error_message = f"The non-existent metric {name} could be retrieved."
+    error_message = f"The non-existent global metric {name} could be retrieved."
     run(
-        f"rok core metric get {name}",
+        f"rok core globalmetric get {name}",
         condition=check_return_code(error_message, expected_code=1),
         retry=0,
     )
     # 3. Update a non-existent metric and expect failure
-    error_message = f"The non-existent metric {name} could be updated."
+    error_message = f"The non-existent global metric {name} could be updated."
     run(
-        f"rok core metric update --max 30 {name}",
+        f"rok core globalmetric update --max 30 {name}",
         condition=check_return_code(error_message, expected_code=1),
         retry=0,
     )
     # 4. Create a metric
-    mp_name = "non-existent-mp-name"
+    mp_name = "non-existent-gmp-name"
     mmin = 5
     mmax = 6
-    error_message = f"The metric {name} could not be created."
+    error_message = f"The global metric {name} could not be created."
     run(
-        f"rok core metric create --name {name} --mp-name {mp_name} "
+        f"rok core globalmetric create --name {name} --gmp-name {mp_name} "
         f"--min {mmin} --max {mmax} -o json",
         condition=check_metric_content(
             error_message, name=name, mp_name=mp_name, min=mmin, max=mmax
@@ -260,20 +260,20 @@ def test_metric_crud():
         retry=0,
     )
     # 5. Get the metric and check the content
-    error_message = f"The metric {name} could not be retrieved."
+    error_message = f"The global metric {name} could not be retrieved."
     run(
-        f"rok core metric get {name} -o json",
+        f"rok core globalmetric get {name} -o json",
         condition=check_metric_content(
             error_message, name=name, mp_name=mp_name, min=mmin, max=mmax
         ),
         retry=0,
     )
     # 6. Update the metric
-    error_message = f"The metric {name} could not be updated."
+    error_message = f"The global metric {name} could not be updated."
     new_min = -2
     new_max = -1
     run(
-        f"rok core metric update {name} --min {new_min} --max {new_max} -o json",
+        f"rok core globalmetric update {name} --min {new_min} --max {new_max} -o json",
         condition=check_metric_content(
             error_message,
             name=name,
@@ -284,9 +284,9 @@ def test_metric_crud():
         retry=0,
     )
     # 7. Get the metric and check the content
-    error_message = f"The metric {name} could not be retrieved."
+    error_message = f"The global metric {name} could not be retrieved."
     run(
-        f"rok core metric get {name} -o json",
+        f"rok core globalmetric get {name} -o json",
         condition=check_metric_content(
             error_message,
             name=name,
@@ -297,37 +297,37 @@ def test_metric_crud():
         retry=0,
     )
     # 8. Perform an empty update of the metric and expect failure
-    error_message = f"The metrics provider {name} was updated despite no change."
+    error_message = f"The global metric {name} was updated despite no change."
     run(
-        f"rok core metric update {name} --min {new_min} -o json",
+        f"rok core globalmetric update {name} --min {new_min} -o json",
         condition=check_return_code(error_message, expected_code=1),
         retry=0,
     )
     # 9. Create a metric with the same name and expect failure
-    error_message = f"The existing metric {name} could be created."
-    new_mp_name = "other-non-existent-mp"
+    error_message = f"The existing global metric {name} could be created."
+    new_mp_name = "other-non-existent-gmp"
     run(
-        f"rok core metric create --name {name} --mp-name {new_mp_name} "
+        f"rok core globalmetric create --name {name} --gmp-name {new_mp_name} "
         f"--min {mmin} --max {mmax} -o json",
         condition=check_return_code(error_message, expected_code=1),
         retry=0,
     )
     # 10. Delete the metric
-    error_message = f"The prometheus metric {name} could not be deleted."
+    error_message = f"The global metric {name} could not be deleted."
     run(
-        f"rok core metric delete {name}",
+        f"rok core globalmetric delete {name}",
         condition=check_return_code(error_message),
         retry=0,
     )
     # 11. List the metrics and verify that the deleted metric is not present
     time.sleep(_GC_DELAY)
-    error_message = "The metrics could not be retrieved."
+    error_message = "The global metrics could not be retrieved."
     metrics = run(
-        "rok core metric list -o json",
+        "rok core globalmetric list -o json",
         condition=check_return_code(error_message),
         retry=0,
     ).json
-    err_msg_fmt = "The list of metrics contains deleted ones: {name}"
+    err_msg_fmt = "The list of global metrics contains deleted ones: {name}"
     for metric in metrics:
         observed_name = metric["metadata"]["name"]
         assert observed_name != name, err_msg_fmt.format(name=name)

@@ -16,7 +16,7 @@ KRAKE_HOMEDIR = "/home/krake"
 ROK_INSTALL_DIR = f"{KRAKE_HOMEDIR}/.local/bin"
 STICKINESS_WEIGHT = 0.1
 
-_ETCD_STATIC_PROVIDER_KEY = "/core/metricsprovider/static_provider"
+_ETCD_STATIC_PROVIDER_KEY = "/core/globalmetricsproviders/static_provider"
 _ETCDCTL_ENV = {"ETCDCTL_API": "3"}
 
 GIT_DIR = "git/krake"
@@ -271,7 +271,7 @@ def check_metrics_provider_content(error_message, name, type, type_details=None)
     assert type_details, error_message + " No type_details were provided."
     expected_mp = {
         "api": "core",
-        "kind": "MetricsProvider",
+        "kind": "GlobalMetricsProvider",
         "metadata": {
             "name": name,
         },
@@ -328,7 +328,7 @@ def check_metric_content(error_message, name, mp_name, min, max, mp_metric_name=
 
     expected_metric = {
         "api": "core",
-        "kind": "Metric",
+        "kind": "GlobalMetric",
         "metadata": {"name": name},
         "spec": {
             "max": float(max),

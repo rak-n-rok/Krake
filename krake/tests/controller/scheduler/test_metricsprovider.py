@@ -4,16 +4,16 @@ from aiohttp import web, ClientSession, ClientConnectorError, ClientResponseErro
 from krake.controller.scheduler import metrics
 from krake.test_utils import server_endpoint, make_prometheus, make_kafka
 
-from tests.factories.core import MetricsProviderFactory, MetricFactory
+from tests.factories.core import GlobalMetricsProviderFactory, GlobalMetricFactory
 
 
 @pytest.mark.slow
 async def test_prometheus_provider_against_prometheus(prometheus, loop):
-    metric = MetricFactory(
+    metric = GlobalMetricFactory(
         spec__provider__name="my-provider",
         spec__provider__metric=prometheus.exporter.metric,
     )
-    metrics_provider = MetricsProviderFactory(
+    metrics_provider = GlobalMetricsProviderFactory(
         metadata__name="my-provider",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
@@ -111,10 +111,10 @@ async def test_prometheus_mock_cycle_update(aiohttp_client):
 async def test_prometheus_provider(aiohttp_server, loop):
     prometheus = await aiohttp_server(make_prometheus({"my-metric": ["0.42"]}))
 
-    metric = MetricFactory(
+    metric = GlobalMetricFactory(
         spec__provider__name="my-provider", spec__provider__metric="my-metric"
     )
-    metrics_provider = MetricsProviderFactory(
+    metrics_provider = GlobalMetricsProviderFactory(
         metadata__name="my-provider",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
@@ -140,8 +140,8 @@ async def test_prometheus_provider_unavailable(aiohttp_server, loop):
 
     prometheus = await aiohttp_server(prometheus_app)
 
-    metric = MetricFactory()
-    metrics_provider = MetricsProviderFactory(
+    metric = GlobalMetricFactory()
+    metrics_provider = GlobalMetricsProviderFactory(
         metadata__name="my-provider",
         spec__type="prometheus",
         spec__prometheus__url=server_endpoint(prometheus),
@@ -167,8 +167,8 @@ async def test_prometheus_provider_connection_error(aiohttp_server, loop):
     url = server_endpoint(prometheus)
     await prometheus.close()
 
-    metric = MetricFactory()
-    metrics_provider = MetricsProviderFactory(
+    metric = GlobalMetricFactory()
+    metrics_provider = GlobalMetricsProviderFactory(
         spec__type="prometheus", spec__prometheus__url=url
     )
 
@@ -185,10 +185,10 @@ async def test_prometheus_provider_connection_error(aiohttp_server, loop):
 
 
 async def test_static_provider(aiohttp_server):
-    metrics_provider = MetricsProviderFactory(
+    metrics_provider = GlobalMetricsProviderFactory(
         spec__type="static", spec__static__metrics={"my_metric": 0.42}
     )
-    metric = MetricFactory(
+    metric = GlobalMetricFactory(
         spec__provider__name=metrics_provider.metadata.name,
         spec__provider__metric="my_metric",
     )
@@ -205,12 +205,12 @@ async def test_static_provider(aiohttp_server):
 async def test_kafka_provider_against_kafka(ksql, loop):
     """Test that the Kafka Provider works against an actual KSQL database."""
     heat_demand_1_metric = ksql.kafka_table.metrics[0]
-    metric = MetricFactory(
+    metric = GlobalMetricFactory(
         spec__provider__name="my-provider",
         spec__provider__metric=heat_demand_1_metric.name,
     )
 
-    metrics_provider = MetricsProviderFactory(
+    metrics_provider = GlobalMetricsProviderFactory(
         metadata__name="my-provider",
         spec__type="kafka",
         spec__kafka__url=server_endpoint(ksql),
@@ -267,10 +267,10 @@ async def test_kafka_provider(aiohttp_server, loop):
     rows = [["first_id", [0.42, 1.0]]]
     kafka = await aiohttp_server(make_kafka("my_table", columns, rows))
 
-    metric = MetricFactory(
+    metric = GlobalMetricFactory(
         spec__provider__name="my-provider", spec__provider__metric="first_id"
     )
-    metrics_provider = MetricsProviderFactory(
+    metrics_provider = GlobalMetricsProviderFactory(
         metadata__name="my-provider",
         spec__type="kafka",
         spec__kafka__comparison_column="id",
@@ -302,8 +302,8 @@ async def test_kafka_provider_unavailable(aiohttp_server, loop):
 
     kafka = await aiohttp_server(kafka_app)
 
-    metric = MetricFactory()
-    metrics_provider = MetricsProviderFactory(
+    metric = GlobalMetricFactory()
+    metrics_provider = GlobalMetricsProviderFactory(
         metadata__name="my-provider",
         spec__type="kafka",
         spec__kafka__comparison_column="id",
@@ -332,8 +332,8 @@ async def test_kafka_provider_connection_error(aiohttp_server, loop):
     url = server_endpoint(kafka)
     await kafka.close()
 
-    metric = MetricFactory()
-    metrics_provider = MetricsProviderFactory(
+    metric = GlobalMetricFactory()
+    metrics_provider = GlobalMetricsProviderFactory(
         spec__type="kafka",
         spec__kafka__comparison_column="id",
         spec__kafka__value_column="value",

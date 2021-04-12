@@ -1,5 +1,5 @@
 ============================
-Scheduling using ``Metrics``
+Scheduling Using Metrics
 ============================
 
 Goal: Explore the metrics mechanisms.
@@ -16,9 +16,9 @@ Metrics in the Krake sense have two meanings. The first one is an actual value f
 parameter, which can be measured or computed in the real world. For instance the current
 space available on a data center, its latency, the amount of green energy used by the
 data center could all be metrics. This value may be dynamic and change over time.
-``Metrics`` are also resources in Krake. They represent actual metrics, are stored in
-the database, and define a few elements, such as the minimum and maximum values (Krake
-only considers numbers for the metrics).
+A ``GlobalMetric`` is also a resource in Krake. It represents an actual metric,
+is stored in the database, and defines a few elements, such as the minimum and
+maximum values (Krake only considers numbers for the metrics).
 
 The Krake scheduler can use these metrics to compute the score of a Krake Kubernetes
 ``Cluster``. Each cluster is associated with a list of metrics and their respective
@@ -28,28 +28,30 @@ score: a metrics with a low value, but a high weight may have more impact on the
 than a metric with medium value but low weight.
 
 For Krake to fetch the current value of a metric, a user needs to define where and how
-it can be requested. ``MetricsProvider`` resources can be created for this purpose. They
-have different types, to support different technologies. There is for example a support
-for Prometheus_. The ``MetricsProvider`` resource will define the URL of the Prometheus
-instance and some other metadata, and afterwards, Krake's scheduler can automatically
-fetch the current value of the metrics for the score's computation.
+it can be requested. ``GlobalMetricsProvider`` resources can be created for this
+purpose. They have different types, to support different technologies. There is for
+example a support for Prometheus_. The ``GlobalMetricsProvider`` resource will define
+the URL of the Prometheus instance and some other metadata, and afterwards, Krake's
+scheduler can automatically fetch the current value of the metrics for the score's
+computation.
 
 The static providers are simple metric providers usually only set during tests. They
 allow a Krake resource to be associated with simple metrics, for which the value can be
 fetched easily, without having to set up a whole infrastructure.
 
-The static providers thus give values for ``Metric`` resources. This value is only
-defined in the resource (stored in the database). Updating the ``MetricProvider``
-resource definition thus implies updating the value of the metrics.
+The static providers thus give values for ``GlobalMetric`` resources. This value is
+only defined in the resource (stored in the database). Updating the
+``GlobalMetricsProvider`` resource definition thus implies updating the value of
+the metrics.
 
-An example of a static ``MetricProvider`` resource is given in the following. It is used
-in the next steps of this guide. As explained, the value of the metrics it provides are
-directly set inside its definition:
+An example of a static ``GlobalMetricsProvider`` resource is given in the following.
+It is used in the next steps of this guide. As explained, the value of the metrics
+it provides are directly set inside its definition:
 
 .. code:: yaml
 
     api: core
-    kind: MetricsProvider
+    kind: GlobalMetricsProvider
     metadata:
       created: '2020-01-21T10:50:11.500376'
       deleted: null
@@ -68,29 +70,29 @@ directly set inside its definition:
       type: static
 
 To get additional information about the metrics and metrics providers, please read the
-documentation about them, see :ref:`dev/scheduling:Metrics and Metric Providers`.
+documentation about them, see :ref:`dev/scheduling:Metrics and Metrics Providers`.
 
 
 Preparation
 ===========
 
-- Add the ``static_provider`` ``MetricsProvider`` using the bootstrap script (from the root of the Krake repository):
+- Add the ``static_provider`` metrics provider using the bootstrap script (from the root of the Krake repository):
 
 .. prompt:: bash $ auto
 
     $ cd <path_to_krake_root>
     $ krake_bootstrap_db support/static_metrics.yaml
 
-- Check that the ``MetricsProvider`` and ``Metrics`` objects have been successfully added:
+- Check that the ``GlobalMetricsProvider`` and ``GlobalMetrics`` objects have been successfully added:
 
 .. prompt:: bash $ auto
 
     $ sudo apt install etcd-client jq
     $ export ETCDCTL_API=3  # To use the version 3 of the etcd API
-    $ etcdctl get --print-value-only /core/metricsprovider/static_provider | jq --sort-keys
+    $ etcdctl get --print-value-only /core/globalmetricsproviders/static_provider | jq --sort-keys
     {
       "api": "core",
-      "kind": "MetricsProvider",
+      "kind": "GlobalMetricsProvider",
       "metadata": {
         "created": "<creation_timestamp>",
         "deleted": null,
@@ -112,10 +114,10 @@ Preparation
         "type": "static"
       }
     }
-    $ etcdctl get --print-value-only /core/metric/electricity_cost_1 | jq --sort-keys
+    $ etcdctl get --print-value-only /core/globalmetrics/electricity_cost_1 | jq --sort-keys
     {
       "api": "core",
-      "kind": "Metric",
+      "kind": "GlobalMetric",
       "metadata": {
         "created": "<creation_timestamp>",
         "deleted": null,
@@ -136,10 +138,10 @@ Preparation
         }
       }
     }
-    $ etcdctl get --print-value-only /core/metric/green_energy_ratio_1 | jq --sort-keys
+    $ etcdctl get --print-value-only /core/globalmetrics/green_energy_ratio_1 | jq --sort-keys
     {
       "api": "core",
-      "kind": "Metric",
+      "kind": "GlobalMetric",
       "metadata": {
         "created": "<creation_timestamp>",
         "deleted": null,
@@ -162,7 +164,7 @@ Preparation
     }
 
 
-- Register ``minikube-cluster-1`` and ``minikube-cluster-1`` clusters, and associate the ``electricity_cost_1`` and ``green_energy_ratio_1`` ``Metrics`` to them using different weights to get different ranking scores:
+- Register ``minikube-cluster-1`` and ``minikube-cluster-1`` clusters, and associate the ``electricity_cost_1`` and ``green_energy_ratio_1`` metrics to them using different weights to get different ranking scores:
 
 .. prompt:: bash $ auto
 
@@ -216,7 +218,7 @@ Observe a migration
   better cluster.
 
   As the score is computed using the metrics, we can trigger the migration by updating
-  the exported value of the Metrics in the ``static_provider`` ``MetricsProvider``
+  the exported value of the metrics in the ``static_provider`` ``GlobalMetricsProvider``
   resource. The following command updates the value of the static metrics:
 
   * ``electricity_cost_1``: to have a value of 0.1;
@@ -237,11 +239,11 @@ Observe a migration
     This is not the actual score but a simplification, as stickiness is also part of the
     computation, see :ref:`dev/scheduling:Scheduling of Applications`
 
-- Update the value of the metrics, by updating the ``static_provider`` MetricsProvider:
+- Update the value of the metrics, by updating the ``static_provider`` GlobalMetricsProvider:
 
 .. prompt:: bash $ auto
 
-    $ etcdctl put /core/metricsprovider/static_provider -- '{"metadata": {"namespace": null, "uid": "26ef45e8-e5c8-44fe-8a7f-a3f40944c925", "labels": {}, "modified": "2020-01-21T10:50:11.500376", "deleted": null, "name": "static_provider", "owners": [], "created": "2020-01-21T10:50:11.500376", "finalizers": []}, "spec": {"type": "static", "static": {"metrics": {"electricity_cost_1": 0.1, "green_energy_ratio_1": 0.9}}}, "api": "core", "kind": "MetricsProvider"}'
+    $ etcdctl put /core/globalmetricsproviders/static_provider -- '{"metadata": {"namespace": null, "uid": "26ef45e8-e5c8-44fe-8a7f-a3f40944c925", "labels": {}, "modified": "2020-01-21T10:50:11.500376", "deleted": null, "name": "static_provider", "owners": [], "created": "2020-01-21T10:50:11.500376", "finalizers": []}, "spec": {"type": "static", "static": {"metrics": {"electricity_cost_1": 0.1, "green_energy_ratio_1": 0.9}}}, "api": "core", "kind": "GlobalMetricsProvider"}'
 
 
 - Now, by waiting a bit (maximum 60 seconds if you kept the default configuration), the

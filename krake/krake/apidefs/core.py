@@ -3,10 +3,10 @@ from krake.data.core import (
     RoleList,
     RoleBinding,
     RoleBindingList,
-    Metric,
-    MetricsProvider,
-    MetricsProviderList,
-    MetricList,
+    GlobalMetric,
+    GlobalMetricsProvider,
+    GlobalMetricsProviderList,
+    GlobalMetricList,
 )
 from .definitions import ApiDef, Scope, operation, ListQuery
 
@@ -95,80 +95,80 @@ class RoleBindingResource:
 
 
 @core.resource
-class MetricResource:
-    singular = "Metric"
-    plural = "Metrics"
+class GlobalMetricResource:
+    singular = "GlobalMetric"
+    plural = "GlobalMetrics"
     scope = Scope.NONE
 
     @operation
     class Create:
         method = "POST"
-        path = "/core/metric"
-        body = Metric
-        response = Metric
+        path = "/core/globalmetrics"
+        body = GlobalMetric
+        response = GlobalMetric
 
     @operation
     class List(ListQuery):
         number = "plural"
         method = "GET"
-        path = "/core/metric"
-        response = MetricList
+        path = "/core/globalmetrics"
+        response = GlobalMetricList
 
     @operation
     class Read:
         method = "GET"
-        path = "/core/metric/{name}"
-        response = Metric
+        path = "/core/globalmetrics/{name}"
+        response = GlobalMetric
 
     @operation
     class Update:
         method = "PUT"
-        path = "/core/metric/{name}"
-        body = Metric
-        response = Metric
+        path = "/core/globalmetrics/{name}"
+        body = GlobalMetric
+        response = GlobalMetric
 
     @operation
     class Delete:
         method = "DELETE"
-        path = "/core/metric/{name}"
-        response = Metric
+        path = "/core/globalmetrics/{name}"
+        response = GlobalMetric
 
 
 @core.resource
-class MetricsProviderResource:
-    singular = "MetricsProvider"
-    plural = "MetricsProviders"
+class GlobalMetricsProviderResource:
+    singular = "GlobalMetricsProvider"
+    plural = "GlobalMetricsProviders"
     scope = Scope.NONE
 
     @operation
     class Create:
         method = "POST"
-        path = "/core/metricsprovider"
-        body = MetricsProvider
-        response = MetricsProvider
+        path = "/core/globalmetricsproviders"
+        body = GlobalMetricsProvider
+        response = GlobalMetricsProvider
 
     @operation
     class List(ListQuery):
         number = "plural"
         method = "GET"
-        path = "/core/metricsprovider"
-        response = MetricsProviderList
+        path = "/core/globalmetricsproviders"
+        response = GlobalMetricsProviderList
 
     @operation
     class Read:
         method = "GET"
-        path = "/core/metricsprovider/{name}"
-        response = MetricsProvider
+        path = "/core/globalmetricsproviders/{name}"
+        response = GlobalMetricsProvider
 
     @operation
     class Update:
         method = "PUT"
-        path = "/core/metricsprovider/{name}"
-        body = MetricsProvider
-        response = MetricsProvider
+        path = "/core/globalmetricsproviders/{name}"
+        body = GlobalMetricsProvider
+        response = GlobalMetricsProvider
 
     @operation
     class Delete:
         method = "DELETE"
-        path = "/core/metricsprovider/{name}"
-        response = MetricsProvider
+        path = "/core/globalmetricsproviders/{name}"
+        response = GlobalMetricsProvider

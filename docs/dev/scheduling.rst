@@ -36,7 +36,7 @@ Scheduling of Applications
 - Selected Kubernetes clusters could contain metrics definition. If the cluster contains
   metrics definition, the application handler fetches metric values from the
   corresponding metrics providers which should be defined in the metric resource
-  specification, see :ref:`dev/scheduling:Metrics and Metric Providers`.
+  specification, see :ref:`dev/scheduling:Metrics and Metrics Providers`.
 
 - Then, the score for each Kubernetes cluster resource is computed. The cluster score is
   represented by a decimal number and is computed from Kubernetes cluster stickiness
@@ -194,7 +194,8 @@ Scheduling of Magnum clusters
 - Selected OpenStack project resources could contain metric definitions. If the
   OpenStack project contains metrics definition, the Magnum cluster handler fetches
   metric values from the corresponding metrics providers which should be defined in the
-  metric resource specification, see :ref:`dev/scheduling:Metrics and Metric Providers`.
+  metric resource specifications,
+  see :ref:`dev/scheduling:Metrics and Metrics Providers`.
 
 - Then, the score for each OpenStack project resource is computed. The OpenStack project
   score is represented by a decimal number and is computed from metric values and
@@ -230,13 +231,13 @@ scheduler. "OS project" means "OpenStack project resource" on the figure.
 .. figure:: /img/scheduler_magnum_cluster_handler.png
 
 
-Metrics and Metric Providers
-============================
+Metrics and Metrics Providers
+=============================
 
 Overview
 --------
 
-This section describes the metrics and theirs providers used in the Krake scheduling
+This section describes the metrics and their providers used in the Krake scheduling
 algorithm.
 
 The Krake scheduler filters backends based on defined backend metrics. The appropriate
@@ -262,10 +263,10 @@ Examples:
   rok os project create --user-id $OS_USER_ID --template $TEMPLATE_ID my-project --metric heat_demand_zone_1 3
 
 
-By design, the Krake metric resource (called ``Metric``) is a core api object, that
-contains its value normalization interval (min, max) and metrics provider name, from
-which the metric current value should be requested. For the moment, Krake supports the
-following types of metrics providers:
+By design, the Krake metric resource (called ``GlobalMetric``) is a core api object,
+that contains its value normalization interval (min, max) and metrics provider name,
+from which the metric current value should be requested. For the moment, Krake
+supports the following types of metrics providers:
 
 - **Prometheus** metrics provider, which can be used to fetch the current value of a
   metric from a Prometheus_ server;
@@ -277,9 +278,10 @@ following types of metrics providers:
   purposes.
 
 
-The metrics provider is defined as a core api resource (called ``MetricsProvider``)
-that stores the access information for the case of a Prometheus metrics provider, or
-the metrics values for the case of a Static metrics provider.
+The metrics provider is defined as a core api resource (called
+``GlobalMetricsProvider``) that stores the access information for the case of a
+Prometheus metrics provider, or the metrics values for the case of a Static
+metrics provider.
 
 
 Example
@@ -288,7 +290,7 @@ Example
 .. code:: yaml
 
     api: core
-    kind: Metric
+    kind: GlobalMetric
     metadata:
       name: heat_demand_zone_1  # name as stored in Krake API (for management purposes)
     spec:
@@ -301,18 +303,18 @@ Example
     ---
     # Prometheus metrics provider
     api: core
-    kind: MetricsProvider
+    kind: GlobalMetricsProvider
     metadata:
       name: prometheus_provider
     spec:
-      type: prometheus  # specify here the type of MetricsProvider
+      type: prometheus  # specify here the type of metrics provider
       prometheus:
         url: http://localhost:9090
 
     ---
     # Kafka metrics provider
     api: core
-    kind: MetricsProvider
+    kind: GlobalMetricsProvider
     metadata:
       name: kafka_provider
     spec:
@@ -326,11 +328,11 @@ Example
     ---
     # Static metrics provider
     api: core
-    kind: MetricsProvider
+    kind: GlobalMetricsProvider
     metadata:
       name: static_provider
     spec:
-      type: static  # specify here the type of MetricsProvider
+      type: static  # specify here the type of metrics provider
       static:
         metrics:
           heat_demand_zone_1: 0.9
@@ -338,8 +340,8 @@ Example
 
 
 In the example above, all metrics providers could be used to fetch the
-``heat_demand_zone_1`` metric. By specifying a name in ``spec.provider.metric`` of the
-``Metric`` resource, the value would be fetched from a different provider:
+``heat_demand_zone_1`` metric. By specifying a name in ``spec.provider.name`` of the
+``GlobalMetric`` resource, the value would be fetched from a different provider:
 
 - ``prometheus_provider`` for the Prometheus provider;
 - ``kafka_provider`` for the Kafka provider;
@@ -348,14 +350,14 @@ In the example above, all metrics providers could be used to fetch the
 
 .. note::
     A metric contains two "names", but they can be different. ``metadata.name`` is the
-    name of the Metric resource as stored by the Krake API. In the database, there can
-    not be two resources of the same kind with the exact same name.
+    name of the GlobalMetric resource as stored by the Krake API. In the database,
+    there can not be two resources of the same kind with the exact same name.
 
     However (if we take for instance the case of Prometheus), two metrics, taken from
     two different Prometheus servers could have the exact same name. This name is given
     by ``spec.provider.metric``.
 
-    So two Krake Metrics resources could be called ``latency_from_A`` and
+    So two Krake `GlobalMetric`s resources could be called ``latency_from_A`` and
     ``latency_from_B`` in the database, but their name could
     be ``latency`` in both Prometheus servers.
 

@@ -111,7 +111,7 @@ starting Krake:
 # Create roles for the RBAC authorization mode.
 krake_bootstrap_db bootstrapping/base_roles.yaml
 
-# Create Metrics and MetricsProviders, for development purposes.
+# Create metrics and metrics providers, for development purposes.
 krake_bootstrap_db support/prometheus_metrics.yaml support/static_metrics.yaml
 ```
 
