@@ -1,10 +1,13 @@
 import asyncio
 import sys
+from contextlib import suppress
 from functools import partial
 from unittest.mock import Mock
 
 import pytest
-from aiohttp import ClientConnectorError
+from aiohttp import ClientConnectorError, web
+from krake.client.core import CoreApi
+from krake.test_utils import server_endpoint, with_timeout
 from tests.factories.kubernetes import ApplicationFactory, ApplicationStatusFactory
 from krake.controller import (
     WorkQueue,
@@ -15,7 +18,7 @@ from krake.controller import (
     Observer,
     sigmoid_delay,
 )
-from krake.data.core import WatchEvent, WatchEventType
+from krake.data.core import WatchEvent, WatchEventType, ListMetadata, RoleList
 from krake.data.kubernetes import ApplicationState
 from tests.controller import SimpleWorker
 
@@ -494,6 +497,118 @@ async def test_reflector_retry(loop):
         # loop.
         assert cumulative_sum > delays[i]
         assert cumulative_sum > delays[i + 4]
+
+
+@with_timeout(3)
+async def test_controller_resilience_api_list_fail(aiohttp_server, config, db, loop):
+    """Ensure that a response sent by the API with an error when listing the resources
+    does not make the Reflector fail, and with it the Controller.
+    """
+    routes = web.RouteTableDef()
+
+    class SimpleController(Controller):
+        async def simple_on_list(self, resource):
+            # If this method is not provided, the listing will not be done by the
+            # Reflector
+            assert False  # This method should never be called
+
+        async def prepare(self, client):
+            assert client is not None
+            self.client = client
+            self.core_api = CoreApi(self.client)
+
+            self.simple_reflector = Reflector(
+                listing=self.core_api.list_roles,
+                watching=self.core_api.watch_roles,
+                on_list=self.simple_on_list,
+                loop=self.loop,
+            )
+            self.register_task(self.simple_reflector, name="Simple reflector")
+
+        async def cleanup(self):
+            self.simple_reflector = None
+            self.core_api = None
+
+    @routes.get("/core/roles")
+    async def _(request):
+        watch = request.rel_url.query.get("watch")
+        if watch is None:
+            raise web.HTTPInternalServerError()
+        # Create a mock "watch" response
+        resp = web.StreamResponse(headers={"Content-Type": "application/x-ndjson"})
+        resp.enable_chunked_encoding()
+        await resp.prepare(request)
+        await asyncio.sleep(30)  # Ensure that the "watch" request do no end prematurely
+
+    mock_app = web.Application(debug=True)
+    mock_app.add_routes(routes)
+    mock_api = await aiohttp_server(mock_app, debug=True)
+
+    controller = SimpleController(server_endpoint(mock_api), loop=loop)
+    run_task = loop.create_task(controller.run())
+    await asyncio.sleep(1)  # wait for the reflectors --> prevents false positives
+
+    # The controller task should not have been finished because of the server error.
+    assert not run_task.done()
+    assert not run_task.cancelled()
+    with pytest.raises(asyncio.InvalidStateError, match="Exception is not set."):
+        run_task.exception()
+
+    run_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await run_task
+
+
+@with_timeout(3)
+async def test_controller_resilience_api_watch_fail(aiohttp_server, config, db, loop):
+    """Ensure that a response sent by the API with an error when watching the resources
+    does not make the Reflector fail, and with it the Controller.
+    """
+    routes = web.RouteTableDef()
+
+    class SimpleController(Controller):
+        async def prepare(self, client):
+            assert client is not None
+            self.client = client
+            self.core_api = CoreApi(self.client)
+
+            self.simple_reflector = Reflector(
+                listing=self.core_api.list_roles,
+                watching=self.core_api.watch_roles,
+                loop=self.loop,
+            )
+            self.register_task(self.simple_reflector, name="Simple reflector")
+
+        async def cleanup(self):
+            self.simple_reflector = None
+            self.core_api = None
+
+    @routes.get("/core/roles")
+    async def _(request):
+        watch = request.rel_url.query.get("watch")
+        if watch is None:
+            # Create a mock "list" response
+            body = RoleList(metadata=ListMetadata(), items=[])
+            return web.json_response(body.serialize())
+        raise web.HTTPInternalServerError()
+
+    mock_app = web.Application(debug=True)
+    mock_app.add_routes(routes)
+    mock_api = await aiohttp_server(mock_app, debug=True)
+
+    controller = SimpleController(server_endpoint(mock_api), loop=loop)
+    run_task = loop.create_task(controller.run())
+    await asyncio.sleep(1)  # wait for the reflectors --> prevents false positives
+
+    # The controller task should not have been finished because of the server error.
+    assert not run_task.done()
+    assert not run_task.cancelled()
+    with pytest.raises(asyncio.InvalidStateError, match="Exception is not set."):
+        run_task.exception()
+
+    run_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await run_task
 
 
 async def test_observer(loop):
