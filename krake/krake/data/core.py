@@ -124,12 +124,46 @@ def _validate_labels(labels):
 
     Raises:
         ValidationError: if any of the keys and labels does not match their respective
-            regular expression.
+            regular expression. The error contains as message the list of all errors
+            which occurred in the labels. Each element of the list is a dictionary with
+            one key-value pair:
+            - key: the label key or label value for which an error occurred as string.
+            - value: the error message.
+
+            .. code:: python
+
+                # Example:
+                labels = {
+                    "key1": "valid",
+                    "key2": ["invalid"],
+                    "$$": "invalid",
+                    True: True,
+                }
+                try:
+                    _validate_labels(labels)
+                except ValidationError as err:
+                    assert err.messages == [
+                        {"['invalid']": 'expected string or bytes-like object'},
+                        {'$$': "Label key '$$' does not match the regex [...]"},
+                        {'True': 'expected string or bytes-like object'},
+                        {'True': 'expected string or bytes-like object'},
+                    ]
 
     """
+    errors = []
     for key, value in labels.items():
-        validate_key(key)
-        validate_value(value)
+        try:
+            validate_key(key)
+        except (ValidationError, TypeError) as err:
+            errors.append({str(key): str(err)})
+
+        try:
+            validate_value(value)
+        except (ValidationError, TypeError) as err:
+            errors.append({str(value): str(err)})
+
+    if errors:
+        raise ValidationError(list(errors))
 
 
 class Metadata(Serializable):
