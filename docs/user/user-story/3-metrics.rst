@@ -87,81 +87,42 @@ Preparation
 
 .. prompt:: bash $ auto
 
-    $ sudo apt install etcd-client jq
-    $ export ETCDCTL_API=3  # To use the version 3 of the etcd API
-    $ etcdctl get --print-value-only /core/globalmetricsproviders/static_provider | jq --sort-keys
-    {
-      "api": "core",
-      "kind": "GlobalMetricsProvider",
-      "metadata": {
-        "created": "<creation_timestamp>",
-        "deleted": null,
-        "finalizers": [],
-        "labels": {},
-        "modified": "<creation_timestamp>",
-        "name": "static_provider",
-        "namespace": null,
-        "owners": [],
-        "uid": "<random_uid>"
-      },
-      "spec": {
-        "static": {
-          "metrics": {
-            "electricity_cost_1": 0.9,
-            "green_energy_ratio_1": 0.1
-          }
-        },
-        "type": "static"
-      }
-    }
-    $ etcdctl get --print-value-only /core/globalmetrics/electricity_cost_1 | jq --sort-keys
-    {
-      "api": "core",
-      "kind": "GlobalMetric",
-      "metadata": {
-        "created": "<creation_timestamp>",
-        "deleted": null,
-        "finalizers": [],
-        "labels": {},
-        "modified": "<creation_timestamp>",
-        "name": "electricity_cost_1",
-        "namespace": null,
-        "owners": [],
-        "uid": "<random_uid>"
-      },
-      "spec": {
-        "max": 1,
-        "min": 0,
-        "provider": {
-          "metric": "electricity_cost_1",
-          "name": "static_provider"
-        }
-      }
-    }
-    $ etcdctl get --print-value-only /core/globalmetrics/green_energy_ratio_1 | jq --sort-keys
-    {
-      "api": "core",
-      "kind": "GlobalMetric",
-      "metadata": {
-        "created": "<creation_timestamp>",
-        "deleted": null,
-        "finalizers": [],
-        "labels": {},
-        "modified": "<creation_timestamp>",
-        "name": "green_energy_ratio_1",
-        "namespace": null,
-        "owners": [],
-        "uid": "<random_uid>"
-      },
-      "spec": {
-        "max": 1,
-        "min": 0,
-        "provider": {
-          "metric": "green_energy_ratio_1",
-          "name": "static_provider"
-        }
-      }
-    }
+    $ rok core globalmetricsprovider get static_provider
+    +-----------+---------------------------+
+    | name      | static_provider           |
+    | namespace | None                      |
+    | labels    | None                      |
+    | created   | 2000-01-01 08:00:00       |
+    | modified  | 2000-01-01 08:00:00       |
+    | deleted   | None                      |
+    | type      | static                    |
+    | metrics   | electricity_cost_1: 0.9   |
+    |           | green_energy_ratio_1: 0.1 |
+    +-----------+---------------------------+
+    $ rok core globalmetric get electricity_cost_1
+    +-----------+---------------------+
+    | name      | electricity_cost_1  |
+    | namespace | None                |
+    | labels    | None                |
+    | created   | 2000-01-01 08:00:00 |
+    | modified  | 2000-01-01 08:00:00 |
+    | deleted   | None                |
+    | provider  | static_provider     |
+    | min       | 0                   |
+    | max       | 1                   |
+    +-----------+---------------------+
+    $ rok core globalmetric get green_energy_ratio_1
+    +-----------+----------------------+
+    | name      | green_energy_ratio_1 |
+    | namespace | None                 |
+    | labels    | None                 |
+    | created   | 2000-01-01 08:00:00  |
+    | modified  | 2000-01-01 08:00:00  |
+    | deleted   | None                 |
+    | provider  | static_provider      |
+    | min       | 0                    |
+    | max       | 1                    |
+    +-----------+----------------------+
 
 
 - Register ``minikube-cluster-1`` and ``minikube-cluster-1`` clusters, and associate the ``electricity_cost_1`` and ``green_energy_ratio_1`` metrics to them using different weights to get different ranking scores:
@@ -201,7 +162,7 @@ Scheduling of an application
 .. prompt:: bash $ auto
 
     $ rok kube app create -f git/krake/rak/functionals/echo-demo.yaml echo-demo
-    $ rok kube app get echo-demo -o json | jq .status.running_on  # The Application is running on "minikube-cluster-1"
+    $ rok kube app get echo-demo  # See "running_on": the Application is running on "minikube-cluster-1"
 
 .. note::
 
@@ -243,7 +204,18 @@ Observe a migration
 
 .. prompt:: bash $ auto
 
-    $ etcdctl put /core/globalmetricsproviders/static_provider -- '{"metadata": {"namespace": null, "uid": "26ef45e8-e5c8-44fe-8a7f-a3f40944c925", "labels": {}, "modified": "2020-01-21T10:50:11.500376", "deleted": null, "name": "static_provider", "owners": [], "created": "2020-01-21T10:50:11.500376", "finalizers": []}, "spec": {"type": "static", "static": {"metrics": {"electricity_cost_1": 0.1, "green_energy_ratio_1": 0.9}}}, "api": "core", "kind": "GlobalMetricsProvider"}'
+    $ rok core globalmetricsprovider update static_provider --metric electricity_cost_1 0.1 --metric green_energy_ratio_1 0.9
+    +-----------+---------------------------+
+    | name      | static_provider           |
+    | namespace | None                      |
+    | labels    | None                      |
+    | created   | 2021-04-08 08:04:23       |
+    | modified  | 2021-04-08 08:10:34       |
+    | deleted   | None                      |
+    | type      | static                    |
+    | metrics   | electricity_cost_1: 0.1   |
+    |           | green_energy_ratio_1: 0.9 |
+    +-----------+---------------------------+
 
 
 - Now, by waiting a bit (maximum 60 seconds if you kept the default configuration), the
@@ -253,7 +225,7 @@ Observe a migration
 
 .. prompt:: bash $ auto
 
-    $ rok kube app get echo-demo -o json | jq .status.running_on  # The Application is now running on "minikube-cluster-2"
+    $ rok kube app get echo-demo  # See "running_on": the Application is running on "minikube-cluster-2"
 
 
 Cleanup
