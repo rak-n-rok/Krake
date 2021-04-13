@@ -209,7 +209,7 @@ class ApplicationSpecFactory(Factory):
 
     @lazy_attribute
     def manifest(self):
-        return kubernetes_manifest
+        return deepcopy(kubernetes_manifest)
 
     constraints = SubFactory(ConstraintsFactory)
 

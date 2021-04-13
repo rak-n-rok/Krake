@@ -23,8 +23,52 @@ class Constraints(Serializable):
     migration: bool = True
 
 
+def _validate_manifest(manifest):
+    """Validate the content of a manifest provided as dictionary. Empty manifests,
+    resources inside without API version, kind, metadata or name are considered invalid.
+
+    Args:
+        manifest (dict): manifest to validate.
+
+    Raises:
+        ValidationError: if any error occurred in any resource inside the manifest. The
+            message is a list with one list per resource. This list contains all errors
+            for the current resource.
+
+    Returns:
+        bool: True if no validation error occurred.
+
+    """
+    if not manifest:
+        raise ValidationError("The manifest file must not be empty.")
+
+    errors = []
+    # For each resource, create a list of errors:
+    for index, resource in enumerate(manifest):
+        resource_errors = []
+
+        msg_fmt = "Field '{field}' not found in resource"
+        msg_fmt += f" at index {index}"
+        name = resource.get("metadata", {}).get("name")
+        if name:
+            msg_fmt += f" (metadata.name: {name!r})"
+        else:
+            resource_errors.append(msg_fmt.format(field="metadata.name"))
+
+        for attribute in ["apiVersion", "kind", "metadata"]:
+            if attribute not in resource:
+                resource_errors.append(msg_fmt.format(field=attribute))
+
+        errors.extend(resource_errors)
+
+    if any(errors):
+        raise ValidationError(errors)
+
+    return True
+
+
 class ApplicationSpec(Serializable):
-    manifest: List[dict]
+    manifest: List[dict] = field(metadata={"validate": _validate_manifest})
     constraints: Constraints
     hooks: List[str] = field(default_factory=list)
 

@@ -1179,6 +1179,10 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
     # Setup Kubernetes API mock server
     routes = web.RouteTableDef()
 
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
+    async def _(request):
+        return web.Response(status=200)
+
     @routes.get("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
         return web.json_response(
@@ -1258,7 +1262,7 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
         status__state=ApplicationState.PENDING,
         status__is_scheduled=True,
         status__scheduled_to=resource_ref(cluster),
-        spec__manifest=[],
+        spec__manifest=[nginx_manifest[0]],
         status__services={"nginx-demo": "127.0.0.1:30704"},
         status__manifest=manifest,
     )
