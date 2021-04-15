@@ -122,18 +122,63 @@ class ApiAdapterCustom(object):
 
 
 class KubernetesClient(object):
+    """Client for connecting to a Kubernetes cluster. This client:
+
+    * prepares the connection based on the information stored in the cluster's
+      kubeconfig file;
+    * prepares the connection to a custom resource's API, if a Kubernetes resource to be
+      managed relies on a Kubernetes custom resource;
+    * offers two methods:
+      - :meth:`apply`: apply a manifest to create or update a resource
+      - :meth:`delete`: delete a resource.
+
+    The client can be used as a context manager, with the Kubernetes client being
+    deleted when leaving the context.
+
+    Attributes:
+        kubeconfig (dict): provided kubeconfig file, to connect to the cluster.
+        custom_resources (list[str]): name of all custom resources that are available on
+            the current cluster.
+        resource_apis (dict): mapping of a Kubernetes's resource name to the API object
+            of the Kubernetes client which manages it (e.g. a Pod belongs to the
+            "CoreV1" API of Kubernetes, so the mapping would be "Pod" ->
+            <client.CoreV1Api_instance>), wrapped in an :class:`ApiAdapter` instance.
+        api_client (ApiClient): base API object created by the Kubernetes API library.
+
+    """
+
     def __init__(self, kubeconfig, custom_resources=None):
+        """Instantiate the client with the information from a Krake Cluster resource.
+
+        Args:
+            kubeconfig (dict): kubeconfig file of the cluster associated to the Krake
+                Cluster.
+            custom_resources (list[str]): ame of all custom resources that are available
+                on the cluster.
+
+        """
         self.kubeconfig = kubeconfig
         self.custom_resources = custom_resources
         self.resource_apis = None
         self.api_client = None
 
     @staticmethod
-    def log_resp(resp, kind, action=None):
+    def log_response(response, kind, action=None):
+        """Utility function to parse a response from the Kubernetes cluster and log its
+        content.
+
+        Args:
+            response (object): the response, as handed over by the Kubernetes client
+                library.
+            kind (str): kind of the original resource that was managed (may be different
+                from the kind of the response).
+            action (str): the type of action performed to get this response.
+
+        """
         resp_log = (
-            f"status={resp.status!r}"
-            if hasattr(resp, "status")
-            else f"resource={resp!r}"
+            f"status={response.status!r}"
+            if hasattr(response, "status")
+            else f"resource={response!r}"
         )
         logger.debug(f"%s {action}. %r", kind, resp_log)
 
@@ -174,7 +219,7 @@ class KubernetesClient(object):
 
     async def __aexit__(self, *exec):
         self.resource_apis = None
-        self.api_client = None
+        await self.api_client.close()
 
     @cached_property
     async def custom_resource_apis(self):
@@ -310,12 +355,12 @@ class KubernetesClient(object):
 
         if resp is None:
             resp = await resource_api.create(kind, body=resource, namespace=namespace)
-            self.log_resp(resp, kind, action="created")
+            self.log_response(resp, kind, action="created")
         else:
             resp = await resource_api.patch(
                 kind, name=name, body=resource, namespace=namespace
             )
-            self.log_resp(resp, kind, action="patched")
+            self.log_response(resp, kind, action="patched")
 
         return resp
 
@@ -355,7 +400,7 @@ class KubernetesClient(object):
                 return
             raise
 
-        self.log_resp(resp, kind, action="deleted")
+        self.log_response(resp, kind, action="deleted")
 
         return resp
 
