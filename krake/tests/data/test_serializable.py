@@ -3,7 +3,8 @@ from typing import List, Dict, Union
 import pytest
 from dataclasses import field
 from krake.data.config import HooksConfiguration
-from krake.data.core import Metadata
+from krake.data.core import Metadata, ListMetadata
+from krake.data.kubernetes import ClusterList
 from marshmallow import ValidationError
 
 from krake.data.serializable import (
@@ -16,7 +17,9 @@ from krake.data.serializable import (
     is_generic_subtype,
 )
 from krake import utils
-from tests.factories.core import MetadataFactory
+from tests.factories.core import MetadataFactory, GlobalMetricFactory
+from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
+from tests.factories.openstack import ProjectFactory
 
 
 class Person(Serializable):
@@ -257,6 +260,34 @@ def test_creation_ignored():
     assert "name" not in error_messages["metadata"]
     assert "created" in error_messages["annotations"][0]["metadata"]
     assert 1 not in error_messages["annotations"]
+
+
+def test_api_object_repr():
+    """Verify the representation of the instances of :class:`ApiObject`."""
+    app = ApplicationFactory(metadata__name="my-app", metadata__namespace="my-ns")
+    app_repr = (
+        f"<kubernetes.Application namespace='my-ns'"
+        f" name='my-app' uid={app.metadata.uid!r}>"
+    )
+    assert repr(app) == app_repr
+
+    project = ProjectFactory(metadata__name="my-project", metadata__namespace="other")
+    project_repr = (
+        f"<openstack.Project namespace='other'"
+        f" name='my-project' uid={project.metadata.uid!r}>"
+    )
+    assert repr(project) == project_repr
+
+    # Non-namespaced
+    metric = GlobalMetricFactory(metadata__name="my-metric")
+    metric_repr = f"<core.GlobalMetric name='my-metric' uid={metric.metadata.uid!r}>"
+    assert repr(metric) == metric_repr
+
+    # List
+    items = [ClusterFactory()] * 10
+    cluster_list = ClusterList(metadata=ListMetadata(), items=items)
+    cluster_list_repr = "<kubernetes.ClusterList length=10>"
+    assert repr(cluster_list) == cluster_list_repr
 
 
 class DataSpec(PolymorphicContainer):
