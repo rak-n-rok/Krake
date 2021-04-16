@@ -60,6 +60,27 @@ def fuzzy_sample(population, k=None):
     return fake.random.sample(population, k)
 
 
+class BaseNonNamespaced(object):
+    """Utility class to add to the list of inherited class of a factory. This factory
+    must be a Serializable with a "metadata" attribute of the :class:`Metadata` class.
+
+    Making a factory inherit from this class allows to set the namespace of the created
+    resource to `None`. It basically resets the namespace to make the resource created
+    at the end non-namespaced.
+
+    It must be added before the :class:`Factory` in the list of parent classes,
+    otherwise the :meth:`_create` will be overridden.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)  # Only useful to prevent IDE warnings.
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        kwargs["metadata"].namespace = None
+        return model_class(*args, **kwargs)
+
+
 class MetadataFactory(Factory):
     class Meta:
         model = Metadata
@@ -113,7 +134,7 @@ class RoleRuleFactory(Factory):
         return fuzzy_sample(list(Verb.__members__.values()))
 
 
-class RoleFactory(Factory):
+class RoleFactory(BaseNonNamespaced, Factory):
     class Meta:
         model = Role
 
@@ -121,7 +142,7 @@ class RoleFactory(Factory):
     rules = List([SubFactory(RoleRuleFactory) for _ in range(2)])
 
 
-class RoleBindingFactory(Factory):
+class RoleBindingFactory(BaseNonNamespaced, Factory):
     class Meta:
         model = RoleBinding
 
@@ -165,7 +186,7 @@ class MetricSpecFactory(Factory):
     provider = SubFactory(MetricSpecProviderFactory)
 
 
-class GlobalMetricFactory(Factory):
+class GlobalMetricFactory(BaseNonNamespaced, Factory):
     class Meta:
         model = GlobalMetric
 
@@ -237,7 +258,7 @@ class MetricsProviderSpecFactory(Factory):
         return model_class(*args, **kwargs)
 
 
-class GlobalMetricsProviderFactory(Factory):
+class GlobalMetricsProviderFactory(BaseNonNamespaced, Factory):
     class Meta:
         model = GlobalMetricsProvider
 

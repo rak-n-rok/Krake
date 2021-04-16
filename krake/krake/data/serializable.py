@@ -632,15 +632,21 @@ class ApiObject(Serializable):
             cls.__repr__ = ApiObject.__repr__
 
     def __repr__(self):
-        if self.metadata.namespace:
-            return (
-                f"<{self.api}.{self.kind} namespace={self.metadata.namespace!r} "
-                f"name={self.metadata.name!r} uid={self.metadata.uid!r}>"
-            )
-        return (
-            f"<{self.api}.{self.kind} name={self.metadata.name!r} "
-            f"uid={self.metadata.uid!r}>"
-        )
+        representation = [f"{self.api}.{self.kind}"]
+
+        if hasattr(self.metadata, "namespace") and self.metadata.namespace:
+            representation.append(f"namespace={self.metadata.namespace!r}")
+
+        if hasattr(self.metadata, "name"):
+            representation.append(f"name={self.metadata.name!r}")
+
+        if hasattr(self.metadata, "uid"):
+            representation.append(f"uid={self.metadata.uid!r}")
+
+        if hasattr(self, "items"):
+            representation.append(f"length={len(self.items)}")
+
+        return f"<{' '.join(representation)}>"
 
 
 class PolymorphicContainerSchema(Schema):
