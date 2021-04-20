@@ -1,5 +1,8 @@
 # Krake
 
+[![pipeline status](https://gitlab.com/rak-n-rok/krake/badges/master/pipeline.svg)](https://gitlab.com/rak-n-rok/krake/-/commits/master)
+[![coverage report](https://gitlab.com/rak-n-rok/krake/badges/master/coverage.svg)](https://gitlab.com/rak-n-rok/krake/-/commits/master)
+
 Welcome to the Krake repository! :octopus:
 
 Krake [ˈkʀaːkə] is an orchestrator engine for containerized and virtualized
