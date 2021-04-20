@@ -21,19 +21,18 @@ import time
 
 from utils import (
     run,
-    Environment,
     check_resource_deleted,
     check_return_code,
     check_spec_container_image,
     kubectl_cmd,
 )
-from resource_definitions import (
-    create_default_environment,
-    ApplicationDefinition,
-    get_default_kubeconfig_path,
+from environment import (
+    Environment,
     MANIFEST_PATH,
-    ResourceKind,
+    create_default_environment,
+    get_default_kubeconfig_path,
 )
+from resource_definitions import ApplicationDefinition, ResourceKind
 
 
 def test_kubernetes_observer_deletion(minikube_clusters):

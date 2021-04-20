@@ -1,7 +1,8 @@
 import os.path
 import random
 
-from utils import run, Environment, check_return_code, kubectl_cmd
+from utils import run, check_return_code, kubectl_cmd
+from environment import Environment
 from resource_definitions import ClusterDefinition, ApplicationDefinition
 
 KRAKE_HOMEDIR = "/home/krake"

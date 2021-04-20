@@ -3,7 +3,6 @@ import logging
 import os
 import subprocess
 import time
-from collections import defaultdict
 from dataclasses import MISSING
 
 logger = logging.getLogger("krake.test_utils.run")
@@ -261,13 +260,8 @@ def check_metrics_provider_content(error_message, name, type, type_details=None)
     expected_mp = {
         "api": "core",
         "kind": "GlobalMetricsProvider",
-        "metadata": {
-            "name": name,
-        },
-        "spec": {
-            "type": type,
-            type: type_details,
-        },
+        "metadata": {"name": name},
+        "spec": {"type": type, type: type_details},
     }
 
     def validate(response):
@@ -579,151 +573,6 @@ def check_http_code_in_output(http_code, error_message=None):
         assert str(http_code) in response.output, message
 
     return validate
-
-
-class Environment(object):
-    """Context manager to use for starting tests on a specific test environment. This
-    environment will create the requested resources in the requested order when started.
-    Actions can then be performed on the environment. Finally, all resources created are
-    deleted in the reverse order of their creation.
-
-    The structure of the environment is given using the ``resources`` parameter. This
-    parameter should be a dict with the following syntax:
-
-    {
-        <priority 0>: [<resource A>, <resource_B>...],
-        <priority 1>: [<resource C>, <resource_D>...],
-    }
-
-    priority:
-        Priorities are integer. All resources with the highest priority (higher number)
-        will be created first.
-
-    resource lists:
-        The resource lists are composed of instances of resource definitions (e.g
-        :class:`ClusterDefinition`). All resources with the same priority will be
-        created "at the same time", i.e. not concurrently, but between the ones with
-        higher and the ones with lower priority.
-
-        Note that the resources in these list do not need to have the same kind.
-
-    To ensure that a resource is actually created or deleted, methods can be added to
-    the resources definition, respectively ``check_created`` and ``check_deleted``.
-    These methods are not meant to test the behavior of Krake, but simply to block the
-    environment. When entering the context created by the :class:`Environment`, these
-    checks ensure that the actual resources are created before handing over to the
-    actual test in the test environment.
-
-    The ``check_created`` and ``check_deleted`` do not take any parameter and do not
-    return anything. However, if the resource is not respectively created or deleted
-    after a certain time, they should raise an exception.
-
-    Example:
-        .. code:: python
-
-            {
-                10: [ClusterDefinition(...), ClusterDefinition(...)],
-                0: [
-                        ApplicationDefinition(...),
-                        ApplicationDefinition(...),
-                        ApplicationDefinition(...),
-                    ],
-            }
-
-    Args:
-        resources (dict): a dictionary that describes the resources to create, with
-            their priority.
-        before_handlers (list): this list of functions will be called one after the
-            other in the given order before all Krake resources have been created. Their
-            signature should be "handler(dict) -> void". The given dict contains the
-            definition of all resources managed by the Environment.
-        after_handlers (list): this list of functions will be called one after the other
-            in the given order after all Krake resources have been deleted. Their
-            signature should be "handler(dict) -> void". The given dict contains the
-            definition of all resources managed by the Environment.
-        creation_delay (int, optional): The number of seconds that should
-            be allowed before concluding that a resource could not be created.
-
-    """
-
-    def __init__(
-        self, resources, before_handlers=None, after_handlers=None, creation_delay=10
-    ):
-        # Dictionary: "priority: list of resources to create"
-        self.res_to_create = resources
-        self.resources = defaultdict(list)
-        self.creation_delay = creation_delay
-
-        self.before_handlers = before_handlers if before_handlers else []
-        self.after_handlers = after_handlers if after_handlers else []
-
-    def __enter__(self):
-        """Create all given resources and check that they have been actually created.
-
-        Returns:
-            Environment: the current environment, after having been populated with the
-                resources to create.
-
-        """
-        for handler in self.before_handlers:
-            handler(self.resources)
-
-        # Create resources with highest priority first
-        for _, resource_list in sorted(self.res_to_create.items(), reverse=True):
-            for resource in resource_list:
-                self.resources[resource.kind] += [resource]
-                resource.create_resource()
-
-        # Check for each resource if it has been created
-        for _, resource_list in sorted(self.res_to_create.items(), reverse=True):
-            for resource in resource_list:
-                resource.check_created(delay=self.creation_delay)
-
-        return self
-
-    def __exit__(self, *exceptions):
-        """Delete all given resources and check that they have been actually deleted."""
-        # Delete resources with lowest priority first
-        for _, resource_list in sorted(self.res_to_create.items()):
-            for resource in resource_list:
-                resource.delete_resource()
-
-        # Check for each resource if it has been deleted
-        for _, resource_list in sorted(self.res_to_create.items()):
-            for resource in resource_list:
-                if hasattr(resource, "check_deleted"):
-                    resource.check_deleted()
-
-        for handler in self.after_handlers:
-            handler(self.resources)
-
-    def get_resource_definition(self, kind, name):
-        """
-        If there exists exactly one resource in 'resources' of kind 'kind'
-        with name 'name', return it. Otherwise raise AssertionError.
-        Args:
-            kind (ResourceKind): the kind of resource which is sought.
-            name (str): the name of the resource that is sought.
-
-        Returns:
-            ResourceDefinition: If found, the sought resource.
-                if kind == ResourceKind.CLUSTER: ClusterDefinition
-                If kind == ResourceKind.APPLICATION: ApplicationDefinition
-
-        Raises:
-            AssertionError if not exactly one resource was found.
-
-        """
-        found = [r for r in self.resources[kind] if r.name == name]
-        if len(found) != 1:
-            msg = (
-                f"Found {len(found)} resources of kind {kind} with name {name} "
-                f"(expected one)."
-            )
-            if len(found) != 0:
-                msg += f" They were: {', '.join(str(rd) for rd in found)}"
-            raise AssertionError(msg)
-        return found[0]
 
 
 def get_scheduling_score(cluster, values, weights, scheduled_to=None):

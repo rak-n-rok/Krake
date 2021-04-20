@@ -42,14 +42,14 @@ import string
 import time
 
 from utils import (
-    Environment,
     create_cluster_info,
     get_scheduling_score,
     set_static_metrics,
     get_static_metrics,
     get_other_cluster,
 )
-from resource_definitions import create_default_environment, ResourceKind
+from environment import Environment, create_default_environment
+from resource_definitions import ResourceKind
 
 KRAKE_HOMEDIR = "/home/krake"
 GIT_DIR = "git/krake"
