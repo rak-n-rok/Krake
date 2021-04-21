@@ -1,8 +1,11 @@
 import os
 from collections import defaultdict
 
-from utils import KRAKE_HOMEDIR
-from resource_definitions import ClusterDefinition, ApplicationDefinition
+from functionals.utils import KRAKE_HOMEDIR
+from functionals.resource_definitions import (
+    ClusterDefinition,
+    ApplicationDefinition,
+)
 
 GIT_DIR = "git/krake"
 TEST_DIR = "rak/functionals"
@@ -23,28 +26,6 @@ def get_default_kubeconfig_path(cluster_name):
 
     """
     return os.path.join(CLUSTERS_CONFIGS, cluster_name)
-
-
-def _convert_to_metrics_list(metrics):
-    """Convert a dict of metrics names and weights as keys and values, into a list
-    of dicts with the two keys "name" and "weight" as keys and the metrics name and
-    metric weight as their corresponding values.
-
-    Examples:
-          metrics {"name1": 1.0, "name2": 2.0} results in the output
-          [{"name": "name1", "weight": 1.0}, {"name": "name2", "weight": 2.0}]
-
-    Args:
-        metrics (dict[str, float]): metrics to convert
-
-    Returns:
-        list[dict[str, object]]: list of dicts with the two keys "name" and "weight" as
-            keys and the metrics name and metric weight as their corresponding values.
-    """
-    metrics_list = []
-    for metric_name, metric_weight in metrics.items():
-        metrics_list.append({"name": metric_name, "weight": metric_weight})
-    return metrics_list
 
 
 class Environment(object):
@@ -245,10 +226,8 @@ def create_multiple_cluster_environment(
             Cluster names and labels for the corresponding Cluster to create.
             The labels are given as a dictionary with the label names as keys
             and the label values as values.
-        metrics (dict[str, dict[str, float]], optional): mapping between
+        metrics (dict[str, list[WeightedMetric]], optional): mapping between
             Cluster names and metrics for the corresponding Cluster to create.
-            The metrics are given as a dictionary with the metric names as keys
-            and the metric weights as values.
         app_name (str, optional): name of the Application to create.
         manifest_path (PathLike, optional): path to the manifest file that
             should be used to create the Application.
@@ -269,17 +248,34 @@ def create_multiple_cluster_environment(
     if not app_cluster_constraints:
         app_cluster_constraints = []
 
-    env = {
-        10: [
-            ClusterDefinition(
-                name=cn,
-                kubeconfig_path=kcp,
-                labels=cluster_labels[cn],
-                metrics=_convert_to_metrics_list(metrics[cn]),
-            )
-            for cn, kcp in kubeconfig_paths.items()
-        ]
+    all_unique_metrics_providers = {
+        # A non-existent metric do not have a metrics provider, so its
+        # get_metrics_provider() method returns None.
+        weighted_metric.metric.get_metrics_provider()
+        for c in kubeconfig_paths
+        for weighted_metric in metrics[c]
     }
+    # Discard None metrics providers from non-existent metrics present in metrics
+    all_unique_metrics_providers.discard(None)
+    all_unique_metrics = {
+        weighted_metric.metric
+        for cluster_name in kubeconfig_paths
+        for weighted_metric in metrics[cluster_name]
+    }
+
+    env = {}
+    if metrics:
+        env[30] = all_unique_metrics_providers
+        env[20] = all_unique_metrics
+    env[10] = [
+        ClusterDefinition(
+            name=cn,
+            kubeconfig_path=kcp,
+            labels=cluster_labels[cn],
+            metrics=metrics[cn],
+        )
+        for cn, kcp in kubeconfig_paths.items()
+    ]
     if app_name:
         env[0] = [
             ApplicationDefinition(
@@ -313,12 +309,8 @@ def create_default_environment(
 
     Args:
         cluster_names (list[str]): cluster names
-        metrics (dict[str, dict[str, float]], optional):
+        metrics (dict[str, list[WeightedMetric]], optional):
             Cluster names and their metrics.
-            keys: the same names as in `cluster_names`
-            values: dict of metrics
-                keys: metric names
-                values: weight of the metrics
         cluster_labels (dict[str, dict[str, str]], optional):
             Cluster names and their cluster labels.
             keys: the same names as in `cluster_names`

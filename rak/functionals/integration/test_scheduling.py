@@ -40,33 +40,25 @@ Test constraints, metrics and metrics providers are globally defined as follows:
 
 import random
 import time
-from utils import (
+from functionals.utils import (
     run,
     check_empty_list,
     check_return_code,
-    create_cluster_info,
+    create_cluster_label_info,
     get_other_cluster,
     get_scheduling_score,
-    set_static_metrics,
-    GLOBAL_STATIC_METRICS,
-    NAMESPACED_STATIC_METRICS,
 )
-from environment import (
+from functionals.environment import (
     Environment,
     create_simple_environment,
     create_default_environment,
     CLUSTERS_CONFIGS,
     MANIFEST_PATH,
 )
-from resource_definitions import ResourceKind
+from functionals.resource_definitions import ResourceKind
+from functionals.resource_provider import provider, WeightedMetric, NonExistentMetric
 
-METRICS = [
-    "heat_demand_zone_1",
-    "heat_demand_zone_2",
-    "heat_demand_zone_3",
-    "heat_demand_zone_4",
-    "heat_demand_zone_5",
-]
+
 CONSTRAINT_EXPRESSIONS = {
     True: [
         "location is DE",
@@ -229,7 +221,7 @@ def test_scheduler_cluster_label_constraints(minikube_clusters):
             #     `location=DE` and `location=IT` (in random order);
             # 2. Create an application with the cluster label constraint given by
             #     `CONSTRAINT_EXPRESSIONS`;
-            cluster_labels = create_cluster_info(clusters, "location", countries)
+            cluster_labels = create_cluster_label_info(clusters, "location", countries)
             environment = create_default_environment(
                 clusters,
                 cluster_labels=cluster_labels,
@@ -261,22 +253,22 @@ def test_scheduler_clusters_with_metrics(minikube_clusters):
     # The two clusters and metrics used in this test
     num_clusters = 2
     clusters = random.sample(minikube_clusters, num_clusters)
-    namespaced_metric_names = random.sample(NAMESPACED_STATIC_METRICS, 1)
-    global_metric_names = random.sample(GLOBAL_STATIC_METRICS, 1)
+    mp = provider.get_namespaced_static_metrics_provider()
+    namespaced_static_metric = random.choice(mp.get_valued_metrics())
+    gmp = provider.get_global_static_metrics_provider()
+    global_static_metric = random.choice(gmp.get_valued_metrics())
+    static_metrics = [namespaced_static_metric, global_static_metric]
 
     # Choose the metric weights for each cluster
     metric_weights = {
-        clusters[0]: {
-            namespaced_metric_names[0]: {"weight": 1.5, "namespaced": True},
-            global_metric_names[0]: {"weight": 1.0, "namespaced": False},
-        },
-        clusters[1]: {
-            namespaced_metric_names[0]: {"weight": 1.0, "namespaced": True},
-            global_metric_names[0]: {"weight": 1.5, "namespaced": False},
-        },
-    }
-    prepared_weights = {
-        c: {m: metric_weights[c][m]["weight"]} for c in clusters for m in c
+        clusters[0]: [
+            WeightedMetric(namespaced_static_metric.metric, 1.5),
+            WeightedMetric(global_static_metric.metric, 1),
+        ],
+        clusters[1]: [
+            WeightedMetric(namespaced_static_metric.metric, 1),
+            WeightedMetric(global_static_metric.metric, 1.5),
+        ],
     }
 
     # Run the test twice and use different metric values in each iteration so
@@ -285,16 +277,14 @@ def test_scheduler_clusters_with_metrics(minikube_clusters):
     for values in [[0.8, 0.7], [0.7, 0.8]]:
 
         # 1. Set the metric values to different values in each run
-        namespaced_metric_value = {namespaced_metric_names[0]: values[0]}
-        global_metric_value = {global_metric_names[0]: values[1]}
-        set_static_metrics(namespaced_metric_value, globals=False)
-        set_static_metrics(global_metric_value, globals=True)
+        namespaced_static_metric.value = values[0]
+        mp.set_valued_metrics(metrics=[namespaced_static_metric])
+        global_static_metric.value = values[1]
+        gmp.set_valued_metrics(metrics=[global_static_metric])
 
         # Calculate the scores and determine the cluster with the highest score.
-        metric_values = dict(namespaced_metric_value, **global_metric_value)
         scores = {
-            c: get_scheduling_score(c, metric_values, prepared_weights)
-            for c in clusters
+            c: get_scheduling_score(c, static_metrics, metric_weights) for c in clusters
         }
         max_score_cluster = max(scores, key=scores.get)
 
@@ -304,7 +294,7 @@ def test_scheduler_clusters_with_metrics(minikube_clusters):
         # 2. Create two Minikube clusters (from a config file) with both a global
         # metric and a namespaced metric and an application. The clusters have
         # different metric weights, which results in them having different scores.
-        environment = create_default_environment(clusters, metrics=prepared_weights)
+        environment = create_default_environment(clusters, metrics=metric_weights)
         with Environment(environment) as env:
             app = env.resources[ResourceKind.APPLICATION][0]
 
@@ -328,42 +318,67 @@ def test_scheduler_clusters_with_global_metrics(minikube_clusters):
         minikube_clusters (list): Names of the Minikube backend.
 
     """
-    for _ in range(3):
+    for i in range(3):
         # The two clusters and metrics used in this test (randomly ordered)
         num_clusters = 2
         clusters = random.sample(minikube_clusters, num_clusters)
-        metric_names = random.sample(set(METRICS), num_clusters)
-        weights = [1] * num_clusters
+        gmp = provider.get_global_prometheus_metrics_provider()
+        prometheus_metrics = random.sample(gmp.get_valued_metrics(), num_clusters)
 
         # Determine to which cluster we expect the application to be scheduled.
-        # (Due to the implementation of the dummy metrics provider, the metric
-        # with the highest suffix will have the highest value. Therefore
-        # (and since the weights of the metrics will be the same
-        # for all clusters), the cluster with the highest metric name suffix
+        # (Since the weights of the metrics will be the same
+        # for all clusters), the cluster with the highest metric value
         # is expected to be chosen by the scheduler.)
-        metric_max = max(metric_names, key=lambda x: int(x[-1]))
-        max_index = next(
-            i for i in range(num_clusters) if metric_max == metric_names[i]
+        max_metric_value = max(
+            prometheus_metric.value for prometheus_metric in prometheus_metrics
         )
-        expected_cluster = clusters[max_index]
+        expected_cluster = next(
+            clusters[i]
+            for i in range(num_clusters)
+            if prometheus_metrics[i].value == max_metric_value
+        )
 
         # 1. Create two Minikube clusters (from a config file) with a randomly
         #     selected metric assigned to each cluster and an application.
-        cluster_metrics = create_cluster_info(clusters, metric_names, weights)
-        environment = create_default_environment(clusters, metrics=cluster_metrics)
+        metric_weights = {
+            clusters[i]: [WeightedMetric(prometheus_metrics[i].metric, 1)]
+            for i in range(num_clusters)
+        }
+        environment = create_default_environment(clusters, metrics=metric_weights)
         with Environment(environment) as env:
             app = env.resources[ResourceKind.APPLICATION][0]
 
             # 2. Ensure that the application was scheduled to the expected cluster;
-            app.check_running_on(expected_cluster)
+            cluster1 = env.resources[ResourceKind.CLUSTER][0]
+            cluster2 = env.resources[ResourceKind.CLUSTER][1]
+            cluster1_json = cluster1.get_resource()
+            cluster2_json = cluster2.get_resource()
+            expected_cluster_json = (
+                cluster1_json if cluster1.name == expected_cluster else cluster2_json
+            )
+            other_cluster_json = (
+                cluster1_json if cluster1.name != expected_cluster else cluster2_json
+            )
+            err_msg = (
+                f"During the {i}-th iteration: Unable to observe that the "
+                f"application {app.name} is running on cluster {expected_cluster}. "
+                f"Expected cluster: {expected_cluster_json}. "
+                f"Other cluster: {other_cluster_json}"
+            )
+            app.check_running_on(expected_cluster, error_message=err_msg)
 
 
-def test_scheduler_clusters_with_one_namespaced_metric(minikube_clusters):
-    """Basic end-to-end testing of clusters with namespaced metrics
+def test_scheduler_clusters_with_one_metric(minikube_clusters):
+    """Basic end-to-end testing of clusters with namespaced and global metrics
 
-    Namespaced cluster metrics and metrics providers are tested as follows:
+    The same test is executed six times. First three times with one cluster
+    having no metrics and one cluster haveing one namespaced metric.
+    Then three times with one cluster having no metrics and one cluster having
+    one global metric.
 
-        1. Create two Minikube clusters (from a config file) (one with a namespaced
+    The three tests of each setup, each run as follows:
+
+        1. Create two Minikube clusters (from a config file) (one with a
             metric and one without any) and an application.
         2. Ensure that the app was scheduled to the cluster with the metric;
 
@@ -371,61 +386,30 @@ def test_scheduler_clusters_with_one_namespaced_metric(minikube_clusters):
         minikube_clusters (list): Names of the Minikube backend.
 
     """
+    mps = [
+        provider.get_namespaced_static_metrics_provider(),
+        provider.get_global_static_metrics_provider(),
+    ]
+    for mp in mps:
+        for _ in range(3):
+            # The two clusters and metrics used in this test (randomly ordered)
+            num_clusters = 2
+            clusters = random.sample(minikube_clusters, num_clusters)
+            static_metric = random.choice(mp.get_valued_metrics())
 
-    for _ in range(3):
-        # The two clusters and metrics used in this test (randomly ordered)
-        num_clusters = 2
-        num_metrics = num_clusters - 1
-        clusters = random.sample(minikube_clusters, num_clusters)
-        metric_names = random.sample(NAMESPACED_STATIC_METRICS, num_metrics)
-        weights = [1] * num_metrics
+            # 1. Create two Minikube clusters (from a config file) (one with a
+            #     namespaced metric and one without any) and an application.
+            cluster_w_metrics = random.choice(clusters)
+            metric_weights = dict.fromkeys(clusters, [])
+            metric_weights[cluster_w_metrics] = [
+                WeightedMetric(static_metric.metric, 1)
+            ]
+            environment = create_default_environment(clusters, metrics=metric_weights)
+            with Environment(environment) as env:
+                app = env.resources[ResourceKind.APPLICATION][0]
 
-        # 1. Create two Minikube clusters (from a config file) (one with a namespaced
-        #     metric and one without any) and an application.
-        cluster_metrics = create_cluster_info(clusters, metric_names, weights)
-        environment = create_default_environment(clusters, metrics=cluster_metrics)
-        with Environment(environment) as env:
-            app = env.resources[ResourceKind.APPLICATION][0]
-
-            # 2. Ensure that the app was scheduled to the cluster with the metric;
-            app.check_running_on(clusters[0])
-
-
-def test_scheduler_clusters_with_one_global_metric(minikube_clusters):
-    """Basic end-to-end testing of clusters metrics
-
-    Cluster metrics and metrics provider are tested multiple times (3) as follows:
-
-        1. Create two Minikube clusters (from a config file) with a randomly
-            selected metric assigned only to one randomly selected cluster,
-            and an application.
-            The cluster with the metric is expected to be chosen by the scheduler.
-        2. Ensure that the application was scheduled to the expected cluster;
-
-    Args:
-        minikube_clusters (list): Names of the Minikube backend.
-
-    """
-    for _ in range(3):
-
-        # the two clusters and one metric to be used in this test
-        clusters = random.sample(minikube_clusters, 2)
-        metric_names = [random.choice(METRICS)]
-        weights = [1]
-
-        # Determine to which cluster we expect the application to be scheduled.
-        # (The cluster with the metric is expected to be chosen by the scheduler.)
-        expected_cluster = clusters[0]
-
-        # 1. Create two Minikube clusters (from a config file) with a randomly
-        #     selected metric assigned to one cluster and an application.
-        metrics_by_cluster = create_cluster_info(clusters, metric_names, weights)
-        environment = create_default_environment(clusters, metrics=metrics_by_cluster)
-        with Environment(environment) as env:
-            app = env.resources[ResourceKind.APPLICATION][0]
-
-            # 2. Ensure that the application was scheduled to the expected cluster;
-            app.check_running_on(expected_cluster)
+                # 2. Ensure that the app was scheduled to the cluster with the metric;
+                app.check_running_on(cluster_w_metrics)
 
 
 def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
@@ -446,6 +430,7 @@ def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
         minikube_clusters (list): Names of the Minikube backend.
 
     """
+    mp = provider.get_global_prometheus_metrics_provider()
     num_clusters = 2
     countries = ["DE", "IT"]
     for match, constraints in CONSTRAINT_EXPRESSIONS.items():
@@ -459,18 +444,20 @@ def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
             # The two clusters, countries and metrics used in this test
             # (randomly ordered)
             clusters = random.sample(minikube_clusters, num_clusters)
-            metric_names = random.sample(set(METRICS), num_clusters)
-            weights = [1] * num_clusters
+            prometheus_metrics = random.sample(mp.get_valued_metrics(), num_clusters)
 
             # 1. Create an application (with a cluster label constraint given from
             # `CONSTRAINT_EXPRESSIONS`) and two Minikube clusters (from a config file)
             # with cluster labels (randomly selected from: `location=DE`,
             # `location=IT`) and randomly selected metrics.
-            cluster_labels = create_cluster_info(clusters, "location", countries)
-            metrics = create_cluster_info(clusters, metric_names, weights)
+            cluster_labels = create_cluster_label_info(clusters, "location", countries)
+            metric_weights = {
+                clusters[i]: [WeightedMetric(prometheus_metrics[i].metric, 1)]
+                for i in range(num_clusters)
+            }
             environment = create_default_environment(
                 clusters,
-                metrics=metrics,
+                metrics=metric_weights,
                 cluster_labels=cluster_labels,
                 app_cluster_constraints=[app_cluster_constraint],
             )
@@ -504,24 +491,24 @@ def test_one_unreachable_metrics_provider(minikube_clusters):
     # The two clusters and metrics used in this test (randomly ordered)
     num_clusters = 2
     clusters = random.sample(minikube_clusters, num_clusters)
-    metric_names = ["heat_demand_zone_unreachable"] * (num_clusters - 1) + [
-        random.choice(METRICS)
-    ]
-    weights = [1] * num_clusters
-
-    metrics_by_cluster = create_cluster_info(clusters, metric_names, weights)
+    unreachable_mp = provider.get_global_prometheus_metrics_provider(reachable=False)
+    unreachable_prometheus_metric = random.choice(unreachable_mp.get_valued_metrics())
+    reachable_mp = provider.get_global_prometheus_metrics_provider()
+    reachable_prometheus_metric = random.choice(reachable_mp.get_valued_metrics())
+    prometheus_metrics = [unreachable_prometheus_metric, reachable_prometheus_metric]
 
     # Determine to which cluster we expect the application to be scheduled.
-    # (The cluster with the reachable metric is expected to be chosen by the scheduler.)
-    expected_cluster = next(
-        c
-        for c in clusters
-        if "heat_demand_zone_unreachable" not in metrics_by_cluster[c]
-    )
+    # (The cluster with the reachable metric is expected to be chosen by the scheduler,
+    # and the reachable metrics will be given to the last cluster.
+    expected_cluster = clusters[-1]
 
     # 1. Create one application, one cluster without metrics, and one with
     #     the metric `heat_demand_zone_unreachable`.
-    environment = create_default_environment(clusters, metrics=metrics_by_cluster)
+    metric_weights = {
+        clusters[i]: [WeightedMetric(prometheus_metrics[i].metric, 1)]
+        for i in range(num_clusters)
+    }
+    environment = create_default_environment(clusters, metrics=metric_weights)
     with Environment(environment, creation_delay=30) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
@@ -574,14 +561,16 @@ def test_all_unreachable_metrics_provider(minikube_clusters):
     # The two clusters and metrics used in this test (randomly ordered)
     num_clusters = 2
     clusters = random.sample(minikube_clusters, num_clusters)
-    metric_names = ["heat_demand_zone_unreachable"]
-    weights = [1]
-
-    metrics_by_cluster = create_cluster_info(clusters, metric_names, weights)
+    mp = provider.get_global_prometheus_metrics_provider(reachable=False)
+    unreachable_metric = random.choice(mp.get_valued_metrics())
 
     # 1. Create one application, one cluster without metrics, and one with
     #     the metric `heat_demand_zone_unreachable`.
-    environment = create_default_environment(clusters, metrics=metrics_by_cluster)
+    metric_weights = {
+        clusters[0]: [WeightedMetric(unreachable_metric.metric, 1)],
+        clusters[1]: [],
+    }
+    environment = create_default_environment(clusters, metrics=metric_weights)
     with Environment(environment, creation_delay=20) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
@@ -629,16 +618,15 @@ def test_metric_not_in_database(minikube_clusters):
     # The two clusters and metrics used in this test (randomly ordered)
     num_clusters = 2
     chosen_cluster = random.sample(minikube_clusters, num_clusters)[0]
-    metric_names = ["non_existent_metric"]
-    weights = [1]
 
-    metrics_by_cluster = create_cluster_info([chosen_cluster], metric_names, weights)
+    non_existent_metric = NonExistentMetric()
+    metric_weights = {
+        chosen_cluster: [WeightedMetric(non_existent_metric, 1)],
+    }
 
     # 1. Create one application and one cluster with a reference to metric which is
     # not present in the database.
-    environment = create_default_environment(
-        [chosen_cluster], metrics=metrics_by_cluster
-    )
+    environment = create_default_environment([chosen_cluster], metrics=metric_weights)
     with Environment(environment, creation_delay=20) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
@@ -653,5 +641,5 @@ def test_metric_not_in_database(minikube_clusters):
         cluster = env.resources[ResourceKind.CLUSTER][0]
         assert cluster.get_state() == "FAILING_METRICS"
         metrics_reasons = cluster.get_metrics_reasons()
-        assert "non_existent_metric" in metrics_reasons
-        assert metrics_reasons["non_existent_metric"]["code"] == "UNKNOWN_METRIC"
+        assert non_existent_metric.name in metrics_reasons
+        assert metrics_reasons[non_existent_metric.name]["code"] == "UNKNOWN_METRIC"

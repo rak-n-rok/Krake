@@ -16,20 +16,14 @@ from enum import Enum
 from urllib.parse import urljoin
 from datetime import datetime, timezone
 
-from utils import (
+from functionals.resource_provider import MetricsProviderType
+from functionals.utils import (
     run,
     check_return_code,
     check_status_code,
     check_metric_content,
     check_metrics_provider_content,
 )
-
-
-class _MetricsProviderType(Enum):
-    PROMETHEUS = "prometheus"
-    STATIC = "static"
-    KAFKA = "kafka"
-
 
 _GC_DELAY = 3
 
@@ -348,26 +342,26 @@ def test_mp_crud():
     new_table = "new_table_name"
     # Save them in a dict:
     type_details = {
-        _MetricsProviderType.PROMETHEUS: {
+        MetricsProviderType.PROMETHEUS: {
             "create": prom_type_details,
             "update": {**prom_type_details, "url": new_url},
         },
-        _MetricsProviderType.STATIC: {
+        MetricsProviderType.STATIC: {
             "create": stat_type_details,
             "update": {**stat_type_details, "metrics": new_metrics},
         },
-        _MetricsProviderType.KAFKA: {
+        MetricsProviderType.KAFKA: {
             "create": kafka_type_details,
             "update": {**kafka_type_details, "table": new_table},
         },
     }
     # Prepare the argument strings for create:
     create_args = {
-        _MetricsProviderType.PROMETHEUS: f"--url {prom_type_details['url']}",
-        _MetricsProviderType.STATIC: " ".join(
+        MetricsProviderType.PROMETHEUS: f"--url {prom_type_details['url']}",
+        MetricsProviderType.STATIC: " ".join(
             f"-m {m} {v}" for m, v in stat_type_details["metrics"].items()
         ),
-        _MetricsProviderType.KAFKA: (
+        MetricsProviderType.KAFKA: (
             f"--comparison-column {kafka_type_details['comparison_column']} "
             f"--value-column {kafka_type_details['value_column']} "
             f"--table {kafka_type_details['table']} "
@@ -376,14 +370,14 @@ def test_mp_crud():
     }
     # Prepare the argument strings for update:
     update_args = {
-        _MetricsProviderType.PROMETHEUS: f"--url {new_url}",
-        _MetricsProviderType.STATIC: " ".join(
+        MetricsProviderType.PROMETHEUS: f"--url {new_url}",
+        MetricsProviderType.STATIC: " ".join(
             f"-m {m} {v}" for m, v in new_metrics.items()
         ),
-        _MetricsProviderType.KAFKA: f"--table {new_table}",
+        MetricsProviderType.KAFKA: f"--table {new_table}",
     }
     for mp_kind in ["mp" and "gmp"]:
-        for mp_type in _MetricsProviderType:
+        for mp_type in MetricsProviderType:
             # 1. Delete a non-existent metrics provider and expect failure
             name = f"e2e_test_{mp_type.value}_{mp_kind}_2b_deleted"
             error_message = (
@@ -475,9 +469,9 @@ def test_mp_crud():
             # 9. Create a metrics provider with the same name and expect failure
             error_message = f"The existing metrics provider {name} could be created."
             other_mp_type = (
-                _MetricsProviderType.STATIC
-                if mp_type == _MetricsProviderType.PROMETHEUS
-                else _MetricsProviderType.PROMETHEUS
+                MetricsProviderType.STATIC
+                if mp_type == MetricsProviderType.PROMETHEUS
+                else MetricsProviderType.PROMETHEUS
             )
             run(
                 f"rok core {mp_kind} create {name} --type {other_mp_type.value} "

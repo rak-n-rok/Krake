@@ -1,4 +1,4 @@
-from utils import run
+from functionals.utils import run
 
 
 def test_list_krake_applications():

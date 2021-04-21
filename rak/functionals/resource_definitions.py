@@ -4,7 +4,7 @@ import time
 from abc import ABC, abstractmethod
 from enum import Enum
 
-from utils import (
+from functionals.utils import (
     run,
     check_resource_exists,
     check_app_running_on,
@@ -12,12 +12,20 @@ from utils import (
     check_return_code,
     check_resource_deleted,
     allow_404,
+    DEFAULT_NAMESPACE,
 )
 
 
 class ResourceKind(Enum):
     APPLICATION = "application"
     CLUSTER = "cluster"
+    METRIC = "metric"
+    GLOBALMETRIC = "globalmetric"
+    METRICSPROVIDER = "metricsprovider"
+    GLOBALMETRICSPROVIDER = "globalmetricsprovider"
+
+    def is_namespaced(self):
+        return self not in [self.GLOBALMETRICSPROVIDER, self.GLOBALMETRIC]
 
 
 class ResourceDefinition(ABC):
@@ -31,11 +39,19 @@ class ResourceDefinition(ABC):
         kind (ResourceKind): resource kind
         _mutable_attributes (list[str]): list of the attributes of the
             ResourceDefinition which can be modified by its update_resource() method.
+        namespace (str, optional): the namespace of the resource
+
+    Raises:
+        ValueError: if kind does not match namespace or if name is missing
     """
 
-    def __init__(self, name, kind):
-        assert name
+    def __init__(self, name, kind, namespace=None):
+        if not name:
+            raise ValueError("name must be provided")
+        if bool(namespace) != kind.is_namespaced():
+            raise ValueError(f"kind '{kind}' and namespace '{namespace}' do not match.")
         self.name = name
+        self.namespace = namespace
         self.kind = kind
         self._mutable_attributes = self._get_mutable_attributes()
 
@@ -55,6 +71,8 @@ class ResourceDefinition(ABC):
     def _get_default_values(self):
         """Returns the default values of all mutable attributes for the
         ResourceDefinition after creation.
+
+        If no default value exists for an attribute, its default value is set to None.
 
         Returns:
             dict[str, object]: a dict with the mutable attributes as keys and their
@@ -293,12 +311,31 @@ class ResourceDefinition(ABC):
         )
         assert self._mutable_attributes.sort() == list(observed.keys()).sort(), msg
 
-        msg = (
-            f"The attributes of the {self.kind} {self.name} was not equal to the "
-            f"ones of the actual resource. ResourceDefinition: {expected}. "
-            f"Actual resource: {observed}."
-        )
-        assert expected == observed, msg
+        for attr in expected:
+            msg = (
+                f"The attribute {attr} of the {self.kind} {self.name} was not "
+                f"equal to the one of the actual resource. ResourceDefinition: "
+                f"{expected}. Actual resource: {observed}."
+            )
+            assert self.attribute_is_equal(attr, expected[attr], observed[attr]), msg
+
+    def attribute_is_equal(self, attr_name, expected, observed):
+        """Check whether the expected is equal to observed.
+
+        Expected to be overridden by subclasses in case the comparison is not
+        straightforward.
+
+        Args:
+            attr_name (str): the name of the attribute for which this comparison
+                is taking place
+            expected (object): the expected attribute value
+            observed (object): the observed attribute value
+
+        Returns:
+            bool: indicating whether expected == observed, given that they are
+                the values of the attr_name attribute of this ResourceDefintion object.
+        """
+        return expected == observed
 
     @abstractmethod
     def update_command(self, **kwargs):
@@ -383,6 +420,7 @@ class ApplicationDefinition(ResourceDefinition):
         migration (bool, optional): migration flag indicating whether the
             application should be able to migrate.
         observer_schema_path (str, optional): path to the observer_schema file to use.
+        namespace (str): namespace of the application
     """
 
     def __init__(
@@ -394,8 +432,9 @@ class ApplicationDefinition(ResourceDefinition):
         hooks=None,
         migration=None,
         observer_schema_path=None,
+        namespace=DEFAULT_NAMESPACE,
     ):
-        super().__init__(name=name, kind=ResourceKind.APPLICATION)
+        super().__init__(name=name, kind=ResourceKind.APPLICATION, namespace=namespace)
         assert os.path.isfile(manifest_path), f"{manifest_path} is not a file."
         self.manifest_path = manifest_path
         self.cluster_label_constraints = constraints or []
@@ -649,16 +688,54 @@ class ClusterDefinition(ResourceDefinition):
         kubeconfig_path (str): path to the kubeconfig file to use for the creation.
         labels (dict[str, str], optional): dict of cluster labels and their values
             to use for the creation.
-        metrics (list[dict[str, object]], optional): list of dict of metrics and their
-            weights. Each dict has te two keys "name" and "weight".
+        metrics (list[WeightedMetrics], optional): list of weighted metrics.
+        namespace (str): namespace of the cluster
     """
 
-    def __init__(self, name, kubeconfig_path, labels=None, metrics=None):
-        super().__init__(name=name, kind=ResourceKind.CLUSTER)
+    def __init__(
+        self,
+        name,
+        kubeconfig_path,
+        labels=None,
+        metrics=None,
+        namespace=DEFAULT_NAMESPACE,
+    ):
+        super().__init__(name=name, kind=ResourceKind.CLUSTER, namespace=namespace)
         assert os.path.isfile(kubeconfig_path), f"{kubeconfig_path} is not a file."
         self.kubeconfig_path = kubeconfig_path
         self.labels = labels or {}
-        self.metrics = metrics or []
+        if not metrics:
+            metrics = []
+        self._set_metrics(metrics)
+
+    def _set_metrics(self, metrics):
+        """Change the metric weights this cluster resource definition has
+        without updating the actual database resource associated with it.
+
+        Args:
+            metrics (list[WeightedMetric]: the new metrics of the cluster
+        """
+        self._validate_metrics(metrics)
+        self.metrics = metrics
+
+    def _validate_metrics(self, metrics):
+        """
+        Args:
+            metrics (list(WeightedMetric)): metrics to validate
+        """
+        if metrics is None:
+            raise ValueError("Expected metrics to be a list. Was None.")
+        if any(
+            [
+                self.namespace != weighted_metric.metric.namespace
+                and weighted_metric.metric.namespace
+                for weighted_metric in metrics
+            ]
+        ):
+            raise ValueError(
+                f"Metrics ({metrics}) and cluster's namespace "
+                f"{self.namespace} do not match."
+            )
 
     def _get_mutable_attributes(self):
         return ["labels", "metrics"]
@@ -697,28 +774,35 @@ class ClusterDefinition(ResourceDefinition):
 
         Example:
             If provided the argument metrics=
-            [{"name": "metric_name1", "weight": 1.0},
-            {"name": "metric_name2", "weight": 2.0}],
+            [WeightedMetric("metric_name1", True, 1.0),
+            WeightedMetric("metric_name2", False, 2.0)],
             this method will return the list
-            ["-m", "metric_name1", "1.0", "-m", "metric_name2", "2.0"],
+            ["-m", "metric_name1", "1.0", "-gm", "metric_name2", "2.0"],
             which can be used when constructing a cli command like
-            rok kube cluster create -m metric_name1 1.0 -m metric_name2 2.0 ...
+            rok kube cluster create -m metric_name1 1.0 -gm metric_name2 2.0 ...
 
         Args:
-            metrics (list[dict[str, object]]): list of dicts of metrics names
-                and their weights
+            metrics (list[WeightedMetric], optional): list of metrics with values.
 
         Returns:
             list[str]:
-                ['-m', 'key_1', 'value_1', '-m', 'key_2', 'value_2', ...,
-                '-m', 'key_n', 'value_n']
+                [flag_1, 'key_1', 'value_1', flag_2, 'key_2', 'value_2', ...,
+                flag_n, 'key_n', 'value_n'] (where flag_i is either "-m" or "-gm"
+                depending on whether the ith item in metrics is namespaced)
                 for all n key, value pairs in metrics.
         """
         metrics_options = []
         if metrics is None:
             metrics = []
-        for metric in metrics:
-            metrics_options += ["-m", metric["name"], str(metric["weight"])]
+        for weighted_metric in metrics:
+            rok_cli_flag = "-gm"
+            if weighted_metric.metric.kind.is_namespaced():
+                rok_cli_flag = "-m"
+            metrics_options += [
+                rok_cli_flag,
+                weighted_metric.metric.name,
+                str(weighted_metric.weight),
+            ]
         return metrics_options
 
     def creation_acceptance_criteria(self, error_message=None):
@@ -789,3 +873,42 @@ class ClusterDefinition(ResourceDefinition):
         """
         cluster_dict = self.get_resource()
         return cluster_dict["spec"]["metrics"]
+
+    def attribute_is_equal(self, attr_name, expected, observed):
+        """Overriding attribute_is_equal() of the ResourceDefinition class,
+        since the metrics attribute of ClusterDefinition needs to be compared
+        differently.
+
+        Args:
+            attr_name (str): the name of the attribute for which this comparison
+                is taking place
+            expected (list[WeightedMetric]): the expected attribute value
+            observed (list[dict[str, object]]): the observed attribute value.
+                Each metric dictionary has the three keys 'name', 'namespaced'
+                and 'weight' as keys and the metric's corresponding values as values.
+
+        Returns:
+            bool: indicating whether expected == observed, given that they are
+                the values of the attr_name attribute of this ResourceDefintion object.
+        """
+        if attr_name != "metrics":
+            return super().attribute_is_equal(attr_name, expected, observed)
+
+        expected_names = [m.metric.name for m in expected]
+        observed_by_name = {
+            m["name"]: {"namespaced": m["namespaced"], "weight": m["weight"]}
+            for m in observed
+        }
+        return (
+            len(expected) == len(observed)
+            and len(expected) == len(observed_by_name)
+            and all(name in expected_names for name in observed_by_name)
+            and all(
+                observed_by_name[m.metric.name]["namespaced"]
+                == bool(m.metric.namespace)
+                for m in expected
+            )
+            and all(
+                observed_by_name[m.metric.name]["weight"] == m.weight for m in expected
+            )
+        )
