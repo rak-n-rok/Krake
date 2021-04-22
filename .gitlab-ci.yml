@@ -43,6 +43,10 @@ cache:
     - merge_requests
     - schedules
   script:
+
+    - apt-get update
+    - apt-get dist-upgrade -y
+
     # Download etcd
     - mkdir /tmp/etcd-download
     - curl -s -L https://github.com/etcd-io/etcd/releases/download/$ETCD_VER/etcd-$ETCD_VER-linux-amd64.tar.gz -o /tmp/etcd.tar.gz
@@ -69,17 +73,21 @@ cache:
     # Download java for Keycloak
     # see https://github.com/docker-library/openjdk/blob/0584b2804ed12dca7c5e264b5fc55fc07a3ac148/8-jre/slim/Dockerfile#L51
     - mkdir -p /usr/share/man/man1
-    - apt-get update
     - apt-get install -y --no-install-recommends openjdk-11-jre
     - java --version
 
     # Download zookeeper, kafka and ksql
-    - apt update
+    - apt-get update
     - apt-get install software-properties-common -y
-    - wget -qO - https://packages.confluent.io/deb/${CONFLUENT_VER}/archive.key | apt-key add -
+    - >
+      for i in {1..10}; do
+        wget -qO - https://packages.confluent.io/deb/${CONFLUENT_VER}/archive.key | apt-key add - \
+        && break \
+        || sleep 20
+      done
     - add-apt-repository "deb [arch=amd64] https://packages.confluent.io/deb/${CONFLUENT_VER} stable main"
-    - apt update
-    - apt install zookeeper confluent-kafka confluent-ksqldb -y
+    - apt-get update
+    - apt-get install zookeeper confluent-kafka confluent-ksqldb -y
     - which zookeeper-server-start
     - which kafka-server-start
     - which ksql-server-start
