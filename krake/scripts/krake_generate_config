@@ -277,6 +277,15 @@ if __name__ == "__main__":
     )
     add_option(
         parser,
+        "--cors-origin",
+        (
+            "URL or wildcard for the 'Access-Control-Allow-Origin' of the CORS system"
+            " on the API."
+        ),
+        default="*",
+    )
+    add_option(
+        parser,
         "--authorization-mode",
         (
             "Authorization mode to use for the requests sent to the API. "

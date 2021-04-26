@@ -327,6 +327,7 @@
             {{ repo_dir }}/krake/scripts/krake_generate_config --dst {{ configuration_dir }}\
             {% if enable_tls is defined and enable_tls %} --tls-enabled {% endif %} \
             {% if cert_dir is defined %} --cert-dir {{ cert_dir }} {% endif %} \
+            {% if cors_origin is defined and cors_origin %} --cors-origin {{ cors_origin }} {% endif %} \
             {% if allow_anonymous is defined and allow_anonymous %} --allow-anonymous {% endif %} \
             {% if keystone_authentication_enabled is defined and keystone_authentication_enabled %} --keystone-authentication-enabled {% endif %} \
             {% if keystone_authentication_endpoint is defined %} --keystone-authentication-endpoint {{ keystone_authentication_endpoint }} {% endif %} \

@@ -267,6 +267,13 @@ def config(etcd_server, user):
 
 @pytest.fixture
 def no_db_config(user):
+    """Create a configuration for the API component without database being created and
+    running in the background.
+
+    Returns:
+        ApiConfiguration: the generated configuration.
+
+    """
     config = base_config(user)
     return ApiConfiguration.deserialize(config, creation_ignored=True)
 

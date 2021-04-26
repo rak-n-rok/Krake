@@ -703,3 +703,21 @@ naturally be modified if the administrator should have another name.
 
 .. _Keystone: https://docs.openstack.org/keystone/latest/
 .. _Keycloak: https://www.keycloak.org/
+
+
+
+CORS
+====
+
+The Cross-origin resource sharing (CORS_) mechanism was enabled on Krake but the fields
+are set to be quite non-restrictive. By default, the ``Access-Control-Allow-Origin`` is
+set to ``*``. With this setup, sending request through a browser could be dangerous. A
+user could first connect to a valid website with some allowed authentication token and
+send requests to Krake. Then the user goes on a malicious website, which may be able to
+reuse the token, as the default value accepts any origin, so any URL. To prevent this
+situation, the value for the ``Access-Control-Allow-Origin`` field can be set for the
+Krake API, see the :ref:`user/configuration:Authentication and authorization` part of
+the configuration.
+
+
+.. _CORS: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS

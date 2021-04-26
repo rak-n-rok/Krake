@@ -125,10 +125,20 @@ def cors_setup(app):
         app (web.Application): Web application
 
     """
+    cors_origin = app["config"].authentication.cors_origin
+
+    default_origin = "*"
+    if cors_origin == default_origin:
+        app.logger.warning(
+            f"Setting the default origin '{default_origin}' for the CORS setup may be a"
+            " security concern. See the 'Security principles' in the admin"
+            " documentation."
+        )
+
     cors = aiohttp_cors.setup(
         app,
         defaults={
-            "*": aiohttp_cors.ResourceOptions(
+            cors_origin: aiohttp_cors.ResourceOptions(
                 allow_credentials=True,
                 allow_headers="*",
                 allow_methods=["DELETE", "GET", "OPTIONS", "POST", "PUT"],
