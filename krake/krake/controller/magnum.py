@@ -103,6 +103,12 @@ class InvalidClusterTemplateType(ControllerError):
     code = ReasonCode.INVALID_CLUSTER_TEMPLATE
 
 
+class ConcurrentDeletionError(Exception):
+    """Raised when a MagnumCluster currently being created on the infrastructure has its
+    Krake pendant in a deleting state in the Krake API.
+    """
+
+
 OPENSTACK_ERRORS = (
     magnumclient.exceptions.ClientException,
     keystoneauth1.exceptions.ClientException,
@@ -403,6 +409,9 @@ class MagnumClusterController(Controller):
         As the Magnum cluster is in a stable state at the end, no further processing
         method is needed to return.
 
+        If the Magnum cluster resource was deleted on the Krake API during its
+        reconciliation, the processing finishes before the end.
+
         Args:
             cluster (krake.data.openstack.MagnumCluster): the Magnum cluster that needs
                 to be processed.
@@ -410,7 +419,11 @@ class MagnumClusterController(Controller):
                 service on the project.
 
         """
-        await self.wait_for_running(cluster, magnum)
+        try:
+            await self.wait_for_running(cluster, magnum)
+        except ConcurrentDeletionError:
+            return None
+
         await self.reconcile_kubernetes_resource(cluster, magnum)
         return None
 
@@ -459,6 +472,9 @@ class MagnumClusterController(Controller):
         As the Magnum cluster is in a stable state at the end, no further processing
         method is needed to return.
 
+        If the Magnum cluster resource was deleted on the Krake API during its
+        reconciliation, the processing finishes before the end.
+
         Args:
             cluster (krake.data.openstack.MagnumCluster): the Magnum cluster that needs
                 to be processed.
@@ -466,7 +482,11 @@ class MagnumClusterController(Controller):
                 service on the project.
 
         """
-        await self.wait_for_running(cluster, magnum)
+        try:
+            await self.wait_for_running(cluster, magnum)
+        except ConcurrentDeletionError:
+            return None
+
         await self.reconcile_kubernetes_resource(cluster, magnum)
         return None
 
@@ -550,6 +570,9 @@ class MagnumClusterController(Controller):
             ControllerError: if the operation on the cluster failed, a corresponding
                 error will be raised (for instance CreateFailed in case the creation of
                 the cluster failed).
+            ConcurrentDeletionError: if the cluster was deleted in parallel on the Krake
+                API. In that case, the wait is stopped, to let the cluster be handled by
+                a worker again.
 
         """
         # FIXME: This should be handled by an observer. The observer
@@ -593,6 +616,19 @@ class MagnumClusterController(Controller):
 
             if response.status == "DELETE_FAILED":
                 raise DeleteFailed(message=response.status_reason)
+
+            # FIXME: this part may not be necessary anymore after the Observer is
+            #  introduced. It should anyway be refactored, as the concurrent deletion is
+            #  for now only handled every "poll_interval" seconds
+            current_cluster = await self.openstack_api.read_magnum_cluster(
+                namespace=cluster.metadata.namespace, name=cluster.metadata.name
+            )
+            if current_cluster.metadata.deleted is not None:
+                logger.info(
+                    f"Cluster {cluster!r} was deleted on the API, end the"
+                    f" reconciliation here."
+                )
+                raise ConcurrentDeletionError()
 
             # TODO: Handle timeout
             logger.debug("Operation on %r still in progress", cluster)

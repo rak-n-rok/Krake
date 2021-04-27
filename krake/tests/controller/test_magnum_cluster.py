@@ -1,10 +1,11 @@
+import asyncio
 import logging
 import multiprocessing
-import time
-
 import pytest
 import pytz
-import asyncio
+import time
+
+from itertools import repeat
 from asyncio.subprocess import PIPE, STDOUT
 from contextlib import suppress
 from unittest.mock import MagicMock
@@ -18,6 +19,7 @@ import magnumclient.exceptions
 from krake.api.app import create_app
 from krake.api.middlewares import error_log
 from krake.client import Client
+from krake.client.openstack import OpenStackApi
 from krake.test_utils import server_endpoint, with_timeout
 from krake.data.core import resource_ref, ReasonCode
 from krake.data.openstack import MagnumCluster, MagnumClusterState
@@ -106,7 +108,21 @@ def test_main(magnum_config, log_to_file_config):
     assert attempted_connectivity
 
 
-def make_openstack_app(cluster_responses):
+def make_openstack_mock_api(cluster_responses, remove_after_deletion=False):
+    """Create a mock Openstack Magnum API as an instance of
+    :class:`aiohttp.web.Application`.
+
+    Args:
+        cluster_responses (iterable): all the next responses sent by the API. If no
+            element is left in the iterable, a 404 will be sent.
+        remove_after_deletion (bool): if set to True, the clusters for which a deletion
+            request was sent will not be handled by the mock API, and calling any
+            request on them will result in a 404.
+
+    Returns:
+        web.Application: the created mock API as aiohttp Application.
+
+    """
     ca = crypto.load_certificate(
         crypto.FILETYPE_PEM,
         dedent(
@@ -208,9 +224,13 @@ def make_openstack_app(cluster_responses):
 
     @routes.delete("/container-infra/v1/clusters/{ident}")
     async def delete_magnum_cluster(request):
-        cluster = request.app["clusters"].get(request.match_info["ident"])
+        uuid = request.match_info["ident"]
+        cluster = request.app["clusters"].get(uuid)
         if cluster is None:
             raise web.HTTPNotFound()
+
+        if remove_after_deletion:
+            del request.app["clusters"][uuid]
 
         return web.json_response({"uuid": cluster["uuid"]})
 
@@ -402,7 +422,7 @@ async def test_resource_reception(aiohttp_server, config, db, loop):
 
 
 async def test_magnum_cluster_create(aiohttp_server, config, db, loop):
-    openstack_app = make_openstack_app(
+    openstack_app = make_openstack_mock_api(
         [
             {
                 "api_address": None,
@@ -544,7 +564,7 @@ async def test_magnum_cluster_create_counts_not_none(aiohttp_server, config, db,
 
 
 async def test_magnum_cluster_template_type(aiohttp_server, config, db, loop):
-    openstack_app = make_openstack_app([])
+    openstack_app = make_openstack_mock_api([])
     openstack_app["cluster_templates"] = {
         "e37e99f5-5418-4fad-997f-761207ff2e2e": {
             "updated_at": "-",
@@ -597,7 +617,7 @@ async def test_magnum_cluster_template_type(aiohttp_server, config, db, loop):
 
 
 async def test_handle_404_on_magnum_cluster_create(aiohttp_server, config, db, loop):
-    openstack_app = make_openstack_app(
+    openstack_app = make_openstack_mock_api(
         [
             {
                 "api_address": None,
@@ -654,7 +674,7 @@ async def test_handle_404_on_magnum_cluster_create(aiohttp_server, config, db, l
 
 
 async def test_magnum_cluster_create_failed(aiohttp_server, config, db, loop):
-    openstack_app = make_openstack_app(
+    openstack_app = make_openstack_mock_api(
         [
             {
                 "api_address": None,
@@ -718,7 +738,7 @@ async def test_magnum_cluster_create_failed(aiohttp_server, config, db, loop):
 
 
 async def test_magnum_cluster_resize(aiohttp_server, config, db, loop):
-    openstack_app = make_openstack_app(
+    openstack_app = make_openstack_mock_api(
         [
             {
                 "master_count": 1,
@@ -855,7 +875,7 @@ async def test_magnum_cluster_update_failed(aiohttp_server, config, db, loop):
 
 
 async def test_handle_404_on_magnum_cluster_resize(aiohttp_server, config, db, loop):
-    openstack_app = make_openstack_app(
+    openstack_app = make_openstack_mock_api(
         [
             {
                 "master_count": 1,
@@ -926,7 +946,7 @@ async def test_handle_404_on_magnum_cluster_resize(aiohttp_server, config, db, l
 
 
 async def test_magnum_cluster_delete(aiohttp_server, config, db, loop):
-    openstack_app = make_openstack_app(
+    openstack_app = make_openstack_mock_api(
         [
             {
                 "api_address": None,
@@ -1064,7 +1084,7 @@ async def test_magnum_cluster_delete_update(aiohttp_server, config, db, loop):
 
 
 async def test_magnum_cluster_delete_failed(aiohttp_server, config, db, loop):
-    openstack_app = make_openstack_app(
+    openstack_app = make_openstack_mock_api(
         [
             {
                 "api_address": None,
@@ -1119,6 +1139,110 @@ async def test_magnum_cluster_delete_failed(aiohttp_server, config, db, loop):
     assert stored.status.reason.message == "Stack DELETE failed"
     assert stored.status.cluster_id is not None
     assert stored.status.cluster is not None
+
+
+@with_timeout(5)
+async def test_magnum_cluster_delete_before_complete(aiohttp_server, config, db, loop):
+    """Ensure that a Magnum Cluster deleted during its handling is still deleted, before
+    its actual creation.
+
+    The test's workflow is:
+    1. start the creation of a Magnum Cluster by a controller worker;
+    2. during the creation, the loop in ``wait_for_running`` blocks, as the mock
+    OpenStack API only returns "CREATE_IN_PROGRESS" state. So the worker is stuck in a
+    loop;
+    3. in the meantime, the ``krake_client_delete_cluster`` coroutine was started
+        - it waited for the Magnum Cluster to have its "cluster_id" set in the status.
+        This means that the worker almost finished the ``on_pending`` handling, and
+        would soon start the ``wait_for_running`` method;
+        - it slept a bit to let the ``wait_for_running`` method start;
+        - it deleted the Magnum Cluster from the Krake API.
+    4. because of the deletion, the worker should stop its processing, and return;
+    5. the Magnum Cluster is processed a second time, to handle the deletion.
+    """
+    openstack_app = make_openstack_mock_api(
+        repeat(
+            {
+                "api_address": None,
+                "master_addresses": [],
+                "status": "CREATE_IN_PROGRESS",
+                "node_addresses": [],
+                "status_reason": None,
+                "stack_id": "16b64063-31ed-42a2-b029-41c7594d71df",
+            }
+        ),
+        remove_after_deletion=True,
+    )
+    openstack_server = await aiohttp_server(openstack_app)
+
+    project = ProjectFactory(
+        spec__url=f"{server_endpoint(openstack_server)}/identity/v3",
+        spec__template="b2339833-8916-454a-86bd-06b450f69210",
+    )
+    cluster = MagnumClusterFactory(
+        metadata__name="my-cluster",
+        status__state=MagnumClusterState.PENDING,
+        status__project=resource_ref(project),
+        status__template="b2339833-8916-454a-86bd-06b450f69210",
+        spec__master_count=None,
+        spec__node_count=None,
+    )
+    await db.put(project)
+    await db.put(cluster)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async def krake_client_delete_cluster():
+        async with Client(
+            url=f"http://{api_server.host}:{api_server.port}", loop=loop
+        ) as current_client:
+            openstack_api = OpenStackApi(current_client)
+
+            # Wait for the controller to enter the loop of wait_for_running
+            while True:
+                current_cluster = await openstack_api.read_magnum_cluster(
+                    namespace=cluster.metadata.namespace, name=cluster.metadata.name
+                )
+                if current_cluster.status.cluster_id is not None:
+                    break
+
+            # have at least a few loops of MagnumClusterController.wait_for_running
+            await asyncio.sleep(0.2)
+
+            await openstack_api.delete_magnum_cluster(
+                namespace=current_cluster.metadata.namespace,
+                name=current_cluster.metadata.name,
+            )
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        controller = MagnumClusterController(
+            server_endpoint(api_server), worker_count=0, poll_interval=0.1
+        )
+        await controller.prepare(client)
+        cluster_processing_task = controller.process_cluster(cluster)
+
+        # Delete the cluster while the controller is handling it.
+        await asyncio.gather(
+            cluster_processing_task, krake_client_delete_cluster(), loop=loop
+        )
+
+        stored = await db.get(
+            MagnumCluster,
+            namespace=cluster.metadata.namespace,
+            name=cluster.metadata.name,
+        )
+        assert stored.status.state == MagnumClusterState.CREATING
+        assert stored.metadata.deleted is not None
+
+        # Handle the cluster a second time after the worker that handled it the first
+        # time stopped because of the deletion. As the cluster is now in a to-be-deleted
+        # state, it will be processed differently.
+        await controller.process_cluster(stored)
+
+    stored = await db.get(
+        MagnumCluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+    )
+    assert stored.status.state == MagnumClusterState.DELETING
 
 
 async def test_handle_magnum_client_exception(aiohttp_server, config, db, loop):
@@ -1235,7 +1359,7 @@ async def test_retry_delete(aiohttp_server, config, db, loop):
 
 
 async def test_reconcile_kubeconfig(aiohttp_server, config, db, loop):
-    openstack_app = make_openstack_app(
+    openstack_app = make_openstack_mock_api(
         [
             {
                 "api_address": "https://127.0.0.3:7443",

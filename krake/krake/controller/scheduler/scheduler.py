@@ -394,6 +394,7 @@ class Scheduler(Controller):
 
         # TODO: Instead of copying labels and metrics, refactor the scheduler
         #   to support transitive labels and metrics.
+        previous_state = cluster
         cluster.metadata.labels = {**project.metadata.labels, **cluster.metadata.labels}
 
         # If a metric with the same name is already specified in the Magnum
@@ -403,11 +404,13 @@ class Scheduler(Controller):
             if metric.name not in metric_names:
                 cluster.spec.metrics.append(metric)
 
-        await self.openstack_api.update_magnum_cluster(
-            namespace=cluster.metadata.namespace,
-            name=cluster.metadata.name,
-            body=cluster,
-        )
+        # If the cluster was not updated, the API will return a 400.
+        if cluster != previous_state:
+            await self.openstack_api.update_magnum_cluster(
+                namespace=cluster.metadata.namespace,
+                name=cluster.metadata.name,
+                body=cluster,
+            )
 
         # TODO: How to support and compare different cluster templates?
         logger.info("Scheduled %r to %r", cluster, project)
