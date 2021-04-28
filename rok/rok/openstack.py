@@ -23,10 +23,13 @@ openstack = ParserSpec("openstack", aliases=["os"], help="Manage OpenStack resou
 project = openstack.subparser("project", help="Manage OpenStack projects")
 
 
-class ProjectTable(BaseTable):
+class ProjectTableList(BaseTable):
+    auth = Cell("spec.auth.type", name="Auth type")
+
+
+class ProjectTable(ProjectTableList):
     url = Cell("spec.url")
     template = Cell("spec.template")
-    auth = Cell("spec.auth.type", name="auth type")
 
 
 @project.command("list", help="List OpenStack projects")
@@ -36,7 +39,7 @@ class ProjectTable(BaseTable):
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
-@printer(table=BaseTable(many=True))
+@printer(table=ProjectTableList(many=True))
 def list_projects(config, session, namespace, all):
     if all:
         url = "/openstack/projects"
@@ -163,6 +166,7 @@ def get_project(config, session, namespace, name):
 @arg_namespace
 @arg_labels
 @arg_metric
+@arg_formatting
 @depends("config", "session")
 @printer(table=ProjectTable())
 def update_project(
@@ -191,6 +195,12 @@ def update_project(
 
     project = resp.json()
 
+    if application_credential and (user_id or password or project_id):
+        raise SystemExit(
+            "Error: application credentials and password credentials cannot be set at"
+            " the same time"
+        )
+
     if application_credential:
         project["spec"]["auth"] = {
             "type": "application_credential",
@@ -199,7 +209,8 @@ def update_project(
                 "secret": application_credential[1],
             },
         }
-    else:
+
+    elif user_id or password or project_id:
         try:
             if user_id is None:
                 user_id = os.environ["OS_USER_ID"]
@@ -321,15 +332,12 @@ def create_cluster(
         namespace = config["user"]
 
     cluster = {
-        "metadata": {
-            "name": name,
-            "labels": labels,
-            "constraints": {"project": {"labels": project_label_constraints}},
-        },
+        "metadata": {"name": name, "labels": labels},
         "spec": {
             "master_count": master_count,
             "node_count": node_count,
             "metrics": metrics,
+            "constraints": {"project": {"labels": project_label_constraints}},
         },
     }
     resp = session.post(
@@ -386,12 +394,20 @@ def get_cluster(config, session, namespace, name):
 @argument("--node-count", type=int, help="Number of worker nodes")
 @arg_namespace
 @arg_metric
+@arg_labels
 @arg_project_label_constraints
 @arg_formatting
 @depends("config", "session")
 @printer(table=ClusterTable())
 def update_cluster(
-    config, session, namespace, name, metrics, project_label_constraints, node_count
+    config,
+    session,
+    namespace,
+    name,
+    labels,
+    metrics,
+    project_label_constraints,
+    node_count,
 ):
     if namespace is None:
         namespace = config["user"]
@@ -404,6 +420,9 @@ def update_cluster(
         raise SystemExit(f"Error 404: Magnum cluster {name!r} not found")
     resp.raise_for_status()
     cluster = resp.json()
+
+    if labels:
+        cluster["metadata"]["labels"] = labels
 
     if node_count is not None:
         cluster["spec"]["node_count"] = node_count

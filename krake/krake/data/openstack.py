@@ -132,7 +132,7 @@ class ProjectConstraints(Serializable):
     scheduled.
     """
 
-    labels: List[LabelConstraint] = None
+    labels: List[LabelConstraint] = field(default_factory=list)
 
 
 class Constraints(Serializable):
@@ -140,7 +140,7 @@ class Constraints(Serializable):
     :class:`MagnumCluster`.
     """
 
-    project: ProjectConstraints = None
+    project: ProjectConstraints
 
 
 class MagnumClusterSpec(Serializable):
@@ -157,7 +157,7 @@ class MagnumClusterSpec(Serializable):
     master_count: int = field(default=None, metadata={"immutable": True})
     node_count: int = None
     metrics: List[MetricRef] = field(default_factory=list)
-    constraints: Constraints = None
+    constraints: Constraints
 
 
 class MagnumClusterState(Enum):

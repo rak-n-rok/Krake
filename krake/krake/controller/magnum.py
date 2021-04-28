@@ -604,17 +604,32 @@ class MagnumClusterController(Controller):
                 )
                 return
 
-            if response.status in ("CREATE_COMPLETE", "UPDATE_COMPLETE"):
+            # FIXME: the Magnum client sometimes gives a ``response`` object not as a
+            #  ``magnumclient.v1.clusters.Cluster`` object but as a ``Clusters``, which
+            #  contains a list of clusters metadata. The issue is not reproducible,
+            #  however the list contains the instance which is expected.
+            if not hasattr(response, "status"):
+                for resp_cluster in response.clusters:
+                    if resp_cluster.uuid == cluster.status.cluster_id:
+                        response = resp_cluster
+                        response_status = response.status
+                        break
+                else:
+                    response_status = None
+            else:
+                response_status = response.status
+
+            if response_status in ("CREATE_COMPLETE", "UPDATE_COMPLETE"):
                 logger.info("Cluster %r operation complete", cluster)
                 break
 
-            if response.status == "CREATE_FAILED":
+            if response_status == "CREATE_FAILED":
                 raise CreateFailed(message=response.status_reason)
 
-            if response.status == "UPDATE_FAILED":
+            if response_status == "UPDATE_FAILED":
                 raise ReconcileFailed(message=response.status_reason)
 
-            if response.status == "DELETE_FAILED":
+            if response_status == "DELETE_FAILED":
                 raise DeleteFailed(message=response.status_reason)
 
             # FIXME: this part may not be necessary anymore after the Observer is
@@ -703,6 +718,8 @@ class MagnumClusterController(Controller):
                     return
                 except ClientError:
                     pass
+                finally:
+                    await api_client.close()
 
         # Generate kubeconfig with new certificates.
         #

@@ -16,7 +16,7 @@ from .constraints import LabelConstraint
 
 
 class ClusterConstraints(Serializable):
-    labels: List[LabelConstraint] = None
+    labels: List[LabelConstraint] = field(default_factory=list)
     custom_resources: List[str] = field(default_factory=list)
 
 
