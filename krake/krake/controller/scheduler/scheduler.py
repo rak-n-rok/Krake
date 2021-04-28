@@ -577,19 +577,23 @@ class Scheduler(Controller):
         # without metrics.
         with_metrics = [project for project in matching if project.spec.metrics]
 
-        # Only use projects without metrics when there are no projects with
-        # metrics.
-        if not with_metrics:
-            scores = [
-                self.calculate_openstack_project_scores((), project)
-                for project in matching
-            ]
-        else:
+        # Only use projects without metrics when there are no projects with metrics.
+        scores = []
+        if with_metrics:
             # Compute the score of all projects based on their metric
             scores = await self.rank_openstack_projects(cluster, with_metrics)
 
         if not scores:
-            logger.info("Unable to compute the score of any Kubernetes cluster")
+            # If no score of project with metrics could be computed (e.g. due to
+            # unreachable metrics providers), compute the score of the matching projects
+            # that do not have metrics.
+            scores = [
+                self.calculate_openstack_project_scores((), project)
+                for project in matching
+            ]
+
+        if not scores:
+            logger.info("Unable to compute the score of any project")
             raise NoProjectFound("No OpenStack project available")
 
         return self.select_maximum(scores).project

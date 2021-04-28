@@ -2078,49 +2078,6 @@ async def test_select_project_not_deleted():
         assert selected == projects[index]
 
 
-async def test_select_no_matching_project(aiohttp_server, config, db, loop):
-    """Ensure that an exception is raised if not matching Project is found for a
-    MagnumCluster.
-    """
-    routes = web.RouteTableDef()
-
-    @routes.get("/api/v1/query")
-    async def _(request):
-        raise web.HTTPServiceUnavailable()
-
-    prometheus_app = web.Application()
-    prometheus_app.add_routes(routes)
-
-    prometheus = await aiohttp_server(prometheus_app)
-
-    cluster = MagnumClusterFactory(status__is_scheduled=False, spec__constraints=None)
-    project = ProjectFactory(spec__metrics=[MetricRef(name="my-metric", weight=1)])
-    metric = GlobalMetricFactory(
-        metadata__name="my-metric",
-        spec__min=0,
-        spec__max=1,
-        spec__provider__name="my-provider",
-        spec__provider__metric="my-metric",
-    )
-    provider = GlobalMetricsProviderFactory(
-        metadata__name="my-provider",
-        spec__type="prometheus",
-        spec__prometheus__url=server_endpoint(prometheus),
-    )
-    await db.put(metric)
-    await db.put(provider)
-    await db.put(project)
-
-    api = await aiohttp_server(create_app(config))
-
-    async with Client(url=server_endpoint(api), loop=loop) as client:
-        scheduler = Scheduler(server_endpoint(api), worker_count=0)
-        await scheduler.prepare(client)
-
-        with pytest.raises(NoProjectFound, match="No OpenStack project available"):
-            await scheduler.select_openstack_project(cluster, [project])
-
-
 async def test_select_project_with_constraints_without_metric():
     # Because the selection of projects is done randomly between the matching projects,
     # if an error was present, the right project could have been randomly picked,
@@ -2140,6 +2097,98 @@ async def test_select_project_with_constraints_without_metric():
     scheduler = Scheduler("http://localhost:8080", worker_count=0)
     selected = await scheduler.select_openstack_project(cluster, projects)
     assert selected == projects[0]
+
+
+async def test_openstack_select_project_all_unreachable_metric(
+    aiohttp_server, config, db, loop
+):
+    """Test scheduler picks a project even if all metrics providers are unreachable"""
+    projects = [
+        ClusterFactory(spec__metrics=[MetricRef(name="unreachable", weight=1)]),
+        ClusterFactory(spec__metrics=[MetricRef(name="unreachable", weight=0.1)]),
+    ]
+    for project in projects:
+        await db.put(project)
+
+    metric = GlobalMetricFactory(
+        metadata__name="unreachable",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="my-provider",
+        spec__provider__metric="my-metric",
+    )
+    provider = GlobalMetricsProviderFactory(
+        metadata__name="my-provider",
+        spec__type="prometheus",
+        spec__prometheus__url="http://dummyurl",
+    )
+
+    await db.put(metric)
+    await db.put(provider)
+
+    random.shuffle(projects)
+
+    cluster = MagnumClusterFactory(
+        spec__constraints__project__labels=[],
+        status__state=MagnumClusterState.PENDING,
+        status__is_scheduled=False,
+    )
+    server = await aiohttp_server(create_app(config))
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        selected = await scheduler.select_openstack_project(cluster, projects)
+
+    assert selected in projects
+
+
+async def test_openstack_select_project_some_unreachable_metric(
+    aiohttp_server, config, db, loop
+):
+    """Test scheduler picks project from those with metrics from reachable providers"""
+    prometheus = await aiohttp_server(make_prometheus({"heat-demand": ["0.4"] * 2}))
+
+    project_wo_metric = ClusterFactory(spec__metrics=[])
+    project_w_unreachable = ClusterFactory(
+        spec__metrics=[MetricRef(name="unreachable", weight=1)]
+    )
+    project_w_metric = ClusterFactory(
+        spec__metrics=[MetricRef(name="heat-demand", weight=1)]
+    )
+    await db.put(project_w_metric)
+    await db.put(project_wo_metric)
+    await db.put(project_w_unreachable)
+
+    metric = GlobalMetricFactory(
+        metadata__name="heat-demand",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus-zone-1",
+        spec__provider__metric="heat-demand",
+    )
+    metrics_provider = GlobalMetricsProviderFactory(
+        metadata__name="prometheus-zone-1",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=False,
+        spec__constraints=None,
+    )
+    await db.put(metric)
+    await db.put(metrics_provider)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        selected = await scheduler.select_openstack_project(
+            app, [project_wo_metric, project_w_unreachable, project_w_metric]
+        )
+
+    assert selected == project_w_metric
 
 
 async def test_openstack_scheduling(aiohttp_server, config, db, loop):

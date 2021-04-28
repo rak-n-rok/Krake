@@ -492,7 +492,7 @@ async def test_magnum_cluster_create_counts_not_none(aiohttp_server, config, db,
     """Ensure that when the count for the masters and the nodes are set in the Magnum
     cluster specifications, they are used instead of the defaults from the templates.
     """
-    openstack_app = make_openstack_app(
+    openstack_app = make_openstack_mock_api(
         [
             {
                 "api_address": None,
@@ -804,7 +804,7 @@ async def test_magnum_cluster_resize(aiohttp_server, config, db, loop):
 
 async def test_magnum_cluster_update_failed(aiohttp_server, config, db, loop):
     """Ensures that a failed update is handled by the workers."""
-    openstack_app = make_openstack_app(
+    openstack_app = make_openstack_mock_api(
         [
             {
                 "master_count": 1,
@@ -1015,7 +1015,7 @@ async def test_magnum_cluster_delete_update(aiohttp_server, config, db, loop):
     Some sleeping time is added between the calls to `consume` along with a debounce
     with a value of 1 to be sure to get only one value.
     """
-    openstack_app = make_openstack_app(
+    openstack_app = make_openstack_mock_api(
         [
             {
                 "api_address": None,
