@@ -61,6 +61,27 @@ def pytest_addoption(parser):
         action="store",
         help="rok config location to use for scripts integration tests",
     )
+    parser.addoption(
+        "--template-id", action="store", help="UUID of an OpenStack cluster template."
+    )
+    parser.addoption(
+        "--project-id",
+        action="store",
+        help="UUID of an OpenStack Project to use as base.",
+    )
+    parser.addoption(
+        "--user-id",
+        action="store",
+        help="UUID of an OpenStack user, with access to the project and the template.",
+    )
+    parser.addoption(
+        "--user-password", action="store", help="Password of the OpenStack user."
+    )
+    parser.addoption(
+        "--auth-url",
+        action="store",
+        help="URL to connect to the OpenStack infrastructure.",
+    )
 
 
 @pytest.fixture
@@ -87,3 +108,27 @@ def etcd_container_port(request):
 def session():
     yield from rok_session(rok_config())
 
+
+@pytest.fixture
+def template_id(request):
+    return request.config.getoption("--template-id", skip=True)
+
+
+@pytest.fixture
+def project_id(request):
+    return request.config.getoption("--project-id", skip=True)
+
+
+@pytest.fixture
+def user_id(request):
+    return request.config.getoption("--user-id", skip=True)
+
+
+@pytest.fixture
+def user_password(request):
+    return request.config.getoption("--user-password", skip=True)
+
+
+@pytest.fixture
+def auth_url(request):
+    return request.config.getoption("--auth-url", skip=True)

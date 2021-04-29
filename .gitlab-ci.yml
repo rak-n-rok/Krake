@@ -198,7 +198,7 @@ e2e-tests:
     ANSIBLE_INVENTORY: ansible/hosts-CI
   script:
     # Pre-requisites: openstack, ansible and pytest
-    - pip install python-openstackclient openstacksdk "ansible>=2.9" pytest
+    - pip install python-openstackclient openstacksdk python-magnumclient "ansible>=2.9" pytest
     - apt-get update -y && apt-get install openssh-client rsync -y
 
     # Create SSH keys for to use during the whole pipeline
@@ -206,6 +206,19 @@ e2e-tests:
     - openstack keypair delete my_runner_key_$CI_PIPELINE_ID || true
     - openstack keypair create my_runner_key_$CI_PIPELINE_ID > .ssh/id_rsa
     - chmod 600 .ssh/id_rsa
+
+    # Prepare the Magnum cluster template
+    - openstack coe cluster template delete e2e_template_$CI_PIPELINE_ID || true
+    - openstack coe cluster template create
+        --coe kubernetes
+        --external-network shared-public-IPv4
+        --image "Fedora Atomic 27 x86_64"
+        --keypair my_runner_key_$CI_PIPELINE_ID
+        --flavor S
+        --master-flavor M
+        --labels kube_tag=v1.11.6
+        --labels cgroup_driver=cgroupfs
+        e2e_template_$CI_PIPELINE_ID
 
     # Configure host-CI template with the CI Pipeline ID
     - sed -i "s/\$CI_PIPELINE_ID/$CI_PIPELINE_ID/g" ansible/hosts-CI
@@ -224,13 +237,16 @@ e2e-tests:
     #########################
     ### Integration tests ###
     #########################
-    - ansible-playbook ansible/integration_tests.yml
+    - ansible-playbook ansible/integration_tests.yml --extra-vars "cluster_template_id=e2e_template_$CI_PIPELINE_ID"
 
   after_script:
     # Pre-requisites: openstack, ansible and pytest
     - pip install python-openstackclient openstacksdk "ansible>=2.9" pytest
     - apt-get update -y && apt-get install openssh-client rsync -y
     - chmod -v 700 ansible/
+
+    # Delete the Magnum cluster template
+    - openstack coe cluster template delete e2e_template_$CI_PIPELINE_ID || true
 
     # Delete the runner SSH keys
     - openstack keypair delete my_runner_key_$CI_PIPELINE_ID || true

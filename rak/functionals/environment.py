@@ -2,7 +2,12 @@ import os
 from collections import defaultdict
 
 from utils import KRAKE_HOMEDIR
-from resource_definitions import ClusterDefinition, ApplicationDefinition
+from resource_definitions import (
+    ClusterDefinition,
+    ApplicationDefinition,
+    ProjectDefinition,
+    MagnumClusterDefinition,
+)
 
 GIT_DIR = "git/krake"
 TEST_DIR = "rak/functionals"
@@ -346,3 +351,76 @@ def create_default_environment(
         app_cluster_constraints=app_cluster_constraints,
         app_migration=app_migration,
     )
+
+
+def create_magnum_cluster_environment(
+    project_names,
+    cluster_name,
+    template_id,
+    project_id,
+    user_id,
+    user_password,
+    auth_url,
+    metrics=None,
+    project_labels=None,
+    constraints=None,
+):
+    """Create an environment with one or several Krake Project resources and one
+    MagnumCluster resource.
+
+    Args:
+        project_names (list[str]): the names of each Krake Project resources to create.
+        cluster_name (str): name of the Magnum Cluster resource in Krake.
+        template_id (str): UUID of the OpenStack cluster template to use for the
+            creation of the Magnum clusters.
+        project_id (str): UUID of the OpenStack Project to use as base for the Krake
+            Projects.
+        user_id (str): UUID of the OpenStack user to get for creating the Krake Project.
+        user_password (str): password of the OpenStack user to get for creating the
+            Krake Project.
+        auth_url (str): URL of the Identity service of the OpenStack infrastructure.
+        metrics (dict[str, dict[str, float]], optional):
+            Cluster names and their metrics.
+            keys: the same names as in `cluster_names`
+            values: dict of metrics
+                keys: metric names
+                values: weight of the metrics
+        project_labels (dict[str, dict[str, str]], optional): project names and their
+            labels.
+            keys: the same names as in `cluster_names`
+            values: dict of cluster labels
+                keys: cluster labels
+                values: value of the cluster labels
+        constraints (list[str], optional): list of cluster constraints,
+            e.g. ["location != DE"].
+
+    Returns:
+        dict[int, list[resource_definitions.ResourceDefinition]]:
+
+    """
+    if not project_labels:
+        project_labels = {pn: {} for pn in project_names}
+    if not metrics:
+        metrics = {pn: {} for pn in project_names}
+    if not constraints:
+        constraints = []
+
+    password_credentials = (project_id, user_id, user_password)
+    return {
+        10: [
+            ProjectDefinition(
+                project_name,
+                auth_url,
+                template_id,
+                password_credentials=password_credentials,
+                labels=project_labels[project_name],
+                metrics=_convert_to_metrics_list(metrics[project_name]),
+            )
+            for project_name in project_names
+        ],
+        0: [
+            MagnumClusterDefinition(
+                cluster_name, master_count=1, node_count=1, constraints=constraints
+            )
+        ],
+    }

@@ -160,18 +160,17 @@ def run(command, retry=10, interval=1, condition=None, input=None, env_vars=None
             time.sleep(interval)
 
 
-def check_app_state(state, error_message, reason=None):
-    """Create a callable to verify the state of an Application obtained as response.
+def check_resource_state(state, error_message, reason=None):
+    """Create a callable to verify the state of a resource obtained as response.
 
     To be used with the :meth:`run` function. The callable will raise an
-    :class:`AssertionError` if the state of the Application is different from the given
+    :class:`AssertionError` if the state of the resource is different from the given
     one.
 
     Args:
-        state (str): the state of the answered Application will be compared with this
-            one.
+        state (str): the state of the answered resource will be compared with this one.
         error_message (str): the message that will be displayed if the check fails.
-        reason (str): if given, the reason of the Application (in case of FAILED state)
+        reason (str): if given, the reason of the resource (in case of FAILED state)
             will be compared to this one.
 
     Returns:
@@ -182,10 +181,10 @@ def check_app_state(state, error_message, reason=None):
 
     def validate(response):
         try:
-            app_details = response.json
-            assert app_details["status"]["state"] == state, error_message
+            res_details = response.json
+            assert res_details["status"]["state"] == state, error_message
             if reason:
-                assert app_details["status"]["reason"]["code"] == reason, error_message
+                assert res_details["status"]["reason"]["code"] == reason, error_message
         except (KeyError, json.JSONDecodeError):
             raise AssertionError(error_message)
 
@@ -362,6 +361,7 @@ def check_return_code(error_message, expected_code=0):
         details = (
             f" Expected return code: {expected_code}."
             f" Observed return code: {response.returncode}."
+            f" Logs: {response.output}"
         )
         assert response.returncode == expected_code, error_message + details
 
@@ -539,6 +539,42 @@ def check_app_running_on(expected_cluster, error_message):
                 f"App running_on: {running_on}"
             )
             assert running_on == expected_cluster, msg
+        except (KeyError, json.JSONDecodeError):
+            raise AssertionError(error_message)
+
+    return validate
+
+
+def check_project_running_on(expected_project, error_message):
+    """Create a callable to verify the project on which a Magnum Cluster is running
+    obtained as a response.
+
+    To be used with the :meth:`run` function. The callable will raise an
+    :class:`AssertionError` if the state of the Magnum Cluster is different from the
+    given one.
+
+    Args:
+        expected_project (str): the name of the project on which the Magnum cluster is
+            expected to be running.
+        error_message (str): the message that will be displayed if the
+            check fails.
+
+    Returns:
+        callable: a condition that will check its given response against the parameters
+            of the current function.
+
+    """
+
+    def validate(response):
+        try:
+            cluster_details = response.json
+            scheduled_to_dict = cluster_details["status"]["project"] or {}
+            scheduled_to = scheduled_to_dict.get("name", None)
+            msg = (
+                error_message + f" Cluster state: {cluster_details['status']['state']},"
+                f" App scheduled to: {scheduled_to}"
+            )
+            assert scheduled_to == expected_project, msg
         except (KeyError, json.JSONDecodeError):
             raise AssertionError(error_message)
 

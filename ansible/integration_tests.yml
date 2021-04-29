@@ -40,6 +40,38 @@
         - "support/static_metrics.yaml"
 
 
+- name: Prepare variables for the OpenStack end-to-end tests
+  hosts: 127.0.0.1
+  connection: local
+  tags:
+  - test_openstack
+  tasks:
+
+  - name: Get OS_PROJECT_ID
+    command: "openstack project show $OS_PROJECT_NAME -f value -c id"
+    register: OS_PROJECT_ID_output
+
+  - name: Prepare "os_project_id" variable
+    set_fact:
+      os_project_id: "{{ OS_PROJECT_ID_output.stdout }}"
+
+  - name: Get OS_USER_ID
+    command: "openstack user show -f value -c id $OS_USERNAME"
+    register: OS_USER_ID_output
+
+  - name: Prepare "os_user_id" variable
+    set_fact:
+      os_user_id: "{{ OS_USER_ID_output.stdout }}"
+
+  - name: Prepare "os_password" variable
+    set_fact:
+      os_password: "{{ lookup('env', 'OS_PASSWORD') }}"
+
+  - name: Prepare "os_auth_url" variable
+    set_fact:
+      os_auth_url: "{{ lookup('env', 'OS_AUTH_URL') }}"
+
+
 - name: Running Krake integration tests
   become: yes
   become_user: krake
@@ -52,6 +84,11 @@
   vars:
     git_dir: /home/krake/git/krake
     test_dir: rak/functionals
+    os_project_id: "{{ hostvars['127.0.0.1'].os_project_id }}"
+    os_user_id: "{{ hostvars['127.0.0.1'].os_user_id }}"
+    os_password: "{{ hostvars['127.0.0.1'].os_password }}"
+    os_auth_url: "{{ hostvars['127.0.0.1'].os_auth_url }}"
+    template_id: "{{ coe_template_output.id }}"
   tasks:
     - name: Run Krake Integration tests
       block:
@@ -108,6 +145,29 @@
           command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_scripts.py --krake_container {{ api_host }} --etcd_container {{ etcd_host }} --etcd_container_port {{ etcd_port }}"
           tags:
             - test_scripts
+
+        - name: Run integration tests for Openstack controller
+          command: |
+            pytest {{ git_dir }}/{{test_dir}}/integration/test_openstack.py
+            --template-id {{ cluster_template_id }}
+            --project-id {{ os_project_id}}
+            --user-id {{ os_user_id }}
+            --user-password {{ os_password }}
+            --auth-url {{ os_auth_url }}
+          when: cluster_template_id is defined
+          tags:
+            - test_openstack
+
+        - name: Display warning for undefined variable for template ID
+          debug:
+            msg: >
+              WARNING: the variable 'cluster_template_id' is not set, the integration
+              tests for openstack will not be started. The other tests will run as
+              expected. Please use
+              'ansible-playbook integration_tests.yml --extra-vars "cluster_template_id=<template_id>"'
+          when: cluster_template_id is not defined
+          tags:
+            - test_openstack
 
       always:
 

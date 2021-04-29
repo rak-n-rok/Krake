@@ -12,12 +12,16 @@ from utils import (
     check_return_code,
     check_resource_deleted,
     allow_404,
+    check_resource_state,
+    check_project_running_on,
 )
 
 
 class ResourceKind(Enum):
     APPLICATION = "application"
     CLUSTER = "cluster"
+    PROJECT = "project"
+    MAGNUMCLUSTER = "magnumcluster"
 
 
 class ResourceDefinition(ABC):
@@ -31,6 +35,8 @@ class ResourceDefinition(ABC):
         kind (ResourceKind): resource kind
         _mutable_attributes (list[str]): list of the attributes of the
             ResourceDefinition which can be modified by its update_resource() method.
+        deletion_delay (int): during deletion of the resource, amount of seconds to wait
+            before checking if the resource was actually deleted.
     """
 
     def __init__(self, name, kind):
@@ -38,6 +44,8 @@ class ResourceDefinition(ABC):
         self.name = name
         self.kind = kind
         self._mutable_attributes = self._get_mutable_attributes()
+
+        self.deletion_delay = 10
 
     @abstractmethod
     def _get_mutable_attributes(self):
@@ -160,18 +168,14 @@ class ResourceDefinition(ABC):
         """
         pass
 
-    def check_deleted(self, delay=10):
+    def check_deleted(self):
         """Run the command for checking if the resource has been deleted.
-
-        Args:
-            delay (int, optional): The number of seconds that should be allowed
-                before giving up.
         """
         run(
             self.get_command(),
             condition=self.deletion_acceptance_criteria(),
             interval=1,
-            retry=delay,
+            retry=self.deletion_delay,
         )
 
     def deletion_acceptance_criteria(self, error_message=None):
@@ -368,6 +372,135 @@ class ResourceDefinition(ABC):
         resource = self.get_resource()
         return resource["metadata"]["labels"]
 
+    @staticmethod
+    def _get_metrics_options(metrics):
+        """Convenience method for generating metric lists for rok cli commands.
+
+        Example:
+            If provided the argument metrics=
+            [{"name": "metric_name1", "weight": 1.0},
+            {"name": "metric_name2", "weight": 2.0}],
+            this method will return the list
+            ["-m", "metric_name1", "1.0", "-m", "metric_name2", "2.0"],
+            which can be used when constructing a cli command like
+            rok kube cluster create -m metric_name1 1.0 -m metric_name2 2.0 ...
+
+        Args:
+            metrics (list[dict[str, object]]): list of dicts of metrics names
+                and their weights
+
+        Returns:
+            list[str]:
+                ['-m', 'key_1', 'value_1', '-m', 'key_2', 'value_2', ...,
+                '-m', 'key_n', 'value_n']
+                for all n key, value pairs in metrics.
+        """
+        metrics_options = []
+        if metrics is None:
+            metrics = []
+        for metric in metrics:
+            metrics_options += ["-m", metric["name"], str(metric["weight"])]
+        return metrics_options
+
+    def _get_label_constraint_options(self, label_constraints):
+        """
+        Convenience method for generating label constraints lists for rok cli commands.
+
+        Example:
+            If provided the argument labels=["constraint1", "constraint2"},
+            this method will return the list ["-L", "constraint1", "-L", "constraint2"],
+            which can be used when constructing a cli command like
+            "rok kube app create -L constraint1 -L constraint2 ..."
+
+        Args:
+            label_constraints (list[str]): list of label constraints to give the
+            application, e.g. ['location is DE']
+
+        Returns:
+            list[str]: ['-L', constr_1, '-L', constr_2, ..., '-L', constr_n]
+                for all n constraints in label_constraints.
+
+        """
+        return self._get_flag_str_options("-L", label_constraints)
+
+    def get_state(self):
+        """Run the command for getting the resource and return its state.
+
+        Returns:
+            str: the current state of the resource, serialized as string.
+
+        """
+        kind = None
+        name = None
+        try:
+            resource_dict = self.get_resource()
+            kind = resource_dict["kind"]
+            name = resource_dict["metadata"]["name"]
+            return resource_dict["status"]["state"]
+        except KeyError as err:
+            raise AssertionError(
+                f"The resource {name!r} of kind {kind!r} has no {err.args[0]} field."
+            )
+
+    def check_state(
+        self, state, within=60, after_delay=0, error_message="", interval=10
+    ):
+        """Run the command for checking that the resource is in the provided state.
+
+        The first check occurs after `after_delay` seconds, and rechecks for
+        `within` seconds every second until the resource is observed with the provided
+        state.
+
+        An AssertionError is raised if the resource is not in the provided state after
+        the complete delay (``after_delay + within``).
+
+        Args:
+            state (str): string value of the state that the resource has to be observed
+                in.
+            within (int): number of seconds it is allowed to take until the resource is
+                in the expected state.
+            after_delay (int): number of seconds to delay before checking.
+            error_message (str): displayed error message in case of error.
+            interval (float): interval in seconds between two checks.
+        """
+
+        if not error_message:
+            error_message = (
+                f"Unable to observe that the Magnum Cluster {self.name!r} is"
+                f" in the {state!r} state"
+            )
+        if after_delay:
+            time.sleep(after_delay)
+        run(
+            self.get_command(),
+            retry=within,
+            interval=interval,
+            condition=check_resource_state(state, error_message),
+        )
+
+    def get_metrics_reasons(self):
+        """Run the command for getting the cluster and return the reasons for the
+        metrics failure if there was any.
+
+        Returns:
+            dict[str, dict[str, str]]: the serialized reasons for the metrics failure,
+                with the name of the metrics as key, and the deserialized reasons as
+                values.
+
+        """
+        kind = None
+        name = None
+        try:
+            resource_dict = self.get_resource()
+            kind = resource_dict["kind"]
+            name = resource_dict["metadata"]["name"]
+            cluster_dict = self.get_resource()
+            return cluster_dict["status"]["metrics_reasons"]
+        except KeyError as err:
+            raise AssertionError(
+                f"The resource {name!r} of kind {kind!r} has no {err.args[0]} field."
+            )
+
 
 class ApplicationDefinition(ResourceDefinition):
     """Definition of an Application resource for the test environment
@@ -426,9 +559,7 @@ class ApplicationDefinition(ResourceDefinition):
 
     def creation_command(self):
         cmd = f"rok kube app create -f {self.manifest_path} {self.name}".split()
-        cmd += self._get_cluster_label_constraint_options(
-            self.cluster_label_constraints
-        )
+        cmd += self._get_label_constraint_options(self.cluster_label_constraints)
         cmd += self._get_label_options(self.labels)
         cmd += self._get_flag_str_options("-H", self.hooks)
         if self.migration is not None:
@@ -494,35 +625,13 @@ class ApplicationDefinition(ResourceDefinition):
             list[str]: the command to update the application, as a list of its parts.
         """
         cmd = f"rok kube app update {self.name}".split()
-        cmd += self._get_cluster_label_constraint_options(cluster_label_constraints)
+        cmd += self._get_label_constraint_options(cluster_label_constraints)
         cmd += self._get_label_options(labels)
         if migration is not None:
             cmd += [self._get_migration_flag(migration)]
         if observer_schema_path:
             cmd += f" -O {observer_schema_path}".split()
         return cmd
-
-    def _get_cluster_label_constraint_options(self, cluster_label_constraints):
-        """
-        Convenience method for generating cluster label constraints lists for
-        rok cli commands.
-
-        Example:
-            If provided the argument labels=["constraint1", "constraint2"},
-            this method will return the list ["-L", "constraint1", "-L", "constraint2"],
-            which can be used when constructing a cli command like
-            "rok kube app create -L constraint1 -L constraint2 ..."
-
-        Args:
-            cluster_label_constraints (list[str]): list of cluster label constraints
-                to give the application, e.g. ['location is DE']
-
-        Returns:
-            list[str]: ['-L', constr_1, '-L', constr_2, ..., '-L', constr_n]
-                for all n constraints in cluster_label_constraints.
-
-        """
-        return self._get_flag_str_options("-L", cluster_label_constraints)
 
     def check_running_on(
         self, cluster_name, within=10, after_delay=0, error_message=""
@@ -594,15 +703,6 @@ class ApplicationDefinition(ResourceDefinition):
         app_dict = self.get_resource()
         return app_dict["status"]["scheduled_to"]["name"]
 
-    def get_state(self):
-        """Run the command for getting the application and return its state.
-
-        Returns:
-            str: the current state of the application
-        """
-        app_dict = self.get_resource()
-        return app_dict["status"]["state"]
-
 
 class ClusterDefinition(ResourceDefinition):
     """Definition of a cluster resource for the test environment :class:`Environment`.
@@ -654,36 +754,6 @@ class ClusterDefinition(ResourceDefinition):
         cmd += [self.kubeconfig_path]
         return cmd
 
-    @staticmethod
-    def _get_metrics_options(metrics):
-        """Convenience method for generating metric lists for rok cli commands.
-
-        Example:
-            If provided the argument metrics=
-            [{"name": "metric_name1", "weight": 1.0},
-            {"name": "metric_name2", "weight": 2.0}],
-            this method will return the list
-            ["-m", "metric_name1", "1.0", "-m", "metric_name2", "2.0"],
-            which can be used when constructing a cli command like
-            rok kube cluster create -m metric_name1 1.0 -m metric_name2 2.0 ...
-
-        Args:
-            metrics (list[dict[str, object]]): list of dicts of metrics names
-                and their weights
-
-        Returns:
-            list[str]:
-                ['-m', 'key_1', 'value_1', '-m', 'key_2', 'value_2', ...,
-                '-m', 'key_n', 'value_n']
-                for all n key, value pairs in metrics.
-        """
-        metrics_options = []
-        if metrics is None:
-            metrics = []
-        for metric in metrics:
-            metrics_options += ["-m", metric["name"], str(metric["weight"])]
-        return metrics_options
-
     def creation_acceptance_criteria(self, error_message=None):
         if not error_message:
             error_message = f"The cluster {self.name} was not properly created."
@@ -702,7 +772,7 @@ class ClusterDefinition(ResourceDefinition):
                 and their weights to update the cluster with.
 
         Returns:
-             list[str]: the command to update the application, as a list of its parts.
+             list[str]: the command to update the cluster, as a list of its parts.
         """
         if not (labels or metrics):
             msg = (
@@ -719,25 +789,371 @@ class ClusterDefinition(ResourceDefinition):
     def get_command(self):
         return f"rok kube cluster get {self.name} -o json".split()
 
-    def get_state(self):
-        """Run the command for getting the cluster and return its state.
+
+class ProjectDefinition(ResourceDefinition):
+    """Definition of Project resource from the "openstack" API of Krake for the test
+    environment :class:`Environment`.
+
+    To create the Project, the "application" or "password" credentials strategies of the
+    Identity service can be used. The values necessary have to be provided when creating
+    the ProjectDefinition, but they are mutually exclusive: either the application or
+    the password strategy must to be used.
+
+    Args:
+        name (str): name of the Project
+        auth_url (str): URL of the Identity service of the OpenStack infrastructure.
+        template_uuid (str):UUID of the OpenStack cluster template to use for the
+            creation of the Magnum clusters.
+        application_credentials ((str, str)): tuple that contains the credentials to
+            connect to the Identity service using the Application credentials strategy
+            (id and secret).
+        password_credentials ((str, str, str)): tuple that contains the credentials to
+            connect to the Identity service using the password strategy (project ID,
+            user ID and password).
+        labels (dict[str, str], optional): dict of labels and their values to use for
+            the creation.
+        metrics (list[dict[str, object]], optional): list of dict of metrics and their
+            weights. Each dict has te two keys "name" and "weight".
+
+    """
+
+    class AuthType(Enum):
+        PASSWORD = "password"
+        APPLICATION_CREDENTIAL = "application_credential"
+
+    def __init__(
+        self,
+        name,
+        auth_url,
+        template_uuid,
+        application_credentials=(),
+        password_credentials=(),
+        labels=None,
+        metrics=None,
+    ):
+        if application_credentials and password_credentials:
+            raise ValueError(
+                "The application and password credentials cannot be set at the same"
+                " time."
+            )
+        if not application_credentials and not password_credentials:
+            raise ValueError(
+                "Either the application or password credentials must be set."
+            )
+        if application_credentials:
+            assert len(application_credentials) == 2
+        self.application_credentials = application_credentials
+
+        if password_credentials:
+            assert len(password_credentials) == 3
+        self.password_credentials = password_credentials
+
+        self.template_uuid = template_uuid
+        self.auth_url = auth_url
+        self.labels = labels or {}
+        self.metrics = metrics or []
+        super().__init__(name=name, kind=ResourceKind.PROJECT)
+
+    def _get_mutable_attributes(self):
+        attrs = [
+            "auth_url",
+            "template_uuid",
+            "labels",
+            "metrics",
+            "application_credentials",
+            "password_credentials",
+        ]
+        return attrs
+
+    def _get_default_values(self):
+        defaults = dict.fromkeys(self._mutable_attributes)
+        defaults.update({"application_credentials": ()})
+        defaults.update({"password_credentials": ()})
+        defaults.update({"labels": {}})
+        defaults.update({"metrics": []})
+        return defaults
+
+    def _get_actual_mutable_attribute_values(self):
+        cluster = self.get_resource()
+        mutable_values = {
+            "auth_url": cluster["spec"]["url"],
+            "template_uuid": cluster["spec"]["template"],
+            "labels": cluster["metadata"]["labels"],
+            "metrics": cluster["spec"]["metrics"],
+        }
+        if cluster["spec"]["auth"]["type"] == "application_credential":
+            app_cred_auth = cluster["spec"]["auth"]["application_credential"]
+            app_cred_id = app_cred_auth["id"]
+            app_cred_secret = app_cred_auth["secret"]
+            mutable_values.update(
+                {
+                    "application_credentials": (app_cred_id, app_cred_secret),
+                    "password_credentials": (),
+                }
+            )
+
+        if cluster["spec"]["auth"]["type"] == "password":
+            password_auth = cluster["spec"]["auth"]["password"]
+            project_id = password_auth["project"]["id"]
+            user_id = password_auth["user"]["id"]
+            auth_password = password_auth["user"]["password"]
+            mutable_values.update(
+                {
+                    "application_credentials": (),
+                    "password_credentials": (project_id, user_id, auth_password),
+                }
+            )
+
+        return mutable_values
+
+    def creation_command(self):
+        cmd = f"rok os project create {self.name}".split()
+
+        if self.application_credentials:
+            cmd += ["--application-credential", *self.application_credentials]
+        if self.password_credentials:
+            project_id, user_id, auth_password = self.password_credentials
+            cmd += [
+                "--user-id",
+                user_id,
+                "--password",
+                auth_password,
+                "--project-id",
+                project_id,
+            ]
+
+        cmd += ["--template", self.template_uuid]
+        cmd += ["--auth-url", self.auth_url]
+        cmd += self._get_label_options(self.labels)
+        cmd += self._get_metrics_options(self.metrics)
+        return cmd
+
+    def creation_acceptance_criteria(self, error_message=None):
+        if not error_message:
+            error_message = f"The project {self.name} was not properly created."
+        return check_resource_exists(error_message=error_message)
+
+    def delete_command(self):
+        return f"rok os project delete {self.name}".split()
+
+    def get_command(self):
+        return f"rok os project get {self.name} -o json".split()
+
+    def update_command(
+        self,
+        auth_url=None,
+        template_uuid=None,
+        application_credentials=None,
+        password_credentials=None,
+        labels=None,
+        metrics=None,
+    ):
+        """Get a command for updating the Project.
+
+        To update the Project, the "application" or "password" credentials strategies of
+        the Identity service can be used. The values necessary do not have to be
+        provided when updating the ProjectDefinition, but they cannot be provided at the
+        same time as they are mutually exclusive: either the application or the password
+        strategy can to be used.
+
+        Args:
+            auth_url (str): URL of the Identity service of the OpenStack infrastructure.
+            template_uuid (str):UUID of the OpenStack cluster template to use for the
+                creation of the Magnum clusters.
+            application_credentials ((str, str)): tuple that contains the credentials to
+                connect to the Identity service using the Application credentials
+                strategy (id and secret).
+            password_credentials ((str, str, str)): tuple that contains the credentials
+                to connect to the Identity service using the password strategy (project
+                ID, user ID and password).
+            labels (dict[str, str], optional): dict of labels and their values to
+                give the cluster, e.g. {'location': 'DE'}
+            metrics (list[dict[str, object]], optional): list of dicts with metrics
+                and their weights to update the cluster with.
 
         Returns:
-            str: the current state of the cluster, serialized as string.
+             list[str]: the command to update the project, as a list of its parts.
 
         """
-        cluster_dict = self.get_resource()
-        return cluster_dict["status"]["state"]
+        cmd = f"rok os project update {self.name}".split()
 
-    def get_metrics_reasons(self):
-        """Run the command for getting the cluster and return the reasons for the
-        metrics failure if there was any.
+        if application_credentials and password_credentials:
+            raise ValueError(
+                "The application and password credentials cannot be set at the same"
+                " time."
+            )
+
+        if application_credentials:
+            cred_id, secret = application_credentials
+            cmd += ["--application-credential", cred_id, secret]
+
+        if password_credentials:
+            project_id, user_id, auth_password = password_credentials
+            cmd += [
+                "--user-id",
+                user_id,
+                "--password",
+                auth_password,
+                "--project-id",
+                project_id,
+            ]
+
+        if auth_url:
+            cmd += ["--auth-url", auth_url]
+        if template_uuid:
+            cmd += ["--template", template_uuid]
+
+        cmd += self._get_label_options(labels)
+        cmd += self._get_metrics_options(metrics)
+        return cmd
+
+
+class MagnumClusterDefinition(ResourceDefinition):
+    """Definition of Magnum cluster resource from the "openstack" API of Krake for the
+    test environment :class:`Environment`.
+
+    Args:
+        name (str): name of the Magnum cluster resource.
+        master_count (int): number of master nodes that the the cluster will have.
+        node_count (int): number of worker nodes that the the cluster will have.
+        constraints (list[str]): list of label constraints to use for the creation of
+            the Magnum cluster.
+        labels (dict[str, str], optional): dict of labels and their values to use for
+            the creation.
+        metrics (list[dict[str, object]], optional): list of dict of metrics and their
+            weights. Each dict has te two keys "name" and "weight".
+
+    """
+
+    def __init__(
+        self,
+        name,
+        master_count=None,
+        node_count=None,
+        constraints=None,
+        labels=None,
+        metrics=None,
+    ):
+        super().__init__(name=name, kind=ResourceKind.MAGNUMCLUSTER)
+        self.project_label_constraints = constraints or []
+        self.master_count = master_count
+        self.node_count = node_count
+        self.labels = labels or {}
+        self.metrics = metrics or []
+
+        self.deletion_delay = 300
+
+    def _get_mutable_attributes(self):
+        return ["node_count", "project_label_constraints", "labels", "metrics"]
+
+    def _get_default_values(self):
+        defaults = dict.fromkeys(self._mutable_attributes)
+        defaults.update({"node_count": None})
+        defaults.update({"project_label_constraints": []})
+        defaults.update({"labels": {}})
+        defaults.update({"metrics": []})
+        return defaults
+
+    def _get_actual_mutable_attribute_values(self):
+        cluster = self.get_resource()
+        return {
+            "node_count": cluster["spec"]["node_count"],
+            "project_label_constraints": cluster["spec"]["constraints"]["project"][
+                "labels"
+            ],
+            "labels": cluster["metadata"]["labels"],
+            "metrics": cluster["spec"]["metrics"],
+        }
+
+    def creation_command(self):
+        cmd = f"rok os cluster create {self.name}".split()
+        if self.master_count is not None:
+            cmd += ["--master-count", str(self.master_count)]
+        if self.node_count is not None:
+            cmd += ["--node-count", str(self.node_count)]
+        cmd += self._get_label_constraint_options(self.project_label_constraints)
+        cmd += self._get_label_options(self.labels)
+        cmd += self._get_metrics_options(self.metrics)
+        return cmd
+
+    def creation_acceptance_criteria(self, error_message=None):
+        if not error_message:
+            error_message = f"The Magnum Cluster {self.name} was not properly created."
+        return check_resource_exists(error_message=error_message)
+
+    def delete_command(self):
+        return f"rok os cluster delete {self.name}".split()
+
+    def get_command(self):
+        return f"rok os cluster get {self.name} -o json".split()
+
+    def update_command(
+        self, node_count=None, label_constraints=None, labels=None, metrics=None
+    ):
+        """
+
+        Args:
+            node_count (int): number of worker nodes that the the cluster will have.
+            label_constraints (list[str]): list of label constraints to use for the
+                creation of the Magnum cluster.
+            labels (dict[str, str], optional): dict of labels and their values to use
+                for the creation.
+            metrics (list[dict[str, object]], optional): list of dict of metrics and
+                their weights. Each dict has te two keys "name" and "weight".
 
         Returns:
-            dict[str, dict[str, str]]: the serialized reasons for the metrics failure,
-                with the name of the metrics as key, and the deserialized reasons as
-                values.
 
         """
-        cluster_dict = self.get_resource()
-        return cluster_dict["status"]["metrics_reasons"]
+        cmd = f"rok os cluster update {self.name}".split()
+        if node_count is not None:
+            cmd += ["--node-count", str(node_count)]
+        cmd += self._get_label_constraint_options(label_constraints)
+        cmd += self._get_label_options(labels)
+        cmd += self._get_metrics_options(metrics)
+        return cmd
+
+    def check_running_on(
+        self, project_name, within=10, after_delay=0, error_message=""
+    ):
+        """Run the command for checking that the magnum cluster is running on the
+        specified project.
+
+        The first check occurs after `after_delay` seconds, and rechecks for
+        `within` seconds every
+        second until the magnum cluster was observed to run on the project
+        `project_name`.
+
+        An AssertionError is raised if the magnum cluster is not running on project
+        `project_name` within `within` seconds of the first check.
+
+        Args:
+            project_name (str): Name of the project on which the magnum cluster is
+                expected to run.
+            within (int): number of seconds it is allowed to take until the project
+                is running on the project `project_name`.
+            after_delay (int): number of seconds to delay before checking.
+            error_message (str): displayed error message in case of error.
+        """
+        if not error_message:
+            error_message = (
+                f"Unable to observe that the magnum cluster {self.name} "
+                f"is running on project {project_name}."
+            )
+        if after_delay:
+            time.sleep(after_delay)
+        run(
+            self.get_command(),
+            retry=within,
+            interval=1,
+            condition=check_project_running_on(project_name, error_message),
+        )
+
+    def get_running_on(self):
+        """Run the command for getting the Magnum cluster and return the name of
+        the project it is running on.
+
+        Returns:
+            str: the name of the project the Magnum cluster is running on.
+        """
+        app_dict = self.get_resource()
+        return app_dict["status"]["project"]["name"]
