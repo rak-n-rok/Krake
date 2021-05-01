@@ -1,3 +1,45 @@
+- name: Prepare Krake infrastructure for integration tests
+  become: yes
+  become_user: krake
+  hosts: krake_apps
+  tags:
+    - prepare-tests
+  roles:
+    - authorized-keys
+  vars:
+    git_dir: /home/krake/git/krake
+  tasks:
+
+    - name: Configure the docker infrastructure for prometheus
+      command: "{{ git_dir }}/docker/generate --config {{ git_dir }}/docker/docker.yaml {{ git_dir }}/docker/prometheus"
+
+    - name: Remove Krake infrastructure
+      docker_compose:
+        project_src: "{{ git_dir }}/docker"
+        files:
+          - "{{ git_dir }}/docker/krake/docker-compose.yaml"
+        state: absent
+
+    - name: Start Krake infrastructure with prometheus
+      docker_compose:
+        project_src: "{{ git_dir }}/docker"
+        files:
+          - "{{ git_dir }}/docker/krake/docker-compose.yaml"
+          - "{{ git_dir }}/docker/prometheus/docker-compose.yaml"
+        state: present
+        build: no
+
+    - name: Bootstrap etcd database with the test-specific resources
+      shell : >
+        docker exec -i {{ api_host }} krake_bootstrap_db --force -
+        {% if etcd_host is defined %} --db-host {{ etcd_host }} {% endif %}
+        {% if etcd_port is defined %} --db-port {{ etcd_port }} {% endif %}
+        < {{ git_dir }}/{{ item }}
+      loop:
+        - "docker/prometheus/bootstrap.yaml"
+        - "support/static_metrics.yaml"
+
+
 - name: Running Krake integration tests
   become: yes
   become_user: krake

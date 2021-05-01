@@ -252,6 +252,7 @@
         - name: Generate the docker configuration file
           script: |
             {{ repo_dir }}/krake/scripts/krake_generate_config --dst {{ git_dir }}/docker \
+            {% if enable_tls is defined and enable_tls %} --tls-enabled {% endif %} \
             {% if api_host is defined %} --api-host {{ api_host }} {% endif %} \
             {% if api_port is defined %} --api-port {{ api_port }} {% endif %} \
             {% if etcd_host is defined %} --etcd-host {{ etcd_host }} {% endif %} \
@@ -260,15 +261,14 @@
             {% if cert_dir is defined %} --cert-dir {{ cert_dir }} {% endif %} \
             {{ git_dir }}/docker/docker.yaml.template
 
-        - name: Configure docker infrastructure bundles
-          command: "{{ git_dir }}/docker/generate --config {{ git_dir }}/docker/docker.yaml {{ git_dir }}/docker/krake {{ git_dir }}/docker/prometheus"
+        - name: Configure the docker infrastructure
+          command: "{{ git_dir }}/docker/generate --config {{ git_dir }}/docker/docker.yaml {{ git_dir }}/docker/krake"
 
         - name: Remove Krake infrastructure
           docker_compose:
             project_src: "{{ git_dir }}/docker"
             files:
               - "{{ git_dir }}/docker/krake/docker-compose.yaml"
-              - "{{ git_dir }}/docker/prometheus/docker-compose.yaml"
             state: absent
 
         - name: Remove Krake image
@@ -383,7 +383,6 @@
             project_src: "{{ git_dir }}/docker"
             files:
               - "{{ git_dir }}/docker/krake/docker-compose.yaml"
-              - "{{ git_dir }}/docker/prometheus/docker-compose.yaml"
             state: present
             build: no
 
@@ -395,8 +394,6 @@
             < {{ git_dir }}/{{ item }}
           loop:
             - "bootstrapping/base_roles.yaml"
-            - "docker/prometheus/bootstrap.yaml"
-            - "support/static_metrics.yaml"
 
     - name: Krake rok deployment
       tags:

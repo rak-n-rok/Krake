@@ -47,12 +47,14 @@ services:
     secrets:
       - source: api-config
         target: "{{ krake.config.path }}/api.yaml"
+      {% if krake.enable_tls -%}
       - source: ca-cert
         target: "{{ krake.cert_dir }}/ca.pem"
       - source: api-server-cert
         target: "{{ krake.cert_dir }}/system:api-server.pem"
       - source: api-server-key
         target: "{{ krake.cert_dir }}/system:api-server-key.pem"
+      {%- endif %}
 
   krake-ctrl-garbage-collector:
     image: krake:latest
@@ -64,12 +66,14 @@ services:
     secrets:
       - source: gc-config
         target: "{{ krake.config.path }}/garbage_collector.yaml"
+      {% if krake.enable_tls -%}
       - source: ca-cert
         target: "{{ krake.cert_dir }}/ca.pem"
       - source: gc-cert
         target: "{{ krake.cert_dir }}/system:gc.pem"
       - source: gc-key
         target: "{{ krake.cert_dir }}/system:gc-key.pem"
+      {%- endif %}
 
   krake-ctrl-kubernetes-application:
     image: krake:latest
@@ -81,6 +85,7 @@ services:
     secrets:
       - source: kubernetes-config
         target: "{{ krake.config.path }}/kubernetes.yaml"
+      {% if krake.enable_tls -%}
       - source: ca-cert
         target: "{{ krake.cert_dir }}/ca.pem"
       - source: kubernetes-cert
@@ -91,6 +96,7 @@ services:
         target: "{{ krake.cert_dir }}/system:complete-signing.pem"
       - source: complete-signing-key
         target: "{{ krake.cert_dir }}/system:complete-signing-key.pem"
+      {%- endif %}
 
   krake-ctrl-scheduler:
     image: krake:latest
@@ -102,12 +108,14 @@ services:
     secrets:
       - source: scheduler-config
         target: "{{ krake.config.path }}/scheduler.yaml"
+      {% if krake.enable_tls -%}
       - source: ca-cert
         target: "{{ krake.cert_dir }}/ca.pem"
       - source: scheduler-cert
         target: "{{ krake.cert_dir }}/system:scheduler.pem"
       - source: scheduler-key
         target: "{{ krake.cert_dir }}/system:scheduler-key.pem"
+      {%- endif %}
 
   krake-ctrl-magnum:
     image: krake:latest
@@ -119,36 +127,48 @@ services:
     secrets:
       - source: magnum-config
         target: "{{ krake.config.path }}/magnum.yaml"
+      {% if krake.enable_tls -%}
       - source: ca-cert
         target: "{{ krake.cert_dir }}/ca.pem"
       - source: magnum-cert
         target: "{{ krake.cert_dir }}/system:magnum.pem"
       - source: magnum-key
         target: "{{ krake.cert_dir }}/system:magnum-key.pem"
+      {%- endif %}
 
 # Configs are not supported by docker-compose without Swarm, but the certificates and
 # keys should not be shared between containers.
 # As as workaround, secrets are used for all files specific to each container.
 secrets:
+  api-config:
+    file: "{{ krake.config.path }}/api.yaml"
+
+  gc-config:
+    file: "{{ krake.config.path }}/garbage_collector.yaml"
+
+  kubernetes-config:
+    file: "{{ krake.config.path }}/kubernetes.yaml"
+
+  scheduler-config:
+    file: "{{ krake.config.path }}/scheduler.yaml"
+
+  magnum-config:
+    file: "{{ krake.config.path }}/magnum.yaml"
+
+  {% if krake.enable_tls -%}
   ca-cert:
     file: "{{ krake.cert_dir }}/ca.pem"
 
-  api-config:
-    file: "{{ krake.config.path }}/api.yaml"
   api-server-cert:
     file: "{{ krake.cert_dir }}/system:api-server.pem"
   api-server-key:
     file: "{{ krake.cert_dir }}/system:api-server-key.pem"
 
-  gc-config:
-    file: "{{ krake.config.path }}/garbage_collector.yaml"
   gc-cert:
     file: "{{ krake.cert_dir }}/system:gc.pem"
   gc-key:
     file: "{{ krake.cert_dir }}/system:gc-key.pem"
 
-  kubernetes-config:
-    file: "{{ krake.config.path }}/kubernetes.yaml"
   kubernetes-cert:
     file: "{{ krake.cert_dir }}/system:kubernetes.pem"
   kubernetes-key:
@@ -158,19 +178,16 @@ secrets:
   complete-signing-key:
     file: "{{ krake.cert_dir }}/system:complete-signing-key.pem"
 
-  scheduler-config:
-    file: "{{ krake.config.path }}/scheduler.yaml"
   scheduler-cert:
     file: "{{ krake.cert_dir }}/system:scheduler.pem"
   scheduler-key:
     file: "{{ krake.cert_dir }}/system:scheduler-key.pem"
 
-  magnum-config:
-    file: "{{ krake.config.path }}/magnum.yaml"
   magnum-cert:
     file: "{{ krake.cert_dir }}/system:magnum.pem"
   magnum-key:
     file: "{{ krake.cert_dir }}/system:magnum-key.pem"
+  {%- endif %}
 
 {% if docker_daemon_mtu is defined %}
 networks:
