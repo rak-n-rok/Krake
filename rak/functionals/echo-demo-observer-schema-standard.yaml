@@ -1,0 +1,42 @@
+# This observer schema corresponds to the default schema of the 'echo-demo.yaml'
+# manifest.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-demo
+  namespace: null
+spec:
+  selector:
+    matchLabels:
+      app: null
+  template:
+    metadata:
+      labels:
+        app: null
+    spec:
+      containers:
+      - name: null
+        image: null
+        ports:
+        - containerPort: null
+        - observer_schema_list_min_length: 1
+          observer_schema_list_max_length: 1
+      - observer_schema_list_min_length: 1
+        observer_schema_list_max_length: 1
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-demo
+  namespace: null
+spec:
+  type: null
+  selector:
+    app: null
+  ports:
+  - port: null
+    protocol: null
+    targetPort: null
+  - observer_schema_list_min_length: 1
+    observer_schema_list_max_length: 1

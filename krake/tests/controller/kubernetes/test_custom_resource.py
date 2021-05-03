@@ -1,6 +1,8 @@
 from textwrap import dedent
 
 from aiohttp import web
+from copy import deepcopy
+
 import json
 import pytz
 import yaml
@@ -18,6 +20,26 @@ from tests.factories.kubernetes import (
     ApplicationFactory,
     ClusterFactory,
     make_kubeconfig,
+)
+
+
+# snake_case response
+crontab_response = yaml.safe_load(
+    """
+---
+api_version: stable.example.com/v1
+kind: CronTab
+metadata:
+  creation_timestamp: "2017-05-31T12:56:35Z"
+  generation: 1
+  name: cron
+  namespace: default
+  resource_version: "285"
+  uid: 9423255b-4600-11e7-af6a-28d2447dc82b
+spec:
+  cron_spec: '* * * * */5'
+  image: cron-image
+"""
 )
 
 
@@ -62,13 +84,26 @@ async def test_custom_resource_cached_property_called_once(
             )
         return web.Response(status=404)
 
-    @routes.get("/apis/stable.example.com/v1/namespaces/default/crontabs/cron")
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if the CronTabs already exists.
+    @routes.get("/apis/stable.example.com/v1/namespaces/default/crontabs/{name}")
     async def _(request):
         return web.Response(status=404)
 
+    # As part of the reconciliation, the k8s controller creates the CronTabs
     @routes.post("/apis/stable.example.com/v1/namespaces/default/crontabs")
     async def _(request):
-        return web.Response(status=200)
+        rd = await request.read()
+        app = json.loads(rd)
+
+        # Craft a response to be used by the Hooks
+        resp = deepcopy(crontab_response)
+
+        resp["metadata"]["name"] = app["metadata"]["name"]
+        resp["spec"]["image"] = app["spec"]["image"]
+        resp["spec"]["cron_spec"] = app["spec"]["cronSpec"]
+
+        return web.json_response(resp)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -93,6 +128,7 @@ async def test_custom_resource_cached_property_called_once(
                     kind: CronTab
                     metadata:
                         name: cron1
+                        namespace: default
                     spec:
                         cronSpec: "* * * * */5"
                         image: cron-image1
@@ -101,6 +137,7 @@ async def test_custom_resource_cached_property_called_once(
                     kind: CronTab
                     metadata:
                         name: cron2
+                        namespace: default
                     spec:
                         cronSpec: "* * * * */10"
                         image: cron-image2
@@ -119,12 +156,20 @@ async def test_custom_resource_cached_property_called_once(
         controller = KubernetesController(server_endpoint(api_server), worker_count=0)
         await controller.prepare(client)
 
+        # The resource is received by the controller, which starts the reconciliation
+        # loop, and updates the application in the DB accordingly.
         await controller.resource_received(app)
 
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.manifest == app.spec.manifest
+
+    assert stored.status.last_applied_manifest == app.spec.manifest
+    # The resource doesn't contain any list (therefore no special control dictionary is
+    # present in last_observed_manifest), and no custom observer_schema is used
+    # (therefore all fields present in spec.manifest are observed). In this specific
+    # case, the last_observed_manifest should be equal to spec.manifest
+    assert stored.status.last_observed_manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
@@ -162,7 +207,7 @@ async def test_custom_resource_cached_property(aiohttp_server):
             content_type="application/json",
         )
 
-    # Determine scope, version, group and plural of custome resource definition
+    # Determine scope, version, group and plural of custom resource definition
     @routes_a.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
     async def _(request):
         if request.match_info["name"] == crd_name:
@@ -210,7 +255,7 @@ async def test_custom_resource_cached_property(aiohttp_server):
             status__state=ApplicationState.PENDING,
             status__scheduled_to=resource_ref(cluster),
             status__is_scheduled=False,
-            status__mangling=list(
+            status__last_applied_manifest=list(
                 yaml.safe_load_all(
                     dedent(
                         """
@@ -219,9 +264,44 @@ async def test_custom_resource_cached_property(aiohttp_server):
                         kind: CronTab
                         metadata:
                             name: cron
+                            namespace: default
                         spec:
                             cronSpec: "* * * * */5"
                             image: cron-image
+                        """
+                    )
+                )
+            ),
+            spec__manifest=list(
+                yaml.safe_load_all(
+                    dedent(
+                        """
+                        ---
+                        apiVersion: stable.example.com/v1
+                        kind: CronTab
+                        metadata:
+                            name: cron
+                            namespace: default
+                        spec:
+                            cronSpec: "* * * * */5"
+                            image: cron-image
+                        """
+                    )
+                )
+            ),
+            spec__observer_schema=list(
+                yaml.safe_load_all(
+                    dedent(
+                        """
+                        ---
+                        apiVersion: stable.example.com/v1
+                        kind: CronTab
+                        metadata:
+                            name: cron
+                            namespace: null
+                        spec:
+                            cronSpec: null
+                            image: null
                         """
                     )
                 )
@@ -244,7 +324,7 @@ async def test_custom_resource_cached_property(aiohttp_server):
 async def test_app_custom_resource_creation(aiohttp_server, config, db, loop):
     routes = web.RouteTableDef()
 
-    # Determine scope, version, group and plural of custome resource definition
+    # Determine scope, version, group and plural of custom resource definition
     @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
     async def _(request):
         if request.match_info["name"] == "crontabs.stable.example.com":
@@ -268,13 +348,17 @@ async def test_app_custom_resource_creation(aiohttp_server, config, db, loop):
             )
         return web.Response(status=404)
 
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a CronTab named `cron` already exists.
     @routes.get("/apis/stable.example.com/v1/namespaces/default/crontabs/cron")
     async def _(request):
         return web.Response(status=404)
 
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller creates the CronTab named `cron`.
     @routes.post("/apis/stable.example.com/v1/namespaces/default/crontabs")
     async def _(request):
-        return web.Response(status=200)
+        return web.json_response(crontab_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -299,6 +383,7 @@ async def test_app_custom_resource_creation(aiohttp_server, config, db, loop):
                     kind: CronTab
                     metadata:
                         name: cron
+                        namespace: default
                     spec:
                         cronSpec: "* * * * */5"
                         image: cron-image
@@ -316,23 +401,36 @@ async def test_app_custom_resource_creation(aiohttp_server, config, db, loop):
         controller = KubernetesController(server_endpoint(api_server), worker_count=0)
         await controller.prepare(client)
 
+        # The resource is received by the controller, which starts the reconciliation
+        # loop, and updates the application in the DB accordingly.
         await controller.resource_received(app)
 
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.manifest == app.spec.manifest
+
+    assert stored.status.last_applied_manifest == app.spec.manifest
+    # The resource doesn't contain any list (therefore no special control dictionary is
+    # present in last_observed_manifest), and no custom observer_schema is used
+    # (therefore all fields present in spec.manifest are observed). In this specific
+    # case, the last_observed_manifest should be equal to spec.manifest
+    assert stored.status.last_observed_manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
 
 async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
+    """Test the update of a running application using CRD
+
+    The Kubernetes Controller should patch the application and update the DB.
+
+    """
     routes = web.RouteTableDef()
 
     deleted = set()
     patched = set()
 
-    # Determine scope, version, group and plural of custome resource definition
+    # Determine scope, version, group and plural of custom resource definition
     @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
     async def _(request):
         if request.match_info["name"] == "crontabs.stable.example.com":
@@ -356,22 +454,39 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
             )
         return web.Response(status=404)
 
-    @routes.patch("/apis/stable.example.com/v1/namespaces/default/crontabs/{name}")
-    async def patch_deployment(request):
-        patched.add(request.match_info["name"])
-        return web.Response(status=200)
-
-    @routes.delete("/apis/stable.example.com/v1/namespaces/default/crontabs/{name}")
-    async def delete_deployment(request):
-        deleted.add(request.match_info["name"])
-        return web.Response(status=200)
-
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if the CronTabs named `cron-demo-1`, `cron-demo-2`
+    # and `cron-demo-3` already exists.
     @routes.get("/apis/stable.example.com/v1/namespaces/default/crontabs/{name}")
     async def _(request):
         deployments = ("cron-demo-1", "cron-demo-2", "cron-demo-3")
         if request.match_info["name"] in deployments:
             return web.Response(status=200)
         return web.Response(status=404)
+
+    # As part of the reconciliation loop, the k8s controller patch the existing
+    # CronTab which has been modified.
+    @routes.patch("/apis/stable.example.com/v1/namespaces/default/crontabs/{name}")
+    async def _(request):
+        rd = await request.read()
+        app = json.loads(rd)
+
+        # Craft a response to be used by the Hooks
+        resp = deepcopy(crontab_response)
+
+        resp["metadata"]["name"] = app["metadata"]["name"]
+        resp["spec"]["image"] = app["spec"]["image"]
+        resp["spec"]["cron_spec"] = app["spec"]["cronSpec"]
+
+        patched.add(request.match_info["name"])
+        return web.json_response(resp)
+
+    # As part the reconclitation loop, the k8s controller deletes the CronTab which
+    # are not present in the manifest file anymore.
+    @routes.delete("/apis/stable.example.com/v1/namespaces/default/crontabs/{name}")
+    async def _(request):
+        deleted.add(request.match_info["name"])
+        return web.Response(status=200)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -388,7 +503,7 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
         status__is_scheduled=True,
         status__running_on=resource_ref(cluster),
         status__scheduled_to=resource_ref(cluster),
-        status__manifest=list(
+        status__last_observed_manifest=list(
             yaml.safe_load_all(
                 dedent(
                     """
@@ -397,6 +512,7 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
                     kind: CronTab
                     metadata:
                         name: cron-demo-1
+                        namespace: default
                     spec:
                         cronSpec: "* * * * */5"
                         image: cron-image
@@ -405,6 +521,7 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
                     kind: CronTab
                     metadata:
                         name: cron-demo-2
+                        namespace: default
                     spec:
                         cronSpec: "* * * * */15"
                         image: cron-image
@@ -413,6 +530,7 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
                     kind: CronTab
                     metadata:
                         name: cron-demo-3
+                        namespace: default
                     spec:
                         cronSpec: "* * * * */35"
                         image: cron-image
@@ -431,6 +549,7 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
                     kind: CronTab
                     metadata:
                         name: cron-demo-2
+                        namespace: default
                     spec:
                         cronSpec: "* * * * */15"
                         image: cron-image
@@ -439,6 +558,7 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
                     kind: CronTab
                     metadata:
                         name: cron-demo-3
+                        namespace: default
                     spec:
                         cronSpec: "* * * * */35"
                         image: cron-image:1.2 # updated image version
@@ -457,6 +577,9 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
         controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
+        # The resource is received by the controller, which starts the reconciliation
+        # loop, deletes `cron-demo-1` and update `cron-demo-3`, and update the
+        # applications in the DB accordingly.
         await controller.resource_received(app)
 
     assert "cron-demo-1" in deleted
@@ -465,18 +588,26 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.manifest == app.spec.manifest
+    assert stored.status.last_applied_manifest == app.spec.manifest
+    # The resource doesn't contain any list (therefore no special control dictionary is
+    # present in last_observed_manifest), and no custom observer_schema is used
+    # (therefore all fields present in spec.manifest are observed). In this specific
+    # case, the last_observed_manifest should be equal to spec.manifest
+    assert stored.status.last_observed_manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
 
 
 async def test_app_custom_resource_migration(aiohttp_server, config, db, loop):
-    """Application was scheduled to a different cluster. The controller should
+    """Test the migration of an application
+
+    Application was scheduled to a different cluster. The controller should
     delete objects from the old cluster and create objects on the new cluster.
+
     """
     routes = web.RouteTableDef()
 
-    # Determine scope, version, group and plural of custome resource definition
+    # Determine scope, version, group and plural of custom resource definition
     @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
     async def _(request):
         if request.match_info["name"] == "crontabs.stable.example.com":
@@ -500,20 +631,36 @@ async def test_app_custom_resource_migration(aiohttp_server, config, db, loop):
             )
         return web.Response(status=404)
 
-    @routes.post("/apis/stable.example.com/v1/namespaces/default/crontabs")
-    async def _(request):
-        body = await request.json()
-        request.app["created"].add(body["metadata"]["name"])
-        return web.Response(status=201)
-
-    @routes.delete("/apis/apps/v1/namespaces/default/deployments/{name}")
-    async def delete_deployment(request):
-        request.app["deleted"].add(request.match_info["name"])
-        return web.Response(status=200)
-
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if the CronTabs already exists.
     @routes.get("/apis/stable.example.com/v1/namespaces/default/crontabs/{name}")
     async def _(request):
         return web.Response(status=404)
+
+    # As part of the reconciliation, the k8s controller creates a new CronTab on the
+    # target cluster
+    @routes.post("/apis/stable.example.com/v1/namespaces/default/crontabs")
+    async def _(request):
+
+        rd = await request.read()
+        app = json.loads(rd)
+
+        # Craft a response to be used by the Hooks
+        resp = deepcopy(crontab_response)
+
+        resp["metadata"]["name"] = app["metadata"]["name"]
+        resp["spec"]["image"] = app["spec"]["image"]
+        resp["spec"]["cron_spec"] = app["spec"]["cronSpec"]
+
+        request.app["created"].add(app["metadata"]["name"])
+        return web.json_response(resp)
+
+    # As part of the migration, the k8s controller deletes the Deployment on the old
+    # cluster
+    @routes.delete("/apis/stable.example.com/v1/namespaces/default/crontabs/{name}")
+    async def delete_deployment(request):
+        request.app["deleted"].add(request.match_info["name"])
+        return web.Response(status=200)
 
     async def make_kubernetes_api(existing=()):
         app = web.Application()
@@ -536,56 +683,45 @@ async def test_app_custom_resource_migration(aiohttp_server, config, db, loop):
         spec__custom_resources=["crontabs.stable.example.com"],
     )
 
-    old_manifest = list(
-        yaml.safe_load_all(
-            dedent(
-                """
-                apiVersion: apps/v1
-                kind: Deployment
-                metadata:
-                  name: nginx-demo
-                spec:
-                  selector:
-                    matchLabels:
-                      app: nginx
-                  template:
-                    metadata:
-                      labels:
-                        app: nginx
-                    spec:
-                      containers:
-                      - name: nginx
-                        image: nginx:1.7.9
-                        ports:
-                        - containerPort: 80
-                """
-            )
-        )
-    )
-    new_manifest = list(
-        yaml.safe_load_all(
-            dedent(
-                """
-                ---
-                apiVersion: stable.example.com/v1
-                kind: CronTab
-                metadata:
-                    name: cron
-                spec:
-                    cronSpec: "* * * * */5"
-                    image: cron-image
-                """
-            )
-        )
-    )
-
     app = ApplicationFactory(
         status__state=ApplicationState.RUNNING,
         status__is_scheduled=True,
         status__running_on=resource_ref(cluster_A),
         status__scheduled_to=resource_ref(cluster_B),
-        status__manifest=old_manifest,
-        spec__manifest=new_manifest,
+        status__last_observed_manifest=list(
+            yaml.safe_load_all(
+                dedent(
+                    """
+                ---
+                apiVersion: stable.example.com/v1
+                kind: CronTab
+                metadata:
+                  name: cron1
+                  namespace: default
+                spec:
+                    cronSpec: "* * * * */10"
+                    image: cron1-image
+                """
+                )
+            )
+        ),
+        spec__manifest=list(
+            yaml.safe_load_all(
+                dedent(
+                    """
+                ---
+                apiVersion: stable.example.com/v1
+                kind: CronTab
+                metadata:
+                    name: cron2
+                    namespace: default
+                spec:
+                    cronSpec: "* * * * */5"
+                    image: cron2-image
+                """
+                )
+            )
+        ),
     )
 
     assert resource_ref(cluster_A) in app.metadata.owners
@@ -601,15 +737,23 @@ async def test_app_custom_resource_migration(aiohttp_server, config, db, loop):
         controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
+        # The resource is received by the controller, which starts the reconciliation
+        # loop, migrate the application and updates the DB accordingly.
         await controller.resource_received(app)
 
-    assert "nginx-demo" in kubernetes_server_A.app["deleted"]
-    assert "cron" in kubernetes_server_B.app["created"]
+    assert "cron1" in kubernetes_server_A.app["deleted"]
+    assert "cron2" in kubernetes_server_B.app["created"]
 
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.manifest == app.spec.manifest
+
+    assert stored.status.last_applied_manifest == app.spec.manifest
+    # The resource doesn't contain any list (therefore no special control dictionary is
+    # present in last_observed_manifest), and no custom observer_schema is used
+    # (therefore all fields present in spec.manifest are observed). In this specific
+    # case, the last_observed_manifest should be equal to spec.manifest
+    assert stored.status.last_observed_manifest == app.spec.manifest
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.status.running_on == resource_ref(cluster_B)
     assert resource_ref(cluster_A) not in stored.metadata.owners
@@ -620,7 +764,7 @@ async def test_app_custom_resource_deletion(aiohttp_server, config, db, loop):
     kubernetes_app = web.Application()
     routes = web.RouteTableDef()
 
-    # Determine scope, version, group and plural of custome resource definition
+    # Determine scope, version, group and plural of custom resource definition
     @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
     async def _(request):
         if request.match_info["name"] == "crontabs.stable.example.com":
@@ -661,7 +805,7 @@ async def test_app_custom_resource_deletion(aiohttp_server, config, db, loop):
         status__scheduled_to=resource_ref(cluster),
         status__running_on=resource_ref(cluster),
         metadata__finalizers=["kubernetes_resources_deletion"],
-        status__manifest=list(
+        status__last_observed_manifest=list(
             yaml.safe_load_all(
                 dedent(
                     """
@@ -670,6 +814,7 @@ async def test_app_custom_resource_deletion(aiohttp_server, config, db, loop):
                     kind: CronTab
                     metadata:
                         name: cron
+                        namespace: default
                     spec:
                         cronSpec: "* * * * */5"
                         image: cron-image
@@ -689,6 +834,9 @@ async def test_app_custom_resource_deletion(aiohttp_server, config, db, loop):
         controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
+        # The resource is received by the controller, which starts the reconciliation
+        # loop, deletes the application on the k8s cluster, and deletes the application
+        # in the DB
         await controller.resource_received(app, start_observer=False)
 
     stored = await db.get(

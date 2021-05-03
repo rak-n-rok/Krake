@@ -166,21 +166,6 @@ class ApplicationStatusFactory(Factory):
             api="kubernetes", kind="Cluster", name=name, namespace=namespace
         )
 
-    @lazy_attribute
-    def manifest(self):
-        if self.state == ApplicationState.PENDING:
-            return None
-
-        if self.factory_parent:
-            manifest = self.factory_parent.spec.manifest
-
-            # Create a random sample of resources from the manifest
-            k = fake.pyint(0, len(manifest))
-            sample = fake.random.sample(manifest, k)
-
-            return deepcopy(sample)
-        return None
-
 
 kubernetes_manifest = list(
     yaml.safe_load_all(

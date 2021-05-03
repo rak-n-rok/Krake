@@ -101,10 +101,24 @@ spec:
 )
 
 
+updated_observer_schema = list(
+    yaml.safe_load_all(
+        """---
+apiVersion: apps/v1 # for versions before 1.9.0 use apps/v1beta2
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  namespace: null
+"""
+    )
+)
+
+
 async def test_update_application(aiohttp_server, config, db, loop):
     app = ApplicationFactory(status__state=ApplicationState.RUNNING)
     await db.put(app)
     app.spec.manifest = updated_manifest
+    app.spec.observer_schema = updated_observer_schema
 
     server = await aiohttp_server(create_app(config=config))
 
@@ -122,6 +136,7 @@ async def test_update_application(aiohttp_server, config, db, loop):
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
     assert stored.spec.manifest == updated_manifest
+    assert stored.spec.observer_schema == updated_observer_schema
     assert stored.status.state == app.status.state
 
 

@@ -390,6 +390,8 @@
                 krake_uid: "{{ krake_image_uid }}"
           tags:
             - build_krake_image
+          environment:
+            - DOCKER_BUILDKIT: 1
 
         - name: Start Krake infrastructure
           docker_compose:

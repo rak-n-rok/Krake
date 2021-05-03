@@ -100,7 +100,6 @@ class ResourceDefinition(ABC):
 
         Raises:
             AssertionError: If any of the default values is None.
-
         """
         default_values = self._get_default_values()
         attrs_needing_defaults = [
@@ -383,6 +382,7 @@ class ApplicationDefinition(ResourceDefinition):
         hooks (list[str]): list of hooks name to apply to the application.
         migration (bool, optional): migration flag indicating whether the
             application should be able to migrate.
+        observer_schema_path (str, optional): path to the observer_schema file to use.
     """
 
     def __init__(
@@ -393,6 +393,7 @@ class ApplicationDefinition(ResourceDefinition):
         labels=None,
         hooks=None,
         migration=None,
+        observer_schema_path=None,
     ):
         super().__init__(name=name, kind=ResourceKind.APPLICATION)
         assert os.path.isfile(manifest_path), f"{manifest_path} is not a file."
@@ -401,6 +402,7 @@ class ApplicationDefinition(ResourceDefinition):
         self.labels = labels or {}
         self.hooks = hooks or []
         self.migration = migration
+        self.observer_schema_path = observer_schema_path
 
     def _get_mutable_attributes(self):
         return ["cluster_label_constraints", "labels", "migration"]
@@ -431,6 +433,8 @@ class ApplicationDefinition(ResourceDefinition):
         cmd += self._get_flag_str_options("-H", self.hooks)
         if self.migration is not None:
             cmd += [self._get_migration_flag(self.migration)]
+        if self.observer_schema_path:
+            cmd += f" -O {self.observer_schema_path}".split()
         return cmd
 
     @staticmethod
@@ -468,7 +472,11 @@ class ApplicationDefinition(ResourceDefinition):
         return f"rok kube app delete {self.name}".split()
 
     def update_command(
-        self, cluster_label_constraints=None, migration=None, labels=None
+        self,
+        cluster_label_constraints=None,
+        migration=None,
+        labels=None,
+        observer_schema_path=None,
     ):
         """Get a command for updating the application.
 
@@ -490,6 +498,8 @@ class ApplicationDefinition(ResourceDefinition):
         cmd += self._get_label_options(labels)
         if migration is not None:
             cmd += [self._get_migration_flag(migration)]
+        if observer_schema_path:
+            cmd += f" -O {observer_schema_path}".split()
         return cmd
 
     def _get_cluster_label_constraint_options(self, cluster_label_constraints):

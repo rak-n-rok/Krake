@@ -41,6 +41,11 @@ document, granting the Krake project to use your work.
 We follow the guidelines on [How to Write a Git Commit Message][git-commit].
 
 
+# Docstrings
+
+Docstrings are written following the [Google Style Python Docstrings][sphinx-google].
+
+
 # How to report a bug
 
 If you find a security vulnerability, do NOT open an issue. Get in touch with
@@ -68,3 +73,4 @@ would like to see, why you need it, and how it should work.
 
 [krake-matrix]: https://riot.im/app/#/room/#krake:matrix.org
 [git-commit]: https://chris.beams.io/posts/git-commit/
+[sphinx-google]: https://www.sphinx-doc.org/en/master/usage/extensions/example_google.html
