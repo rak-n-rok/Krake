@@ -1403,7 +1403,7 @@ def test_update_last_applied_manifest_from_resp(loop):
 
     # `spec.replicas` is not initialized in `nginx-manifest` but is present in the
     # `observer_schema`. It is initialized in the first call to the function.
-    update_last_applied_manifest_from_resp(app, None, None, deployment_object)
+    update_last_applied_manifest_from_resp(app, deployment_object)
     assert (
         app.status.last_applied_manifest[0]["spec"]["replicas"]
         == original_replicas_count
@@ -1417,7 +1417,7 @@ def test_update_last_applied_manifest_from_resp(loop):
     first_container_manifest = get_first_container(nginx_manifest[0])
 
     # As this field is initialized in `nginx-manifest`, its value is not updated.
-    update_last_applied_manifest_from_resp(app, None, None, deployment_object)
+    update_last_applied_manifest_from_resp(app, deployment_object)
     first_container_app = get_first_container(app.status.last_applied_manifest[0])
     assert first_container_app["image"] == first_container_manifest["image"]
 
@@ -1426,7 +1426,7 @@ def test_update_last_applied_manifest_from_resp(loop):
 
     # The field is observed and has already been initialized. No new update to
     # `last_applied_manifest` should occur from a Kubernetes response.
-    update_last_applied_manifest_from_resp(app, None, None, deployment_object)
+    update_last_applied_manifest_from_resp(app, deployment_object)
     assert (
         app.status.last_applied_manifest[0]["spec"]["replicas"]
         == original_replicas_count
@@ -1437,7 +1437,7 @@ def test_update_last_applied_manifest_from_resp(loop):
 
     # The field is not observed and is initialized by `nginx-manifest`. No update should
     # occur
-    update_last_applied_manifest_from_resp(app, None, None, service_object)
+    update_last_applied_manifest_from_resp(app, service_object)
     assert (
         app.status.last_applied_manifest[1]["spec"]["ports"][0]["protocol"]
         == nginx_manifest[1]["spec"]["ports"][0]["protocol"]
@@ -1450,7 +1450,7 @@ def test_update_last_applied_manifest_from_resp(loop):
     service_object = serialize_k8s_object(copy_service_response, "V1Service")
 
     # Only the first port is observed: No update should occur
-    update_last_applied_manifest_from_resp(app, None, None, service_object)
+    update_last_applied_manifest_from_resp(app, service_object)
     assert len(app.status.last_applied_manifest[1]["spec"]["ports"]) == 1
 
     # State (5): A third port is added to the Service.
@@ -1460,7 +1460,7 @@ def test_update_last_applied_manifest_from_resp(loop):
     service_object = serialize_k8s_object(copy_service_response, "V1Service")
 
     # Only the first port is observed: No update should occur
-    update_last_applied_manifest_from_resp(app, None, None, service_object)
+    update_last_applied_manifest_from_resp(app, service_object)
     assert len(app.status.last_applied_manifest[1]["spec"]["ports"]) == 1
 
     # State (6): All ports are removed from the Service.
@@ -1469,7 +1469,7 @@ def test_update_last_applied_manifest_from_resp(loop):
 
     # The first port is observed and initialized by `nginx_manifest`. No update should
     # occur
-    update_last_applied_manifest_from_resp(app, None, None, service_object)
+    update_last_applied_manifest_from_resp(app, service_object)
     assert len(app.status.last_applied_manifest[1]["spec"]["ports"]) == 1
 
 
@@ -1527,11 +1527,11 @@ def test_update_last_observed_manifest_from_resp(loop):
     # empty
 
     # Update the Deployment observed manifest from the standard response.
-    update_last_observed_manifest_from_resp(app, None, None, deployment_object)
+    update_last_observed_manifest_from_resp(app, deployment_object)
     assert app.status.last_observed_manifest[0] == initial_last_observed_manifest[0]
 
     # Update the Service observed manifest from the standard response.
-    update_last_observed_manifest_from_resp(app, None, None, service_object)
+    update_last_observed_manifest_from_resp(app, service_object)
     assert app.status.last_observed_manifest[1] == initial_last_observed_manifest[1]
 
     # State (1): Change the Deployment's image in the k8s response
@@ -1539,7 +1539,7 @@ def test_update_last_observed_manifest_from_resp(loop):
     first_container_resp["image"] = "nginx:1.6"
     deployment_object = serialize_k8s_object(copy_deployment_response, "V1Deployment")
     # This field is observed, therefore it should be updated in `last_observed_manifest`
-    update_last_observed_manifest_from_resp(app, None, None, deployment_object)
+    update_last_observed_manifest_from_resp(app, deployment_object)
     first_container_app = get_first_container(app.status.last_observed_manifest[0])
     assert first_container_app["image"] == first_container_resp["image"]
 
@@ -1547,7 +1547,7 @@ def test_update_last_observed_manifest_from_resp(loop):
     deployment_object.spec.replicas = 2
 
     # This field is observed, therefore it should be updated in `last_observed_manifest`
-    update_last_observed_manifest_from_resp(app, None, None, deployment_object)
+    update_last_observed_manifest_from_resp(app, deployment_object)
     assert (
         app.status.last_observed_manifest[0]["spec"]["replicas"]
         == deployment_object.spec.replicas
@@ -1558,7 +1558,7 @@ def test_update_last_observed_manifest_from_resp(loop):
 
     # The field is not observed, therefore it shouldn't be present in
     # `last_observed_manifest`
-    update_last_observed_manifest_from_resp(app, None, None, service_object)
+    update_last_observed_manifest_from_resp(app, service_object)
     assert "protocol" not in app.status.last_observed_manifest[1]["spec"]["ports"][0]
 
     # State (4): A second port is added to the Service.
@@ -1568,7 +1568,7 @@ def test_update_last_observed_manifest_from_resp(loop):
     service_object = serialize_k8s_object(copy_service_response, "V1Service")
 
     # The length of the list should be updated in `last_observed_manifest`
-    update_last_observed_manifest_from_resp(app, None, None, service_object)
+    update_last_observed_manifest_from_resp(app, service_object)
     assert (
         app.status.last_observed_manifest[1]["spec"]["ports"][-1][
             "observer_schema_list_current_length"
@@ -1583,7 +1583,7 @@ def test_update_last_observed_manifest_from_resp(loop):
     service_object = serialize_k8s_object(copy_service_response, "V1Service")
 
     # The length of the list should be updated in `last_observed_manifest`
-    update_last_observed_manifest_from_resp(app, None, None, service_object)
+    update_last_observed_manifest_from_resp(app, service_object)
     assert (
         app.status.last_observed_manifest[1]["spec"]["ports"][-1][
             "observer_schema_list_current_length"
@@ -1597,7 +1597,7 @@ def test_update_last_observed_manifest_from_resp(loop):
     # The length of the list should be updated in `last_observed_manifest`
     # Also, the first port should not be present in `last_observed_manifest` anymore.
     # The list of ports only contains the special control dictionary
-    update_last_observed_manifest_from_resp(app, None, None, service_object)
+    update_last_observed_manifest_from_resp(app, service_object)
     assert (
         app.status.last_observed_manifest[1]["spec"]["ports"][-1][
             "observer_schema_list_current_length"

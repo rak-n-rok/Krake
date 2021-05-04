@@ -174,17 +174,13 @@ async def register_service(app, cluster, resource, response):
 
 
 @listen.on(Hook.ResourcePostDelete)
-async def unregister_service(app, cluster, resource, response):
+async def unregister_service(app, resource, **kwargs):
     """Unregister endpoint of Kubernetes Service object on deletion.
 
     Args:
         app (krake.data.kubernetes.Application): Application the service belongs to
-        cluster (krake.data.kubernetes.Cluster): The cluster on which the
-            application is running
         resource (dict): Kubernetes object description as specified in the
             specification of the application.
-        response (kubernetes_asyncio.client.V1Status): Response of the
-            Kubernetes API
 
     """
     if resource["kind"] != "Service":
@@ -198,17 +194,13 @@ async def unregister_service(app, cluster, resource, response):
 
 
 @listen.on(Hook.ResourcePostDelete)
-async def remove_resource_from_last_observed_manifest(app, cluster, resource, response):
+async def remove_resource_from_last_observed_manifest(app, resource, **kwargs):
     """Remove a given resource from the last_observed_manifest after its deletion
 
     Args:
         app (krake.data.kubernetes.Application): Application the service belongs to
-        cluster (krake.data.kubernetes.Cluster): The cluster on which the
-            application is running
         resource (dict): Kubernetes object description as specified in the
             specification of the application.
-        response (kubernetes_asyncio.client.V1Status): Response of the
-            Kubernetes API
 
     """
     try:
@@ -330,16 +322,12 @@ def update_last_applied_manifest_list_from_resp(
 
 @listen.on(Hook.ResourcePostCreate)
 @listen.on(Hook.ResourcePostUpdate)
-def update_last_applied_manifest_from_resp(app, cluster, resource, response):
+def update_last_applied_manifest_from_resp(app, response, **kwargs):
     """Hook run after the creation or update of an application in order to update the
     `status.last_applied_manifest` using the k8s response.
 
     Args:
         app (krake.data.kubernetes.Application): Application the service belongs to
-        cluster (krake.data.kubernetes.Cluster): The cluster on which the
-            application is running - Not Used
-        resource (dict): Kubernetes object description as specified in the
-            specification of the application. - Not Used
         response (kubernetes_asyncio.client.V1Status): Response of the Kubernetes API
 
     After a Kubernetes resource has been created/updated, the
@@ -370,16 +358,12 @@ def update_last_applied_manifest_from_resp(app, cluster, resource, response):
 
 @listen.on(Hook.ResourcePostCreate)
 @listen.on(Hook.ResourcePostUpdate)
-def update_last_observed_manifest_from_resp(app, cluster, resource, response):
+def update_last_observed_manifest_from_resp(app, response, **kwargs):
     """Handler to run after the creation or update of a Kubernetes resource to update
     the last_observed_manifest from the response of the Kubernetes API.
 
     Args:
         app (krake.data.kubernetes.Application): Application the service belongs to
-        cluster (krake.data.kubernetes.Cluster): The cluster on which the
-            application is running
-        resource (dict): Kubernetes object description as specified in the
-            specification of the application.
         response (kubernetes_asyncio.client.V1Service): Response of the
             Kubernetes API
 
