@@ -212,12 +212,7 @@ async def remove_resource_from_last_observed_manifest(app, cluster, resource, re
 
     """
     try:
-        idx = get_kubernetes_resource_idx(
-            app.status.last_observed_manifest,
-            resource["apiVersion"],
-            resource["kind"],
-            resource["metadata"]["name"],
-        )
+        idx = get_kubernetes_resource_idx(app.status.last_observed_manifest, resource)
     except IndexError:
         return
 
@@ -362,19 +357,9 @@ def update_last_applied_manifest_from_resp(app, cluster, resource, response):
         # The Kubernetes API deserialized the k8s response into an object
         resp = response.to_dict()
 
-    idx_applied = get_kubernetes_resource_idx(
-        app.status.last_applied_manifest,
-        resp["api_version"],
-        resp["kind"],
-        resp["metadata"]["name"],
-    )
+    idx_applied = get_kubernetes_resource_idx(app.status.last_applied_manifest, resp)
 
-    idx_observed = get_kubernetes_resource_idx(
-        app.status.mangled_observer_schema,
-        resp["api_version"],
-        resp["kind"],
-        resp["metadata"]["name"],
-    )
+    idx_observed = get_kubernetes_resource_idx(app.status.mangled_observer_schema, resp)
 
     update_last_applied_manifest_dict_from_resp(
         app.status.last_applied_manifest[idx_applied],
@@ -411,10 +396,7 @@ def update_last_observed_manifest_from_resp(app, cluster, resource, response):
 
     try:
         idx_observed = get_kubernetes_resource_idx(
-            app.status.mangled_observer_schema,
-            resp["api_version"],
-            resp["kind"],
-            resp["metadata"]["name"],
+            app.status.mangled_observer_schema, resp
         )
     except IndexError:
         # All created resources should be observed
@@ -422,10 +404,7 @@ def update_last_observed_manifest_from_resp(app, cluster, resource, response):
 
     try:
         idx_last_observed = get_kubernetes_resource_idx(
-            app.status.last_observed_manifest,
-            resp["api_version"],
-            resp["kind"],
-            resp["metadata"]["name"],
+            app.status.last_observed_manifest, resp
         )
     except IndexError:
         # If the resource is not yes present in last_observed_manifest, append it.
@@ -669,10 +648,7 @@ def update_last_applied_manifest_from_spec(app):
         # matter.
         try:
             idx_status_old = get_kubernetes_resource_idx(
-                app.status.last_applied_manifest,
-                resource_observed["apiVersion"],
-                resource_observed["kind"],
-                resource_observed["metadata"]["name"],
+                app.status.last_applied_manifest, resource_observed
             )
         except IndexError:
             continue
@@ -684,10 +660,7 @@ def update_last_applied_manifest_from_spec(app):
         try:
             # Check if the observed resource is present in spec.manifest
             idx_status_new = get_kubernetes_resource_idx(
-                new_last_applied_manifest,
-                resource_observed["apiVersion"],
-                resource_observed["kind"],
-                resource_observed["metadata"]["name"],
+                new_last_applied_manifest, resource_observed
             )
         except IndexError:
             # The resource is observed but is not present in the spec.manifest.
@@ -923,10 +896,7 @@ def generate_default_observer_schema(app, default_namespace="default"):
     for resource_manifest in app.spec.manifest:
         try:
             idx = get_kubernetes_resource_idx(
-                app.status.mangled_observer_schema,
-                resource_manifest["apiVersion"],
-                resource_manifest["kind"],
-                resource_manifest["metadata"]["name"],
+                app.status.mangled_observer_schema, resource_manifest
             )
 
             # In case a custom observer schema is provided for this resource, the
@@ -1527,10 +1497,7 @@ class Complete(object):
             for sub_resource in items:
                 sub_resources_to_mangle = None
                 idx_observed = get_kubernetes_resource_idx(
-                    mangled_observer_schema,
-                    resource["apiVersion"],
-                    resource["kind"],
-                    resource["metadata"]["name"],
+                    mangled_observer_schema, resource
                 )
                 for keys in sub_resource.path:
                     try:

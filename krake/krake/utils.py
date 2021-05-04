@@ -94,15 +94,14 @@ def get_namespace_as_kwargs(namespace):
     return kwargs
 
 
-def get_kubernetes_resource_idx(manifest, resource_api, resource_kind, resource_name):
+def get_kubernetes_resource_idx(manifest, resource, check_namespace=False):
     """Get a resource identified by its resource api, kind and name, from a manifest
     file
 
     Args:
         manifest (list[dict]): Manifest file to get the resource from
-        resource_api (str): API Version of the resource to find
-        resource_kind (str): Kind of the resource to find
-        resource_name (str): Name of the resource to find
+        resource (dict[str, dict|list|str]): resource to find
+        check_namespace (bool): Flag to decide, if the namespace should be checked
 
     Raises:
         IndexError: If the resource is not present in the manifest
@@ -112,46 +111,14 @@ def get_kubernetes_resource_idx(manifest, resource_api, resource_kind, resource_
 
     """
     for idx, found_resource in enumerate(manifest):
+        api_version = resource.get("apiVersion") or resource["api_version"]
         if (
-            found_resource["apiVersion"] == resource_api
-            and found_resource["kind"] == resource_kind
-            and found_resource["metadata"]["name"] == resource_name
-        ):
-            return idx
-
-    raise IndexError
-
-
-def get_kubernetes_resource_idx_with_namespace(
-    manifest,
-    resource_api,
-    resource_kind,
-    resource_name,
-    resource_namespace
-):
-    """Get a resource identified by its resource api, kind, name and namespace,
-    from a manifest file
-
-    Args:
-        manifest (list[dict]): Manifest file to get the resource from
-        resource_api (str): API Version of the resource to find
-        resource_kind (str): Kind of the resource to find
-        resource_name (str): Name of the resource to find
-        resource_namespace (str): Namespace of the resource to find
-
-    Raises:
-        IndexError: If the resource is not present in the manifest
-
-    Returns:
-        int: Position of the resource in the manifest
-
-    """
-    for idx, found_resource in enumerate(manifest):
-        if (
-            found_resource["apiVersion"] == resource_api
-            and found_resource["kind"] == resource_kind
-            and found_resource["metadata"]["name"] == resource_name
-            and found_resource["metadata"]["namespace"] == resource_namespace
+            found_resource["apiVersion"] == api_version
+            and found_resource["kind"] == resource["kind"]
+            and found_resource["metadata"]["name"] == resource["metadata"]["name"]
+            and (not check_namespace or
+                 found_resource["metadata"]["namespace"] ==
+                 resource["metadata"]["namespace"])
         ):
             return idx
 

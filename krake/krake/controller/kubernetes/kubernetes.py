@@ -23,7 +23,7 @@ from krake.controller.kubernetes.hooks import (
 )
 from krake.utils import (
     now,
-    get_kubernetes_resource_idx_with_namespace
+    get_kubernetes_resource_idx
 )
 from krake.data.core import ReasonCode, resource_ref, Reason
 from krake.data.kubernetes import ApplicationState
@@ -236,23 +236,15 @@ class ResourceDelta(NamedTuple):
 
         for observed_resource in app.status.mangled_observer_schema:
 
-            desired_idx = get_kubernetes_resource_idx_with_namespace(
-                app.status.last_applied_manifest,
-                observed_resource["apiVersion"],
-                observed_resource["kind"],
-                observed_resource["metadata"]["name"],
-                observed_resource["metadata"]["namespace"],
+            desired_idx = get_kubernetes_resource_idx(
+                app.status.last_applied_manifest, observed_resource, True
             )
             desired_resource = app.status.last_applied_manifest[desired_idx]
 
             current_resource = None
             with suppress(IndexError):
-                current_idx = get_kubernetes_resource_idx_with_namespace(
-                    app.status.last_observed_manifest,
-                    observed_resource["apiVersion"],
-                    observed_resource["kind"],
-                    observed_resource["metadata"]["name"],
-                    observed_resource["metadata"]["namespace"],
+                current_idx = get_kubernetes_resource_idx(
+                    app.status.last_observed_manifest, observed_resource, True
                 )
                 current_resource = app.status.last_observed_manifest[current_idx]
 
@@ -275,12 +267,8 @@ class ResourceDelta(NamedTuple):
         # last_applied_manifest nor observer_schema)
         for current_resource in app.status.last_observed_manifest:
             try:
-                get_kubernetes_resource_idx_with_namespace(
-                    app.status.last_applied_manifest,
-                    current_resource["apiVersion"],
-                    current_resource["kind"],
-                    current_resource["metadata"]["name"],
-                    current_resource["metadata"]["namespace"]
+                get_kubernetes_resource_idx(
+                    app.status.last_applied_manifest, current_resource, True
                 )
             except IndexError:
                 deleted.append(current_resource)
