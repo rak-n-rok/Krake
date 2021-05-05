@@ -385,10 +385,10 @@ def get_first_container(deployment):
     return deployment["spec"]["template"]["spec"]["containers"][0]
 
 
-def serialize_k8s_object(manifest, object_type):
+async def serialize_k8s_object(manifest, object_type):
     """Create a Kubernetes object from a dictionary.
 
-    This is usefull to test functions which only accept Kubernetes objects.
+    This is useful to test functions which only accept Kubernetes objects.
 
     This is a temporary implementation, as a proper deserialization function hasn't yet
     been implemented in the kubernetes_client package. See

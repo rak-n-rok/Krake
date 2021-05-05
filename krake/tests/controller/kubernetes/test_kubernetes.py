@@ -1744,7 +1744,7 @@ async def test_client_app_delete_error_handling(
     assert already_deleted == 1
 
 
-def test_resource_delta(loop):
+async def test_resource_delta(loop):
     """Test if the controller correctly calculates the delta between
     ``last_applied_manifest`` and ``last_observed_manifest``
 
