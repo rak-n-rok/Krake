@@ -79,18 +79,7 @@
           - haveged
           - python3-pip
           - conntrack
-
-    - name: Add Docker GPG key
-      apt_key:
-        url: https://download.docker.com/linux/ubuntu/gpg
-
-    - name: Add Docker APT repository
-      apt_repository:
-        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ansible_distribution_release}} stable
-
-    - name: Install Docker CE
-      apt:
-        name: docker-ce
+          - docker.io
 
     # TODO: Remove once issue is resolved
     #   C&H infra currently suffers from "MTU bug" when typical value of 1500 causes connectivity
