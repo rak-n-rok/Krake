@@ -33,7 +33,7 @@ import random
 import re
 import string
 from functools import partial, wraps
-from argparse import ArgumentParser, MetavarTypeHelpFormatter
+from argparse import ArgumentParser
 from base64 import b64encode
 
 from OpenSSL import crypto
@@ -43,6 +43,7 @@ from keystoneauth1.identity.v3 import Password, ApplicationCredential
 from keystoneauth1.session import Session
 import keystoneauth1.exceptions
 from krake.data.config import MagnumConfiguration
+from krake.utils import KrakeArgumentFormatter
 from magnumclient.v1.client import Client as MagnumV1Client
 import magnumclient.exceptions
 
@@ -1080,7 +1081,7 @@ def make_csr(key_size=4096):
 
 
 parser = ArgumentParser(
-    description="OpenStack Magnum controller", formatter_class=MetavarTypeHelpFormatter
+    description="OpenStack Magnum controller", formatter_class=KrakeArgumentFormatter
 )
 parser.add_argument("-c", "--config", type=str, help="Path to configuration YAML file")
 

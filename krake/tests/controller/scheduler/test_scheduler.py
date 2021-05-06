@@ -1,6 +1,8 @@
 import pytest
 import random
 import time
+import asyncio
+from asyncio.subprocess import PIPE, STDOUT
 from aiohttp import web
 from copy import deepcopy
 from datetime import datetime, timezone, timedelta
@@ -20,12 +22,39 @@ from krake.data.openstack import (
     ProjectState,
     Project,
 )
-from krake.test_utils import server_endpoint, make_prometheus
+from krake.test_utils import server_endpoint, make_prometheus, with_timeout
 
 from tests.factories import fake
 from tests.factories.core import GlobalMetricsProviderFactory, GlobalMetricFactory
 from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
 from tests.factories.openstack import MagnumClusterFactory, ProjectFactory
+
+
+@with_timeout(3)
+async def test_main_help(loop):
+    """Verify that the help for the Krake Scheduler is displayed, and contains the
+    elements added by the argparse formatters (default value and expected types of the
+    parameters).
+    """
+    command = "python -m krake.controller.scheduler -h"
+    # The loop parameter is mandatory otherwise the test fails if started with others.
+    process = await asyncio.create_subprocess_exec(
+        *command.split(" "), stdout=PIPE, stderr=STDOUT, loop=loop
+    )
+    stdout, _ = await process.communicate()
+    output = stdout.decode()
+
+    to_check = [
+        "Krake scheduler",
+        "usage:",
+        "optional arguments:",
+        "default:",  # Present if the default value of the arguments are displayed
+        "str",  # Present if the type of the arguments are displayed
+        "int",
+    ]
+
+    for expression in to_check:
+        assert expression in output
 
 
 async def test_kubernetes_reception(aiohttp_server, config, db, loop):

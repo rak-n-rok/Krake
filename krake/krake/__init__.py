@@ -6,7 +6,7 @@ from typing import List
 import yaml
 import logging.config
 
-from dataclasses import is_dataclass
+from dataclasses import is_dataclass, MISSING
 from krake.data.serializable import is_generic_subtype, is_qualified_generic
 from marshmallow import ValidationError
 
@@ -190,6 +190,10 @@ class ConfigurationOptionMapper(object):
                 name = cls._generate_option_name(new_parents)
                 optname = "--" + name
                 option_fields_mapping[name] = new_parents
+
+                if field.default != MISSING:
+                    kwargs["default"] = field.default
+
                 parser.add_argument(optname, **kwargs)
 
         return option_fields_mapping
