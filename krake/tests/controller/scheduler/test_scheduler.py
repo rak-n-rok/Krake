@@ -1,3 +1,6 @@
+import asyncio
+import multiprocessing
+
 import pytest
 import random
 import time
@@ -11,6 +14,7 @@ from krake.api.app import create_app
 from krake.client import Client
 from krake.client.kubernetes import KubernetesApi
 from krake.controller.scheduler import Scheduler
+from krake.controller.scheduler.__main__ import main
 from krake.controller.scheduler.constraints import match_cluster_constraints
 from krake.data.constraints import LabelConstraint
 from krake.data.core import ResourceRef, MetricRef
@@ -55,6 +59,56 @@ async def test_main_help(loop):
 
     for expression in to_check:
         assert expression in output
+
+
+@pytest.mark.slow
+def test_main(scheduler_config, log_to_file_config):
+    """Test the main function of the Scheduler, and verify that it starts, display the
+    right output and stops without issue.
+    """
+    log_config, file_path = log_to_file_config()
+
+    scheduler_config.api_endpoint = "http://my-krake-api:1234"
+    scheduler_config.log = log_config
+
+    def wrapper(configuration):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        main(configuration)
+
+    # Start the process and let it time to initialize
+    process = multiprocessing.Process(target=wrapper, args=(scheduler_config,))
+    process.start()
+    time.sleep(2)
+
+    # Stop and wait for the process to finish
+    process.terminate()
+    process.join()
+
+    assert not process.is_alive()
+    assert process.exitcode == 0
+
+    # Verify the output of the process
+    with open(file_path, "r") as f:
+        output = f.read()
+
+    assert "Controller started" in output
+    assert "Received signal, exiting..." in output
+    assert "Controller stopped" in output
+
+    # Verify that all "ERROR" lines in the output are only errors that logs the lack of
+    # connectivity to the API.
+    attempted_connectivity = False
+    for line in output.split("\n"):
+        if "ERROR" in output:
+            message = (
+                f"In line {line!r}, an error occurred which was different from the"
+                f" error from connecting to the API."
+            )
+            assert "Cannot connect to host my-krake-api:1234" in output, message
+            attempted_connectivity = True
+
+    assert attempted_connectivity
 
 
 async def test_kubernetes_reception(aiohttp_server, config, db, loop):

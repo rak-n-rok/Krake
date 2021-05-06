@@ -29,8 +29,12 @@ from contextlib import suppress
 # Prepend package directory for working imports
 from krake.data.config import (
     ApiConfiguration,
-    TlsClientConfiguration,
     HooksConfiguration,
+    MagnumConfiguration,
+    TlsClientConfiguration,
+    ControllerConfiguration,
+    SchedulerConfiguration,
+    KubernetesConfiguration,
 )
 
 package_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -276,6 +280,134 @@ def no_db_config(user):
     """
     config = base_config(user)
     return ApiConfiguration.deserialize(config, creation_ignored=True)
+
+
+@pytest.fixture
+def log_to_file_config(tmp_path):
+    """Returns a function that can generate a dictionary that can be used as
+    configuration for the logging module. Such a dictionary is part of the Krake
+    components configuration.
+    The generated configuration sets the "INFO" log level, and only logs to a file. The
+    path to the file can be provided. If not, a file is created by default in a
+    temporary directory.
+
+    FIXME: This should be removed when issue #282 has been closed.
+    """
+    base_file_path = str(tmp_path / "krake.log")
+
+    def generate_log_config(file_path=None):
+        """Generate the actual dictionary for logging.
+
+        Args:
+            file_path (str): path to the file to which the logs will be written. If not
+                specified, a temporary file is used by default.
+
+        Returns:
+            (dict[str, Any], str): a tuple that contains first the generated dictionary,
+                and second the path to the file where the logs will be written.
+
+        """
+        final_file_path = base_file_path
+        if file_path is not None:
+            final_file_path = file_path
+
+        log_format = "%(asctime)s - [%(name)s] - [%(levelname)-5s] - %(message)s"
+        return (
+            {
+                "version": 1,
+                "level": "INFO",
+                "formatters": {"krake": {"format": log_format}},
+                "handlers": {
+                    "file": {
+                        "class": "logging.FileHandler",
+                        "formatter": "krake",
+                        "filename": final_file_path,
+                    }
+                },
+                "loggers": {"krake": {"handlers": ["file"], "propagate": False}},
+            },
+            final_file_path,
+        )
+
+    return generate_log_config
+
+
+@pytest.fixture
+def tls_client_config():
+    """Create a configuration for the "tls" field in the controllers configuration.
+
+    Returns:
+        TlsClientConfiguration: the created configuration.
+
+    """
+    config = {
+        "enabled": False,
+        "client_cert": "cert_path",
+        "client_key": "key_path",
+        "client_ca": "client_ca_path",
+    }
+    return TlsClientConfiguration.deserialize(config, creation_ignored=True)
+
+
+@pytest.fixture
+def gc_config(tls_client_config):
+    """Create a configuration for the Garbage Collector.
+
+    Returns:
+        ControllerConfiguration: the created configuration.
+
+    """
+
+    config = {"tls": tls_client_config.serialize(), "log": {}}
+    return ControllerConfiguration.deserialize(config, creation_ignored=True)
+
+
+@pytest.fixture
+def kube_config(tls_client_config):
+    """Create a configuration for the Kubernetes Controller.
+
+    Returns:
+        KubernetesConfiguration: the created configuration.
+
+    """
+
+    config = {
+        "tls": tls_client_config.serialize(),
+        "hooks": {
+            "complete": {
+                "intermediate_src": "/etc/krake/certs/kube.pem",
+                "intermediate_key_src": "/etc/krake/certs/kube-key.pem",
+            }
+        },
+        "log": {},
+    }
+    return KubernetesConfiguration.deserialize(config, creation_ignored=True)
+
+
+@pytest.fixture
+def magnum_config(tls_client_config):
+    """Create a configuration for the Magnum Controller.
+
+    Returns:
+        MagnumConfiguration: the created configuration.
+
+    """
+
+    config = {"tls": tls_client_config.serialize(), "log": {}}
+    return MagnumConfiguration.deserialize(config, creation_ignored=True)
+
+
+@pytest.fixture
+def scheduler_config(tls_client_config):
+    """Create a configuration for the Scheduler.
+
+    Returns:
+        SchedulerConfiguration: the created configuration.
+
+    """
+
+    config = {"tls": tls_client_config.serialize(), "log": {}}
+    return SchedulerConfiguration.deserialize(config, creation_ignored=True)
 
 
 class KeystoneInfo(NamedTuple):
