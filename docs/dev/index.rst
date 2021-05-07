@@ -23,6 +23,7 @@ API reference of all modules is provided.
     scheduling
     hooks
     observers
+    kubernetes-controller
     garbage-collection
     ref/krake
     ref/rok
