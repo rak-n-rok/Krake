@@ -758,7 +758,7 @@ class Scheduler(Controller):
             metrics (list[krake.data.core.MetricRef]): the list of metrics for which the
                 scheduler attempted to fetch the current value.
             reasons (list[Reason]): the list of reasons for the metrics failing which
-                were found. For each metric in the :args:`metrics` argument, there
+                were found. For each metric in the :attr:`metrics` argument, there
                 should be one element in this argument: the reason for the metric
                 failing, or None if it did not fail.
 

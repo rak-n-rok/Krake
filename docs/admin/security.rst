@@ -125,8 +125,8 @@ authentication is enabled:
  2. an HTTP request is sent to the API, with this token used in the header.
 
 
-Step 1
-------
+Step 1: Kesytone token request
+------------------------------
 
 To request a token to the Keystone server, you can use the following example by
 replacing the values with the corresponding ones for your setup:
@@ -216,8 +216,8 @@ as environment variable, for instance:
     $ TOKEN=XXXXXXXXXXXXXXXXXXXXXX
 
 
-Step 2
-------
+Step 2: Keystone token usage
+----------------------------
 
 Using your token, you can then communicate with the Krake API:
 
@@ -247,8 +247,8 @@ enabled:
  2. an HTTP request is sent to the API, with this token used in the header.
 
 
-Step 1
-------
+Step 1: Keycloak token request
+------------------------------
 
 Query
 ~~~~~
@@ -321,8 +321,8 @@ simply use:
     $ TOKEN=$(support/keycloak token)
 
 
-Step 2
-------
+Step 2: Keycloak token usage
+----------------------------
 
 Using your token, you can then communicate with the Krake API:
 
