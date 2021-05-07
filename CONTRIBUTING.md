@@ -71,6 +71,6 @@ would like to see, why you need it, and how it should work.
 
 <!-- References -->
 
-[krake-matrix]: https://riot.im/app/#/room/#krake:matrix.org
+[krake-matrix]: https://app.element.io/#/room/#krake:matrix.org
 [git-commit]: https://chris.beams.io/posts/git-commit/
 [sphinx-google]: https://www.sphinx-doc.org/en/master/usage/extensions/example_google.html
