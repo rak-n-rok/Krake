@@ -274,7 +274,7 @@ transformed to an open source project in September 2019.
 [admin-docs]: https://rak-n-rok.readthedocs.io/projects/krake/en/latest/admin/index.html
 [user-docs]: https://rak-n-rok.readthedocs.io/projects/krake/en/latest/user/index.html
 [sphinx]: http://www.sphinx-doc.org/
-[krake-matrix]: https://riot.im/app/#/room/#krake:matrix.org
+[krake-matrix]: https://app.element.io/#/room/#krake:matrix.org 
 [virtualenv]: https://virtualenv.pypa.io/en/stable
 [confluent_packages]: https://docs.confluent.io/platform/current/installation/available_packages.html
 [cfssl]: https://github.com/cloudflare/cfssl
