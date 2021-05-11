@@ -1,8 +1,7 @@
 """This modules defines aiohttp middlewares for the Krake HTTP API"""
 import asyncio
-import json
 from aiohttp import web, hdrs
-from krake.api.helpers import HttpReason, HttpReasonCode
+from krake.api.helpers import HttpReason, HttpReasonCode, json_error
 
 from .database import TransactionError
 
@@ -35,9 +34,7 @@ def retry_transaction(retry=1):
             reason="Concurrent writes to database",
             code=HttpReasonCode.TRANSACTION_ERROR,
         )
-        raise web.HTTPConflict(
-            text=json.dumps(reason.serialize()), content_type="application/json"
-        )
+        raise json_error(web.HTTPConflict, reason.serialize())
 
     return retry_transaction_middleware
 
