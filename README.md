@@ -2,6 +2,8 @@
 
 [![pipeline status](https://gitlab.com/rak-n-rok/krake/badges/master/pipeline.svg)](https://gitlab.com/rak-n-rok/krake/-/commits/master)
 [![coverage report](https://gitlab.com/rak-n-rok/krake/badges/master/coverage.svg)](https://gitlab.com/rak-n-rok/krake/-/commits/master)
+[![Support room on Matrix](https://img.shields.io/matrix/krake:matrix.org.svg?label=%23krake%3Amatrix.org&logo=matrix)](https://app.element.io/#/room/#krake:matrix.org
+)
 
 Welcome to the Krake repository! :octopus:
 
