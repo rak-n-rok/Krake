@@ -166,9 +166,80 @@ def _validate_labels(labels):
         raise ValidationError(list(errors))
 
 
+_resource_name_pattern = None
+_resource_name_regex = None
+
+
+def _get_resource_name_regex():
+    """Build or return the regular expressions that are used to validate
+    the name of the Krake resources.
+    Returns:
+        (re.Pattern): the compiled regular expressions, to validate
+        the resource name.
+
+    """
+    global _resource_name_regex, _resource_name_pattern
+
+    # Build the patterns only if not already built
+    if _resource_name_regex:
+        return _resource_name_regex
+
+    # First and last characters must be alphanumeric. The rest of the string must be
+    # alphanumeric, "-", "_" or "." and without whitespace as well as have a
+    # max length of 255 and a min length of 1
+    max_name_size = 253  # reduced by 2 for the regex
+    min_name_size = 0  # reduced by 1 for the regex
+    base_alphanumeric_pattern = "\\w|(\\w[\\w\\-_.:]{{{min_length},{length}}}\\w)"
+
+    resource_name_pattern = base_alphanumeric_pattern.format(
+        min_length=min_name_size, length=max_name_size
+    )
+
+    _resource_name_pattern = resource_name_pattern
+    _resource_name_regex = re.compile(_resource_name_pattern, re.ASCII)
+    return _resource_name_regex
+
+
+def _validate_resource_name(name):
+    """Each Krake resource name is checked against a specific pattern.
+    Which characters are not allowed is defined in _get_resource_name_regex
+
+    Args:
+        name(str): the different resource names to validate.
+
+    Raises:
+        ValidationError: if any resource name does not match their respective
+            regular expression.
+
+    """
+    resource_name_regex = _get_resource_name_regex()
+    if not resource_name_regex.fullmatch(name):
+        raise ValidationError("Invalid character in resource name.")
+
+
+def _validate_resource_namespace(namespace):
+    """Each Krake resource namespace is checked against a specific pattern.
+    Which characters are not allowed is defined in _get_resource_name_regex
+
+    Args:
+        namespace(str): the different resource namespaces to validate.
+
+    Raises:
+        ValidationError: if any resource namespace does not match their respective
+            regular expression.
+
+    """
+    resource_namespace_regex = _get_resource_name_regex()
+    if not resource_namespace_regex.fullmatch(namespace):
+        raise ValidationError("Invalid character in resource namespace.")
+
+
 class Metadata(Serializable):
-    name: str = field(metadata={"immutable": True})
-    namespace: str = field(default=None, metadata={"immutable": True})
+    name: str = field(metadata={"immutable": True, "validate": _validate_resource_name})
+    namespace: str = field(
+        default=None,
+        metadata={"immutable": True, "validate": _validate_resource_namespace},
+    )
     labels: dict = field(default_factory=dict, metadata={"validate": _validate_labels})
     finalizers: List[str] = field(default_factory=list)
 
