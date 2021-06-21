@@ -33,12 +33,14 @@ def fuzzy_name():
 
     Returns:
         str: the new name generated.
-
     """
+
     max_tries = 300
     for _ in range(max_tries):
         name = "-".join(fake.name().split()).lower()
-        if name not in _existing_names:
+        # sometimes fuzzy creates names with "jr." at the end of a test name
+        # due to resource name regulations the "." is not allowed there
+        if "." not in name[-1] and name not in _existing_names:
             _existing_names.add(name)
             break
     else:
