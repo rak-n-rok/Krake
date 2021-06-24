@@ -482,6 +482,129 @@ def update_last_observed_manifest_list(observed_resource, response):
     return res
 
 
+def update_last_applied_manifest_dict_from_spec(
+    resource_status_new, resource_status_old, resource_observed
+):
+    """Together with :func:``update_last_applied_manifest_list_from_spec``, this
+    function is called recursively to update a partial ``last_applied_manifest``
+
+    Args:
+        resource_status_new (dict): partial ``last_applied_manifest`` being updated
+        resource_status_old (dict): partial of the current ``last_applied_manifest``
+        resource_observed (dict): partial observer_schema for the manifest file
+            being updated
+
+    """
+    for key, value in resource_observed.items():
+
+        if key not in resource_status_old:
+            continue
+
+        if key in resource_status_new:
+
+            if isinstance(value, dict):
+                update_last_applied_manifest_dict_from_spec(
+                    resource_status_new[key],
+                    resource_status_old[key],
+                    resource_observed[key],
+                )
+
+            elif isinstance(value, list):
+                update_last_applied_manifest_list_from_spec(
+                    resource_status_new[key],
+                    resource_status_old[key],
+                    resource_observed[key],
+                )
+
+        else:
+            # If the key is not present the spec.manifest, we first need to
+            # initialize it
+
+            if isinstance(value, dict):
+                resource_status_new[key] = {}
+                update_last_applied_manifest_dict_from_spec(
+                    resource_status_new[key],
+                    resource_status_old[key],
+                    resource_observed[key],
+                )
+
+            elif isinstance(value, list):
+                resource_status_new[key] = []
+                update_last_applied_manifest_list_from_spec(
+                    resource_status_new[key],
+                    resource_status_old[key],
+                    resource_observed[key],
+                )
+
+            else:
+                resource_status_new[key] = resource_status_old[key]
+
+
+def update_last_applied_manifest_list_from_spec(
+    resource_status_new, resource_status_old, resource_observed
+):
+    """Together with :func:``update_last_applied_manifest_dict_from_spec``, this
+    function is called recursively to update a partial ``last_applied_manifest``
+
+    Args:
+        resource_status_new (list): partial ``last_applied_manifest`` being updated
+        resource_status_old (list): partial of the current ``last_applied_manifest``
+        resource_observed (list): partial observer_schema for the manifest file
+            being updated
+
+    """
+
+    # Looping over the observed resource, except the last element which is the
+    # special control dictionary
+    for idx, val in enumerate(resource_observed[:-1]):
+
+        if idx >= len(resource_status_old):
+            # The element in not in the current last_applied_manifest, and neither
+            # is the rest of the list
+            break
+
+        if idx < len(resource_status_new):
+            # The element is present in spec.manifest and in the current
+            # last_applied_manifest. Updating observed fields
+
+            if isinstance(val, dict):
+                update_last_applied_manifest_dict_from_spec(
+                    resource_status_new[idx],
+                    resource_status_old[idx],
+                    resource_observed[idx],
+                )
+
+            elif isinstance(val, list):
+                update_last_applied_manifest_list_from_spec(
+                    resource_status_new[idx],
+                    resource_status_old[idx],
+                    resource_observed[idx],
+                )
+
+        else:
+            # If the element is not present in the spec.manifest, we first have to
+            # initialize it.
+
+            if isinstance(val, dict):
+                resource_status_new.append({})
+                update_last_applied_manifest_dict_from_spec(
+                    resource_status_new[idx],
+                    resource_status_old[idx],
+                    resource_observed[idx],
+                )
+
+            elif isinstance(val, list):
+                resource_status_new.append([])
+                update_last_applied_manifest_list_from_spec(
+                    resource_status_new[idx],
+                    resource_status_old[idx],
+                    resource_observed[idx],
+                )
+
+            else:
+                resource_status_new.append(resource_status_old[idx])
+
+
 def update_last_applied_manifest_from_spec(app):
     """Update the status.last_applied_manifest of an application from spec.manifests
 
@@ -495,127 +618,6 @@ def update_last_applied_manifest_from_spec(app):
     in the spec.manifest)
 
     """
-
-    def update_last_applied_manifest_dict_from_spec(
-        resource_status_new, resource_status_old, resource_observed
-    ):
-        """Together with :func:``update_last_applied_manifest_list_from_spec``, this
-        function is called recursively to update a partial ``last_applied_manifest``
-
-        Args:
-            resource_status_new (dict): partial ``last_applied_manifest`` being updated
-            resource_status_old (dict): partial of the current ``last_applied_manifest``
-            resource_observed (dict): partial observer_schema for the manifest file
-                being updated
-
-        """
-        for key, value in resource_observed.items():
-
-            if key not in resource_status_old:
-                continue
-
-            if key in resource_status_new:
-
-                if isinstance(value, dict):
-                    update_last_applied_manifest_dict_from_spec(
-                        resource_status_new[key],
-                        resource_status_old[key],
-                        resource_observed[key],
-                    )
-
-                elif isinstance(value, list):
-                    update_last_applied_manifest_list_from_spec(
-                        resource_status_new[key],
-                        resource_status_old[key],
-                        resource_observed[key],
-                    )
-
-            else:
-                # If the key is not present the spec.manifest, we first need to
-                # initialize it
-
-                if isinstance(value, dict):
-                    resource_status_new[key] = {}
-                    update_last_applied_manifest_dict_from_spec(
-                        resource_status_new[key],
-                        resource_status_old[key],
-                        resource_observed[key],
-                    )
-
-                elif isinstance(value, list):
-                    resource_status_new[key] = []
-                    update_last_applied_manifest_list_from_spec(
-                        resource_status_new[key],
-                        resource_status_old[key],
-                        resource_observed[key],
-                    )
-
-                else:
-                    resource_status_new[key] = resource_status_old[key]
-
-    def update_last_applied_manifest_list_from_spec(
-        resource_status_new, resource_status_old, resource_observed
-    ):
-        """Together with :func:``update_last_applied_manifest_dict_from_spec``, this
-        function is called recursively to update a partial ``last_applied_manifest``
-
-        Args:
-            resource_status_new (list): partial ``last_applied_manifest`` being updated
-            resource_status_old (list): partial of the current ``last_applied_manifest``
-            resource_observed (list): partial observer_schema for the manifest file
-                being updated
-
-        """
-
-        # Looping over the observed resource, except the last element which is the
-        # special control dictionary
-        for idx, val in enumerate(resource_observed[:-1]):
-
-            if idx >= len(resource_status_old):
-                # The element in not in the current last_applied_manifest, and neither
-                # is the rest of the list
-                break
-
-            if idx < len(resource_status_new):
-                # The element is present in spec.manifest and in the current
-                # last_applied_manifest. Updating observed fields
-
-                if isinstance(val, dict):
-                    update_last_applied_manifest_dict_from_spec(
-                        resource_status_new[idx],
-                        resource_status_old[idx],
-                        resource_observed[idx],
-                    )
-
-                elif isinstance(val, list):
-                    update_last_applied_manifest_list_from_spec(
-                        resource_status_new[idx],
-                        resource_status_old[idx],
-                        resource_observed[idx],
-                    )
-
-            else:
-                # If the element is not present in the spec.manifest, we first have to
-                # initialize it.
-
-                if isinstance(val, dict):
-                    resource_status_new.append({})
-                    update_last_applied_manifest_dict_from_spec(
-                        resource_status_new[idx],
-                        resource_status_old[idx],
-                        resource_observed[idx],
-                    )
-
-                elif isinstance(val, list):
-                    resource_status_new.append([])
-                    update_last_applied_manifest_list_from_spec(
-                        resource_status_new[idx],
-                        resource_status_old[idx],
-                        resource_observed[idx],
-                    )
-
-                else:
-                    resource_status_new.append(resource_status_old[idx])
 
     # The new last_applied_manifest is initialized as a copy of the spec.manifest, and
     # augmented by all observed fields which are present in the current
