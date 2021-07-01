@@ -178,7 +178,9 @@ class WorkQueue(object):
             await self._add_key_to_queue(key)
 
     async def cancel(self, key):
-        """Cancel the corresponding debounce coroutine for the given key
+        """Cancel the corresponding debounce coroutine for the given key. An attempt to
+        cancel the coroutine for a key which was not inserted into the queue does not
+        raise any error, and is simply ignored.
 
         Args:
             key: Key that identifies the value
@@ -200,6 +202,8 @@ class WorkQueue(object):
         for timer, _ in timers:
             with suppress(asyncio.CancelledError):
                 await timer
+
+        self.timers = dict()
 
     def empty(self):
         """Check if the queue is empty
@@ -316,8 +320,7 @@ class Reflector(object):
                 await self.on_delete(resource)
 
     async def list_and_watch(self):
-        """Start the given list and watch coroutines.
-        """
+        """Start the given list and watch coroutines."""
         async with self.client_watch() as watcher:
             await joint(
                 self.list_resource(), self.watch_resource(watcher), loop=self.loop
@@ -467,8 +470,7 @@ class Observer(object):
             logger.debug("Resource %s did not change", resource_ref(self.resource))
 
     async def run(self):
-        """Start the observing process indefinitely, with the Observer time step.
-        """
+        """Start the observing process indefinitely, with the Observer time step."""
         while True:
             await asyncio.sleep(self.time_step)
             logger.debug("Observing registered resource: %s", self.resource)
@@ -546,7 +548,7 @@ class Controller(object):
         raise NotImplementedError("Implement prepare")
 
     async def cleanup(self):
-        """Unregister all background tasks that are attributes
+        """Unregister all background tasks that are attributes.
         """
         raise NotImplementedError("Implement cleanup")
 
@@ -619,7 +621,9 @@ class Controller(object):
                 than what the burst time allows.
 
         """
-        window = BurstWindow(name, self.burst_time, max_retry=self.max_retry)
+        window = BurstWindow(
+            name, self.burst_time, max_retry=self.max_retry, loop=self.loop
+        )
 
         while True:
             with window:
@@ -631,8 +635,7 @@ class Controller(object):
                     logger.exception(err)
 
     async def run(self):
-        """Start at once all the registered background tasks with the retry logic.
-        """
+        """Start at once all the registered background tasks with the retry logic."""
         client = Client(
             url=self.api_endpoint, loop=self.loop, ssl_context=self.ssl_context
         )
@@ -781,8 +784,7 @@ class Executor(object):
         return self._waiter.__await__()
 
     async def __aexit__(self, *exc):
-        """Wait for the managed controller to be finished and cleanup.
-        """
+        """Wait for the managed controller to be finished and cleanup."""
         if not self._waiter.done():
             self._waiter.cancel()
 
@@ -866,16 +868,7 @@ def _extract_ssl_config(tls_config):
          its path is also given. Otherwise the last element is None.
 
     """
-    try:
-        cert_tuple = (
-            tls_config.client_cert,
-            tls_config.client_key,
-            tls_config.client_ca,
-        )
-    except KeyError as ke:
-        raise KeyError(
-            f"The key '{ke.args[0]}' is missing from the 'tls' configuration part"
-        )
+    cert_tuple = tls_config.client_cert, tls_config.client_key, tls_config.client_ca
 
     for path in cert_tuple:
         if path and not os.path.isfile(path):

@@ -7,12 +7,19 @@ from copy import deepcopy
 
 import mock
 import pytest
-from aiohttp import web
+from aiohttp import web, ClientConnectorError
 from asyncio.subprocess import PIPE, STDOUT
 import pytz
 
 from krake import utils
-from kubernetes_asyncio.client import V1Status, V1Service, V1ServiceSpec, V1ServicePort
+from krake.controller.kubernetes.client import InvalidResourceError
+from kubernetes_asyncio.client import (
+    V1Status,
+    V1Service,
+    V1ServiceSpec,
+    V1ServicePort,
+    ApiException,
+)
 
 from krake.api.app import create_app
 from krake.data.core import resource_ref, ReasonCode
@@ -22,6 +29,7 @@ from krake.controller.kubernetes import (
     KubernetesController,
     register_service,
     unregister_service,
+    KubernetesClient,
 )
 from krake.controller.kubernetes.kubernetes import ResourceDelta
 from krake.controller.kubernetes.hooks import (
@@ -1216,7 +1224,7 @@ async def test_app_management_no_error_logs(aiohttp_server, config, db, loop, ca
     asyncio_logger = logging.getLogger("asyncio")
     asyncio_logger.disabled = False
 
-    deployment_manifest = deepcopy(nginx_manifest[0])
+    copy_deployment_manifest = deepcopy(nginx_manifest[0])
     actual_state = 0
 
     routes = web.RouteTableDef()
@@ -1225,7 +1233,7 @@ async def test_app_management_no_error_logs(aiohttp_server, config, db, loop, ca
     async def _(request):
         nonlocal actual_state
         if actual_state == 2:
-            return web.json_response(deployment_manifest)
+            return web.json_response(copy_deployment_manifest)
         return web.Response(status=404)
 
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
@@ -1247,7 +1255,7 @@ async def test_app_management_no_error_logs(aiohttp_server, config, db, loop, ca
         status__state=ApplicationState.PENDING,
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
-        spec__manifest=[deployment_manifest],
+        spec__manifest=[copy_deployment_manifest],
     )
     await db.put(cluster)
     await db.put(app)
@@ -1528,8 +1536,12 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
     assert stored.status.services == {}
 
 
-async def test_kubernetes_controller_error_handling(aiohttp_server, config, db, loop):
-    """Test the behavior of the Controller in case of a ControllerError."""
+async def test_kubernetes_controller_unsupported_error_handling(
+    aiohttp_server, config, db, loop
+):
+    """Test the behavior of the Controller in case of an error due to an unsupported
+    resource.
+    """
     failed_manifest = deepcopy(nginx_manifest)
     for resource in failed_manifest:
         resource["kind"] = "Unsupported"
@@ -1596,6 +1608,144 @@ async def test_kubernetes_api_error_handling(aiohttp_server, config, db, loop):
     )
     assert stored.status.state == ApplicationState.FAILED
     assert stored.status.reason.code == ReasonCode.KUBERNETES_ERROR
+
+
+async def test_client_app_kind_error_handling(aiohttp_server, config, db, loop):
+    """Test the error handling in the KubernetesClient when attempting to create a
+    resource if the kind of a resource is removed from a manifest file.
+    """
+    copy_deployment_manifest = deepcopy(nginx_manifest[:1])
+    del copy_deployment_manifest[0]["kind"]
+
+    cluster = ClusterFactory()
+
+    kube = KubernetesClient(cluster.spec.kubeconfig, [])
+
+    with pytest.raises(InvalidResourceError, match="kind"):
+        await kube.apply(copy_deployment_manifest[0])
+
+
+async def test_client_app_name_error_handling(aiohttp_server, config, db, loop):
+    """Test the error handling in the KubernetesClient when attempting to create a
+    resource if the name of the resource is removed from a manifest file.
+    """
+    copy_deployment_manifest = deepcopy(nginx_manifest[:1])
+    del copy_deployment_manifest[0]["metadata"]["name"]
+
+    cluster = ClusterFactory()
+
+    kube = KubernetesClient(cluster.spec.kubeconfig, [])
+    with pytest.raises(InvalidResourceError, match="metadata.name"):
+        await kube.apply(copy_deployment_manifest[0])
+
+
+async def test_client_app_namespace_handling(aiohttp_server, config, db, loop):
+    """Test if the manifest files are handled by the client whether they have a
+    namespace or not.
+    """
+    # With namespace
+    copy_deployment_manifest = deepcopy(nginx_manifest[:1])
+    assert copy_deployment_manifest[0]["metadata"]["namespace"]
+
+    cluster = ClusterFactory()
+
+    # If the manifest is accepted, the client attempts to connect to a non-existent
+    # cluster using the mock kubeconfig file generated, cannot, and thus raises an error
+    with suppress(ClientConnectorError):
+        async with KubernetesClient(cluster.spec.kubeconfig, []) as kube:
+            await kube.apply(copy_deployment_manifest[0])
+
+    # Without namespace
+    del copy_deployment_manifest[0]["metadata"]["namespace"]
+
+    with suppress(ClientConnectorError):
+        async with KubernetesClient(cluster.spec.kubeconfig, []) as kube:
+            await kube.apply(copy_deployment_manifest[0])
+
+
+async def test_client_app_apply_not_404_error_handling(
+    aiohttp_server, config, db, loop
+):
+    """For the apply() method of the KubernetesClient, test the handling of response
+    with an error which is not a 404.
+    """
+    copy_deployment_manifest = deepcopy(nginx_manifest[:1])
+
+    routes = web.RouteTableDef()
+
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
+    async def _(request):
+        return web.Response(status=403)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    async with KubernetesClient(cluster.spec.kubeconfig, []) as kube:
+        with pytest.raises(ApiException):
+            await kube.apply(copy_deployment_manifest[0])
+
+
+async def test_client_app_delete_error_handling(
+    aiohttp_server, config, db, loop, caplog
+):
+    """For the delete() method of the KubernetesClient, test the handling of response
+    with a 404 error and with an error with another status.
+    There are three states:
+
+        0. initialisation
+        1. when deleting a resource from the cluster, a 403 is sent. The Kubernetes
+            client does not know how to handle it, and raises an exception.
+        2. when deleting a resource from the cluster, a 404 is sent. The Kubernetes
+            client must handle it as if the resource was already deleted.
+    """
+    caplog.set_level(logging.DEBUG)
+    current_state = 0
+
+    copy_deployment_manifest = deepcopy(nginx_manifest[:1])
+
+    routes = web.RouteTableDef()
+
+    @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
+    async def _(request):
+        nonlocal current_state
+        if current_state == 1:
+            return web.Response(status=403)
+        elif current_state == 2:
+            return web.Response(status=404)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    async with KubernetesClient(cluster.spec.kubeconfig, []) as kube:
+        # State (1): Return a 403
+        current_state = 1
+
+        with pytest.raises(ApiException):
+            await kube.delete(copy_deployment_manifest[0])
+
+        # State (2): Return a 404
+        current_state = 2
+        resp = await kube.delete(copy_deployment_manifest[0])
+        assert resp is None
+
+    already_deleted = 0
+    for record in caplog.records:
+        if (
+            record.levelname == "DEBUG"
+            and record.message == "Deployment already deleted"
+        ):
+            already_deleted += 1
+
+    # The logs for the resource already deleted must only appear once, in the state (2)
+    assert already_deleted == 1
 
 
 def test_resource_delta(loop):

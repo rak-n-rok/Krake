@@ -244,6 +244,7 @@ def base_config(user, etcd_host="localhost", etcd_port=2379):
                 },
                 "static": {"enabled": True, "name": user},
             },
+            "cors_origin": "http://example.com",
         },
         "authorization": "always-allow",
         "etcd": {"host": etcd_host, "port": etcd_port, "retry_transactions": 0},

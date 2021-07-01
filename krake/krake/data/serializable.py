@@ -840,11 +840,11 @@ class PolymorphicContainer(Serializable):
 
     def __init__(self, **kwargs):
         # Add the subfield as attribute
-        type_ = kwargs["type"]
         try:
+            type_ = kwargs["type"]
             value = kwargs.pop(type_)
         except KeyError as err:
-            raise TypeError(f"Missing required keyword argument {type_!r}") from err
+            raise TypeError("Missing required keyword argument 'type'") from err
         setattr(self, type_, value)
 
         super().__init__(**kwargs)

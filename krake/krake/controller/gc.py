@@ -439,9 +439,15 @@ class GarbageCollector(Controller):
         self.apis = {}
         self.graph = None
 
-    async def handle_resource(self):
+    async def handle_resource(self, run_once=False):
         """Infinite loop which fetches and hand over the resources to the right
         coroutine. This function is meant to be run as background task.
+
+        Args:
+            run_once (bool, optional): if True, the function only handles one resource,
+                then stops. Otherwise, continue to handle each new resource on the
+                queue indefinitely.
+
         """
         while True:
             key, resource = await self.queue.get()
@@ -450,6 +456,9 @@ class GarbageCollector(Controller):
                 await self.resource_received(resource)
             finally:
                 await self.queue.done(key)
+
+            if run_once:
+                break  # Only used for tests
 
     async def resource_received(self, resource):
         """Core functionality of the garbage collector. Mark the given resource's

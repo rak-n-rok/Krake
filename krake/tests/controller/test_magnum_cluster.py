@@ -133,7 +133,7 @@ def make_openstack_app(cluster_responses):
         ZrS+c6go0ZV7JOIqRWIq
         -----END CERTIFICATE-----
         """
-        ),
+        ).encode(),
     )
     ca_key = crypto.load_privatekey(
         crypto.FILETYPE_PEM,
@@ -168,7 +168,7 @@ def make_openstack_app(cluster_responses):
         BbqNbATttAvO/XFz5kNeUr0=
         -----END PRIVATE KEY-----
         """
-        ),
+        ).encode(),
     )
     token = "unittest-token"
     routes = web.RouteTableDef()
@@ -468,6 +468,81 @@ async def test_magnum_cluster_create(aiohttp_server, config, db, loop):
     assert resource_ref(cluster) in kube.metadata.owners
 
 
+async def test_magnum_cluster_create_counts_not_none(aiohttp_server, config, db, loop):
+    """Ensure that when the count for the masters and the nodes are set in the Magnum
+    cluster specifications, they are used instead of the defaults from the templates.
+    """
+    openstack_app = make_openstack_app(
+        [
+            {
+                "api_address": None,
+                "master_addresses": [],
+                "status": "CREATE_IN_PROGRESS",
+                "node_addresses": [],
+                "status_reason": None,
+                "stack_id": "16b64063-31ed-42a2-b029-41c7594d71df",
+            },
+            {
+                "master_count": 3,
+                "node_count": 5,
+                "api_address": "https://185.128.119.132:6443",
+                "master_addresses": ["185.128.119.132"],
+                "status": "CREATE_COMPLETE",
+                "node_addresses": ["185.128.118.210"],
+                "status_reason": "Stack CREATE completed successfully",
+                "stack_id": "16b64063-31ed-42a2-b029-41c7594d71df",
+            },
+        ]
+    )
+    openstack_server = await aiohttp_server(openstack_app)
+
+    project = ProjectFactory(
+        spec__url=f"{server_endpoint(openstack_server)}/identity/v3",
+        spec__template="b2339833-8916-454a-86bd-06b450f69210",
+    )
+    cluster = MagnumClusterFactory(
+        metadata__name="my-cluster",
+        status__state=MagnumClusterState.PENDING,
+        status__project=resource_ref(project),
+        status__template="b2339833-8916-454a-86bd-06b450f69210",
+        spec__master_count=3,
+        spec__node_count=5,
+    )
+    await db.put(project)
+    await db.put(cluster)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        controller = MagnumClusterController(
+            server_endpoint(api_server), worker_count=0, poll_interval=0.1
+        )
+        await controller.prepare(client)
+        await controller.process_cluster(cluster)
+
+    stored = await db.get(
+        MagnumCluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+    )
+    assert stored.status.state == MagnumClusterState.RUNNING
+    assert stored.metadata.finalizers[-1] == "magnum_cluster_deletion"
+    assert stored.spec.master_count == 3
+    assert stored.spec.node_count == 5
+    assert stored.status.node_count == 5
+
+    # Validate payloads sent to Magnum API
+    sent = openstack_app["clusters"][cluster.status.cluster_id]
+    assert sent["name"].startswith("testing-my-cluster-")
+
+    assert stored.status.cluster is not None
+    kube = await db.get(
+        Cluster,
+        namespace=stored.status.cluster.namespace,
+        name=stored.status.cluster.name,
+    )
+    assert kube is not None
+    assert resource_ref(cluster) in kube.metadata.owners
+
+
 async def test_magnum_cluster_template_type(aiohttp_server, config, db, loop):
     openstack_app = make_openstack_app([])
     openstack_app["cluster_templates"] = {
@@ -707,6 +782,78 @@ async def test_magnum_cluster_resize(aiohttp_server, config, db, loop):
     assert stored.status.node_count == 5
 
 
+async def test_magnum_cluster_update_failed(aiohttp_server, config, db, loop):
+    """Ensures that a failed update is handled by the workers."""
+    openstack_app = make_openstack_app(
+        [
+            {
+                "master_count": 1,
+                "node_count": 3,
+                "api_address": "https://185.128.119.132:6443",
+                "master_addresses": ["185.128.119.132"],
+                "status": "UPDATE_IN_PROGRESS",
+                "node_addresses": ["185.128.118.210"],
+                "stack_id": "ff9e97a9-db1e-4fed-ac6f-b219c14846e7",
+            },
+            {
+                "master_count": 1,
+                "node_count": 3,
+                "api_address": "https://185.128.119.132:6443",
+                "master_addresses": ["185.128.119.132"],
+                "status": "UPDATE_FAILED",
+                "status_reason": "Stack UPDATE failed",
+                "node_addresses": ["185.128.118.210"],
+                "stack_id": "ff9e97a9-db1e-4fed-ac6f-b219c14846e7",
+            },
+        ]
+    )
+    openstack_server = await aiohttp_server(openstack_app)
+
+    project = ProjectFactory(
+        spec__url=f"{server_endpoint(openstack_server)}/identity/v3"
+    )
+    cluster = MagnumClusterFactory(
+        metadata__name="my-cluster",
+        status__state=MagnumClusterState.RUNNING,
+        status__project=resource_ref(project),
+        status__node_count=3,
+        status__api_address="https://185.128.119.132:6443",
+        status__master_addresses=["185.128.119.132"],
+        status__node_addresses=["185.128.118.210"],
+        spec__master_count=1,
+        spec__node_count=5,
+    )
+    assert cluster.status.cluster_id is not None
+
+    openstack_app["clusters"][cluster.status.cluster_id] = {
+        "uuid": cluster.status.cluster_id,
+        "node_count": cluster.status.node_count,
+    }
+
+    await db.put(project)
+    await db.put(cluster)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        controller = MagnumClusterController(
+            server_endpoint(api_server), worker_count=0, poll_interval=0.1
+        )
+        await controller.prepare(client)
+        await controller.process_cluster(cluster)
+
+    stored = await db.get(
+        MagnumCluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+    )
+    assert stored.status.state == MagnumClusterState.FAILED
+    assert stored.status.cluster_id is not None
+    assert stored.status.reason.code == ReasonCode.RECONCILE_FAILED
+    assert stored.status.reason.message == "Stack UPDATE failed"
+
+    assert stored.spec.node_count == 5
+    assert stored.status.node_count == 3
+
+
 async def test_handle_404_on_magnum_cluster_resize(aiohttp_server, config, db, loop):
     openstack_app = make_openstack_app(
         [
@@ -828,6 +975,92 @@ async def test_magnum_cluster_delete(aiohttp_server, config, db, loop):
     assert stored.metadata.finalizers == ["cascade_deletion"]
     assert stored.status.cluster_id is not None
     assert stored.status.cluster is not None
+
+
+@pytest.mark.slow
+async def test_magnum_cluster_delete_update(aiohttp_server, config, db, loop):
+    """During the deletion of a Magnum cluster, it is updated by the controller (mostly
+    to set its DELETING state). The reflectors watch the update events of the cluster,
+    but the controller should not handle again the cluster.
+
+    This test ensures that this event is handled the right way: when the cluster is
+    already deleted, simply return without handling the cluster.
+
+    The workflow is as follow:
+      0. Insert the cluster in a "to-be-deleted" state in the database
+      1. Handle the deletion of the cluster
+      2. Ensures that, during deletion, the cluster was updated, thus reenqueued
+      3. Ensures that the reenqueued cluster is ignored by the controller
+
+    Some sleeping time is added between the calls to `consume` along with a debounce
+    with a value of 1 to be sure to get only one value.
+    """
+    openstack_app = make_openstack_app(
+        [
+            {
+                "api_address": None,
+                "master_addresses": [],
+                "status": "DELETE_IN_PROGRESS",
+                "node_addresses": [],
+                "status_reason": None,
+                "stack_id": "4941dc5e-9616-4729-abbd-9c6cf111bd85",
+            }
+        ]
+    )
+    openstack_server = await aiohttp_server(openstack_app)
+
+    project = ProjectFactory(
+        spec__url=f"{server_endpoint(openstack_server)}/identity/v3"
+    )
+    # 0. Insert the cluster in a "to-be-deleted" state in the database
+    cluster = MagnumClusterFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__finalizers=["magnum_cluster_deletion"],
+        status__state=MagnumClusterState.RUNNING,
+        status__project=resource_ref(project),
+        spec__master_count=None,
+        spec__node_count=None,
+    )
+
+    openstack_app["clusters"][cluster.status.cluster_id] = {
+        "uuid": cluster.status.cluster_id
+    }
+
+    await db.put(project)
+    await db.put(cluster)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        controller = MagnumClusterController(
+            server_endpoint(api_server), worker_count=0, poll_interval=0.1, debounce=1
+        )
+        await controller.prepare(client)
+
+        reflector_task = loop.create_task(controller.reflector())
+
+        # 1. Handle the deletion of the cluster
+        await controller.consume(run_once=True)
+
+        # 2. Ensures that, during deletion, the cluster was updated, thus reenqueued
+        await asyncio.sleep(2)  # wait for the reflector to see the resource update
+        assert controller.queue.size() == 1
+
+        # 3. Ensures that the reenqueued cluster is ignored by the controller
+        # (as not present on the database anymore.)
+        await controller.consume(run_once=True)
+        await asyncio.sleep(2)
+        assert controller.queue.size() == 0
+
+        reflector_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await reflector_task
+
+    # Finally ensure that the cluster was deleted
+    stored = await db.get(
+        MagnumCluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+    )
+    assert stored is None
 
 
 async def test_magnum_cluster_delete_failed(aiohttp_server, config, db, loop):

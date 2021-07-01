@@ -4,9 +4,9 @@ import yaml
 from copy import deepcopy
 from marshmallow import ValidationError
 
-from krake.data.kubernetes import Application, ObserverSchemaError
+from krake.data.kubernetes import Application, Cluster, ObserverSchemaError
 from tests.controller.kubernetes import nginx_manifest
-from tests.factories.kubernetes import ApplicationFactory
+from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
 
 
 def test_application_constraints_null_error_handling():
@@ -115,6 +115,63 @@ def test_application_manifest_multiple_errors_handling():
     )
     # 1 error on the last resource
     assert manifest_errs[2] == "Field 'metadata.name' not found in resource at index 2"
+
+
+async def test_kubeconfig_validation_context_error_handling():
+    """Ensure that if the kubeconfig file in a Cluster's spec has more that one context,
+    an validation error is raised.
+    """
+    cluster = ClusterFactory()
+
+    cluster.spec.kubeconfig["contexts"].append(
+        {"context": {"cluster": "foo", "user": "bar"}, "name": "other-context"}
+    )
+    assert len(cluster.spec.kubeconfig["contexts"]) == 2
+    serialized = cluster.serialize()
+
+    with pytest.raises(ValidationError, match="Only one context is allowed"):
+        Cluster.deserialize(serialized)
+
+
+async def test_kubeconfig_validation_user_error_handling():
+    """Ensure that if the kubeconfig file in a Cluster's spec has more that one user,
+    an validation error is raised.
+    """
+    cluster = ClusterFactory()
+
+    cluster.spec.kubeconfig["users"].append(
+        {
+            "name": "other-user",
+            "user": {"client-certificate-data": "<cert>", "client-key-data": "<key>"},
+        }
+    )
+    assert len(cluster.spec.kubeconfig["users"]) == 2
+    serialized = cluster.serialize()
+
+    with pytest.raises(ValidationError, match="Only one user is allowed"):
+        Cluster.deserialize(serialized)
+
+
+async def test_kubeconfig_validation_cluster_error_handling():
+    """Ensure that if the kubeconfig file in a Cluster's spec has more that one cluster,
+    an validation error is raised.
+    """
+    cluster = ClusterFactory()
+
+    cluster.spec.kubeconfig["clusters"].append(
+        {
+            "cluster": {
+                "certificate-authority-data": "<CA>",
+                "server": "https://127.0.0.1:8080",
+            },
+            "name": "other-cluster",
+        }
+    )
+    assert len(cluster.spec.kubeconfig["clusters"]) == 2
+    serialized = cluster.serialize()
+
+    with pytest.raises(ValidationError, match="Only one cluster is allowed"):
+        Cluster.deserialize(serialized)
 
 
 kubernetes_manifest = list(

@@ -1,4 +1,5 @@
 from argparse import ArgumentParser, Namespace
+from copy import deepcopy
 from typing import List
 
 import marshmallow
@@ -8,7 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from dataclasses import field
-from krake import ConfigurationOptionMapper, load_yaml_config
+from krake import ConfigurationOptionMapper, load_yaml_config, search_config
 from krake.data.config import ApiConfiguration
 from krake.data.serializable import Serializable
 
@@ -89,7 +90,9 @@ class RootConfiguration(Serializable):
     fifth_key: List[NestedConfiguration] = field(default_factory=list)
 
 
-args = Namespace(first_key=None, second_key=True, third_key=False, the_fourth_key=4)
+test_args = Namespace(
+    first_key=None, second_key=True, third_key=False, the_fourth_key=4
+)
 
 # Option name to list of fields mapping
 option_fields_mapping = {
@@ -117,7 +120,7 @@ def test_add_argumentss():
     argv = "--second-key --the-fourth-key 4".split()
     parsed = parser.parse_args(argv)
 
-    assert parsed == args
+    assert parsed == test_args
 
     # The list should not be parsed
     argv = "--second-key --fifth-key lorem".split()
@@ -126,7 +129,7 @@ def test_add_argumentss():
 
 
 def test_load_command_line():
-    modified_args = vars(args).copy()
+    modified_args = vars(test_args).copy()
     modified_args["foo"] = "over"
 
     mapper = ConfigurationOptionMapper(
@@ -149,7 +152,7 @@ def test_replace_from_cli():
     mapper = ConfigurationOptionMapper(
         RootConfiguration, option_fields_mapping=option_fields_mapping
     )
-    final_config = mapper._replace_from_cli(loaded_config, vars(args).copy())
+    final_config = mapper._replace_from_cli(loaded_config, vars(test_args).copy())
 
     expected = {
         "first_key": "value_one",
@@ -158,3 +161,151 @@ def test_replace_from_cli():
         "the": {"fourth_key": 4},
     }
     assert final_config == expected
+
+
+def test_search_config(tmp_path):
+    """Test the search_config function"""
+    root_yaml = tmp_path / "root.yaml"
+    with open(root_yaml, "w") as f:
+        f.write("foobar")
+
+    chosen_path = search_config(root_yaml)
+    assert chosen_path == root_yaml
+
+
+def test_search_config_no_file():
+    """Tests the error handling of search_config() if no file is found."""
+    message = (
+        "Configuration in 'non-existing.yaml', "
+        "'/etc/krake/non-existing.yaml' not found"
+    )
+    with pytest.raises(FileNotFoundError, match=message):
+        search_config("non-existing.yaml")
+
+
+def test_merge():
+    """Test that the merge function takes the argument parameters with a higher
+    priority.
+    """
+    config = {
+        "first_key": "value_one",
+        "second_key": False,
+        "third_key": False,
+        "the": {"fourth_key": 0},
+    }
+    mapper = ConfigurationOptionMapper(
+        RootConfiguration, option_fields_mapping=option_fields_mapping
+    )
+
+    merged = mapper.merge(config, vars(test_args))
+
+    assert merged.first_key == "value_one"
+    assert merged.second_key
+    assert not merged.third_key
+    assert merged.the.fourth_key == 4
+
+
+def test_merge_validation_error():
+    """Test that the merge function raises errors if arguments values are not valid."""
+    config = {
+        "first_key": "value_one",
+        "second_key": False,
+        "third_key": False,
+        "the": {"fourth_key": 0},
+    }
+    mapper = ConfigurationOptionMapper(
+        RootConfiguration, option_fields_mapping=option_fields_mapping
+    )
+
+    invalid_type = deepcopy(test_args)
+    invalid_type.second_key = "not_a_bool"
+
+    with pytest.raises(SystemExit, match=" - field 'second_key': Not a valid boolean."):
+        mapper.merge(config, vars(invalid_type))
+
+    invalid_nested_type = deepcopy(test_args)
+    invalid_nested_type.the_fourth_key = "not_an_int"
+
+    with pytest.raises(
+        SystemExit, match=" - field 'the.fourth_key': Not a valid integer."
+    ):
+        mapper.merge(config, vars(invalid_nested_type))
+
+
+def test_args_workflow_no_cli(tmp_path):
+    """Test the workflow for starting a Krake component with support of the
+    :class:`ConfigurationOptionMapper`.
+
+    Let the mapper use the content of a default configuration file.
+    """
+    # Prepare the default configuration file:
+    serialized_config = {
+        "first_key": "value_one",
+        "second_key": False,
+        "third_key": False,
+        "the": {"fourth_key": 0},
+    }
+    root_config = RootConfiguration.deserialize(serialized_config)
+
+    root_yaml = tmp_path / "root.yaml"
+    with open(root_yaml, "w") as f:
+        yaml.dump(root_config.serialize(), f)
+
+    # Create the mapper:
+    parser = ArgumentParser()
+    parser.add_argument("--config", "-c")
+
+    mapper = ConfigurationOptionMapper(RootConfiguration)
+    mapper.add_arguments(parser)
+
+    # Use default configuration file, as no file has been set in the arguments
+    no_config_args = Namespace(config=None)
+    args = vars(no_config_args)
+
+    config = load_yaml_config(args["config"] or search_config(root_yaml))
+    api_config = mapper.merge(config, args)
+
+    assert api_config.first_key == "value_one"
+    assert not api_config.second_key
+    assert not api_config.third_key
+    assert api_config.the.fourth_key == 0
+
+
+def test_args_workflow_file_from_cli(tmp_path):
+    """Test the workflow for starting a Krake component with support of the
+    :class:`ConfigurationOptionMapper`.
+
+    Let the mapper use the content of a configuration file whose path was provided as
+    parameter.
+    """
+    # Prepare the configuration file given as argument:
+    serialized_config = {
+        "first_key": "value_one",
+        "second_key": True,
+        "third_key": False,
+        "the": {"fourth_key": 42},
+    }
+    root_config = RootConfiguration.deserialize(serialized_config)
+
+    root_yaml = tmp_path / "root.yaml"
+    with open(root_yaml, "w") as f:
+        yaml.dump(root_config.serialize(), f)
+
+    # Create the mapper:
+    parser = ArgumentParser()
+    parser.add_argument("--config", "-c")
+
+    mapper = ConfigurationOptionMapper(RootConfiguration)
+    mapper.add_arguments(parser)
+
+    # Use file set in the arguments
+    args_with_config = Namespace(config=root_yaml)
+    args = vars(args_with_config)
+
+    config = load_yaml_config(args["config"] or search_config("non-existing.yaml"))
+    api_config = mapper.merge(config, args)
+
+    assert api_config.first_key == "value_one"
+    assert api_config.second_key
+    assert not api_config.third_key
+    assert api_config.the.fourth_key == 42

@@ -172,7 +172,7 @@ def keystone_authentication(endpoint):
             headers={"X-Auth-Token": token, "X-Subject-Token": token},
         )
         if resp.status != 200:
-            message = f"Invalid Keystone token " f"(HTTP {resp.status} {resp.reason})"
+            message = f"Invalid Keystone token (HTTP {resp.status} {resp.reason})"
             reason = HttpReason(
                 reason=message, code=HttpReasonCode.INVALID_KEYSTONE_TOKEN
             )

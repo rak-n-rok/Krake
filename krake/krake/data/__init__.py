@@ -39,7 +39,8 @@ class Key(object):
         self.attribute = attribute
         self.parameters = list(self._params_re.finditer(template))
 
-        template_re = self._params_re.sub(".+?", template)
+        # For each parameter, only accepts ASCII, ":", "." and "-".
+        template_re = self._params_re.sub("[.a-zA-Z0-9_:-]+?", template)
         self.pattern = re.compile(fr"^{template_re}$")
 
     def matches(self, key):

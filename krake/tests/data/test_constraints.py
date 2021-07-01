@@ -12,6 +12,59 @@ import lark
 from marshmallow import ValidationError
 
 
+def test_label_constraint_class_methods():
+    """Verify the base methods of the LabelConstraint class (__eq__, __hash__...)"""
+    lc_de = LabelConstraint.parse("location is DE")
+    lc_not_de = LabelConstraint.parse("location is not DE")
+    assert lc_de != lc_not_de
+
+    lc_fr = LabelConstraint.parse("location is FR")
+    assert lc_de != lc_fr
+
+    lc_de_2 = LabelConstraint.parse("location is DE")
+    assert lc_de == lc_de_2
+
+    # Check label constraints hashing
+    label_constraints = set()
+    label_constraints.add(lc_de)
+    label_constraints.add(lc_fr)
+    label_constraints.add(lc_not_de)
+    label_constraints.add(lc_de_2)
+
+    # As lc_de_2 is equal to lc_de, only 3 elements have actually been added.
+    assert len(label_constraints) == 3
+
+    # Check representation
+    assert repr(lc_de) == "<EqualConstraint 'location is DE'>"
+    assert repr(lc_not_de) == "<NotEqualConstraint 'location is not DE'>"
+
+    lc_eq_de = LabelConstraint.parse("location == DE")
+    assert repr(lc_eq_de) == "<EqualConstraint 'location is DE'>"
+    lc_not_eq_de = LabelConstraint.parse("location != DE")
+    assert repr(lc_not_eq_de) == "<NotEqualConstraint 'location is not DE'>"
+
+    lc_in_de_sk = LabelConstraint.parse("location in (DE, SK)")
+    assert repr(lc_in_de_sk) == "<InConstraint 'location in (DE, SK)'>"
+    lc_in_de_sk = LabelConstraint.parse("location not in (DE, SK)")
+    assert repr(lc_in_de_sk) == "<NotInConstraint 'location not in (DE, SK)'>"
+
+    lc_in_de_sk_comma = LabelConstraint.parse("location in (DE, SK,)")
+    assert repr(lc_in_de_sk_comma) == "<InConstraint 'location in (DE, SK)'>"
+    lc_not_in_de_sk_comma = LabelConstraint.parse("location not in (DE, SK,)")
+    assert repr(lc_not_in_de_sk_comma) == "<NotInConstraint 'location not in (DE, SK)'>"
+
+
+def test_label_constraint_deserialization():
+    """Ensure that a label constraint as string cannot be deserialized if it is invalid.
+    """
+    serialized_constraints = {
+        "labels": ["location is not valid DE"],
+        "custom_resources": [],
+    }
+    with pytest.raises(ValidationError, match="Invalid label constraint"):
+        ClusterConstraints.deserialize(serialized_constraints)
+
+
 def valid_serialization(constraint):
     """Attempt the serialization and deserialization processes of the given constraint
     to trigger a validation of its content.
@@ -104,23 +157,39 @@ def test_parse_notin_constraint(expression):
 
 def test_equal_constraint_match():
     assert LabelConstraint.parse("location is DE").match({"location": "DE"})
+
     assert not LabelConstraint.parse("location is DE").match({"location": "SK"})
+    assert not LabelConstraint.parse("location is DE").match({"country": "SK"})
+    assert not LabelConstraint.parse("location is DE").match({"country": "DE"})
 
 
 def test_notequal_constraint_match():
     assert LabelConstraint.parse("location is not DE").match({"location": "SK"})
+
     assert not LabelConstraint.parse("location is not DE").match({"location": "DE"})
+    assert not LabelConstraint.parse("location is not DE").match({"country": "DE"})
+    assert not LabelConstraint.parse("location is not DE").match({"country": "SK"})
 
 
 def test_in_constraint_match():
     assert LabelConstraint.parse("location in (DE, SK)").match({"location": "SK"})
+
     assert not LabelConstraint.parse("location in (DE, SK)").match({"location": "EU"})
+    assert not LabelConstraint.parse("location in (DE, SK)").match({"country": "EU"})
+    assert not LabelConstraint.parse("location in (DE, SK)").match({"country": "SK"})
 
 
 def test_notin_constraint_match():
     assert LabelConstraint.parse("location not in (DE, SK)").match({"location": "EU"})
+
     assert not LabelConstraint.parse("location not in (DE, SK)").match(
         {"location": "DE"}
+    )
+    assert not LabelConstraint.parse("location not in (DE, SK)").match(
+        {"country": "DE"}
+    )
+    assert not LabelConstraint.parse("location not in (DE, SK)").match(
+        {"country": "SK"}
     )
 
 

@@ -6,6 +6,7 @@ import pytest
 from krake.data import Key
 from krake.data.serializable import Serializable
 from krake.api.database import EventType, Revision, revision, TransactionError
+from krake.test_utils import aenumerate
 
 from tests.factories import fake
 
@@ -188,14 +189,6 @@ async def test_watching_create(db, loop):
         await creating
 
     assert data == watched
-
-
-async def aenumerate(iterable):
-    i = 0
-
-    async for item in iterable:
-        yield i, item
-        i += 1
 
 
 async def test_watching_update(db, loop):

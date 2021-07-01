@@ -2,6 +2,7 @@ import pytest
 from aiohttp import web, ClientSession, ClientConnectorError, ClientResponseError
 
 from krake.controller.scheduler import metrics
+from krake.controller.scheduler.metrics import MetricError, fetch_query
 from krake.test_utils import server_endpoint, make_prometheus, make_kafka
 
 from tests.factories.core import GlobalMetricsProviderFactory, GlobalMetricFactory
@@ -128,11 +129,59 @@ async def test_prometheus_provider(aiohttp_server, loop):
         assert value == 0.42
 
 
+async def test_prometheus_provider_metric_unavailable(aiohttp_server, loop):
+    """Test the resilience of the Prometheus provider when the name of a metric taken
+    from a Metric resource is not found.
+    """
+    prometheus = await aiohttp_server(make_prometheus({"my-metric": ["0.42"]}))
+
+    metric = GlobalMetricFactory(
+        spec__provider__name="my-provider", spec__provider__metric="other-metric"
+    )
+    metrics_provider = GlobalMetricsProviderFactory(
+        metadata__name="my-provider",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+
+    async with ClientSession() as session:
+        provider = metrics.Provider(metrics_provider=metrics_provider, session=session)
+        assert isinstance(provider, metrics.Prometheus)
+
+        with pytest.raises(
+            MetricError, match="Metric 'other-metric' not in Prometheus response"
+        ):
+            await provider.query(metric)
+
+
+async def test_prometheus_provider_invalid_metric(aiohttp_server, loop):
+    """Test the resilience of the Prometheus provider when a metric value is not a
+    integer or a float.
+    """
+    prometheus = await aiohttp_server(make_prometheus({"my-metric": ["not_a_float"]}))
+
+    metric = GlobalMetricFactory(
+        spec__provider__name="my-provider", spec__provider__metric="my-metric"
+    )
+    metrics_provider = GlobalMetricsProviderFactory(
+        metadata__name="my-provider",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+
+    async with ClientSession() as session:
+        provider = metrics.Provider(metrics_provider=metrics_provider, session=session)
+        assert isinstance(provider, metrics.Prometheus)
+
+        with pytest.raises(MetricError, match="Invalid value for metric 'my-metric'"):
+            await provider.query(metric)
+
+
 async def test_prometheus_provider_unavailable(aiohttp_server, loop):
     routes = web.RouteTableDef()
 
     @routes.get("/api/v1/query")
-    async def _(request):
+    async def _(_):
         raise web.HTTPServiceUnavailable()
 
     prometheus_app = web.Application()
@@ -199,6 +248,26 @@ async def test_static_provider(aiohttp_server):
 
         value = await provider.query(metric)
         assert value == 0.42
+
+
+async def test_static_provider_metric_unavailable(aiohttp_server):
+    """Test the resilience of the Static provider when the name of a metric taken from a
+    Metric resource is not found.
+    """
+    metrics_provider = GlobalMetricsProviderFactory(
+        spec__type="static", spec__static__metrics={"my_metric": 0.42}
+    )
+    metric = GlobalMetricFactory(
+        spec__provider__name=metrics_provider.metadata.name,
+        spec__provider__metric="other-metric",
+    )
+
+    async with ClientSession() as session:
+        provider = metrics.Provider(metrics_provider=metrics_provider, session=session)
+        assert isinstance(provider, metrics.Static)
+
+        with pytest.raises(MetricError, match="Metric 'other-metric' not defined"):
+            await provider.query(metric)
 
 
 @pytest.mark.slow
@@ -290,11 +359,41 @@ async def test_kafka_provider(aiohttp_server, loop):
         assert value == 1.0
 
 
+async def test_kafka_provider_metric_unavailable(aiohttp_server, loop):
+    """Test the resilience of the Kafka provider when the name of a metric taken from a
+    Metric resource is not found.
+    """
+    columns = ["id", "value"]
+    rows = [["first_id", [0.42, 1.0]]]
+    kafka = await aiohttp_server(make_kafka("my_table", columns, rows))
+
+    metric = GlobalMetricFactory(
+        spec__provider__name="my-provider", spec__provider__metric="wrong_id"
+    )
+    metrics_provider = GlobalMetricsProviderFactory(
+        metadata__name="my-provider",
+        spec__type="kafka",
+        spec__kafka__comparison_column="id",
+        spec__kafka__value_column="value",
+        spec__kafka__table="my_table",
+        spec__kafka__url=server_endpoint(kafka),
+    )
+
+    async with ClientSession() as session:
+        provider = metrics.Provider(metrics_provider=metrics_provider, session=session)
+        assert isinstance(provider, metrics.Kafka)
+
+        with pytest.raises(
+            MetricError, match="The value of the metric 'wrong_id' cannot be read"
+        ):
+            await provider.query(metric)
+
+
 async def test_kafka_provider_unavailable(aiohttp_server, loop):
     routes = web.RouteTableDef()
 
     @routes.post("/query")
-    async def _(request):
+    async def _(_):
         raise web.HTTPServiceUnavailable()
 
     kafka_app = web.Application()
@@ -351,3 +450,43 @@ async def test_kafka_provider_connection_error(aiohttp_server, loop):
             await provider.query(metric)
 
         assert isinstance(err.value.__cause__, ClientConnectorError)
+
+
+async def test_fetch_query():
+    """Test the output of the fetch_query function in normal conditions.
+    """
+    metrics_provider = GlobalMetricsProviderFactory(
+        spec__type="static", spec__static__metrics={"my_metric": 0.42}
+    )
+    metric = GlobalMetricFactory(
+        spec__provider__name=metrics_provider.metadata.name,
+        spec__provider__metric="my_metric",
+    )
+
+    async with ClientSession() as session:
+        query_result = await fetch_query(session, metric, metrics_provider, 10)
+
+    assert query_result.metric == metric
+    assert query_result.value == 0.42
+    assert query_result.weight == 10
+
+
+async def test_fetch_query_out_of_range():
+    """Test the behavior of the fetch_query function when a metric value is out of
+    range: should raise an exception.
+    """
+    metrics_provider = GlobalMetricsProviderFactory(
+        spec__type="static", spec__static__metrics={"my_metric": 2}  # higher than max
+    )
+    # Default max is 1
+    metric = GlobalMetricFactory(
+        spec__provider__name=metrics_provider.metadata.name,
+        spec__provider__metric="my_metric",
+    )
+
+    async with ClientSession() as session:
+        with pytest.raises(
+            MetricError,
+            match=f"Invalid metric value for {metric.metadata.name!r}: 2 out of range",
+        ):
+            await fetch_query(session, metric, metrics_provider, 10)

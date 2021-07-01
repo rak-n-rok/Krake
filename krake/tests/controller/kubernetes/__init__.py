@@ -1,6 +1,7 @@
 import yaml
-
+from textwrap import dedent
 from copy import deepcopy
+
 
 deployment_manifest = yaml.safe_load(
     """---
@@ -316,3 +317,59 @@ initial_last_observed_manifest = [
     initial_last_observed_manifest_service,
     initial_last_observed_manifest_configmap,
 ]
+
+
+def crontab_crd(namespaced=True):
+    """Return the custom resource definition for the CRON resource.
+
+    Args:
+        namespaced (bool): if True, the returned definition will be namespaced, if
+            False, it will not (set to "Cluster").
+
+    Returns:
+        dict[str, object]: the generated custom resource definition.
+
+    """
+    return deepcopy(
+        {
+            "api_version": "apiextensions.k8s.io/v1beta1",
+            "kind": "CustomResourceDefinition",
+            "spec": {
+                "group": "stable.example.com",
+                "names": {"kind": "CronTab", "plural": "crontabs"},
+                "scope": "Namespaced" if namespaced else "Cluster",
+                "versions": [{"name": "v1", "served": "True", "storage": "True"}],
+            },
+        }
+    )
+
+
+def create_cron_resource(name="cron", minute=5, image="cron-image"):
+    """Create a CronTab resource from parameters.
+
+    Args:
+        name (str): name of the resource
+        minute (int): time set for the minutes in the CRON specifications.
+        image (str): image used for the CRON specifications.
+
+    Returns:
+        dict[str, object]: the generated CronTab resource.
+
+    """
+    return next(
+        yaml.safe_load_all(
+            dedent(
+                f"""
+            ---
+            apiVersion: stable.example.com/v1
+            kind: CronTab
+            metadata:
+                name: {name}
+                namespace: default
+            spec:
+                cronSpec: "* * * * {minute}"
+                image: {image}
+            """
+            )
+        )
+    )

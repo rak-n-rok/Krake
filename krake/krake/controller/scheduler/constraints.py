@@ -94,3 +94,42 @@ def match_cluster_constraints(app, cluster):
     ]
 
     return _evaluate(app, cluster, constraints)
+
+
+def match_project_constraints(cluster, project):
+    """Evaluate if all application constraints labels match project labels.
+
+    Args:
+        cluster (krake.data.openstack.MagnumCluster): Cluster that is scheduled
+        project (krake.data.kubernetes.project): Project to which the
+            cluster should be bound.
+
+    Returns:
+        bool: True if the project fulfills all project constraints
+
+    """
+    if not cluster.spec.constraints:
+        return True
+
+    # project constraints
+    if cluster.spec.constraints.project:
+        # Label constraints for the project
+        if cluster.spec.constraints.project.labels:
+            for constraint in cluster.spec.constraints.project.labels:
+                if constraint.match(project.metadata.labels or {}):
+                    logger.debug(
+                        "Project %s matches constraint %r",
+                        resource_ref(project),
+                        constraint,
+                    )
+                else:
+                    logger.debug(
+                        "Project %s does not match constraint %r",
+                        resource_ref(project),
+                        constraint,
+                    )
+                    return False
+
+    logger.debug("Project %s fulfills constraints of %r", project, cluster)
+
+    return True

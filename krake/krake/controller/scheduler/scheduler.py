@@ -25,7 +25,7 @@ from krake.data.kubernetes import (
     ClusterState,
 )
 
-from .constraints import match_cluster_constraints
+from .constraints import match_cluster_constraints, match_project_constraints
 from .metrics import MetricError, fetch_query, MetricsProviderError
 from .. import Controller, ControllerError, Reflector, WorkQueue
 
@@ -46,24 +46,24 @@ class NoProjectFound(ControllerError):
 
 @total_ordering
 class RankMixin(object):
-    """Mixin class for ranking objects based on their ``rank`` attribute.
+    """Mixin class for ranking objects based on their ``score`` attribute.
 
-    This mixin class is used by the :func:`ranked` decorator.
+    This mixin class is used by the :func:`order_by_score` decorator.
     """
 
     def __lt__(self, o):
-        if not hasattr(o, "rank"):
+        if not hasattr(o, "score"):
             return NotImplemented
-        return self.rank < o.rank
+        return self.score < o.score
 
     def __eq__(self, o):
-        if not hasattr(o, "rank"):
+        if not hasattr(o, "score"):
             return NotImplemented
-        return self.rank == o.rank
+        return self.score == o.score
 
 
-def order_by_rank(cls):
-    """Decorator for making a class orderable based on the ``rank`` attribute.
+def orderable_by_score(cls):
+    """Decorator for making a class orderable based on the ``score`` attribute.
 
     We cannot use :func:`functools.total_ordering` in
     :class:`typing.NamedTuple` because tuple already implements rich
@@ -86,19 +86,19 @@ def order_by_rank(cls):
     return cls
 
 
-@order_by_rank
-class ClusterRank(NamedTuple):
-    """Named tuple for ordering Kubernetes clusters based on a rank"""
+@orderable_by_score
+class ClusterScore(NamedTuple):
+    """Named tuple for ordering Kubernetes clusters based on a score"""
 
-    rank: float
+    score: float
     cluster: Cluster
 
 
-@order_by_rank
-class ProjectRank(NamedTuple):
-    """Named tuple for ordering OpenStack projects based on a rank"""
+@orderable_by_score
+class ProjectScore(NamedTuple):
+    """Named tuple for ordering OpenStack projects based on a score"""
 
-    rank: float
+    score: float
     project: Project
 
 
@@ -445,89 +445,6 @@ class Scheduler(Controller):
             await self.queue.put(app.metadata.uid, app, delay=self.reschedule_after)
 
     @staticmethod
-    def match_cluster_constraints(app, cluster):
-        """Evaluate if all application constraints labels match cluster labels.
-
-        Args:
-            app (krake.data.kubernetes.Application): Application that should be
-                bound.
-            cluster (krake.data.kubernetes.Cluster): Cluster to which the
-                application should be bound.
-
-        Returns:
-            bool: True if the cluster fulfills all application cluster constraints
-
-        """
-        if not app.spec.constraints:
-            return True
-
-        # Cluster constraints
-        if app.spec.constraints.cluster:
-            # Label constraints for the cluster
-            if app.spec.constraints.cluster.labels:
-                for constraint in app.spec.constraints.cluster.labels:
-                    if constraint.match(cluster.metadata.labels or {}):
-                        logger.debug(
-                            "Cluster %s matches constraint %r",
-                            resource_ref(cluster),
-                            constraint,
-                        )
-                    else:
-                        logger.debug(
-                            "Cluster %s does not match constraint %r",
-                            resource_ref(cluster),
-                            constraint,
-                        )
-                        return False
-
-        logger.debug(
-            "Cluster %s fulfills constraints of application %r",
-            resource_ref(cluster),
-            resource_ref(app),
-        )
-
-        return True
-
-    @staticmethod
-    def match_project_constraints(cluster, project):
-        """Evaluate if all application constraints labels match project labels.
-
-        Args:
-            cluster (krake.data.openstack.MagnumCluster): Cluster that is scheduled
-            project (krake.data.kubernetes.project): Project to which the
-                cluster should be bound.
-
-        Returns:
-            bool: True if the project fulfills all project constraints
-
-        """
-        if not cluster.spec.constraints:
-            return True
-
-        # project constraints
-        if cluster.spec.constraints.project:
-            # Label constraints for the project
-            if cluster.spec.constraints.project.labels:
-                for constraint in cluster.spec.constraints.project.labels:
-                    if constraint.match(project.metadata.labels or {}):
-                        logger.debug(
-                            "Project %s matches constraint %r",
-                            resource_ref(project),
-                            constraint,
-                        )
-                    else:
-                        logger.debug(
-                            "Project %s does not match constraint %r",
-                            resource_ref(project),
-                            constraint,
-                        )
-                        return False
-
-        logger.debug("Project %s fulfills constraints of %r", project, cluster)
-
-        return True
-
-    @staticmethod
     def select_maximum(ranked):
         """From a list of ClusterRank, get the one with the best rank. If several
         ClusterRank have the same rank, one of them is chosen randomly.
@@ -551,7 +468,7 @@ class Scheduler(Controller):
 
         Args:
             app (krake.data.kubernetes.Application): Application object for binding
-            clusters (List[krake.data.kubernetes.Cluster]): Clusters between which
+            clusters (list[krake.data.kubernetes.Cluster]): Clusters between which
                 the "best" one should be chosen.
 
         Returns:
@@ -611,25 +528,21 @@ class Scheduler(Controller):
 
         # Only use clusters without metrics when there are no clusters with
         # metrics.
-        ranked = []
+        scores = []
         if with_metrics:
-            # Rank the clusters based on their metric and return the cluster with
-            # a minimal rank.
-            ranked = await self.rank_kubernetes_clusters(app, with_metrics)
+            # Compute the score of all clusters based on their metric
+            scores = await self.rank_kubernetes_clusters(app, with_metrics)
 
-        if not ranked:
-            # If no cluster with metrics could be ranked (e.g. due to unreachable
-            # metrics providers), rank the matching clusters that do not have metrics.
-            ranked = [
-                self.calculate_kubernetes_cluster_rank((), cluster, app)
+        if not scores:
+            # If no score of cluster with metrics could be computed (e.g. due to
+            # unreachable metrics providers), compute the score of the matching clusters
+            # that do not have metrics.
+            scores = [
+                self.calculate_kubernetes_cluster_score((), cluster, app)
                 for cluster in matching
             ]
 
-        if not ranked:
-            logger.info("Unable to rank any Kubernetes cluster")
-            raise NoClusterFound("No Kubernetes cluster available")
-
-        return self.select_maximum(ranked).cluster
+        return self.select_maximum(scores).cluster
 
     async def select_openstack_project(self, cluster, projects):
         """Select "best" OpenStack project for the Magnum cluster.
@@ -637,7 +550,7 @@ class Scheduler(Controller):
         Args:
             cluster (krake.data.openstack.MagnumCluster): Cluster that should
                 be bound to a project
-            projects (List[krake.data.openstack.Project]): Projects between the
+            projects (list[krake.data.openstack.Project]): Projects between the
                 "best" one is chosen.
 
         Returns:
@@ -650,7 +563,7 @@ class Scheduler(Controller):
         matching = [
             project
             for project in projects
-            if self.match_project_constraints(cluster, project)
+            if match_project_constraints(cluster, project)
         ]
 
         if not matching:
@@ -664,50 +577,53 @@ class Scheduler(Controller):
         # Only use projects without metrics when there are no projects with
         # metrics.
         if not with_metrics:
-            ranked = [
-                self.calculate_openstack_project_rank((), project)
+            scores = [
+                self.calculate_openstack_project_scores((), project)
                 for project in matching
             ]
         else:
-            # Rank the projects based on their metric and return the project with
-            # a minimal rank.
-            ranked = await self.rank_openstack_projects(cluster, with_metrics)
+            # Compute the score of all projects based on their metric
+            scores = await self.rank_openstack_projects(cluster, with_metrics)
 
-        if not ranked:
-            logger.info("Unable to rank any project")
+        if not scores:
+            logger.info("Unable to compute the score of any Kubernetes cluster")
             raise NoProjectFound("No OpenStack project available")
 
-        return self.select_maximum(ranked).project
+        return self.select_maximum(scores).project
 
     async def rank_kubernetes_clusters(self, app, clusters):
-        """Rank kubernetes clusters based on metrics values and weights.
+        """Compute the score of the kubernetes clusters based on metrics values and
+        weights.
 
         Args:
             app (krake.data.kubernetes.Application): Application object for binding
-            clusters (List[Cluster]): List of clusters to rank
+            clusters (list[Cluster]): List of clusters for which the score has to be
+                computed.
 
         Returns:
-            List[ClusterRank]: Ranked list of clusters
+            list[ClusterScore]: list of all cluster's score
 
         """
         return [
-            self.calculate_kubernetes_cluster_rank(metrics, cluster, app)
+            self.calculate_kubernetes_cluster_score(metrics, cluster, app)
             for cluster in clusters
             async for metrics in self.fetch_metrics(cluster, cluster.spec.metrics)
         ]
 
     async def rank_openstack_projects(self, cluster, projects):
-        """Rank OpenStack projects based on metric values and weights.
+        """Compute the score of the OpenStack projects based on metric values and
+        weights.
 
         Args:
             cluster (krake.data.openstack.MagnumCluster): Cluster that is scheduled
-            projects (List[krake.data.openstack.Project]): List of projects to rank
+            projects (list[Project]): List of projects for which the score has to be
+                computed.
 
         Returns:
-            List[ProjectRank]: Ranked list of projects
+            list[ProjectScore]: list of all cluster's score
         """
         return [
-            self.calculate_openstack_project_rank(metrics, project)
+            self.calculate_openstack_project_scores(metrics, project)
             for project in projects
             async for metrics in self.fetch_metrics(project, project.spec.metrics)
         ]
@@ -796,8 +712,8 @@ class Scheduler(Controller):
 
         .. code:: python
 
-            ranked = [
-                self.rank_foo()
+            scores = [
+                self.calculate_foo_score()
                 for foo in foos
                 async for metrics in self.fetch_metrics(foo, foo.spec.metrics)
             ]
@@ -875,49 +791,48 @@ class Scheduler(Controller):
 
         yield fetched
 
-    def calculate_kubernetes_cluster_rank(self, metrics, cluster, app):
+    def calculate_kubernetes_cluster_score(self, metrics, cluster, app):
         """Calculate weighted sum of metrics values.
 
         Args:
-            metrics (List[.metrics.QueryResult]): List of metric query results
-            cluster (krake.data.kubernetes.Cluster): Cluster that is ranked
+            metrics (list[.metrics.QueryResult]): List of metric query results
+            cluster (Cluster): cluster for which the score has to be computed.
             app (krake.data.kubernetes.Application): Application object that
                 should be scheduled.
 
         Returns:
-            ClusterRank: rank of the passed cluster based on metrics and
-            application.
+            ClusterScore: score of the passed cluster based on metrics and application.
 
         """
         sticky = self.calculate_kubernetes_cluster_stickiness(cluster, app)
 
         if not metrics:
-            return ClusterRank(rank=sticky.weight * sticky.value, cluster=cluster)
+            return ClusterScore(score=sticky.weight * sticky.value, cluster=cluster)
 
         norm = sum(metric.weight for metric in metrics) + sticky.weight
-        rank = (
+        score = (
             sum(metric.value * metric.weight for metric in metrics)
             + (sticky.value * sticky.weight)
         ) / norm
 
-        return ClusterRank(rank=rank, cluster=cluster)
+        return ClusterScore(score=score, cluster=cluster)
 
     def calculate_kubernetes_cluster_stickiness(self, cluster, app):
         """Return extra metric for clusters to make the application "stick" to
-        it by increasing its rank.
+        it by increasing its score.
 
         If the application is already scheduled to the passed cluster, a
         stickiness of ``1.0`` with a configurable weight is returned.
         Otherwise, a stickiness of ``0`` is returned.
 
         Args:
-            cluster (krake.data.kubernetes.Cluster): Cluster that is ranked
+            cluster (Cluster): cluster for which the score has to be computed.
             app (krake.data.kubernetes.Application): Application object that
                 should be scheduled.
 
         Returns:
             Stickiness: Value and its weight that should be added to the
-            cluster rank.
+            cluster score.
 
         """
         if resource_ref(cluster) != app.status.scheduled_to:
@@ -925,24 +840,25 @@ class Scheduler(Controller):
 
         return Stickiness(weight=self.stickiness, value=1.0)
 
-    def calculate_openstack_project_rank(self, metrics, project):
-        """Calculate rank of OpenStack project based on the given metrics.
+    def calculate_openstack_project_scores(self, metrics, project):
+        """Calculate score of OpenStack project based on the given metrics.
 
         Args:
             metrics (list[krake.controller.scheduler.metrics.QueryResult]): List of
                 metric query results.
-            project (krake.data.openstack.Project): Project that is ranked
+            project (krake.data.openstack.Project): Project for which the score has to
+                be computed.
 
         Returns:
-            ProjectRank: Rank of the passed project based on metrics and
-            Magnum cluster.
+            ProjectScore: Score of the passed project based on metrics and Magnum
+                cluster.
 
         """
-        # Rank for a OpenStack project without any metrics
+        # Score for a OpenStack project without any metrics
         if not metrics:
-            return ProjectRank(rank=0, project=project)
+            return ProjectScore(score=0, project=project)
 
         norm = sum(metric.weight for metric in metrics)
-        rank = sum(metric.value * metric.weight for metric in metrics) / norm
+        score = sum(metric.value * metric.weight for metric in metrics) / norm
 
-        return ProjectRank(rank=rank, project=project)
+        return ProjectScore(score=score, project=project)

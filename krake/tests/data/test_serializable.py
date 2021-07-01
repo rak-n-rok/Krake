@@ -367,6 +367,46 @@ def test_polymorphic_equality():
     assert spec3 == spec5
 
 
+def test_polymorphic_creation_error_handling():
+    """Verify that creating a :class:`PolyMorphicContainer` without the `type` attribute
+    also raises an error.
+    """
+    with pytest.raises(TypeError, match="Missing required keyword argument 'type'"):
+        DataSpec(float=FloatSpec(min=0, max=1.0))
+
+
+def test_polymorphic_register_error_handling():
+    """Verify that adding a :class:`PolyMorphicContainerSpec` with an already registered
+    type to a :class:`PolyMorphicContainer` leads to an exception."""
+    with pytest.raises(ValueError, match="'bool' already registered by "):
+
+        @DataSpec.register("bool")
+        class OtherSpec(Serializable):
+            pass
+
+
+def test_polymorphic_validate_type_error_handling():
+    """Verify that deserializing an instance of :class:`PolyMorphicContainerSpec` where
+    the "type" attribute is removed will lead to an exception.
+    """
+    serialized = DataSpec(type="float", float=FloatSpec(min=0, max=1.0)).serialize()
+
+    serialized["type"] = "non-existing"
+    with pytest.raises(ValidationError, match="Unknown type 'non-existing'"):
+        DataSpec.deserialize(serialized)
+
+
+def test_polymorphic_validate_subschema_error_handling():
+    """Verify that deserializing an instance of :class:`PolyMorphicContainerSpec` where
+    the container attribute is removed will lead to an exception.
+    """
+    serialized = DataSpec(type="float", float=FloatSpec(min=0, max=1.0)).serialize()
+
+    del serialized["float"]
+    with pytest.raises(ValidationError, match="Field is required"):
+        DataSpec.deserialize(serialized)
+
+
 def test_is_generic():
     assert is_generic(List)
     assert is_generic(List[int])

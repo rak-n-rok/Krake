@@ -71,7 +71,10 @@ def normalize(metric, value):
 
     """
     if not metric.spec.min <= value <= metric.spec.max:
-        raise MetricError(f"Invalid metric value {value!r}")
+        raise MetricError(
+            f"Invalid metric value for {metric.metadata.name!r}:"
+            f" {value!r} out of range"
+        )
 
     return (value - metric.spec.min) / (metric.spec.max - metric.spec.min)
 
