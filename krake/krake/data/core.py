@@ -264,7 +264,11 @@ class ReasonCode(IntEnum):
     INTERNAL_ERROR = 1  # Default error
 
     INVALID_RESOURCE = 10  # Invalid values in the Manifest
-    CLUSTER_NOT_REACHABLE = 11  # Connectivity issue with the Kubernetes deployment
+    UNSUPPORTED_KIND = 11  # Kubernetes kind not supported by the Kubernetes controller
+    # The custom resource provided does not exist or is invalid
+    INVALID_CUSTOM_RESOURCE = 12
+
+    CLUSTER_NOT_REACHABLE = 20  # Connectivity issue with the Kubernetes deployment
     NO_SUITABLE_RESOURCE = 50  # Scheduler issue
 
     KUBERNETES_ERROR = 60

@@ -18,10 +18,27 @@ from krake.utils import camel_to_snake_case, cached_property
 logger = logging.getLogger(__name__)
 
 
-class InvalidResourceError(ControllerError):
-    """Raised in case of invalid kubernetes resource definition."""
+class InvalidManifestError(ControllerError):
+    """Raised when the manifest of a resource has an invalid structure."""
 
     code = ReasonCode.INVALID_RESOURCE
+
+
+class InvalidCustomResourceDefinitionError(ControllerError):
+    """Raised when reading a custom resource definition from a cluster where it should
+    exist, and the request fails. It mostly occurs when the provided custom resource
+    definition has an invalid structure or does not exist on the actual cluster.
+    """
+
+    code = ReasonCode.INVALID_CUSTOM_RESOURCE
+
+
+class UnsupportedResourceError(ControllerError):
+    """Raised when the kind of a Kubernetes resource in a manifest is not supported by
+    the Kubernetes controller.
+    """
+
+    code = ReasonCode.UNSUPPORTED_KIND
 
 
 class ApiAdapter(object):
@@ -252,12 +269,12 @@ class KubernetesClient(object):
             spec:
                 crdSpec: spec_2
 
-        Raises:
-            InvalidResourceError: If the request for the custom resource
-            definition failed.
-
         Returns:
             dict: Custom resource apis
+
+        Raises:
+            InvalidCustomResourceDefinitionError: If the request for the custom resource
+                definition failed.
 
         """
         custom_resource_apis = {}
@@ -275,7 +292,7 @@ class KubernetesClient(object):
                     custom_resource
                 )
             except ApiException as err:
-                raise InvalidResourceError(str(err))
+                raise InvalidCustomResourceDefinitionError(err)
 
             # Custom resource api version should be always first item in versions
             # field
@@ -305,8 +322,8 @@ class KubernetesClient(object):
             ApiAdapter: the API adapter to use for this resource.
 
         Raises:
-            InvalidResourceError: if the kind given is not supported by the Controller,
-                and is not a supported custom resource.
+            UnsupportedResourceError: if the kind given is not supported by the
+                Controller, and is not a supported custom resource.
 
         """
         try:
@@ -316,7 +333,7 @@ class KubernetesClient(object):
                 custom_resource_apis = await self.custom_resource_apis
                 resource_api = custom_resource_apis[kind]
             except KeyError:
-                raise InvalidResourceError(f"{kind} resources are not supported")
+                raise UnsupportedResourceError(f"{kind} resources are not supported")
 
         return resource_api
 
@@ -335,6 +352,11 @@ class KubernetesClient(object):
         Raises:
             InvalidResourceError: if the kind or the name is not present.
 
+        Raises:
+            InvalidManifestError: if the kind or name is not present in the resource.
+            ApiException: by the Kubernetes API in case of malformed content or
+                error on the cluster's side.
+
         """
         metadata = resource["metadata"]
         namespace = metadata.get("namespace", self.default_namespace)
@@ -342,12 +364,12 @@ class KubernetesClient(object):
         try:
             kind = resource["kind"]
         except KeyError:
-            raise InvalidResourceError('Resource must define "kind"')
+            raise InvalidManifestError('Resource must define "kind"')
 
         try:
             name = metadata["name"]
         except KeyError:
-            raise InvalidResourceError('Resource must define "metadata.name"')
+            raise InvalidManifestError('Resource must define "metadata.name"')
 
         return kind, name, namespace
 
@@ -395,6 +417,11 @@ class KubernetesClient(object):
         Returns:
             kubernetes_asyncio.client.models.v1_status.V1Status: response from the
                 cluster as given by the Kubernetes client.
+
+        Raises:
+            InvalidManifestError: if the kind or name is not present in the resource.
+            ApiException: by the Kubernetes API in case of malformed content or
+                error on the cluster's side.
 
         """
         kind, name, namespace = self._get_immutables(resource)

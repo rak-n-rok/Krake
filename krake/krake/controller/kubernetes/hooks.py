@@ -18,8 +18,8 @@ from OpenSSL import crypto
 from typing import NamedTuple
 
 import yarl
-from krake.controller import Observer, ControllerError
-from krake.controller.kubernetes.client import KubernetesClient
+from krake.controller import Observer
+from krake.controller.kubernetes.client import KubernetesClient, InvalidManifestError
 from krake.utils import camel_to_snake_case, get_kubernetes_resource_idx
 from kubernetes_asyncio.client.rest import ApiException
 from yarl import URL
@@ -34,16 +34,8 @@ from kubernetes_asyncio.client import (
 )
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 
-from krake.data.core import ReasonCode
-
 
 logger = logging.getLogger(__name__)
-
-
-class InvalidResourceError(ControllerError):
-    """Raised in case of invalid kubernetes resource definition."""
-
-    code = ReasonCode.INVALID_RESOURCE
 
 
 class Hook(Enum):
@@ -1450,10 +1442,14 @@ class Complete(object):
             Args:
                 sub_resource (SubResource): Hook sub-resource that needs to be injected
                     into :attr:`last_applied_manifest`
-                sub_resources_to_mangle (object): Kubernetes sub-resources from
+                sub_resource_to_mangle (object): Kubernetes sub-resources from
                     :attr:`last_applied_manifest` which need to be processed
                 observed_resource_to_mangle (dict): partial mangled_observer_schema
                     corresponding to the Kubernetes sub-resource.
+
+            Raises:
+                InvalidManifestError: if the sub-resource which will be mangled is not a
+                    list or a dict.
 
             """
 
@@ -1564,7 +1560,11 @@ class Complete(object):
                     )
 
                 else:
-                    raise InvalidResourceError
+                    message = (
+                        f"The sub-resource to mangle {sub_resources_to_mangle!r} has an"
+                        "invalid type, should be in '[dict, list]'"
+                    )
+                    raise InvalidManifestError(message)
 
     def configmap(
         self,

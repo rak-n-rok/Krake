@@ -305,7 +305,8 @@ class Session(object):
         updated to the revision returned by the transaction response.
 
         Args:
-            instance (object): Serializable object that should be stored
+            instance (krake.data.serializable.Serializable): Serializable object that
+            should be stored.
 
         Raise:
             TransactionError: If the key was modified in between or already

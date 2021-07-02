@@ -9,7 +9,7 @@ import pytz
 import yaml
 
 from krake.api.app import create_app
-from krake.controller.kubernetes.client import InvalidResourceError
+from krake.controller.kubernetes.client import InvalidCustomResourceDefinitionError
 from krake.controller.kubernetes.kubernetes import ResourceDelta
 from krake.data.core import resource_ref
 from krake.data.kubernetes import Application, ApplicationState
@@ -954,7 +954,7 @@ async def test_app_custom_resource_deletion_non_ns(aiohttp_server, config, db, l
 async def test_app_custom_resource_error_handling(aiohttp_server, config, db, loop):
     routes = web.RouteTableDef()
 
-    # Determine scope, version, group and plural of custome resource definition
+    # Determine scope, version, group and plural of custom resource definition
     @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
     async def _(request):
         return web.Response(status=403)
@@ -984,5 +984,5 @@ async def test_app_custom_resource_error_handling(aiohttp_server, config, db, lo
         controller = KubernetesController(server_endpoint(api_server), worker_count=0)
         await controller.prepare(client)
 
-        with pytest.raises(InvalidResourceError, match="403"):
+        with pytest.raises(InvalidCustomResourceDefinitionError, match="403"):
             await controller.resource_received(app)

@@ -12,7 +12,7 @@ from asyncio.subprocess import PIPE, STDOUT
 import pytz
 
 from krake import utils
-from krake.controller.kubernetes.client import InvalidResourceError
+from krake.controller.kubernetes.client import InvalidManifestError
 from kubernetes_asyncio.client import (
     V1Status,
     V1Service,
@@ -1571,7 +1571,7 @@ async def test_kubernetes_controller_unsupported_error_handling(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
     assert stored.status.state == ApplicationState.FAILED
-    assert stored.status.reason.code == ReasonCode.INVALID_RESOURCE
+    assert stored.status.reason.code == ReasonCode.UNSUPPORTED_KIND
 
 
 async def test_kubernetes_api_error_handling(aiohttp_server, config, db, loop):
@@ -1621,7 +1621,7 @@ async def test_client_app_kind_error_handling(aiohttp_server, config, db, loop):
 
     kube = KubernetesClient(cluster.spec.kubeconfig, [])
 
-    with pytest.raises(InvalidResourceError, match="kind"):
+    with pytest.raises(InvalidManifestError, match="kind"):
         await kube.apply(copy_deployment_manifest[0])
 
 
@@ -1635,7 +1635,7 @@ async def test_client_app_name_error_handling(aiohttp_server, config, db, loop):
     cluster = ClusterFactory()
 
     kube = KubernetesClient(cluster.spec.kubeconfig, [])
-    with pytest.raises(InvalidResourceError, match="metadata.name"):
+    with pytest.raises(InvalidManifestError, match="metadata.name"):
         await kube.apply(copy_deployment_manifest[0])
 
 
