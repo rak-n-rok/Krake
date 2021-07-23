@@ -29,6 +29,7 @@ from .utils import (
     StoreDict,
     get_data_classes,
     render_and_print,
+    add_no_black_formatting,
 )
 from typing import NamedTuple, List
 
@@ -279,7 +280,7 @@ def process_classes_scopes(scopes, data_classes):
             )
 
 
-def generate_apidef(data_path, templates_dir, template_path, scopes=None):
+def generate_apidef(data_path, templates_dir, template_path, no_black, scopes=None):
     """From a given Krake API module path, prints an API definition file that contains
     the definition of all resources described in the API.
 
@@ -288,6 +289,7 @@ def generate_apidef(data_path, templates_dir, template_path, scopes=None):
             "krake.data.my_api".
         templates_dir (str): path of the directory in which the template is stored.
         template_path (str): name of the template.
+        no_black (bool): if True, the black formatting will not be used.
         scopes (dict, optional): a dictionary of the scope for each class, with the
             key-value pairs being: "<class_name>: <scope_as_string>". For example:
             "MyClass": "NAMESPACED". If no value is provided, the default scope will be
@@ -300,7 +302,7 @@ def generate_apidef(data_path, templates_dir, template_path, scopes=None):
     api_def = Api.from_path(data_path, scopes=scopes)
 
     parameters = {"api_def": api_def}
-    render_and_print(templates_dir, template_path, parameters)
+    render_and_print(templates_dir, template_path, parameters, no_black=no_black)
 
 
 def add_apidef_subparser(subparsers):
@@ -323,6 +325,7 @@ def add_apidef_subparser(subparsers):
             "Syntax: '<path>.<to>.<module>'. Example: 'krake.data.foo'."
         ),
     )
+    add_no_black_formatting(parser=parser)
     add_templates_dir(parser=parser)
     add_template_path(parser=parser, default=default_apidef_template)
 
