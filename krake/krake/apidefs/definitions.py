@@ -42,8 +42,6 @@ Example:
 """
 from inspect import getmembers
 from enum import Enum, auto
-from marshmallow import fields, missing
-from marshmallow.validate import Range
 
 from krake.data.serializable import ApiObject
 
@@ -66,6 +64,8 @@ class ApiDef(object):
     def __init__(self, name):
         self.name = name
         self.resources = []
+        self._import_classes = None
+        self._import_factory_classes = None
 
     def resource(self, template):
         """Decorator method that is used to transform a given class into a
@@ -138,6 +138,7 @@ class Resource(object):
         self.scope = scope
         self.singular = singular
         self.plural = plural
+        self._import_classes = None
 
         for name, op in operations:
             op.resource = self
@@ -146,6 +147,25 @@ class Resource(object):
         for name, sub in subresources:
             sub.resource = self
         self.subresources = [sub for _, sub in subresources]
+
+    def __getitem__(self, item):
+        """Gets the operation defined for this resource, with the given name.
+
+        Args:
+            item (str): name of the operation to retrieve.
+
+        Returns:
+            operation: the operation with the given name.
+
+        Raises:
+            KeyError: if no operation with this name has been defined for this Resource.
+
+        """
+        for operation in self.operations:
+            if operation.name == item:
+                return operation
+        else:
+            raise KeyError(item)
 
     def __repr__(self):
         return f"<Resource {self.api}.{self.singular} scope={self.scope.name}>"
@@ -343,6 +363,10 @@ class subresource(object):
             raise RuntimeError(f"Subresource already bound to {self._resource!r}")
         self._resource = value
 
+    @property
+    def resource_name(self):
+        return f"{self.resource.plural.lower()}/{self.name.lower()}"
+
     def __repr__(self):
         return (
             f"<subresource {self.name} for "
@@ -373,47 +397,3 @@ def make_resource(cls, api):
         operations=operations,
         subresources=subresources,
     )
-
-
-class QueryFlag(fields.Field):
-    """Field used for boolean query parameters.
-
-    If the query parameter exists the field is deserialized to :data:`True`
-    regardless of the value. The field is marked as ``load_only``.
-
-    """
-
-    def __init__(self, **metadata):
-        super().__init__(load_only=True, **metadata)
-
-    def deserialize(self, value, attr=None, data=None, **kwargs):
-        if value is missing:
-            return False
-        return True
-
-
-class ListQuery(object):
-    """Simple mixin class for :class:`operation` template classes.
-
-    Defines default :attr:`operation.query` attribute for *list* and *list
-    all* operations.
-
-    """
-
-    query = {
-        "heartbeat": fields.Integer(
-            missing=None,
-            doc=(
-                "Number of seconds after which the server sends a heartbeat in "
-                "form a an empty newline. Passing 0 disables the heartbeat. "
-                "Default: 10 seconds"
-            ),
-            validate=Range(min=0),
-        ),
-        "watch": QueryFlag(
-            doc=(
-                "Watch for changes to the described resources and return "
-                "them as a stream of :class:`krake.data.core.WatchEvent`"
-            )
-        ),
-    }
