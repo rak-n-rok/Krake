@@ -1,9 +1,12 @@
+import sys
+
 from .utils import (
     add_templates_dir,
     get_data_classes,
     get_default_template_dir,
     render_and_print,
     add_no_black_formatting,
+    add_option,
 )
 from krake.apidefs.definitions import ApiDef
 
@@ -56,7 +59,9 @@ class ApiOrTestGenerator(object):
         self.template_path = template_path
         self.description = description
 
-    def generate_code(self, data_path, templates_dir, no_black):
+    def generate_code(
+        self, data_path, templates_dir, no_black, operations=None, resources=None
+    ):
         """From a given Krake API definition path, prints a Python file that contains the
         code from the templates directory, with the given API definition applied, to be
         included in Krake.
@@ -66,11 +71,21 @@ class ApiOrTestGenerator(object):
                 "krake.data.my_api".
             templates_dir (str): path of the directory in which the template is stored.
             no_black (bool): if True, the black formatting will not be used.
+            operations (list[str]): list of names of operations that the generator
+                should display. If empty, all operations are processed and displayed.
+            resources (list[str]): list of names of resources that the generator should
+                display. If empty, all resources are processed and displayed.
 
         """
         api_definitions = get_data_classes(data_path, condition=is_api_def)
         assert len(api_definitions) == 1, "Only one API should be defined."
         api_definition = api_definitions[0]
+
+        if resources:
+            filter_resources(api_definition, resources)
+
+        if operations:
+            filter_operations(api_definition, operations)
 
         parameters = {"api_def": api_definition}
         render_and_print(
@@ -104,4 +119,114 @@ class ApiOrTestGenerator(object):
 
         add_no_black_formatting(parser=parser)
 
+        add_operations_to_keep(parser=parser)
+        add_resources_to_keep(parser=parser)
+
         parser.set_defaults(generator=self.generate_code)
+
+
+def add_operations_to_keep(parser, **kwargs):
+    """Adds an "--operations" option for the given parser, which can be reused several
+    times. The resulting list of strings can then be used for a list of operations to
+    display.
+
+    Args:
+        parser (argparse.ArgumentParser): parser to which the option will be added.
+        **kwargs (dict): additional arguments to give to the parser.
+
+    """
+    add_option(
+        parser,
+        short="-o",
+        name="--operations",
+        help=(
+            "Names of operations from the API definition resources (any case) that"
+            " will be displayed by the generator. Can be used several times. Empty to"
+            " keep all operations."
+        ),
+        action="append",
+        **kwargs,
+    )
+
+
+def _keep_given_operations(resource, operations):
+    """From the provided resource, removes all operations which are not in the provided
+    operations list.
+
+    Args:
+        resource: API definition resource or subresource.
+        operations (list[str]): list of operations name to keep.
+
+    """
+    for res_operation in list(resource.operations):
+        if res_operation.name.lower() not in operations:
+            resource.operations.remove(res_operation)
+
+
+def filter_operations(api_definition, keep_operations):
+    """From an API definition, removes all operations on all resources and sub-resources
+    that are not in the provided operations.
+
+    Args:
+        api_definition (krake.apidefs.definitions.ApiDef): API definition extracted from
+            a module file.
+        keep_operations (list[str]): list of operations name to keep.
+
+    """
+    if len(set(keep_operations)) != len(keep_operations):
+        sys.exit("Error: some operations to keep are duplicates.")
+
+    keep_operations = [op.lower() for op in keep_operations]
+
+    for resource in api_definition.resources:
+        _keep_given_operations(resource, keep_operations)
+
+        for sub_resource in resource.subresources:
+            _keep_given_operations(sub_resource, keep_operations)
+
+
+def add_resources_to_keep(parser, **kwargs):
+    """Adds an "--resources" option for the given parser, which can be reused several
+    times. The resulting list of strings can then be used for a list of resources to
+    display.
+
+    Args:
+        parser (argparse.ArgumentParser): parser to which the option will be added.
+        **kwargs (dict): additional arguments to give to the parser.
+
+    """
+    add_option(
+        parser,
+        short="-r",
+        name="--resources",
+        help=(
+            "Names of resources from the API definition (any case) that will be"
+            " displayed by the generator. Can be used several times. Empty to keep all"
+            " resources."
+        ),
+        action="append",
+        **kwargs,
+    )
+
+
+def filter_resources(api_definition, keep_resources):
+    """From an API definition, removes all resources on all resources and sub-resources
+    that are not in the provided resources.
+
+    Args:
+        api_definition (krake.apidefs.definitions.ApiDef): API definition extracted from
+            a module file.
+        keep_resources (list[str]): list of resources name to keep.
+
+    """
+    if len(set(keep_resources)) != len(keep_resources):
+        sys.exit("Error: some resources to keep are duplicates.")
+
+    keep_resources = [op.lower() for op in keep_resources]
+
+    for resource in list(api_definition.resources):
+        if (
+            resource.singular.lower() not in keep_resources
+            and resource.snake_case_singular.lower() not in keep_resources
+        ):
+            api_definition.resources.remove(resource)
