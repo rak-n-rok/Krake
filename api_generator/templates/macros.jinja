@@ -1,0 +1,73 @@
+{#
+    Includes the template corresponding to the given operation name.
+
+    Args:
+        operation (krake.apidefs.definitions.operation): operation to include to the
+            main template.
+        main_dir (PathLike): path to the directory that contains all template for the
+            current generator.
+        sub_resource (bool): if False, the template for the current operation will be
+            taken from the normal operation instead of the sub-resource operation's
+               templates.
+#}
+{% macro include_operation(operation, main_dir, sub_resource=True) %}
+{% if operation.subresource and sub_resource %}
+    {#- Needs "operation" as parameter for the values in the included template -#}
+    {% include '{}/subres_{}.jinja'.format(main_dir, operation.name|lower) %}
+{% else %}
+    {#- Needs "operation" as parameter for the values in the included template -#}
+    {% include '{}/{}.jinja'.format(main_dir, operation.name|lower) %}
+{% endif %}
+{% endmacro %}
+
+
+{#
+    Adds "namespace" as parameter if the resource of the operation is namespaced.
+
+    Args:
+        operation (krake.apidefs.definitions.operation): the current operation.
+#}
+{% macro namespace_format(operation) -%}
+    {{ "namespace=namespace, " if operation.resource.namespaced }}
+{%- endmacro %}
+
+
+{#
+    Adds "namespace" in the signature of a function if the resource of the operation is
+    namespaced.
+
+    Args:
+        operation (krake.apidefs.definitions.operation): the current operation.
+#}
+{% macro namespace_signature(operation) -%}
+    {{ ", namespace" if operation.resource.namespaced }}
+{%- endmacro %}
+
+
+{#
+    Generates the docstring for an operation, WITHOUT its description. Only the arguments
+    and returned elements are generated.
+
+    Args:
+        operation (krake.apidefs.definitions.operation): the current operation.
+#}
+{% macro docstring(operation) -%}
+{% if operation.arguments %}
+Args:
+{%- for arg in operation.arguments %}
+{%- if arg.name == "body" %}
+    body ({{ operation.body.__name__ }}): Body of the HTTP request.
+{%- elif arg.name == "namespace" %}
+    namespace (str): namespace in which the {{ operation.resource.singular }} will be updated.
+{%- elif arg.name == "name" %}
+    name (str): name of the {{ operation.resource.singular }}.
+{%- else %}
+    {{ arg.name }} ({{ arg.kind }}): {{ arg.doc }}
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+{% if operation.response %}
+Returns:
+    {{ operation.response.__name__ }}: Body of the HTTP response.
+{% endif %}
+{%- endmacro %}
