@@ -33,7 +33,7 @@ from .utils import (
 )
 from typing import NamedTuple, List
 
-from krake.apidefs.definitions import Scope
+from api_generator.apidefs.definitions import Scope
 from krake.data.serializable import ApiObject
 
 
