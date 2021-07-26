@@ -53,6 +53,11 @@ def add_generators(parsers):
     )
     test_client.add_apidef_subparser(parsers)
 
+    test_server = ApiOrTestGenerator(
+        "test_server", "test_server/main.jinja", "unit tests for the API server code"
+    )
+    test_server.add_apidef_subparser(parsers)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Code generator for the Krake API.")

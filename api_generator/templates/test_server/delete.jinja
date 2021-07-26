@@ -1,0 +1,67 @@
+async def test_delete_{{ operation.signature_name }}(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    # MISSING Resource-specific elements can be set here
+    data = {{ operation.response.__name__ }}Factory()
+    await db.put(data)
+
+    resp = await client.delete(
+        f"{{ operation.path.format(namespace="testing", name="{data.metadata.name}") }}"
+    )
+    assert resp.status == 200
+    received = {{ operation.response.__name__ }}.deserialize(await resp.json())
+    assert resource_ref(received) == resource_ref(data)
+    assert received.metadata.deleted is not None
+
+    deleted = await db.get({{ operation.response.__name__ }}, {{ namespace_testing(operation) }}name=data.metadata.name)
+    assert deleted.metadata.deleted is not None
+    assert "cascade_deletion" in deleted.metadata.finalizers
+
+
+async def test_add_finalizer_in_deleted_{{ operation.signature_name }}(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = {{ operation.response.__name__ }}Factory(
+        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+    )
+    await db.put(data)
+
+    data.metadata.finalizers = ["a-different-finalizer"]
+    resp = await client.put(
+        f"{{ operation.path.format(namespace="testing", name="{data.metadata.name}") }}", json=data.serialize()
+    )
+    assert resp.status == 409
+    body = await resp.json()
+    assert len(body["metadata"]["finalizers"]) == 1
+
+
+async def test_delete_{{ operation.signature_name }}_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.delete(
+        "{{ operation.path.format(namespace="testing", name="my-resource") }}"
+    )
+    assert resp.status == 403
+
+    async with rbac_allow(
+        "{{ operation.resource.api }}",
+        "{{ operation.resource.plural|lower }}",
+        "delete"
+    ):
+        resp = await client.delete(
+            "{{ operation.path.format(namespace="testing", name="my-resource") }}"
+        )
+        assert resp.status == 404
+
+
+async def test_delete_{{ operation.signature_name }}_already_in_deletion(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    in_deletion = {{ operation.response.__name__ }}Factory(metadata__deleted=fake.date_time())
+    await db.put(in_deletion)
+
+    resp = await client.delete(
+        f"{{ operation.path.format(namespace="testing", name="{in_deletion.metadata.name}") }}"
+    )
+    assert resp.status == 200
