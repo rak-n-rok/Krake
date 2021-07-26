@@ -211,7 +211,7 @@ class MagnumCluster(ApiObject):
 
 class MagnumClusterList(ApiObject):
     api: str = "openstack"
-    kind: str = "ProjectList"
+    kind: str = "MagnumClusterList"
     metadata: ListMetadata
     items: List[MagnumCluster]
 
