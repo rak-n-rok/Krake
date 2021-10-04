@@ -120,3 +120,39 @@ def get_kubernetes_resource_idx(manifest, resource_api, resource_kind, resource_
             return idx
 
     raise IndexError
+
+
+def get_kubernetes_resource_idx_with_namespace(
+    manifest,
+    resource_api,
+    resource_kind,
+    resource_name,
+    resource_namespace
+):
+    """Get a resource identified by its resource api, kind, name and namespace,
+    from a manifest file
+
+    Args:
+        manifest (list[dict]): Manifest file to get the resource from
+        resource_api (str): API Version of the resource to find
+        resource_kind (str): Kind of the resource to find
+        resource_name (str): Name of the resource to find
+        resource_namespace (str): Namespace of the resource to find
+
+    Raises:
+        IndexError: If the resource is not present in the manifest
+
+    Returns:
+        int: Position of the resource in the manifest
+
+    """
+    for idx, found_resource in enumerate(manifest):
+        if (
+            found_resource["apiVersion"] == resource_api
+            and found_resource["kind"] == resource_kind
+            and found_resource["metadata"]["name"] == resource_name
+            and found_resource["metadata"]["namespace"] == resource_namespace
+        ):
+            return idx
+
+    raise IndexError
