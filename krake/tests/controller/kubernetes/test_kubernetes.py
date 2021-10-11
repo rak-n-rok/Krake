@@ -1806,12 +1806,16 @@ def test_resource_delta(loop):
         present in last_applied_manifest
 
     State (10):
-        Add additional elements to a list in last_observed_manifest
+        Update the namespace field in the last_observed_manifest, which is observed and present in
+        last_applied_manifest
 
     State (11):
-        Remove elements from a list in last_observed_manifest
+        Add additional elements to a list in last_observed_manifest
 
     State (12):
+        Remove elements from a list in last_observed_manifest
+
+    State (13):
         Remove ConfigMap
 
     """
@@ -1954,7 +1958,21 @@ def test_resource_delta(loop):
     assert len(deleted) == 0
     assert len(modified) == 0
 
-    # State (10): Add additional elements to a list in last_observed_manifest
+
+    # State (10): Update the namespace field in the last_observed_manifest, which is observed and
+    # present in last_applied_manifest
+
+    app.status.last_observed_manifest[1]["metadata"]["namespace"] = "Secondary"
+
+    # The modification of the namespace field should create a new resource in the changed namespace
+    # and delete the old resource out of the old namespace. This leads to a new and a deleted element
+    # in their respective lists
+    new, deleted, modified = ResourceDelta.calculate(app)
+    assert len(new) == 1
+    assert len(deleted) == 1
+    assert len(modified) == 0
+
+    # State (11): Add additional elements to a list in last_observed_manifest
     app.status.last_applied_manifest = deepcopy(initial_last_applied_manifest)
     app.status.last_observed_manifest = deepcopy(initial_last_observed_manifest)
     app.status.last_observed_manifest[1]["spec"]["ports"].insert(
@@ -1986,7 +2004,7 @@ def test_resource_delta(loop):
     assert len(modified) == 1
     assert app.status.last_applied_manifest[1] in modified  # Service
 
-    # State (11): Remove elements from a list in last_observed_manifest
+    # State (12): Remove elements from a list in last_observed_manifest
     app.status.mangled_observer_schema[1]["spec"]["ports"][-1][
         "observer_schema_list_min_length"
     ] = 1
@@ -2005,7 +2023,7 @@ def test_resource_delta(loop):
     assert len(modified) == 1
     assert app.status.last_applied_manifest[1] in modified  # Service
 
-    # State (12): Remove ConfigMap
+    # State (13): Remove ConfigMap
     app.status.last_applied_manifest = deepcopy(initial_last_applied_manifest)
     app.status.last_observed_manifest = deepcopy(initial_last_observed_manifest)
     app.status.mangled_observer_schema.pop(2)
