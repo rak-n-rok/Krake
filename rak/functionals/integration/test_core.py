@@ -1,17 +1,25 @@
 """This module defines E2e integration tests for the core resources of
 the Krake API:
 
+    Role
+    RoleBinding
     GlobalMetricsProvider
     GlobalMetric
 
-The tests are performed against the krake API, via the rok cli.
+The tests are performed against the Krake API, via the rok cli or a sessions request
+instance, in case of no available implementation in rok.
 """
 import time
+import requests
+
 from enum import Enum
+from urllib.parse import urljoin
+from datetime import datetime, timezone
 
 from utils import (
     run,
     check_return_code,
+    check_status_code,
     check_metric_content,
     check_metrics_provider_content,
 )
@@ -24,6 +32,285 @@ class _MetricsProviderType(Enum):
 
 
 _GC_DELAY = 3
+
+# FIXME: Change with a rok implementation of Role and RoleBinding
+# In succession with the conftest.py, test_roles_crud and test_rolebindings_crud need
+# to be changed, if a rok implementation for roles and rolebindings is available.
+
+def test_roles_crud(session):
+    """Test basic role functionality with the session library.
+    Rok cli can't be used here, because it doesn't implement role calls (yet).
+    The test method performs the following tests for roles:
+
+    1. Delete a non-existent role and expect failure
+    2. Get a non-existent role and expect failure
+    3. Update a non-existent role and expect failure
+    4. Create a role
+    5. Get the role and check the content
+    6. Update the role
+    7. Get the role and check the content
+    8. Perform an empty update of the role and expect failure
+    9. Create a role with the same name and expect failure
+    10. Delete the role created earlier
+    11. List the roles and verify that the deleted one is not present
+    """
+
+    base_url = session.base_url
+    name = "e2e_test_role_2b_deleted"
+    url = "/core/roles"
+    req_url = urljoin(urljoin(base_url, url) + "/", name)
+
+    # 1. Delete a non-existent role and expect failure
+    try:
+        session.delete(req_url)
+    except requests.HTTPError as e:
+        check_status_code(e.response, 404)
+        pass
+
+    # 2. Get a non-existent role and expect failure
+    try:
+        session.get(req_url)
+    except requests.HTTPError as e:
+        check_status_code(e.response, 404)
+        pass
+
+    # 3. Update a non-existent role and expect failure
+    data = {
+        "rules": [],
+        "metadata": {
+            "uid": "",
+            "name": name,
+            "created": "2021-09-09T08:18:50.856741+00:00",
+            "modified": "2021-09-09T08:18:50.856741+00:00",
+            "labels": {},
+        },
+    }
+    try:
+        session.put(req_url, json=data)
+    except requests.HTTPError as e:
+        check_status_code(e.response, 404)
+        pass
+
+    # 4. Create a role
+    before_creation = datetime.now(timezone.utc)
+    resp = session.post(
+        urljoin(base_url, url), json={"metadata": {"name": name}, "rules": []}
+    )
+    check_status_code(resp, 200)
+
+    # 5. Get the role and check the content
+    resp = session.get(req_url)
+    check_status_code(resp, 200)
+    resp_data = resp.json()
+    assert resp_data["rules"] == []
+    assert resp_data["metadata"]["uid"] != ""
+    assert resp_data["metadata"]["name"] == name
+    assert (
+        before_creation
+        < datetime.strptime(resp_data["metadata"]["created"], "%Y-%m-%dT%H:%M:%S.%f%z")
+        < datetime.now(timezone.utc)
+    )
+
+    # 6. Update the role
+    before_update = datetime.now(timezone.utc)
+
+    data = {
+        "rules": [],
+        "metadata": {
+            "uid": resp_data["metadata"]["uid"],
+            "name": name,
+            "created": resp_data["metadata"]["created"],
+            "modified": resp_data["metadata"]["modified"],
+            "labels": {"Testlabel": "Testlabel"},
+        },
+    }
+    resp = session.put(req_url, json=data)
+    check_status_code(resp, 200)
+
+    # 7. Get the role and check the updated content
+    resp = session.get(req_url)
+    check_status_code(resp, 200)
+    resp_data = resp.json()
+    assert resp_data["rules"] == []
+    assert resp_data["metadata"]["uid"] != ""
+    assert resp_data["metadata"]["name"] == name
+    assert (
+        before_update
+        < datetime.strptime(resp_data["metadata"]["modified"], "%Y-%m-%dT%H:%M:%S.%f%z")
+        < datetime.now(timezone.utc)
+    )
+    assert resp_data["metadata"]["labels"] == {"Testlabel": "Testlabel"}
+
+    # 8. Update the role with an empty update and expect failure
+    try:
+        session.put(req_url, json={})
+    except requests.HTTPError as e:
+        check_status_code(e.response, 422)
+        pass
+
+    # 9. Create a role with the same name and expect failure
+    try:
+        session.post(
+            urljoin(base_url, url), json={"metadata": {"name": name}, "rules": []}
+        )
+    except requests.HTTPError as e:
+        check_status_code(e.response, 409)
+        pass
+
+    # 10. Delete the role created earlier
+    resp = session.delete(req_url)
+    check_status_code(resp, 200)
+
+    # 11. List the roles and verify that the deleted one is not present
+    resp = session.get(urljoin(base_url, url))
+    check_status_code(resp, 200)
+    resp_data = resp.json()
+    for item in resp_data["items"]:
+        if item["metadata"]["deleted"] is not None:
+            assert item["metadata"]["name"] == name
+        else:
+            assert item["metadata"]["name"] != name
+
+
+def test_rolebindings_crud(session):
+    """Test basic rolebinding functionality with the session library.
+    Rok cli can't be used here, because it doesn't implement rolebinding calls (yet).
+    The test method performs the following tests for rolebindings:
+
+    1. Delete a non-existent rolebinding and expect failure
+    2. Get a non-existent rolebinding and expect failure
+    3. Update a non-existent rolebinding and expect failure
+    4. Create a rolebinding
+    5. Get the rolebinding and check the content
+    6. Update the rolebinding
+    7. Get the rolebinding and check the content
+    8. Perform an empty update of the rolebinding and expect failure
+    9. Create a rolebinding with the same name and expect failure
+    10. Delete the rolebinding created earlier
+    11. List the rolebindings and verify that the deleted one is not present
+    """
+
+    base_url = session.base_url
+    name = "e2e_test_rolebinding_2b_deleted"
+    url = "/core/rolebindings"
+    req_url = urljoin(urljoin(base_url, url) + "/", name)
+
+    # 1. Delete a non-existent rolebinding and expect failure
+    try:
+        session.delete(req_url)
+    except requests.HTTPError as e:
+        check_status_code(e.response, 404)
+        pass
+
+    # 2. Get a non-existent rolebinding and expect failure
+    try:
+        session.get(req_url)
+    except requests.HTTPError as e:
+        check_status_code(e.response, 404)
+        pass
+
+    # 3. Update a non-existent rolebinding and expect failure
+    data = {
+        "users": [],
+        "roles": [],
+        "metadata": {
+            "uid": "",
+            "name": name,
+            "created": "2021-09-09T08:18:50.856741+00:00",
+            "modified": "2021-09-09T08:18:50.856741+00:00",
+            "labels": {},
+        },
+    }
+    try:
+        session.put(req_url, json=data)
+    except requests.HTTPError as e:
+        check_status_code(e.response, 404)
+        pass
+
+    # 4. Create a rolebinding
+    before_creation = datetime.now(timezone.utc)
+    resp = session.post(
+        urljoin(base_url, url),
+        json={"metadata": {"name": name}, "users": [], "roles": []},
+    )
+    check_status_code(resp, 200)
+
+    # 5. Get the rolebinding and check the content
+    resp = session.get(req_url)
+    check_status_code(resp, 200)
+    resp_data = resp.json()
+    assert resp_data["users"] == []
+    assert resp_data["roles"] == []
+    assert resp_data["metadata"]["uid"] != ""
+    assert resp_data["metadata"]["name"] == name
+    assert (
+        before_creation
+        < datetime.strptime(resp_data["metadata"]["created"], "%Y-%m-%dT%H:%M:%S.%f%z")
+        < datetime.now(timezone.utc)
+    )
+
+    # 6. Update the rolebinding
+    before_update = datetime.now(timezone.utc)
+
+    data = {
+        "users": [],
+        "roles": [],
+        "metadata": {
+            "uid": resp_data["metadata"]["uid"],
+            "name": name,
+            "created": resp_data["metadata"]["created"],
+            "modified": resp_data["metadata"]["modified"],
+            "labels": {"Testlabel": "Testlabel"},
+        },
+    }
+    resp = session.put(req_url, json=data)
+    check_status_code(resp, 200)
+
+    # 7. Get the rolebinding and check the updated content
+    resp = session.get(req_url)
+    check_status_code(resp, 200)
+    resp_data = resp.json()
+    assert resp_data["users"] == []
+    assert resp_data["roles"] == []
+    assert resp_data["metadata"]["uid"] != ""
+    assert resp_data["metadata"]["name"] == name
+    assert (
+        before_update
+        < datetime.strptime(resp_data["metadata"]["modified"], "%Y-%m-%dT%H:%M:%S.%f%z")
+        < datetime.now(timezone.utc)
+    )
+    assert resp_data["metadata"]["labels"] == {"Testlabel": "Testlabel"}
+
+    # 8. Update the rolebinding with an empty update and expect failure
+    try:
+        session.put(req_url, json={})
+    except requests.HTTPError as e:
+        check_status_code(e.response, 422)
+        pass
+
+    # 9. Create a rolebinding with the same name and expect failure
+    try:
+        session.post(
+            urljoin(base_url, url),
+            json={"metadata": {"name": name}, "users": [], "roles": []},
+        )
+    except requests.HTTPError as e:
+        check_status_code(e.response, 409)
+        pass
+
+    # 10. Delete the rolebinding created earlier
+    resp = session.delete(req_url)
+    check_status_code(resp, 200)
+
+    # 11. List the rolebindings and verify that the deleted one is not present
+    resp = session.get(urljoin(base_url, url))
+    check_status_code(resp, 200)
+    resp_data = resp.json()
+    for item in resp_data["items"]:
+        if item["metadata"]["deleted"] is not None:
+            assert item["metadata"]["name"] == name
+        else:
+            assert item["metadata"]["name"] != name
 
 
 def test_gmp_crud():

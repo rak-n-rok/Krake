@@ -368,6 +368,21 @@ def check_return_code(error_message, expected_code=0):
     return validate
 
 
+def check_status_code(response, expected_code=200):
+    """Presents a function to validate the status code of a requests response object.
+
+    Args:
+        response (requests.Response): the response object, that will be checked.
+        expected_code (int, optional): a http return code, to check against the one of
+            the given response.
+    """
+    error_message = (
+        f" Expected return code: {expected_code}."
+        f" Observed return code: {response.status_code}."
+    )
+    assert response.status_code == expected_code, error_message
+
+
 def check_empty_list(error_message):
     """Create a callable to verify that a response is empty.
 
