@@ -5,7 +5,8 @@ from enum import Enum, auto
 from functools import wraps
 from aiohttp import web
 from krake.data.serializable import Serializable
-from marshmallow import ValidationError
+from marshmallow import ValidationError, fields, missing
+from marshmallow.validate import Range
 
 
 class HttpReasonCode(Enum):
@@ -226,3 +227,61 @@ def use_schema(argname, schema):
         return wrapper
 
     return decorator
+
+
+def make_create_request_schema(cls):
+    """Create a :class:`marshmallow.Schema` excluding subresources and read-only.
+
+    Args:
+        cls (type): Data class with ``Schema`` attribute
+
+    Returns:
+        marshmallow.Schema: Schema instance with excluded subresources
+
+    """
+    exclude = cls.fields_ignored_by_creation()
+    return cls.Schema(exclude=exclude)
+
+
+class QueryFlag(fields.Field):
+    """Field used for boolean query parameters.
+
+    If the query parameter exists the field is deserialized to :data:`True`
+    regardless of the value. The field is marked as ``load_only``.
+
+    """
+
+    def __init__(self, **metadata):
+        super().__init__(load_only=True, **metadata)
+
+    def deserialize(self, value, attr=None, data=None, **kwargs):
+        if value is missing:
+            return False
+        return True
+
+
+class ListQuery(object):
+    """Simple mixin class for :class:`operation` template classes.
+
+    Defines default :attr:`operation.query` attribute for *list* and *list
+    all* operations.
+
+    """
+
+    query = {
+        "heartbeat": fields.Integer(
+            missing=None,
+            doc=(
+                "Number of seconds after which the server sends a heartbeat in "
+                "form of an empty newline. Passing 0 disables the heartbeat. "
+                "Default: 10 seconds"
+            ),
+            validate=Range(min=0),
+        ),
+        "watch": QueryFlag(
+            doc=(
+                "Watches for changes to the described resources and return "
+                "them as a stream of :class:`krake.data.core.WatchEvent`"
+            )
+        ),
+    }

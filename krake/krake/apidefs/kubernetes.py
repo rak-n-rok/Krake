@@ -1,3 +1,4 @@
+from krake.api.helpers import ListQuery
 from krake.data.kubernetes import (
     Application,
     ApplicationList,
@@ -6,7 +7,7 @@ from krake.data.kubernetes import (
     ClusterBinding,
     ApplicationComplete,
 )
-from .definitions import ApiDef, Scope, operation, subresource, ListQuery
+from .definitions import ApiDef, Scope, operation, subresource
 
 
 kubernetes = ApiDef("kubernetes")
@@ -100,6 +101,12 @@ class ClusterResource:
         response = Cluster
 
     @operation
+    class Read:
+        method = "GET"
+        path = "/kubernetes/namespaces/{namespace}/clusters/{name}"
+        response = Cluster
+
+    @operation
     class List(ListQuery):
         number = "plural"
         method = "GET"
@@ -112,12 +119,6 @@ class ClusterResource:
         method = "GET"
         path = "/kubernetes/clusters"
         response = ClusterList
-
-    @operation
-    class Read:
-        method = "GET"
-        path = "/kubernetes/namespaces/{namespace}/clusters/{name}"
-        response = Cluster
 
     @operation
     class Update:
