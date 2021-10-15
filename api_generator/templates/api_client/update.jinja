@@ -1,0 +1,10 @@
+async def update_{{ operation.signature_name }}(self, body{{ namespace_signature(operation) }}, name):
+    """Updates the specified {{ operation.resource.singular }}.
+    {{ docstring(operation)|indent }}
+    """
+    path = "{{ operation.path }}".format({{ namespace_format(operation) }}name=name)
+    url = self.client.url.with_path(path)
+
+    resp = await self.client.session.request("{{ operation.method }}", url, json=body.serialize())
+    data = await resp.json()
+    return {{ operation.response.__name__ }}.deserialize(data)

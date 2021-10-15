@@ -1,0 +1,23 @@
+async def list_all_{{ operation.signature_name }}(self):
+    """Lists all {{ operation.resource.plural }}.
+    {{ docstring(operation)|indent }}
+    """
+    path = "{{ operation.path }}"
+    url = self.client.url.with_path(path)
+
+    resp = await self.client.session.request("{{ operation.method }}", url)
+    data = await resp.json()
+    return {{ operation.response.__name__ }}.deserialize(data)
+
+def watch_all_{{ operation.signature_name }}(self, heartbeat=None):
+    """Generates a watcher for all {{ operation.resource.plural }}.
+    {{ docstring(operation)|indent }}
+    """
+    path = "{{ operation.path }}"
+
+    query = {"watch": ""}
+    if heartbeat is not None:
+        query["heartbeat"] = heartbeat
+    url = self.client.url.with_path(path).with_query(query)
+
+    return Watcher(self.client.session, url, {{ operation.resource.singular }})

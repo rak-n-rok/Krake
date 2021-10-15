@@ -2,6 +2,10 @@
 modifying an existing one. It allows the creation of:
 
  * the API definition of an API, using the resources defined in ``krake.data``;
+ * the API server code for Krake using the given API definition;
+ * the API client code for Krake using the given API definition.
+ * the unit tests for Krake clients using the given API definition.
+ * the unit tests for the Krake server using the given API definition.
 
 To use it, the ``extras_requires`` called ``api_generator`` of the ``setup.py`` must be
 installed. Use the following:
@@ -30,6 +34,14 @@ documentation of the module for the specific generators.
 import argparse
 
 from .api_definition import add_apidef_subparser
+from .api_or_test_generator import ApiOrTestGenerator
+
+
+def add_generators(parsers):
+    api_client = ApiOrTestGenerator(
+        "api_client", "api_client/main.jinja", "API client code"
+    )
+    api_client.add_apidef_subparser(parsers)
 
 
 if __name__ == "__main__":
@@ -37,6 +49,7 @@ if __name__ == "__main__":
     subparsers = parser.add_subparsers()
 
     add_apidef_subparser(subparsers)
+    add_generators(subparsers)
 
     args = parser.parse_args()
 
