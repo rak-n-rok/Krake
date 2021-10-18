@@ -1,3 +1,26 @@
+"""This specific module handles the generation of API code, for the client and the
+server-side, and for their unit tests counterparts. The API definitions files must be
+provided as path to the API definition module in the API generator.
+
+The generator prints a file content. This should be put into a Python file, which can
+then be integrated into Krake, in the Krake code or unit tests.
+
+The following syntax should be used:
+
+.. code:: bash
+
+    python -m api_generator <generator_name> <module_path> [<other_opts>...] > \
+        <module.path>
+
+For ``generator_name``, the possibilities are set in the main of the API generator.
+
+For example:
+
+.. code:: bash
+
+    python -m api_generator api_client api_generator.apidefs.core
+
+"""
 import sys
 
 from .utils import (
@@ -8,7 +31,7 @@ from .utils import (
     add_no_black_formatting,
     add_option,
 )
-from krake.apidefs.definitions import ApiDef
+from api_generator.apidefs.definitions import ApiDef
 
 
 def is_api_def(obj):

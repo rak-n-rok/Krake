@@ -1,0 +1,24 @@
+@routes.route(
+    "{{ operation.method }}", "{{ operation.path }}"
+)
+@protected(
+    api="{{ operation.resource.api }}", resource="{{ operation.subresource.resource_name }}", verb="update"
+)
+@use_schema("body", {{ operation.body.__name__ }}.Schema)
+@load("entity", {{ operation.response.__name__ }})
+async def update_{{ operation.signature_name }}(request, body, entity):
+    source = getattr(body, "{{ operation.subresource.name|lower }}")
+    dest = getattr(entity, "{{ operation.subresource.name|lower }}")
+
+    dest.update(source)
+
+    await session(request).put(entity)
+    logger.info(
+        "Update %s of %s %r (%s)",
+        "{{ operation.subresource.name }}",
+        "{{ operation.resource.singular }}",
+        entity.metadata.name,
+        entity.metadata.uid,
+    )
+
+    return web.json_response(entity.serialize())
