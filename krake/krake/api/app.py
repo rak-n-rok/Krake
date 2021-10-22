@@ -23,7 +23,7 @@ import aiohttp_cors
 import logging
 import ssl
 
-from aiohttp import web, ClientSession
+from aiohttp import web, ClientSession, TCPConnector
 from functools import partial
 from krake.api.database import Session
 
@@ -102,7 +102,9 @@ def create_app(config):
     app["ssl_context"] = ssl_context
 
     # Cleanup contexts
-    app.cleanup_ctx.append(http_session)
+    app.cleanup_ctx.append(
+        partial(http_session, ssl_context=ssl_context)
+    )
     app.cleanup_ctx.append(
         partial(db_session, host=config.etcd.host, port=config.etcd.port)
     )
@@ -166,9 +168,9 @@ async def db_session(app, host, port):
         yield
 
 
-async def http_session(app):
-    """Async generator creating an :class:`aiohttp.ClientSession` HTTP session
-    that can be used by other components (middleware, route handlers). The HTTP
+async def http_session(app, ssl_context=None):
+    """Async generator creating an :class:`aiohttp.ClientSession` HTTP(S) session
+    that can be used by other components (middleware, route handlers). The HTTP(S)
     client session is available under the ``http`` key of the application.
 
     This function should be used as cleanup context (see
@@ -178,7 +180,11 @@ async def http_session(app):
         app (aiohttp.web.Application): Web application
 
     """
-    async with ClientSession() as session:
+    connector = None
+    if ssl_context:
+        connector = TCPConnector(ssl_context=ssl_context)
+
+    async with ClientSession(connector=connector) as session:
         app["http"] = session
         yield
 
