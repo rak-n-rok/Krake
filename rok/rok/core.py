@@ -13,7 +13,7 @@ from .parser import (
     arg_formatting,
     MetricAction,
 )
-from .fixtures import depends
+from .fixtures import depends, rok_response_handler
 from .formatters import (
     BaseTable,
     Cell,
@@ -132,6 +132,7 @@ def list_globalmetricsproviders(session):
 @arg_formatting
 @depends("session")
 @printer(table=GlobalMetricsProviderTable())
+@rok_response_handler
 def create_globalmetricsprovider(
     session, name, url, mp_type, metrics, comparison_column, value_column, table
 ):
@@ -167,7 +168,7 @@ def create_globalmetricsprovider(
     }
 
     resp = session.post(GLOBAL_METRICS_PROVIDER_BASE_URL, json=mp)
-    return resp.json()
+    return resp, name
 
 
 def _validate_for_create_gmp(
@@ -443,6 +444,7 @@ def list_globalmetrics(session):
 @arg_formatting
 @depends("session")
 @printer(table=GlobalMetricTable())
+@rok_response_handler
 def create_globalmetric(session, name, gmp_name, min, max, metric_name=None):
     """Create a GlobalMetric resource.
 
@@ -477,7 +479,7 @@ def create_globalmetric(session, name, gmp_name, min, max, metric_name=None):
     }
 
     resp = session.post(GLOBAL_METRIC_BASE_URL, json=metric)
-    return resp.json()
+    return resp, name
 
 
 @global_metric.command("get", help="Get a global metric")

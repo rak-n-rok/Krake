@@ -20,7 +20,7 @@ from .parser import (
     arg_namespace,
     arg_metric,
 )
-from .fixtures import depends
+from .fixtures import depends, rok_response_handler
 from .formatters import (
     BaseTable,
     Cell,
@@ -161,6 +161,7 @@ class ApplicationTable(ApplicationListTable):
 @arg_formatting
 @depends("config", "session")
 @printer(table=ApplicationTable())
+@rok_response_handler
 def create_application(
     config,
     session,
@@ -201,7 +202,7 @@ def create_application(
         },
     }
     resp = session.post(f"/kubernetes/namespaces/{namespace}/applications", json=app)
-    return resp.json()
+    return resp, name
 
 
 @application.command("get", help="Get Kubernetes application")
@@ -413,6 +414,7 @@ def create_cluster_config(kubeconfig, context_name=None):
 @arg_formatting
 @depends("config", "session")
 @printer(table=ClusterTable(many=False))
+@rok_response_handler
 def create_cluster(
     config, session, namespace, kubeconfig, context, metrics, labels, custom_resources
 ):
@@ -430,7 +432,7 @@ def create_cluster(
         },
     }
     resp = session.post(f"/kubernetes/namespaces/{namespace}/clusters", json=to_create)
-    return resp.json()
+    return resp, cluster_name
 
 
 @cluster.command("list", help="List Kubernetes clusters")

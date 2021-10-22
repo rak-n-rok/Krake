@@ -15,7 +15,7 @@ from .parser import (
     arg_namespace,
     arg_metric,
 )
-from .fixtures import depends
+from .fixtures import depends, rok_response_handler
 from .formatters import BaseTable, Cell, printer, dict_formatter
 
 openstack = ParserSpec("openstack", aliases=["os"], help="Manage OpenStack resources")
@@ -67,6 +67,7 @@ def list_projects(config, session, namespace, all):
 @arg_metric
 @depends("config", "session")
 @printer(table=ProjectTable())
+@rok_response_handler
 def create_project(
     config,
     session,
@@ -125,7 +126,7 @@ def create_project(
         },
     }
     resp = session.post(f"/openstack/namespaces/{namespace}/projects", json=project)
-    return resp.json()
+    return resp, name
 
 
 @project.command("get", help="Get OpenStack project")
@@ -306,6 +307,7 @@ class ClusterTable(ClusterListTable):
 @argument("--node-count", type=int, help="Number of worker nodes")
 @depends("config", "session")
 @printer(table=ClusterTable())
+@rok_response_handler
 def create_cluster(
     config,
     session,
@@ -337,7 +339,7 @@ def create_cluster(
         json=cluster,
         raise_for_status=False,
     )
-    return resp.json()
+    return resp, name
 
 
 @cluster.command("list", help="List Magnum clusters")
