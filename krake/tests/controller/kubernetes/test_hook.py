@@ -2,7 +2,7 @@ import json
 import os.path
 import ssl
 import tempfile
-import yaml
+from base64 import b64decode
 
 from copy import deepcopy
 
@@ -31,6 +31,7 @@ from tests.controller.kubernetes import (
     deployment_manifest,
     custom_deployment_observer_schema,
     deployment_response,
+    secret_response,
 )
 
 
@@ -50,6 +51,7 @@ async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
     """
     routes = web.RouteTableDef()
     deploy_mangled_response = deepcopy(deployment_response)
+    secret_mangled_response = deepcopy(secret_response)
 
     # As part of the reconciliation loop started by ``controller.resource_received``,
     # the k8s controller checks if a Deployment named `nginx-demo` already exists.
@@ -59,7 +61,7 @@ async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
 
     # As part of the reconciliation loop, the k8s controller creates the deployment. We
     # augment the standard API Response with the additional "env" dictionary that
-    # contains the TOKEN and the URL
+    # contains the TOKEN and the URL taken from secret
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
         nonlocal deploy_mangled_response
@@ -72,6 +74,25 @@ async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
         resp_first_container["env"] = app_first_container["env"]
 
         return web.json_response(deploy_mangled_response)
+
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a Secret named `nginx-secret` already exists.
+    @routes.get("/api/v1/namespaces/secondary/secrets/nginx-secret")
+    async def _(request):
+        return web.Response(status=404)
+
+    # As part of the reconciliation loop, the k8s controller creates
+    # the Kubernetes secret. Kubernetes secret stores Krake
+    # authentication token and the Krake complete hook URL for the given application.
+    @routes.post("/api/v1/namespaces/secondary/secrets")
+    async def _(request):
+        nonlocal secret_mangled_response
+        rd = await request.read()
+        secret = json.loads(rd)
+
+        secret_mangled_response["metadata"]["name"] = secret["metadata"]["name"]
+        secret_mangled_response["data"] = secret["data"]
+        return web.json_response(secret_mangled_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -108,48 +129,61 @@ async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
 
-    # TLS is disabled, so no additional resource has been generated
-    assert len(stored.status.last_observed_manifest) == 1
+    # TLS is disabled, so only one (Kubernetes secret which stores Krake
+    # authentication token and the Krake complete hook URL)
+    # additional resource has been generated
+    assert len(stored.status.last_observed_manifest) == 2
 
     # Mangled `env` dictionary should be observed
     for observer_schema in stored.status.mangled_observer_schema:
-        if observer_schema["kind"] != "Deployment":
-            continue
-
-        for container in observer_schema["spec"]["template"]["spec"]["containers"][:-1]:
-            assert container["env"] == [
-                {"name": None, "value": None},
-                {"name": None, "value": None},
-                {
-                    "observer_schema_list_min_length": 2,
-                    "observer_schema_list_max_length": 2,
-                },
-            ]
+        if observer_schema["kind"] == "Deployment":
+            for container in observer_schema["spec"]["template"]["spec"]["containers"][:-1]:
+                assert container["env"] == [
+                    {
+                        "name": None,
+                        "valueFrom": {"secretKeyRef": {"key": None, "name": None}},
+                    },
+                    {
+                        "name": None,
+                        "valueFrom": {"secretKeyRef": {"key": None, "name": None}},
+                    },
+                    {
+                        "observer_schema_list_min_length": 2,
+                        "observer_schema_list_max_length": 2,
+                    },
+                ]
+        if observer_schema["kind"] == "Secret":
+            assert observer_schema["metadata"]["name"] == secret_mangled_response["metadata"]["name"]
+            assert observer_schema["data"].keys() == secret_mangled_response["data"].keys()
 
     # Mangled `env` dictionary should be present in last_applied_manifest and
     # last_observed_manifest
     for resource in stored.status.last_applied_manifest:
-        if resource["kind"] != "Deployment":
-            continue
+        if resource["kind"] == "Deployment":
+            for container in resource["spec"]["template"]["spec"]["containers"]:
+                assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
+                assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
 
-        for container in resource["spec"]["template"]["spec"]["containers"]:
-            assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
-            assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
+        if resource["kind"] == "Secret":
+            assert resource["metadata"]["name"] == secret_mangled_response["metadata"]["name"]
+            assert resource["data"] == secret_mangled_response["data"]
 
     for resource in stored.status.last_observed_manifest:
-        if resource["kind"] != "Deployment":
-            continue
+        if resource["kind"] == "Deployment":
+            # Loop over observed containers, but exclude special control list
+            for container in resource["spec"]["template"]["spec"]["containers"][:-1]:
+                assert "KRAKE_TOKEN" in [env["name"] for env in container["env"][:-1]]
+                assert "KRAKE_COMPLETE_URL" in [
+                    env["name"] for env in container["env"][:-1]
+                ]
 
-        # Loop over observed containers, but exclude special control list
-        for container in resource["spec"]["template"]["spec"]["containers"][:-1]:
-            assert "KRAKE_TOKEN" in [env["name"] for env in container["env"][:-1]]
-            assert "KRAKE_COMPLETE_URL" in [
-                env["name"] for env in container["env"][:-1]
-            ]
+                # Check special control dictionary
+                assert len(container["env"]) == 3
+                assert container["env"][-1] == {"observer_schema_list_current_length": 2}
 
-            # Check special control dictionary
-            assert len(container["env"]) == 3
-            assert container["env"][-1] == {"observer_schema_list_current_length": 2}
+        if resource["kind"] == "Secret":
+            assert resource["metadata"]["name"] == secret_mangled_response["metadata"]["name"]
+            assert resource["data"] == secret_mangled_response["data"]
 
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
@@ -192,7 +226,7 @@ async def test_complete_hook_disable_by_user(
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
 
     # We only consider the first resource in the manifest file, that is a Deployment.
-    # This Deployment should be modified by the "complete" hook with ENV vars.
+    # This Deployment should not be modified by the "complete" hook with ENV vars.
     #
     # When received by the k8s controller, the application is in PENDING state and
     # scheduled to a cluster. It contains a manifest and a custom observer_schema.
@@ -222,12 +256,10 @@ async def test_complete_hook_disable_by_user(
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-
+    # Complete hook is disabled, so no additional resource has been generated
     assert len(stored.status.last_observed_manifest) == 1
     for resource in stored.status.last_observed_manifest:
-        if resource["kind"] != "Deployment":
-            continue
-
+        assert resource["kind"] == "Deployment"
         for container in resource["spec"]["template"]["spec"]["containers"]:
             assert "env" not in container
 
@@ -254,7 +286,8 @@ async def test_complete_hook_tls(
     """
     routes = web.RouteTableDef()
     deploy_mangled_response = deepcopy(deployment_response)
-    configmap_resource = {}
+    secret_mangled_response = deepcopy(secret_response)
+    secret_mangled_responses = []
 
     server_cert = pki.gencert("api-server")
     ssl_context = client_ssl_context("client")
@@ -263,40 +296,28 @@ async def test_complete_hook_tls(
     )
 
     # As part of the reconciliation loop started by ``controller.resource_received``,
-    # the k8s controller checks if a ConfigMap named `ca.pem` already exists.
-    @routes.get("/api/v1/namespaces/secondary/configmaps/ca.pem")
+    # the k8s controller checks if a Secret named `nginx-secret` already exists.
+    @routes.get("/api/v1/namespaces/secondary/secrets/nginx-secret")
     async def _(request):
         return web.Response(status=404)
 
-    # As part of the reconciliation loop, the k8s controller created the `ca.pem`
-    # ConfigMap
-    @routes.post("/api/v1/namespaces/secondary/configmaps")
+    # As part of the reconciliation loop, the k8s controller creates
+    # the Kubernetes secret. Kubernetes secret stores Krake
+    # authentication token and the Krake complete hook URL for the given application
+    # and `ca.pem` secret
+    @routes.post("/api/v1/namespaces/secondary/secrets")
     async def _(request):
-        nonlocal configmap_resource
+        nonlocal secret_mangled_response
+        nonlocal secret_mangled_responses
+
+        resp = deepcopy(secret_mangled_response)
         rd = await request.read()
+        secret = json.loads(rd)
 
-        configmap_resource = json.loads(rd)
+        resp["metadata"]["name"] = secret["metadata"]["name"]
+        resp["data"] = secret["data"]
 
-        resp = yaml.safe_load(
-            """
-            apiVersion: v1
-            data: CONFIGMAP_DATA
-            kind: ConfigMap
-            metadata:
-              annotations: {}
-              creationTimestamp: "2020-07-21T13:57:03Z"
-              managedFields: []
-              name: CONFIGMAP_NAME
-              namespace: secondary
-              resourceVersion: "5073306"
-              selfLink: /api/v1/namespaces/default/configmaps/name
-              uid: e851306b-4581-48f3-808d-1d18c9038309
-                """
-        )
-
-        resp["metadata"]["name"] = configmap_resource["metadata"]["name"]
-        resp["data"] = configmap_resource["data"]
-
+        secret_mangled_responses.append(resp)
         return web.json_response(resp)
 
     # As part of the reconciliation loop started by ``controller.resource_received``,
@@ -369,25 +390,12 @@ async def test_complete_hook_tls(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
 
-    expected_config_map_observer_schema = yaml.safe_load(
-        f"""
-            apiVersion: v1
-            data:
-              ca-bundle.pem: null
-              cert.pem: null
-              key.pem: null
-            kind: ConfigMap
-            metadata:
-              name: {configmap_resource["metadata"]["name"]}
-              namespace: secondary
-                """
-    )
-
     # The last_applied_manifest, last_observed_manifest, and observer_schema, should
-    # contain the Deployment and the ConfigMap
-    assert len(stored.status.mangled_observer_schema) == 2
-    assert len(stored.status.last_applied_manifest) == 2
-    assert len(stored.status.last_observed_manifest) == 2
+    # contain the Deployment and two Secrets
+    # (Environment variables secret and TLS secret)
+    assert len(stored.status.mangled_observer_schema) == 3
+    assert len(stored.status.last_applied_manifest) == 3
+    assert len(stored.status.last_observed_manifest) == 3
 
     containers = stored.status.mangled_observer_schema[0]["spec"]["template"]["spec"][
         "containers"
@@ -398,8 +406,8 @@ async def test_complete_hook_tls(
     for container in containers[:-1]:
         assert "volumeMounts" in container
         assert container["env"] == [
-            {"name": None, "value": None},
-            {"name": None, "value": None},
+            {"name": None, "valueFrom": {"secretKeyRef": {"key": None, "name": None}}},
+            {"name": None, "valueFrom": {"secretKeyRef": {"key": None, "name": None}}},
             {
                 "observer_schema_list_min_length": 2,
                 "observer_schema_list_max_length": 2,
@@ -431,24 +439,45 @@ async def test_complete_hook_tls(
         assert container["env"][-1] == {"observer_schema_list_current_length": 2}
 
     # The last_applied_manifest and last_observed_manifest should contain the mangled
-    # resource ConfigMap
-    assert stored.status.last_applied_manifest[1]["kind"] == "ConfigMap"
+    # resource Secrets
+    assert stored.status.last_applied_manifest[1]["kind"] == "Secret"
+    assert stored.status.last_applied_manifest[2]["kind"] == "Secret"
     assert (
         stored.status.last_observed_manifest[0]["metadata"]["namespace"] == "secondary"
     )
-    assert stored.status.last_applied_manifest[1] == configmap_resource
 
-    # There are no list in the ConfigMap resource, therefore there are no special
-    # control dictionary added. In this specific case, it is equal to the ConfigMap
+    for index, secret_resp in enumerate(secret_mangled_responses):
+        assert (
+            stored.status.last_applied_manifest[index + 1]["kind"]
+            == secret_resp["kind"]
+        )
+        assert (
+            stored.status.last_applied_manifest[index + 1]["metadata"]["name"]
+            == secret_resp["metadata"]["name"]
+        )
+        assert (
+            stored.status.last_applied_manifest[index + 1]["data"]
+            == secret_resp["data"]
+        )
+
+    # There are no list in the Secret resource, therefore there are no special
+    # control dictionary added. In this specific case, it is equal to the Secret
     # resource
-    assert stored.status.last_observed_manifest[1]["kind"] == "ConfigMap"
-    assert stored.status.last_observed_manifest[1] == configmap_resource
+    assert stored.status.last_observed_manifest[1]["kind"] == "Secret"
+    assert stored.status.last_observed_manifest[2]["kind"] == "Secret"
 
-    # The mangled resource ConfigMap should be observed
-    assert stored.status.mangled_observer_schema[1]["kind"] == "ConfigMap"
-    assert (
-        stored.status.mangled_observer_schema[1] == expected_config_map_observer_schema
-    )
+    # The mangled resource Secret should be observed
+    assert stored.status.mangled_observer_schema[1]["kind"] == "Secret"
+    assert stored.status.mangled_observer_schema[2]["kind"] == "Secret"
+    for index, secret_resp in enumerate(secret_mangled_responses):
+        assert (
+            stored.status.mangled_observer_schema[index + 1]["kind"]
+            == secret_resp["kind"]
+        )
+        assert (
+            stored.status.mangled_observer_schema[index + 1]["metadata"]["name"]
+            == secret_resp["metadata"]["name"]
+        )
 
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
@@ -475,6 +504,7 @@ async def test_complete_hook_default_namespace(
     """
     deployment_created = False
     deploy_mangled_response = deepcopy(deployment_response)
+    secret_mangled_response = deepcopy(secret_response)
 
     routes = web.RouteTableDef()
 
@@ -501,6 +531,25 @@ async def test_complete_hook_default_namespace(
         resp_first_container["env"] = app_first_container["env"]
 
         return web.json_response(deploy_mangled_response)
+
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a Secret named `nginx-secret` already exists.
+    @routes.get("/api/v1/namespaces/secondary/secrets/nginx-secret")
+    async def _(request):
+        return web.Response(status=404)
+
+    # As part of the reconciliation loop, the k8s controller creates
+    # the Kubernetes secret. Kubernetes secret stores Krake
+    # authentication token and the Krake complete hook URL for the given application.
+    @routes.post("/api/v1/namespaces/default/secrets")
+    async def _(request):
+        nonlocal secret_mangled_response
+        rd = await request.read()
+        secret = json.loads(rd)
+
+        secret_mangled_response["metadata"]["name"] = secret["metadata"]["name"]
+        secret_mangled_response["data"] = secret["data"]
+        return web.json_response(secret_mangled_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -541,32 +590,37 @@ async def test_complete_hook_default_namespace(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
 
-    assert (
-        len(stored.status.last_observed_manifest) == 1
-    )  # one resource in the spec manifest
+    # TLS is disabled, so only one (Kubernetes secret which stores Krake
+    # authentication token and the Krake complete hook URL)
+    # additional resource has been generated
+    assert len(stored.status.last_observed_manifest) == 2
 
     for resource in stored.status.last_applied_manifest:
-        if resource["kind"] != "Deployment":
-            continue
+        if resource["kind"] == "Deployment":
+            for container in resource["spec"]["template"]["spec"]["containers"]:
+                assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
+                assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
 
-        for container in resource["spec"]["template"]["spec"]["containers"]:
-            assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
-            assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
+        if resource["kind"] == "Secret":
+            assert resource["metadata"]["name"] == secret_mangled_response["metadata"]["name"]
+            assert resource["data"] == secret_mangled_response["data"]
 
     for resource in stored.status.last_observed_manifest:
-        if resource["kind"] != "Deployment":
-            continue
+        if resource["kind"] == "Deployment":
+            # Loop over observed containers, but exclude special control list
+            for container in resource["spec"]["template"]["spec"]["containers"][:-1]:
+                assert "KRAKE_TOKEN" in [env["name"] for env in container["env"][:-1]]
+                assert "KRAKE_COMPLETE_URL" in [
+                    env["name"] for env in container["env"][:-1]
+                ]
 
-        # Loop over observed containers, but exclude special control list
-        for container in resource["spec"]["template"]["spec"]["containers"][:-1]:
-            assert "KRAKE_TOKEN" in [env["name"] for env in container["env"][:-1]]
-            assert "KRAKE_COMPLETE_URL" in [
-                env["name"] for env in container["env"][:-1]
-            ]
+                # Check special control dictionary
+                assert len(container["env"]) == 3
+                assert container["env"][-1] == {"observer_schema_list_current_length": 2}
 
-            # Check special control dictionary
-            assert len(container["env"]) == 3
-            assert container["env"][-1] == {"observer_schema_list_current_length": 2}
+        if resource["kind"] == "Secret":
+            assert resource["metadata"]["name"] == secret_mangled_response["metadata"]["name"]
+            assert resource["data"] == secret_mangled_response["data"]
 
     assert stored.status.state == ApplicationState.RUNNING
     assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
@@ -587,15 +641,26 @@ def get_hook_environment_value(application):
 
     """
     deployment = application.status.last_observed_manifest[0]
+    secret = {}
+    for manifest in application.status.last_observed_manifest:
+        if manifest["kind"] == "Secret" and manifest["metadata"]["name"].endswith(
+            "krake-secret-token"
+        ):
+            secret = manifest
 
     token = None
     url = None
+    token_key = None
+    url_key = None
     for container in deployment["spec"]["template"]["spec"]["containers"][:-1]:
         for env in container["env"][:-1]:
             if env["name"] == "KRAKE_TOKEN":
-                token = env["value"]
+                token_key = env["valueFrom"]["secretKeyRef"]["key"]
             if env["name"] == "KRAKE_COMPLETE_URL":
-                url = env["value"]
+                url_key = env["valueFrom"]["secretKeyRef"]["key"]
+
+    token = b64decode(secret["data"][token_key]).decode()
+    url = b64decode(secret["data"][url_key]).decode()
 
     if token is None or url is None:
         raise ValueError("The token and the url must be in the environment")
@@ -622,6 +687,7 @@ async def test_complete_hook_external_endpoint(
     """
     hooks_config.complete.external_endpoint = "https://new.external.endpoint"
     deploy_mangled_response = deepcopy(deployment_response)
+    secret_mangled_response = deepcopy(secret_response)
 
     routes = web.RouteTableDef()
 
@@ -647,6 +713,25 @@ async def test_complete_hook_external_endpoint(
         resp_first_container["env"] = app_first_container["env"]
 
         return web.json_response(deploy_mangled_response)
+
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a Secret named `nginx-secret` already exists.
+    @routes.get("/api/v1/namespaces/secondary/secrets/nginx-secret")
+    async def _(request):
+        return web.Response(status=404)
+
+    # As part of the reconciliation loop, the k8s controller creates
+    # the Kubernetes secret. Kubernetes secret stores Krake
+    # authentication token and the Krake complete hook URL for the given application.
+    @routes.post("/api/v1/namespaces/secondary/secrets")
+    async def _(request):
+        nonlocal secret_mangled_response
+        rd = await request.read()
+        secret = json.loads(rd)
+
+        secret_mangled_response["metadata"]["name"] = secret["metadata"]["name"]
+        secret_mangled_response["data"] = secret["data"]
+        return web.json_response(secret_mangled_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -679,8 +764,10 @@ async def test_complete_hook_external_endpoint(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
 
-    # TLS is disabled, so no additional resource has been generated
-    assert len(stored.status.last_observed_manifest) == 1
+    # TLS is disabled, so only one (Kubernetes secret which stores Krake
+    # authentication token and the Krake complete hook URL)
+    # additional resource has been generated
+    assert len(stored.status.last_observed_manifest) == 2
 
     _, url = get_hook_environment_value(stored)
     endpoint = URL(url)
@@ -704,6 +791,7 @@ async def test_complete_hook_sending(aiohttp_server, config, db, loop, hooks_con
 
     """
     deploy_mangled_response = deepcopy(deployment_response)
+    secret_mangled_response = deepcopy(secret_response)
 
     routes = web.RouteTableDef()
 
@@ -728,6 +816,25 @@ async def test_complete_hook_sending(aiohttp_server, config, db, loop, hooks_con
         resp_first_container["env"] = app_first_container["env"]
 
         return web.json_response(deploy_mangled_response)
+
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a Secret named `nginx-secret` already exists.
+    @routes.get("/api/v1/namespaces/secondary/secrets/nginx-secret")
+    async def _(request):
+        return web.Response(status=404)
+
+    # As part of the reconciliation loop, the k8s controller creates
+    # the Kubernetes secret. Kubernetes secret stores Krake
+    # authentication token and the Krake complete hook URL for the given application.
+    @routes.post("/api/v1/namespaces/secondary/secrets")
+    async def _(request):
+        nonlocal secret_mangled_response
+        rd = await request.read()
+        secret = json.loads(rd)
+
+        secret_mangled_response["metadata"]["name"] = secret["metadata"]["name"]
+        secret_mangled_response["data"] = secret["data"]
+        return web.json_response(secret_mangled_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -783,14 +890,16 @@ async def test_complete_hook_sending_tls(
      * extras: send a request to the "complete" hook endpoint.
 
     Expectations:
-        The information present on the DEPLOYED Kubernetes resources are enough to use
-        the "complete" hook endpoint, and the request sent to this endpoint led to the
-        deletion of the Application on the API.
+        The information present on the DEPLOYED Kubernetes resources and
+        Kubernetes Secret are enough to use the "complete" hook endpoint,
+        and the request sent to this endpoint led to the deletion of the
+        Application on the API.
 
     """
     routes = web.RouteTableDef()
     deploy_mangled_response = deepcopy(deployment_response)
-    configmap_resource = {}
+    secret_mangled_response = deepcopy(secret_response)
+    secret_mangled_responses = []
 
     server_cert = pki.gencert("api-server")
     config.tls = TlsServerConfiguration(
@@ -800,40 +909,28 @@ async def test_complete_hook_sending_tls(
     ssl_context = client_ssl_context("client")
 
     # As part of the reconciliation loop started by ``controller.resource_received``,
-    # the k8s controller checks if a ConfigMap named `ca.pem` already exists.
-    @routes.get("/api/v1/namespaces/secondary/configmaps/ca.pem")
+    # the k8s controller checks if a Secret named `nginx-secret` already exists.
+    @routes.get("/api/v1/namespaces/secondary/secrets/nginx-secret")
     async def _(request):
         return web.Response(status=404)
 
-    # As part of the reconciliation loop, the k8s controller created the `ca.pem`
-    # ConfigMap
-    @routes.post("/api/v1/namespaces/secondary/configmaps")
+    # As part of the reconciliation loop, the k8s controller creates
+    # the Kubernetes secret. Kubernetes secret stores Krake
+    # authentication token and the Krake complete hook URL for the given application
+    # and `ca.pem` secret
+    @routes.post("/api/v1/namespaces/secondary/secrets")
     async def _(request):
-        nonlocal configmap_resource
+        nonlocal secret_mangled_response
+        nonlocal secret_mangled_responses
+
+        resp = deepcopy(secret_mangled_response)
         rd = await request.read()
+        secret = json.loads(rd)
 
-        configmap_resource = json.loads(rd)
+        resp["metadata"]["name"] = secret["metadata"]["name"]
+        resp["data"] = secret["data"]
 
-        resp = yaml.safe_load(
-            """
-            apiVersion: v1
-            data: CONFIGMAP_DATA
-            kind: ConfigMap
-            metadata:
-              annotations: {}
-              creationTimestamp: "2020-07-21T13:57:03Z"
-              managedFields: []
-              name: CONFIGMAP_NAME
-              namespace: secondary
-              resourceVersion: "5073306"
-              selfLink: /api/v1/namespaces/default/configmaps/name
-              uid: e851306b-4581-48f3-808d-1d18c9038309
-                """
-        )
-
-        resp["metadata"]["name"] = configmap_resource["metadata"]["name"]
-        resp["data"] = configmap_resource["data"]
-
+        secret_mangled_responses.append(resp)
         return web.json_response(resp)
 
     # As part of the reconciliation loop started by ``controller.resource_received``,
@@ -913,20 +1010,20 @@ async def test_complete_hook_sending_tls(
         with pytest.raises(aiohttp.ClientSSLError):
             await client.session.put(url, json=complete.serialize())
 
-    # Attempt to send a request to the hook endpoint with the certificate taken from the
+    # Attempt to send a request to the hook endpoint with the cert taken from the
     # deployed Application. Should succeed.
-    configmap = stored.status.last_observed_manifest[1]
-
+    secret_certs = stored.status.last_observed_manifest[1]
     # Load the certificates into an SSL context.
     with tempfile.TemporaryDirectory() as tmpdirname:
         cert_paths = {}
         # Write the CA, the certificate and the key to files.
-        for file_name, content in configmap["data"].items():
+        for file_name, content in secret_certs["data"].items():
             cert_path = os.path.join(tmpdirname, file_name)
             cert_paths[file_name] = cert_path
+            content_decoded = b64decode(content).decode()
 
             with open(cert_path, "w") as f:
-                f.write(content)
+                f.write(content_decoded)
 
         hook_ssl_context = ssl.create_default_context(
             cafile=cert_paths["ca-bundle.pem"]
@@ -969,7 +1066,8 @@ async def test_complete_hook_sending_tls_rbac(
     config.authentication.strategy.static.enabled = False
 
     deploy_mangled_response = deepcopy(deployment_response)
-    configmap_resource = {}
+    secret_mangled_response = deepcopy(secret_response)
+    secret_mangled_responses = []
     routes = web.RouteTableDef()
 
     server_cert = pki.gencert("api-server")
@@ -982,40 +1080,28 @@ async def test_complete_hook_sending_tls_rbac(
     invalid_ssl_context = client_ssl_context("invalid_user")
 
     # As part of the reconciliation loop started by ``controller.resource_received``,
-    # the k8s controller checks if a ConfigMap named `ca.pem` already exists.
-    @routes.get("/api/v1/namespaces/secondary/configmaps/ca.pem")
+    # the k8s controller checks if a Secret named `nginx-secret` already exists.
+    @routes.get("/api/v1/namespaces/secondary/secrets/nginx-secret")
     async def _(request):
         return web.Response(status=404)
 
-    # As part of the reconciliation loop, the k8s controller created the `ca.pem`
-    # ConfigMap
-    @routes.post("/api/v1/namespaces/secondary/configmaps")
+    # As part of the reconciliation loop, the k8s controller creates
+    # the Kubernetes secret. Kubernetes secret stores Krake
+    # authentication token and the Krake complete hook URL for the given application
+    # and `ca.pem` secret
+    @routes.post("/api/v1/namespaces/secondary/secrets")
     async def _(request):
-        nonlocal configmap_resource
+        nonlocal secret_mangled_response
+        nonlocal secret_mangled_responses
+
+        resp = deepcopy(secret_mangled_response)
         rd = await request.read()
+        secret = json.loads(rd)
 
-        configmap_resource = json.loads(rd)
+        resp["metadata"]["name"] = secret["metadata"]["name"]
+        resp["data"] = secret["data"]
 
-        resp = yaml.safe_load(
-            """
-            apiVersion: v1
-            data: CONFIGMAP_DATA
-            kind: ConfigMap
-            metadata:
-              annotations: {}
-              creationTimestamp: "2020-07-21T13:57:03Z"
-              managedFields: []
-              name: CONFIGMAP_NAME
-              namespace: secondary
-              resourceVersion: "5073306"
-              selfLink: /api/v1/namespaces/default/configmaps/name
-              uid: e851306b-4581-48f3-808d-1d18c9038309
-                """
-        )
-
-        resp["metadata"]["name"] = configmap_resource["metadata"]["name"]
-        resp["data"] = configmap_resource["data"]
-
+        secret_mangled_responses.append(resp)
         return web.json_response(resp)
 
     # As part of the reconciliation loop started by ``controller.resource_received``,
@@ -1117,9 +1203,10 @@ async def test_complete_hook_sending_tls_rbac(
         for file_name, content in configmap["data"].items():
             cert_path = os.path.join(tmpdirname, file_name)
             cert_paths[file_name] = cert_path
+            content_decoded = b64decode(content).decode()
 
             with open(cert_path, "w") as f:
-                f.write(content)
+                f.write(content_decoded)
 
         hook_ssl_context = ssl.create_default_context(
             cafile=cert_paths["ca-bundle.pem"]
@@ -1153,7 +1240,7 @@ async def test_complete_hook_reschedule(
     aiohttp_server, config, pki, db, loop, hooks_config
 ):
     """Attempt to reschedule an Application augmented with the "complete" hook. Enable
-    TLS to use the "full-featured" hook (with the ConfigMap containing a certificate).
+    TLS to use the "full-featured" hook (with the Secret containing a certificate).
 
     Conditions:
      * TLS:  enabled
@@ -1170,7 +1257,8 @@ async def test_complete_hook_reschedule(
     """
     routes = web.RouteTableDef()
     deploy_mangled_response = deepcopy(deployment_response)
-    configmap_resource = {}
+    secret_mangled_response = deepcopy(secret_response)
+    secret_mangled_responses = []
 
     server_cert = pki.gencert("api-server")
     config.tls = TlsServerConfiguration(
@@ -1186,37 +1274,29 @@ async def test_complete_hook_reschedule(
     )
     ssl_context = create_ssl_context(client_tls)
 
-    @routes.get("/api/v1/namespaces/secondary/configmaps/ca.pem")
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a Secret named `nginx-secret` already exists.
+    @routes.get("/api/v1/namespaces/secondary/secrets/nginx-secret")
     async def _(request):
         return web.Response(status=404)
 
-    @routes.post("/api/v1/namespaces/secondary/configmaps")
+    # As part of the reconciliation loop, the k8s controller creates
+    # the Kubernetes secret. Kubernetes secret stores Krake
+    # authentication token and the Krake complete hook URL for the given application
+    # and `ca.pem` secret
+    @routes.post("/api/v1/namespaces/secondary/secrets")
     async def _(request):
-        nonlocal configmap_resource
+        nonlocal secret_mangled_response
+        nonlocal secret_mangled_responses
+
+        resp = deepcopy(secret_mangled_response)
         rd = await request.read()
+        secret = json.loads(rd)
 
-        configmap_resource = json.loads(rd)
+        resp["metadata"]["name"] = secret["metadata"]["name"]
+        resp["data"] = secret["data"]
 
-        resp = yaml.safe_load(
-            """
-            apiVersion: v1
-            data: CONFIGMAP_DATA
-            kind: ConfigMap
-            metadata:
-              annotations: {}
-              creationTimestamp: "2020-07-21T13:57:03Z"
-              managedFields: []
-              name: CONFIGMAP_NAME
-              namespace: secondary
-              resourceVersion: "5073306"
-              selfLink: /api/v1/namespaces/default/configmaps/name
-              uid: e851306b-4581-48f3-808d-1d18c9038309
-                """
-        )
-
-        resp["metadata"]["name"] = configmap_resource["metadata"]["name"]
-        resp["data"] = configmap_resource["data"]
-
+        secret_mangled_responses.append(resp)
         return web.json_response(resp)
 
     @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")

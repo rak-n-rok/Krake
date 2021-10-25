@@ -38,7 +38,7 @@ from tests.controller.kubernetes import (
     mangled_observer_schema,
     deployment_response,
     service_response,
-    configmap_response,
+    secret_response,
     initial_last_observed_manifest_deployment,
     initial_last_observed_manifest_service,
     initial_last_observed_manifest,
@@ -81,7 +81,7 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
     This test goes through the following scenario:
 
     State (0):
-        A Deployment, a Service and a ConfigMap are present, the Deployment has an
+        A Deployment, a Service and a Secret are present, the Deployment has an
         nginx image with version "1.7.9". The service defines 1 port using the "TCP"
         protocol. A custom observer schema is used:
         - It observes the deployment's image, initialized by the given manifest file.
@@ -89,7 +89,7 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
         - The Service's first port's protocol, initialized in the manifest file, is
         *not* observed
         - It accepts between 0 and 2 ports.
-        - The presence of the ConfigMap is observed
+        - The presence of the Secret is observed
     State (1):
         The Deployment image version changed to "1.6".
     State (2):
@@ -103,7 +103,7 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
     State (6):
         All ports are removed from the Service.
     State (7):
-        The ConfigMap is deleted
+        The Secret is deleted
 
     For each state, it is tested if the Kubernetes Observer detects the update and calls
     the ``on_res_update`` method.
@@ -165,14 +165,14 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
 
         return web.json_response(updated_service_response)
 
-    @routes.get("/api/v1/namespaces/secondary/configmaps/nginx-demo")
+    @routes.get("/api/v1/namespaces/secondary/secrets/nginx-demo")
     async def _(request):
         nonlocal actual_state
         if actual_state in range(0, 7):
-            # The ConfigMap has not been modified on the cluster
-            return web.json_response(configmap_response)
+            # The Secret has not been modified on the cluster
+            return web.json_response(secret_response)
         elif actual_state == 7:
-            # State (7): The ConfigMap is deleted
+            # State (7): The Secret is deleted
             return web.Response(status=404)
 
     kubernetes_app = web.Application()
@@ -240,7 +240,7 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
             assert ports_length == 0
 
         elif actual_state == 7:
-            # State (7): The ConfigMap is deleted
+            # State (7): The Secret is deleted
             assert len(manifests) == 2
 
     observer = KubernetesObserver(cluster, app, on_res_update, time_step=-1)
@@ -282,7 +282,7 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
     await observer.observe_resource()
     assert calls_to_res_update == 5
 
-    # State (7): The ConfigMap is deleted
+    # State (7): The Secret is deleted
     actual_state = 7
     await observer.observe_resource()
     assert calls_to_res_update == 6
@@ -800,7 +800,7 @@ async def test_observer_on_status_update(aiohttp_server, db, config, loop):
 
         # Protocol of first port is not observed
         assert "protocol" not in last_observed_manifest[1]["spec"]["ports"][0]
-        # ConfigMap is not observed
+        # Secret is not observed
         assert len(last_observed_manifest) == 2
         assert last_observed_manifest[0]["kind"] == "Deployment"
         assert last_observed_manifest[1]["kind"] == "Service"
@@ -854,9 +854,9 @@ async def test_observer_on_status_update_mangled(
             first_container["image"] = "nginx:1.6"
             return web.json_response(updated_deployment_response)
 
-    @routes.post("/api/v1/namespaces/secondary/configmaps")
+    @routes.post("/api/v1/namespaces/secondary/secrets")
     async def _(request):
-        return web.json_response(configmap_response)
+        return web.json_response(secret_response)
 
     @routes.post("/api/v1/namespaces/secondary/services")
     async def _(request):
@@ -870,9 +870,9 @@ async def test_observer_on_status_update_mangled(
         elif actual_state >= 1:
             return web.json_response(service_response)
 
-    @routes.get("/api/v1/namespaces/secondary/configmaps/nginx-demo")
+    @routes.get("/api/v1/namespaces/secondary/secrets/nginx-demo")
     async def _(request):
-        return web.json_response(configmap_response)
+        return web.json_response(secret_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -898,6 +898,8 @@ async def test_observer_on_status_update_mangled(
 
     def update_decorator(func):
         async def on_res_update(resource):
+            print("H"*50)
+            print(resource.spec)
             nonlocal calls_to_res_update, actual_state
             calls_to_res_update += 1
 
@@ -1156,9 +1158,9 @@ async def test_observer_on_delete(aiohttp_server, config, db, loop):
     async def _(request):
         return web.json_response(deployment_response)
 
-    @routes.get("/api/v1/namespaces/secondary/configmaps/nginx-demo")
+    @routes.get("/api/v1/namespaces/secondary/secrets/nginx-demo")
     async def _(request):
-        return web.json_response(configmap_response)
+        return web.json_response(secret_response)
 
     @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
@@ -1168,7 +1170,7 @@ async def test_observer_on_delete(aiohttp_server, config, db, loop):
     async def _(request):
         return web.Response(status=200)
 
-    @routes.delete("/api/v1/namespaces/secondary/configmaps/nginx-demo")
+    @routes.delete("/api/v1/namespaces/secondary/secrets/nginx-demo")
     async def _(request):
         return web.Response(status=200)
 

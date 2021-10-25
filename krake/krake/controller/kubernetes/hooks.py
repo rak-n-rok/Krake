@@ -6,6 +6,7 @@ define when the hook will be executed.
 import asyncio
 import logging
 import random
+from base64 import b64encode
 from collections import defaultdict
 from contextlib import suppress
 from copy import deepcopy
@@ -30,10 +31,10 @@ from secrets import token_urlsafe
 
 from kubernetes_asyncio.client import (
     Configuration,
-    V1ConfigMap,
+    V1Secret,
     V1EnvVar,
     V1VolumeMount,
-    V1Volume,
+    V1Volume, V1SecretKeySelector, V1EnvVarSource,
 )
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 
@@ -1117,18 +1118,19 @@ class CertificatePair(NamedTuple):
 class Complete(object):
     """Mangle given application and injects complete hooks variables into it.
 
-    Hook injects an environment variable which stores the Krake authentication token
-    and an environment variable which stores the Krake complete hook URL for the given
-    application into the application resource definition. Only resources defined in
+    Hook injects a Kubernetes secret which stores Krake authentication token
+    and the Krake complete hook URL for the given application. The variables
+    from Kubernetes secret are imported as environment variables
+    into the application resource definition. Only resources defined in
     :args:`complete_resources` can be modified.
 
     Names of environment variables are defined in the application controller
     configuration file.
 
-    If TLS is enabled on the Krake API, the complete hook injects a Kubernetes configmap
+    If TLS is enabled on the Krake API, the complete hook injects a Kubernetes secret
     and it corresponding volume and volume mount definitions for the Krake CA,
     the client certificate with the right CN, and its key. The directory where the
-    configmap is mounted is defined in the configuration.
+    secret is mounted is defined in the configuration.
 
     Args:
         api_endpoint (str): the given API endpoint
@@ -1193,7 +1195,8 @@ class Complete(object):
                 cluster's kubeconfig file
 
         """
-        cfg_name = "-".join([name, "krake", "configmap"])
+        secret_certs_name = "-".join([name, "krake", "secret", "certs"])
+        secret_token_name = "-".join([name, "krake", "secret", "token"])
         volume_name = "-".join([name, "krake", "volume"])
         ca_certs = (
             self.ssl_context.get_ca_certs(binary_form=True)
@@ -1202,7 +1205,7 @@ class Complete(object):
         )
 
         # Extract all different namespaces
-        # FIXME: too many assumptions here: do we create one ConfigMap for each
+        # FIXME: too many assumptions here: do we create one Secret for each
         #  namespace?
         resource_namespaces = {
             resource["metadata"].get("namespace", "default")
@@ -1210,22 +1213,35 @@ class Complete(object):
         }
 
         hook_resources = []
+        hook_sub_resources = []
         if ca_certs:
-            hook_resources = [
-                self.configmap(
-                    cfg_name,
-                    namespace,
+            hook_resources.extend([
+                self.secret_certs(
+                    secret_certs_name,
+                    resource_namespace,
                     intermediate_src=intermediate_src,
                     generated_cert=generated_cert,
                     ca_certs=ca_certs,
                 )
-                for namespace in resource_namespaces
-            ]
+                for resource_namespace in resource_namespaces
+            ])
+            hook_sub_resources.extend([
+                *self.volumes(secret_certs_name, volume_name, self.cert_dest)
+            ])
 
-        hook_sub_resources = [
-            *self.env_vars(name, namespace, self.api_endpoint, token),
-            *self.volumes(cfg_name, volume_name, ca_certs),
-        ]
+        hook_resources.extend([
+            self.secret_token(
+                secret_token_name,
+                name,
+                namespace,
+                resource_namespace,
+                self.api_endpoint,
+                token,
+            ) for resource_namespace in resource_namespaces
+        ])
+        hook_sub_resources.extend([
+            *self.env_vars(secret_token_name),
+        ])
 
         self.mangle(
             hook_resources,
@@ -1336,8 +1352,8 @@ class Complete(object):
             hook_resources = [
                 {
                     'apiVersion': 'v1',
-                    'kind': 'ConfigMap',
-                    'metadata': {'name': 'cfg', 'namespace': 'default'}
+                    'kind': 'Secret',
+                    'metadata': {'name': 'sct', 'namespace': 'default'}
                 }
             ]
             hook_sub_resources = [
@@ -1374,7 +1390,7 @@ class Complete(object):
                         ]
                     },
                 },
-                {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "cfg"}},
+                {"apiVersion": "v1", "kind": "Secret", "metadata": {"name": "sct"}},
             ]
 
             assert mangled_observer_schema == [
@@ -1403,8 +1419,8 @@ class Complete(object):
                 },
                 {
                     "apiVersion": "v1",
-                    "kind": "ConfigMap",
-                    "metadata": {"name": "cfg", "namespace": "default"},
+                    "kind": "Secret",
+                    "metadata": {"name": "sct", "namespace": "default"},
                 },
             ]
 
@@ -1569,22 +1585,22 @@ class Complete(object):
                     )
                     raise InvalidManifestError(message)
 
-    def configmap(
+    def secret_certs(
         self,
-        cfg_name,
+        secret_name,
         namespace,
         ca_certs=None,
         intermediate_src=None,
         generated_cert=None,
     ):
-        """Create a complete hook configmap resource.
+        """Create a complete hook secret resource.
 
-        Complete hook configmap stores Krake CAs and client certificates to communicate
+        Complete hook secret stores Krake CAs and client certificates to communicate
         with the Krake API.
 
         Args:
-            cfg_name (str): Configmap name
-            namespace (str): Kubernetes namespace where the ConfigMap will be created.
+            secret_name (str): Secret name
+            namespace (str): Kubernetes namespace where the Secret will be created.
             ca_certs (list): Krake CA list
             intermediate_src (str): content of the certificate that is used to sign new
                 certificates for the complete hook.
@@ -1593,7 +1609,7 @@ class Complete(object):
                 corresponding key.
 
         Returns:
-            dict: complete hook configmaps resources
+            dict: complete hook secret resource
 
         """
         ca_certs_pem = ""
@@ -1607,39 +1623,58 @@ class Complete(object):
         ca_certs_pem += intermediate_src_content
 
         data = {
-            self.ca_name: ca_certs_pem,
-            self.cert_name: generated_cert.cert,
-            self.key_name: generated_cert.key,
+            self.ca_name: self._encode_to_64(ca_certs_pem),
+            self.cert_name: self._encode_to_64(generated_cert.cert),
+            self.key_name: self._encode_to_64(generated_cert.key),
         }
-        return self.attribute_map(
-            V1ConfigMap(
-                api_version="v1",
-                kind="ConfigMap",
-                data=data,
-                metadata={"name": cfg_name, "namespace": namespace},
-            )
-        )
+        return self.secret(secret_name, data, namespace)
 
-    def volumes(self, cfg_name, volume_name, ca_certs=None):
+    def secret_token(
+        self, secret_name, name, namespace, resource_namespace, api_endpoint, token
+    ):
+        """Create complete hook secret resource.
+
+        Complete hook secret stores Krake authentication token
+        and complete hook URL for given application.
+
+        Args:
+            secret_name (str): Secret name
+            name (str): Application name
+            namespace (str): Application namespace
+            resource_namespace (str): Kubernetes namespace where the
+                Secret will be created.
+            api_endpoint (str): Krake API endpoint
+            token (str): Complete hook authentication token
+
+        Returns:
+            dict: complete hook secret resource
+
+        """
+        complete_url = self.create_complete_url(name, namespace, api_endpoint)
+        data = {
+            self.env_token.lower(): self._encode_to_64(token),
+            self.env_complete.lower(): self._encode_to_64(complete_url),
+        }
+        return self.secret(secret_name, data, resource_namespace)
+
+    def volumes(self, secret_name, volume_name, mount_path):
         """Create complete hook volume and volume mount sub-resources
 
-        Complete hook volume gives access to configmap which stores Krake CAs
+        Complete hook volume gives access to hook's secret, which stores
+        Krake CAs and client certificates to communicate with the Krake API.
         Complete hook volume mount mounts volume into application
 
         Args:
-            cfg_name (str): Configmap name
+            secret_name (str): Secret name
             volume_name (str): Volume name
-            ca_certs (list): Krake CA list
+            mount_path (list): Volume mount path
 
         Returns:
             list: List of complete hook volume and volume mount sub-resources
 
         """
-        if not ca_certs:
-            return []
-
-        volume = V1Volume(name=volume_name, config_map={"name": cfg_name})
-        volume_mount = V1VolumeMount(name=volume_name, mount_path=self.cert_dest)
+        volume = V1Volume(name=volume_name, secret={"secretName": secret_name})
+        volume_mount = V1VolumeMount(name=volume_name, mount_path=mount_path)
         return [
             SubResource(
                 group="volumes",
@@ -1657,6 +1692,49 @@ class Complete(object):
                 ),
             ),
         ]
+
+    @staticmethod
+    def _encode_to_64(string):
+        """Compute the base 64 encoding of a string.
+
+        Args:
+            string (str): the string to encode.
+
+        Returns:
+            str: the result of the encoding.
+
+        """
+        # b64encode accepts only bytes.
+        return b64encode(string.encode()).decode()
+
+    def secret(
+        self,
+        secret_name,
+        secret_data,
+        namespace,
+        _type="Opaque"
+    ):
+        """Create a secret resource.
+
+        Args:
+            secret_name (str): Secret name
+            secret_data (dict): Secret data
+            namespace (str): Kubernetes namespace where the Secret will be created.
+            _type (str, optional): Secret type. Defaults to Opaque.
+
+        Returns:
+            dict: secret resource
+
+        """
+        return self.attribute_map(
+            V1Secret(
+                api_version="v1",
+                kind="Secret",
+                data=secret_data,
+                metadata={"name": secret_name, "namespace": namespace},
+                type=_type,
+            )
+        )
 
     @staticmethod
     def create_complete_url(name, namespace, api_endpoint):
@@ -1678,28 +1756,47 @@ class Complete(object):
             )
         )
 
-    def env_vars(self, name, namespace, api_endpoint, token):
+    def env_vars(self, secret_name):
         """Create complete hook environment variables sub-resources
 
         Create complete hook environment variables store Krake authentication token
         and complete hook URL for given application.
 
         Args:
-            name (str): Application name
-            namespace (str): Application namespace
-            token (str): Complete hook authentication token
-            api_endpoint (str): Krake API endpoint
-            token (str): Complete hook authentication token
+            secret_name (str): Secret name
 
         Returns:
             list: List of complete hook environment variables sub-resources
 
         """
         sub_resources = []
-        complete_url = self.create_complete_url(name, namespace, api_endpoint)
 
-        env_token = V1EnvVar(name=self.env_token, value=token)
-        env_url = V1EnvVar(name=self.env_complete, value=complete_url)
+        env_token = V1EnvVar(
+            name=self.env_token,
+            value_from=self.attribute_map(
+                V1EnvVarSource(
+                    secret_key_ref=self.attribute_map(
+                        V1SecretKeySelector(
+                            name=secret_name,
+                            key=self.env_token.lower()
+                        )
+                    )
+                )
+            )
+        )
+        env_url = V1EnvVar(
+            name=self.env_complete,
+            value_from=self.attribute_map(
+                V1EnvVarSource(
+                    secret_key_ref=self.attribute_map(
+                        V1SecretKeySelector(
+                            name=secret_name,
+                            key=self.env_complete.lower()
+                        )
+                    )
+                )
+            )
+        )
 
         for env in (env_token, env_url):
             sub_resources.append(
