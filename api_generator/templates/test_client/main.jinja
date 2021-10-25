@@ -1,0 +1,37 @@
+{% import "macros.jinja" as macros %}
+from operator import attrgetter
+
+from krake.api.app import create_app
+from krake.client import Client
+from krake.client.{{ api_def.name }} import {{ api_def.name|title }}Api
+from krake.data.core import WatchEventType
+from krake.utils import aenumerate
+{% for module_path, classes in api_def.import_classes.items() -%}
+    from {{ module_path }} import {% for cls_name in classes -%}
+        {{ cls_name.__name__ }}{{ ", " if not loop.last }}
+    {%- endfor -%}
+{% endfor %}
+from krake.test_utils import with_timeout
+
+{% if api_def.import_factory_classes %}
+from tests.factories.{{ api_def.name }} import {{ " " }}
+{%- for module_path, classes in api_def.import_factory_classes.items() -%}
+    {%- for cls in classes -%}
+        {{ cls.__name__ }}Factory{{ ", " if not loop.last }}
+    {%- endfor -%}
+{%- endfor %}
+{% endif %}
+
+
+{% for resource in api_def.resources %}
+{% for operation in resource.operations %}
+    {{ macros.include_operation(operation, "test_client") }}
+{% endfor %}
+
+{% for subresource in resource.subresources -%}
+    {% for operation in subresource.operations -%}
+        {{ macros.include_operation(operation, "test_client") }}
+    {% endfor %}
+{% endfor %}
+
+{%- endfor %}

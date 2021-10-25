@@ -1,0 +1,27 @@
+async def test_update_{{ operation.signature_name }}(aiohttp_server, config, db, loop):
+    # MISSING Resource-specific attributes can be set here
+    data = {{ operation.body.__name__ }}Factory()
+    await db.put(data)
+    # MISSING The resource-specific attributes can be updated here
+    # data.spec.foo = bar
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        {{ operation.resource.api }}_api = {{ operation.resource.api|title }}Api(client)
+        received = await {{ operation.resource.api }}_api.update_{{ operation.signature_name }}(
+            {{ namespace_metadata(operation) }}name=data.metadata.name, body=data
+        )
+
+    assert received.api == "{{ operation.resource.api }}"
+    assert received.kind == "{{ operation.response.__name__ }}"
+    assert data.metadata.modified < received.metadata.modified
+    # MISSING Assertions on resource-specific received values.
+    # assert received.spec.foo == bar
+
+    stored = await db.get(
+        {{ operation.response.__name__ }}, {{ namespace_metadata(operation) }}name=data.metadata.name
+    )
+    assert stored == received
+    # MISSING Assertions on resource-specific updated values.
+    # assert data.spec.foo == bar
