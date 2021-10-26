@@ -89,6 +89,45 @@ def depends(*dependencies):
     return decorator
 
 
+def rok_response_handler(func):
+    """Decorator function for returning rok responses. Can be used for any
+    Krake-controller implemented in rok that generates resources.
+
+    Args:
+        func: Function that creates resources, e.g. clusters, applications.
+    Returns:
+        Decorator for printing responses in rok.
+    """
+
+    def decorator(*args, **kwargs):
+        resp, name = func(*args, **kwargs)
+        if resp.status_code < 400:
+            return resp.json()
+        elif resp.status_code == 409:
+            raise SystemExit(
+                f"Error {resp.status_code}: Resource creation \
+failed - reason: {resp.json()['reason']}"
+            )
+        elif resp.status_code == 415 or resp.status_code == 422:
+            raise SystemExit(
+                f"Error {resp.status_code}: Resource creation \
+failed - reason: {resp.json()['metadata']['name'][0]}: {name!r}"
+            )
+        elif resp.status_code >= 400:
+            try:
+                raise SystemExit(
+                    f"Error {resp.status_code}: Resource creation \
+failed - reason: unknown - {resp.json()['metadata']['name'][0]}"
+                )
+            except ValueError:
+                raise SystemExit(
+                    f"Error {resp.status_code}: Resource creation \
+failed - reason: unknown"
+                )
+
+    return decorator
+
+
 class Resolver(object):
     """Dependency resolver for function arguments annotated with
     :func:`depends`.
@@ -274,7 +313,7 @@ class BaseUrlSession(requests.Session):
         url = self.create_url(url)
         resp = super().request(method, url, *args, **kwargs)
         if raise_for_status:
-            resp.raise_for_status()
+            resp
         return resp
 
     def create_url(self, url):
