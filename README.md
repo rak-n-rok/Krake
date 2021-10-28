@@ -22,8 +22,8 @@ management in Edge Cloud infrastructures.
 
 In order to get started and play with Krake, you'll need to deploy Krake plus
 at least one Kubernetes cluster to act as a backend for Krake. We recommend
-[Minikube][minikube], which is a simple way to get a Kubernetes environment
-for development purposes.
+[Minikube][minikube] or [KinD][kind], which are a simple ways to get a Kubernetes
+environment for development purposes.
 
 This section describes a quickstart for developers to get started with a Krake
 development setup. Advanced topics are covered in the
@@ -36,7 +36,7 @@ development setup. Advanced topics are covered in the
 
 - [etcdv3][etcd]
 - [Python][python] >= 3.6
-- [Setup at least one Minikube VM][minikube]
+- [Setup at least one Minikube VM][minikube] or [KinD instance][kind] alternatively
 
 #### Testing
 
@@ -149,7 +149,11 @@ This provides a simple demonstration of Krake's functionalities. Please refer
 to the [User Documentation][user-docs] for extended usage guidelines,
 explanations, and examples.
 
-Download the kubeconfig file, as well as the certificate and key file
+#### Prepare Kubernetes environment
+
+##### Minikube
+
+Create Minikube instance and download the kubeconfig file, as well as the certificate and key file
 necessary to connect to your Minikube instance.
 
 ```bash
@@ -167,7 +171,21 @@ $ sed -i "/client-certificate/c\    client-certificate: `pwd`/cluster_certs/cert
 $ sed -i "/client-key/c\    client-key: `pwd`/cluster_certs/certs/client.key" cluster_certs/config
 ```
 
-Now we register the Minikube instance as a Krake backend and use Krake to
+##### KinD
+
+Create KinD instance and save the kubeconfig file in `cluster_certs` directory
+
+Prerequisites
+- [Docker][docker]
+- [KinD][kind]
+
+```bash
+$ mkdir cluster_certs
+$ CLUSTER_NAME=""  # The name of your k8s cluster
+$ kind create cluster --name $CLUSTER_NAME --kubeconfig cluster_certs/$CLUSTER_NAME  # Start single node k8s cluster
+```
+
+Now we register the Minikube (or KinD) instance as a Krake backend and use Krake to
 deploy an `echoserver` application.
 
 ```bash
@@ -274,7 +292,9 @@ transformed to an open source project in September 2019.
 [admin-docs]: https://rak-n-rok.readthedocs.io/projects/krake/en/latest/admin/index.html
 [user-docs]: https://rak-n-rok.readthedocs.io/projects/krake/en/latest/user/index.html
 [sphinx]: http://www.sphinx-doc.org/
-[krake-matrix]: https://app.element.io/#/room/#krake:matrix.org 
+[krake-matrix]: https://app.element.io/#/room/#krake:matrix.org
 [virtualenv]: https://virtualenv.pypa.io/en/stable
 [confluent_packages]: https://docs.confluent.io/platform/current/installation/available_packages.html
 [cfssl]: https://github.com/cloudflare/cfssl
+[kind]: https://kind.sigs.k8s.io/
+[docker]: https://www.docker.com/
