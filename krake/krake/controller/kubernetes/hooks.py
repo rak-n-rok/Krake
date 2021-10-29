@@ -20,7 +20,10 @@ from typing import NamedTuple
 import yarl
 from krake.controller import Observer
 from krake.controller.kubernetes.client import KubernetesClient, InvalidManifestError
-from krake.utils import camel_to_snake_case, get_kubernetes_resource_idx
+from krake.utils import (
+    camel_to_snake_case,
+    get_kubernetes_resource_idx
+)
 from kubernetes_asyncio.client.rest import ApiException
 from yarl import URL
 from secrets import token_urlsafe
