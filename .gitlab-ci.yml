@@ -238,3 +238,11 @@ e2e-tests:
     ### Cleanup the staging infra ###
     #################################
     - ansible-playbook ansible/unprovision.yml
+
+# Following code is for security testing in GitLab
+
+include:
+  - template: Security/Dependency-Scanning.gitlab-ci.yml
+  - template: Security/License-Scanning.gitlab-ci.yml
+  - template: Security/SAST.gitlab-ci.yml
+  - template: Security/Secret-Detection.gitlab-ci.yml
