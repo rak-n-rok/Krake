@@ -364,7 +364,7 @@ class HandlerDeactivator(object):
     """Context manager used in the tests to temporarly remove a Handler from a Hook.
 
     Args:
-        hook (krake.controller.hooks.Hook): Hook for which the handler should be
+        hook (krake.controller.hooks.HookType): HookType for which the handler should be
             temporarly disabled.
         handler (callable): The handler to deactivate
 

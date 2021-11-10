@@ -12,7 +12,7 @@ from typing import NamedTuple, Tuple
 
 from yarl import URL
 
-from .hooks import listen, Hook
+from .hooks import listen, HookType
 from krake.client.kubernetes import KubernetesApi
 from krake.controller import Controller, Reflector, ControllerError
 from krake.controller.kubernetes.hooks import (
@@ -522,14 +522,14 @@ class KubernetesController(Controller):
         if app.metadata.deleted:
             # Delete the Application
             await listen.hook(
-                Hook.ApplicationPreDelete,
+                HookType.ApplicationPreDelete,
                 controller=self,
                 app=copy,
                 start=start_observer,
             )
             await self._delete_application(copy)
             await listen.hook(
-                Hook.ApplicationPostDelete,
+                HookType.ApplicationPostDelete,
                 controller=self,
                 app=copy,
                 start=start_observer,
@@ -540,14 +540,14 @@ class KubernetesController(Controller):
         ):
             # Migrate the Application
             await listen.hook(
-                Hook.ApplicationPreMigrate,
+                HookType.ApplicationPreMigrate,
                 controller=self,
                 app=copy,
                 start=start_observer,
             )
             await self._migrate_application(copy)
             await listen.hook(
-                Hook.ApplicationPostMigrate,
+                HookType.ApplicationPostMigrate,
                 controller=self,
                 app=copy,
                 start=start_observer,
@@ -555,14 +555,14 @@ class KubernetesController(Controller):
         else:
             # Reconcile the Application
             await listen.hook(
-                Hook.ApplicationPreReconcile,
+                HookType.ApplicationPreReconcile,
                 controller=self,
                 app=copy,
                 start=start_observer,
             )
             await self._reconcile_application(copy)
             await listen.hook(
-                Hook.ApplicationPostReconcile,
+                HookType.ApplicationPostReconcile,
                 controller=self,
                 app=copy,
                 start=start_observer,
@@ -620,7 +620,7 @@ class KubernetesController(Controller):
             ) as kube:
                 for resource in last_observed_manifest_copy:
                     await listen.hook(
-                        Hook.ResourcePreDelete,
+                        HookType.ResourcePreDelete,
                         app=app,
                         cluster=cluster,
                         resource=resource,
@@ -628,7 +628,7 @@ class KubernetesController(Controller):
                     )
                     resp = await kube.delete(resource)
                     await listen.hook(
-                        Hook.ResourcePostDelete,
+                        HookType.ResourcePostDelete,
                         app=app,
                         cluster=cluster,
                         resource=resource,
@@ -656,7 +656,7 @@ class KubernetesController(Controller):
         generate_default_observer_schema(app, kube.default_namespace)
         update_last_applied_manifest_from_spec(app)
         await listen.hook(
-            Hook.ApplicationMangling,
+            HookType.ApplicationMangling,
             app=app,
             api_endpoint=self.api_endpoint,
             ssl_context=self.ssl_context,
@@ -728,7 +728,7 @@ class KubernetesController(Controller):
             # Delete all resources that are no longer in the spec
             for deleted in delta.deleted:
                 await listen.hook(
-                    Hook.ResourcePreDelete,
+                    HookType.ResourcePreDelete,
                     app=app,
                     cluster=cluster,
                     resource=deleted,
@@ -736,7 +736,7 @@ class KubernetesController(Controller):
                 )
                 resp = await kube.delete(deleted)
                 await listen.hook(
-                    Hook.ResourcePostDelete,
+                    HookType.ResourcePostDelete,
                     app=app,
                     cluster=cluster,
                     resource=deleted,
@@ -746,7 +746,7 @@ class KubernetesController(Controller):
             # Create new resource
             for new in delta.new:
                 await listen.hook(
-                    Hook.ResourcePreCreate,
+                    HookType.ResourcePreCreate,
                     app=app,
                     cluster=cluster,
                     resource=new,
@@ -754,7 +754,7 @@ class KubernetesController(Controller):
                 )
                 resp = await kube.apply(new)
                 await listen.hook(
-                    Hook.ResourcePostCreate,
+                    HookType.ResourcePostCreate,
                     app=app,
                     cluster=cluster,
                     resource=new,
@@ -764,7 +764,7 @@ class KubernetesController(Controller):
             # Update modified resource
             for modified in delta.modified:
                 await listen.hook(
-                    Hook.ResourcePreUpdate,
+                    HookType.ResourcePreUpdate,
                     app=app,
                     cluster=cluster,
                     resource=modified,
@@ -772,7 +772,7 @@ class KubernetesController(Controller):
                 )
                 resp = await kube.apply(modified)
                 await listen.hook(
-                    Hook.ResourcePostUpdate,
+                    HookType.ResourcePostUpdate,
                     app=app,
                     cluster=cluster,
                     resource=modified,
@@ -812,7 +812,7 @@ class KubernetesController(Controller):
         generate_default_observer_schema(app, kube.default_namespace)
         update_last_applied_manifest_from_spec(app)
         await listen.hook(
-            Hook.ApplicationMangling,
+            HookType.ApplicationMangling,
             app=app,
             api_endpoint=self.api_endpoint,
             ssl_context=self.ssl_context,

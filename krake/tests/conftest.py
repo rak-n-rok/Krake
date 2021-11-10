@@ -378,7 +378,11 @@ def kube_config(tls_client_config):
             "complete": {
                 "intermediate_src": "/etc/krake/certs/kube.pem",
                 "intermediate_key_src": "/etc/krake/certs/kube-key.pem",
-            }
+            },
+            "shutdown": {
+                "intermediate_src": "/etc/krake/certs/kube.pem",
+                "intermediate_key_src": "/etc/krake/certs/kube-key.pem",
+            },
         },
         "log": {},
     }
@@ -981,6 +985,14 @@ def hooks_config(pki):
                     "cert_dest": "/etc/krake_certs",
                     "env_token": "KRAKE_TOKEN",
                     "env_complete": "KRAKE_COMPLETE_URL",
+                },
+                "shutdown": {
+                    "hook_user": "test-shutdown-hook-user",
+                    "intermediate_src": client_cert.cert,
+                    "intermediate_key_src": client_cert.key,
+                    "cert_dest": "/etc/krake_certs",
+                    "env_token": "KRAKE_TOKEN",
+                    "env_shutdown": "KRAKE_SHUTDOWN_URL",
                 }
             }
         )

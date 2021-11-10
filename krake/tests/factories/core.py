@@ -113,6 +113,7 @@ class RoleRuleFactory(Factory):
             "kubernetes": [
                 "applications",
                 "applications/complete",
+                "applications/shutdown",
                 "applications/status",
                 "clusters",
                 "clusters/status",

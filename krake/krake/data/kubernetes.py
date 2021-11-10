@@ -321,6 +321,8 @@ class ApplicationStatus(Status):
     token: str = None
     complete_cert: str = None
     complete_key: str = None
+    shutdown_cert: str = None
+    shutdown_key: str = None
 
 
 @persistent("/kubernetes/applications/{namespace}/{name}")
@@ -342,6 +344,12 @@ class ApplicationList(ApiObject):
 class ApplicationComplete(ApiObject):
     api: str = "kubernetes"
     kind: str = "Complete"
+    token: str = None
+
+
+class ApplicationShutdown(ApiObject):
+    api: str = "kubernetes"
+    kind: str = "Shutdown"
     token: str = None
 
 

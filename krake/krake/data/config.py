@@ -196,8 +196,74 @@ class CompleteHookConfiguration(Serializable):
     )
 
 
+class ShutdownHookConfiguration(Serializable):
+    hook_user: str = field(
+        default="system:shutdown-hook",
+        metadata={
+            "help": (
+                "Name of the 'shutdown' hook user put in the certificates given to"
+                " Applications. Needed if RBAC is enabled."
+            )
+        },
+    )
+    intermediate_src: str = field(
+        metadata={
+            "help": (
+                "Path to the certificate which will sign new certificates given to the"
+                " Applications."
+            )
+        }
+    )
+    intermediate_key_src: str = field(
+        metadata={
+            "help": (
+                "Path to the certificate key which will sign new certificates given"
+                " to the Applications."
+            )
+        }
+    )
+    cert_dest: str = field(
+        default="/etc/krake_certs/",
+        metadata={
+            "help": "Environment variable to be used in the Kubernetes Application"
+        },
+    )
+    env_token: str = field(
+        default="KRAKE_TOKEN",
+        metadata={
+            "help": (
+                "Name of the environment variable to be used in the Kubernetes"
+                " Application to access the token to identify the Application."
+            )
+        },
+    )
+    env_shutdown: str = field(
+        default="KRAKE_SHUTDOWN_URL",
+        metadata={
+            "help": (
+                "Name of the environment variable to be used in the Kubernetes"
+                " Application to access the actual API endpoint of Krake to notify the"
+                " end of job."
+            )
+        },
+    )
+    external_endpoint: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "URL that will be provided to the Application, which corresponds to the"
+                " API endpoint to notify the end of job. If not provided, the default"
+                " endpoint of the Krake API will be used. It should be set if the"
+                " KubernetesController is connected to the API with a private IP."
+            ),
+            "validate": _validate_endpoint,
+        },
+    )
+
+
 class HooksConfiguration(Serializable):
     complete: CompleteHookConfiguration
+    shutdown: ShutdownHookConfiguration
 
 
 ###################################

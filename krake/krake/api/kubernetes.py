@@ -28,6 +28,7 @@ from krake.data.kubernetes import (
     ClusterList,
     ClusterBinding,
     ApplicationComplete,
+    ApplicationShutdown,
 )
 
 logger = logging.getLogger("krake.api.kubernetes")
@@ -261,6 +262,29 @@ class KubernetesApi(object):
         await session(request).put(app)
         logger.info(
             "Deleting of application %r (%s) by calling complete hook",
+            app.metadata.name,
+            app.metadata.uid,
+        )
+        return web.json_response(app.serialize())
+
+    @routes.route(
+        "PUT", "/kubernetes/namespaces/{namespace}/applications/{name}/shutdown"
+    )
+    @protected(api="kubernetes", resource="applications/shutdown", verb="update")
+    @use_schema("body", ApplicationShutdown.Schema)
+    @load("app", Application)
+    async def update_application_shutdown(request, body, app):
+        # # If the hook is not enabled for the Application or if the token is invalid
+        # if app.status.token is None or app.status.token != body.token:
+        #     raise web.HTTPUnauthorized(
+        #         reason="No token has been provided or the provided one is invalid."
+        #     )
+        #
+        # # Resource marked as deletion, to be deleted by the Garbage Collector
+        # app.metadata.deleted = utils.now()
+        # await session(request).put(app)
+        logger.info(
+            "Deleting of application %r (%s) by calling shutdown hook",
             app.metadata.name,
             app.metadata.uid,
         )

@@ -6,6 +6,7 @@ from krake.data.kubernetes import (
     ClusterList,
     ClusterBinding,
     ApplicationComplete,
+    ApplicationShutdown
 )
 from .definitions import ApiDef, Scope, operation, subresource
 
@@ -84,6 +85,15 @@ class ApplicationResource:
             method = "PUT"
             path = "/kubernetes/namespaces/{namespace}/applications/{name}/complete"
             body = ApplicationComplete
+            response = Application
+
+    @subresource
+    class Shutdown:
+        @operation
+        class Update:
+            method = "PUT"
+            path = "/kubernetes/namespaces/{namespace}/applications/{name}/shutdown"
+            body = ApplicationShutdown
             response = Application
 
 
