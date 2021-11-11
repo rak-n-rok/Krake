@@ -898,8 +898,6 @@ async def test_observer_on_status_update_mangled(
 
     def update_decorator(func):
         async def on_res_update(resource):
-            print("H"*50)
-            print(resource.spec)
             nonlocal calls_to_res_update, actual_state
             calls_to_res_update += 1
 
