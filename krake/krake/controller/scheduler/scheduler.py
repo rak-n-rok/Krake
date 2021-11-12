@@ -209,6 +209,8 @@ class Scheduler(Controller):
         self.openstack_api = None
         self.kubernetes_api = None
         self.core_api = None
+        self.kubernetes = None
+        self.openstack = None
 
 
 class Handler(object):
