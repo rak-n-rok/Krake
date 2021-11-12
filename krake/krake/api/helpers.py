@@ -5,12 +5,17 @@ from enum import Enum, auto
 from functools import wraps
 from aiohttp import web
 from krake.data.serializable import Serializable
-from marshmallow import ValidationError, fields, missing
-from marshmallow.validate import Range
+from marshmallow import ValidationError
+
+
+# does the import of the package logging maybe belong somewhere else ?
+import logging
+
+logger = logging.getLogger("krake.api.kubernetes")
 
 
 class HttpReasonCode(Enum):
-    # When a database transaction failed
+    # When a database transaction failedy
     TRANSACTION_ERROR = auto()
     # When the authentication through keystone failed
     INVALID_KEYSTONE_TOKEN = auto()
@@ -21,8 +26,7 @@ class HttpReasonCode(Enum):
 
 
 class HttpReason(Serializable):
-    """Store the reasons for failures on the HTTP layers for the API.
-    """
+    """Store the reasons for failures on the HTTP layers for the API."""
 
     code: HttpReasonCode
     reason: str
@@ -212,12 +216,19 @@ def use_schema(argname, schema):
         async def wrapper(request, *args, **kwargs):
             try:
                 body = await request.json()
-            except json.JSONDecodeError:
-                raise web.HTTPUnsupportedMediaType()
+            except json.JSONDecodeError as err:
+
+                logger.debug("JSONDecodeError: await request.json() failed")
+                logger.debug("raise HTTPClientError: 415 - HTTPUnsupportedMediaType")
+                # raise web.HTTPUnsupportedMediaType()
+                raise json_error(web.HTTPUnsupportedMediaType, err.messages)
 
             try:
                 payload = schema.load(body)
             except ValidationError as err:
+
+                logger.debug("ValidationError: schema.load(body) failed")
+                logger.debug("raise HTTPClientError: 422 - HTTPUnprocessableEntity")
                 raise json_error(web.HTTPUnprocessableEntity, err.messages)
 
             kwargs[argname] = payload
@@ -227,61 +238,3 @@ def use_schema(argname, schema):
         return wrapper
 
     return decorator
-
-
-def make_create_request_schema(cls):
-    """Create a :class:`marshmallow.Schema` excluding subresources and read-only.
-
-    Args:
-        cls (type): Data class with ``Schema`` attribute
-
-    Returns:
-        marshmallow.Schema: Schema instance with excluded subresources
-
-    """
-    exclude = cls.fields_ignored_by_creation()
-    return cls.Schema(exclude=exclude)
-
-
-class QueryFlag(fields.Field):
-    """Field used for boolean query parameters.
-
-    If the query parameter exists the field is deserialized to :data:`True`
-    regardless of the value. The field is marked as ``load_only``.
-
-    """
-
-    def __init__(self, **metadata):
-        super().__init__(load_only=True, **metadata)
-
-    def deserialize(self, value, attr=None, data=None, **kwargs):
-        if value is missing:
-            return False
-        return True
-
-
-class ListQuery(object):
-    """Simple mixin class for :class:`operation` template classes.
-
-    Defines default :attr:`operation.query` attribute for *list* and *list
-    all* operations.
-
-    """
-
-    query = {
-        "heartbeat": fields.Integer(
-            missing=None,
-            doc=(
-                "Number of seconds after which the server sends a heartbeat in "
-                "form of an empty newline. Passing 0 disables the heartbeat. "
-                "Default: 10 seconds"
-            ),
-            validate=Range(min=0),
-        ),
-        "watch": QueryFlag(
-            doc=(
-                "Watches for changes to the described resources and return "
-                "them as a stream of :class:`krake.data.core.WatchEvent`"
-            )
-        ),
-    }

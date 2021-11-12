@@ -88,6 +88,11 @@ def create_app(config):
 
     authentication = load_authentication(config)
     authorizer = load_authorizer(config)
+    # SETUP MIDDLEWARE:
+
+    # ADDED:
+    # logger = logging.getLogger(__name__)
+    # middlewares.setup_logging_request_id_prefix()
 
     app = web.Application(
         logger=logger,
@@ -95,6 +100,8 @@ def create_app(config):
             middlewares.error_log(),
             authentication,
             middlewares.retry_transaction(retry=config.etcd.retry_transactions),
+            # ADDED:
+            middlewares.request_id_middleware(),
         ],
     )
     app["config"] = config
