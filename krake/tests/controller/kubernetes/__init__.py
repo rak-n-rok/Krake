@@ -45,10 +45,10 @@ spec:
 """
 )
 
-configmap_manifest = yaml.safe_load(
+secret_manifest = yaml.safe_load(
     """---
 apiVersion: v1
-kind: ConfigMap
+kind: Secret
 metadata:
   name: nginx-demo
   namespace: secondary
@@ -57,7 +57,7 @@ data:
 """
 )
 
-nginx_manifest = [deployment_manifest, service_manifest, configmap_manifest]
+nginx_manifest = [deployment_manifest, service_manifest, secret_manifest]
 
 # To be used to initialize spec.observer_schema
 custom_deployment_observer_schema = yaml.safe_load(
@@ -108,10 +108,10 @@ spec:
 """
 )
 
-custom_configmap_observer_schema = yaml.safe_load(
+custom_secret_observer_schema = yaml.safe_load(
     """---
 apiVersion: v1
-kind: ConfigMap
+kind: Secret
 metadata:
   name: nginx-demo
   namespace: null
@@ -121,23 +121,23 @@ metadata:
 custom_observer_schema = [
     custom_deployment_observer_schema,
     custom_service_observer_schema,
-    custom_configmap_observer_schema,
+    custom_secret_observer_schema,
 ]
 
 # To be used to initialize status.mangled_observer_schema when the controller loop is
 # not called in the test.
 mangled_deployment_observer_schema = deepcopy(custom_deployment_observer_schema)
 mangled_service_observer_schema = deepcopy(custom_service_observer_schema)
-mangled_configmap_observer_schema = deepcopy(custom_configmap_observer_schema)
+mangled_secret_observer_schema = deepcopy(custom_secret_observer_schema)
 
 mangled_deployment_observer_schema["metadata"]["namespace"] = "secondary"
 mangled_service_observer_schema["metadata"]["namespace"] = "secondary"
-mangled_configmap_observer_schema["metadata"]["namespace"] = "secondary"
+mangled_secret_observer_schema["metadata"]["namespace"] = "secondary"
 
 mangled_observer_schema = [
     mangled_deployment_observer_schema,
     mangled_service_observer_schema,
-    mangled_configmap_observer_schema,
+    mangled_secret_observer_schema,
 ]
 
 
@@ -239,6 +239,24 @@ status:
     """
 )
 
+secret_response = yaml.safe_load(
+    """
+apiVersion: v1
+data:
+  nginx_config: "myconfig"
+kind: Secret
+metadata:
+  annotations: {}
+  creationTimestamp: "2021-10-18T13:38:04Z"
+  managedFields: []
+  name: nginx-demo
+  namespace: secondary
+  resourceVersion: "439"
+  selfLink: /api/v1/namespaces/secondary/secrets/nginx-secret
+  uid: 9a7ecc91-83a9-47ae-8fed-ea9321b6e626
+    """
+)
+
 configmap_response = yaml.safe_load(
     """
 apiVersion: v1
@@ -302,10 +320,10 @@ spec:
     """
 )
 
-initial_last_observed_manifest_configmap = yaml.safe_load(
+initial_last_observed_manifest_secret = yaml.safe_load(
     """
 apiVersion: v1
-kind: ConfigMap
+kind: Secret
 metadata:
   name: nginx-demo
   namespace: secondary
@@ -315,7 +333,7 @@ metadata:
 initial_last_observed_manifest = [
     initial_last_observed_manifest_deployment,
     initial_last_observed_manifest_service,
-    initial_last_observed_manifest_configmap,
+    initial_last_observed_manifest_secret,
 ]
 
 

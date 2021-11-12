@@ -50,14 +50,14 @@ from tests.factories.kubernetes import (
 from tests.controller.kubernetes import (
     deployment_manifest,
     service_manifest,
-    configmap_manifest,
+    secret_manifest,
     nginx_manifest,
     custom_deployment_observer_schema,
     custom_service_observer_schema,
     custom_observer_schema,
     deployment_response,
     service_response,
-    configmap_response,
+    secret_response,
     initial_last_observed_manifest_deployment,
     initial_last_observed_manifest_service,
     initial_last_observed_manifest,
@@ -597,10 +597,10 @@ async def test_app_creation_manifest_namespace_set(aiohttp_server, config, db, l
 async def test_app_observer_schema_generation(aiohttp_server, config, db, loop):
     """Test the automatic generation of the observer_schema
 
-    We create an application with a Deployment and a ConfigMap. We specify a custom
+    We create an application with a Deployment and a Secret. We specify a custom
     observer_schema for the Deployment. As part of the reconciliation loop, the
     controller should automatically generate the default observer schema for the
-    ConfigMap
+    Secret
 
     """
     routes = web.RouteTableDef()
@@ -613,7 +613,7 @@ async def test_app_observer_schema_generation(aiohttp_server, config, db, loop):
         # No `nginx-demo` Deployment exist
         return web.Response(status=404)
 
-    @routes.get("/api/v1/namespaces/secondary/configmaps/nginx-demo")
+    @routes.get("/api/v1/namespaces/secondary/secrets/nginx-demo")
     async def _(request):
         # No `nginx-demo` Service exist
         return web.Response(status=404)
@@ -625,10 +625,10 @@ async def test_app_observer_schema_generation(aiohttp_server, config, db, loop):
         # As a response, the k8s API provides the full Deployment object
         return web.json_response(deployment_response)
 
-    @routes.post("/api/v1/namespaces/secondary/configmaps")
+    @routes.post("/api/v1/namespaces/secondary/secrets")
     async def _(request):
-        # As a response, the k8s API provides the full Service object
-        return web.json_response(configmap_response)
+        # As a response, the k8s API provides the full Secret object
+        return web.json_response(secret_response)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -643,7 +643,7 @@ async def test_app_observer_schema_generation(aiohttp_server, config, db, loop):
         status__state=ApplicationState.PENDING,
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
-        spec__manifest=[deployment_manifest, configmap_manifest],
+        spec__manifest=[deployment_manifest, secret_manifest],
         spec__observer_schema=[custom_deployment_observer_schema],
     )
     await db.put(cluster)
@@ -664,10 +664,10 @@ async def test_app_observer_schema_generation(aiohttp_server, config, db, loop):
     )
 
     assert stored.status.mangled_observer_schema[0]["kind"] == "Deployment"
-    assert stored.status.mangled_observer_schema[1]["kind"] == "ConfigMap"
+    assert stored.status.mangled_observer_schema[1]["kind"] == "Secret"
 
     assert stored.status.last_observed_manifest[0]["kind"] == "Deployment"
-    assert stored.status.last_observed_manifest[1]["kind"] == "ConfigMap"
+    assert stored.status.last_observed_manifest[1]["kind"] == "Secret"
 
 
 async def test_app_update(aiohttp_server, config, db, loop):
@@ -1138,7 +1138,7 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
     deleted = set()
 
     # As part of the deletion, the k8s controller deletes the Deployment, Service, and
-    # ConfigMap from the k8s cluster
+    # Secret from the k8s cluster
     @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
         deleted.add("Deployment")
@@ -1149,9 +1149,9 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
         deleted.add("Service")
         return web.Response(status=200)
 
-    @routes.delete("/api/v1/namespaces/secondary/configmaps/nginx-demo")
+    @routes.delete("/api/v1/namespaces/secondary/secrets/nginx-demo")
     async def _(request):
-        deleted.add("ConfigMap")
+        deleted.add("Secret")
         return web.Response(status=200)
 
     kubernetes_app.add_routes(routes)
@@ -1205,7 +1205,7 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
     assert len(deleted) == 3
     assert "Deployment" in deleted
     assert "Service" in deleted
-    assert "ConfigMap" in deleted
+    assert "Secret" in deleted
 
 
 async def test_app_management_no_error_logs(aiohttp_server, config, db, loop, caplog):
@@ -1755,14 +1755,14 @@ def test_resource_delta(loop):
 
     State (0):
         The application possesses a last_applied_manifest which specifies a Deployment,
-        a Service and a ConfigMap. The application has a custom observer_schema which
+        a Service and a Secret. The application has a custom observer_schema which
         observes only part of the resources:
         - It observes the deployment's image, initialized by the given manifest file.
         - It observes the deployment's replicas count, initialized by k8s to 1.
         - The Service's first port's protocol, initialized in the manifest file, is
         *not* observed
         - It accepts between 0 and 2 ports.
-        - The ConfigMap is not observed
+        - The Secret is not observed
 
         The application does not possess a last_observed_manifest.
 
@@ -1816,7 +1816,7 @@ def test_resource_delta(loop):
         Remove elements from a list in last_observed_manifest
 
     State (13):
-        Remove ConfigMap
+        Remove Secret
 
     """
 
@@ -1832,14 +1832,14 @@ def test_resource_delta(loop):
 
     deployment_object = serialize_k8s_object(deployment_response, "V1Deployment")
     service_object = serialize_k8s_object(service_response, "V1Service")
-    configmap_object = serialize_k8s_object(configmap_response, "V1ConfigMap")
+    secret_object = serialize_k8s_object(secret_response, "V1Secret")
 
-    # The Deployment and Service and ConfigMap have to be created.
+    # The Deployment and Service and Secret have to be created.
     new, deleted, modified = ResourceDelta.calculate(app)
     assert len(new) == 3
     assert app.status.last_applied_manifest[0] in new  # Deployment
     assert app.status.last_applied_manifest[1] in new  # Service
-    assert app.status.last_applied_manifest[2] in new  # ConfigMap
+    assert app.status.last_applied_manifest[2] in new  # Secret
     assert len(deleted) == 0
     assert len(modified) == 0
 
@@ -1847,7 +1847,7 @@ def test_resource_delta(loop):
     # last_applied_manifest.
     update_last_applied_manifest_from_resp(app, None, None, deployment_object)
     update_last_applied_manifest_from_resp(app, None, None, service_object)
-    update_last_applied_manifest_from_resp(app, None, None, configmap_object)
+    update_last_applied_manifest_from_resp(app, None, None, secret_object)
     initial_last_applied_manifest = deepcopy(app.status.last_applied_manifest)
     app.status.last_observed_manifest = deepcopy(initial_last_observed_manifest)
 
@@ -2023,16 +2023,16 @@ def test_resource_delta(loop):
     assert len(modified) == 1
     assert app.status.last_applied_manifest[1] in modified  # Service
 
-    # State (13): Remove ConfigMap
+    # State (13): Remove Secret
     app.status.last_applied_manifest = deepcopy(initial_last_applied_manifest)
     app.status.last_observed_manifest = deepcopy(initial_last_observed_manifest)
     app.status.mangled_observer_schema.pop(2)
     app.spec.manifest.pop(2)
     app.status.last_applied_manifest.pop(2)
 
-    # ConfigMap should be deleted
+    # Secret should be deleted
     new, deleted, modified = ResourceDelta.calculate(app)
     assert len(new) == 0
     assert len(deleted) == 1
     assert len(modified) == 0
-    assert app.status.last_observed_manifest[2] in deleted  # ConfigMap
+    assert app.status.last_observed_manifest[2] in deleted  # Secret
