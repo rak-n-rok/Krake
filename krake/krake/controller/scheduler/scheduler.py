@@ -142,14 +142,20 @@ class Scheduler(Controller):
             api_endpoint, loop=loop, ssl_context=ssl_context, debounce=debounce
         )
         self.magnum_queue = WorkQueue(loop=self.loop, debounce=debounce)
+
         self.kubernetes_api = None
         self.openstack_api = None
         self.core_api = None
+
         self.kubernetes_reflector = None
         self.openstack_reflector = None
+
         self.worker_count = worker_count
         self.reschedule_after = reschedule_after
         self.stickiness = stickiness
+
+        self.kubernetes = None
+        self.openstack = None
 
     async def prepare(self, client):
         assert client is not None
@@ -158,30 +164,40 @@ class Scheduler(Controller):
         self.openstack_api = OpenStackApi(self.client)
         self.core_api = CoreApi(self.client)
 
+        self.openstack = OpenstackHandler(self.client, self.magnum_queue,
+                                          self.openstack_api, self.core_api)
+        self.kubernetes = KubernetesHandler(self.client, self.queue,
+                                            self.kubernetes_api, self.core_api,
+                                            self.stickiness, self.reschedule_after)
+
         for i in range(self.worker_count):
             self.register_task(
-                self.handle_kubernetes_applications, name=f"kubernetes_worker_{i}"
+                self.kubernetes.handle_kubernetes_applications,
+                name=f"kubernetes_worker_{i}"
             )
 
         for i in range(self.worker_count):
-            self.register_task(self.handle_magnum_clusters, name=f"magnum_worker_{i}")
+            self.register_task(
+                self.openstack.handle_magnum_clusters,
+                name=f"magnum_worker_{i}"
+            )
 
         self.kubernetes_reflector = Reflector(
             listing=self.kubernetes_api.list_all_applications,
             watching=self.kubernetes_api.watch_all_applications,
-            on_list=self.received_kubernetes_app,
-            on_add=self.received_kubernetes_app,
-            on_update=self.received_kubernetes_app,
-            on_delete=self.received_kubernetes_app,
+            on_list=self.kubernetes.received_kubernetes_app,
+            on_add=self.kubernetes.received_kubernetes_app,
+            on_update=self.kubernetes.received_kubernetes_app,
+            on_delete=self.kubernetes.received_kubernetes_app,
             resource_plural="Kubernetes Applications",
         )
         self.openstack_reflector = Reflector(
             listing=self.openstack_api.list_all_magnum_clusters,
             watching=self.openstack_api.watch_all_magnum_clusters,
-            on_list=self.received_magnum_cluster,
-            on_add=self.received_magnum_cluster,
-            on_update=self.received_magnum_cluster,
-            on_delete=self.received_magnum_cluster,
+            on_list=self.openstack.received_magnum_cluster,
+            on_add=self.openstack.received_magnum_cluster,
+            on_update=self.openstack.received_magnum_cluster,
+            on_delete=self.openstack.received_magnum_cluster,
             resource_plural="Magnum Clusters",
         )
         self.register_task(self.kubernetes_reflector, name="Kubernetes reflector")
@@ -190,259 +206,21 @@ class Scheduler(Controller):
     async def cleanup(self):
         self.kubernetes_reflector = None
         self.openstack_reflector = None
+        self.openstack_api = None
         self.kubernetes_api = None
         self.core_api = None
+        self.kubernetes = None
+        self.openstack = None
 
-    async def received_kubernetes_app(self, app):
-        """Handler for Kubernetes application reflector.
 
-        Args:
-            app (krake.data.kubernetes.Application): Application received from the API
+class Handler(object):
 
-        """
-        if app.metadata.deleted:
-            # TODO: If an application is deleted, the scheduling of other
-            #   applications should potentially be revised.
-            logger.debug("Cancel rescheduling of deleted %r", app)
-            await self.queue.cancel(app.metadata.uid)
+    def __init__(self, client, queue, api, core_api):
 
-        # The application is already scheduled and no change has been made to the specs
-        # since then. Nevertheless, we should perform a periodic rescheduling to handle
-        # changes in the cluster metric values.
-        elif (
-            app.status.kube_controller_triggered
-            and app.metadata.modified <= app.status.kube_controller_triggered
-        ):
-            await self.reschedule_kubernetes_application(app)
-
-        elif app.status.state == ApplicationState.FAILED:
-            logger.debug("Reject failed %r", app)
-        else:
-            logger.debug("Accept %r", app)
-            await self.queue.put(app.metadata.uid, app)
-
-    async def received_magnum_cluster(self, cluster):
-        """Handler for Kubernetes application reflector.
-
-        Args:
-            cluster (krake.data.openstack.MagnumCluster): MagnumCLuster received from
-                the API.
-
-        """
-        # For now, we do not reschedule Magnum clusters. Hence, not enqueuing
-        # for rescheduling and not "scheduled" timestamp.
-        if cluster.metadata.deleted:
-            logger.debug("Ignore deleted %r", cluster)
-        elif cluster.status.project is None:
-            logger.debug("Accept unbound %r", cluster)
-            await self.magnum_queue.put(cluster.metadata.uid, cluster)
-        else:
-            logger.debug("Ignore bound %r", cluster)
-
-    async def handle_kubernetes_applications(self, run_once=False):
-        """Infinite loop which fetches and hands over the Kubernetes Application
-        resources to the right coroutine. The specific exceptions and error handling
-        have to be added here.
-
-        This function is meant to be run as background task. Lock the handling of a
-        resource with the :attr:`lock` attribute.
-
-        Args:
-            run_once (bool, optional): if True, the function only handles one resource,
-                then stops. Otherwise, continue to handle each new resource on the
-                queue indefinitely.
-
-        """
-        while True:
-            key, app = await self.queue.get()
-            try:
-                # TODO: API for supporting different application types
-                logger.debug("Handling %r", app)
-                await self.kubernetes_application_received(app)
-            except ControllerError as error:
-                app.status.reason = Reason(code=error.code, message=error.message)
-                app.status.state = ApplicationState.FAILED
-
-                await self.kubernetes_api.update_application_status(
-                    namespace=app.metadata.namespace, name=app.metadata.name, body=app
-                )
-            finally:
-                await self.queue.done(key)
-            if run_once:
-                break  # TODO: should we keep this? Only useful for tests
-
-    async def handle_magnum_clusters(self, run_once=False):
-        """Infinite loop which fetches and hands over the MagnumCluster resources to the
-        right coroutine. The specific exceptions and error handling have to be added
-        here.
-
-        This function is meant to be run as background task. Lock the handling of a
-        resource with the :attr:`lock` attribute.
-
-        Args:
-            run_once (bool, optional): if True, the function only handles one resource,
-                then stops. Otherwise, continue to handle each new resource on the
-                queue indefinitely.
-
-        """
-        while True:
-            key, cluster = await self.magnum_queue.get()
-            try:
-                # TODO: API for supporting different application types
-                logger.debug("Handling %r", cluster)
-                await self.schedule_magnum_cluster(cluster)
-            except ControllerError as error:
-                cluster.status.reason = Reason(code=error.code, message=error.message)
-                cluster.status.state = MagnumClusterState.FAILED
-
-                await self.openstack_api.update_magnum_cluster_status(
-                    namespace=cluster.metadata.namespace,
-                    name=cluster.metadata.name,
-                    body=cluster,
-                )
-            finally:
-                await self.magnum_queue.done(key)
-
-            if run_once:
-                break
-
-    async def kubernetes_application_received(self, app):
-        """Process a Kubernetes Application: schedule the Application on a Kubernetes
-        cluster and initiate its rescheduling.
-
-        Args:
-            app (krake.data.kubernetes.Application): the Application to process.
-
-        """
-        # TODO: Evaluate spawning a new cluster
-        await self.schedule_kubernetes_application(app)
-        await self.reschedule_kubernetes_application(app)
-
-    async def schedule_kubernetes_application(self, app):
-        """Choose a suitable Kubernetes cluster for the given Application and bound them
-        together.
-
-        Args:
-            app (krake.data.kubernetes.Application): the Application that needs to be
-                scheduled to a Cluster.
-
-        """
-        logger.info("Schedule %r", app)
-
-        if app.status.scheduled_to and not app.spec.constraints.migration:
-            logger.debug(
-                "Not migrating %r, since migration of the application is disabled.", app
-            )
-            return
-
-        clusters = await self.kubernetes_api.list_all_clusters()
-        cluster = await self.select_kubernetes_cluster(app, clusters.items)
-
-        scheduled_to = resource_ref(cluster)
-
-        # Check if the scheduling decision changed
-        if app.status.scheduled_to == scheduled_to:
-            logger.debug("No change for %r", app)
-
-            # The timestamp is updated anyway because the KubernetesController is
-            # waiting for the Scheduler to take a decision before handling the update on
-            # an Application. By updating this, the KubernetesController can start
-            # working on the current Application.
-            # However, if no update has been performed on the Application, then the
-            # modified timestamp is lower. As we are in the case of no change in the
-            # scheduling decision, there is no need to have the KubernetesController
-            # processing the Application. Updating the timestamp would simply trigger
-            # a processing of the Application by the KubernetesController, which would
-            # not make the controller perform any action.
-            if app.metadata.modified > app.status.kube_controller_triggered:
-                app.status.kube_controller_triggered = utils.now()
-                await self.kubernetes_api.update_application_status(
-                    namespace=app.metadata.namespace, name=app.metadata.name, body=app
-                )
-            return
-
-        if app.status.scheduled_to:
-            logger.info(
-                "Migrate %r from %s to %s", app, app.status.scheduled_to, scheduled_to
-            )
-        else:
-            logger.info("Scheduled %r to %r", app, cluster)
-        await self.kubernetes_api.update_application_binding(
-            namespace=app.metadata.namespace,
-            name=app.metadata.name,
-            body=ClusterBinding(cluster=scheduled_to),
-        )
-
-    async def schedule_magnum_cluster(self, cluster):
-        """Choose a suitable OpenStack Project for the given MagnumCluster and bound
-        them together.
-
-        Args:
-            cluster (krake.data.openstack.MagnumCluster): the MagnumCluster that needs
-                to be scheduled to a Project.
-        """
-        assert cluster.status.project is None, "Magnum cluster is already bound"
-
-        logger.info("Schedule %r", cluster)
-
-        projects = await self.openstack_api.list_all_projects()
-        project = await self.select_openstack_project(cluster, projects.items)
-
-        if project is None:
-            logger.info("No matching OpenStack project found for %r", cluster)
-            raise NoProjectFound("No matching OpenStack project found")
-
-        # TODO: Instead of copying labels and metrics, refactor the scheduler
-        #   to support transitive labels and metrics.
-        cluster.metadata.labels = {**project.metadata.labels, **cluster.metadata.labels}
-
-        # If a metric with the same name is already specified in the Magnum
-        # cluster spec, this takes precedence.
-        metric_names = set(metric.name for metric in cluster.spec.metrics)
-        for metric in project.spec.metrics:
-            if metric.name not in metric_names:
-                cluster.spec.metrics.append(metric)
-
-        await self.openstack_api.update_magnum_cluster(
-            namespace=cluster.metadata.namespace,
-            name=cluster.metadata.name,
-            body=cluster,
-        )
-
-        # TODO: How to support and compare different cluster templates?
-        logger.info("Scheduled %r to %r", cluster, project)
-        await self.openstack_api.update_magnum_cluster_binding(
-            namespace=cluster.metadata.namespace,
-            name=cluster.metadata.name,
-            body=MagnumClusterBinding(
-                project=resource_ref(project), template=project.spec.template
-            ),
-        )
-
-    async def reschedule_kubernetes_application(self, app):
-        """Ensure that the given Application will go through the scheduling process
-        after a certain interval. This allows an Application to be rescheduled to a
-        more suitable Cluster if a better one is found.
-
-        Args:
-            app (krake.data.kubernetes.Application): the Application to reschedule.
-
-        """
-        if not app.spec.constraints.migration:
-            logger.debug(
-                "Not rescheduling %r, since migration of the application is disabled.",
-                app,
-            )
-            return
-
-        # Put the application into the work queue with a certain delay. This
-        # ensures the rescheduling of the application. Only put it if there is
-        # not already another version of the resource in the queue. This check
-        # is needed to ensure that we do not overwrite state changes with the
-        # current one which might be outdated.
-        if app.metadata.uid not in self.queue.dirty:
-            logger.debug("Reschedule %r in %s secs", app, self.reschedule_after)
-            await self.queue.put(app.metadata.uid, app, delay=self.reschedule_after)
+        self.client = client
+        self.queue = queue
+        self.api = api
+        self.core_api = core_api
 
     @staticmethod
     def select_maximum(ranked):
@@ -462,171 +240,6 @@ class Scheduler(Controller):
 
         # Select randomly between best projects
         return random.choice(maximum)
-
-    async def select_kubernetes_cluster(self, app, clusters):
-        """Select suitable kubernetes cluster for application binding.
-
-        Args:
-            app (krake.data.kubernetes.Application): Application object for binding
-            clusters (list[krake.data.kubernetes.Cluster]): Clusters between which
-                the "best" one should be chosen.
-
-        Returns:
-            Cluster: Cluster suitable for application binding
-
-        """
-        # Reject clusters marked as deleted
-        clusters = (cluster for cluster in clusters if cluster.metadata.deleted is None)
-        matching = [
-            cluster for cluster in clusters if match_cluster_constraints(app, cluster)
-        ]
-
-        if not matching:
-            logger.info("No matching Kubernetes cluster for %r found", app)
-            raise NoClusterFound("No matching Kubernetes cluster found")
-
-        # If the application already has been scheduled it might be that it
-        # was very recently. In fact, since the controller reacts to all updates
-        # of the application, it might very well be that the previous scheduling
-        # took place very recently. For example, the kubernetes controller updates
-        # the app in reaction to the scheduler's scheduling, in which case
-        # the scheduler will try and select the best cluster yet again.
-        # Therefore we have to make sure the previous scheduling was not too recent.
-        # If it was, we want to stay at the current cluster - if it is still matching.
-        # The above reasoning is also true in the case when the user has performed an
-        # update of the application's cluster label constraints. Also in this case, the
-        # update should not cause a migration if 'app was `recently scheduled`'
-        # and 'current cluster is still matching'. If the app was recently scheduled
-        # but the update caused the current cluster to no longer be matching, we
-        # will reschedule, since `current` will become None below.
-        # If 'app was NOT `recently scheduled`' and 'current cluster is still matching',
-        # we might reschedule, e.g., due to changing metrics.
-        if app.status.scheduled_to:
-            # get current cluster as first cluster in matching to which app is scheduled
-            current = next(
-                (c for c in matching if resource_ref(c) == app.status.scheduled_to),
-                None,
-            )
-            # if current cluster is still matching
-            if current:
-                # We check how long ago the previous scheduling took place.
-                # If it is less than reschedule_after seconds ago, we do not
-                # reschedule. We use reschedule_after for this comparison,
-                # since it indicates how often it is desired that an application
-                # should be rescheduled when a more appropriate cluster exists.
-                time_since_scheduled_to_current = utils.now() - app.status.scheduled
-                app_recently_scheduled = time_since_scheduled_to_current < timedelta(
-                    seconds=self.reschedule_after
-                )
-                if app_recently_scheduled:
-                    return current
-
-        # Partition list if matching clusters into a list if clusters with
-        # metrics and without metrics. Clusters with metrics are preferred
-        # over clusters without metrics.
-        with_metrics = [cluster for cluster in matching if cluster.spec.metrics]
-
-        # Only use clusters without metrics when there are no clusters with
-        # metrics.
-        scores = []
-        if with_metrics:
-            # Compute the score of all clusters based on their metric
-            scores = await self.rank_kubernetes_clusters(app, with_metrics)
-
-        if not scores:
-            # If no score of cluster with metrics could be computed (e.g. due to
-            # unreachable metrics providers), compute the score of the matching clusters
-            # that do not have metrics.
-            scores = [
-                self.calculate_kubernetes_cluster_score((), cluster, app)
-                for cluster in matching
-            ]
-
-        return self.select_maximum(scores).cluster
-
-    async def select_openstack_project(self, cluster, projects):
-        """Select "best" OpenStack project for the Magnum cluster.
-
-        Args:
-            cluster (krake.data.openstack.MagnumCluster): Cluster that should
-                be bound to a project
-            projects (list[krake.data.openstack.Project]): Projects between the
-                "best" one is chosen.
-
-        Returns:
-            krake.data.openstack.Project, None: Best project matching the
-            constraints of the Magnum cluster. None if no project can be found.
-
-        """
-        # Reject projects marked as deleted
-        projects = (project for project in projects if project.metadata.deleted is None)
-        matching = [
-            project
-            for project in projects
-            if match_project_constraints(cluster, project)
-        ]
-
-        if not matching:
-            logger.info("No matching OpenStack project found for %r", cluster)
-            raise NoProjectFound("No matching OpenStack project found")
-
-        # Filter projects with metrics which are preferred over projects
-        # without metrics.
-        with_metrics = [project for project in matching if project.spec.metrics]
-
-        # Only use projects without metrics when there are no projects with
-        # metrics.
-        if not with_metrics:
-            scores = [
-                self.calculate_openstack_project_scores((), project)
-                for project in matching
-            ]
-        else:
-            # Compute the score of all projects based on their metric
-            scores = await self.rank_openstack_projects(cluster, with_metrics)
-
-        if not scores:
-            logger.info("Unable to compute the score of any Kubernetes cluster")
-            raise NoProjectFound("No OpenStack project available")
-
-        return self.select_maximum(scores).project
-
-    async def rank_kubernetes_clusters(self, app, clusters):
-        """Compute the score of the kubernetes clusters based on metrics values and
-        weights.
-
-        Args:
-            app (krake.data.kubernetes.Application): Application object for binding
-            clusters (list[Cluster]): List of clusters for which the score has to be
-                computed.
-
-        Returns:
-            list[ClusterScore]: list of all cluster's score
-
-        """
-        return [
-            self.calculate_kubernetes_cluster_score(metrics, cluster, app)
-            for cluster in clusters
-            async for metrics in self.fetch_metrics(cluster, cluster.spec.metrics)
-        ]
-
-    async def rank_openstack_projects(self, cluster, projects):
-        """Compute the score of the OpenStack projects based on metric values and
-        weights.
-
-        Args:
-            cluster (krake.data.openstack.MagnumCluster): Cluster that is scheduled
-            projects (list[Project]): List of projects for which the score has to be
-                computed.
-
-        Returns:
-            list[ProjectScore]: list of all cluster's score
-        """
-        return [
-            self.calculate_openstack_project_scores(metrics, project)
-            for project in projects
-            async for metrics in self.fetch_metrics(project, project.spec.metrics)
-        ]
 
     @staticmethod
     def metrics_reason_from_err(error):
@@ -683,10 +296,10 @@ class Scheduler(Controller):
 
         if resource.kind == "Cluster":
             resource.status.state = ClusterState.FAILING_METRICS
-            update_status_client = self.kubernetes_api.update_cluster_status
+            update_status_client = self.api.update_cluster_status
         elif resource.kind == "Project":
             resource.status.state = ProjectState.FAILING_METRICS
-            update_status_client = self.openstack_api.update_project_status
+            update_status_client = self.api.update_project_status
         else:
             raise ValueError(f"Unsupported kind: {resource.kind}.")
 
@@ -791,6 +404,268 @@ class Scheduler(Controller):
 
         yield fetched
 
+
+class KubernetesHandler(Handler):
+
+    def __init__(self, client, queue, api, core_api, stickiness, reschedule_after):
+
+        super(KubernetesHandler, self).__init__(client, queue, api, core_api)
+
+        self.stickiness = stickiness
+        self.reschedule_after = reschedule_after
+
+    async def received_kubernetes_app(self, app):
+        """Handler for Kubernetes application reflector.
+
+        Args:
+            app (krake.data.kubernetes.Application): Application received from the API
+
+        """
+        if app.metadata.deleted:
+            # TODO: If an application is deleted, the scheduling of other
+            #   applications should potentially be revised.
+            logger.debug("Cancel rescheduling of deleted %r", app)
+            await self.queue.cancel(app.metadata.uid)
+
+        # The application is already scheduled and no change has been made to the specs
+        # since then. Nevertheless, we should perform a periodic rescheduling to handle
+        # changes in the cluster metric values.
+        elif (
+            app.status.kube_controller_triggered
+            and app.metadata.modified <= app.status.kube_controller_triggered
+        ):
+            await self.reschedule_kubernetes_application(app)
+
+        elif app.status.state == ApplicationState.FAILED:
+            logger.debug("Reject failed %r", app)
+        else:
+            logger.debug("Accept %r", app)
+            await self.queue.put(app.metadata.uid, app)
+
+    async def handle_kubernetes_applications(self, run_once=False):
+        """Infinite loop which fetches and hands over the Kubernetes Application
+        resources to the right coroutine. The specific exceptions and error handling
+        have to be added here.
+
+        This function is meant to be run as background task. Lock the handling of a
+        resource with the :attr:`lock` attribute.
+
+        Args:
+            run_once (bool, optional): if True, the function only handles one resource,
+                then stops. Otherwise, continue to handle each new resource on the
+                queue indefinitely.
+
+        """
+        while True:
+            key, app = await self.queue.get()
+            try:
+                # TODO: API for supporting different application types
+                logger.debug("Handling %r", app)
+                await self.kubernetes_application_received(app)
+            except ControllerError as error:
+                app.status.reason = Reason(code=error.code, message=error.message)
+                app.status.state = ApplicationState.FAILED
+
+                await self.api.update_application_status(
+                    namespace=app.metadata.namespace, name=app.metadata.name, body=app
+                )
+            finally:
+                await self.queue.done(key)
+            if run_once:
+                break  # TODO: should we keep this? Only useful for tests
+
+    async def kubernetes_application_received(self, app):
+        """Process a Kubernetes Application: schedule the Application on a Kubernetes
+        cluster and initiate its rescheduling.
+
+        Args:
+            app (krake.data.kubernetes.Application): the Application to process.
+
+        """
+        # TODO: Evaluate spawning a new cluster
+        await self.schedule_kubernetes_application(app)
+        await self.reschedule_kubernetes_application(app)
+
+    async def schedule_kubernetes_application(self, app):
+        """Choose a suitable Kubernetes cluster for the given Application and bound them
+        together.
+
+        Args:
+            app (krake.data.kubernetes.Application): the Application that needs to be
+                scheduled to a Cluster.
+
+        """
+        logger.info("Schedule %r", app)
+
+        if app.status.scheduled_to and not app.spec.constraints.migration:
+            logger.debug(
+                "Not migrating %r, since migration of the application is disabled.", app
+            )
+            return
+
+        clusters = await self.api.list_all_clusters()
+        cluster = await self.select_kubernetes_cluster(app, clusters.items)
+
+        scheduled_to = resource_ref(cluster)
+
+        # Check if the scheduling decision changed
+        if app.status.scheduled_to == scheduled_to:
+            logger.debug("No change for %r", app)
+
+            # The timestamp is updated anyway because the KubernetesController is
+            # waiting for the Scheduler to take a decision before handling the update on
+            # an Application. By updating this, the KubernetesController can start
+            # working on the current Application.
+            # However, if no update has been performed on the Application, then the
+            # modified timestamp is lower. As we are in the case of no change in the
+            # scheduling decision, there is no need to have the KubernetesController
+            # processing the Application. Updating the timestamp would simply trigger
+            # a processing of the Application by the KubernetesController, which would
+            # not make the controller perform any action.
+            if app.metadata.modified > app.status.kube_controller_triggered:
+                app.status.kube_controller_triggered = utils.now()
+                await self.api.update_application_status(
+                    namespace=app.metadata.namespace, name=app.metadata.name, body=app
+                )
+            return
+
+        if app.status.scheduled_to:
+            logger.info(
+                "Migrate %r from %s to %s", app, app.status.scheduled_to, scheduled_to
+            )
+        else:
+            logger.info("Scheduled %r to %r", app, cluster)
+        await self.api.update_application_binding(
+            namespace=app.metadata.namespace,
+            name=app.metadata.name,
+            body=ClusterBinding(cluster=scheduled_to),
+        )
+
+    async def reschedule_kubernetes_application(self, app):
+        """Ensure that the given Application will go through the scheduling process
+        after a certain interval. This allows an Application to be rescheduled to a
+        more suitable Cluster if a better one is found.
+
+        Args:
+            app (krake.data.kubernetes.Application): the Application to reschedule.
+
+        """
+        if not app.spec.constraints.migration:
+            logger.debug(
+                "Not rescheduling %r, since migration of the application is disabled.",
+                app,
+            )
+            return
+
+        # Put the application into the work queue with a certain delay. This
+        # ensures the rescheduling of the application. Only put it if there is
+        # not already another version of the resource in the queue. This check
+        # is needed to ensure that we do not overwrite state changes with the
+        # current one which might be outdated.
+        if app.metadata.uid not in self.queue.dirty:
+            logger.debug("Reschedule %r in %s secs", app, self.reschedule_after)
+            await self.queue.put(app.metadata.uid, app, delay=self.reschedule_after)
+
+    async def select_kubernetes_cluster(self, app, clusters):
+        """Select suitable kubernetes cluster for application binding.
+
+        Args:
+            app (krake.data.kubernetes.Application): Application object for binding
+            clusters (list[krake.data.kubernetes.Cluster]): Clusters between which
+                the "best" one should be chosen.
+
+        Returns:
+            Cluster: Cluster suitable for application binding
+
+        """
+        # Reject clusters marked as deleted
+        clusters = (cluster for cluster in clusters if cluster.metadata.deleted is None)
+        matching = [
+            cluster for cluster in clusters if match_cluster_constraints(app, cluster)
+        ]
+
+        if not matching:
+            logger.info("No matching Kubernetes cluster for %r found", app)
+            raise NoClusterFound("No matching Kubernetes cluster found")
+
+        # If the application already has been scheduled it might be that it
+        # was very recently. In fact, since the controller reacts to all updates
+        # of the application, it might very well be that the previous scheduling
+        # took place very recently. For example, the kubernetes controller updates
+        # the app in reaction to the scheduler's scheduling, in which case
+        # the scheduler will try and select the best cluster yet again.
+        # Therefore we have to make sure the previous scheduling was not too recent.
+        # If it was, we want to stay at the current cluster - if it is still matching.
+        # The above reasoning is also true in the case when the user has performed an
+        # update of the application's cluster label constraints. Also in this case, the
+        # update should not cause a migration if 'app was `recently scheduled`'
+        # and 'current cluster is still matching'. If the app was recently scheduled
+        # but the update caused the current cluster to no longer be matching, we
+        # will reschedule, since `current` will become None below.
+        # If 'app was NOT `recently scheduled`' and 'current cluster is still matching',
+        # we might reschedule, e.g., due to changing metrics.
+        if app.status.scheduled_to:
+            # get current cluster as first cluster in matching to which app is scheduled
+            current = next(
+                (c for c in matching if resource_ref(c) == app.status.scheduled_to),
+                None,
+            )
+            # if current cluster is still matching
+            if current:
+                # We check how long ago the previous scheduling took place.
+                # If it is less than reschedule_after seconds ago, we do not
+                # reschedule. We use reschedule_after for this comparison,
+                # since it indicates how often it is desired that an application
+                # should be rescheduled when a more appropriate cluster exists.
+                time_since_scheduled_to_current = utils.now() - app.status.scheduled
+                app_recently_scheduled = time_since_scheduled_to_current < timedelta(
+                    seconds=self.reschedule_after
+                )
+                if app_recently_scheduled:
+                    return current
+
+        # Partition list if matching clusters into a list if clusters with
+        # metrics and without metrics. Clusters with metrics are preferred
+        # over clusters without metrics.
+        with_metrics = [cluster for cluster in matching if cluster.spec.metrics]
+
+        # Only use clusters without metrics when there are no clusters with
+        # metrics.
+        scores = []
+        if with_metrics:
+            # Compute the score of all clusters based on their metric
+            scores = await self.rank_kubernetes_clusters(app, with_metrics)
+
+        if not scores:
+            # If no score of cluster with metrics could be computed (e.g. due to
+            # unreachable metrics providers), compute the score of the matching clusters
+            # that do not have metrics.
+            scores = [
+                self.calculate_kubernetes_cluster_score((), cluster, app)
+                for cluster in matching
+            ]
+
+        return self.select_maximum(scores).cluster
+
+    async def rank_kubernetes_clusters(self, app, clusters):
+        """Compute the score of the kubernetes clusters based on metrics values and
+        weights.
+
+        Args:
+            app (krake.data.kubernetes.Application): Application object for binding
+            clusters (list[Cluster]): List of clusters for which the score has to be
+                computed.
+
+        Returns:
+            list[ClusterScore]: list of all cluster's score
+
+        """
+        return [
+            self.calculate_kubernetes_cluster_score(metrics, cluster, app)
+            for cluster in clusters
+            async for metrics in self.fetch_metrics(cluster, cluster.spec.metrics)
+        ]
+
     def calculate_kubernetes_cluster_score(self, metrics, cluster, app):
         """Calculate weighted sum of metrics values.
 
@@ -839,6 +714,177 @@ class Scheduler(Controller):
             return Stickiness(weight=0, value=0)
 
         return Stickiness(weight=self.stickiness, value=1.0)
+
+
+class OpenstackHandler(Handler):
+
+    def __init__(self, client, queue, api, core_api):
+
+        super(OpenstackHandler, self).__init__(client, queue, api, core_api)
+
+    async def received_magnum_cluster(self, cluster):
+        """Handler for Kubernetes application reflector.
+
+        Args:
+            cluster (krake.data.openstack.MagnumCluster): MagnumCLuster received from
+                the API.
+
+        """
+        # For now, we do not reschedule Magnum clusters. Hence, not enqueuing
+        # for rescheduling and not "scheduled" timestamp.
+        if cluster.metadata.deleted:
+            logger.debug("Ignore deleted %r", cluster)
+        elif cluster.status.project is None:
+            logger.debug("Accept unbound %r", cluster)
+            await self.queue.put(cluster.metadata.uid, cluster)
+        else:
+            logger.debug("Ignore bound %r", cluster)
+
+    async def handle_magnum_clusters(self, run_once=False):
+        """Infinite loop which fetches and hands over the MagnumCluster resources to the
+        right coroutine. The specific exceptions and error handling have to be added
+        here.
+
+        This function is meant to be run as background task. Lock the handling of a
+        resource with the :attr:`lock` attribute.
+
+        Args:
+            run_once (bool, optional): if True, the function only handles one resource,
+                then stops. Otherwise, continue to handle each new resource on the
+                queue indefinitely.
+
+        """
+        while True:
+            key, cluster = await self.queue.get()
+            try:
+                # TODO: API for supporting different application types
+                logger.debug("Handling %r", cluster)
+                await self.schedule_magnum_cluster(cluster)
+            except ControllerError as error:
+                cluster.status.reason = Reason(code=error.code, message=error.message)
+                cluster.status.state = MagnumClusterState.FAILED
+
+                await self.api.update_magnum_cluster_status(
+                    namespace=cluster.metadata.namespace,
+                    name=cluster.metadata.name,
+                    body=cluster,
+                )
+            finally:
+                await self.queue.done(key)
+
+            if run_once:
+                break
+
+    async def schedule_magnum_cluster(self, cluster):
+        """Choose a suitable OpenStack Project for the given MagnumCluster and bound
+        them together.
+
+        Args:
+            cluster (krake.data.openstack.MagnumCluster): the MagnumCluster that needs
+                to be scheduled to a Project.
+        """
+        assert cluster.status.project is None, "Magnum cluster is already bound"
+
+        logger.info("Schedule %r", cluster)
+
+        projects = await self.api.list_all_projects()
+        project = await self.select_openstack_project(cluster, projects.items)
+
+        if project is None:
+            logger.info("No matching OpenStack project found for %r", cluster)
+            raise NoProjectFound("No matching OpenStack project found")
+
+        # TODO: Instead of copying labels and metrics, refactor the scheduler
+        #   to support transitive labels and metrics.
+        cluster.metadata.labels = {**project.metadata.labels, **cluster.metadata.labels}
+
+        # If a metric with the same name is already specified in the Magnum
+        # cluster spec, this takes precedence.
+        metric_names = set(metric.name for metric in cluster.spec.metrics)
+        for metric in project.spec.metrics:
+            if metric.name not in metric_names:
+                cluster.spec.metrics.append(metric)
+
+        await self.api.update_magnum_cluster(
+            namespace=cluster.metadata.namespace,
+            name=cluster.metadata.name,
+            body=cluster,
+        )
+
+        # TODO: How to support and compare different cluster templates?
+        logger.info("Scheduled %r to %r", cluster, project)
+        await self.api.update_magnum_cluster_binding(
+            namespace=cluster.metadata.namespace,
+            name=cluster.metadata.name,
+            body=MagnumClusterBinding(
+                project=resource_ref(project), template=project.spec.template
+            ),
+        )
+
+    async def select_openstack_project(self, cluster, projects):
+        """Select "best" OpenStack project for the Magnum cluster.
+
+        Args:
+            cluster (krake.data.openstack.MagnumCluster): Cluster that should
+                be bound to a project
+            projects (list[krake.data.openstack.Project]): Projects between the
+                "best" one is chosen.
+
+        Returns:
+            krake.data.openstack.Project, None: Best project matching the
+            constraints of the Magnum cluster. None if no project can be found.
+
+        """
+        # Reject projects marked as deleted
+        projects = (project for project in projects if project.metadata.deleted is None)
+        matching = [
+            project
+            for project in projects
+            if match_project_constraints(cluster, project)
+        ]
+
+        if not matching:
+            logger.info("No matching OpenStack project found for %r", cluster)
+            raise NoProjectFound("No matching OpenStack project found")
+
+        # Filter projects with metrics which are preferred over projects
+        # without metrics.
+        with_metrics = [project for project in matching if project.spec.metrics]
+
+        # Only use projects without metrics when there are no projects with
+        # metrics.
+        if not with_metrics:
+            scores = [
+                self.calculate_openstack_project_scores((), project)
+                for project in matching
+            ]
+        else:
+            # Compute the score of all projects based on their metric
+            scores = await self.rank_openstack_projects(cluster, with_metrics)
+
+        if not scores:
+            logger.info("Unable to compute the score of any Kubernetes cluster")
+            raise NoProjectFound("No OpenStack project available")
+
+        return self.select_maximum(scores).project
+
+    async def rank_openstack_projects(self, cluster, projects):
+        """Compute the score of the OpenStack projects based on metric values and
+        weights.
+
+        Args:
+            cluster (krake.data.openstack.MagnumCluster): Cluster that is scheduled
+            projects (list[Project]): List of projects for which the score has to be
+                computed.
+
+        Returns:
+            list[ProjectScore]: list of all cluster's score
+        """
+        return [
+            self.calculate_openstack_project_scores(metrics, project)
+            for project in projects
+            async for metrics in self.fetch_metrics(project, project.spec.metrics)
+        ]
 
     def calculate_openstack_project_scores(self, metrics, project):
         """Calculate score of OpenStack project based on the given metrics.
