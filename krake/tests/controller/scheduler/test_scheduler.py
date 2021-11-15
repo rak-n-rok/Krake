@@ -358,7 +358,7 @@ async def test_kubernetes_score(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        clusters_scores = await scheduler.rank_kubernetes_clusters(app, clusters)
+        clusters_scores = await scheduler.kubernetes.rank_kubernetes_clusters(app, clusters)
 
     for ranked, cluster in zip(clusters_scores, clusters):
         assert ranked.score is not None
@@ -399,7 +399,7 @@ async def test_kubernetes_score_sticky(aiohttp_server, config, db, loop):
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
 
-        ranked = await scheduler.rank_kubernetes_clusters(
+        ranked = await scheduler.kubernetes.rank_kubernetes_clusters(
             pending_app, [cluster_A, cluster_B]
         )
         assert ranked[0].score == 0.75
@@ -408,7 +408,7 @@ async def test_kubernetes_score_sticky(aiohttp_server, config, db, loop):
         # Compute the score of the clusters where application is already scheduled to
         # one of the clusters, hence a stickiness metric should be added to the score of
         # cluster "A".
-        ranked = await scheduler.rank_kubernetes_clusters(
+        ranked = await scheduler.kubernetes.rank_kubernetes_clusters(
             scheduled_app, [cluster_A, cluster_B]
         )
 
@@ -420,13 +420,17 @@ async def test_kubernetes_score_sticky(aiohttp_server, config, db, loop):
         assert ranked[1].cluster == cluster_B
 
 
-async def test_kubernetes_score_with_metrics_only():
+async def test_kubernetes_score_with_metrics_only(aiohttp_server, config, loop):
     app = ApplicationFactory(status__is_scheduled=False)
     clusters = [ClusterFactory(spec__metrics=[]), ClusterFactory(spec__metrics=[])]
 
     with pytest.raises(AssertionError):
         scheduler = Scheduler("http://localhost:8080", worker_count=0)
-        await scheduler.rank_kubernetes_clusters(app, clusters)
+        server = await aiohttp_server(create_app(config))
+
+        async with Client(url=server_endpoint(server), loop=loop) as client:
+            await scheduler.prepare(client)
+            await scheduler.kubernetes.rank_kubernetes_clusters(app, clusters)
 
 
 async def test_kubernetes_score_missing_metric(aiohttp_server, db, config, loop):
@@ -444,7 +448,7 @@ async def test_kubernetes_score_missing_metric(aiohttp_server, db, config, loop)
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        scored = await scheduler.rank_kubernetes_clusters(app, [cluster])
+        scored = await scheduler.kubernetes.rank_kubernetes_clusters(app, [cluster])
 
     assert len(scored) == 0
 
@@ -484,7 +488,7 @@ async def test_kubernetes_score_missing_metrics_provider(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        scored = await scheduler.rank_kubernetes_clusters(app, clusters)
+        scored = await scheduler.kubernetes.rank_kubernetes_clusters(app, clusters)
 
     assert len(scored) == 0
 
@@ -573,7 +577,7 @@ async def test_kubernetes_score_multiple_failing_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        scored = await scheduler.rank_kubernetes_clusters(app, clusters)
+        scored = await scheduler.kubernetes.rank_kubernetes_clusters(app, clusters)
 
     assert len(scored) == 0
 
@@ -661,7 +665,7 @@ async def test_kubernetes_score_failing_metrics_provider(
     async with Client(url=server_endpoint(api), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(api), worker_count=0)
         await scheduler.prepare(client)
-        scored = await scheduler.rank_kubernetes_clusters(app, clusters)
+        scored = await scheduler.kubernetes.rank_kubernetes_clusters(app, clusters)
 
     assert len(scored) == 0
 
@@ -707,23 +711,27 @@ async def test_kubernetes_prefer_cluster_with_metrics(aiohttp_server, config, db
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.select_kubernetes_cluster(
+        selected = await scheduler.kubernetes.select_kubernetes_cluster(
             app, (cluster_miss, cluster)
         )
 
     assert selected == cluster
 
 
-async def test_kubernetes_select_cluster_without_metric():
+async def test_kubernetes_select_cluster_without_metric(aiohttp_server, config, loop):
     clusters = (ClusterFactory(spec__metrics=[]), ClusterFactory(spec__metrics=[]))
     app = ApplicationFactory(spec__constraints=None)
 
     scheduler = Scheduler("http://localhost:8080", worker_count=0)
-    selected = await scheduler.select_kubernetes_cluster(app, clusters)
-    assert selected in clusters
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        await scheduler.prepare(client)
+        selected = await scheduler.kubernetes.select_kubernetes_cluster(app, clusters)
+        assert selected in clusters
 
 
-async def test_kubernetes_select_cluster_not_deleted():
+async def test_kubernetes_select_cluster_not_deleted(aiohttp_server, config, loop):
     # As the finally selected cluster is chosen randomly, perform the test several times
     # to ensure that the cluster has really been chosen the right way, not by chance.
     for _ in range(10):
@@ -739,12 +747,17 @@ async def test_kubernetes_select_cluster_not_deleted():
         app = ApplicationFactory(spec__constraints=None)
 
         scheduler = Scheduler("http://localhost:8080", worker_count=0)
-        selected = await scheduler.select_kubernetes_cluster(app, clusters)
+        server = await aiohttp_server(create_app(config))
 
-        assert selected == clusters[index]
+        async with Client(url=server_endpoint(server), loop=loop) as client:
+            await scheduler.prepare(client)
+            selected = await scheduler.kubernetes.select_kubernetes_cluster(app,
+                                                                            clusters)
+
+            assert selected == clusters[index]
 
 
-async def test_kubernetes_select_cluster_with_constraints_without_metric():
+async def test_kubernetes_select_cluster_with_constraints_without_metric(aiohttp_server, config, loop):
     # Because the selection of clusters is done randomly between the matching clusters,
     # if an error was present, the right cluster could have been randomly picked,
     # and the test would pass even if it should not.
@@ -762,11 +775,15 @@ async def test_kubernetes_select_cluster_with_constraints_without_metric():
     )
 
     scheduler = Scheduler("http://localhost:8080", worker_count=0)
-    selected = await scheduler.select_kubernetes_cluster(app, clusters)
-    assert selected == clusters[0]
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        await scheduler.prepare(client)
+        selected = await scheduler.kubernetes.select_kubernetes_cluster(app, clusters)
+        assert selected == clusters[0]
 
 
-async def test_kubernetes_select_cluster_sticky_without_metric():
+async def test_kubernetes_select_cluster_sticky_without_metric(aiohttp_server, config, loop):
     cluster_A = ClusterFactory(spec__metrics=[])
     cluster_B = ClusterFactory(spec__metrics=[])
     app = ApplicationFactory(
@@ -777,8 +794,12 @@ async def test_kubernetes_select_cluster_sticky_without_metric():
     )
 
     scheduler = Scheduler("http://localhost:8080", worker_count=0)
-    selected = await scheduler.select_kubernetes_cluster(app, (cluster_A, cluster_B))
-    assert selected == cluster_A
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        await scheduler.prepare(client)
+        selected = await scheduler.kubernetes.select_kubernetes_cluster(app, (cluster_A, cluster_B))
+        assert selected == cluster_A
 
 
 async def test_kubernetes_select_cluster_all_unreachable_metric(
@@ -819,7 +840,7 @@ async def test_kubernetes_select_cluster_all_unreachable_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.select_kubernetes_cluster(app, clusters)
+        selected = await scheduler.kubernetes.select_kubernetes_cluster(app, clusters)
 
     assert selected in clusters
 
@@ -866,7 +887,7 @@ async def test_kubernetes_select_cluster_some_unreachable_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.select_kubernetes_cluster(
+        selected = await scheduler.kubernetes.select_kubernetes_cluster(
             app, [cluster_wo_metric, cluster_w_unreachable, cluster_w_metric]
         )
 
@@ -921,7 +942,7 @@ async def test_kubernetes_select_cluster_sticky_all_unreachable_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.select_kubernetes_cluster(app, clusters)
+        selected = await scheduler.kubernetes.select_kubernetes_cluster(app, clusters)
 
     assert selected == current_wo_metric
 
@@ -990,7 +1011,7 @@ async def test_kubernetes_select_cluster_sticky_others_with_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.select_kubernetes_cluster(app, clusters)
+        selected = await scheduler.kubernetes.select_kubernetes_cluster(app, clusters)
 
     assert selected == cluster_w_metric2
 
@@ -1038,7 +1059,7 @@ async def test_kubernetes_select_cluster_sticky_reachable_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.select_kubernetes_cluster(app, clusters)
+        selected = await scheduler.kubernetes.select_kubernetes_cluster(app, clusters)
 
     assert selected == current_w_metric
 
@@ -1086,7 +1107,7 @@ async def test_kubernetes_select_cluster_sticky_to_unreachable_all_unreachable_m
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.select_kubernetes_cluster(app, clusters)
+        selected = await scheduler.kubernetes.select_kubernetes_cluster(app, clusters)
 
     assert selected == current_w_unreachable
 
@@ -1137,7 +1158,7 @@ async def test_kubernetes_select_cluster_sticky_unreachable_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.select_kubernetes_cluster(app, clusters)
+        selected = await scheduler.kubernetes.select_kubernetes_cluster(app, clusters)
 
     assert selected == cluster_w_metric
 
@@ -1174,7 +1195,7 @@ async def test_kubernetes_scheduling(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        await scheduler.kubernetes_application_received(app)
+        await scheduler.kubernetes.kubernetes_application_received(app)
 
         stored = await db.get(Application, namespace="testing", name=app.metadata.name)
 
@@ -1198,7 +1219,7 @@ async def test_kubernetes_scheduling_error(aiohttp_server, config, db, loop):
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
         await scheduler.queue.put(app.metadata.uid, app)
-        await scheduler.handle_kubernetes_applications(run_once=True)
+        await scheduler.kubernetes.handle_kubernetes_applications(run_once=True)
 
     stored = await db.get(Application, namespace="testing", name=app.metadata.name)
     assert stored.status.reason.code == ReasonCode.NO_SUITABLE_RESOURCE
@@ -1261,7 +1282,7 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
             reschedule_after=reschedule_after.seconds,
         )
         await scheduler.prepare(client)
-        await scheduler.kubernetes_application_received(app)
+        await scheduler.kubernetes.kubernetes_application_received(app)
 
         stored1 = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -1272,7 +1293,7 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
         assert stored1.metadata.modified <= stored1.status.scheduled
 
         # Schedule a second time the scheduled resource
-        await scheduler.kubernetes_application_received(stored1)
+        await scheduler.kubernetes.kubernetes_application_received(stored1)
         second_try_time = datetime.now().astimezone()
 
         # Since not much time has passed the application should not have migrated
@@ -1298,7 +1319,7 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
         time.sleep(pause.total_seconds())
 
         # Schedule the application a third time
-        await scheduler.kubernetes_application_received(stored_second_try)
+        await scheduler.kubernetes.kubernetes_application_received(stored_second_try)
 
         stored2 = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -1475,7 +1496,7 @@ async def test_kubernetes_no_migration(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        await scheduler.kubernetes_application_received(app)
+        await scheduler.kubernetes.kubernetes_application_received(app)
 
         stored1 = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -1486,7 +1507,7 @@ async def test_kubernetes_no_migration(aiohttp_server, config, db, loop):
         assert stored1.metadata.modified <= stored1.status.scheduled
 
         # Schedule the scheduled resource a second time
-        await scheduler.kubernetes_application_received(stored1)
+        await scheduler.kubernetes.kubernetes_application_received(stored1)
 
         stored2 = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -1554,7 +1575,7 @@ async def test_kubernetes_application_update(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        await scheduler.kubernetes_application_received(app)
+        await scheduler.kubernetes.kubernetes_application_received(app)
 
         stored1 = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -1576,7 +1597,7 @@ async def test_kubernetes_application_update(aiohttp_server, config, db, loop):
 
         # Schedule a second time the scheduled resource
         updated_app = deepcopy(received)
-        await scheduler.kubernetes_application_received(updated_app)
+        await scheduler.kubernetes.kubernetes_application_received(updated_app)
 
         stored2 = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -1650,7 +1671,7 @@ async def test_kubernetes_application_reschedule_no_update(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        await scheduler.kubernetes_application_received(app)
+        await scheduler.kubernetes.kubernetes_application_received(app)
 
         stored1 = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -1662,7 +1683,7 @@ async def test_kubernetes_application_reschedule_no_update(
 
         # Schedule a second time the scheduled resource
         updated_app = deepcopy(stored1)
-        await scheduler.kubernetes_application_received(updated_app)
+        await scheduler.kubernetes.kubernetes_application_received(updated_app)
 
         stored2 = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -1750,20 +1771,24 @@ async def test_openstack_score(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        projects_scores = await scheduler.rank_openstack_projects(cluster, projects)
+        projects_scores = await scheduler.openstack.rank_openstack_projects(cluster, projects)
 
     for ranked, project in zip(projects_scores, projects):
         assert ranked.score is not None
         assert ranked.project == project
 
 
-async def test_openstack_score_with_metrics_only():
+async def test_openstack_score_with_metrics_only(aiohttp_server, config, loop):
     cluster = MagnumClusterFactory(status__is_scheduled=False)
     projects = [ProjectFactory(spec__metrics=[]), ProjectFactory(spec__metrics=[])]
 
     with pytest.raises(AssertionError):
         scheduler = Scheduler("http://localhost:8080", worker_count=0)
-        await scheduler.rank_openstack_projects(cluster, projects)
+        server = await aiohttp_server(create_app(config))
+
+        async with Client(url=server_endpoint(server), loop=loop) as client:
+            await scheduler.prepare(client)
+            await scheduler.openstack.rank_openstack_projects(cluster, projects)
 
 
 async def test_openstack_score_missing_metric(aiohttp_server, db, config, loop):
@@ -1781,7 +1806,7 @@ async def test_openstack_score_missing_metric(aiohttp_server, db, config, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        scored = await scheduler.rank_openstack_projects(cluster, [project])
+        scored = await scheduler.openstack.rank_openstack_projects(cluster, [project])
 
     assert len(scored) == 0
 
@@ -1868,7 +1893,7 @@ async def test_openstack_score_multiple_failing_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        scored = await scheduler.rank_openstack_projects(cluster, projects)
+        scored = await scheduler.openstack.rank_openstack_projects(cluster, projects)
 
     assert len(scored) == 0
 
@@ -1938,7 +1963,7 @@ async def test_openstack_score_missing_metrics_provider(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        scored = await scheduler.rank_openstack_projects(cluster, projects)
+        scored = await scheduler.openstack.rank_openstack_projects(cluster, projects)
 
     assert len(scored) == 0
 
@@ -1995,7 +2020,7 @@ async def test_openstack_score_failing_metrics_provider(
     async with Client(url=server_endpoint(api), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(api), worker_count=0)
         await scheduler.prepare(client)
-        scored = await scheduler.rank_openstack_projects(cluster, projects)
+        scored = await scheduler.openstack.rank_openstack_projects(cluster, projects)
 
     assert len(scored) == 0
 
@@ -2041,23 +2066,27 @@ async def test_prefer_projects_with_metrics(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.select_openstack_project(
+        selected = await scheduler.openstack.select_openstack_project(
             cluster, (project_miss, project)
         )
 
     assert selected == project
 
 
-async def test_select_project_without_metric():
+async def test_select_project_without_metric(aiohttp_server, config, loop):
     projects = (ProjectFactory(spec__metrics=[]), ProjectFactory(spec__metrics=[]))
     cluster = MagnumClusterFactory(spec__constraints=None)
 
     scheduler = Scheduler("http://localhost:8080", worker_count=0)
-    selected = await scheduler.select_openstack_project(cluster, projects)
-    assert selected in projects
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        await scheduler.prepare(client)
+        selected = await scheduler.openstack.select_openstack_project(cluster, projects)
+        assert selected in projects
 
 
-async def test_select_project_not_deleted():
+async def test_select_project_not_deleted(aiohttp_server, config, loop):
     # As the finally selected project is chosen randomly, perform the test several times
     # to ensure that the project has really been chosen the right way, not by chance.
     for _ in range(10):
@@ -2073,9 +2102,13 @@ async def test_select_project_not_deleted():
         cluster = MagnumClusterFactory(spec__constraints=None)
 
         scheduler = Scheduler("http://localhost:8080", worker_count=0)
-        selected = await scheduler.select_openstack_project(cluster, projects)
+        server = await aiohttp_server(create_app(config))
 
-        assert selected == projects[index]
+        async with Client(url=server_endpoint(server), loop=loop) as client:
+            await scheduler.prepare(client)
+            selected = await scheduler.openstack.select_openstack_project(cluster, projects)
+
+            assert selected == projects[index]
 
 
 async def test_select_no_matching_project(aiohttp_server, config, db, loop):
@@ -2118,10 +2151,10 @@ async def test_select_no_matching_project(aiohttp_server, config, db, loop):
         await scheduler.prepare(client)
 
         with pytest.raises(NoProjectFound, match="No OpenStack project available"):
-            await scheduler.select_openstack_project(cluster, [project])
+            await scheduler.openstack.select_openstack_project(cluster, [project])
 
 
-async def test_select_project_with_constraints_without_metric():
+async def test_select_project_with_constraints_without_metric(aiohttp_server, config, loop):
     # Because the selection of projects is done randomly between the matching projects,
     # if an error was present, the right project could have been randomly picked,
     # and the test would pass even if it should not.
@@ -2138,8 +2171,12 @@ async def test_select_project_with_constraints_without_metric():
     )
 
     scheduler = Scheduler("http://localhost:8080", worker_count=0)
-    selected = await scheduler.select_openstack_project(cluster, projects)
-    assert selected == projects[0]
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        await scheduler.prepare(client)
+        selected = await scheduler.openstack.select_openstack_project(cluster, projects)
+        assert selected == projects[0]
 
 
 async def test_openstack_scheduling(aiohttp_server, config, db, loop):
@@ -2173,7 +2210,7 @@ async def test_openstack_scheduling(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        await scheduler.schedule_magnum_cluster(cluster)
+        await scheduler.openstack.schedule_magnum_cluster(cluster)
 
         stored = await db.get(
             MagnumCluster,
@@ -2198,7 +2235,7 @@ async def test_openstack_scheduling_error(aiohttp_server, config, db, loop):
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
         await scheduler.magnum_queue.put(cluster.metadata.uid, cluster)
-        await scheduler.handle_magnum_clusters(run_once=True)
+        await scheduler.openstack.handle_magnum_clusters(run_once=True)
 
     stored = await db.get(
         MagnumCluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
