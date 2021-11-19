@@ -23,7 +23,7 @@ from krake.controller.kubernetes.hooks import (
 )
 from krake.utils import (
     now,
-    get_kubernetes_resource_idx_with_namespace
+    get_kubernetes_resource_idx
 )
 from krake.data.core import ReasonCode, resource_ref, Reason
 from krake.data.kubernetes import ApplicationState
@@ -100,6 +100,110 @@ class ResourceDelta(NamedTuple):
     modified: Tuple[dict, ...]
 
     @classmethod
+    def _calculate_modified_dict(cls, observed, desired, current):
+        """Together with :func:`_calculate_modified_list``, this function is called
+        recursively to check if the observed fields of a resource have been modified
+        (difference between desired and current)
+
+        Args:
+            observed (dict): partial ``observer_schema`` of a resource
+            desired (dict): partial ``last_applied_manifest`` of a resource
+            current (dict): partial ``last_observed_manifest`` of a resource
+
+        Raises:
+            ModifiedResourceException: If there exists a difference in the observed
+                valued between the desired and the current resource
+
+        This function go through all observed fields, and check their value in the
+        desired and current dictionary
+
+        """
+        for key, value in observed.items():
+
+            if key not in current:
+                # If the key is observed but not in the current dictionary, we
+                # should trigger an update of the resource to get its value from the
+                # Kubernetes API.
+                raise ModifiedResourceException(f"{key} not in current dict {current}")
+
+            if key not in desired:
+                # If the key is observed but not in the desired dictionary, we
+                # should trigger an update of the resource to get its value from the
+                # Kubernetes API.
+                raise ModifiedResourceException(f"{key} not in desired dict {desired}")
+
+            else:
+                if isinstance(value, dict):
+                    cls._calculate_modified_dict(
+                        observed[key], desired[key], current[key]
+                    )
+                elif isinstance(value, list):
+                    cls._calculate_modified_list(
+                        observed[key], desired[key], current[key]
+                    )
+                else:
+                    if desired[key] != current[key]:
+                        raise ModifiedResourceException(
+                            f"current {key} not matching desired value.",
+                            f" desired: {desired} - current: {current}",
+                        )
+
+    @classmethod
+    def _calculate_modified_list(cls, observed, desired, current):
+        """Together with :func:`_calculate_modified_dict``, this function is called
+        recursively to check if the observed fields of a resource have been modified
+        (difference between desired and current)
+
+        Args:
+            observed (list): partial ``observer_schema`` of a resource
+            desired (list): partial ``last_applied_manifest`` of a resource
+            current (list): partial ``last_observed_manifest`` of a resource
+
+        Raises:
+            ModifiedResourceException: If there exists a difference in the observed
+                valued between the desired and the current resource
+
+        This function go through all observed fields, and check their value in the
+        desired and current list
+
+        """
+        for idx, value in enumerate(observed[:-1]):
+
+            # Logical XOR
+            if (idx >= len(current)) != (idx >= len(desired)):
+                # If an observed element is present in only one of the dictionary,
+                # we consider the list as modified.
+                raise ModifiedResourceException(
+                    "Observed element not present in one of the manifest"
+                )
+
+            elif idx < len(current) and idx < len(desired):
+
+                if isinstance(value, dict):
+                    cls._calculate_modified_dict(
+                        observed[idx], desired[idx], current[idx]
+                    )
+                elif isinstance(value, list):
+                    cls._calculate_modified_list(
+                        observed[idx], desired[idx], current[idx]
+                    )
+                else:
+                    if desired[idx] != current[idx]:
+                        raise ModifiedResourceException(
+                            f"current index {idx} not matching desired value.",
+                            f"desired: {desired} - current: {current}",
+                        )
+
+        # Check current list length against authorized list length
+        if (
+            current[-1]["observer_schema_list_current_length"]
+            < observed[-1]["observer_schema_list_min_length"]
+            or current[-1]["observer_schema_list_current_length"]
+            > observed[-1]["observer_schema_list_max_length"]
+        ):
+            raise ModifiedResourceException(f"Invalid list length for list {current}")
+
+    @classmethod
     def calculate(cls, app):
         """Calculate the difference between the resources in the specification
         and the status of the given application.
@@ -122,137 +226,21 @@ class ResourceDelta(NamedTuple):
 
         """
 
-        def _calculate_modified_dict(observed, desired, current):
-            """Together with :func:`_calculate_modified_list``, this function is called
-            recursively to check if the observed fields of a resource have been modified
-            (difference between desired and current)
-
-            Args:
-                observed (dict): partial ``observer_schema`` of a resource
-                desired (dict): partial ``last_applied_manifest`` of a resource
-                current (dict): partial ``last_observed_manifest`` of a resource
-
-            Raises:
-                ModifiedResourceException: If there exists a difference in the observed
-                    valued between the desired and the current resource
-
-            This function go through all observed fields, and check their value in the
-            desired and current dictionary
-
-            """
-            for key, value in observed.items():
-
-                if key not in current:
-                    # If the key is observed but not in the current dictionary, we
-                    # should trigger an update of the resource to get its value from the
-                    # Kubernetes API.
-                    raise ModifiedResourceException(
-                        f"{key} not in current dict {current}"
-                    )
-
-                if key not in desired:
-                    # If the key is observed but not in the desired dictionary, we
-                    # should trigger an update of the resource to get its value from the
-                    # Kubernetes API.
-                    raise ModifiedResourceException(
-                        f"{key} not in desired dict {desired}"
-                    )
-
-                else:
-                    if isinstance(value, dict):
-                        _calculate_modified_dict(
-                            observed[key], desired[key], current[key]
-                        )
-                    elif isinstance(value, list):
-                        _calculate_modified_list(
-                            observed[key], desired[key], current[key]
-                        )
-                    else:
-                        if desired[key] != current[key]:
-                            raise ModifiedResourceException(
-                                f"current {key} not matching desired value.",
-                                f" desired: {desired} - current: {current}",
-                            )
-
-        def _calculate_modified_list(observed, desired, current):
-            """Together with :func:`_calculate_modified_dict``, this function is called
-            recursively to check if the observed fields of a resource have been modified
-            (difference between desired and current)
-
-            Args:
-                observed (list): partial ``observer_schema`` of a resource
-                desired (list): partial ``last_applied_manifest`` of a resource
-                current (list): partial ``last_observed_manifest`` of a resource
-
-            Raises:
-                ModifiedResourceException: If there exists a difference in the observed
-                    valued between the desired and the current resource
-
-            This function go through all observed fields, and check their value in the
-            desired and current list
-
-            """
-            for idx, value in enumerate(observed[:-1]):
-
-                # Logical XOR
-                if (idx >= len(current)) != (idx >= len(desired)):
-                    # If an observed element is present in only one of the dictionary,
-                    # we consider the list as modified.
-                    raise ModifiedResourceException(
-                        "Observed element not present in one of the manifest"
-                    )
-
-                elif idx < len(current) and idx < len(desired):
-
-                    if isinstance(value, dict):
-                        _calculate_modified_dict(
-                            observed[idx], desired[idx], current[idx]
-                        )
-                    elif isinstance(value, list):
-                        _calculate_modified_list(
-                            observed[idx], desired[idx], current[idx]
-                        )
-                    else:
-                        if desired[idx] != current[idx]:
-                            raise ModifiedResourceException(
-                                f"current index {idx} not matching desired value.",
-                                f"desired: {desired} - current: {current}",
-                            )
-
-            # Check current list length against authorized list length
-            if (
-                current[-1]["observer_schema_list_current_length"]
-                < observed[-1]["observer_schema_list_min_length"]
-                or current[-1]["observer_schema_list_current_length"]
-                > observed[-1]["observer_schema_list_max_length"]
-            ):
-                raise ModifiedResourceException(
-                    f"Invalid list length for list {current}"
-                )
-
         new = []
         deleted = []
         modified = []
 
         for observed_resource in app.status.mangled_observer_schema:
 
-            desired_idx = get_kubernetes_resource_idx_with_namespace(
-                app.status.last_applied_manifest,
-                observed_resource["apiVersion"],
-                observed_resource["kind"],
-                observed_resource["metadata"]["name"],
-                observed_resource["metadata"]["namespace"],
+            desired_idx = get_kubernetes_resource_idx(
+                app.status.last_applied_manifest, observed_resource, True
             )
             desired_resource = app.status.last_applied_manifest[desired_idx]
 
             current_resource = None
             with suppress(IndexError):
-                current_idx = get_kubernetes_resource_idx_with_namespace(
-                    app.status.last_observed_manifest,
-                    observed_resource["apiVersion"],
-                    observed_resource["kind"],
-                    observed_resource["metadata"]["name"],
-                    observed_resource["metadata"]["namespace"],
+                current_idx = get_kubernetes_resource_idx(
+                    app.status.last_observed_manifest, observed_resource, True
                 )
                 current_resource = app.status.last_observed_manifest[current_idx]
 
@@ -264,7 +252,7 @@ class ResourceDelta(NamedTuple):
                 # If the resource is present in both last_applied_manifest and
                 # last_observed_manifest, check if it has been modified.
                 try:
-                    _calculate_modified_dict(
+                    cls._calculate_modified_dict(
                         observed_resource, desired_resource, current_resource
                     )
                 except ModifiedResourceException:
@@ -275,12 +263,8 @@ class ResourceDelta(NamedTuple):
         # last_applied_manifest nor observer_schema)
         for current_resource in app.status.last_observed_manifest:
             try:
-                get_kubernetes_resource_idx_with_namespace(
-                    app.status.last_applied_manifest,
-                    current_resource["apiVersion"],
-                    current_resource["kind"],
-                    current_resource["metadata"]["name"],
-                    current_resource["metadata"]["namespace"]
+                get_kubernetes_resource_idx(
+                    app.status.last_applied_manifest, current_resource, True
                 )
             except IndexError:
                 deleted.append(current_resource)

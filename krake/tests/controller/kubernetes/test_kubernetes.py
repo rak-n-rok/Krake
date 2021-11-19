@@ -1462,19 +1462,15 @@ async def test_service_registration(aiohttp_server, config, db, loop):
 
 async def test_unregister_service():
     resource = {"kind": "Service", "metadata": {"name": "nginx"}}
-    cluster = ClusterFactory()
     app = ApplicationFactory(status__services={"nginx": "127.0.0.1:1234"})
-    response = V1Status()
-    await unregister_service(app, cluster, resource, response)
+    await unregister_service(app, resource)
     assert app.status.services == {}
 
 
 async def test_unregister_service_without_previous_service():
     resource = {"kind": "Service", "metadata": {"name": "nginx"}}
-    cluster = ClusterFactory()
     app = ApplicationFactory(status__services={})
-    response = V1Status()
-    await unregister_service(app, cluster, resource, response)
+    await unregister_service(app, resource)
     assert app.status.services == {}
 
 
@@ -1748,7 +1744,7 @@ async def test_client_app_delete_error_handling(
     assert already_deleted == 1
 
 
-def test_resource_delta(loop):
+async def test_resource_delta(loop):
     """Test if the controller correctly calculates the delta between
     ``last_applied_manifest`` and ``last_observed_manifest``
 
@@ -1830,9 +1826,9 @@ def test_resource_delta(loop):
     initial_mangled_observer_schema = deepcopy(app.status.mangled_observer_schema)
     update_last_applied_manifest_from_spec(app)
 
-    deployment_object = serialize_k8s_object(deployment_response, "V1Deployment")
-    service_object = serialize_k8s_object(service_response, "V1Service")
-    secret_object = serialize_k8s_object(secret_response, "V1Secret")
+    deployment_object = await serialize_k8s_object(deployment_response, "V1Deployment")
+    service_object = await serialize_k8s_object(service_response, "V1Service")
+    secret_object = await serialize_k8s_object(secret_response, "V1Secret")
 
     # The Deployment and Service and Secret have to be created.
     new, deleted, modified = ResourceDelta.calculate(app)
@@ -1845,9 +1841,9 @@ def test_resource_delta(loop):
 
     # State (1): The application possesses a last_observed_manifest which matches the
     # last_applied_manifest.
-    update_last_applied_manifest_from_resp(app, None, None, deployment_object)
-    update_last_applied_manifest_from_resp(app, None, None, service_object)
-    update_last_applied_manifest_from_resp(app, None, None, secret_object)
+    update_last_applied_manifest_from_resp(app, deployment_object)
+    update_last_applied_manifest_from_resp(app, service_object)
+    update_last_applied_manifest_from_resp(app, secret_object)
     initial_last_applied_manifest = deepcopy(app.status.last_applied_manifest)
     app.status.last_observed_manifest = deepcopy(initial_last_observed_manifest)
 

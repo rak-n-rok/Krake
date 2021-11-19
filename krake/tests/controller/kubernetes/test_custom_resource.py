@@ -45,6 +45,20 @@ spec:
 """
 )
 
+observer_schema = yaml.safe_load_all(dedent(
+    """
+    ---
+    apiVersion: stable.example.com/v1
+    kind: CronTab
+    metadata:
+        name: cron
+        namespace: null
+    spec:
+        cronSpec: null
+        image: null
+    """
+))
+
 
 async def test_custom_resource_cached_property_called_once(
     aiohttp_server, config, db, loop
@@ -223,23 +237,7 @@ async def test_custom_resource_cached_property(aiohttp_server):
             status__is_scheduled=False,
             status__last_applied_manifest=[create_cron_resource()],
             spec__manifest=[create_cron_resource()],
-            spec__observer_schema=list(
-                yaml.safe_load_all(
-                    dedent(
-                        """
-                        ---
-                        apiVersion: stable.example.com/v1
-                        kind: CronTab
-                        metadata:
-                            name: cron
-                            namespace: null
-                        spec:
-                            cronSpec: null
-                            image: null
-                        """
-                    )
-                )
-            ),
+            spec__observer_schema=list(observer_schema),
         )
         async with KubernetesClient(
             cluster.spec.kubeconfig, cluster.spec.custom_resources

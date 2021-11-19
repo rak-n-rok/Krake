@@ -174,17 +174,13 @@ async def register_service(app, cluster, resource, response):
 
 
 @listen.on(Hook.ResourcePostDelete)
-async def unregister_service(app, cluster, resource, response):
+async def unregister_service(app, resource, **kwargs):
     """Unregister endpoint of Kubernetes Service object on deletion.
 
     Args:
         app (krake.data.kubernetes.Application): Application the service belongs to
-        cluster (krake.data.kubernetes.Cluster): The cluster on which the
-            application is running
         resource (dict): Kubernetes object description as specified in the
             specification of the application.
-        response (kubernetes_asyncio.client.V1Status): Response of the
-            Kubernetes API
 
     """
     if resource["kind"] != "Service":
@@ -198,26 +194,17 @@ async def unregister_service(app, cluster, resource, response):
 
 
 @listen.on(Hook.ResourcePostDelete)
-async def remove_resource_from_last_observed_manifest(app, cluster, resource, response):
+async def remove_resource_from_last_observed_manifest(app, resource, **kwargs):
     """Remove a given resource from the last_observed_manifest after its deletion
 
     Args:
         app (krake.data.kubernetes.Application): Application the service belongs to
-        cluster (krake.data.kubernetes.Cluster): The cluster on which the
-            application is running
         resource (dict): Kubernetes object description as specified in the
             specification of the application.
-        response (kubernetes_asyncio.client.V1Status): Response of the
-            Kubernetes API
 
     """
     try:
-        idx = get_kubernetes_resource_idx(
-            app.status.last_observed_manifest,
-            resource["apiVersion"],
-            resource["kind"],
-            resource["metadata"]["name"],
-        )
+        idx = get_kubernetes_resource_idx(app.status.last_observed_manifest, resource)
     except IndexError:
         return
 
@@ -335,16 +322,12 @@ def update_last_applied_manifest_list_from_resp(
 
 @listen.on(Hook.ResourcePostCreate)
 @listen.on(Hook.ResourcePostUpdate)
-def update_last_applied_manifest_from_resp(app, cluster, resource, response):
+def update_last_applied_manifest_from_resp(app, response, **kwargs):
     """Hook run after the creation or update of an application in order to update the
     `status.last_applied_manifest` using the k8s response.
 
     Args:
         app (krake.data.kubernetes.Application): Application the service belongs to
-        cluster (krake.data.kubernetes.Cluster): The cluster on which the
-            application is running - Not Used
-        resource (dict): Kubernetes object description as specified in the
-            specification of the application. - Not Used
         response (kubernetes_asyncio.client.V1Status): Response of the Kubernetes API
 
     After a Kubernetes resource has been created/updated, the
@@ -362,19 +345,9 @@ def update_last_applied_manifest_from_resp(app, cluster, resource, response):
         # The Kubernetes API deserialized the k8s response into an object
         resp = response.to_dict()
 
-    idx_applied = get_kubernetes_resource_idx(
-        app.status.last_applied_manifest,
-        resp["api_version"],
-        resp["kind"],
-        resp["metadata"]["name"],
-    )
+    idx_applied = get_kubernetes_resource_idx(app.status.last_applied_manifest, resp)
 
-    idx_observed = get_kubernetes_resource_idx(
-        app.status.mangled_observer_schema,
-        resp["api_version"],
-        resp["kind"],
-        resp["metadata"]["name"],
-    )
+    idx_observed = get_kubernetes_resource_idx(app.status.mangled_observer_schema, resp)
 
     update_last_applied_manifest_dict_from_resp(
         app.status.last_applied_manifest[idx_applied],
@@ -385,16 +358,12 @@ def update_last_applied_manifest_from_resp(app, cluster, resource, response):
 
 @listen.on(Hook.ResourcePostCreate)
 @listen.on(Hook.ResourcePostUpdate)
-def update_last_observed_manifest_from_resp(app, cluster, resource, response):
+def update_last_observed_manifest_from_resp(app, response, **kwargs):
     """Handler to run after the creation or update of a Kubernetes resource to update
     the last_observed_manifest from the response of the Kubernetes API.
 
     Args:
         app (krake.data.kubernetes.Application): Application the service belongs to
-        cluster (krake.data.kubernetes.Cluster): The cluster on which the
-            application is running
-        resource (dict): Kubernetes object description as specified in the
-            specification of the application.
         response (kubernetes_asyncio.client.V1Service): Response of the
             Kubernetes API
 
@@ -411,10 +380,7 @@ def update_last_observed_manifest_from_resp(app, cluster, resource, response):
 
     try:
         idx_observed = get_kubernetes_resource_idx(
-            app.status.mangled_observer_schema,
-            resp["api_version"],
-            resp["kind"],
-            resp["metadata"]["name"],
+            app.status.mangled_observer_schema, resp
         )
     except IndexError:
         # All created resources should be observed
@@ -422,10 +388,7 @@ def update_last_observed_manifest_from_resp(app, cluster, resource, response):
 
     try:
         idx_last_observed = get_kubernetes_resource_idx(
-            app.status.last_observed_manifest,
-            resp["api_version"],
-            resp["kind"],
-            resp["metadata"]["name"],
+            app.status.last_observed_manifest, resp
         )
     except IndexError:
         # If the resource is not yes present in last_observed_manifest, append it.
@@ -519,6 +482,129 @@ def update_last_observed_manifest_list(observed_resource, response):
     return res
 
 
+def update_last_applied_manifest_dict_from_spec(
+    resource_status_new, resource_status_old, resource_observed
+):
+    """Together with :func:``update_last_applied_manifest_list_from_spec``, this
+    function is called recursively to update a partial ``last_applied_manifest``
+
+    Args:
+        resource_status_new (dict): partial ``last_applied_manifest`` being updated
+        resource_status_old (dict): partial of the current ``last_applied_manifest``
+        resource_observed (dict): partial observer_schema for the manifest file
+            being updated
+
+    """
+    for key, value in resource_observed.items():
+
+        if key not in resource_status_old:
+            continue
+
+        if key in resource_status_new:
+
+            if isinstance(value, dict):
+                update_last_applied_manifest_dict_from_spec(
+                    resource_status_new[key],
+                    resource_status_old[key],
+                    resource_observed[key],
+                )
+
+            elif isinstance(value, list):
+                update_last_applied_manifest_list_from_spec(
+                    resource_status_new[key],
+                    resource_status_old[key],
+                    resource_observed[key],
+                )
+
+        else:
+            # If the key is not present the spec.manifest, we first need to
+            # initialize it
+
+            if isinstance(value, dict):
+                resource_status_new[key] = {}
+                update_last_applied_manifest_dict_from_spec(
+                    resource_status_new[key],
+                    resource_status_old[key],
+                    resource_observed[key],
+                )
+
+            elif isinstance(value, list):
+                resource_status_new[key] = []
+                update_last_applied_manifest_list_from_spec(
+                    resource_status_new[key],
+                    resource_status_old[key],
+                    resource_observed[key],
+                )
+
+            else:
+                resource_status_new[key] = resource_status_old[key]
+
+
+def update_last_applied_manifest_list_from_spec(
+    resource_status_new, resource_status_old, resource_observed
+):
+    """Together with :func:``update_last_applied_manifest_dict_from_spec``, this
+    function is called recursively to update a partial ``last_applied_manifest``
+
+    Args:
+        resource_status_new (list): partial ``last_applied_manifest`` being updated
+        resource_status_old (list): partial of the current ``last_applied_manifest``
+        resource_observed (list): partial observer_schema for the manifest file
+            being updated
+
+    """
+
+    # Looping over the observed resource, except the last element which is the
+    # special control dictionary
+    for idx, val in enumerate(resource_observed[:-1]):
+
+        if idx >= len(resource_status_old):
+            # The element in not in the current last_applied_manifest, and neither
+            # is the rest of the list
+            break
+
+        if idx < len(resource_status_new):
+            # The element is present in spec.manifest and in the current
+            # last_applied_manifest. Updating observed fields
+
+            if isinstance(val, dict):
+                update_last_applied_manifest_dict_from_spec(
+                    resource_status_new[idx],
+                    resource_status_old[idx],
+                    resource_observed[idx],
+                )
+
+            elif isinstance(val, list):
+                update_last_applied_manifest_list_from_spec(
+                    resource_status_new[idx],
+                    resource_status_old[idx],
+                    resource_observed[idx],
+                )
+
+        else:
+            # If the element is not present in the spec.manifest, we first have to
+            # initialize it.
+
+            if isinstance(val, dict):
+                resource_status_new.append({})
+                update_last_applied_manifest_dict_from_spec(
+                    resource_status_new[idx],
+                    resource_status_old[idx],
+                    resource_observed[idx],
+                )
+
+            elif isinstance(val, list):
+                resource_status_new.append([])
+                update_last_applied_manifest_list_from_spec(
+                    resource_status_new[idx],
+                    resource_status_old[idx],
+                    resource_observed[idx],
+                )
+
+            else:
+                resource_status_new.append(resource_status_old[idx])
+
+
 def update_last_applied_manifest_from_spec(app):
     """Update the status.last_applied_manifest of an application from spec.manifests
 
@@ -532,127 +618,6 @@ def update_last_applied_manifest_from_spec(app):
     in the spec.manifest)
 
     """
-
-    def update_last_applied_manifest_dict_from_spec(
-        resource_status_new, resource_status_old, resource_observed
-    ):
-        """Together with :func:``update_last_applied_manifest_list_from_spec``, this
-        function is called recursively to update a partial ``last_applied_manifest``
-
-        Args:
-            resource_status_new (dict): partial ``last_applied_manifest`` being updated
-            resource_status_old (dict): partial of the current ``last_applied_manifest``
-            resource_observed (dict): partial observer_schema for the manifest file
-                being updated
-
-        """
-        for key, value in resource_observed.items():
-
-            if key not in resource_status_old:
-                continue
-
-            if key in resource_status_new:
-
-                if isinstance(value, dict):
-                    update_last_applied_manifest_dict_from_spec(
-                        resource_status_new[key],
-                        resource_status_old[key],
-                        resource_observed[key],
-                    )
-
-                elif isinstance(value, list):
-                    update_last_applied_manifest_list_from_spec(
-                        resource_status_new[key],
-                        resource_status_old[key],
-                        resource_observed[key],
-                    )
-
-            else:
-                # If the key is not present the spec.manifest, we first need to
-                # initialize it
-
-                if isinstance(value, dict):
-                    resource_status_new[key] = {}
-                    update_last_applied_manifest_dict_from_spec(
-                        resource_status_new[key],
-                        resource_status_old[key],
-                        resource_observed[key],
-                    )
-
-                elif isinstance(value, list):
-                    resource_status_new[key] = []
-                    update_last_applied_manifest_list_from_spec(
-                        resource_status_new[key],
-                        resource_status_old[key],
-                        resource_observed[key],
-                    )
-
-                else:
-                    resource_status_new[key] = resource_status_old[key]
-
-    def update_last_applied_manifest_list_from_spec(
-        resource_status_new, resource_status_old, resource_observed
-    ):
-        """Together with :func:``update_last_applied_manifest_dict_from_spec``, this
-        function is called recursively to update a partial ``last_applied_manifest``
-
-        Args:
-            resource_status_new (list): partial ``last_applied_manifest`` being updated
-            resource_status_old (list): partial of the current ``last_applied_manifest``
-            resource_observed (list): partial observer_schema for the manifest file
-                being updated
-
-        """
-
-        # Looping over the observed resource, except the last element which is the
-        # special control dictionary
-        for idx, val in enumerate(resource_observed[:-1]):
-
-            if idx >= len(resource_status_old):
-                # The element in not in the current last_applied_manifest, and neither
-                # is the rest of the list
-                break
-
-            if idx < len(resource_status_new):
-                # The element is present in spec.manifest and in the current
-                # last_applied_manifest. Updating observed fields
-
-                if isinstance(val, dict):
-                    update_last_applied_manifest_dict_from_spec(
-                        resource_status_new[idx],
-                        resource_status_old[idx],
-                        resource_observed[idx],
-                    )
-
-                elif isinstance(val, list):
-                    update_last_applied_manifest_list_from_spec(
-                        resource_status_new[idx],
-                        resource_status_old[idx],
-                        resource_observed[idx],
-                    )
-
-            else:
-                # If the element is not present in the spec.manifest, we first have to
-                # initialize it.
-
-                if isinstance(val, dict):
-                    resource_status_new.append({})
-                    update_last_applied_manifest_dict_from_spec(
-                        resource_status_new[idx],
-                        resource_status_old[idx],
-                        resource_observed[idx],
-                    )
-
-                elif isinstance(val, list):
-                    resource_status_new.append([])
-                    update_last_applied_manifest_list_from_spec(
-                        resource_status_new[idx],
-                        resource_status_old[idx],
-                        resource_observed[idx],
-                    )
-
-                else:
-                    resource_status_new.append(resource_status_old[idx])
 
     # The new last_applied_manifest is initialized as a copy of the spec.manifest, and
     # augmented by all observed fields which are present in the current
@@ -669,10 +634,7 @@ def update_last_applied_manifest_from_spec(app):
         # matter.
         try:
             idx_status_old = get_kubernetes_resource_idx(
-                app.status.last_applied_manifest,
-                resource_observed["apiVersion"],
-                resource_observed["kind"],
-                resource_observed["metadata"]["name"],
+                app.status.last_applied_manifest, resource_observed
             )
         except IndexError:
             continue
@@ -684,10 +646,7 @@ def update_last_applied_manifest_from_spec(app):
         try:
             # Check if the observed resource is present in spec.manifest
             idx_status_new = get_kubernetes_resource_idx(
-                new_last_applied_manifest,
-                resource_observed["apiVersion"],
-                resource_observed["kind"],
-                resource_observed["metadata"]["name"],
+                new_last_applied_manifest, resource_observed
             )
         except IndexError:
             # The resource is observed but is not present in the spec.manifest.
@@ -923,10 +882,7 @@ def generate_default_observer_schema(app, default_namespace="default"):
     for resource_manifest in app.spec.manifest:
         try:
             idx = get_kubernetes_resource_idx(
-                app.status.mangled_observer_schema,
-                resource_manifest["apiVersion"],
-                resource_manifest["kind"],
-                resource_manifest["metadata"]["name"],
+                app.status.mangled_observer_schema, resource_manifest
             )
 
             # In case a custom observer schema is provided for this resource, the
@@ -1527,10 +1483,7 @@ class Complete(object):
             for sub_resource in items:
                 sub_resources_to_mangle = None
                 idx_observed = get_kubernetes_resource_idx(
-                    mangled_observer_schema,
-                    resource["apiVersion"],
-                    resource["kind"],
-                    resource["metadata"]["name"],
+                    mangled_observer_schema, resource
                 )
                 for keys in sub_resource.path:
                     try:

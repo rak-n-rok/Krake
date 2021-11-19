@@ -213,12 +213,7 @@ def _validate_observer_schema(observer_schema, manifest):
             raise ObserverSchemaError(e)
 
         try:
-            get_kubernetes_resource_idx(
-                manifest,
-                resource_observer_schema["apiVersion"],
-                resource_observer_schema["kind"],
-                resource_observer_schema["metadata"]["name"],
-            )
+            get_kubernetes_resource_idx(manifest, resource_observer_schema)
         except IndexError:
             raise ObserverSchemaError("Observed resource must be in manifest")
 
