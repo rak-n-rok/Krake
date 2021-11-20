@@ -51,6 +51,24 @@ Usage
 The API generator is a Python module not integrated into the Krake main code. It is
 present in the Krake repository on ``api_generator/``.
 
+
+Requirements
+------------
+
+To install the required packages in your local environment, you can use:
+
+.. prompt:: bash $ auto
+
+    $ pip install "krake/[api_generator]"
+
+
+Krake needs to be installed on your local environment as well to be able to use the
+generator. The previous command also installs Krake.
+
+
+Commands
+--------
+
 The base command for the generator is the following:
 
 .. prompt:: bash $ auto
@@ -61,11 +79,6 @@ The ``<command>`` part sets the type of generator which will be used, e.g. the K
 code, or unit tests for the client. The ``<parameters>`` are the specific arguments for
 the chosen generator.
 
-
-.. warning::
-
-    Krake needs to be installed on your local environment to be able to use the
-    generator.
 
 .. warning::
 
