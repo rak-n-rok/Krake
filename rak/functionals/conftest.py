@@ -56,11 +56,6 @@ def pytest_addoption(parser):
         action="store",
         help="etcd container port to use for scripts integration tests",
     )
-    parser.addoption(
-        "--rok_config",
-        action="store",
-        help="rok config location to use for scripts integration tests",
-    )
 
 
 @pytest.fixture

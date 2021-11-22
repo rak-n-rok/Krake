@@ -162,7 +162,7 @@ replacing the values with the corresponding ones for your setup:
           }
         }'
 
-The following example is for the ``support/keystone`` script:
+The following example is for the ``support/keystone/keystone`` script:
 
 .. code:: bash
 
@@ -572,6 +572,9 @@ configuration as well:
           endpoint: <your_keystone_endpoint>
           realm: <your_keycloak_realm>
 
+Krake contains an example Keystone server under ``support/keystone/Dockerfile``.
+This is a docker file, which creates an image with a secure Keystone instance, that
+can be accessed over HTTPS.
 
 
 Configuration of the authorization:
