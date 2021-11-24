@@ -543,7 +543,7 @@ def keystone():
         ]
         with subprocess.Popen(command) as proc:
             try:
-                wait_for_url(f"http://{host}:{port}/v3", timeout=7)
+                wait_for_url(f"http://{host}:{port}/v3", timeout=30)
                 info = KeystoneInfo(
                     host=host,
                     port=port,
@@ -629,7 +629,7 @@ def keycloak():
             try:
                 wait_for_url(
                     f"http://localhost:{info.port}/auth/realms/{info.realm}/",
-                    timeout=60,
+                    timeout=90,
                 )
                 yield info
             except TimeoutError:
