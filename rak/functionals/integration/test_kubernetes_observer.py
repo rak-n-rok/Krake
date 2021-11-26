@@ -423,8 +423,7 @@ def test_kubernetes_observer_delete_on_api(minikube_clusters):
         app = env.resources[ResourceKind.APPLICATION][0]
 
         # 1. Delete the Application on the API
-        app.delete_resource()
-        app.check_deleted()
+        app.delete_resource(True)
 
         # 2. Check that resource has NOT been put back up on the cluster by the
         # observer's doing
@@ -438,8 +437,7 @@ def test_kubernetes_observer_delete_on_api(minikube_clusters):
         # 3. Create the resource again but with other specs
         new_manifest_path = f"{MANIFEST_PATH}/echo-demo-update.yaml"
         new_app = ApplicationDefinition(name=app.name, manifest_path=new_manifest_path)
-        new_app.create_resource()
-        new_app.check_created()
+        new_app.create_resource(True)
 
         # 4. Check that the resource has not been reverted to its previous state due to
         # the observer.

@@ -262,7 +262,11 @@ class ApplicationState(Enum):
     RECONCILING = auto()
     MIGRATING = auto()
     DELETING = auto()
+    DELETED = auto()
     FAILED = auto()
+
+    def equals(self, string):
+        return self.name == string.upper()
 
 
 class ApplicationStatus(Status):

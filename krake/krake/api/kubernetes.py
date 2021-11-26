@@ -10,6 +10,7 @@ from krake.api.auth import protected
 from krake.api.database import EventType
 from krake.api.helpers import (
     load,
+    blocking,
     session,
     Heartbeat,
     use_schema,
@@ -42,6 +43,7 @@ class KubernetesApi(object):
     @routes.route("POST", "/kubernetes/namespaces/{namespace}/applications")
     @protected(api="kubernetes", resource="applications", verb="create")
     @use_schema("body", schema=make_create_request_schema(Application))
+    @blocking()
     async def create_application(request, body):
         kwargs = {"name": body.metadata.name}
 
@@ -85,6 +87,7 @@ class KubernetesApi(object):
     @routes.route("DELETE", "/kubernetes/namespaces/{namespace}/applications/{name}")
     @protected(api="kubernetes", resource="applications", verb="delete")
     @load("entity", Application)
+    @blocking()
     async def delete_application(request, entity):
         # Resource is already deleting
         if entity.metadata.deleted:
@@ -289,6 +292,7 @@ class KubernetesApi(object):
     @routes.route("POST", "/kubernetes/namespaces/{namespace}/clusters")
     @protected(api="kubernetes", resource="clusters", verb="create")
     @use_schema("body", schema=make_create_request_schema(Cluster))
+    @blocking()
     async def create_cluster(request, body):
         kwargs = {"name": body.metadata.name}
 
@@ -332,6 +336,7 @@ class KubernetesApi(object):
     @routes.route("DELETE", "/kubernetes/namespaces/{namespace}/clusters/{name}")
     @protected(api="kubernetes", resource="clusters", verb="delete")
     @load("entity", Cluster)
+    @blocking()
     async def delete_cluster(request, entity):
         # Resource is already deleting
         if entity.metadata.deleted:
