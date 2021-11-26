@@ -74,13 +74,13 @@ class ResourceDefinition(ABC):
         """
         pass
 
-    def create_resource(self):
+    def create_resource(self, wait=False):
         """Create the resource."""
         # Create the actual resource based on the initial values of this
         # ResourceDefinition, since these are the values which should be used
         # for the creation.
         error_message = f"The {self.kind} {self.name} could not be created."
-        run(self.creation_command(), condition=check_return_code(error_message))
+        run(self.creation_command(wait), condition=check_return_code(error_message))
 
         # Update this ResourceDefinition with the default values of all mutable
         # attributes for which none was provided. It is important to do this after
@@ -111,7 +111,7 @@ class ResourceDefinition(ABC):
             setattr(self, attr, default_values[attr])
 
     @abstractmethod
-    def creation_command(self):
+    def creation_command(self, wait):
         """Get the command for creating the resource.
 
         Returns:
@@ -145,14 +145,14 @@ class ResourceDefinition(ABC):
         """
         pass
 
-    def delete_resource(self):
+    def delete_resource(self, wait=False):
         """Delete the resource."""
         # The 404 HTTP code is allowed for the cases where the resource has been deleted
         # during the test.
-        run(self.delete_command(), condition=allow_404)
+        run(self.delete_command(wait), condition=allow_404)
 
     @abstractmethod
-    def delete_command(self):
+    def delete_command(self, wait):
         """Get the command for deleting the resource.
 
         Returns:
@@ -424,8 +424,14 @@ class ApplicationDefinition(ResourceDefinition):
             "migration": app["spec"]["constraints"]["migration"],
         }
 
-    def creation_command(self):
-        cmd = f"rok kube app create -f {self.manifest_path} {self.name}".split()
+    def creation_command(self, wait):
+
+        if wait:
+            cmd = f"rok kube app create -f {self.manifest_path} " \
+                  f"{self.name} --wait".split()
+        else:
+            cmd = f"rok kube app create -f {self.manifest_path} {self.name}".split()
+
         cmd += self._get_cluster_label_constraint_options(
             self.cluster_label_constraints
         )
@@ -468,8 +474,14 @@ class ApplicationDefinition(ResourceDefinition):
     def creation_acceptance_criteria(self, error_message=None):
         return check_app_created_and_up(error_message=error_message)
 
-    def delete_command(self):
-        return f"rok kube app delete {self.name}".split()
+    def delete_command(self, wait):
+        if wait:
+            return f"rok kube app delete {self.name} --wait".split()
+        else:
+            return f"rok kube app delete {self.name}".split()
+
+    def delete_command_wait(self):
+        return f"rok kube app delete {self.name} --wait".split()
 
     def update_command(
         self,
@@ -489,6 +501,7 @@ class ApplicationDefinition(ResourceDefinition):
                     False: --disable-migration
                     None: (No flag)
             labels (dict[str, str]): dict of labels with which to update the app.
+            observer_schema_path (str): path to the observer schema
 
         Returns:
             list[str]: the command to update the application, as a list of its parts.
@@ -647,7 +660,7 @@ class ClusterDefinition(ResourceDefinition):
             "metrics": cluster["spec"]["metrics"],
         }
 
-    def creation_command(self):
+    def creation_command(self, wait):
         cmd = "rok kube cluster create".split()
         cmd += self._get_label_options(self.labels)
         cmd += self._get_metrics_options(self.metrics)
@@ -689,7 +702,7 @@ class ClusterDefinition(ResourceDefinition):
             error_message = f"The cluster {self.name} was not properly created."
         return check_resource_exists(error_message=error_message)
 
-    def delete_command(self):
+    def delete_command(self, wait):
         return f"rok kube cluster delete {self.name}".split()
 
     def update_command(self, labels=None, metrics=None):

@@ -153,6 +153,10 @@ class ApplicationTable(ApplicationListTable):
 )
 @argument("name", help="Name of the application")
 @arg_migration_constraints(default="--enable-migration")
+@argument("--wait", action="store", nargs="?", const="running",
+          choices=["creating", "pending", "running"],
+          help="Wait with the response until the application reaches a specific state."
+          "If no state is specified, running is used as a default.")
 @arg_cluster_label_constraints
 @arg_cluster_resource_constraints
 @arg_namespace
@@ -175,6 +179,7 @@ def create_application(
     labels,
     cluster_resource_constraints,
     hooks,
+    wait
 ):
     if namespace is None:
         namespace = config["user"]
@@ -201,7 +206,14 @@ def create_application(
             },
         },
     }
-    resp = session.post(f"/kubernetes/namespaces/{namespace}/applications", json=app)
+
+    blocking_state = False
+    if wait is not None:
+        blocking_state = wait
+
+    resp = session.post(f"/kubernetes/namespaces/{namespace}/applications",
+                        json=app,
+                        params={'blocking': blocking_state})
     return resp, name
 
 
@@ -231,6 +243,10 @@ def get_application(config, session, namespace, name):
 @argument("name", help="Kubernetes application name")
 @argument("-f", "--file", type=FileType(), help="Kubernetes manifest file")
 @argument("-O", "--observer_schema_file", type=FileType(), help="Observer Schema File")
+@argument("--wait", action="store", nargs="?", const="running",
+          choices=["reconciling", "running"],
+          help="Wait with the response until the application reaches a specific state."
+          "If no state is specified, running is used as a default.")
 @arg_migration_constraints()
 @arg_cluster_label_constraints
 @arg_cluster_resource_constraints
@@ -253,6 +269,7 @@ def update_application(
     cluster_label_constraints,
     cluster_resource_constraints,
     hooks,
+    wait,
 ):
     if namespace is None:
         namespace = config["user"]
@@ -287,8 +304,14 @@ def update_application(
     if disable_migration or enable_migration:
         app_constraints["migration"] = enable_migration
 
+    blocking_state = False
+    if wait is not None:
+        blocking_state = wait
+
     resp = session.put(
-        f"/kubernetes/namespaces/{namespace}/applications/{name}", json=app
+        f"/kubernetes/namespaces/{namespace}/applications/{name}",
+        json=app,
+        params={"blocking": blocking_state}
     )
 
     return resp.json()
@@ -296,17 +319,26 @@ def update_application(
 
 @application.command("delete", help="Delete Kubernetes application")
 @argument("name", help="Kubernetes application name")
+@argument("--wait", action="store", nargs="?", const="deleted",
+          choices=["deleting", "deleted"],
+          help="Wait with the response until the application reaches a specific state."
+          "If no state is specified, deleted is used as a default.")
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
 @printer(table=ApplicationTable())
-def delete_application(config, session, namespace, name):
+def delete_application(config, session, namespace, name, wait):
     if namespace is None:
         namespace = config["user"]
+
+    blocking_state = False
+    if wait is not None:
+        blocking_state = wait
 
     resp = session.delete(
         f"/kubernetes/namespaces/{namespace}/applications/{name}",
         raise_for_status=False,
+        params={'blocking': blocking_state}
     )
     if resp.status_code == 404:
         raise SystemExit(f"Error 404: Application {name!r} not found")
@@ -314,6 +346,7 @@ def delete_application(config, session, namespace, name):
 
     if resp.status_code == 204:
         return None
+
     return resp.json()
 
 
@@ -431,7 +464,10 @@ def create_cluster(
             "custom_resources": custom_resources,
         },
     }
-    resp = session.post(f"/kubernetes/namespaces/{namespace}/clusters", json=to_create)
+
+    resp = session.post(f"/kubernetes/namespaces/{namespace}/clusters",
+                        json=to_create)
+
     return resp, cluster_name
 
 
@@ -530,8 +566,10 @@ def delete_cluster(config, session, namespace, name):
         namespace = config["user"]
 
     resp = session.delete(
-        f"/kubernetes/namespaces/{namespace}/clusters/{name}", raise_for_status=False
+        f"/kubernetes/namespaces/{namespace}/clusters/{name}",
+        raise_for_status=False
     )
+
     if resp.status_code == 404:
         raise SystemExit(f"Error 404: Kubernetes cluster {name!r} not found")
     resp.raise_for_status()

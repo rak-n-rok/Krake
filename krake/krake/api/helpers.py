@@ -1,10 +1,13 @@
 """Simple helper functions that are used by the HTTP endpoints."""
 import asyncio
 import json
+import time
+
 from enum import Enum, auto
 from functools import wraps
 from aiohttp import web
 from krake.data.serializable import Serializable
+from krake.data.kubernetes import ApplicationState
 from marshmallow import ValidationError, fields, missing
 from marshmallow.validate import Range
 
@@ -223,6 +226,54 @@ def use_schema(argname, schema):
             kwargs[argname] = payload
 
             return await handler(request, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def blocking():
+    """Decorator function to enable function blocking. This allows only a return of the
+    response if the requested action is completed (eg. deletion of a resource).
+    The function logic is therefore executed after its decorated counterpart.
+
+    Returns:
+        Response: JSON style response coming from the handler
+    """
+
+    def decorator(handler):
+        @wraps(handler)
+        async def wrapper(request, *args, **kwargs):
+            resp = await handler(request, *args, **kwargs)
+
+            if "blocking" in request.query and request.query["blocking"] != 'False':
+
+                entity = {}
+                if kwargs.get("body"):
+                    entity = kwargs["body"]
+                if kwargs.get("entity"):
+                    entity = kwargs["entity"]
+
+                key_params = {}
+                if entity.metadata.name:
+                    key_params = {"name": entity.metadata.name}
+                if entity.metadata.namespace:
+                    key_params = {"namespace": entity.metadata.namespace}
+
+                t_end = time.time() + 60
+                async with session(request).watch(entity, **key_params) as w:
+                    async for event, obj, rev in w:
+                        if time.time() > t_end:
+                            break
+                        if obj is not None and \
+                                obj.status.state.equals(request.query["blocking"]):
+                            return web.json_response(obj.serialize())
+
+                        if obj is None and request.query["blocking"] == "deleted":
+                            entity.status.state = ApplicationState.DELETED
+                            return web.json_response(entity.serialize())
+
+            return resp
 
         return wrapper
 
