@@ -24,5 +24,6 @@ API reference of all modules is provided.
     hooks
     observers
     garbage-collection
+    api-generation
     ref/krake
     ref/rok
