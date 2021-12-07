@@ -3,6 +3,7 @@ import logging
 from contextlib import suppress
 from copy import deepcopy
 from functools import partial
+from datetime import timedelta
 
 from aiohttp import ClientResponseError
 from krake.controller.kubernetes.client import KubernetesClient
@@ -521,19 +522,48 @@ class KubernetesController(Controller):
         copy = deepcopy(app)
         if app.metadata.deleted:
             # Delete the Application
-            await listen.hook(
-                HookType.ApplicationPreDelete,
-                controller=self,
-                app=copy,
-                start=start_observer,
-            )
-            await self._delete_application(copy)
-            await listen.hook(
-                HookType.ApplicationPostDelete,
-                controller=self,
-                app=copy,
-                start=start_observer,
-            )
+            try:
+                if (
+                    "shutdown" in app.spec.hooks
+                    and app.status.state not in [ApplicationState.WAITING_FOR_CLEANING,
+                                                 ApplicationState.READY_FOR_DELETION,
+                                                 ApplicationState.DELETING,
+                                                 ApplicationState.DELETION_FAILED]
+                ):
+                    app.status.state = ApplicationState.WAITING_FOR_CLEANING
+
+                    await self.kubernetes_api.update_application_status(
+                        namespace=app.metadata.namespace,
+                        name=app.metadata.name,
+                        body=app
+                    )
+
+                    await self._delete_manifest(app)
+                elif (
+                    (
+                        "shutdown" in app.spec.hooks
+                        and app.status.state is ApplicationState.READY_FOR_DELETION
+                    )
+                    or "shutdown" not in app.spec.hooks
+                ):
+                    await listen.hook(
+                        HookType.ApplicationPreDelete,
+                        controller=self,
+                        app=copy,
+                        start=start_observer,
+                    )
+                    await self._delete_application(copy)
+                    await listen.hook(
+                        HookType.ApplicationPostDelete,
+                        controller=self,
+                        app=copy,
+                        start=start_observer,
+                    )
+
+            except ClientResponseError as err:
+                if err.status == 404:
+                    return
+                raise
         elif (
             copy.status.running_on
             and copy.status.running_on != copy.status.scheduled_to
@@ -551,7 +581,16 @@ class KubernetesController(Controller):
                 async with KubernetesClient(
                     cluster.spec.kubeconfig, cluster.spec.custom_resources
                 ) as kube:
-                    await kube.shutdown(copy)
+                    if copy.status.migration_timeout is None:
+                        copy.status.migration_timeout = \
+                            now() + timedelta(seconds=app.spec.shutdown_timeout)
+                        await self.kubernetes_api.update_application_status(
+                            namespace=copy.metadata.namespace,
+                            name=copy.metadata.name,
+                            body=copy
+                        )
+
+                        await kube.shutdown(copy)
             else:
                 # Migrate the Application
                 await listen.hook(
@@ -593,13 +632,7 @@ class KubernetesController(Controller):
 
         try:
             # Transition into "DELETING" state
-            if (
-                "shutdown" in app.spec.hooks
-                and app.status.state is not ApplicationState.DELETING
-            ):
-                app.status.state = ApplicationState.WAITING_FOR_CLEANING
-            else:
-                app.status.state = ApplicationState.DELETING
+            app.status.state = ApplicationState.DELETING
 
             await self.kubernetes_api.update_application_status(
                 namespace=app.metadata.namespace, name=app.metadata.name, body=app
@@ -643,7 +676,16 @@ class KubernetesController(Controller):
             ) as kube:
                 for resource in last_observed_manifest_copy:
                     if app.status.state is ApplicationState.WAITING_FOR_CLEANING:
-                        resp = await kube.shutdown(app)
+                        if app.status.deletion_timeout is None:
+                            app.status.deletion_timeout = \
+                                now() + timedelta(seconds=app.spec.shutdown_timeout)
+                            await self.kubernetes_api.update_application_status(
+                                namespace=app.metadata.namespace,
+                                name=app.metadata.name,
+                                body=app
+                            )
+
+                            await kube.shutdown(app)
                     else:
                         await listen.hook(
                             HookType.ResourcePreDelete,
@@ -852,6 +894,7 @@ class KubernetesController(Controller):
         await self._apply_manifest(app, delta)
 
         # Transition into "RUNNING" state
+        app.status.migration_timeout = None
         app.status.state = ApplicationState.RUNNING
         await self.kubernetes_api.update_application_status(
             namespace=app.metadata.namespace, name=app.metadata.name, body=app

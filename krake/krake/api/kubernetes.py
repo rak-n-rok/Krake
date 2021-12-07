@@ -281,13 +281,16 @@ class KubernetesApi(object):
         #        reason="No token has been provided or the provided one is invalid."
         #    )
 
-        # Resource state changed to DELETING OR READY_FOR_MIGRATING, based on the
-        # current state.
-        if app.status.state is ApplicationState.WAITING_FOR_CLEANING:
+        # Resource state changed to a READY_FOR state depending on the deleted flag
+        if app.status.state in [ApplicationState.WAITING_FOR_CLEANING,
+                                ApplicationState.MIGRATION_FAILED,
+                                ApplicationState.DELETION_FAILED]:
             if app.metadata.deleted:
-                app.status.state = ApplicationState.DELETING
+                app.status.state = ApplicationState.READY_FOR_DELETION
+                app.status.deletion_timeout = None
             else:
                 app.status.state = ApplicationState.READY_FOR_MIGRATION
+                app.status.migration_timeout = None
         await session(request).put(app)
         logger.info(
             "Deleting of application %r (%s) by calling shutdown hook",
@@ -314,11 +317,12 @@ class KubernetesApi(object):
 
         await session(request).put(entity)
         logger.info(
-            "Update %s of %s %r (%s)",
+            "Update %s of %s %r (%s) to %s",
             "Status",
             "Application",
             entity.metadata.name,
             entity.metadata.uid,
+            entity.status.state
         )
 
         return web.json_response(entity.serialize())
@@ -333,8 +337,7 @@ class KubernetesApi(object):
         namespace = request.match_info.get("namespace")
         kwargs["namespace"] = namespace
 
-        # Ensure that a resource with the same name does not already
-        # exists.
+        # Ensure that a resource with the same name does not already exist.
         existing = await session(request).get(body.__class__, **kwargs)
 
         if existing is not None:

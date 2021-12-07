@@ -427,8 +427,13 @@ class KubernetesHandler(Handler):
         if app.metadata.deleted:
             # TODO: If an application is deleted, the scheduling of other
             #   applications should potentially be revised.
-            logger.debug("Cancel rescheduling of deleted %r", app)
-            await self.queue.cancel(app.metadata.uid)
+            if "shutdown" in app.spec.hooks:
+                if app.metadata.uid not in self.queue.dirty:
+                    logger.debug("Reschedule %r in %s secs", app, 30)
+                    await self.queue.put(app.metadata.uid, app, delay=30)
+            else:
+                logger.debug("Cancel rescheduling of deleted %r", app)
+                await self.queue.cancel(app.metadata.uid)
 
         # The application is already scheduled and no change has been made to the specs
         # since then. Nevertheless, we should perform a periodic rescheduling to handle
@@ -568,6 +573,39 @@ class KubernetesHandler(Handler):
             )
             return
 
+        if (
+            app.status.migration_timeout is not None and
+            app.status.migration_timeout < utils.now() and
+            app.status.state is not ApplicationState.MIGRATION_FAILED
+        ):
+            app.status.state = ApplicationState.MIGRATION_FAILED
+            await self.api.update_application_status(
+                namespace=app.metadata.namespace,
+                name=app.metadata.name,
+                body=app,
+            )
+
+        if (
+            app.status.deletion_timeout is not None and
+            app.status.deletion_timeout < utils.now() and
+            app.status.state is not ApplicationState.DELETION_FAILED
+        ):
+            app.status.state = ApplicationState.DELETION_FAILED
+            await self.api.update_application_status(
+                namespace=app.metadata.namespace,
+                name=app.metadata.name,
+                body=app,
+            )
+
+        if app.status.state in [ApplicationState.MIGRATION_FAILED,
+                                ApplicationState.DELETION_FAILED]:
+            logger.debug(
+                "Not rescheduling %r, since it is in %s.",
+                app,
+                app.status.state
+            )
+            return
+
         # Put the application into the work queue with a certain delay. This
         # ensures the rescheduling of the application. Only put it if there is
         # not already another version of the resource in the queue. This check
@@ -605,7 +643,7 @@ class KubernetesHandler(Handler):
         # took place very recently. For example, the kubernetes controller updates
         # the app in reaction to the scheduler's scheduling, in which case
         # the scheduler will try and select the best cluster yet again.
-        # Therefore we have to make sure the previous scheduling was not too recent.
+        # Therefore, we have to make sure the previous scheduling was not too recent.
         # If it was, we want to stay at the current cluster - if it is still matching.
         # The above reasoning is also true in the case when the user has performed an
         # update of the application's cluster label constraints. Also in this case, the

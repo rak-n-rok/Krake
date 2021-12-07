@@ -6,18 +6,18 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: sd-app
+      app: shutdown
   template:
     metadata:
       labels:
-        app: sd-app
+        app: shutdown
     spec:
       volumes:
       - name: sd-volume
         configMap:
           name: sd-rq-configmap
       containers:
-      - name: sd-app
+      - name: shutdown
         image: nyurik/alpine-python3-requests
         ports:
           - containerPort: 10000
@@ -40,11 +40,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: sd-app
+  name: shutdown
 spec:
   type: NodePort
   selector:
-    app: sd-app
+    app: shutdown
   ports:
   - port: 10000
     protocol: TCP

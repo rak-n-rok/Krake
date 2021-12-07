@@ -230,13 +230,15 @@ class ApplicationSpec(Serializable):
             generates the ``status.mangled_observer_schema``.
         constraints (Constraints, optional): Scheduling constraints
         hooks (list[str], optional): List of enabled hooks
-
+        shutdown_timeout (int): timeout in seconds for the shutdown hook
+            should probably be combined with the hooks list in some way
     """
 
     manifest: List[dict] = field(metadata={"validate": _validate_manifest})
     observer_schema: List[dict] = field(default_factory=list)
     constraints: Constraints
     hooks: List[str] = field(default_factory=list)
+    shutdown_timeout: int = 30
 
     def __post_init__(self):
         """Method automatically ran at the end of the :meth:`__init__` method, used to
@@ -261,8 +263,11 @@ class ApplicationState(Enum):
     RUNNING = auto()
     RECONCILING = auto()
     WAITING_FOR_CLEANING = auto()
+    MIGRATION_FAILED = auto()
     READY_FOR_MIGRATION = auto()
     MIGRATING = auto()
+    DELETION_FAILED = auto()
+    READY_FOR_DELETION = auto()
     DELETING = auto()
     DELETED = auto()
     FAILED = auto()
@@ -325,6 +330,8 @@ class ApplicationStatus(Status):
     complete_key: str = None
     shutdown_cert: str = None
     shutdown_key: str = None
+    migration_timeout: datetime = None
+    deletion_timeout: datetime = None
 
 
 @persistent("/kubernetes/applications/{namespace}/{name}")

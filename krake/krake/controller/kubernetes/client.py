@@ -441,12 +441,11 @@ class KubernetesClient(object):
         return resp
 
     async def shutdown(self, app):
-        """Delete the given resource on the cluster using its internal data as
-        reference.
+        """Gracefully shutdown the given application on the cluster by calling the apps
+        exposed shutdown address.
 
         Args:
-            resource (dict): the resource to delete, as a manifest file translated in
-                dict.
+            app (): the app to gracefully shutdown.
 
         Returns:
             kubernetes_asyncio.client.models.v1_status.V1Status: response from the
@@ -459,7 +458,7 @@ class KubernetesClient(object):
 
         """
         try:
-            resp = requests.put("http://" + app.status.services["sd-app"] + "/shutdown")
+            resp = requests.put("http://"+app.status.services["shutdown"]+"/shutdown")
         except requests.exceptions.RequestException as err:
             if err.response.statuscode == 404:
                 logger.debug("Resource already deleted")
