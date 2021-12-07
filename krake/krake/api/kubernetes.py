@@ -29,6 +29,7 @@ from krake.data.kubernetes import (
     ClusterBinding,
     ApplicationComplete,
     ApplicationShutdown,
+    ApplicationState
 )
 
 logger = logging.getLogger("krake.api.kubernetes")
@@ -274,15 +275,20 @@ class KubernetesApi(object):
     @use_schema("body", ApplicationShutdown.Schema)
     @load("app", Application)
     async def update_application_shutdown(request, body, app):
-        # # If the hook is not enabled for the Application or if the token is invalid
+        # If the hook is not enabled for the Application or if the token is invalid
         # if app.status.token is None or app.status.token != body.token:
-        #     raise web.HTTPUnauthorized(
-        #         reason="No token has been provided or the provided one is invalid."
-        #     )
-        #
-        # # Resource marked as deletion, to be deleted by the Garbage Collector
-        # app.metadata.deleted = utils.now()
-        # await session(request).put(app)
+        #    raise web.HTTPUnauthorized(
+        #        reason="No token has been provided or the provided one is invalid."
+        #    )
+
+        # Resource state changed to DELETING OR READY_FOR_MIGRATING, based on the
+        # current state.
+        if app.status.state is ApplicationState.WAITING_FOR_CLEANING:
+            if app.metadata.deleted:
+                app.status.state = ApplicationState.DELETING
+            else:
+                app.status.state = ApplicationState.READY_FOR_MIGRATION
+        await session(request).put(app)
         logger.info(
             "Deleting of application %r (%s) by calling shutdown hook",
             app.metadata.name,

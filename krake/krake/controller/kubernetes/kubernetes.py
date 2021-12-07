@@ -538,20 +538,35 @@ class KubernetesController(Controller):
             copy.status.running_on
             and copy.status.running_on != copy.status.scheduled_to
         ):
-            # Migrate the Application
-            await listen.hook(
-                HookType.ApplicationPreMigrate,
-                controller=self,
-                app=copy,
-                start=start_observer,
-            )
-            await self._migrate_application(copy)
-            await listen.hook(
-                HookType.ApplicationPostMigrate,
-                controller=self,
-                app=copy,
-                start=start_observer,
-            )
+            if (
+                "shutdown" in copy.spec.hooks
+                and copy.status.state is ApplicationState.WAITING_FOR_CLEANING
+            ):
+                cluster = await self.kubernetes_api.read_cluster(
+                    namespace=copy.status.running_on.namespace,
+                    name=copy.status.running_on.name,
+                )
+                # Loop over a copy of the `last_observed_manifest` as we modify delete
+                # resources from the dictionary in the ResourcePostDelete hook
+                async with KubernetesClient(
+                    cluster.spec.kubeconfig, cluster.spec.custom_resources
+                ) as kube:
+                    await kube.shutdown(copy)
+            else:
+                # Migrate the Application
+                await listen.hook(
+                    HookType.ApplicationPreMigrate,
+                    controller=self,
+                    app=copy,
+                    start=start_observer,
+                )
+                await self._migrate_application(copy)
+                await listen.hook(
+                    HookType.ApplicationPostMigrate,
+                    controller=self,
+                    app=copy,
+                    start=start_observer,
+                )
         else:
             # Reconcile the Application
             await listen.hook(
@@ -575,9 +590,17 @@ class KubernetesController(Controller):
         #  is handled again. However, there are no actual resource anymore, as they have
         #  been deleted. To prevent this, the worker verifies that the Application is
         #  not deleted yet before attempting to delete it.
+
         try:
             # Transition into "DELETING" state
-            app.status.state = ApplicationState.DELETING
+            if (
+                "shutdown" in app.spec.hooks
+                and app.status.state is not ApplicationState.DELETING
+            ):
+                app.status.state = ApplicationState.WAITING_FOR_CLEANING
+            else:
+                app.status.state = ApplicationState.DELETING
+
             await self.kubernetes_api.update_application_status(
                 namespace=app.metadata.namespace, name=app.metadata.name, body=app
             )
@@ -619,21 +642,24 @@ class KubernetesController(Controller):
                 cluster.spec.kubeconfig, cluster.spec.custom_resources
             ) as kube:
                 for resource in last_observed_manifest_copy:
-                    await listen.hook(
-                        HookType.ResourcePreDelete,
-                        app=app,
-                        cluster=cluster,
-                        resource=resource,
-                        controller=self,
-                    )
-                    resp = await kube.delete(resource)
-                    await listen.hook(
-                        HookType.ResourcePostDelete,
-                        app=app,
-                        cluster=cluster,
-                        resource=resource,
-                        response=resp,
-                    )
+                    if app.status.state is ApplicationState.WAITING_FOR_CLEANING:
+                        resp = await kube.shutdown(app)
+                    else:
+                        await listen.hook(
+                            HookType.ResourcePreDelete,
+                            app=app,
+                            cluster=cluster,
+                            resource=resource,
+                            controller=self,
+                        )
+                        resp = await kube.delete(resource)
+                        await listen.hook(
+                            HookType.ResourcePostDelete,
+                            app=app,
+                            cluster=cluster,
+                            resource=resource,
+                            response=resp,
+                        )
 
         if app.status.running_on:
             app.metadata.owners.remove(app.status.running_on)

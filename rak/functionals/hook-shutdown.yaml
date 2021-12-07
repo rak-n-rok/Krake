@@ -1,0 +1,51 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sd-container
+spec:
+  selector:
+    matchLabels:
+      app: sd-app
+  template:
+    metadata:
+      labels:
+        app: sd-app
+    spec:
+      volumes:
+      - name: sd-volume
+        configMap:
+          name: sd-rq-configmap
+      containers:
+      - name: sd-app
+        image: nyurik/alpine-python3-requests
+        ports:
+          - containerPort: 10000
+        volumeMounts:
+          - mountPath: /opt
+            name: sd-volume
+        env:
+          - name: HOME
+            value: /tmp
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "copy scripts to /tmp (configMap is read-only)"
+          cp /opt/hook-script-shutdown-rq.py /tmp
+          echo "apply 'chmod +x' to /tmp/hook-script-shutdown-rq.py"
+          chmod +x /tmp/hook-script-shutdown-rq.py
+          /tmp/hook-script-shutdown-rq.py
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sd-app
+spec:
+  type: NodePort
+  selector:
+    app: sd-app
+  ports:
+  - port: 10000
+    protocol: TCP
+    targetPort: 10000

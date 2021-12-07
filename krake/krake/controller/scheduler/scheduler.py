@@ -533,11 +533,19 @@ class KubernetesHandler(Handler):
             return
 
         if app.status.scheduled_to:
+            if "shutdown" in app.spec.hooks:
+                app.status.state = ApplicationState.WAITING_FOR_CLEANING
+                await self.api.update_application_status(
+                    namespace=app.metadata.namespace,
+                    name=app.metadata.name,
+                    body=app
+                )
             logger.info(
                 "Migrate %r from %s to %s", app, app.status.scheduled_to, scheduled_to
             )
         else:
             logger.info("Scheduled %r to %r", app, cluster)
+
         await self.api.update_application_binding(
             namespace=app.metadata.namespace,
             name=app.metadata.name,
