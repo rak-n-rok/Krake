@@ -15,6 +15,8 @@ from marshmallow.validate import Range
 class HttpReasonCode(Enum):
     # When a database transaction failed
     TRANSACTION_ERROR = auto()
+    # When the update field
+    UPDATE_ERROR = auto()
     # When the authentication through keystone failed
     INVALID_KEYSTONE_TOKEN = auto()
     # When the authentication through keycloak failed

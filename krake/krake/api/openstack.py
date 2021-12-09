@@ -186,15 +186,17 @@ class OpenStackApi(object):
                     },
                 )
 
-        # FIXME: if a user updates an immutable field, (such as the created timestamp),
-        # the request is accepted and the API returns 200. The `modified` timestamp
-        # will also still be updated, even though no change from the request on
-        # immutable fields will be applied.
-        # Changes to immutable fields should be rejected, see Krake issue #410
         if body == entity:
             raise json_error(web.HTTPBadRequest, "The body contained no update.")
 
-        entity.update(body)
+        try:
+            entity.update(body)
+        except ValueError as e:
+            reason = HttpReason(
+                reason=str(e), code=HttpReasonCode.UPDATE_ERROR
+            )
+            raise json_error(web.HTTPBadRequest, reason.serialize())
+
         entity.metadata.modified = utils.now()
 
         # Resource is in "deletion in progress" state and all finalizers have
@@ -245,7 +247,13 @@ class OpenStackApi(object):
         source = getattr(body, "status")
         dest = getattr(entity, "status")
 
-        dest.update(source)
+        try:
+            dest.update(source)
+        except ValueError as e:
+            reason = HttpReason(
+                reason=str(e), code=HttpReasonCode.UPDATE_ERROR
+            )
+            raise json_error(web.HTTPBadRequest, reason.serialize())
 
         await session(request).put(entity)
         logger.info(
@@ -403,15 +411,17 @@ class OpenStackApi(object):
                     },
                 )
 
-        # FIXME: if a user updates an immutable field, (such as the created timestamp),
-        # the request is accepted and the API returns 200. The `modified` timestamp
-        # will also still be updated, even though no change from the request on
-        # immutable fields will be applied.
-        # Changes to immutable fields should be rejected, see Krake issue #410
         if body == entity:
             raise json_error(web.HTTPBadRequest, "The body contained no update.")
 
-        entity.update(body)
+        try:
+            entity.update(body)
+        except ValueError as e:
+            reason = HttpReason(
+                reason=str(e), code=HttpReasonCode.UPDATE_ERROR
+            )
+            raise json_error(web.HTTPBadRequest, reason.serialize())
+
         entity.metadata.modified = utils.now()
 
         # Resource is in "deletion in progress" state and all finalizers have
@@ -443,7 +453,13 @@ class OpenStackApi(object):
         source = getattr(body, "status")
         dest = getattr(entity, "status")
 
-        dest.update(source)
+        try:
+            dest.update(source)
+        except ValueError as e:
+            reason = HttpReason(
+                reason=str(e), code=HttpReasonCode.UPDATE_ERROR
+            )
+            raise json_error(web.HTTPBadRequest, reason.serialize())
 
         await session(request).put(entity)
         logger.info(

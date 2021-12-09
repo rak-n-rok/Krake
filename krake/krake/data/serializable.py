@@ -534,9 +534,15 @@ class Serializable(metaclass=SerializableMeta):
         """Update data class fields with corresponding fields from the
         overwrite object.
 
-        If a field is marked as _subresource_, _readonly_ or _immutable_ it is
-        not modified. Otherwise, attributes from overwrite will replace
+        If a field is marked as _subresource_ or _readonly_ it is
+        not modified. If a field is marked as _immutable_ and there is
+        an attempt to update the value, the :class:`ValueError` is raised.
+        Otherwise, attributes from overwrite will replace
         attributes from the current object.
+
+        The :meth:`update` must ignore the _subresource_ and _readonly_ fields,
+        to avoid accidentally overwriting e.g. status fields in
+        read-modify-write scenarios.
 
         The function works recursively for nested :class:`Serializable`
         attributes which means the :meth:`update` method of the attribute will
@@ -554,38 +560,48 @@ class Serializable(metaclass=SerializableMeta):
         Args:
             overwrite (Serializable): Serializable object will be merged with
                 the current object.
+        Raises:
+            ValueError: If there is an attempt to update an _immutable_ field.
 
         """
         for field in dataclasses.fields(self):
-            immutable = any(
+
+            if any(
                 (
                     field.metadata.get("subresource", False),
-                    field.metadata.get("readonly", False),
-                    field.metadata.get("immutable", False),
+                    field.metadata.get("readonly", False)
                 )
-            )
-            if not immutable:
-                value = getattr(overwrite, field.name)
+            ):
+                continue
 
-                if isinstance(field.type, type) and issubclass(
-                    field.type, Serializable
-                ):
-                    # Overwrite value is None, just set it directly
-                    if value is None:
-                        setattr(self, field.name, None)
-                    # Current attribute is None, copy the whole attribute
-                    # FIXME: What about subresource/readonly/immutable
-                    elif getattr(self, field.name) is None:
-                        setattr(self, field.name, value)
-                    # Update field by field
-                    else:
-                        getattr(self, field.name).update(value)
-                else:
-                    # We do not make copies from attributes. This leads to
-                    # behavior similar to "shallow copying". If the overwrite
-                    # attribute is mutable, e.g. a dict, list, it will be just
-                    # referenced here.
+            if field.metadata.get("immutable", False):
+                if getattr(self, field.name) != getattr(overwrite, field.name):
+                    raise ValueError(
+                        f"Trying to update an immutable field: {field.name}"
+                    )
+
+                continue
+
+            value = getattr(overwrite, field.name)
+
+            if isinstance(field.type, type) and issubclass(
+                field.type, Serializable
+            ):
+                # Overwrite value is None, just set it directly
+                if value is None:
+                    setattr(self, field.name, None)
+                # Current attribute is None, copy the whole attribute
+                elif getattr(self, field.name) is None:
                     setattr(self, field.name, value)
+                # Update field by field
+                else:
+                    getattr(self, field.name).update(value)
+            else:
+                # We do not make copies from attributes. This leads to
+                # behavior similar to "shallow copying". If the overwrite
+                # attribute is mutable, e.g. a dict, list, it will be just
+                # referenced here.
+                setattr(self, field.name, value)
 
 
 class ApiObject(Serializable):

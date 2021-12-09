@@ -198,9 +198,10 @@ async def test_read_magnum_cluster(aiohttp_server, config, db, loop):
 
 
 async def test_update_magnum_cluster(aiohttp_server, config, db, loop):
-    data = MagnumClusterFactory(spec__master_count=1)
+    data = MagnumClusterFactory(spec__master_count=1, spec__node_count=4)
     await db.put(data)
-    data.spec.master_count = 3
+
+    # Update node count to 7
     data.spec.node_count = 7
 
     server = await aiohttp_server(create_app(config=config))

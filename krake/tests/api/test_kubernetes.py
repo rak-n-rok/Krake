@@ -502,6 +502,24 @@ async def test_update_application_no_changes(aiohttp_client, config, db):
     assert resp.status == 400
 
 
+async def test_update_application_immutable_field(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = ApplicationFactory()
+    await db.put(data)
+    data.metadata.namespace = "namespace2"
+
+    resp = await client.put(
+        f"/kubernetes/namespaces/testing/applications/{data.metadata.name}",
+        json=data.serialize(),
+    )
+    assert resp.status == 400
+    assert await resp.json() == {
+        "code": "UPDATE_ERROR",
+        "reason": "Trying to update an immutable field: namespace"
+    }
+
+
 async def test_update_application_binding(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
@@ -1092,6 +1110,24 @@ async def test_update_cluster_no_changes(aiohttp_client, config, db):
         json=data.serialize(),
     )
     assert resp.status == 400
+
+
+async def test_update_cluster_immutable_field(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = ClusterFactory()
+    await db.put(data)
+    data.metadata.namespace = "namespace2"
+
+    resp = await client.put(
+        f"/kubernetes/namespaces/testing/clusters/{data.metadata.name}",
+        json=data.serialize(),
+    )
+    assert resp.status == 400
+    assert await resp.json() == {
+        "code": "UPDATE_ERROR",
+        "reason": "Trying to update an immutable field: namespace"
+    }
 
 
 async def test_update_cluster_status(aiohttp_client, config, db):
