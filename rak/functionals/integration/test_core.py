@@ -37,6 +37,7 @@ _GC_DELAY = 3
 # In succession with the conftest.py, test_roles_crud and test_rolebindings_crud need
 # to be changed, if a rok implementation for roles and rolebindings is available.
 
+
 def test_roles_crud(session):
     """Test basic role functionality with the session library.
     Rok cli can't be used here, because it doesn't implement role calls (yet).

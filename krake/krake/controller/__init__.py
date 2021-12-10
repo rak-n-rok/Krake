@@ -550,8 +550,7 @@ class Controller(object):
         raise NotImplementedError("Implement prepare")
 
     async def cleanup(self):
-        """Unregister all background tasks that are attributes.
-        """
+        """Unregister all background tasks that are attributes."""
         raise NotImplementedError("Implement cleanup")
 
     def create_endpoint(self, api_endpoint):

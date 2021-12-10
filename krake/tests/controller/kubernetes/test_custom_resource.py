@@ -45,8 +45,9 @@ spec:
 """
 )
 
-observer_schema = yaml.safe_load_all(dedent(
-    """
+observer_schema = yaml.safe_load_all(
+    dedent(
+        """
     ---
     apiVersion: stable.example.com/v1
     kind: CronTab
@@ -57,7 +58,8 @@ observer_schema = yaml.safe_load_all(dedent(
         cronSpec: null
         image: null
     """
-))
+    )
+)
 
 
 async def test_custom_resource_cached_property_called_once(

@@ -21,10 +21,7 @@ from typing import NamedTuple
 import yarl
 from krake.controller import Observer
 from krake.controller.kubernetes.client import KubernetesClient, InvalidManifestError
-from krake.utils import (
-    camel_to_snake_case,
-    get_kubernetes_resource_idx
-)
+from krake.utils import camel_to_snake_case, get_kubernetes_resource_idx
 from kubernetes_asyncio.client.rest import ApiException
 from yarl import URL
 from secrets import token_urlsafe
@@ -34,7 +31,9 @@ from kubernetes_asyncio.client import (
     V1Secret,
     V1EnvVar,
     V1VolumeMount,
-    V1Volume, V1SecretKeySelector, V1EnvVarSource,
+    V1Volume,
+    V1SecretKeySelector,
+    V1EnvVarSource,
 )
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 
@@ -1171,33 +1170,40 @@ class Complete(object):
         hook_resources = []
         hook_sub_resources = []
         if ca_certs:
-            hook_resources.extend([
-                self.secret_certs(
-                    secret_certs_name,
+            hook_resources.extend(
+                [
+                    self.secret_certs(
+                        secret_certs_name,
+                        resource_namespace,
+                        intermediate_src=intermediate_src,
+                        generated_cert=generated_cert,
+                        ca_certs=ca_certs,
+                    )
+                    for resource_namespace in resource_namespaces
+                ]
+            )
+            hook_sub_resources.extend(
+                [*self.volumes(secret_certs_name, volume_name, self.cert_dest)]
+            )
+
+        hook_resources.extend(
+            [
+                self.secret_token(
+                    secret_token_name,
+                    name,
+                    namespace,
                     resource_namespace,
-                    intermediate_src=intermediate_src,
-                    generated_cert=generated_cert,
-                    ca_certs=ca_certs,
+                    self.api_endpoint,
+                    token,
                 )
                 for resource_namespace in resource_namespaces
-            ])
-            hook_sub_resources.extend([
-                *self.volumes(secret_certs_name, volume_name, self.cert_dest)
-            ])
-
-        hook_resources.extend([
-            self.secret_token(
-                secret_token_name,
-                name,
-                namespace,
-                resource_namespace,
-                self.api_endpoint,
-                token,
-            ) for resource_namespace in resource_namespaces
-        ])
-        hook_sub_resources.extend([
-            *self.env_vars(secret_token_name),
-        ])
+            ]
+        )
+        hook_sub_resources.extend(
+            [
+                *self.env_vars(secret_token_name),
+            ]
+        )
 
         self.mangle(
             hook_resources,
@@ -1660,13 +1666,7 @@ class Complete(object):
         # b64encode accepts only bytes.
         return b64encode(string.encode()).decode()
 
-    def secret(
-        self,
-        secret_name,
-        secret_data,
-        namespace,
-        _type="Opaque"
-    ):
+    def secret(self, secret_name, secret_data, namespace, _type="Opaque"):
         """Create a secret resource.
 
         Args:
@@ -1730,12 +1730,11 @@ class Complete(object):
                 V1EnvVarSource(
                     secret_key_ref=self.attribute_map(
                         V1SecretKeySelector(
-                            name=secret_name,
-                            key=self.env_token.lower()
+                            name=secret_name, key=self.env_token.lower()
                         )
                     )
                 )
-            )
+            ),
         )
         env_url = V1EnvVar(
             name=self.env_complete,
@@ -1743,12 +1742,11 @@ class Complete(object):
                 V1EnvVarSource(
                     secret_key_ref=self.attribute_map(
                         V1SecretKeySelector(
-                            name=secret_name,
-                            key=self.env_complete.lower()
+                            name=secret_name, key=self.env_complete.lower()
                         )
                     )
                 )
-            )
+            ),
         )
 
         for env in (env_token, env_url):

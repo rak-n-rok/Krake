@@ -273,7 +273,8 @@ async def test_queue_cancel_workflow(loop):
 
 
 async def test_queue_cancel_non_existent_key(loop):
-    """Ensure that cancelling a key not present in the queue does not raise any error.
+    """Ensure that cancelling a key not present in the queue
+    does not raise any error.
     """
     queue = WorkQueue(loop=loop, debounce=0)
     assert queue.empty()

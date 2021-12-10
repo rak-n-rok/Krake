@@ -14,7 +14,6 @@ import pytz
 from krake import utils
 from krake.controller.kubernetes.client import InvalidManifestError
 from kubernetes_asyncio.client import (
-    V1Status,
     V1Service,
     V1ServiceSpec,
     V1ServicePort,
@@ -1352,9 +1351,7 @@ async def test_session_closed(aiohttp_server, config, db, loop):
 
 
 async def test_register_service():
-    """Test the register_service hook
-
-    """
+    """Test the register_service hook"""
     resource = {"kind": "Service", "metadata": {"name": "nginx"}}
     cluster = ClusterFactory()
     app = ApplicationFactory()
@@ -1408,9 +1405,7 @@ async def test_register_service_without_node_port():
 
 
 async def test_service_registration(aiohttp_server, config, db, loop):
-    """Test the creation of a Service and the registration of its endpoint
-
-    """
+    """Test the creation of a Service and the registration of its endpoint"""
     # Setup Kubernetes API mock server
     routes = web.RouteTableDef()
 
@@ -1802,8 +1797,8 @@ async def test_resource_delta(loop):
         present in last_applied_manifest
 
     State (10):
-        Update the namespace field in the last_observed_manifest, which is observed and present in
-        last_applied_manifest
+        Update the namespace field in the last_observed_manifest,
+        which is observed and present in last_applied_manifest
 
     State (11):
         Add additional elements to a list in last_observed_manifest
@@ -1954,15 +1949,15 @@ async def test_resource_delta(loop):
     assert len(deleted) == 0
     assert len(modified) == 0
 
-
-    # State (10): Update the namespace field in the last_observed_manifest, which is observed and
-    # present in last_applied_manifest
+    # State (10): Update the namespace field in the last_observed_manifest,
+    # which is observed and present in last_applied_manifest
 
     app.status.last_observed_manifest[1]["metadata"]["namespace"] = "Secondary"
 
-    # The modification of the namespace field should create a new resource in the changed namespace
-    # and delete the old resource out of the old namespace. This leads to a new and a deleted element
-    # in their respective lists
+    # The modification of the namespace field should create a new resource
+    # in the changed namespace and delete the old resource out of the old
+    # namespace. This leads to a new and a deleted element in their
+    # respective lists
     new, deleted, modified = ResourceDelta.calculate(app)
     assert len(new) == 1
     assert len(deleted) == 1

@@ -102,9 +102,7 @@ def create_app(config):
     app["ssl_context"] = ssl_context
 
     # Cleanup contexts
-    app.cleanup_ctx.append(
-        partial(http_session, ssl_context=ssl_context)
-    )
+    app.cleanup_ctx.append(partial(http_session, ssl_context=ssl_context))
     app.cleanup_ctx.append(
         partial(db_session, host=config.etcd.host, port=config.etcd.port)
     )

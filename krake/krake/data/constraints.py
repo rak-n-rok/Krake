@@ -120,8 +120,7 @@ class LabelConstraint(object):
         operation = tree.children[1].data
 
         def format_possibilities(token):
-            """Format one token to extract the actual value inside.
-            """
+            """Format one token to extract the actual value inside."""
             single_value = str(token.children[0])
             validate_value(single_value)
             return single_value
