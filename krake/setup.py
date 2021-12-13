@@ -40,6 +40,7 @@ setup(
             "pytest-aiohttp==0.3.*",
             "pytz==2021.*",
             "tox==3.*",
+            "pre-commit==2.*",
         },
         "api_generator": {"black==21.11b1", "jinja2==3.*"},
     },
