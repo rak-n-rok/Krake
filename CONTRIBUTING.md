@@ -14,7 +14,7 @@ support.
 # How to report a bug
 
 If you find a security vulnerability, do NOT open an issue. Get in touch with
-`mgoerens` on the [Krake Matrix room][krake-matrix].
+`pthiem` on the [Krake Matrix room][krake-matrix].
 
 For any other type of bug, please create a issue using the "Issue" template.
 Make sure to answer at least these three questions:
