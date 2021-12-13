@@ -1,8 +1,8 @@
 from krake.client import Watcher, ApiClient
-from krake.data.openstack import MagnumCluster, ProjectList, MagnumClusterList, Project
+from krake.data.openstack import Project, ProjectList, MagnumClusterList, MagnumCluster
 
 
-class OpenStackApi(ApiClient):
+class OpenstackApi(ApiClient):
     """Openstack API client
 
     Example:
@@ -11,14 +11,17 @@ class OpenStackApi(ApiClient):
             from krake.client import Client
 
             with Client(url="http://localhost:8080") as client:
-                openstack_api = OpenStackApi(client)
+                openstack_api = OpenstackApi(client)
 
     Args:
         client (krake.client.Client): API client for accessing the Krake HTTP API
 
     """
 
-    plurals = {"MagnumCluster": "MagnumClusters", "Project": "Projects"}
+    plurals = {
+        "MagnumCluster": "MagnumClusters",
+        "Project": "Projects",
+    }
 
     async def create_magnum_cluster(self, body, namespace):
         """Creates the specified MagnumCluster.
@@ -32,7 +35,7 @@ class OpenStackApi(ApiClient):
 
         """
         path = "/openstack/namespaces/{namespace}/magnumclusters".format(
-            namespace=namespace
+            namespace=namespace,
         )
         url = self.client.url.with_path(path)
 
@@ -67,13 +70,15 @@ class OpenStackApi(ApiClient):
 
         Args:
             namespace (str): namespace in which the MagnumCluster will be updated.
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
 
         Returns:
             MagnumClusterList: Body of the HTTP response.
 
         """
         path = "/openstack/namespaces/{namespace}/magnumclusters".format(
-            namespace=namespace
+            namespace=namespace,
         )
         url = self.client.url.with_path(path)
 
@@ -86,16 +91,15 @@ class OpenStackApi(ApiClient):
 
         Args:
             namespace (str): namespace in which the MagnumCluster will be updated.
-            heartbeat (int): Number of seconds after which the server sends a heartbeat
-                in form of an empty newline. Passing 0 disables the heartbeat. Default:
-                10 seconds
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
 
         Returns:
             MagnumClusterList: Body of the HTTP response.
 
         """
         path = "/openstack/namespaces/{namespace}/magnumclusters".format(
-            namespace=namespace
+            namespace=namespace,
         )
 
         query = {"watch": ""}
@@ -108,6 +112,10 @@ class OpenStackApi(ApiClient):
 
     async def list_all_magnum_clusters(self):
         """Lists all MagnumClusters.
+
+        Args:
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
 
         Returns:
             MagnumClusterList: Body of the HTTP response.
@@ -124,9 +132,8 @@ class OpenStackApi(ApiClient):
         """Generates a watcher for all MagnumClusters.
 
         Args:
-            heartbeat (int): Number of seconds after which the server sends a heartbeat
-                in form of an empty newline. Passing 0 disables the heartbeat. Default:
-                10 seconds
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
 
         Returns:
             MagnumClusterList: Body of the HTTP response.
@@ -235,7 +242,9 @@ class OpenStackApi(ApiClient):
             Project: Body of the HTTP response.
 
         """
-        path = "/openstack/namespaces/{namespace}/projects".format(namespace=namespace)
+        path = "/openstack/namespaces/{namespace}/projects".format(
+            namespace=namespace,
+        )
         url = self.client.url.with_path(path)
 
         resp = await self.client.session.request("POST", url, json=body.serialize())
@@ -269,12 +278,16 @@ class OpenStackApi(ApiClient):
 
         Args:
             namespace (str): namespace in which the Project will be updated.
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
 
         Returns:
             ProjectList: Body of the HTTP response.
 
         """
-        path = "/openstack/namespaces/{namespace}/projects".format(namespace=namespace)
+        path = "/openstack/namespaces/{namespace}/projects".format(
+            namespace=namespace,
+        )
         url = self.client.url.with_path(path)
 
         resp = await self.client.session.request("GET", url)
@@ -286,15 +299,16 @@ class OpenStackApi(ApiClient):
 
         Args:
             namespace (str): namespace in which the Project will be updated.
-            heartbeat (int): Number of seconds after which the server sends a heartbeat
-                in form of an empty newline. Passing 0 disables the heartbeat. Default:
-                10 seconds
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
 
         Returns:
             ProjectList: Body of the HTTP response.
 
         """
-        path = "/openstack/namespaces/{namespace}/projects".format(namespace=namespace)
+        path = "/openstack/namespaces/{namespace}/projects".format(
+            namespace=namespace,
+        )
 
         query = {"watch": ""}
         if heartbeat is not None:
@@ -306,6 +320,10 @@ class OpenStackApi(ApiClient):
 
     async def list_all_projects(self):
         """Lists all Projects.
+
+        Args:
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
 
         Returns:
             ProjectList: Body of the HTTP response.
@@ -322,9 +340,8 @@ class OpenStackApi(ApiClient):
         """Generates a watcher for all Projects.
 
         Args:
-            heartbeat (int): Number of seconds after which the server sends a heartbeat
-                in form of an empty newline. Passing 0 disables the heartbeat. Default:
-                10 seconds
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
 
         Returns:
             ProjectList: Body of the HTTP response.
@@ -400,3 +417,4 @@ class OpenStackApi(ApiClient):
         resp = await self.client.session.request("PUT", url, json=body.serialize())
         data = await resp.json()
         return Project.deserialize(data)
+

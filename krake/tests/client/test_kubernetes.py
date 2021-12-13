@@ -1,25 +1,20 @@
-import yaml
 from operator import attrgetter
 
 from krake.api.app import create_app
 from krake.client import Client
 from krake.client.kubernetes import KubernetesApi
-from krake.data.core import resource_ref, ResourceRef, WatchEventType
-from krake.data.kubernetes import (
-    Application,
-    Cluster,
-    ApplicationState,
-    ClusterBinding,
-    ApplicationComplete,
-    ClusterState,
-)
-from krake.test_utils import with_timeout, aenumerate
+from krake.data.core import WatchEventType
+from krake.utils import aenumerate
+from krake.data.kubernetes import ClusterList, Application, ApplicationList, Cluster
+from krake.test_utils import with_timeout
 
-from tests.factories.kubernetes import ApplicationFactory, ClusterFactory, ReasonFactory
+
+from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
 
 
 async def test_create_application(aiohttp_server, config, db, loop):
-    data = ApplicationFactory(status__state=ApplicationState.PENDING)
+    # MISSING Resource-specific elements can be set here
+    data = ApplicationFactory()
 
     server = await aiohttp_server(create_app(config=config))
 
@@ -35,13 +30,14 @@ async def test_create_application(aiohttp_server, config, db, loop):
     assert received.metadata.namespace == "testing"
     assert received.metadata.created
     assert received.metadata.modified
-    assert received.spec == data.spec
+
+    # MISSING The resource-specific attributes can be verified here.
+    # assert received.spec == data.spec
 
     stored = await db.get(
         Application, namespace=data.metadata.namespace, name=data.metadata.name
     )
     assert stored == received
-    assert stored.spec == data.spec
 
 
 async def test_delete_application(aiohttp_server, config, db, loop):
@@ -84,7 +80,9 @@ async def test_list_applications(aiohttp_server, config, db, loop):
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         kubernetes_api = KubernetesApi(client)
-        received = await kubernetes_api.list_applications(namespace="testing")
+        received = await kubernetes_api.list_applications(
+            namespace="testing",
+        )
 
     assert received.api == "kubernetes"
     assert received.kind == "ApplicationList"
@@ -110,7 +108,9 @@ async def test_watch_applications(aiohttp_server, config, db, loop):
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         kubernetes_api = KubernetesApi(client)
-        async with kubernetes_api.watch_applications(namespace="testing") as watcher:
+        async with kubernetes_api.watch_applications(
+            namespace="testing",
+        ) as watcher:
             modifying = loop.create_task(modify())
 
             async for i, event in aenumerate(watcher):
@@ -196,51 +196,12 @@ async def test_read_application(aiohttp_server, config, db, loop):
         assert received == data
 
 
-updated_manifest = list(
-    yaml.safe_load_all(
-        """---
-apiVersion: apps/v1 # for versions before 1.9.0 use apps/v1beta2
-kind: Deployment
-metadata:
-  name: nginx-deployment
-spec:
-  selector:
-    matchLabels:
-      app: nginx
-  replicas: 2 # tells deployment to run 2 pods matching the template
-  template:
-    metadata:
-      labels:
-        app: nginx
-    spec:
-      containers:
-      - name: nginx
-        image: nginx:1.7.9
-        ports:
-        - containerPort: 80
-"""
-    )
-)
-
-
-updated_observer_schema = list(
-    yaml.safe_load_all(
-        """---
-apiVersion: apps/v1 # for versions before 1.9.0 use apps/v1beta2
-kind: Deployment
-metadata:
-  name: nginx-deployment
-  namespace: null
-"""
-    )
-)
-
-
 async def test_update_application(aiohttp_server, config, db, loop):
-    data = ApplicationFactory(status__state=ApplicationState.RUNNING)
+    # MISSING Resource-specific attributes can be set here
+    data = ApplicationFactory()
     await db.put(data)
-    data.spec.manifest = updated_manifest
-    data.spec.observer_schema = updated_observer_schema
+    # MISSING The resource-specific attributes can be updated here
+    # data.spec.foo = bar
 
     server = await aiohttp_server(create_app(config=config))
 
@@ -253,25 +214,26 @@ async def test_update_application(aiohttp_server, config, db, loop):
     assert received.api == "kubernetes"
     assert received.kind == "Application"
     assert data.metadata.modified < received.metadata.modified
-    assert received.spec.manifest == updated_manifest
-    assert received.status.state == data.status.state
+    # MISSING Assertions on resource-specific received values.
+    # assert received.spec.foo == bar
 
     stored = await db.get(
         Application, namespace=data.metadata.namespace, name=data.metadata.name
     )
-    assert stored.spec.manifest == updated_manifest
-    assert stored.spec.observer_schema == updated_observer_schema
-    assert stored.status.state == data.status.state
+    assert stored == received
+    # MISSING Assertions on resource-specific updated values.
+    # assert data.spec.foo == bar
 
 
 async def test_update_application_binding(aiohttp_server, config, db, loop):
-    data = ApplicationFactory(status__state=ApplicationState.PENDING)
+    # MISSING Subresource-specific attributes can be set here
+    data = ApplicationFactory()
     await db.put(data)
-    cluster = ClusterFactory()
-    await db.put(cluster)
 
-    cluster_ref = resource_ref(cluster)
-    binding = ClusterBinding(cluster=cluster_ref)
+    # MISSING The subresource-specific attributes can be updated here
+    # data.binding.foo = bar
+
+    binding = ClusterBinding()
 
     server = await aiohttp_server(create_app(config=config))
 
@@ -283,26 +245,27 @@ async def test_update_application_binding(aiohttp_server, config, db, loop):
 
     assert received.api == "kubernetes"
     assert received.kind == "Application"
-    assert received.status.scheduled_to == cluster_ref
-    assert received.status.running_on is None
-    assert received.status.state == ApplicationState.PENDING
-    assert cluster_ref in received.metadata.owners
+
+    # MISSING Assertions on subresource-specific received values.
+    # assert received.binding.foo == bar
 
     stored = await db.get(
         Application, namespace=data.metadata.namespace, name=data.metadata.name
     )
-    assert stored.status.scheduled_to == cluster_ref
-    assert stored.status.running_on is None
-    assert stored.status.state == ApplicationState.PENDING
-    assert cluster_ref in stored.metadata.owners
+    # MISSING Assertions on subresource-specific updated values.
+    # assert received.binding == data.binding
+    # assert received.binding.foo == bar
 
 
 async def test_update_application_complete(aiohttp_server, config, db, loop):
-    token = "a_random_token"
-    data = ApplicationFactory(status__token=token)
+    # MISSING Subresource-specific attributes can be set here
+    data = ApplicationFactory()
     await db.put(data)
 
-    complete = ApplicationComplete(token=token)
+    # MISSING The subresource-specific attributes can be updated here
+    # data.complete.foo = bar
+
+    complete = ApplicationComplete()
 
     server = await aiohttp_server(create_app(config=config))
 
@@ -314,23 +277,26 @@ async def test_update_application_complete(aiohttp_server, config, db, loop):
 
     assert received.api == "kubernetes"
     assert received.kind == "Application"
-    assert received.metadata.deleted
+
+    # MISSING Assertions on subresource-specific received values.
+    # assert received.complete.foo == bar
 
     stored = await db.get(
         Application, namespace=data.metadata.namespace, name=data.metadata.name
     )
-    assert stored.metadata.deleted
+    # MISSING Assertions on subresource-specific updated values.
+    # assert received.complete == data.complete
+    # assert received.complete.foo == bar
 
 
 async def test_update_application_status(aiohttp_server, config, db, loop):
+    # MISSING Subresource-specific attributes can be set here
     data = ApplicationFactory()
     await db.put(data)
-    data.status.state = ApplicationState.FAILED
-    data.status.reason = ReasonFactory()
-    data.status.cluster = ResourceRef(
-        api="kubernetes", kind="Cluster", namespace="testing", name="test-cluster"
-    )
-    data.status.services = {"service1": "127.0.0.1:38531"}
+
+    # MISSING The subresource-specific attributes can be updated here
+    # data.status.foo = bar
+
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
@@ -341,15 +307,20 @@ async def test_update_application_status(aiohttp_server, config, db, loop):
 
     assert received.api == "kubernetes"
     assert received.kind == "Application"
-    assert received.status == data.status
+
+    # MISSING Assertions on subresource-specific received values.
+    # assert received.status.foo == bar
 
     stored = await db.get(
         Application, namespace=data.metadata.namespace, name=data.metadata.name
     )
-    assert stored == received
+    # MISSING Assertions on subresource-specific updated values.
+    # assert received.status == data.status
+    # assert received.status.foo == bar
 
 
 async def test_create_cluster(aiohttp_server, config, db, loop):
+    # MISSING Resource-specific elements can be set here
     data = ClusterFactory()
 
     server = await aiohttp_server(create_app(config=config))
@@ -366,7 +337,9 @@ async def test_create_cluster(aiohttp_server, config, db, loop):
     assert received.metadata.namespace == "testing"
     assert received.metadata.created
     assert received.metadata.modified
-    assert received.spec == data.spec
+
+    # MISSING The resource-specific attributes can be verified here.
+    # assert received.spec == data.spec
 
     stored = await db.get(
         Cluster, namespace=data.metadata.namespace, name=data.metadata.name
@@ -389,7 +362,6 @@ async def test_delete_cluster(aiohttp_server, config, db, loop):
     assert received.api == "kubernetes"
     assert received.kind == "Cluster"
     assert received.metadata.deleted is not None
-    assert received.spec == data.spec
 
     stored = await db.get(
         Cluster, namespace=data.metadata.namespace, name=data.metadata.name
@@ -415,7 +387,9 @@ async def test_list_clusters(aiohttp_server, config, db, loop):
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         kubernetes_api = KubernetesApi(client)
-        received = await kubernetes_api.list_clusters(namespace="testing")
+        received = await kubernetes_api.list_clusters(
+            namespace="testing",
+        )
 
     assert received.api == "kubernetes"
     assert received.kind == "ClusterList"
@@ -441,7 +415,9 @@ async def test_watch_clusters(aiohttp_server, config, db, loop):
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         kubernetes_api = KubernetesApi(client)
-        async with kubernetes_api.watch_clusters(namespace="testing") as watcher:
+        async with kubernetes_api.watch_clusters(
+            namespace="testing",
+        ) as watcher:
             modifying = loop.create_task(modify())
 
             async for i, event in aenumerate(watcher):
@@ -528,9 +504,11 @@ async def test_read_cluster(aiohttp_server, config, db, loop):
 
 
 async def test_update_cluster(aiohttp_server, config, db, loop):
-    data = ClusterFactory(spec__custom_resources=[])
+    # MISSING Resource-specific attributes can be set here
+    data = ClusterFactory()
     await db.put(data)
-    data.spec.custom_resources = ["A", "B"]
+    # MISSING The resource-specific attributes can be updated here
+    # data.spec.foo = bar
 
     server = await aiohttp_server(create_app(config=config))
 
@@ -543,20 +521,24 @@ async def test_update_cluster(aiohttp_server, config, db, loop):
     assert received.api == "kubernetes"
     assert received.kind == "Cluster"
     assert data.metadata.modified < received.metadata.modified
-    assert received.spec.custom_resources == data.spec.custom_resources
+    # MISSING Assertions on resource-specific received values.
+    # assert received.spec.foo == bar
 
     stored = await db.get(
         Cluster, namespace=data.metadata.namespace, name=data.metadata.name
     )
     assert stored == received
+    # MISSING Assertions on resource-specific updated values.
+    # assert data.spec.foo == bar
 
 
 async def test_update_cluster_status(aiohttp_server, config, db, loop):
+    # MISSING Subresource-specific attributes can be set here
     data = ClusterFactory()
     await db.put(data)
 
-    data.status.state = ClusterState.FAILING_METRICS
-    data.status.metrics_reasons = {"my-metric": ReasonFactory()}
+    # MISSING The subresource-specific attributes can be updated here
+    # data.status.foo = bar
 
     server = await aiohttp_server(create_app(config=config))
 
@@ -569,11 +551,13 @@ async def test_update_cluster_status(aiohttp_server, config, db, loop):
     assert received.api == "kubernetes"
     assert received.kind == "Cluster"
 
-    assert received.status.state == ClusterState.FAILING_METRICS
-    assert list(received.status.metrics_reasons.keys()) == ["my-metric"]
+    # MISSING Assertions on subresource-specific received values.
+    # assert received.status.foo == bar
 
     stored = await db.get(
         Cluster, namespace=data.metadata.namespace, name=data.metadata.name
     )
-    assert stored.status.state == ClusterState.FAILING_METRICS
-    assert list(stored.status.metrics_reasons.keys()) == ["my-metric"]
+    # MISSING Assertions on subresource-specific updated values.
+    # assert received.status == data.status
+    # assert received.status.foo == bar
+

@@ -1,13 +1,13 @@
 from krake.client import Watcher, ApiClient
 from krake.data.core import (
-    GlobalMetricsProvider,
     Role,
-    RoleList,
     GlobalMetric,
+    RoleList,
+    RoleBindingList,
     GlobalMetricList,
     RoleBinding,
-    RoleBindingList,
     GlobalMetricsProviderList,
+    GlobalMetricsProvider,
 )
 
 
@@ -73,6 +73,10 @@ class CoreApi(ApiClient):
     async def list_global_metrics(self):
         """Lists the GlobalMetrics in the namespace.
 
+        Args:
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
+
         Returns:
             GlobalMetricList: Body of the HTTP response.
 
@@ -88,9 +92,8 @@ class CoreApi(ApiClient):
         """Generates a watcher for the GlobalMetrics in the namespace.
 
         Args:
-            heartbeat (int): Number of seconds after which the server sends a heartbeat
-                in form of an empty newline. Passing 0 disables the heartbeat. Default:
-                10 seconds
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
 
         Returns:
             GlobalMetricList: Body of the HTTP response.
@@ -180,6 +183,10 @@ class CoreApi(ApiClient):
     async def list_global_metrics_providers(self):
         """Lists the GlobalMetricsProviders in the namespace.
 
+        Args:
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
+
         Returns:
             GlobalMetricsProviderList: Body of the HTTP response.
 
@@ -195,9 +202,9 @@ class CoreApi(ApiClient):
         """Generates a watcher for the GlobalMetricsProviders in the namespace.
 
         Args:
-            heartbeat (int): Number of seconds after which the server sends a heartbeat
-                in form of an empty newline. Passing 0 disables the heartbeat. Default:
-                10 seconds
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
+
         Returns:
             GlobalMetricsProviderList: Body of the HTTP response.
 
@@ -286,6 +293,10 @@ class CoreApi(ApiClient):
     async def list_roles(self):
         """Lists the Roles in the namespace.
 
+        Args:
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
+
         Returns:
             RoleList: Body of the HTTP response.
 
@@ -301,9 +312,8 @@ class CoreApi(ApiClient):
         """Generates a watcher for the Roles in the namespace.
 
         Args:
-            heartbeat (int): Number of seconds after which the server sends a heartbeat
-                in form of an empty newline. Passing 0 disables the heartbeat. Default:
-                10 seconds
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
 
         Returns:
             RoleList: Body of the HTTP response.
@@ -393,6 +403,10 @@ class CoreApi(ApiClient):
     async def list_role_bindings(self):
         """Lists the RoleBindings in the namespace.
 
+        Args:
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
+
         Returns:
             RoleBindingList: Body of the HTTP response.
 
@@ -408,9 +422,8 @@ class CoreApi(ApiClient):
         """Generates a watcher for the RoleBindings in the namespace.
 
         Args:
-            heartbeat (int): Number of seconds after which the server sends a heartbeat
-                in form of an empty newline. Passing 0 disables the heartbeat. Default:
-                10 seconds
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
 
         Returns:
             RoleBindingList: Body of the HTTP response.
@@ -460,3 +473,4 @@ class CoreApi(ApiClient):
         resp = await self.client.session.request("PUT", url, json=body.serialize())
         data = await resp.json()
         return RoleBinding.deserialize(data)
+

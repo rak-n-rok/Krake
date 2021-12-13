@@ -1,5 +1,5 @@
 from krake.client import Watcher, ApiClient
-from krake.data.kubernetes import Cluster, ClusterList, ApplicationList, Application
+from krake.data.kubernetes import Cluster, Application, ClusterList, ApplicationList
 
 
 class KubernetesApi(ApiClient):
@@ -18,7 +18,10 @@ class KubernetesApi(ApiClient):
 
     """
 
-    plurals = {"Application": "Applications", "Cluster": "Clusters"}
+    plurals = {
+        "Application": "Applications",
+        "Cluster": "Clusters",
+    }
 
     async def create_application(self, body, namespace):
         """Creates the specified Application.
@@ -32,7 +35,7 @@ class KubernetesApi(ApiClient):
 
         """
         path = "/kubernetes/namespaces/{namespace}/applications".format(
-            namespace=namespace
+            namespace=namespace,
         )
         url = self.client.url.with_path(path)
 
@@ -67,13 +70,15 @@ class KubernetesApi(ApiClient):
 
         Args:
             namespace (str): namespace in which the Application will be updated.
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
 
         Returns:
             ApplicationList: Body of the HTTP response.
 
         """
         path = "/kubernetes/namespaces/{namespace}/applications".format(
-            namespace=namespace
+            namespace=namespace,
         )
         url = self.client.url.with_path(path)
 
@@ -86,16 +91,15 @@ class KubernetesApi(ApiClient):
 
         Args:
             namespace (str): namespace in which the Application will be updated.
-            heartbeat (int): Number of seconds after which the server sends a heartbeat
-                in form of an empty newline. Passing 0 disables the heartbeat. Default:
-                10 seconds.
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
 
         Returns:
             ApplicationList: Body of the HTTP response.
 
         """
         path = "/kubernetes/namespaces/{namespace}/applications".format(
-            namespace=namespace
+            namespace=namespace,
         )
 
         query = {"watch": ""}
@@ -108,6 +112,10 @@ class KubernetesApi(ApiClient):
 
     async def list_all_applications(self):
         """Lists all Applications.
+
+        Args:
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
 
         Returns:
             ApplicationList: Body of the HTTP response.
@@ -124,9 +132,8 @@ class KubernetesApi(ApiClient):
         """Generates a watcher for all Applications.
 
         Args:
-            heartbeat (int): Number of seconds after which the server sends a heartbeat
-                in form of an empty newline. Passing 0 disables the heartbeat. Default:
-                10 seconds.
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
 
         Returns:
             ApplicationList: Body of the HTTP response.
@@ -256,7 +263,9 @@ class KubernetesApi(ApiClient):
             Cluster: Body of the HTTP response.
 
         """
-        path = "/kubernetes/namespaces/{namespace}/clusters".format(namespace=namespace)
+        path = "/kubernetes/namespaces/{namespace}/clusters".format(
+            namespace=namespace,
+        )
         url = self.client.url.with_path(path)
 
         resp = await self.client.session.request("POST", url, json=body.serialize())
@@ -290,12 +299,16 @@ class KubernetesApi(ApiClient):
 
         Args:
             namespace (str): namespace in which the Cluster will be updated.
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
 
         Returns:
             ClusterList: Body of the HTTP response.
 
         """
-        path = "/kubernetes/namespaces/{namespace}/clusters".format(namespace=namespace)
+        path = "/kubernetes/namespaces/{namespace}/clusters".format(
+            namespace=namespace,
+        )
         url = self.client.url.with_path(path)
 
         resp = await self.client.session.request("GET", url)
@@ -307,15 +320,16 @@ class KubernetesApi(ApiClient):
 
         Args:
             namespace (str): namespace in which the Cluster will be updated.
-            heartbeat (int): Number of seconds after which the server sends a heartbeat
-                in form of an empty newline. Passing 0 disables the heartbeat. Default:
-                10 seconds.
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
 
         Returns:
             ClusterList: Body of the HTTP response.
 
         """
-        path = "/kubernetes/namespaces/{namespace}/clusters".format(namespace=namespace)
+        path = "/kubernetes/namespaces/{namespace}/clusters".format(
+            namespace=namespace,
+        )
 
         query = {"watch": ""}
         if heartbeat is not None:
@@ -327,6 +341,10 @@ class KubernetesApi(ApiClient):
 
     async def list_all_clusters(self):
         """Lists all Clusters.
+
+        Args:
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
 
         Returns:
             ClusterList: Body of the HTTP response.
@@ -343,9 +361,8 @@ class KubernetesApi(ApiClient):
         """Generates a watcher for all Clusters.
 
         Args:
-            heartbeat (int): Number of seconds after which the server sends a heartbeat
-                in form of an empty newline. Passing 0 disables the heartbeat. Default:
-                10 seconds.
+            heartbeat (int): Number of seconds after which the server sends a heartbeat in form of an empty newline. Passing 0 disables the heartbeat. Default: 10 seconds
+            watch (str): Watches for changes to the described resources and return them as a stream of :class:`krake.data.core.WatchEvent`
 
         Returns:
             ClusterList: Body of the HTTP response.
@@ -421,3 +438,4 @@ class KubernetesApi(ApiClient):
         resp = await self.client.session.request("PUT", url, json=body.serialize())
         data = await resp.json()
         return Cluster.deserialize(data)
+

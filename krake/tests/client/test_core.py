@@ -3,27 +3,31 @@ from operator import attrgetter
 from krake.api.app import create_app
 from krake.client import Client
 from krake.client.core import CoreApi
+from krake.data.core import WatchEventType
+from krake.utils import aenumerate
 from krake.data.core import (
-    GlobalMetric,
-    GlobalMetricsProvider,
-    RoleBinding,
     Role,
-    WatchEventType,
+    GlobalMetric,
+    RoleList,
+    RoleBindingList,
+    GlobalMetricList,
+    RoleBinding,
+    GlobalMetricsProviderList,
+    GlobalMetricsProvider,
 )
-from krake.test_utils import with_timeout, aenumerate
+from krake.test_utils import with_timeout
+
 
 from tests.factories.core import (
-    GlobalMetricFactory,
-    GlobalMetricsProviderFactory,
-    MetricsProviderSpecFactory,
-    MetricSpecProviderFactory,
-    RoleBindingFactory,
     RoleFactory,
-    RoleRuleFactory,
+    GlobalMetricFactory,
+    RoleBindingFactory,
+    GlobalMetricsProviderFactory,
 )
 
 
 async def test_create_global_metric(aiohttp_server, config, db, loop):
+    # MISSING Resource-specific elements can be set here
     data = GlobalMetricFactory()
 
     server = await aiohttp_server(create_app(config=config))
@@ -38,6 +42,9 @@ async def test_create_global_metric(aiohttp_server, config, db, loop):
     assert received.metadata.namespace is None
     assert received.metadata.created
     assert received.metadata.modified
+
+    # MISSING The resource-specific attributes can be verified here.
+    # assert received.spec == data.spec
 
     stored = await db.get(GlobalMetric, name=data.metadata.name)
     assert stored == received
@@ -55,7 +62,6 @@ async def test_delete_global_metric(aiohttp_server, config, db, loop):
 
     assert received.api == "core"
     assert received.kind == "GlobalMetric"
-    assert received.spec == data.spec
     assert received.metadata.deleted is not None
 
     stored = await db.get(GlobalMetric, name=data.metadata.name)
@@ -135,9 +141,11 @@ async def test_read_global_metric(aiohttp_server, config, db, loop):
 
 
 async def test_update_global_metric(aiohttp_server, config, db, loop):
+    # MISSING Resource-specific attributes can be set here
     data = GlobalMetricFactory()
     await db.put(data)
-    data.spec.provider = MetricSpecProviderFactory()
+    # MISSING The resource-specific attributes can be updated here
+    # data.spec.foo = bar
 
     server = await aiohttp_server(create_app(config=config))
 
@@ -149,15 +157,18 @@ async def test_update_global_metric(aiohttp_server, config, db, loop):
 
     assert received.api == "core"
     assert received.kind == "GlobalMetric"
-
-    assert received.spec == data.spec
     assert data.metadata.modified < received.metadata.modified
+    # MISSING Assertions on resource-specific received values.
+    # assert received.spec.foo == bar
 
     stored = await db.get(GlobalMetric, name=data.metadata.name)
     assert stored == received
+    # MISSING Assertions on resource-specific updated values.
+    # assert data.spec.foo == bar
 
 
 async def test_create_global_metrics_provider(aiohttp_server, config, db, loop):
+    # MISSING Resource-specific elements can be set here
     data = GlobalMetricsProviderFactory()
 
     server = await aiohttp_server(create_app(config=config))
@@ -172,6 +183,9 @@ async def test_create_global_metrics_provider(aiohttp_server, config, db, loop):
     assert received.metadata.namespace is None
     assert received.metadata.created
     assert received.metadata.modified
+
+    # MISSING The resource-specific attributes can be verified here.
+    # assert received.spec == data.spec
 
     stored = await db.get(GlobalMetricsProvider, name=data.metadata.name)
     assert stored == received
@@ -191,7 +205,6 @@ async def test_delete_global_metrics_provider(aiohttp_server, config, db, loop):
 
     assert received.api == "core"
     assert received.kind == "GlobalMetricsProvider"
-    assert received.spec == data.spec
     assert received.metadata.deleted is not None
 
     stored = await db.get(GlobalMetricsProvider, name=data.metadata.name)
@@ -271,9 +284,11 @@ async def test_read_global_metrics_provider(aiohttp_server, config, db, loop):
 
 
 async def test_update_global_metrics_provider(aiohttp_server, config, db, loop):
-    data = GlobalMetricsProviderFactory(spec__type="static")
+    # MISSING Resource-specific attributes can be set here
+    data = GlobalMetricsProviderFactory()
     await db.put(data)
-    data.spec = MetricsProviderSpecFactory(type="prometheus")
+    # MISSING The resource-specific attributes can be updated here
+    # data.spec.foo = bar
 
     server = await aiohttp_server(create_app(config=config))
 
@@ -285,15 +300,18 @@ async def test_update_global_metrics_provider(aiohttp_server, config, db, loop):
 
     assert received.api == "core"
     assert received.kind == "GlobalMetricsProvider"
-
-    assert received.spec == data.spec
     assert data.metadata.modified < received.metadata.modified
+    # MISSING Assertions on resource-specific received values.
+    # assert received.spec.foo == bar
 
     stored = await db.get(GlobalMetricsProvider, name=data.metadata.name)
     assert stored == received
+    # MISSING Assertions on resource-specific updated values.
+    # assert data.spec.foo == bar
 
 
 async def test_create_role(aiohttp_server, config, db, loop):
+    # MISSING Resource-specific elements can be set here
     data = RoleFactory()
 
     server = await aiohttp_server(create_app(config=config))
@@ -308,6 +326,9 @@ async def test_create_role(aiohttp_server, config, db, loop):
     assert received.metadata.namespace is None
     assert received.metadata.created
     assert received.metadata.modified
+
+    # MISSING The resource-specific attributes can be verified here.
+    # assert received.spec == data.spec
 
     stored = await db.get(Role, name=data.metadata.name)
     assert stored == received
@@ -399,9 +420,11 @@ async def test_read_role(aiohttp_server, config, db, loop):
 
 
 async def test_update_role(aiohttp_server, config, db, loop):
+    # MISSING Resource-specific attributes can be set here
     data = RoleFactory()
     await db.put(data)
-    data.rules.append(RoleRuleFactory())
+    # MISSING The resource-specific attributes can be updated here
+    # data.spec.foo = bar
 
     server = await aiohttp_server(create_app(config=config))
 
@@ -411,14 +434,18 @@ async def test_update_role(aiohttp_server, config, db, loop):
 
     assert received.api == "core"
     assert received.kind == "Role"
-    assert received.rules == data.rules
     assert data.metadata.modified < received.metadata.modified
+    # MISSING Assertions on resource-specific received values.
+    # assert received.spec.foo == bar
 
     stored = await db.get(Role, name=data.metadata.name)
     assert stored == received
+    # MISSING Assertions on resource-specific updated values.
+    # assert data.spec.foo == bar
 
 
 async def test_create_role_binding(aiohttp_server, config, db, loop):
+    # MISSING Resource-specific elements can be set here
     data = RoleBindingFactory()
 
     server = await aiohttp_server(create_app(config=config))
@@ -433,6 +460,9 @@ async def test_create_role_binding(aiohttp_server, config, db, loop):
     assert received.metadata.namespace is None
     assert received.metadata.created
     assert received.metadata.modified
+
+    # MISSING The resource-specific attributes can be verified here.
+    # assert received.spec == data.spec
 
     stored = await db.get(RoleBinding, name=data.metadata.name)
     assert stored == received
@@ -529,10 +559,11 @@ async def test_read_role_binding(aiohttp_server, config, db, loop):
 
 
 async def test_update_role_binding(aiohttp_server, config, db, loop):
+    # MISSING Resource-specific attributes can be set here
     data = RoleBindingFactory()
     await db.put(data)
-    data.users.append("test-user")
-    data.roles.append("test-role")
+    # MISSING The resource-specific attributes can be updated here
+    # data.spec.foo = bar
 
     server = await aiohttp_server(create_app(config=config))
 
@@ -544,9 +575,12 @@ async def test_update_role_binding(aiohttp_server, config, db, loop):
 
     assert received.api == "core"
     assert received.kind == "RoleBinding"
-    assert received.users == data.users
-    assert received.roles == data.roles
     assert data.metadata.modified < received.metadata.modified
+    # MISSING Assertions on resource-specific received values.
+    # assert received.spec.foo == bar
 
     stored = await db.get(RoleBinding, name=data.metadata.name)
     assert stored == received
+    # MISSING Assertions on resource-specific updated values.
+    # assert data.spec.foo == bar
+

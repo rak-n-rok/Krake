@@ -2,31 +2,24 @@ from operator import attrgetter
 
 from krake.api.app import create_app
 from krake.client import Client
-from krake.client.openstack import OpenStackApi
-from krake.data.core import resource_ref, ResourceRef, WatchEventType
-from krake.data.openstack import (
-    Project,
-    MagnumCluster,
-    MagnumClusterBinding,
-    MagnumClusterState,
-    ProjectState,
-)
-from krake.test_utils import with_timeout, aenumerate
+from krake.client.openstack import OpenstackApi
+from krake.data.core import WatchEventType
+from krake.utils import aenumerate
+from krake.data.openstack import ProjectList, MagnumClusterList, MagnumCluster, Project
+from krake.test_utils import with_timeout
 
-from tests.factories.openstack import (
-    MagnumClusterFactory,
-    ProjectFactory,
-    ReasonFactory,
-)
+
+from tests.factories.openstack import MagnumClusterFactory, ProjectFactory
 
 
 async def test_create_magnum_cluster(aiohttp_server, config, db, loop):
+    # MISSING Resource-specific elements can be set here
     data = MagnumClusterFactory()
 
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
+        openstack_api = OpenstackApi(client)
         received = await openstack_api.create_magnum_cluster(
             namespace=data.metadata.namespace, body=data
         )
@@ -37,7 +30,9 @@ async def test_create_magnum_cluster(aiohttp_server, config, db, loop):
     assert received.metadata.namespace == "testing"
     assert received.metadata.created
     assert received.metadata.modified
-    assert received.spec == data.spec
+
+    # MISSING The resource-specific attributes can be verified here.
+    # assert received.spec == data.spec
 
     stored = await db.get(
         MagnumCluster, namespace=data.metadata.namespace, name=data.metadata.name
@@ -52,7 +47,7 @@ async def test_delete_magnum_cluster(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
+        openstack_api = OpenstackApi(client)
         received = await openstack_api.delete_magnum_cluster(
             namespace=data.metadata.namespace, name=data.metadata.name
         )
@@ -84,8 +79,10 @@ async def test_list_magnum_clusters(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
-        received = await openstack_api.list_magnum_clusters(namespace="testing")
+        openstack_api = OpenstackApi(client)
+        received = await openstack_api.list_magnum_clusters(
+            namespace="testing",
+        )
 
     assert received.api == "openstack"
     assert received.kind == "MagnumClusterList"
@@ -110,8 +107,10 @@ async def test_watch_magnum_clusters(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
-        async with openstack_api.watch_magnum_clusters(namespace="testing") as watcher:
+        openstack_api = OpenstackApi(client)
+        async with openstack_api.watch_magnum_clusters(
+            namespace="testing",
+        ) as watcher:
             modifying = loop.create_task(modify())
 
             async for i, event in aenumerate(watcher):
@@ -144,7 +143,7 @@ async def test_list_all_magnum_clusters(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
+        openstack_api = OpenstackApi(client)
         received = await openstack_api.list_all_magnum_clusters()
 
     assert received.api == "openstack"
@@ -168,7 +167,7 @@ async def test_watch_all_magnum_clusters(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
+        openstack_api = OpenstackApi(client)
         async with openstack_api.watch_all_magnum_clusters() as watcher:
             modifying = loop.create_task(modify())
 
@@ -190,7 +189,7 @@ async def test_read_magnum_cluster(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
+        openstack_api = OpenstackApi(client)
         received = await openstack_api.read_magnum_cluster(
             namespace=data.metadata.namespace, name=data.metadata.name
         )
@@ -198,15 +197,16 @@ async def test_read_magnum_cluster(aiohttp_server, config, db, loop):
 
 
 async def test_update_magnum_cluster(aiohttp_server, config, db, loop):
-    data = MagnumClusterFactory(spec__master_count=1)
+    # MISSING Resource-specific attributes can be set here
+    data = MagnumClusterFactory()
     await db.put(data)
-    data.spec.master_count = 3
-    data.spec.node_count = 7
+    # MISSING The resource-specific attributes can be updated here
+    # data.spec.foo = bar
 
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
+        openstack_api = OpenstackApi(client)
         received = await openstack_api.update_magnum_cluster(
             namespace=data.metadata.namespace, name=data.metadata.name, body=data
         )
@@ -214,80 +214,87 @@ async def test_update_magnum_cluster(aiohttp_server, config, db, loop):
     assert received.api == "openstack"
     assert received.kind == "MagnumCluster"
     assert data.metadata.modified < received.metadata.modified
-    assert received.spec.master_count == 1
-    assert received.spec.node_count == 7
+    # MISSING Assertions on resource-specific received values.
+    # assert received.spec.foo == bar
 
     stored = await db.get(
         MagnumCluster, namespace=data.metadata.namespace, name=data.metadata.name
     )
     assert stored == received
+    # MISSING Assertions on resource-specific updated values.
+    # assert data.spec.foo == bar
 
 
 async def test_update_magnum_cluster_binding(aiohttp_server, config, db, loop):
+    # MISSING Subresource-specific attributes can be set here
     data = MagnumClusterFactory()
-    project = ProjectFactory()
     await db.put(data)
-    await db.put(project)
 
-    project_ref = resource_ref(project)
-    binding = MagnumClusterBinding(project=project_ref, template=project.spec.template)
+    # MISSING The subresource-specific attributes can be updated here
+    # data.binding.foo = bar
+
+    binding = MagnumClusterBinding()
 
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
+        openstack_api = OpenstackApi(client)
         received = await openstack_api.update_magnum_cluster_binding(
             namespace=data.metadata.namespace, name=data.metadata.name, body=binding
         )
 
     assert received.api == "openstack"
     assert received.kind == "MagnumCluster"
-    assert received.status.project == project_ref
-    assert received.status.template == project.spec.template
-    assert project_ref in received.metadata.owners
+
+    # MISSING Assertions on subresource-specific received values.
+    # assert received.binding.foo == bar
 
     stored = await db.get(
         MagnumCluster, namespace=data.metadata.namespace, name=data.metadata.name
     )
-    assert stored == received
+    # MISSING Assertions on subresource-specific updated values.
+    # assert received.binding == data.binding
+    # assert received.binding.foo == bar
 
 
 async def test_update_magnum_cluster_status(aiohttp_server, config, db, loop):
-    data = MagnumClusterFactory(status__state=MagnumClusterState.PENDING)
+    # MISSING Subresource-specific attributes can be set here
+    data = MagnumClusterFactory()
     await db.put(data)
 
-    data.status.state = MagnumClusterState.FAILED
-    data.status.reason = ReasonFactory()
-    data.status.project = ResourceRef(
-        api="openstack", kind="Project", namespace="testing", name="test-project"
-    )
+    # MISSING The subresource-specific attributes can be updated here
+    # data.status.foo = bar
 
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
+        openstack_api = OpenstackApi(client)
         received = await openstack_api.update_magnum_cluster_status(
             namespace=data.metadata.namespace, name=data.metadata.name, body=data
         )
 
     assert received.api == "openstack"
     assert received.kind == "MagnumCluster"
-    assert received.metadata == data.metadata
-    assert received.status == data.status
+
+    # MISSING Assertions on subresource-specific received values.
+    # assert received.status.foo == bar
 
     stored = await db.get(
         MagnumCluster, namespace=data.metadata.namespace, name=data.metadata.name
     )
-    assert stored == received
+    # MISSING Assertions on subresource-specific updated values.
+    # assert received.status == data.status
+    # assert received.status.foo == bar
 
 
 async def test_create_project(aiohttp_server, config, db, loop):
+    # MISSING Resource-specific elements can be set here
     data = ProjectFactory()
 
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
+        openstack_api = OpenstackApi(client)
         received = await openstack_api.create_project(
             namespace=data.metadata.namespace, body=data
         )
@@ -298,7 +305,9 @@ async def test_create_project(aiohttp_server, config, db, loop):
     assert received.metadata.namespace == "testing"
     assert received.metadata.created
     assert received.metadata.modified
-    assert received.spec == data.spec
+
+    # MISSING The resource-specific attributes can be verified here.
+    # assert received.spec == data.spec
 
     stored = await db.get(
         Project, namespace=data.metadata.namespace, name=data.metadata.name
@@ -313,7 +322,7 @@ async def test_delete_project(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
+        openstack_api = OpenstackApi(client)
         received = await openstack_api.delete_project(
             namespace=data.metadata.namespace, name=data.metadata.name
         )
@@ -345,8 +354,10 @@ async def test_list_projects(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
-        received = await openstack_api.list_projects(namespace="testing")
+        openstack_api = OpenstackApi(client)
+        received = await openstack_api.list_projects(
+            namespace="testing",
+        )
 
     assert received.api == "openstack"
     assert received.kind == "ProjectList"
@@ -371,8 +382,10 @@ async def test_watch_projects(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
-        async with openstack_api.watch_projects(namespace="testing") as watcher:
+        openstack_api = OpenstackApi(client)
+        async with openstack_api.watch_projects(
+            namespace="testing",
+        ) as watcher:
             modifying = loop.create_task(modify())
 
             async for i, event in aenumerate(watcher):
@@ -405,7 +418,7 @@ async def test_list_all_projects(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
+        openstack_api = OpenstackApi(client)
         received = await openstack_api.list_all_projects()
 
     assert received.api == "openstack"
@@ -429,7 +442,7 @@ async def test_watch_all_projects(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
+        openstack_api = OpenstackApi(client)
         async with openstack_api.watch_all_projects() as watcher:
             modifying = loop.create_task(modify())
 
@@ -451,7 +464,7 @@ async def test_read_project(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
+        openstack_api = OpenstackApi(client)
         received = await openstack_api.read_project(
             namespace=data.metadata.namespace, name=data.metadata.name
         )
@@ -459,14 +472,16 @@ async def test_read_project(aiohttp_server, config, db, loop):
 
 
 async def test_update_project(aiohttp_server, config, db, loop):
+    # MISSING Resource-specific attributes can be set here
     data = ProjectFactory()
     await db.put(data)
-    data.spec = ProjectFactory().spec
+    # MISSING The resource-specific attributes can be updated here
+    # data.spec.foo = bar
 
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
+        openstack_api = OpenstackApi(client)
         received = await openstack_api.update_project(
             namespace=data.metadata.namespace, name=data.metadata.name, body=data
         )
@@ -474,25 +489,29 @@ async def test_update_project(aiohttp_server, config, db, loop):
     assert received.api == "openstack"
     assert received.kind == "Project"
     assert data.metadata.modified < received.metadata.modified
-    assert received.spec == data.spec
+    # MISSING Assertions on resource-specific received values.
+    # assert received.spec.foo == bar
 
     stored = await db.get(
         Project, namespace=data.metadata.namespace, name=data.metadata.name
     )
     assert stored == received
+    # MISSING Assertions on resource-specific updated values.
+    # assert data.spec.foo == bar
 
 
 async def test_update_project_status(aiohttp_server, config, db, loop):
+    # MISSING Subresource-specific attributes can be set here
     data = ProjectFactory()
     await db.put(data)
 
-    data.status.state = ProjectState.FAILING_METRICS
-    data.status.metrics_reasons = {"my-metric": ReasonFactory()}
+    # MISSING The subresource-specific attributes can be updated here
+    # data.status.foo = bar
 
     server = await aiohttp_server(create_app(config=config))
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
-        openstack_api = OpenStackApi(client)
+        openstack_api = OpenstackApi(client)
         received = await openstack_api.update_project_status(
             namespace=data.metadata.namespace, name=data.metadata.name, body=data
         )
@@ -500,11 +519,13 @@ async def test_update_project_status(aiohttp_server, config, db, loop):
     assert received.api == "openstack"
     assert received.kind == "Project"
 
-    assert received.status.state == ProjectState.FAILING_METRICS
-    assert list(received.status.metrics_reasons.keys()) == ["my-metric"]
+    # MISSING Assertions on subresource-specific received values.
+    # assert received.status.foo == bar
 
     stored = await db.get(
         Project, namespace=data.metadata.namespace, name=data.metadata.name
     )
-    assert stored.status.state == ProjectState.FAILING_METRICS
-    assert list(stored.status.metrics_reasons.keys()) == ["my-metric"]
+    # MISSING Assertions on subresource-specific updated values.
+    # assert received.status == data.status
+    # assert received.status.foo == bar
+

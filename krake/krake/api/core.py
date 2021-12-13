@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import logging
 from aiohttp import web
@@ -645,3 +646,4 @@ class CoreApi(object):
             )
 
         return web.json_response(entity.serialize())
+

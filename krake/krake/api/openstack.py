@@ -20,18 +20,12 @@ from krake.api.helpers import (
     ListQuery,
 )
 from krake.data.core import WatchEvent, WatchEventType, ListMetadata
-from krake.data.openstack import (
-    ProjectList,
-    Project,
-    MagnumCluster,
-    MagnumClusterList,
-    MagnumClusterBinding,
-)
+from krake.data.openstack import MagnumCluster, MagnumClusterList, Project, ProjectList
 
 logger = logging.getLogger(__name__)
 
 
-class OpenStackApi(object):
+class OpenstackApi(object):
     """Contains all handlers for the resources of the "openstack" API.
     These handlers will be added to the Krake API components.
     """
@@ -187,10 +181,10 @@ class OpenStackApi(object):
                 )
 
         # FIXME: if a user updates an immutable field, (such as the created timestamp),
-        # the request is accepted and the API returns 200. The `modified` timestamp
-        # will also still be updated, even though no change from the request on
-        # immutable fields will be applied.
-        # Changes to immutable fields should be rejected, see Krake issue #410
+        #  the request is accepted and the API returns 200. The `modified` timestamp
+        #  will also still be updated, even though no change from the request on
+        #  immutable fields will be applied.
+        #  Changes to immutable fields should be rejected, see Krake issue #410
         if body == entity:
             raise json_error(web.HTTPBadRequest, "The body contained no update.")
 
@@ -222,18 +216,24 @@ class OpenStackApi(object):
         "PUT", "/openstack/namespaces/{namespace}/magnumclusters/{name}/binding"
     )
     @protected(api="openstack", resource="magnumclusters/binding", verb="update")
-    @load("cluster", MagnumCluster)
     @use_schema("body", MagnumClusterBinding.Schema)
-    async def update_magnum_cluster_binding(request, body, cluster):
-        cluster.status.project = body.project
-        cluster.status.template = body.template
+    @load("entity", MagnumCluster)
+    async def update_magnum_cluster_binding(request, body, entity):
+        source = getattr(body, "binding")
+        dest = getattr(entity, "binding")
 
-        if body.project not in cluster.metadata.owners:
-            cluster.metadata.owners.append(body.project)
+        dest.update(source)
 
-        await session(request).put(cluster)
-        logger.info("Bind %r to %r", cluster, cluster.status.project)
-        return web.json_response(cluster.serialize())
+        await session(request).put(entity)
+        logger.info(
+            "Update %s of %s %r (%s)",
+            "Binding",
+            "MagnumCluster",
+            entity.metadata.name,
+            entity.metadata.uid,
+        )
+
+        return web.json_response(entity.serialize())
 
     @routes.route(
         "PUT", "/openstack/namespaces/{namespace}/magnumclusters/{name}/status"
@@ -404,10 +404,10 @@ class OpenStackApi(object):
                 )
 
         # FIXME: if a user updates an immutable field, (such as the created timestamp),
-        # the request is accepted and the API returns 200. The `modified` timestamp
-        # will also still be updated, even though no change from the request on
-        # immutable fields will be applied.
-        # Changes to immutable fields should be rejected, see Krake issue #410
+        #  the request is accepted and the API returns 200. The `modified` timestamp
+        #  will also still be updated, even though no change from the request on
+        #  immutable fields will be applied.
+        #  Changes to immutable fields should be rejected, see Krake issue #410
         if body == entity:
             raise json_error(web.HTTPBadRequest, "The body contained no update.")
 
@@ -455,3 +455,4 @@ class OpenStackApi(object):
         )
 
         return web.json_response(entity.serialize())
+

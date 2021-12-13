@@ -6,27 +6,24 @@ from operator import attrgetter
 
 from krake.api.app import create_app
 from krake.api.helpers import HttpReason, HttpReasonCode
-
 from krake.data.core import WatchEventType, WatchEvent, resource_ref
 from krake.data.core import (
-    GlobalMetric,
+    GlobalMetricsProviderList,
     GlobalMetricsProvider,
     RoleList,
+    Role,
+    GlobalMetric,
+    RoleBindingList,
     GlobalMetricList,
     RoleBinding,
-    RoleBindingList,
-    Role,
-    GlobalMetricsProviderList,
 )
 
+
 from tests.factories.core import (
-    GlobalMetricFactory,
-    MetricSpecFactory,
     GlobalMetricsProviderFactory,
-    MetricsProviderSpecFactory,
-    RoleBindingFactory,
     RoleFactory,
-    RoleRuleFactory,
+    GlobalMetricFactory,
+    RoleBindingFactory,
 )
 
 from tests.factories.fake import fake
@@ -34,6 +31,8 @@ from tests.factories.fake import fake
 
 async def test_create_global_metric(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
+
+    # MISSING Resource-specific elements can be set here
     data = GlobalMetricFactory()
 
     resp = await client.post("/core/globalmetrics", json=data.serialize())
@@ -44,6 +43,8 @@ async def test_create_global_metric(aiohttp_client, config, db):
     assert received.metadata.modified
     assert received.metadata.namespace is None
     assert received.metadata.uid
+    # MISSING The resource-specific attributes can be verified here.
+    # assert received.spec == data.spec
 
     stored = await db.get(GlobalMetric, name=data.metadata.name)
     assert stored == received
@@ -78,6 +79,7 @@ async def test_create_global_metric_with_existing_name(aiohttp_client, config, d
 async def test_delete_global_metric(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
+    # MISSING Resource-specific elements can be set here
     data = GlobalMetricFactory()
     await db.put(data)
 
@@ -168,6 +170,7 @@ async def test_list_global_metrics_rbac(rbac_allow, config, aiohttp_client):
 
 async def test_watch_global_metrics(aiohttp_client, config, db, loop):
     client = await aiohttp_client(create_app(config=config))
+    # MISSING Resource-specific elements can be set here
     resources = [GlobalMetricFactory(), GlobalMetricFactory()]
 
     async def watch(created):
@@ -185,15 +188,18 @@ async def test_watch_global_metrics(aiohttp_client, config, db, loop):
             if i == 0:
                 assert event.type == WatchEventType.ADDED
                 assert data.metadata.name == resources[0].metadata.name
-                assert data.spec == resources[0].spec
+                # MISSING The resource-specific attributes can be verified here.
+                # assert data.spec == resources[0].spec
             elif i == 1:
                 assert event.type == WatchEventType.ADDED
                 assert data.metadata.name == resources[1].metadata.name
-                assert data.spec == resources[1].spec
+                # MISSING The resource-specific attributes can be verified here.
+                # assert data.spec == resources[1].spec
             elif i == 2:
                 assert event.type == WatchEventType.MODIFIED
                 assert data.metadata.name == resources[0].metadata.name
-                assert data.spec == resources[0].spec
+                # MISSING The resource-specific attributes can be verified here.
+                # assert data.spec == resources[0].spec
                 return
             elif i == 3:
                 assert False
@@ -247,9 +253,11 @@ async def test_read_global_metric_rbac(rbac_allow, config, aiohttp_client):
 async def test_update_global_metric(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
+    # MISSING Resource-specific attributes can be set here
     data = GlobalMetricFactory()
     await db.put(data)
-    data.spec = MetricSpecFactory(min=-10, max=10)
+    # MISSING The resource-specific attributes can be updated here
+    # data.spec.foo = bar
 
     resp = await client.put(
         f"/core/globalmetrics/{data.metadata.name}", json=data.serialize()
@@ -260,7 +268,8 @@ async def test_update_global_metric(aiohttp_client, config, db):
     assert received.api == "core"
     assert received.kind == "GlobalMetric"
     assert data.metadata.modified < received.metadata.modified
-    assert received.spec == data.spec
+    # MISSING Assertions on resource-specific received values.
+    # assert received.spec.foo == bar
 
     stored = await db.get(GlobalMetric, name=data.metadata.name)
     assert stored == received
@@ -316,6 +325,7 @@ async def test_update_global_metric_no_changes(aiohttp_client, config, db):
 async def test_create_global_metrics_provider(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
+    # MISSING Resource-specific elements can be set here
     data = GlobalMetricsProviderFactory()
 
     resp = await client.post("/core/globalmetricsproviders", json=data.serialize())
@@ -326,7 +336,8 @@ async def test_create_global_metrics_provider(aiohttp_client, config, db):
     assert received.metadata.modified
     assert received.metadata.namespace is None
     assert received.metadata.uid
-    assert received.spec == data.spec
+    # MISSING The resource-specific attributes can be verified here.
+    # assert received.spec == data.spec
 
     stored = await db.get(GlobalMetricsProvider, name=data.metadata.name)
     assert stored == received
@@ -363,6 +374,7 @@ async def test_create_global_metrics_provider_with_existing_name(
 async def test_delete_global_metrics_provider(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
+    # MISSING Resource-specific elements can be set here
     data = GlobalMetricsProviderFactory()
     await db.put(data)
 
@@ -459,6 +471,7 @@ async def test_list_global_metrics_providers_rbac(rbac_allow, config, aiohttp_cl
 
 async def test_watch_global_metrics_providers(aiohttp_client, config, db, loop):
     client = await aiohttp_client(create_app(config=config))
+    # MISSING Resource-specific elements can be set here
     resources = [GlobalMetricsProviderFactory(), GlobalMetricsProviderFactory()]
 
     async def watch(created):
@@ -476,15 +489,18 @@ async def test_watch_global_metrics_providers(aiohttp_client, config, db, loop):
             if i == 0:
                 assert event.type == WatchEventType.ADDED
                 assert data.metadata.name == resources[0].metadata.name
-                assert data.spec == resources[0].spec
+                # MISSING The resource-specific attributes can be verified here.
+                # assert data.spec == resources[0].spec
             elif i == 1:
                 assert event.type == WatchEventType.ADDED
                 assert data.metadata.name == resources[1].metadata.name
-                assert data.spec == resources[1].spec
+                # MISSING The resource-specific attributes can be verified here.
+                # assert data.spec == resources[1].spec
             elif i == 2:
                 assert event.type == WatchEventType.MODIFIED
                 assert data.metadata.name == resources[0].metadata.name
-                assert data.spec == resources[0].spec
+                # MISSING The resource-specific attributes can be verified here.
+                # assert data.spec == resources[0].spec
                 return
             elif i == 3:
                 assert False
@@ -493,7 +509,7 @@ async def test_watch_global_metrics_providers(aiohttp_client, config, db, loop):
         # Wait for watcher to be established
         await created
 
-        # Create the  GlobalMetricsProviders
+        # Create the GlobalMetricsProviders
         for data in resources:
             resp = await client.post(
                 "/core/globalmetricsproviders", json=data.serialize()
@@ -542,9 +558,11 @@ async def test_read_global_metrics_provider_rbac(rbac_allow, config, aiohttp_cli
 async def test_update_global_metrics_provider(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
-    data = GlobalMetricsProviderFactory(spec__type="prometheus")
+    # MISSING Resource-specific attributes can be set here
+    data = GlobalMetricsProviderFactory()
     await db.put(data)
-    data.spec = MetricsProviderSpecFactory(type="static")
+    # MISSING The resource-specific attributes can be updated here
+    # data.spec.foo = bar
 
     resp = await client.put(
         f"/core/globalmetricsproviders/{data.metadata.name}", json=data.serialize()
@@ -555,7 +573,8 @@ async def test_update_global_metrics_provider(aiohttp_client, config, db):
     assert received.api == "core"
     assert received.kind == "GlobalMetricsProvider"
     assert data.metadata.modified < received.metadata.modified
-    assert received.spec == data.spec
+    # MISSING Assertions on resource-specific received values.
+    # assert received.spec.foo == bar
 
     stored = await db.get(GlobalMetricsProvider, name=data.metadata.name)
     assert stored == received
@@ -608,39 +627,10 @@ async def test_update_global_metrics_provider_no_changes(aiohttp_client, config,
     assert resp.status == 400
 
 
-async def test_update_global_metrics_provider_with_changes(aiohttp_client, config, db):
-    """Ensures that updates in the GlobalMetricsProvider's PolymorphicContainer are
-    considered as well.
-    """
-    client = await aiohttp_client(create_app(config=config))
-
-    data = GlobalMetricsProviderFactory(spec__type="prometheus")
-    await db.put(data)
-
-    # Modifying only an attribute from the contained specs.
-    data.spec.prometheus.url += "/other/path"
-
-    resp = await client.put(
-        f"/core/globalmetricsproviders/{data.metadata.name}", json=data.serialize()
-    )
-    assert resp.status == 200
-    received = GlobalMetricsProvider.deserialize(await resp.json())
-    assert received.spec.prometheus.url == data.spec.prometheus.url
-
-    # Modifying the whole spec to a different type.
-    data.spec = MetricsProviderSpecFactory(type="kafka")
-
-    resp = await client.put(
-        f"/core/globalmetricsproviders/{data.metadata.name}", json=data.serialize()
-    )
-    assert resp.status == 200
-    received = GlobalMetricsProvider.deserialize(await resp.json())
-    assert received.spec == data.spec
-
-
 async def test_create_role(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
+    # MISSING Resource-specific elements can be set here
     data = RoleFactory()
 
     resp = await client.post("/core/roles", json=data.serialize())
@@ -651,6 +641,8 @@ async def test_create_role(aiohttp_client, config, db):
     assert received.metadata.modified
     assert received.metadata.namespace is None
     assert received.metadata.uid
+    # MISSING The resource-specific attributes can be verified here.
+    # assert received.spec == data.spec
 
     stored = await db.get(Role, name=data.metadata.name)
     assert stored == received
@@ -685,6 +677,7 @@ async def test_create_role_with_existing_name(aiohttp_client, config, db):
 async def test_delete_role(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
+    # MISSING Resource-specific elements can be set here
     data = RoleFactory()
     await db.put(data)
 
@@ -773,6 +766,7 @@ async def test_list_roles_rbac(rbac_allow, config, aiohttp_client):
 
 async def test_watch_roles(aiohttp_client, config, db, loop):
     client = await aiohttp_client(create_app(config=config))
+    # MISSING Resource-specific elements can be set here
     resources = [RoleFactory(), RoleFactory()]
 
     async def watch(created):
@@ -790,15 +784,18 @@ async def test_watch_roles(aiohttp_client, config, db, loop):
             if i == 0:
                 assert event.type == WatchEventType.ADDED
                 assert data.metadata.name == resources[0].metadata.name
-                assert data.rules == resources[0].rules
+                # MISSING The resource-specific attributes can be verified here.
+                # assert data.spec == resources[0].spec
             elif i == 1:
                 assert event.type == WatchEventType.ADDED
                 assert data.metadata.name == resources[1].metadata.name
-                assert data.rules == resources[1].rules
+                # MISSING The resource-specific attributes can be verified here.
+                # assert data.spec == resources[1].spec
             elif i == 2:
                 assert event.type == WatchEventType.MODIFIED
                 assert data.metadata.name == resources[0].metadata.name
-                assert data.rules == resources[0].rules
+                # MISSING The resource-specific attributes can be verified here.
+                # assert data.spec == resources[0].spec
                 return
             elif i == 3:
                 assert False
@@ -807,7 +804,7 @@ async def test_watch_roles(aiohttp_client, config, db, loop):
         # Wait for watcher to be established
         await created
 
-        # Create the  Roles
+        # Create the Roles
         for data in resources:
             resp = await client.post("/core/roles", json=data.serialize())
             assert resp.status == 200
@@ -852,13 +849,11 @@ async def test_read_role_rbac(rbac_allow, config, aiohttp_client):
 async def test_update_role(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
+    # MISSING Resource-specific attributes can be set here
     data = RoleFactory()
-    previous_rules = data.rules
     await db.put(data)
-
-    new_rules = [RoleRuleFactory(), RoleRuleFactory(), RoleRuleFactory()]
-    assert new_rules != previous_rules
-    data.rules = new_rules
+    # MISSING The resource-specific attributes can be updated here
+    # data.spec.foo = bar
 
     resp = await client.put(f"/core/roles/{data.metadata.name}", json=data.serialize())
     assert resp.status == 200
@@ -867,7 +862,8 @@ async def test_update_role(aiohttp_client, config, db):
     assert received.api == "core"
     assert received.kind == "Role"
     assert data.metadata.modified < received.metadata.modified
-    assert received.rules == new_rules
+    # MISSING Assertions on resource-specific received values.
+    # assert received.spec.foo == bar
 
     stored = await db.get(Role, name=data.metadata.name)
     assert stored == received
@@ -919,6 +915,7 @@ async def test_update_role_no_changes(aiohttp_client, config, db):
 async def test_create_role_binding(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
+    # MISSING Resource-specific elements can be set here
     data = RoleBindingFactory()
 
     resp = await client.post("/core/rolebindings", json=data.serialize())
@@ -929,6 +926,8 @@ async def test_create_role_binding(aiohttp_client, config, db):
     assert received.metadata.modified
     assert received.metadata.namespace is None
     assert received.metadata.uid
+    # MISSING The resource-specific attributes can be verified here.
+    # assert received.spec == data.spec
 
     stored = await db.get(RoleBinding, name=data.metadata.name)
     assert stored == received
@@ -963,6 +962,7 @@ async def test_create_role_binding_with_existing_name(aiohttp_client, config, db
 async def test_delete_role_binding(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
+    # MISSING Resource-specific elements can be set here
     data = RoleBindingFactory()
     await db.put(data)
 
@@ -1053,6 +1053,7 @@ async def test_list_role_bindings_rbac(rbac_allow, config, aiohttp_client):
 
 async def test_watch_role_bindings(aiohttp_client, config, db, loop):
     client = await aiohttp_client(create_app(config=config))
+    # MISSING Resource-specific elements can be set here
     resources = [RoleBindingFactory(), RoleBindingFactory()]
 
     async def watch(created):
@@ -1070,15 +1071,18 @@ async def test_watch_role_bindings(aiohttp_client, config, db, loop):
             if i == 0:
                 assert event.type == WatchEventType.ADDED
                 assert data.metadata.name == resources[0].metadata.name
-                assert data.users == resources[0].users
+                # MISSING The resource-specific attributes can be verified here.
+                # assert data.spec == resources[0].spec
             elif i == 1:
                 assert event.type == WatchEventType.ADDED
                 assert data.metadata.name == resources[1].metadata.name
-                assert data.users == resources[1].users
+                # MISSING The resource-specific attributes can be verified here.
+                # assert data.spec == resources[1].spec
             elif i == 2:
                 assert event.type == WatchEventType.MODIFIED
                 assert data.metadata.name == resources[0].metadata.name
-                assert data.users == resources[0].users
+                # MISSING The resource-specific attributes can be verified here.
+                # assert data.spec == resources[0].spec
                 return
             elif i == 3:
                 assert False
@@ -1087,7 +1091,7 @@ async def test_watch_role_bindings(aiohttp_client, config, db, loop):
         # Wait for watcher to be established
         await created
 
-        # Create the  RoleBindings
+        # Create the RoleBindings
         for data in resources:
             resp = await client.post("/core/rolebindings", json=data.serialize())
             assert resp.status == 200
@@ -1132,10 +1136,11 @@ async def test_read_role_binding_rbac(rbac_allow, config, aiohttp_client):
 async def test_update_role_binding(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
+    # MISSING Resource-specific attributes can be set here
     data = RoleBindingFactory()
     await db.put(data)
-    data.users = ["some", "additional", "users"]
-    data.roles = ["and", "other", "roles"]
+    # MISSING The resource-specific attributes can be updated here
+    # data.spec.foo = bar
 
     resp = await client.put(
         f"/core/rolebindings/{data.metadata.name}", json=data.serialize()
@@ -1146,8 +1151,8 @@ async def test_update_role_binding(aiohttp_client, config, db):
     assert received.api == "core"
     assert received.kind == "RoleBinding"
     assert data.metadata.modified < received.metadata.modified
-    assert received.users == data.users
-    assert received.roles == data.roles
+    # MISSING Assertions on resource-specific received values.
+    # assert received.spec.foo == bar
 
     stored = await db.get(RoleBinding, name=data.metadata.name)
     assert stored == received
@@ -1198,3 +1203,4 @@ async def test_update_role_binding_no_changes(aiohttp_client, config, db):
         f"/core/rolebindings/{data.metadata.name}", json=data.serialize()
     )
     assert resp.status == 400
+

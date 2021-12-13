@@ -10,7 +10,6 @@ from krake.api.auth import protected
 from krake.api.database import EventType
 from krake.api.helpers import (
     load,
-    blocking,
     session,
     Heartbeat,
     use_schema,
@@ -21,16 +20,9 @@ from krake.api.helpers import (
     ListQuery,
 )
 from krake.data.core import WatchEvent, WatchEventType, ListMetadata
-from krake.data.kubernetes import (
-    ApplicationList,
-    Application,
-    Cluster,
-    ClusterList,
-    ClusterBinding,
-    ApplicationComplete,
-)
+from krake.data.kubernetes import Application, ApplicationList, Cluster, ClusterList
 
-logger = logging.getLogger("krake.api.kubernetes")
+logger = logging.getLogger(__name__)
 
 
 class KubernetesApi(object):
@@ -43,7 +35,6 @@ class KubernetesApi(object):
     @routes.route("POST", "/kubernetes/namespaces/{namespace}/applications")
     @protected(api="kubernetes", resource="applications", verb="create")
     @use_schema("body", schema=make_create_request_schema(Application))
-    @blocking()
     async def create_application(request, body):
         kwargs = {"name": body.metadata.name}
 
@@ -87,7 +78,6 @@ class KubernetesApi(object):
     @routes.route("DELETE", "/kubernetes/namespaces/{namespace}/applications/{name}")
     @protected(api="kubernetes", resource="applications", verb="delete")
     @load("entity", Application)
-    @blocking()
     async def delete_application(request, entity):
         # Resource is already deleting
         if entity.metadata.deleted:
@@ -191,10 +181,10 @@ class KubernetesApi(object):
                 )
 
         # FIXME: if a user updates an immutable field, (such as the created timestamp),
-        # the request is accepted and the API returns 200. The `modified` timestamp
-        # will also still be updated, even though no change from the request on
-        # immutable fields will be applied.
-        # Changes to immutable fields should be rejected, see Krake issue #410
+        #  the request is accepted and the API returns 200. The `modified` timestamp
+        #  will also still be updated, even though no change from the request on
+        #  immutable fields will be applied.
+        #  Changes to immutable fields should be rejected, see Krake issue #410
         if body == entity:
             raise json_error(web.HTTPBadRequest, "The body contained no update.")
 
@@ -227,44 +217,46 @@ class KubernetesApi(object):
     )
     @protected(api="kubernetes", resource="applications/binding", verb="update")
     @use_schema("body", ClusterBinding.Schema)
-    @load("app", Application)
-    async def update_application_binding(request, body, app):
-        now = utils.now()
-        app.status.scheduled = now
-        app.status.kube_controller_triggered = now
-        app.status.scheduled_to = body.cluster
+    @load("entity", Application)
+    async def update_application_binding(request, body, entity):
+        source = getattr(body, "binding")
+        dest = getattr(entity, "binding")
 
-        if body.cluster not in app.metadata.owners:
-            app.metadata.owners.append(body.cluster)
+        dest.update(source)
 
-        await session(request).put(app)
+        await session(request).put(entity)
         logger.info(
-            "Update binding of application %r (%s)", app.metadata.name, app.metadata.uid
+            "Update %s of %s %r (%s)",
+            "Binding",
+            "Application",
+            entity.metadata.name,
+            entity.metadata.uid,
         )
-        return web.json_response(app.serialize())
+
+        return web.json_response(entity.serialize())
 
     @routes.route(
         "PUT", "/kubernetes/namespaces/{namespace}/applications/{name}/complete"
     )
     @protected(api="kubernetes", resource="applications/complete", verb="update")
     @use_schema("body", ApplicationComplete.Schema)
-    @load("app", Application)
-    async def update_application_complete(request, body, app):
-        # If the hook is not enabled for the Application or if the token is invalid
-        if app.status.token is None or app.status.token != body.token:
-            raise web.HTTPUnauthorized(
-                reason="No token has been provided or the provided one is invalid."
-            )
+    @load("entity", Application)
+    async def update_application_complete(request, body, entity):
+        source = getattr(body, "complete")
+        dest = getattr(entity, "complete")
 
-        # Resource marked as deletion, to be deleted by the Garbage Collector
-        app.metadata.deleted = utils.now()
-        await session(request).put(app)
+        dest.update(source)
+
+        await session(request).put(entity)
         logger.info(
-            "Deleting of application %r (%s) by calling complete hook",
-            app.metadata.name,
-            app.metadata.uid,
+            "Update %s of %s %r (%s)",
+            "Complete",
+            "Application",
+            entity.metadata.name,
+            entity.metadata.uid,
         )
-        return web.json_response(app.serialize())
+
+        return web.json_response(entity.serialize())
 
     @routes.route(
         "PUT", "/kubernetes/namespaces/{namespace}/applications/{name}/status"
@@ -292,7 +284,6 @@ class KubernetesApi(object):
     @routes.route("POST", "/kubernetes/namespaces/{namespace}/clusters")
     @protected(api="kubernetes", resource="clusters", verb="create")
     @use_schema("body", schema=make_create_request_schema(Cluster))
-    @blocking()
     async def create_cluster(request, body):
         kwargs = {"name": body.metadata.name}
 
@@ -336,7 +327,6 @@ class KubernetesApi(object):
     @routes.route("DELETE", "/kubernetes/namespaces/{namespace}/clusters/{name}")
     @protected(api="kubernetes", resource="clusters", verb="delete")
     @load("entity", Cluster)
-    @blocking()
     async def delete_cluster(request, entity):
         # Resource is already deleting
         if entity.metadata.deleted:
@@ -437,10 +427,10 @@ class KubernetesApi(object):
                 )
 
         # FIXME: if a user updates an immutable field, (such as the created timestamp),
-        # the request is accepted and the API returns 200. The `modified` timestamp
-        # will also still be updated, even though no change from the request on
-        # immutable fields will be applied.
-        # Changes to immutable fields should be rejected, see Krake issue #410
+        #  the request is accepted and the API returns 200. The `modified` timestamp
+        #  will also still be updated, even though no change from the request on
+        #  immutable fields will be applied.
+        #  Changes to immutable fields should be rejected, see Krake issue #410
         if body == entity:
             raise json_error(web.HTTPBadRequest, "The body contained no update.")
 
@@ -488,3 +478,4 @@ class KubernetesApi(object):
         )
 
         return web.json_response(entity.serialize())
+
