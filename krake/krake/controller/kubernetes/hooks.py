@@ -404,7 +404,8 @@ def update_last_observed_manifest_from_resp(app, response, **kwargs):
 
     try:
         idx_observed = get_kubernetes_resource_idx(
-            app.status.mangled_observer_schema, resp
+            app.status.mangled_observer_schema,
+            resp
         )
     except IndexError:
         # All created resources should be observed
@@ -412,7 +413,8 @@ def update_last_observed_manifest_from_resp(app, response, **kwargs):
 
     try:
         idx_last_observed = get_kubernetes_resource_idx(
-            app.status.last_observed_manifest, resp
+            app.status.last_observed_manifest,
+            resp
         )
     except IndexError:
         # If the resource is not yes present in last_observed_manifest, append it.
@@ -658,7 +660,8 @@ def update_last_applied_manifest_from_spec(app):
         # matter.
         try:
             idx_status_old = get_kubernetes_resource_idx(
-                app.status.last_applied_manifest, resource_observed
+                app.status.last_applied_manifest,
+                resource_observed
             )
         except IndexError:
             continue
@@ -670,7 +673,8 @@ def update_last_applied_manifest_from_spec(app):
         try:
             # Check if the observed resource is present in spec.manifest
             idx_status_new = get_kubernetes_resource_idx(
-                new_last_applied_manifest, resource_observed
+                new_last_applied_manifest,
+                resource_observed
             )
         except IndexError:
             # The resource is observed but is not present in the spec.manifest.
@@ -906,7 +910,8 @@ def generate_default_observer_schema(app, default_namespace="default"):
     for resource_manifest in app.spec.manifest:
         try:
             idx = get_kubernetes_resource_idx(
-                app.status.mangled_observer_schema, resource_manifest
+                app.status.mangled_observer_schema,
+                resource_manifest
             )
 
             # In case a custom observer schema is provided for this resource, the
@@ -1110,7 +1115,7 @@ async def shutdown(app, api_endpoint, ssl_context, config, default_namespace="de
 
     # Generate only once the certificate and key for a specific Application
     generated_cert = CertificatePair(
-        cert=app.status.shutdown_cert, key=app.status.complete_key
+        cert=app.status.shutdown_cert, key=app.status.shutdown_key
     )
     if ssl_context and generated_cert == (None, None):
         generated_cert = generate_certificate(config.shutdown)
@@ -1589,7 +1594,8 @@ class Complete(object):
             for sub_resource in items:
                 sub_resources_to_mangle = None
                 idx_observed = get_kubernetes_resource_idx(
-                    mangled_observer_schema, resource
+                    mangled_observer_schema,
+                    resource
                 )
                 for keys in sub_resource.path:
                     try:
@@ -2250,9 +2256,7 @@ class Shutdown(object):
                 sub_resources_to_mangle = None
                 idx_observed = get_kubernetes_resource_idx(
                     mangled_observer_schema,
-                    resource["apiVersion"],
-                    resource["kind"],
-                    resource["metadata"]["name"],
+                    resource
                 )
                 for keys in sub_resource.path:
                     try:
@@ -2315,9 +2319,9 @@ class Shutdown(object):
         intermediate_src=None,
         generated_cert=None,
     ):
-        """Create a complete hook secret resource.
+        """Create a shutdown hook secret resource.
 
-        Complete hook secret stores Krake CAs and client certificates to communicate
+        Shutdown hook secret stores Krake CAs and client certificates to communicate
         with the Krake API.
 
         Args:

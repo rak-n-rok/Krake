@@ -231,14 +231,18 @@ class ResourceDelta(NamedTuple):
         for observed_resource in app.status.mangled_observer_schema:
 
             desired_idx = get_kubernetes_resource_idx(
-                app.status.last_applied_manifest, observed_resource, True
+                app.status.last_applied_manifest,
+                observed_resource,
+                True
             )
             desired_resource = app.status.last_applied_manifest[desired_idx]
 
             current_resource = None
             with suppress(IndexError):
                 current_idx = get_kubernetes_resource_idx(
-                    app.status.last_observed_manifest, observed_resource, True
+                    app.status.last_observed_manifest,
+                    observed_resource,
+                    True
                 )
                 current_resource = app.status.last_observed_manifest[current_idx]
 
@@ -262,7 +266,9 @@ class ResourceDelta(NamedTuple):
         for current_resource in app.status.last_observed_manifest:
             try:
                 get_kubernetes_resource_idx(
-                    app.status.last_applied_manifest, current_resource, True
+                    app.status.last_applied_manifest,
+                    current_resource,
+                    True
                 )
             except IndexError:
                 deleted.append(current_resource)

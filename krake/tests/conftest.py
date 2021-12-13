@@ -973,23 +973,25 @@ def hooks_config(pki):
         HooksConfiguration: the generated configuration.
 
     """
-    client_cert = pki.gencert("test-complete-hook-signing", is_intermediate=True)
-
+    client_complete_cert = pki.gencert("test-complete-hook-signing",
+                                       is_intermediate=True)
+    client_shutdown_cert = pki.gencert("test-complete-hook-signing",
+                                       is_intermediate=True)
     return deepcopy(
         HooksConfiguration.deserialize(
             {
                 "complete": {
                     "hook_user": "test-complete-hook-user",
-                    "intermediate_src": client_cert.cert,
-                    "intermediate_key_src": client_cert.key,
+                    "intermediate_src": client_complete_cert.cert,
+                    "intermediate_key_src": client_complete_cert.key,
                     "cert_dest": "/etc/krake_certs",
                     "env_token": "KRAKE_TOKEN",
                     "env_complete": "KRAKE_COMPLETE_URL",
                 },
                 "shutdown": {
                     "hook_user": "test-shutdown-hook-user",
-                    "intermediate_src": client_cert.cert,
-                    "intermediate_key_src": client_cert.key,
+                    "intermediate_src": client_shutdown_cert.cert,
+                    "intermediate_key_src": client_shutdown_cert.key,
                     "cert_dest": "/etc/krake_certs",
                     "env_token": "KRAKE_TOKEN",
                     "env_shutdown": "KRAKE_SHUTDOWN_URL",
