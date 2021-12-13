@@ -192,9 +192,7 @@ class OpenStackApi(object):
         try:
             entity.update(body)
         except ValueError as e:
-            reason = HttpReason(
-                reason=str(e), code=HttpReasonCode.UPDATE_ERROR
-            )
+            reason = HttpReason(reason=str(e), code=HttpReasonCode.UPDATE_ERROR)
             raise json_error(web.HTTPBadRequest, reason.serialize())
 
         entity.metadata.modified = utils.now()
@@ -250,9 +248,7 @@ class OpenStackApi(object):
         try:
             dest.update(source)
         except ValueError as e:
-            reason = HttpReason(
-                reason=str(e), code=HttpReasonCode.UPDATE_ERROR
-            )
+            reason = HttpReason(reason=str(e), code=HttpReasonCode.UPDATE_ERROR)
             raise json_error(web.HTTPBadRequest, reason.serialize())
 
         await session(request).put(entity)
@@ -417,9 +413,7 @@ class OpenStackApi(object):
         try:
             entity.update(body)
         except ValueError as e:
-            reason = HttpReason(
-                reason=str(e), code=HttpReasonCode.UPDATE_ERROR
-            )
+            reason = HttpReason(reason=str(e), code=HttpReasonCode.UPDATE_ERROR)
             raise json_error(web.HTTPBadRequest, reason.serialize())
 
         entity.metadata.modified = utils.now()
@@ -456,9 +450,7 @@ class OpenStackApi(object):
         try:
             dest.update(source)
         except ValueError as e:
-            reason = HttpReason(
-                reason=str(e), code=HttpReasonCode.UPDATE_ERROR
-            )
+            reason = HttpReason(reason=str(e), code=HttpReasonCode.UPDATE_ERROR)
             raise json_error(web.HTTPBadRequest, reason.serialize())
 
         await session(request).put(entity)

@@ -1,12 +1,11 @@
 import asyncio
 import json
-from copy import deepcopy
-
 import pytz
 import yaml
 from itertools import count
 from operator import attrgetter
 from secrets import token_urlsafe
+from copy import deepcopy
 
 from krake.api.app import create_app
 from krake.api.helpers import HttpReason, HttpReasonCode
@@ -507,7 +506,7 @@ async def test_update_application_immutable_field(aiohttp_client, config, db):
 
     data = ApplicationFactory()
     await db.put(data)
-    data.metadata.namespace = "namespace2"
+    data.metadata.namespace = "override"
 
     resp = await client.put(
         f"/kubernetes/namespaces/testing/applications/{data.metadata.name}",
@@ -516,7 +515,7 @@ async def test_update_application_immutable_field(aiohttp_client, config, db):
     assert resp.status == 400
     assert await resp.json() == {
         "code": "UPDATE_ERROR",
-        "reason": "Trying to update an immutable field: namespace"
+        "reason": "Trying to update an immutable field: namespace",
     }
 
 
@@ -1117,7 +1116,7 @@ async def test_update_cluster_immutable_field(aiohttp_client, config, db):
 
     data = ClusterFactory()
     await db.put(data)
-    data.metadata.namespace = "namespace2"
+    data.metadata.namespace = "override"
 
     resp = await client.put(
         f"/kubernetes/namespaces/testing/clusters/{data.metadata.name}",
@@ -1126,7 +1125,7 @@ async def test_update_cluster_immutable_field(aiohttp_client, config, db):
     assert resp.status == 400
     assert await resp.json() == {
         "code": "UPDATE_ERROR",
-        "reason": "Trying to update an immutable field: namespace"
+        "reason": "Trying to update an immutable field: namespace",
     }
 
 

@@ -318,7 +318,7 @@ async def test_update_global_metric_immutable_field(aiohttp_client, config, db):
 
     data = GlobalMetricFactory()
     await db.put(data)
-    data.metadata.namespace = "namespace2"
+    data.metadata.namespace = "override"
 
     resp = await client.put(
         f"/core/globalmetrics/{data.metadata.name}", json=data.serialize()
@@ -326,7 +326,7 @@ async def test_update_global_metric_immutable_field(aiohttp_client, config, db):
     assert resp.status == 400
     assert await resp.json() == {
         "code": "UPDATE_ERROR",
-        "reason": "Trying to update an immutable field: namespace"
+        "reason": "Trying to update an immutable field: namespace",
     }
 
 
@@ -625,12 +625,14 @@ async def test_update_global_metrics_provider_no_changes(aiohttp_client, config,
     assert resp.status == 400
 
 
-async def test_update_global_metrics_provider_immutable_field(aiohttp_client, config, db):
+async def test_update_global_metrics_provider_immutable_field(
+    aiohttp_client, config, db
+):
     client = await aiohttp_client(create_app(config=config))
 
     data = GlobalMetricsProviderFactory()
     await db.put(data)
-    data.metadata.namespace = "namespace2"
+    data.metadata.namespace = "override"
 
     resp = await client.put(
         f"/core/globalmetricsproviders/{data.metadata.name}", json=data.serialize()
@@ -638,7 +640,7 @@ async def test_update_global_metrics_provider_immutable_field(aiohttp_client, co
     assert resp.status == 400
     assert await resp.json() == {
         "code": "UPDATE_ERROR",
-        "reason": "Trying to update an immutable field: namespace"
+        "reason": "Trying to update an immutable field: namespace",
     }
 
 
@@ -955,13 +957,13 @@ async def test_update_role_immutable_field(aiohttp_client, config, db):
 
     data = RoleFactory()
     await db.put(data)
-    data.metadata.namespace = "namespace2"
+    data.metadata.namespace = "override"
 
     resp = await client.put(f"/core/roles/{data.metadata.name}", json=data.serialize())
     assert resp.status == 400
     assert await resp.json() == {
         "code": "UPDATE_ERROR",
-        "reason": "Trying to update an immutable field: namespace"
+        "reason": "Trying to update an immutable field: namespace",
     }
 
 
@@ -1254,7 +1256,7 @@ async def test_update_role_binding_immutable_field(aiohttp_client, config, db):
 
     data = RoleBindingFactory()
     await db.put(data)
-    data.metadata.namespace = "namespace2"
+    data.metadata.namespace = "override"
 
     resp = await client.put(
         f"/core/rolebindings/{data.metadata.name}", json=data.serialize()
@@ -1262,5 +1264,5 @@ async def test_update_role_binding_immutable_field(aiohttp_client, config, db):
     assert resp.status == 400
     assert await resp.json() == {
         "code": "UPDATE_ERROR",
-        "reason": "Trying to update an immutable field: namespace"
+        "reason": "Trying to update an immutable field: namespace",
     }

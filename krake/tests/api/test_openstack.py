@@ -444,19 +444,18 @@ async def test_update_magnum_cluster_no_changes(aiohttp_client, config, db):
 async def test_update_magnum_cluster_immutable_field(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
-    data = MagnumClusterFactory(status__template="template1")
+    data = MagnumClusterFactory()
     await db.put(data)
-    data.status.template = "template2"
+    data.metadata.namespace = "override"
 
     resp = await client.put(
-        f"/openstack/namespaces/{data.metadata.namespace}"
-        f"/magnumclusters/{data.metadata.name}/status",
+        f"/openstack/namespaces/testing/magnumclusters/{data.metadata.name}",
         json=data.serialize(),
     )
     assert resp.status == 400
     assert await resp.json() == {
         "code": "UPDATE_ERROR",
-        "reason": "Trying to update an immutable field: template"
+        "reason": "Trying to update an immutable field: namespace",
     }
 
 
@@ -966,7 +965,7 @@ async def test_update_project_immutable_field(aiohttp_client, config, db):
 
     data = ProjectFactory()
     await db.put(data)
-    data.metadata.namespace = "namespace2"
+    data.metadata.namespace = "override"
 
     resp = await client.put(
         f"/openstack/namespaces/testing/projects/{data.metadata.name}",
@@ -975,7 +974,7 @@ async def test_update_project_immutable_field(aiohttp_client, config, db):
     assert resp.status == 400
     assert await resp.json() == {
         "code": "UPDATE_ERROR",
-        "reason": "Trying to update an immutable field: namespace"
+        "reason": "Trying to update an immutable field: namespace",
     }
 
 

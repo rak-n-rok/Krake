@@ -167,9 +167,7 @@ class CoreApi(object):
         try:
             entity.update(body)
         except ValueError as e:
-            reason = HttpReason(
-                reason=str(e), code=HttpReasonCode.UPDATE_ERROR
-            )
+            reason = HttpReason(reason=str(e), code=HttpReasonCode.UPDATE_ERROR)
             raise json_error(web.HTTPBadRequest, reason.serialize())
 
         entity.metadata.modified = utils.now()
@@ -327,9 +325,7 @@ class CoreApi(object):
         try:
             entity.update(body)
         except ValueError as e:
-            reason = HttpReason(
-                reason=str(e), code=HttpReasonCode.UPDATE_ERROR
-            )
+            reason = HttpReason(reason=str(e), code=HttpReasonCode.UPDATE_ERROR)
             raise json_error(web.HTTPBadRequest, reason.serialize())
 
         entity.metadata.modified = utils.now()
@@ -477,9 +473,7 @@ class CoreApi(object):
         try:
             entity.update(body)
         except ValueError as e:
-            reason = HttpReason(
-                reason=str(e), code=HttpReasonCode.UPDATE_ERROR
-            )
+            reason = HttpReason(reason=str(e), code=HttpReasonCode.UPDATE_ERROR)
             raise json_error(web.HTTPBadRequest, reason.serialize())
 
         entity.metadata.modified = utils.now()
@@ -626,9 +620,7 @@ class CoreApi(object):
         try:
             entity.update(body)
         except ValueError as e:
-            reason = HttpReason(
-                reason=str(e), code=HttpReasonCode.UPDATE_ERROR
-            )
+            reason = HttpReason(reason=str(e), code=HttpReasonCode.UPDATE_ERROR)
             raise json_error(web.HTTPBadRequest, reason.serialize())
 
         entity.metadata.modified = utils.now()
