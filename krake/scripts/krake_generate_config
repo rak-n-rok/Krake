@@ -67,9 +67,29 @@ def create_api_endpoint(api_host=None, api_port=None, tls_enabled=None, **kwargs
     return f"{scheme}://{api_host}:{api_port}"
 
 
-@register("external_endpoint_key_and_value")
-def format_external_endpoint_key_and_value(external_endpoint=None, **kwargs):
+@register("external_complete_endpoint_key_and_value")
+def format_complete_external_endpoint_key_and_value(external_endpoint=None, **kwargs):
     """Add a line for the optional "external_endpoint" parameter of the "complete" hook.
+    If a value is given, the line is generated, with format: "key: <given_value>". If no
+    value is given, the line is kept empty.
+
+    Args:
+        external_endpoint (str|None): the value of the external endpoint, as it should
+            appear in the configuration. None if no external endpoint should be given.
+
+    Returns:
+        str: the line to add in the configuration if an endpoint has been defined, the
+            empty string otherwise.
+
+    """
+    if external_endpoint:
+        return f"external_endpoint: {external_endpoint}"
+    return ""
+
+
+@register("external_shutdown_endpoint_key_and_value")
+def format_external_shutdown_endpoint_key_and_value(external_endpoint=None, **kwargs):
+    """Add a line for the optional "external_endpoint" parameter of the "shutdown" hook.
     If a value is given, the line is generated, with format: "key: <given_value>". If no
     value is given, the line is kept empty.
 

@@ -1500,9 +1500,9 @@ class Complete(object):
                 with new hook resources. Otherwise, the function injects each new hook
                 sub-resource into the :attr:`last_applied_manifest` object
                 sub-resources. Defaults to False.
-                default_namespace (str, optional): The default namespace to use if no
-                    namespace is specified in the resource declaration. Fetched from the
-                    cluster's kubeconfig file
+            default_namespace (str, optional): The default namespace to use if no
+                namespace is specified in the resource declaration. Fetched from the
+                cluster's kubeconfig file
 
         """
 
@@ -1943,7 +1943,7 @@ class Shutdown(object):
         hook_resources = []
         hook_sub_resources = []
         if ca_certs:
-            hook_resources = [
+            hook_resources.extend([
                 self.secret_certs(
                     secret_certs_name,
                     resource_namespace,
@@ -1952,7 +1952,7 @@ class Shutdown(object):
                     ca_certs=ca_certs,
                 )
                 for resource_namespace in resource_namespaces
-            ]
+            ])
             hook_sub_resources.extend([
                 *self.volumes(secret_certs_name, volume_name, self.cert_dest)
             ])
@@ -2161,9 +2161,9 @@ class Shutdown(object):
                 with new hook resources. Otherwise, the function injects each new hook
                 sub-resource into the :attr:`last_applied_manifest` object
                 sub-resources. Defaults to False.
-                default_namespace (str, optional): The default namespace to use if no
-                    namespace is specified in the resource declaration. Fetched from the
-                    cluster's kubeconfig file
+            default_namespace (str, optional): The default namespace to use if no
+                namespace is specified in the resource declaration. Fetched from the
+                cluster's kubeconfig file
 
         """
 
@@ -2272,7 +2272,7 @@ class Shutdown(object):
                         getitem, keys, mangled_observer_schema[idx_observed]
                     )
                 except KeyError:
-                    Complete.create_path(
+                    Shutdown.create_path(
                         mangled_observer_schema[idx_observed], list(keys)
                     )
                     observed_sub_resources = reduce(
@@ -2383,26 +2383,23 @@ class Shutdown(object):
         }
         return self.secret(secret_name, data, resource_namespace)
 
-    def volumes(self, cfg_name, volume_name, ca_certs=None):
+    def volumes(self, secret_name, volume_name, mount_path):
         """Create shutdown hook volume and volume mount sub-resources
 
         Shutdown hook volume gives access to configmap which stores Krake CAs
         Shutdown hook volume mount hooks volume into application
 
         Args:
-            cfg_name (str): Configmap name
+            secret_name (str): Secret name
             volume_name (str): Volume name
-            ca_certs (list): Krake CA list
+            mount_path (list): Volume mount path
 
         Returns:
             list: List of shutdown hook volume and volume mount sub-resources
 
         """
-        if not ca_certs:
-            return []
-
-        volume = V1Volume(name=volume_name, config_map={"name": cfg_name})
-        volume_mount = V1VolumeMount(name=volume_name, mount_path=self.cert_dest)
+        volume = V1Volume(name=volume_name, secret={"secretName": secret_name})
+        volume_mount = V1VolumeMount(name=volume_name, mount_path=mount_path)
         return [
             SubResource(
                 group="volumes",
@@ -2474,7 +2471,7 @@ class Shutdown(object):
             api_endpoint (str): Krake API endpoint
 
         Returns:
-            str: Application complete url
+            str: Application shutdown url
 
         """
         api_url = URL(api_endpoint)

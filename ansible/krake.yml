@@ -357,6 +357,10 @@
             {% if complete_hook_env_token is defined %} --complete-hook-env-token {{ complete_hook_env_token }} {% endif %} \
             {% if complete_hook_env_complete is defined %} --complete-hook-env-complete {{ complete_hook_env_complete }} {% endif %} \
             {% if external_endpoint is defined or use_private_ip %} --external-endpoint {{ final_external_endpoint }} {% endif %} \
+            {% if shutdown_hook_user is defined %} --shutdown-hook-user {{ shutdown_hook_user }} {% endif %} \
+            {% if shutdown_hook_cert_dest is defined %} --shutdown-hook-cert-dest {{ shutdown_hook_cert_dest }} {% endif %} \
+            {% if shutdown_hook_env_token is defined %} --shutdown-hook-env-token {{ shutdown_hook_env_token }} {% endif %} \
+            {% if shutdown_hook_env_shutdown is defined %} --shutdown-hook-env-shutdown {{ shutdown_hook_env_shutdown }} {% endif %} \
             {{ template_path }}
           vars:
             template_path: "{{ item.path }}"

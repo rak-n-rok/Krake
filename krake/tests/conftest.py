@@ -975,7 +975,7 @@ def hooks_config(pki):
     """
     client_complete_cert = pki.gencert("test-complete-hook-signing",
                                        is_intermediate=True)
-    client_shutdown_cert = pki.gencert("test-complete-hook-signing",
+    client_shutdown_cert = pki.gencert("test-shutdown-hook-signing",
                                        is_intermediate=True)
     return deepcopy(
         HooksConfiguration.deserialize(

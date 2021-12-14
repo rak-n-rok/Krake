@@ -597,6 +597,9 @@ class KubernetesController(Controller):
                         )
 
                         await kube.shutdown(copy)
+            elif copy.status.state is ApplicationState.MIGRATION_FAILED:
+                logger.debug("No migration possible since the app is in %r",
+                             app.status.state)
             else:
                 # Migrate the Application
                 await listen.hook(

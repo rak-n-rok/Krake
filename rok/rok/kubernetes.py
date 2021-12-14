@@ -218,6 +218,13 @@ def create_application(
         },
     }
 
+    if hooks:
+        app["spec"]["hooks"] = []
+        for hook in hooks:
+            app["spec"]["hooks"].append(hook[0])
+            if isinstance(hook, list) and 1 < len(hook) and hook[0] == "shutdown":
+                app["spec"]["shutdown_timeout"] = hook[1]
+
     blocking_state = False
     if wait is not None:
         blocking_state = wait

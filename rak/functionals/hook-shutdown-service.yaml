@@ -2,25 +2,29 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sd-container
+  name: sd-deployment
 spec:
   selector:
     matchLabels:
-      app: shutdown
+      app: shutdown-service
   template:
     metadata:
       labels:
-        app: shutdown
+        app: shutdown-service
     spec:
       volumes:
       - name: sd-volume
         configMap:
           name: sd-service-configmap
       containers:
-      - name: shutdown
-        image: nyurik/alpine-python3-requests
+      - name: echo
+        image: echo-server-python:test
+        imagePullPolicy: Never
         ports:
-          - containerPort: 10000
+        - containerPort: 10000
+          name: shutdown
+        - containerPort: 8080
+          name: app
         volumeMounts:
           - mountPath: /opt
             name: sd-volume
@@ -31,6 +35,7 @@ spec:
         - /bin/sh
         - -c
         - |
+          /usr/local/bin/run.sh &
           echo "copy scripts to /tmp (configMap is read-only)"
           cp /opt/hook-script-shutdown-service.py /tmp
           echo "apply 'chmod +x' to /tmp/hook-script-shutdown-service.py"
@@ -44,8 +49,22 @@ metadata:
 spec:
   type: NodePort
   selector:
-    app: shutdown
+    app: shutdown-service
   ports:
   - port: 10000
     protocol: TCP
     targetPort: 10000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app
+spec:
+  type: NodePort
+  selector:
+    app: shutdown-service
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: 8080
+

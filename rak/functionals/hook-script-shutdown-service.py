@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""This script is used by the "complete" hook test, to act as a dummy job being started
+"""This script is used by the "shutdown" hook test, to act as a dummy job being started
 in a Deployment that belongs to a Krake Application.
 """
 import os.path
