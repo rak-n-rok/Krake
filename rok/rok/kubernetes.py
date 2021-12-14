@@ -165,6 +165,12 @@ class ApplicationTable(ApplicationListTable):
 @arg_formatting
 @depends("config", "session")
 @printer(table=ApplicationTable())
+# FIXME: The attempt to introduce better response handling of rok CLI
+#  caused a minor bug. Response handling of :func:`rok_response_handler`
+#  was suppressed by hotfix, see Krake issue #452.
+#  Anyway, the rok CLI responses should be improved and the
+#  :func:`rok_response_handler` should be more generic,
+#  see Krake issue #455
 @rok_response_handler
 def create_application(
     config,
@@ -447,6 +453,12 @@ def create_cluster_config(kubeconfig, context_name=None):
 @arg_formatting
 @depends("config", "session")
 @printer(table=ClusterTable(many=False))
+# FIXME: The attempt to introduce better response handling of rok CLI
+#  caused a minor bug. Response handling of :func:`rok_response_handler`
+#  was suppressed by hotfix, see Krake issue #452.
+#  Anyway, the rok CLI responses should be improved and the
+#  :func:`rok_response_handler` should be more generic,
+#  see Krake issue #455
 @rok_response_handler
 def create_cluster(
     config, session, namespace, kubeconfig, context, metrics, labels, custom_resources

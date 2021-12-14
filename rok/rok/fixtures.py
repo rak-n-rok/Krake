@@ -313,7 +313,7 @@ class BaseUrlSession(requests.Session):
         url = self.create_url(url)
         resp = super().request(method, url, *args, **kwargs)
         if raise_for_status:
-            resp
+            resp.raise_for_status()
         return resp
 
     def create_url(self, url):

@@ -67,6 +67,12 @@ def list_projects(config, session, namespace, all):
 @arg_metric
 @depends("config", "session")
 @printer(table=ProjectTable())
+# FIXME: The attempt to introduce better response handling of rok CLI
+#  caused a minor bug. Response handling of :func:`rok_response_handler`
+#  was suppressed by hotfix, see Krake issue #452.
+#  Anyway, the rok CLI responses should be improved and the
+#  :func:`rok_response_handler` should be more generic,
+#  see Krake issue #455
 @rok_response_handler
 def create_project(
     config,
@@ -307,6 +313,12 @@ class ClusterTable(ClusterListTable):
 @argument("--node-count", type=int, help="Number of worker nodes")
 @depends("config", "session")
 @printer(table=ClusterTable())
+# FIXME: The attempt to introduce better response handling of rok CLI
+#  caused a minor bug. Response handling of :func:`rok_response_handler`
+#  was suppressed by hotfix, see Krake issue #452.
+#  Anyway, the rok CLI responses should be improved and the
+#  :func:`rok_response_handler` should be more generic,
+#  see Krake issue #455
 @rok_response_handler
 def create_cluster(
     config,
