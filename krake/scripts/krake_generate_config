@@ -418,5 +418,45 @@ if __name__ == "__main__":
         default="",
     )
 
+    add_option(
+        parser,
+        "--shutdown-hook-user",
+        (
+            "For the 'shutdown' hook, the name of the user defined in the CN of the"
+            " generated certificates. Should match the Roles in the database if RBAC is"
+            " enabled."
+        ),
+        default="system:shutdown-hook",
+    )
+    add_option(
+        parser,
+        "--shutdown-hook-cert-dest",
+        (
+            "For the shutdown hook, set the path to the directory, where the"
+            " certificates will be stored in the deployed Application."
+        ),
+        default="/etc/krake_cert",
+    )
+    add_option(
+        parser,
+        "--shutdown-hook-env-token",
+        (
+            "For the complete hook, set the name of the environment variable"
+            " that contain the value of the token,"
+            " which will be given to the Application."
+        ),
+        default="KRAKE_TOKEN",
+    )
+    add_option(
+        parser,
+        "--shutdown-hook-env-shutdown",
+        (
+            "For the complete hook, set the name of the environment variable"
+            " that contain the URL of the Krake API,"
+            " which will be given to the Application."
+        ),
+        default="KRAKE_SHUTDOWN_URL",
+    )
+
     args = vars(parser.parse_args())
     sys.exit(main(**args))

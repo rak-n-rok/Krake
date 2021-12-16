@@ -319,6 +319,7 @@
             --intermediate-ca --ignore
           loop:
             - system:complete-signing
+            - system:shutdown-signing
           when: enable_tls is defined and enable_tls
 
         - name: Get a list of all Krake components's configuration files

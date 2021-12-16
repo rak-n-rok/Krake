@@ -1032,7 +1032,7 @@ async def complete(app, api_endpoint, ssl_context, config, default_namespace="de
     Hook mangles given application and injects complete hooks variables.
 
     Application complete hook is disabled by default.
-    User enables this hook by the --hook argument in rok cli.
+    User enables this hook by the --hook-complete argument in rok cli.
 
     Args:
         app (krake.data.kubernetes.Application): Application object processed
@@ -1089,8 +1089,8 @@ async def shutdown(app, api_endpoint, ssl_context, config, default_namespace="de
     """Execute application complete hook defined by :class:`Complete`.
     Hook mangles given application and injects complete hooks variables.
 
-    Application complete hook is disabled by default.
-    User enables this hook by the --hook argument in rok cli.
+    Application shutdown hook is disabled by default.
+    User enables this hook by the --hook-shutdown argument in rok cli.
 
     Args:
         app (krake.data.kubernetes.Application): Application object processed

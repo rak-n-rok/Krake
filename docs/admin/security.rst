@@ -491,6 +491,7 @@ What you need:
      * ``system:magnum``
      * ``system:admin``
      * ``system:complete-signing``
+     * ``system:shutdown-signing``
      * an additional certificate is necessary for the API.
 
    These names are the ones present in the bootstrapping file called
@@ -509,6 +510,13 @@ certificates, thus would need to be set for signing purposes:
 .. code:: bash
 
     $ support/pki system:complete-signing --intermediate-ca
+
+The certificate with ``system:shutdown-signing`` will be used for signing new
+certificates, thus would need to be set for signing purposes:
+
+.. code:: bash
+
+    $ support/pki system:shutdown-signing --intermediate-ca
 
 If Krake is not deployed locally, you also need to set its external endpoint as TLS
 subject alternative names, for instance:
@@ -625,6 +633,8 @@ common names of the controller certificates must be:
  * ``system:kubernetes`` for the Kubernetes controller;
  * ``system:complete-signing`` for the signing certificate of the "complete" hook,
    see :ref:`dev/hooks:Complete`.
+ * ``system:shutdown-signing`` for the signing certificate of the "shutdown" hook,
+   see :ref:`dev/hooks:Shutdown`.
  * ``system:magnum`` for the Magnum controller.
 
 
