@@ -72,6 +72,7 @@ arg_hooks = argument(
     "-H",
     "--hook",
     dest="hooks",
+    nargs="*",
     default=[],
     action="append",
     help="Application hook. Can be specified multiple times",
@@ -205,7 +206,6 @@ def create_application(
     app = {
         "metadata": {"name": name, "labels": labels},
         "spec": {
-            "hooks": hooks,
             "manifest": manifest,
             "observer_schema": observer_schema,
             "constraints": {
