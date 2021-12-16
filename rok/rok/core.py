@@ -132,6 +132,12 @@ def list_globalmetricsproviders(session):
 @arg_formatting
 @depends("session")
 @printer(table=GlobalMetricsProviderTable())
+# FIXME: The attempt to introduce better response handling of rok CLI
+#  caused a minor bug. Response handling of :func:`rok_response_handler`
+#  was suppressed by hotfix, see Krake issue #452.
+#  Anyway, the rok CLI responses should be improved and the
+#  :func:`rok_response_handler` should be more generic,
+#  see Krake issue #455
 @rok_response_handler
 def create_globalmetricsprovider(
     session, name, url, mp_type, metrics, comparison_column, value_column, table
@@ -444,6 +450,12 @@ def list_globalmetrics(session):
 @arg_formatting
 @depends("session")
 @printer(table=GlobalMetricTable())
+# FIXME: The attempt to introduce better response handling of rok CLI
+#  caused a minor bug. Response handling of :func:`rok_response_handler`
+#  was suppressed by hotfix, see Krake issue #452.
+#  Anyway, the rok CLI responses should be improved and the
+#  :func:`rok_response_handler` should be more generic,
+#  see Krake issue #455
 @rok_response_handler
 def create_globalmetric(session, name, gmp_name, min, max, metric_name=None):
     """Create a GlobalMetric resource.
