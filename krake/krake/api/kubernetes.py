@@ -276,10 +276,10 @@ class KubernetesApi(object):
     @load("app", Application)
     async def update_application_shutdown(request, body, app):
         # If the hook is not enabled for the Application or if the token is invalid
-        # if app.status.token is None or app.status.token != body.token:
-        #    raise web.HTTPUnauthorized(
-        #        reason="No token has been provided or the provided one is invalid."
-        #    )
+        if app.status.token is None or app.status.token != body.token:
+            raise web.HTTPUnauthorized(
+               reason="No token has been provided or the provided one is invalid."
+            )
 
         # Resource state changed to a READY_FOR state depending on the deleted flag
         if app.status.state in [ApplicationState.WAITING_FOR_CLEANING,
