@@ -128,7 +128,7 @@ def test_update():
         author=Person(given_name="Douglas", surname="Adams"),
     )
     update = Book(
-        id=9780465025275,
+        id=42,
         name="Six Easy Pieces",
         created=datetime(2011, 3, 11).astimezone(),
         author=Person(given_name="Richard", surname="Feynman"),
@@ -152,7 +152,7 @@ def test_update_replacing_value_with_none():
         author=Person(given_name="Douglas", surname="Adams"),
     )
     update = Book(
-        id=9780465025275,
+        id=42,
         name="Six Easy Pieces",
         created=datetime(2011, 3, 11).astimezone(),
         author=None,
@@ -164,7 +164,7 @@ def test_update_replacing_value_with_none():
 
 def test_update_replacing_none_with_value():
     book = Book(
-        id=9780465025275,
+        id=42,
         name="Six Easy Pieces",
         created=datetime(2011, 3, 11).astimezone(),
         author=None,
@@ -180,6 +180,43 @@ def test_update_replacing_none_with_value():
     assert book.author is update.author
     assert book.author.given_name == "Douglas"
     assert book.author.surname == "Adams"
+
+
+def test_update_read_only_field():
+    book = Book(
+        id=42,
+        created=datetime(1979, 10, 12).astimezone(),
+        name="The Hitchhiker's Guide to the Galaxy",
+        author=Person(given_name="Douglas", surname="Adams"),
+    )
+    update = book
+    update.created = datetime(2021, 2, 11).astimezone()
+
+    book.update(update)
+
+    assert book.id == 42
+    assert book.created == book.created
+    assert book.name == "The Hitchhiker's Guide to the Galaxy"
+    assert book.author is update.author
+    assert book.author.given_name == "Douglas"
+    assert book.author.surname == "Adams"
+
+
+def test_update_immutable_field():
+    book = Book(
+        id=42,
+        name="The Hitchhiker's Guide to the Galaxy",
+        created=datetime(1979, 10, 12).astimezone(),
+        author=Person(given_name="Douglas", surname="Adams"),
+    )
+    update = Book(
+        id=1,
+        name="Six Easy Pieces",
+        created=datetime(2011, 3, 11).astimezone(),
+        author=Person(given_name="Richard", surname="Feynman"),
+    )
+    with pytest.raises(ValueError, match="Trying to update an immutable field: id"):
+        book.update(update)
 
 
 def test_api_object():

@@ -10,7 +10,13 @@ async def update_{{ operation.signature_name }}(request, body, entity):
     source = getattr(body, "{{ operation.subresource.name|lower }}")
     dest = getattr(entity, "{{ operation.subresource.name|lower }}")
 
-    dest.update(source)
+    try:
+        dest.update(source)
+    except ValueError as e:
+        reason = HttpReason(
+            reason=str(e), code=HttpReasonCode.UPDATE_ERROR
+        )
+        raise json_error(web.HTTPBadRequest, reason.serialize())
 
     await session(request).put(entity)
     logger.info(

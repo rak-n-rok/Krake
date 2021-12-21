@@ -246,7 +246,7 @@ async def test_update(db):
     rev = revision(original)
     original_id = original.id
 
-    overwrite = MyModelFactory()
+    overwrite = MyModelFactory(id=original_id)
     assert revision(overwrite) is None
 
     original.update(overwrite)
