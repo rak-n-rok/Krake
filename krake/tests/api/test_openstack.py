@@ -1,6 +1,7 @@
 import asyncio
 import json
 import pytz
+
 from itertools import count
 from operator import attrgetter
 
@@ -371,7 +372,6 @@ async def test_update_magnum_cluster(aiohttp_client, config, db):
     data = MagnumClusterFactory(spec__node_count=5, spec__master_count=1)
     await db.put(data)
 
-    data.spec.master_count = 2
     data.spec.node_count = 10
 
     resp = await client.put(
@@ -441,26 +441,22 @@ async def test_update_magnum_cluster_no_changes(aiohttp_client, config, db):
     assert resp.status == 400
 
 
-async def test_magnum_cluster_template_immutable(aiohttp_client, config, db):
+async def test_update_magnum_cluster_immutable_field(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
-    data = MagnumClusterFactory(status__template="template1")
+    data = MagnumClusterFactory()
     await db.put(data)
-    data.status.template = "template2"
+    data.metadata.namespace = "override"
 
     resp = await client.put(
-        f"/openstack/namespaces/{data.metadata.namespace}"
-        f"/magnumclusters/{data.metadata.name}/status",
+        f"/openstack/namespaces/testing/magnumclusters/{data.metadata.name}",
         json=data.serialize(),
     )
-    assert resp.status == 200
-    cluster = MagnumCluster.deserialize(await resp.json())
-    assert cluster.status.template == "template1"
-
-    stored = await db.get(
-        cluster, namespace=data.metadata.namespace, name=cluster.metadata.name
-    )
-    assert stored.status.template == "template1"
+    assert resp.status == 400
+    assert await resp.json() == {
+        "code": "UPDATE_ERROR",
+        "reason": "Trying to update an immutable field: namespace",
+    }
 
 
 async def test_update_magnum_cluster_binding(aiohttp_client, config, db):
@@ -962,6 +958,24 @@ async def test_update_project_no_changes(aiohttp_client, config, db):
         json=data.serialize(),
     )
     assert resp.status == 400
+
+
+async def test_update_project_immutable_field(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = ProjectFactory()
+    await db.put(data)
+    data.metadata.namespace = "override"
+
+    resp = await client.put(
+        f"/openstack/namespaces/testing/projects/{data.metadata.name}",
+        json=data.serialize(),
+    )
+    assert resp.status == 400
+    assert await resp.json() == {
+        "code": "UPDATE_ERROR",
+        "reason": "Trying to update an immutable field: namespace",
+    }
 
 
 async def test_update_project_status(aiohttp_client, config, db):
