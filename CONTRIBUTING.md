@@ -13,10 +13,10 @@ support.
 
 # How to report a bug
 
-If you find a security vulnerability, do NOT open an issue. Get in touch with
-`krake-ci@cloudandheat.com` on the [Krake Matrix room][krake-matrix].
+If you find a security vulnerability, do NOT open an issue.
+Please contact the Krake Team via [mail](mailto:krake-ci@cloudandheat.com).
 
-For any other type of bug, please create a issue using the "Issue" template.
+For any other type of bug, please create an issue using the "Issue" template.
 Make sure to answer at least these three questions:
 
 1. What did you do?
@@ -30,7 +30,7 @@ you've tripped over a bug.
 
 # How to suggest a feature or enhancement
 
-Open an issue on our issues tracker on GitLab which describes the feature you
+Open an issue on our issue tracker on GitLab, which describes the feature you
 would like to see, why you need it, and how it should work.
 
 
