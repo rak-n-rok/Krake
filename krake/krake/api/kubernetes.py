@@ -327,6 +327,45 @@ class KubernetesApi(object):
 
         return web.json_response(entity.serialize())
 
+    @routes.route(
+        "PUT", "/kubernetes/namespaces/{namespace}/applications/{name}/retry"
+    )
+    @protected(api="kubernetes", resource="applications/status", verb="update")
+    @load("entity", Application)
+    async def retry_application(request, entity):
+
+        if entity.status.state == ApplicationState.MIGRATION_FAILED:
+            entity.status.state = ApplicationState.RETRY_CLEANING
+            entity.status.migration_timeout = None
+            await session(request).put(entity)
+            logger.info(
+                "Migrating %s %r (%s)",
+                "Application",
+                entity.metadata.name,
+                entity.metadata.uid,
+            )
+
+        elif entity.status.state == ApplicationState.DELETION_FAILED:
+            entity.status.state = ApplicationState.RETRY_CLEANING
+            entity.status.deletion_timeout = None
+            await session(request).put(entity)
+            logger.info(
+                "Deleting %s %r (%s)",
+                "Application",
+                entity.metadata.name,
+                entity.metadata.uid,
+            )
+
+        else:
+            logger.info(
+                "No migration or deletion retry for %s %r (%s) needed",
+                "Application",
+                entity.metadata.name,
+                entity.metadata.uid,
+            )
+
+        return web.json_response(entity.serialize())
+
     @routes.route("POST", "/kubernetes/namespaces/{namespace}/clusters")
     @protected(api="kubernetes", resource="clusters", verb="create")
     @use_schema("body", schema=make_create_request_schema(Cluster))

@@ -380,6 +380,30 @@ def delete_application(config, session, namespace, name, wait):
     return resp.json()
 
 
+@application.command("retry", help="Retry to migrate or delete an application")
+@argument("name", help="Kubernetes application name")
+@arg_namespace
+@arg_formatting
+@depends("config", "session")
+@printer(table=ApplicationTable())
+def retry_application(config, session, namespace, name):
+    if namespace is None:
+        namespace = config["user"]
+
+    resp = session.put(
+        f"/kubernetes/namespaces/{namespace}/applications/{name}/retry",
+        raise_for_status=False
+    )
+    if resp.status_code == 404:
+        raise SystemExit(f"Error 404: Application {name!r} not found")
+    resp.raise_for_status()
+
+    if resp.status_code == 204:
+        return None
+
+    return resp.json()
+
+
 cluster = kubernetes.subparser("cluster", help="Manage Kubernetes clusters")
 
 

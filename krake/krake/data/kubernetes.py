@@ -262,6 +262,7 @@ class ApplicationState(Enum):
     CREATING = auto()
     RUNNING = auto()
     RECONCILING = auto()
+    RETRY_CLEANING = auto()
     WAITING_FOR_CLEANING = auto()
     MIGRATION_FAILED = auto()
     READY_FOR_MIGRATION = auto()
