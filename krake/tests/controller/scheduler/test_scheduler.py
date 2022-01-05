@@ -4,7 +4,6 @@ import multiprocessing
 import pytest
 import random
 import time
-import asyncio
 from asyncio.subprocess import PIPE, STDOUT
 from aiohttp import web
 from copy import deepcopy
@@ -358,7 +357,9 @@ async def test_kubernetes_score(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        clusters_scores = await scheduler.kubernetes.rank_kubernetes_clusters(app, clusters)
+        clusters_scores = await scheduler.kubernetes.rank_kubernetes_clusters(
+            app, clusters
+        )
 
     for ranked, cluster in zip(clusters_scores, clusters):
         assert ranked.score is not None
@@ -751,13 +752,16 @@ async def test_kubernetes_select_cluster_not_deleted(aiohttp_server, config, loo
 
         async with Client(url=server_endpoint(server), loop=loop) as client:
             await scheduler.prepare(client)
-            selected = await scheduler.kubernetes.select_kubernetes_cluster(app,
-                                                                            clusters)
+            selected = await scheduler.kubernetes.select_kubernetes_cluster(
+                app, clusters
+            )
 
             assert selected == clusters[index]
 
 
-async def test_kubernetes_select_cluster_with_constraints_without_metric(aiohttp_server, config, loop):
+async def test_kubernetes_select_cluster_with_constraints_without_metric(
+    aiohttp_server, config, loop
+):
     # Because the selection of clusters is done randomly between the matching clusters,
     # if an error was present, the right cluster could have been randomly picked,
     # and the test would pass even if it should not.
@@ -783,7 +787,9 @@ async def test_kubernetes_select_cluster_with_constraints_without_metric(aiohttp
         assert selected == clusters[0]
 
 
-async def test_kubernetes_select_cluster_sticky_without_metric(aiohttp_server, config, loop):
+async def test_kubernetes_select_cluster_sticky_without_metric(
+    aiohttp_server, config, loop
+):
     cluster_A = ClusterFactory(spec__metrics=[])
     cluster_B = ClusterFactory(spec__metrics=[])
     app = ApplicationFactory(
@@ -798,7 +804,9 @@ async def test_kubernetes_select_cluster_sticky_without_metric(aiohttp_server, c
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes.select_kubernetes_cluster(app, (cluster_A, cluster_B))
+        selected = await scheduler.kubernetes.select_kubernetes_cluster(
+            app, (cluster_A, cluster_B)
+        )
         assert selected == cluster_A
 
 
@@ -1771,7 +1779,9 @@ async def test_openstack_score(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        projects_scores = await scheduler.openstack.rank_openstack_projects(cluster, projects)
+        projects_scores = await scheduler.openstack.rank_openstack_projects(
+            cluster, projects
+        )
 
     for ranked, project in zip(projects_scores, projects):
         assert ranked.score is not None
@@ -2106,7 +2116,9 @@ async def test_select_project_not_deleted(aiohttp_server, config, loop):
 
         async with Client(url=server_endpoint(server), loop=loop) as client:
             await scheduler.prepare(client)
-            selected = await scheduler.openstack.select_openstack_project(cluster, projects)
+            selected = await scheduler.openstack.select_openstack_project(
+                cluster, projects
+            )
 
             assert selected == projects[index]
 
@@ -2154,7 +2166,9 @@ async def test_select_no_matching_project(aiohttp_server, config, db, loop):
             await scheduler.openstack.select_openstack_project(cluster, [project])
 
 
-async def test_select_project_with_constraints_without_metric(aiohttp_server, config, loop):
+async def test_select_project_with_constraints_without_metric(
+    aiohttp_server, config, loop
+):
     # Because the selection of projects is done randomly between the matching projects,
     # if an error was present, the right project could have been randomly picked,
     # and the test would pass even if it should not.

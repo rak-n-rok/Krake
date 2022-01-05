@@ -81,4 +81,3 @@ def etcd_container_port(request):
 @pytest.fixture
 def session():
     yield from rok_session(rok_config())
-

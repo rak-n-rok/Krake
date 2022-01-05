@@ -137,7 +137,9 @@ async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
     # Mangled `env` dictionary should be observed
     for observer_schema in stored.status.mangled_observer_schema:
         if observer_schema["kind"] == "Deployment":
-            for container in observer_schema["spec"]["template"]["spec"]["containers"][:-1]:
+            for container in observer_schema["spec"]["template"]["spec"]["containers"][
+                :-1
+            ]:
                 assert container["env"] == [
                     {
                         "name": None,
@@ -153,8 +155,13 @@ async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
                     },
                 ]
         if observer_schema["kind"] == "Secret":
-            assert observer_schema["metadata"]["name"] == secret_mangled_response["metadata"]["name"]
-            assert observer_schema["data"].keys() == secret_mangled_response["data"].keys()
+            assert (
+                observer_schema["metadata"]["name"]
+                == secret_mangled_response["metadata"]["name"]
+            )
+            assert (
+                observer_schema["data"].keys() == secret_mangled_response["data"].keys()
+            )
 
     # Mangled `env` dictionary should be present in last_applied_manifest and
     # last_observed_manifest
@@ -165,7 +172,10 @@ async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
                 assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
 
         if resource["kind"] == "Secret":
-            assert resource["metadata"]["name"] == secret_mangled_response["metadata"]["name"]
+            assert (
+                resource["metadata"]["name"]
+                == secret_mangled_response["metadata"]["name"]
+            )
             assert resource["data"] == secret_mangled_response["data"]
 
     for resource in stored.status.last_observed_manifest:
@@ -179,10 +189,15 @@ async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
 
                 # Check special control dictionary
                 assert len(container["env"]) == 3
-                assert container["env"][-1] == {"observer_schema_list_current_length": 2}
+                assert container["env"][-1] == {
+                    "observer_schema_list_current_length": 2
+                }
 
         if resource["kind"] == "Secret":
-            assert resource["metadata"]["name"] == secret_mangled_response["metadata"]["name"]
+            assert (
+                resource["metadata"]["name"]
+                == secret_mangled_response["metadata"]["name"]
+            )
             assert resource["data"] == secret_mangled_response["data"]
 
     assert stored.status.state == ApplicationState.RUNNING
@@ -602,7 +617,10 @@ async def test_complete_hook_default_namespace(
                 assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
 
         if resource["kind"] == "Secret":
-            assert resource["metadata"]["name"] == secret_mangled_response["metadata"]["name"]
+            assert (
+                resource["metadata"]["name"]
+                == secret_mangled_response["metadata"]["name"]
+            )
             assert resource["data"] == secret_mangled_response["data"]
 
     for resource in stored.status.last_observed_manifest:
@@ -616,10 +634,15 @@ async def test_complete_hook_default_namespace(
 
                 # Check special control dictionary
                 assert len(container["env"]) == 3
-                assert container["env"][-1] == {"observer_schema_list_current_length": 2}
+                assert container["env"][-1] == {
+                    "observer_schema_list_current_length": 2
+                }
 
         if resource["kind"] == "Secret":
-            assert resource["metadata"]["name"] == secret_mangled_response["metadata"]["name"]
+            assert (
+                resource["metadata"]["name"]
+                == secret_mangled_response["metadata"]["name"]
+            )
             assert resource["data"] == secret_mangled_response["data"]
 
     assert stored.status.state == ApplicationState.RUNNING

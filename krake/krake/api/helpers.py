@@ -26,8 +26,7 @@ class HttpReasonCode(Enum):
 
 
 class HttpReason(Serializable):
-    """Store the reasons for failures on the HTTP layers for the API.
-    """
+    """Store the reasons for failures on the HTTP layers for the API."""
 
     code: HttpReasonCode
     reason: str
@@ -248,7 +247,7 @@ def blocking():
         async def wrapper(request, *args, **kwargs):
             resp = await handler(request, *args, **kwargs)
 
-            if "blocking" in request.query and request.query["blocking"] != 'False':
+            if "blocking" in request.query and request.query["blocking"] != "False":
 
                 entity = {}
                 if kwargs.get("body"):
@@ -267,8 +266,9 @@ def blocking():
                     async for event, obj, rev in w:
                         if time.time() > t_end:
                             break
-                        if obj is not None and \
-                                obj.status.state.equals(request.query["blocking"]):
+                        if obj is not None and obj.status.state.equals(
+                            request.query["blocking"]
+                        ):
                             return web.json_response(obj.serialize())
 
                         if obj is None and request.query["blocking"] == "deleted":

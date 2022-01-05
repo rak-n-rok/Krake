@@ -74,22 +74,19 @@ logger = logging.getLogger("krake.controller.openstack")
 
 
 class CreateFailed(ControllerError):
-    """Raised in case the creation of a Magnum cluster failed.
-    """
+    """Raised in case the creation of a Magnum cluster failed."""
 
     code = ReasonCode.CREATE_FAILED
 
 
 class ReconcileFailed(ControllerError):
-    """Raised in case the update of a Magnum cluster failed.
-    """
+    """Raised in case the update of a Magnum cluster failed."""
 
     code = ReasonCode.RECONCILE_FAILED
 
 
 class DeleteFailed(ControllerError):
-    """Raised in case the deletion of a Magnum cluster failed.
-    """
+    """Raised in case the deletion of a Magnum cluster failed."""
 
     code = ReasonCode.DELETE_FAILED
     recoverable = False

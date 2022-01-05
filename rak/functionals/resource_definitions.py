@@ -427,8 +427,10 @@ class ApplicationDefinition(ResourceDefinition):
     def creation_command(self, wait):
 
         if wait:
-            cmd = f"rok kube app create -f {self.manifest_path} " \
-                  f"{self.name} --wait".split()
+            cmd = (
+                f"rok kube app create -f {self.manifest_path} "
+                f"{self.name} --wait".split()
+            )
         else:
             cmd = f"rok kube app create -f {self.manifest_path} {self.name}".split()
 

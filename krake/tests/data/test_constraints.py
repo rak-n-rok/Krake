@@ -55,7 +55,8 @@ def test_label_constraint_class_methods():
 
 
 def test_label_constraint_deserialization():
-    """Ensure that a label constraint as string cannot be deserialized if it is invalid.
+    """Ensure that a label constraint as string cannot be deserialized
+    if it is invalid.
     """
     serialized_constraints = {
         "labels": ["location is not valid DE"],

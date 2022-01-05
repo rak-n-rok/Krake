@@ -21,10 +21,7 @@ from krake.controller.kubernetes.hooks import (
     update_last_applied_manifest_from_spec,
     generate_default_observer_schema,
 )
-from krake.utils import (
-    now,
-    get_kubernetes_resource_idx
-)
+from krake.utils import now, get_kubernetes_resource_idx
 from krake.data.core import ReasonCode, resource_ref, Reason
 from krake.data.kubernetes import ApplicationState
 

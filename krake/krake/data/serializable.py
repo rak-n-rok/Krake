@@ -139,7 +139,6 @@ if sys.version_info >= (3, 9):
     def _get_origin(cls):
         return cls.__origin__
 
-
 elif sys.version_info >= (3, 7):
 
     def _is_generic(cls):
@@ -168,7 +167,6 @@ elif sys.version_info >= (3, 7):
 
     def _get_origin(cls):
         return cls.__origin__
-
 
 else:  # Python 3.6
 

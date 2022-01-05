@@ -453,8 +453,7 @@ async def test_kafka_provider_connection_error(aiohttp_server, loop):
 
 
 async def test_fetch_query():
-    """Test the output of the fetch_query function in normal conditions.
-    """
+    """Test the output of the fetch_query function in normal conditions."""
     metrics_provider = GlobalMetricsProviderFactory(
         spec__type="static", spec__static__metrics={"my_metric": 0.42}
     )

@@ -116,9 +116,11 @@ def get_kubernetes_resource_idx(manifest, resource, check_namespace=False):
             found_resource["apiVersion"] == api_version
             and found_resource["kind"] == resource["kind"]
             and found_resource["metadata"]["name"] == resource["metadata"]["name"]
-            and (not check_namespace or
-                 found_resource["metadata"]["namespace"] ==
-                 resource["metadata"]["namespace"])
+            and (
+                not check_namespace
+                or found_resource["metadata"]["namespace"]
+                == resource["metadata"]["namespace"]
+            )
         ):
             return idx
 
