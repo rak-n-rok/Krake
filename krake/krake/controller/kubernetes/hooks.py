@@ -972,7 +972,9 @@ def generate_default_observer_schema_dict(
         observer_schema_dict["metadata"]["namespace"] = manifest_dict["metadata"].get(
             "namespace", default_namespace
         )
-        if manifest_dict["spec"]["type"] == "LoadBalancer":
+        if "spec" in manifest_dict and \
+                "type" in manifest_dict["spec"] and \
+                manifest_dict["spec"]["type"] == "LoadBalancer":
             observer_schema_dict["status"] = {}
             observer_schema_dict["status"]["load_balancer"] = {}
             observer_schema_dict["status"]["load_balancer"]["ingress"] = None
