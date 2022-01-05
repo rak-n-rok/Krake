@@ -972,6 +972,10 @@ def generate_default_observer_schema_dict(
         observer_schema_dict["metadata"]["namespace"] = manifest_dict["metadata"].get(
             "namespace", default_namespace
         )
+        if manifest_dict["spec"]["type"] == "LoadBalancer":
+            observer_schema_dict["status"] = {}
+            observer_schema_dict["status"]["load_balancer"] = {}
+            observer_schema_dict["status"]["load_balancer"]["ingress"] = None
 
     return observer_schema_dict
 
@@ -1432,7 +1436,7 @@ class Complete(object):
         if not is_sub_resource:
             last_applied_manifest.extend(items)
             for sub_resource in items:
-                # Generate the default observer schema for the each resource
+                # Generate the default observer schema for each resource
                 mangled_observer_schema.append(
                     generate_default_observer_schema_dict(
                         sub_resource,
