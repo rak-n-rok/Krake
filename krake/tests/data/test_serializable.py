@@ -678,7 +678,7 @@ def test_label_validation_reject_value(label_value):
 
 
 def test_label_multiple_errors():
-    """"Test that invalid types as label values raise an exception."""
+    """ "Test that invalid types as label values raise an exception."""
 
     # 1. Label value is wrong
     data = MetadataFactory(labels={"key1": [None, True]})

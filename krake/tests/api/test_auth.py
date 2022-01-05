@@ -177,8 +177,7 @@ async def test_keystone_auth_no_token(aiohttp_client, config):
 
 @pytest.mark.slow
 async def test_keycloak(keycloak):
-    """Test the Keycloak fixture.
-    """
+    """Test the Keycloak fixture."""
     async with ClientSession() as session:
         # Create a new authentication token
         url = (
@@ -210,8 +209,7 @@ async def test_keycloak(keycloak):
 
 @pytest.mark.slow
 async def test_keycloak_auth(keycloak, aiohttp_client, config):
-    """Using the keycloak fixture, test the API's Keycloak authentication.
-    """
+    """Using the keycloak fixture, test the API's Keycloak authentication."""
     async with ClientSession() as session:
         # Create a new authentication token
         url = (

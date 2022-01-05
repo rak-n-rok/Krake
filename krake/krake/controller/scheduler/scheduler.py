@@ -164,22 +164,27 @@ class Scheduler(Controller):
         self.openstack_api = OpenStackApi(self.client)
         self.core_api = CoreApi(self.client)
 
-        self.openstack = OpenstackHandler(self.client, self.magnum_queue,
-                                          self.openstack_api, self.core_api)
-        self.kubernetes = KubernetesHandler(self.client, self.queue,
-                                            self.kubernetes_api, self.core_api,
-                                            self.stickiness, self.reschedule_after)
+        self.openstack = OpenstackHandler(
+            self.client, self.magnum_queue, self.openstack_api, self.core_api
+        )
+        self.kubernetes = KubernetesHandler(
+            self.client,
+            self.queue,
+            self.kubernetes_api,
+            self.core_api,
+            self.stickiness,
+            self.reschedule_after,
+        )
 
         for i in range(self.worker_count):
             self.register_task(
                 self.kubernetes.handle_kubernetes_applications,
-                name=f"kubernetes_worker_{i}"
+                name=f"kubernetes_worker_{i}",
             )
 
         for i in range(self.worker_count):
             self.register_task(
-                self.openstack.handle_magnum_clusters,
-                name=f"magnum_worker_{i}"
+                self.openstack.handle_magnum_clusters, name=f"magnum_worker_{i}"
             )
 
         self.kubernetes_reflector = Reflector(
@@ -214,7 +219,6 @@ class Scheduler(Controller):
 
 
 class Handler(object):
-
     def __init__(self, client, queue, api, core_api):
 
         self.client = client
@@ -406,7 +410,6 @@ class Handler(object):
 
 
 class KubernetesHandler(Handler):
-
     def __init__(self, client, queue, api, core_api, stickiness, reschedule_after):
 
         super(KubernetesHandler, self).__init__(client, queue, api, core_api)
@@ -717,7 +720,6 @@ class KubernetesHandler(Handler):
 
 
 class OpenstackHandler(Handler):
-
     def __init__(self, client, queue, api, core_api):
 
         super(OpenstackHandler, self).__init__(client, queue, api, core_api)

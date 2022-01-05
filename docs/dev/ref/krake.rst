@@ -191,4 +191,3 @@ Data Abstraction
 .. automodule:: krake.data.kubernetes
     :members:
     :show-inheritance:
-

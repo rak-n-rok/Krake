@@ -710,9 +710,13 @@ def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
             # 5c. Ensure the time since previous migration >= RESCHEDULING_INTERVAL
             if previous_migration_time:
                 app_dict = app.get_resource()
-                scheduled_datetime = datetime.strptime(app_dict["status"]["scheduled"], '%Y-%m-%dT%H:%M:%S.%f%z')
-                assert datetime.timestamp(scheduled_datetime) - previous_migration_time >= RESCHEDULING_INTERVAL
-
+                scheduled_datetime = datetime.strptime(
+                    app_dict["status"]["scheduled"], "%Y-%m-%dT%H:%M:%S.%f%z"
+                )
+                assert (
+                    datetime.timestamp(scheduled_datetime) - previous_migration_time
+                    >= RESCHEDULING_INTERVAL
+                )
 
             # setup the loop variables for the next iteration of the loop
             this_cluster, next_cluster = next_cluster, this_cluster
