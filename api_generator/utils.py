@@ -186,7 +186,7 @@ def get_template(templates_dir, template_path):
 
     """
     file_loader = FileSystemLoader(templates_dir)
-    env = Environment(loader=file_loader)
+    env = Environment(loader=file_loader, autoescape=True)
 
     try:
         template = env.get_template(template_path)
