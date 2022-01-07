@@ -975,9 +975,7 @@ def generate_default_observer_schema_dict(
         if "spec" in manifest_dict and \
                 "type" in manifest_dict["spec"] and \
                 manifest_dict["spec"]["type"] == "LoadBalancer":
-            observer_schema_dict["status"] = {}
-            observer_schema_dict["status"]["load_balancer"] = {}
-            observer_schema_dict["status"]["load_balancer"]["ingress"] = None
+            observer_schema_dict["status"] = {"load_balancer": {"ingress": None}}
 
     return observer_schema_dict
 
