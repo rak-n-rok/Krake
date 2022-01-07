@@ -535,8 +535,8 @@ def check_app_running_on(expected_cluster, error_message):
             scheduled_to = scheduled_to_dict.get("name", None)
             msg = (
                 error_message + f" App state: {app_details['status']['state']}, "
-                f"App scheduled_to: {scheduled_to}, "
-                f"App running_on: {running_on}"
+                                f"App scheduled_to: {scheduled_to}, "
+                                f"App running_on: {running_on}"
             )
             assert running_on == expected_cluster, msg
         except (KeyError, json.JSONDecodeError):
