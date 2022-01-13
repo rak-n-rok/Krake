@@ -6,7 +6,7 @@
 
 """
 import sys
-from argparse import FileType
+from argparse import FileType, Action
 from base64 import b64encode
 
 import yaml
@@ -68,14 +68,42 @@ arg_cluster_label_constraints = argument(
     help="Constraint for labels of the cluster. Can be specified multiple times",
 )
 
-arg_hooks = argument(
-    "-H",
-    "--hook",
+arg_hook_complete = argument(
+    "--hook-complete",
     dest="hooks",
+    const=["complete"],
+    action="append_const",
+    help="Enables the application complete hook.",
+)
+
+TIMEOUT_PERIOD = 60
+
+
+class ShutdownAction(Action):
+    def __call__(self, parser, namespace, values=None, option_string=None):
+        if values is None:
+            values = []
+        if len(values) < 1:
+            defaults = [TIMEOUT_PERIOD]
+            values = ['shutdown'] + values + defaults[len(values):]
+        else:
+            values = ['shutdown'] + values
+        setattr(namespace, self.dest, [values])
+
+
+arg_hook_shutdown = argument(
+    "--hook-shutdown",
+    dest="hooks",
+    metavar=(
+        "timeout-period"
+    ),
     nargs="*",
-    default=[],
-    action="append",
-    help="Application hook. Can be specified multiple times",
+    action=ShutdownAction,
+    help=(
+        f"Enables the application shutdown hook. Additional arguments are possible:"
+        f" timeout-period [{TIMEOUT_PERIOD}]s"
+    ),
+
 )
 
 arg_cluster_resource_constraints = argument(
@@ -167,7 +195,8 @@ class ApplicationTable(ApplicationListTable):
 @arg_cluster_resource_constraints
 @arg_namespace
 @arg_labels
-@arg_hooks
+@arg_hook_complete
+@arg_hook_shutdown
 @arg_formatting
 @depends("config", "session")
 @printer(table=ApplicationTable())
@@ -222,8 +251,10 @@ def create_application(
         app["spec"]["hooks"] = []
         for hook in hooks:
             app["spec"]["hooks"].append(hook[0])
-            if isinstance(hook, list) and 1 < len(hook) and hook[0] == "shutdown":
-                app["spec"]["shutdown_timeout"] = hook[1]
+            if isinstance(hook, list) and \
+               len(hook) > 1 and \
+               hook[0] == "shutdown":
+                app["spec"]["shutdown_grace_time"] = hook[1]
 
     blocking_state = False
     if wait is not None:
@@ -277,7 +308,8 @@ def get_application(config, session, namespace, name):
 @arg_cluster_resource_constraints
 @arg_namespace
 @arg_labels
-@arg_hooks
+@arg_hook_complete
+@arg_hook_shutdown
 @arg_formatting
 @depends("config", "session")
 @printer(table=ApplicationTable())

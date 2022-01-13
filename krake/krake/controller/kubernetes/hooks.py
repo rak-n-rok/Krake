@@ -111,7 +111,7 @@ class HookDispatcher(object):
         attribute.
 
         Args:
-            hook (HookType): Hook attribute for which to execute handlers.
+            hook (HookType): The hook attribute for which to execute handlers.
 
         """
         try:
@@ -249,7 +249,7 @@ def update_last_applied_manifest_dict_from_resp(
         response (dict): partial response from the Kubernetes API.
 
     Raises:
-        KeyError: If the an observed field is not present in the Kubernetes response
+        KeyError: If the observed field is not present in the Kubernetes response
 
     This function go through all observed fields, and initialized their value in
     last_applied_manifest if they are not yet present
@@ -886,7 +886,7 @@ def generate_certificate(config):
     client_key.generate_key(crypto.TYPE_RSA, 2048)
     client_cert.set_pubkey(client_key)
 
-    client_cert.sign(intermediate_key_src, "sha256")  # Should be done at the very end.
+    client_cert.sign(intermediate_key_src, "sha256")
 
     cert_dump = crypto.dump_certificate(crypto.FILETYPE_PEM, client_cert).decode()
     key_dump = crypto.dump_privatekey(crypto.FILETYPE_PEM, client_key).decode()
@@ -921,8 +921,8 @@ def generate_default_observer_schema(app, default_namespace="default"):
             ] = resource_manifest["metadata"].get("namespace", default_namespace)
 
         except IndexError:
-            # Only create a default observer schema is a custom observer schema hasn't
-            # be set by the user.
+            # Only create a default observer schema, if a custom observer schema hasn't
+            # been set by the user.
             app.status.mangled_observer_schema.append(
                 generate_default_observer_schema_dict(
                     resource_manifest,
@@ -1086,8 +1086,8 @@ async def complete(app, api_endpoint, ssl_context, config, default_namespace="de
 
 @listen.on(HookType.ApplicationMangling)
 async def shutdown(app, api_endpoint, ssl_context, config, default_namespace="default"):
-    """Execute application complete hook defined by :class:`Complete`.
-    Hook mangles given application and injects complete hooks variables.
+    """Executes an application shutdown hook defined by :class:`Shutdown`.
+    The hook mangles the given application and injects shutdown hooks variables.
 
     Application shutdown hook is disabled by default.
     User enables this hook by the --hook-shutdown argument in rok cli.
@@ -1097,7 +1097,7 @@ async def shutdown(app, api_endpoint, ssl_context, config, default_namespace="de
             when the hook is called
         api_endpoint (str): the given API endpoint
         ssl_context (ssl.SSLContext): SSL context to communicate with the API endpoint
-        config (krake.data.config.HooksConfiguration): Complete hook
+        config (krake.data.config.HooksConfiguration): Shutdown hook
             configuration.
         default_namespace (str, optional): The default namespace to use if no namespace
             is specified in the resource declaration. Fetched from the cluster's
@@ -1140,6 +1140,20 @@ async def shutdown(app, api_endpoint, ssl_context, config, default_namespace="de
         app.status.mangled_observer_schema,
         default_namespace,
     )
+
+
+@listen.on(HookType.ResourcePreDelete)
+async def pre_shutdown(controller, app, **kwargs):
+    """
+
+    Args:
+        app (krake.data.kubernetes.Application): Application object processed
+            when the hook is called
+    """
+    if "shutdown" not in app.spec.hooks:
+        return
+
+    return
 
 
 class SubResource(NamedTuple):
@@ -1187,8 +1201,8 @@ class Complete(object):
     Names of environment variables are defined in the application controller
     configuration file.
 
-    If TLS is enabled on the Krake API, the complete hook injects a Kubernetes secret
-    and it corresponding volume and volume mount definitions for the Krake CA,
+    If TLS is enabled on the Krake API, the complete hook injects a Kubernetes secret,
+    and it's corresponding volume and volume mount definitions for the Krake CA,
     the client certificate with the right CN, and its key. The directory where the
     secret is mounted is defined in the configuration.
 
@@ -1230,7 +1244,7 @@ class Complete(object):
         mangled_observer_schema,
         default_namespace="default",
     ):
-        """Mangle given application and injects complete hook resources and
+        """Mangle given application and inject complete hook resources and
         sub-resources into :attr:`last_applied_manifest` object by :meth:`mangle`. Also
         mangle the observer_schema as new resources and sub-resources should be observed
 
@@ -1325,7 +1339,7 @@ class Complete(object):
 
     @staticmethod
     def attribute_map(obj):
-        """Convert Kubernetes object to dict based on its attribute mapping
+        """Convert a Kubernetes object to dict based on its attribute mapping
 
         Example:
             .. code:: python
@@ -1386,8 +1400,8 @@ class Complete(object):
         is_sub_resource=False,
         default_namespace="default",
     ):
-        """Mangle application desired state with custom hook resources or
-        sub-resources
+        """Mangle applications desired state with custom hook resources or
+        sub-resources.
 
         Example:
             .. code:: python
@@ -1500,9 +1514,9 @@ class Complete(object):
                 with new hook resources. Otherwise, the function injects each new hook
                 sub-resource into the :attr:`last_applied_manifest` object
                 sub-resources. Defaults to False.
-            default_namespace (str, optional): The default namespace to use if no
-                namespace is specified in the resource declaration. Fetched from the
-                cluster's kubeconfig file
+                default_namespace (str, optional): The default namespace to use if no
+                    namespace is specified in the resource declaration. Fetched from the
+                    cluster's kubeconfig file
 
         """
 
@@ -1523,7 +1537,7 @@ class Complete(object):
             return
 
         def inject(sub_resource, sub_resource_to_mangle, observed_resource_to_mangle):
-            """Inject hook defined sub-resource into Kubernetes sub-resource
+            """Inject a hooks defined sub-resource into a Kubernetes sub-resource.
 
             Args:
                 sub_resource (SubResource): Hook sub-resource that needs to be injected
@@ -1658,7 +1672,7 @@ class Complete(object):
         intermediate_src=None,
         generated_cert=None,
     ):
-        """Create a complete hook secret resource.
+        """Create a complete hooks secret resource.
 
         Complete hook secret stores Krake CAs and client certificates to communicate
         with the Krake API.
@@ -1697,7 +1711,7 @@ class Complete(object):
     def secret_token(
         self, secret_name, name, namespace, resource_namespace, api_endpoint, token
     ):
-        """Create complete hook secret resource.
+        """Create complete hooks secret resource.
 
         Complete hook secret stores Krake authentication token
         and complete hook URL for given application.
@@ -1723,7 +1737,7 @@ class Complete(object):
         return self.secret(secret_name, data, resource_namespace)
 
     def volumes(self, secret_name, volume_name, mount_path):
-        """Create complete hook volume and volume mount sub-resources
+        """Create complete hooks volume and volume mount sub-resources
 
         Complete hook volume gives access to hook's secret, which stores
         Krake CAs and client certificates to communicate with the Krake API.
@@ -1797,7 +1811,7 @@ class Complete(object):
 
     @staticmethod
     def create_complete_url(name, namespace, api_endpoint):
-        """Create application complete URL.
+        """Create an applications complete URL.
 
         Args:
             name (str): Application name
@@ -1816,7 +1830,7 @@ class Complete(object):
         )
 
     def env_vars(self, secret_name):
-        """Create complete hook environment variables sub-resources
+        """Create complete hooks environment variables sub-resources
 
         Create complete hook environment variables store Krake authentication token
         and complete hook URL for given application.
@@ -1898,9 +1912,10 @@ class Shutdown(object):
         mangled_observer_schema,
         default_namespace="default",
     ):
-        """Mangle given application and injects complete hook resources and
-        sub-resources into :attr:`last_applied_manifest` object by :meth:`mangle`. Also
-        mangle the observer_schema as new resources and sub-resources should be observed
+        """Mangle a given application and inject complete hook resources and
+        sub-resources into the :attr:`last_applied_manifest` object by :meth:`mangle`.
+        Also mangle the observer_schema as new resources and sub-resources should
+        be observed.
 
         :attr:`last_applied_manifest` is created as a deep copy of the desired
         application resources, as defined by user. It can be updated by custom hook
@@ -1986,7 +2001,7 @@ class Shutdown(object):
 
     @staticmethod
     def attribute_map(obj):
-        """Convert a Kubernetes object to dict based on its attribute mapping
+        """Convert a Kubernetes object to a dict based on its attribute mapping.
 
         Example:
             .. code:: python
@@ -2047,8 +2062,8 @@ class Shutdown(object):
         is_sub_resource=False,
         default_namespace="default",
     ):
-        """Mangle application desired state with custom hook resources or
-        sub-resources
+        """Mangle applications desired state with custom hook resources or
+        sub-resources.
 
         Example:
             .. code:: python
@@ -2173,7 +2188,7 @@ class Shutdown(object):
         if not is_sub_resource:
             last_applied_manifest.extend(items)
             for sub_resource in items:
-                # Generate the default observer schema for the each resource
+                # Generate the default observer schema for each resource
                 mangled_observer_schema.append(
                     generate_default_observer_schema_dict(
                         sub_resource,
@@ -2184,7 +2199,7 @@ class Shutdown(object):
             return
 
         def inject(sub_resource, sub_resource_to_mangle, observed_resource_to_mangle):
-            """Inject hook defined sub-resource into Kubernetes sub-resource
+            """Inject a hooks defined sub-resource into a Kubernetes sub-resource.
 
             Args:
                 sub_resource (SubResource): Hook sub-resource that needs to be injected
@@ -2195,7 +2210,7 @@ class Shutdown(object):
                     corresponding to the Kubernetes sub-resource.
 
             Raises:
-                InvalidManifestError: if the sub-resource which will be mangled is not a
+                InvalidManifestError: if the to-be mangled sub-resource is not a
                     list or a dict.
 
             """
@@ -2358,7 +2373,7 @@ class Shutdown(object):
     def secret_token(
         self, secret_name, name, namespace, resource_namespace, api_endpoint, token
     ):
-        """Create shutdown hook secret resource.
+        """Create shutdown hooks secret resource.
 
         Shutdown hook secret stores Krake authentication token
         and shutdown hook URL for given application.
@@ -2384,10 +2399,10 @@ class Shutdown(object):
         return self.secret(secret_name, data, resource_namespace)
 
     def volumes(self, secret_name, volume_name, mount_path):
-        """Create shutdown hook volume and volume mount sub-resources
+        """Create shutdown hooks volume and volume mount sub-resources.
 
-        Shutdown hook volume gives access to configmap which stores Krake CAs
-        Shutdown hook volume mount hooks volume into application
+        Shutdown hook volume gives access to a configmap, which stores Krake CAs
+        Shutdown hook volume mount hooks volume into application.
 
         Args:
             secret_name (str): Secret name
@@ -2439,7 +2454,7 @@ class Shutdown(object):
         namespace,
         _type="Opaque"
     ):
-        """Create a secret resource.
+        """Creates a secret resource.
 
         Args:
             secret_name (str): Secret name
@@ -2463,7 +2478,7 @@ class Shutdown(object):
 
     @staticmethod
     def create_shutdown_url(name, namespace, api_endpoint):
-        """Create application shutdown URL.
+        """Create an applications shutdown URL.
 
         Args:
             name (str): Application name
@@ -2482,10 +2497,10 @@ class Shutdown(object):
         )
 
     def env_vars(self, secret_name):
-        """Create shutdown hook environment variables sub-resources
+        """Create shutdown hooks environment variables sub-resources.
 
-        Create shutdown hook environment variables store Krake authentication token
-        and shutdown hook URL for given application.
+        Creates shutdown hook environment variables to store Krake authentication token
+        and a shutdown hook URL for given applications.
 
         Args:
             secret_name (str): Secret name

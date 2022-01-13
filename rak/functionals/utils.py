@@ -363,7 +363,7 @@ def check_return_code(error_message, expected_code=0):
             f" Expected return code: {expected_code}."
             f" Observed return code: {response.returncode}."
         )
-        assert response.returncode == expected_code, response.output + details
+        assert response.returncode == expected_code, error_message + details
 
     return validate
 
@@ -447,7 +447,7 @@ def check_resource_deleted(error_message):
     """
 
     def validate(response):
-        assert "not found" in response.output, error_message + response.output
+        assert "not found" in response.output, error_message
         assert response.returncode == 1
 
     return validate

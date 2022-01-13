@@ -52,8 +52,7 @@ class KubernetesApi(object):
         namespace = request.match_info.get("namespace")
         kwargs["namespace"] = namespace
 
-        # Ensure that a resource with the same name does not already
-        # exists.
+        # Ensure that a resource with the same name does not already exist.
         existing = await session(request).get(body.__class__, **kwargs)
 
         if existing is not None:
@@ -94,6 +93,9 @@ class KubernetesApi(object):
         # Resource is already deleting
         if entity.metadata.deleted:
             return web.json_response(entity.serialize())
+
+        if "shutdown" in entity.spec.hooks:
+            entity.status.state = ApplicationState.WAITING_FOR_CLEANING
 
         # TODO: Should be update "modified" here?
         # Resource marked as deletion, to be deleted by the Garbage Collector
@@ -283,14 +285,13 @@ class KubernetesApi(object):
 
         # Resource state changed to a READY_FOR state depending on the deleted flag
         if app.status.state in [ApplicationState.WAITING_FOR_CLEANING,
-                                ApplicationState.MIGRATION_FAILED,
-                                ApplicationState.DELETION_FAILED]:
+                                ApplicationState.DEGRADED]:
             if app.metadata.deleted:
-                app.status.state = ApplicationState.READY_FOR_DELETION
-                app.status.deletion_timeout = None
+                app.status.state = ApplicationState.READY_FOR_ACTION
+                app.status.shutdown_grace_period = None
             else:
-                app.status.state = ApplicationState.READY_FOR_MIGRATION
-                app.status.migration_timeout = None
+                app.status.state = ApplicationState.READY_FOR_ACTION
+                app.status.shutdown_grace_period = None
         await session(request).put(app)
         logger.info(
             "Deleting of application %r (%s) by calling shutdown hook",
@@ -317,12 +318,11 @@ class KubernetesApi(object):
 
         await session(request).put(entity)
         logger.info(
-            "Update %s of %s %r (%s) to %s",
+            "Update %s of %s %r (%s)",
             "Status",
             "Application",
             entity.metadata.name,
-            entity.metadata.uid,
-            entity.status.state
+            entity.metadata.uid
         )
 
         return web.json_response(entity.serialize())
@@ -334,20 +334,9 @@ class KubernetesApi(object):
     @load("entity", Application)
     async def retry_application(request, entity):
 
-        if entity.status.state == ApplicationState.MIGRATION_FAILED:
-            entity.status.state = ApplicationState.RETRY_CLEANING
-            entity.status.migration_timeout = None
-            await session(request).put(entity)
-            logger.info(
-                "Migrating %s %r (%s)",
-                "Application",
-                entity.metadata.name,
-                entity.metadata.uid,
-            )
-
-        elif entity.status.state == ApplicationState.DELETION_FAILED:
-            entity.status.state = ApplicationState.RETRY_CLEANING
-            entity.status.deletion_timeout = None
+        if entity.status.state == ApplicationState.DEGRADED:
+            entity.status.state = ApplicationState.WAITING_FOR_CLEANING
+            entity.status.shutdown_grace_period = None
             await session(request).put(entity)
             logger.info(
                 "Deleting %s %r (%s)",

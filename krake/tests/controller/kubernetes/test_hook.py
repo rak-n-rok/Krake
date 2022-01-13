@@ -2214,7 +2214,7 @@ async def test_shutdown_hook_sending(aiohttp_server, config, db, loop, hooks_con
         status__state=ApplicationState.WAITING_FOR_CLEANING,
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
-        status__deletion_timeout=utils.now(),
+        status__shutdown_grace_period=utils.now(),
         spec__hooks=["shutdown"],
         spec__manifest=[deployment_manifest],
         spec__observer_schema=[custom_deployment_observer_schema],
@@ -2252,7 +2252,7 @@ async def test_shutdown_hook_sending(aiohttp_server, config, db, loop, hooks_con
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
     assert stored.metadata.deleted is not None
-    assert stored.status.deletion_timeout is not None
+    assert stored.status.shutdown_grace_period is not None
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
 
@@ -2263,7 +2263,7 @@ async def test_shutdown_hook_sending(aiohttp_server, config, db, loop, hooks_con
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.deletion_timeout is None
+    assert stored.status.shutdown_grace_period is None
 
 
 async def test_shutdown_hook_sending_tls(
@@ -2356,7 +2356,7 @@ async def test_shutdown_hook_sending_tls(
         status__state=ApplicationState.PENDING,
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
-        status__deletion_timeout=utils.now(),
+        status__shutdown_grace_period=utils.now(),
         spec__hooks=["shutdown"],
         spec__manifest=[deployment_manifest],
         spec__observer_schema=[custom_deployment_observer_schema],
@@ -2438,7 +2438,7 @@ async def test_shutdown_hook_sending_tls(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
     assert stored.metadata.deleted is not None
-    assert stored.status.deletion_timeout is not None
+    assert stored.status.shutdown_grace_period is not None
 
     async with Client(
         url=server_endpoint(api_server), loop=loop, ssl_context=hook_ssl_context
@@ -2450,7 +2450,7 @@ async def test_shutdown_hook_sending_tls(
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.status.deletion_timeout is None
+    assert stored.status.shutdown_grace_period is None
 
 
 async def test_shutdown_hook_sending_tls_rbac(
@@ -2546,7 +2546,7 @@ async def test_shutdown_hook_sending_tls_rbac(
         status__state=ApplicationState.PENDING,
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
-        status__deletion_timeout=utils.now(),
+        status__shutdown_grace_period=utils.now(),
         spec__hooks=["shutdown"],
         spec__manifest=[deployment_manifest],
         spec__observer_schema=[custom_deployment_observer_schema],
@@ -2648,8 +2648,7 @@ async def test_shutdown_hook_sending_tls_rbac(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
     assert stored.metadata.deleted is not None
-    assert stored.status.deletion_timeout is not None
-
+    assert stored.status.shutdown_grace_period is not None
 
     async with Client(
         url=server_endpoint(api_server), loop=loop, ssl_context=hook_ssl_context
@@ -2671,7 +2670,7 @@ async def test_shutdown_hook_sending_tls_rbac(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
     assert stored.metadata.deleted is not None
-    assert stored.status.deletion_timeout is None
+    assert stored.status.shutdown_grace_period is None
 
 
 async def test_shutdown_hook_reschedule(

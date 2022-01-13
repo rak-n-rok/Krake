@@ -67,6 +67,7 @@ def test_complete_hook(minikube_clusters):
             condition=check_return_code(error_message),
         )
 
+
 @pytest.mark.skip(
     reason="The spawned krake instance can't find the clusters ip. But even the error"
     "handling is inconsistent here, so I prefer to skip the test for now and redo"

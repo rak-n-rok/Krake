@@ -526,31 +526,21 @@ class KubernetesController(Controller):
         logger.debug("Handle %r", app)
 
         copy = deepcopy(app)
-        if app.metadata.deleted:
+        if copy.metadata.deleted:
             # Delete the Application
             try:
                 if (
-                    "shutdown" in app.spec.hooks
-                    and app.status.state not in [ApplicationState.WAITING_FOR_CLEANING,
-                                                 ApplicationState.READY_FOR_DELETION,
-                                                 ApplicationState.DELETING,
-                                                 ApplicationState.DELETION_FAILED]
+                    "shutdown" in copy.spec.hooks
+                    and copy.status.state is ApplicationState.WAITING_FOR_CLEANING
                 ):
-                    app.status.state = ApplicationState.WAITING_FOR_CLEANING
 
-                    await self.kubernetes_api.update_application_status(
-                        namespace=app.metadata.namespace,
-                        name=app.metadata.name,
-                        body=app
-                    )
+                    await self._shutdown_application(copy)
 
-                    await self._delete_manifest(app)
                 elif (
-                    (
-                        "shutdown" in app.spec.hooks
-                        and app.status.state is ApplicationState.READY_FOR_DELETION
-                    )
-                    or "shutdown" not in app.spec.hooks
+                    # Don't need to check for shutdown hook here, since the state
+                    # READY_FOR_ACTION is only set
+                    copy.status.state is ApplicationState.READY_FOR_ACTION
+                    or "shutdown" not in copy.spec.hooks
                 ):
                     await listen.hook(
                         HookType.ApplicationPreDelete,
@@ -576,31 +566,29 @@ class KubernetesController(Controller):
         ):
             if (
                 "shutdown" in copy.spec.hooks
-                and copy.status.state is ApplicationState.WAITING_FOR_CLEANING
+                and copy.status.state is not ApplicationState.READY_FOR_ACTION
             ):
-                cluster = await self.kubernetes_api.read_cluster(
-                    namespace=copy.status.running_on.namespace,
-                    name=copy.status.running_on.name,
-                )
-                # Loop over a copy of the `last_observed_manifest` as we modify delete
-                # resources from the dictionary in the ResourcePostDelete hook
-                async with KubernetesClient(
-                    cluster.spec.kubeconfig, cluster.spec.custom_resources
-                ) as kube:
-                    if copy.status.migration_timeout is None:
-                        copy.status.migration_timeout = \
-                            now() + timedelta(seconds=app.spec.shutdown_timeout)
-                        await self.kubernetes_api.update_application_status(
-                            namespace=copy.metadata.namespace,
-                            name=copy.metadata.name,
-                            body=copy
-                        )
+                if copy.status.state in [ApplicationState.RUNNING,
+                                         ApplicationState.RECONCILING]:
+                    copy.status.state = ApplicationState.WAITING_FOR_CLEANING
+                    await self.kubernetes_api.update_application_status(
+                        namespace=copy.metadata.namespace,
+                        name=copy.metadata.name,
+                        body=copy,
+                    )
 
-                        await kube.shutdown(copy)
-            elif copy.status.state is ApplicationState.MIGRATION_FAILED:
-                logger.debug("No migration possible since the app is in %r",
-                             app.status.state)
-            else:
+                if copy.status.state is ApplicationState.WAITING_FOR_CLEANING:
+                    await self._shutdown_application(copy)
+
+            # elif copy.status.state is ApplicationState.FAILED:
+            #     logger.debug("No migration possible since the app is in %r",
+            #                  app.status.state)
+            elif (
+                # Don't need to check for shutdown hook here, since the state
+                # READY_FOR_ACTION is only set
+                app.status.state is ApplicationState.READY_FOR_ACTION
+                or "shutdown" not in app.spec.hooks
+            ):
                 # Migrate the Application
                 await listen.hook(
                     HookType.ApplicationPreMigrate,
@@ -684,39 +672,77 @@ class KubernetesController(Controller):
                 cluster.spec.kubeconfig, cluster.spec.custom_resources
             ) as kube:
                 for resource in last_observed_manifest_copy:
-                    if app.status.state is ApplicationState.WAITING_FOR_CLEANING:
-                        if app.status.deletion_timeout is None:
-                            app.status.deletion_timeout = \
-                                now() + timedelta(seconds=app.spec.shutdown_timeout)
-                            await self.kubernetes_api.update_application_status(
-                                namespace=app.metadata.namespace,
-                                name=app.metadata.name,
-                                body=app
-                            )
-
-                            await kube.shutdown(app)
-                    else:
-                        await listen.hook(
-                            HookType.ResourcePreDelete,
-                            app=app,
-                            cluster=cluster,
-                            resource=resource,
-                            controller=self,
-                        )
-                        resp = await kube.delete(resource)
-                        await listen.hook(
-                            HookType.ResourcePostDelete,
-                            app=app,
-                            cluster=cluster,
-                            resource=resource,
-                            response=resp,
-                        )
+                    await listen.hook(
+                        HookType.ResourcePreDelete,
+                        app=app,
+                        cluster=cluster,
+                        resource=resource,
+                        controller=self,
+                    )
+                    resp = await kube.delete(resource)
+                    await listen.hook(
+                        HookType.ResourcePostDelete,
+                        app=app,
+                        cluster=cluster,
+                        resource=resource,
+                        response=resp,
+                    )
 
         if app.status.running_on:
             app.metadata.owners.remove(app.status.running_on)
 
         # Clear manifest in status
         app.status.running_on = None
+
+    async def _shutdown_application(self, app):
+
+        cluster = await self.kubernetes_api.read_cluster(
+            namespace=app.status.running_on.namespace,
+            name=app.status.running_on.name,
+        )
+        # Loop over a copy of the `last_observed_manifest` as we modify delete
+        # resources from the dictionary in the ResourcePostDelete hook
+        last_observed_manifest_copy = deepcopy(app.status.last_observed_manifest)
+        async with KubernetesClient(
+            cluster.spec.kubeconfig, cluster.spec.custom_resources
+        ) as kube:
+            for _ in last_observed_manifest_copy:
+                if app.status.shutdown_grace_period is None:
+                    app.status.shutdown_grace_period = \
+                        now() + timedelta(seconds=app.spec.shutdown_grace_time)
+                    await self.kubernetes_api.update_application_status(
+                        namespace=app.metadata.namespace,
+                        name=app.metadata.name,
+                        body=app
+                    )
+
+                    await kube.shutdown(app)
+
+                    async def grace_period_job(app, callback):
+                        await asyncio.sleep(app.spec.shutdown_grace_time)
+                        await callback(app)
+
+                    asyncio.ensure_future(
+                        grace_period_job(
+                            app, self._check_grace_period
+                        )
+                    )
+
+        return
+
+    async def _check_grace_period(self, app):
+        app_update = await self.kubernetes_api.read_application(
+            namespace=app.metadata.namespace,
+            name=app.metadata.name,
+        )
+        if app_update.status.state is ApplicationState.WAITING_FOR_CLEANING:
+            app.status.state = ApplicationState.DEGRADED
+            await self.kubernetes_api.update_application_status(
+                namespace=app.metadata.namespace,
+                name=app.metadata.name,
+                body=app,
+            )
+        return
 
     async def _reconcile_application(self, app):
         if not app.status.scheduled_to:
@@ -903,7 +929,7 @@ class KubernetesController(Controller):
         await self._apply_manifest(app, delta)
 
         # Transition into "RUNNING" state
-        app.status.migration_timeout = None
+        app.status.shutdown_grace_period = None
         app.status.state = ApplicationState.RUNNING
         await self.kubernetes_api.update_application_status(
             namespace=app.metadata.namespace, name=app.metadata.name, body=app

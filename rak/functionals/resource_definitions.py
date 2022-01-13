@@ -438,7 +438,8 @@ class ApplicationDefinition(ResourceDefinition):
             self.cluster_label_constraints
         )
         cmd += self._get_label_options(self.labels)
-        cmd += self._get_flag_str_options("-H", self.hooks)
+        cmd += self._get_hook_params(self.hooks)
+
         if self.migration is not None:
             cmd += [self._get_migration_flag(self.migration)]
         if self.observer_schema_path:
@@ -472,6 +473,27 @@ class ApplicationDefinition(ResourceDefinition):
         else:
             raise RuntimeError("migration must be None, False or True.")
         return migration_flag
+
+    @staticmethod
+    def _get_hook_params(hooks):
+        """
+        Determines the hook cli options for a 'rok kube app create'
+        or 'rok kube app update' command, based on the value of the 'hooks' list.
+
+        Args:
+            hooks (list): list containing all hooks
+
+        Returns:
+            list: list containing all hook parameters for the cli
+
+        """
+        hook_params = []
+        if "complete" in hooks:
+            hook_params.append("--hook-complete")
+        if "shutdown" in hooks:
+            hook_params.append("--hook-shutdown")
+
+        return hook_params
 
     def creation_acceptance_criteria(self, error_message=None):
         return check_app_created_and_up(error_message=error_message)

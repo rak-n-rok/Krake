@@ -427,13 +427,8 @@ class KubernetesHandler(Handler):
         if app.metadata.deleted:
             # TODO: If an application is deleted, the scheduling of other
             #   applications should potentially be revised.
-            if "shutdown" in app.spec.hooks:
-                if app.metadata.uid not in self.queue.dirty:
-                    logger.debug("Reschedule %r in %s secs", app, 30)
-                    await self.queue.put(app.metadata.uid, app, delay=30)
-            else:
-                logger.debug("Cancel rescheduling of deleted %r", app)
-                await self.queue.cancel(app.metadata.uid)
+            logger.debug("Cancel rescheduling of deleted %r", app)
+            await self.queue.cancel(app.metadata.uid)
 
         # The application is already scheduled and no change has been made to the specs
         # since then. Nevertheless, we should perform a periodic rescheduling to handle
@@ -538,13 +533,6 @@ class KubernetesHandler(Handler):
             return
 
         if app.status.scheduled_to:
-            if "shutdown" in app.spec.hooks:
-                app.status.state = ApplicationState.WAITING_FOR_CLEANING
-                await self.api.update_application_status(
-                    namespace=app.metadata.namespace,
-                    name=app.metadata.name,
-                    body=app
-                )
             logger.info(
                 "Migrate %r from %s to %s", app, app.status.scheduled_to, scheduled_to
             )
@@ -570,39 +558,6 @@ class KubernetesHandler(Handler):
             logger.debug(
                 "Not rescheduling %r, since migration of the application is disabled.",
                 app,
-            )
-            return
-
-        if (
-            app.status.migration_timeout is not None and
-            app.status.migration_timeout < utils.now() and
-            app.status.state is not ApplicationState.MIGRATION_FAILED
-        ):
-            app.status.state = ApplicationState.MIGRATION_FAILED
-            await self.api.update_application_status(
-                namespace=app.metadata.namespace,
-                name=app.metadata.name,
-                body=app,
-            )
-
-        if (
-            app.status.deletion_timeout is not None and
-            app.status.deletion_timeout < utils.now() and
-            app.status.state is not ApplicationState.DELETION_FAILED
-        ):
-            app.status.state = ApplicationState.DELETION_FAILED
-            await self.api.update_application_status(
-                namespace=app.metadata.namespace,
-                name=app.metadata.name,
-                body=app,
-            )
-
-        if app.status.state in [ApplicationState.MIGRATION_FAILED,
-                                ApplicationState.DELETION_FAILED]:
-            logger.debug(
-                "Not rescheduling %r, since it is in %s.",
-                app,
-                app.status.state
             )
             return
 
