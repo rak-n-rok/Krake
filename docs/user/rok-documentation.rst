@@ -150,8 +150,11 @@ create
     ``-n | --namespace`` (optional):
         The namespace to which the Application has to be added. If none is given, the user namespace is selected.
 
-    ``-H | --hook`` (optional):
-        The Application hook which modify the creation or liveness of Application.
+    ``--hook-complete`` (optional):
+        The complete hook, which allows an Application to send a completion signal to the API.
+
+    ``--hook-shutdown`` (optional):
+        The shutdown hook, which allows the graceful shutdown of the Application. Can have an additional timeout value after the argument.
 
     ``-R | --cluster-resource-constraint`` (optional):
         The name of custom resources definition constraint in form: ``<plural>.<group>``. The application will be deployed only on the clusters with given custom definition support. Can be specified multiple times.
@@ -189,8 +192,11 @@ update
     ``-n | --namespace`` (optional):
         The namespace from which the Applications have to be taken. If none is given, the user namespace is selected.
 
-    ``-H | --hook`` (optional):
-        The Application hook which modify the creation or liveness of Application.
+    ``--hook-complete`` (optional):
+        The complete hook, which allows an Application to send a completion signal to the API.
+
+    ``--hook-shutdown`` (optional):
+        The shutdown hook, which allows the graceful shutdown of the Application. Can have an additional timeout value after the argument.
 
     ``-R | --cluster-resource-constraint`` (optional):
         The name of custom resources definition constraint in form: ``<plural>.<group>``. The application will be deployed only on the clusters with given custom definition support. Can be specified multiple times.

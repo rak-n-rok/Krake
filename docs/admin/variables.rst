@@ -115,6 +115,18 @@ krake_apps.yml
         IP, its port and the "http" or "https" scheme depending on the status of TLS on
         the Krake API (enabled or disabled).
 
+    shutdown_hook_user (string)
+        Name of the user for the "shutdown" hook.
+    shutdown_hook_cert_dest (file path)
+        Path inside the deployed Application where the certificate and its key will be
+        stored (for the "complete" hook).
+    shutdown_hook_env_token (string)
+        Name of the environment variable that will contain the token in the deployed
+        Application.
+    shutdown_hook_env_shutdown (string)
+        Name of the environment variable that will contain the URL of the Krake API in
+        the deployed Application.
+
 magnum_clusters.yml
     prometheus_port
         Prometheus server port

@@ -93,7 +93,7 @@ def test_create_cluster_and_app(minikube_clusters):
     # 1. Create cluster and application
     # 2. Check that the application is in RUNNING state
     # (Checks 1-2 are performed automatically when entering the environment);
-    with Environment(environment) as env:
+    with Environment(environment, creation_delay=30) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
         # 3. Ensure that the application was scheduled to the cluster;
@@ -145,6 +145,7 @@ def test_create_on_other_namespace(minikube_clusters):
         environment,
         before_handlers=[create_namespace],
         after_handlers=[delete_namespace],
+        creation_delay=60
     ) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 

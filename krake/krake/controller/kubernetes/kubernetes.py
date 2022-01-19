@@ -3,6 +3,7 @@ import logging
 from contextlib import suppress
 from copy import deepcopy
 from functools import partial
+from datetime import timedelta
 
 from aiohttp import ClientResponseError
 from krake.controller.kubernetes.client import KubernetesClient
@@ -12,7 +13,7 @@ from typing import NamedTuple, Tuple
 
 from yarl import URL
 
-from .hooks import listen, Hook
+from .hooks import listen, HookType
 from krake.client.kubernetes import KubernetesApi
 from krake.controller import Controller, Reflector, ControllerError
 from krake.controller.kubernetes.hooks import (
@@ -230,14 +231,18 @@ class ResourceDelta(NamedTuple):
         for observed_resource in app.status.mangled_observer_schema:
 
             desired_idx = get_kubernetes_resource_idx(
-                app.status.last_applied_manifest, observed_resource, True
+                app.status.last_applied_manifest,
+                observed_resource,
+                True
             )
             desired_resource = app.status.last_applied_manifest[desired_idx]
 
             current_resource = None
             with suppress(IndexError):
                 current_idx = get_kubernetes_resource_idx(
-                    app.status.last_observed_manifest, observed_resource, True
+                    app.status.last_observed_manifest,
+                    observed_resource,
+                    True
                 )
                 current_resource = app.status.last_observed_manifest[current_idx]
 
@@ -261,7 +266,9 @@ class ResourceDelta(NamedTuple):
         for current_resource in app.status.last_observed_manifest:
             try:
                 get_kubernetes_resource_idx(
-                    app.status.last_applied_manifest, current_resource, True
+                    app.status.last_applied_manifest,
+                    current_resource,
+                    True
                 )
             except IndexError:
                 deleted.append(current_resource)
@@ -519,50 +526,94 @@ class KubernetesController(Controller):
         logger.debug("Handle %r", app)
 
         copy = deepcopy(app)
-        if app.metadata.deleted:
+        if copy.metadata.deleted:
             # Delete the Application
-            await listen.hook(
-                Hook.ApplicationPreDelete,
-                controller=self,
-                app=copy,
-                start=start_observer,
-            )
-            await self._delete_application(copy)
-            await listen.hook(
-                Hook.ApplicationPostDelete,
-                controller=self,
-                app=copy,
-                start=start_observer,
-            )
+            try:
+                if (
+                    "shutdown" in copy.spec.hooks
+                    and copy.status.state is ApplicationState.WAITING_FOR_CLEANING
+                ):
+
+                    await self._shutdown_application(copy)
+
+                elif (
+                    # Don't need to check for shutdown hook here, since the state
+                    # READY_FOR_ACTION is only set
+                    copy.status.state is ApplicationState.READY_FOR_ACTION
+                    or "shutdown" not in copy.spec.hooks
+                ):
+                    await listen.hook(
+                        HookType.ApplicationPreDelete,
+                        controller=self,
+                        app=copy,
+                        start=start_observer,
+                    )
+                    await self._delete_application(copy)
+                    await listen.hook(
+                        HookType.ApplicationPostDelete,
+                        controller=self,
+                        app=copy,
+                        start=start_observer,
+                    )
+
+            except ClientResponseError as err:
+                if err.status == 404:
+                    return
+                raise
         elif (
             copy.status.running_on
             and copy.status.running_on != copy.status.scheduled_to
         ):
-            # Migrate the Application
-            await listen.hook(
-                Hook.ApplicationPreMigrate,
-                controller=self,
-                app=copy,
-                start=start_observer,
-            )
-            await self._migrate_application(copy)
-            await listen.hook(
-                Hook.ApplicationPostMigrate,
-                controller=self,
-                app=copy,
-                start=start_observer,
-            )
+            if (
+                "shutdown" in copy.spec.hooks
+                and copy.status.state is not ApplicationState.READY_FOR_ACTION
+            ):
+                if copy.status.state in [ApplicationState.RUNNING,
+                                         ApplicationState.RECONCILING]:
+                    copy.status.state = ApplicationState.WAITING_FOR_CLEANING
+                    await self.kubernetes_api.update_application_status(
+                        namespace=copy.metadata.namespace,
+                        name=copy.metadata.name,
+                        body=copy,
+                    )
+
+                if copy.status.state is ApplicationState.WAITING_FOR_CLEANING:
+                    await self._shutdown_application(copy)
+
+            # elif copy.status.state is ApplicationState.FAILED:
+            #     logger.debug("No migration possible since the app is in %r",
+            #                  app.status.state)
+            elif (
+                # Don't need to check for shutdown hook here, since the state
+                # READY_FOR_ACTION is only set
+                app.status.state is ApplicationState.READY_FOR_ACTION
+                or "shutdown" not in app.spec.hooks
+            ):
+                # Migrate the Application
+                await listen.hook(
+                    HookType.ApplicationPreMigrate,
+                    controller=self,
+                    app=copy,
+                    start=start_observer,
+                )
+                await self._migrate_application(copy)
+                await listen.hook(
+                    HookType.ApplicationPostMigrate,
+                    controller=self,
+                    app=copy,
+                    start=start_observer,
+                )
         else:
             # Reconcile the Application
             await listen.hook(
-                Hook.ApplicationPreReconcile,
+                HookType.ApplicationPreReconcile,
                 controller=self,
                 app=copy,
                 start=start_observer,
             )
             await self._reconcile_application(copy)
             await listen.hook(
-                Hook.ApplicationPostReconcile,
+                HookType.ApplicationPostReconcile,
                 controller=self,
                 app=copy,
                 start=start_observer,
@@ -575,9 +626,11 @@ class KubernetesController(Controller):
         #  is handled again. However, there are no actual resource anymore, as they have
         #  been deleted. To prevent this, the worker verifies that the Application is
         #  not deleted yet before attempting to delete it.
+
         try:
             # Transition into "DELETING" state
             app.status.state = ApplicationState.DELETING
+
             await self.kubernetes_api.update_application_status(
                 namespace=app.metadata.namespace, name=app.metadata.name, body=app
             )
@@ -620,7 +673,7 @@ class KubernetesController(Controller):
             ) as kube:
                 for resource in last_observed_manifest_copy:
                     await listen.hook(
-                        Hook.ResourcePreDelete,
+                        HookType.ResourcePreDelete,
                         app=app,
                         cluster=cluster,
                         resource=resource,
@@ -628,7 +681,7 @@ class KubernetesController(Controller):
                     )
                     resp = await kube.delete(resource)
                     await listen.hook(
-                        Hook.ResourcePostDelete,
+                        HookType.ResourcePostDelete,
                         app=app,
                         cluster=cluster,
                         resource=resource,
@@ -640,6 +693,56 @@ class KubernetesController(Controller):
 
         # Clear manifest in status
         app.status.running_on = None
+
+    async def _shutdown_application(self, app):
+
+        cluster = await self.kubernetes_api.read_cluster(
+            namespace=app.status.running_on.namespace,
+            name=app.status.running_on.name,
+        )
+        # Loop over a copy of the `last_observed_manifest` as we modify delete
+        # resources from the dictionary in the ResourcePostDelete hook
+        last_observed_manifest_copy = deepcopy(app.status.last_observed_manifest)
+        async with KubernetesClient(
+            cluster.spec.kubeconfig, cluster.spec.custom_resources
+        ) as kube:
+            for _ in last_observed_manifest_copy:
+                if app.status.shutdown_grace_period is None:
+                    app.status.shutdown_grace_period = \
+                        now() + timedelta(seconds=app.spec.shutdown_grace_time)
+                    await self.kubernetes_api.update_application_status(
+                        namespace=app.metadata.namespace,
+                        name=app.metadata.name,
+                        body=app
+                    )
+
+                    await kube.shutdown(app)
+
+                    async def grace_period_job(app, callback):
+                        await asyncio.sleep(app.spec.shutdown_grace_time)
+                        await callback(app)
+
+                    asyncio.ensure_future(
+                        grace_period_job(
+                            app, self._check_grace_period
+                        )
+                    )
+
+        return
+
+    async def _check_grace_period(self, app):
+        app_update = await self.kubernetes_api.read_application(
+            namespace=app.metadata.namespace,
+            name=app.metadata.name,
+        )
+        if app_update.status.state is ApplicationState.WAITING_FOR_CLEANING:
+            app.status.state = ApplicationState.DEGRADED
+            await self.kubernetes_api.update_application_status(
+                namespace=app.metadata.namespace,
+                name=app.metadata.name,
+                body=app,
+            )
+        return
 
     async def _reconcile_application(self, app):
         if not app.status.scheduled_to:
@@ -656,7 +759,7 @@ class KubernetesController(Controller):
         generate_default_observer_schema(app, kube.default_namespace)
         update_last_applied_manifest_from_spec(app)
         await listen.hook(
-            Hook.ApplicationMangling,
+            HookType.ApplicationMangling,
             app=app,
             api_endpoint=self.api_endpoint,
             ssl_context=self.ssl_context,
@@ -728,7 +831,7 @@ class KubernetesController(Controller):
             # Delete all resources that are no longer in the spec
             for deleted in delta.deleted:
                 await listen.hook(
-                    Hook.ResourcePreDelete,
+                    HookType.ResourcePreDelete,
                     app=app,
                     cluster=cluster,
                     resource=deleted,
@@ -736,7 +839,7 @@ class KubernetesController(Controller):
                 )
                 resp = await kube.delete(deleted)
                 await listen.hook(
-                    Hook.ResourcePostDelete,
+                    HookType.ResourcePostDelete,
                     app=app,
                     cluster=cluster,
                     resource=deleted,
@@ -746,7 +849,7 @@ class KubernetesController(Controller):
             # Create new resource
             for new in delta.new:
                 await listen.hook(
-                    Hook.ResourcePreCreate,
+                    HookType.ResourcePreCreate,
                     app=app,
                     cluster=cluster,
                     resource=new,
@@ -754,7 +857,7 @@ class KubernetesController(Controller):
                 )
                 resp = await kube.apply(new)
                 await listen.hook(
-                    Hook.ResourcePostCreate,
+                    HookType.ResourcePostCreate,
                     app=app,
                     cluster=cluster,
                     resource=new,
@@ -764,7 +867,7 @@ class KubernetesController(Controller):
             # Update modified resource
             for modified in delta.modified:
                 await listen.hook(
-                    Hook.ResourcePreUpdate,
+                    HookType.ResourcePreUpdate,
                     app=app,
                     cluster=cluster,
                     resource=modified,
@@ -772,7 +875,7 @@ class KubernetesController(Controller):
                 )
                 resp = await kube.apply(modified)
                 await listen.hook(
-                    Hook.ResourcePostUpdate,
+                    HookType.ResourcePostUpdate,
                     app=app,
                     cluster=cluster,
                     resource=modified,
@@ -812,7 +915,7 @@ class KubernetesController(Controller):
         generate_default_observer_schema(app, kube.default_namespace)
         update_last_applied_manifest_from_spec(app)
         await listen.hook(
-            Hook.ApplicationMangling,
+            HookType.ApplicationMangling,
             app=app,
             api_endpoint=self.api_endpoint,
             ssl_context=self.ssl_context,
@@ -826,6 +929,7 @@ class KubernetesController(Controller):
         await self._apply_manifest(app, delta)
 
         # Transition into "RUNNING" state
+        app.status.shutdown_grace_period = None
         app.status.state = ApplicationState.RUNNING
         await self.kubernetes_api.update_application_status(
             namespace=app.metadata.namespace, name=app.metadata.name, body=app

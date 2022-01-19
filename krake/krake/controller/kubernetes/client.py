@@ -1,5 +1,6 @@
 import logging
 
+import requests
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 from kubernetes_asyncio.client import (
     ApiClient,
@@ -436,6 +437,38 @@ class KubernetesClient(object):
             raise
 
         self.log_response(resp, kind, action="deleted")
+
+        return resp
+
+    async def shutdown(self, app):
+        """Gracefully shutdown the given application on the cluster by calling the apps
+        exposed shutdown address.
+
+        Args:
+            app (): the app to gracefully shutdown.
+
+        Returns:
+            kubernetes_asyncio.client.models.v1_status.V1Status: response from the
+                cluster as given by the Kubernetes client.
+
+        Raises:
+            InvalidManifestError: if the kind or name is not present in the resource.
+            ApiException: by the Kubernetes API in case of malformed content or
+                error on the cluster's side.
+
+        """
+        logger.debug("URL: " + app.status.services["shutdown"])
+
+        try:
+            resp = requests.put("http://"+app.status.services["shutdown"]+"/shutdown")
+        except requests.exceptions.RequestException as err:
+            if err.response is None:
+                logger.debug("URL: " + app.status.services["shutdown"])
+                raise
+            if err.response.statuscode == 404:
+                logger.debug("Resource already deleted")
+                return
+            raise
 
         return resp
 

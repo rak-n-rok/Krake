@@ -230,13 +230,14 @@ class ApplicationSpec(Serializable):
             generates the ``status.mangled_observer_schema``.
         constraints (Constraints, optional): Scheduling constraints
         hooks (list[str], optional): List of enabled hooks
-
+        shutdown_grace_time (int): timeout in seconds for the shutdown hook
     """
 
     manifest: List[dict] = field(metadata={"validate": _validate_manifest})
     observer_schema: List[dict] = field(default_factory=list)
     constraints: Constraints
     hooks: List[str] = field(default_factory=list)
+    shutdown_grace_time: int = 30
 
     def __post_init__(self):
         """Method automatically ran at the end of the :meth:`__init__` method, used to
@@ -260,9 +261,13 @@ class ApplicationState(Enum):
     CREATING = auto()
     RUNNING = auto()
     RECONCILING = auto()
+    RETRYING = auto()
+    WAITING_FOR_CLEANING = auto()
+    READY_FOR_ACTION = auto()
     MIGRATING = auto()
     DELETING = auto()
     DELETED = auto()
+    DEGRADED = auto()
     FAILED = auto()
 
     def equals(self, string):
@@ -321,6 +326,9 @@ class ApplicationStatus(Status):
     token: str = None
     complete_cert: str = None
     complete_key: str = None
+    shutdown_cert: str = None
+    shutdown_key: str = None
+    shutdown_grace_period: datetime = None
 
 
 @persistent("/kubernetes/applications/{namespace}/{name}")
@@ -342,6 +350,12 @@ class ApplicationList(ApiObject):
 class ApplicationComplete(ApiObject):
     api: str = "kubernetes"
     kind: str = "Complete"
+    token: str = None
+
+
+class ApplicationShutdown(ApiObject):
+    api: str = "kubernetes"
+    kind: str = "Shutdown"
     token: str = None
 
 

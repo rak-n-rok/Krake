@@ -28,6 +28,8 @@ from krake.data.kubernetes import (
     ClusterList,
     ClusterBinding,
     ApplicationComplete,
+    ApplicationShutdown,
+    ApplicationState
 )
 
 logger = logging.getLogger("krake.api.kubernetes")
@@ -50,8 +52,7 @@ class KubernetesApi(object):
         namespace = request.match_info.get("namespace")
         kwargs["namespace"] = namespace
 
-        # Ensure that a resource with the same name does not already
-        # exists.
+        # Ensure that a resource with the same name does not already exist.
         existing = await session(request).get(body.__class__, **kwargs)
 
         if existing is not None:
@@ -92,6 +93,9 @@ class KubernetesApi(object):
         # Resource is already deleting
         if entity.metadata.deleted:
             return web.json_response(entity.serialize())
+
+        if "shutdown" in entity.spec.hooks:
+            entity.status.state = ApplicationState.WAITING_FOR_CLEANING
 
         # TODO: Should be update "modified" here?
         # Resource marked as deletion, to be deleted by the Garbage Collector
@@ -267,6 +271,36 @@ class KubernetesApi(object):
         return web.json_response(app.serialize())
 
     @routes.route(
+        "PUT", "/kubernetes/namespaces/{namespace}/applications/{name}/shutdown"
+    )
+    @protected(api="kubernetes", resource="applications/shutdown", verb="update")
+    @use_schema("body", ApplicationShutdown.Schema)
+    @load("app", Application)
+    async def update_application_shutdown(request, body, app):
+        # If the hook is not enabled for the Application or if the token is invalid
+        if app.status.token is None or app.status.token != body.token:
+            raise web.HTTPUnauthorized(
+               reason="No token has been provided or the provided one is invalid."
+            )
+
+        # Resource state changed to a READY_FOR state depending on the deleted flag
+        if app.status.state in [ApplicationState.WAITING_FOR_CLEANING,
+                                ApplicationState.DEGRADED]:
+            if app.metadata.deleted:
+                app.status.state = ApplicationState.READY_FOR_ACTION
+                app.status.shutdown_grace_period = None
+            else:
+                app.status.state = ApplicationState.READY_FOR_ACTION
+                app.status.shutdown_grace_period = None
+        await session(request).put(app)
+        logger.info(
+            "Deleting of application %r (%s) by calling shutdown hook",
+            app.metadata.name,
+            app.metadata.uid,
+        )
+        return web.json_response(app.serialize())
+
+    @routes.route(
         "PUT", "/kubernetes/namespaces/{namespace}/applications/{name}/status"
     )
     @protected(api="kubernetes", resource="applications/status", verb="update")
@@ -288,8 +322,36 @@ class KubernetesApi(object):
             "Status",
             "Application",
             entity.metadata.name,
-            entity.metadata.uid,
+            entity.metadata.uid
         )
+
+        return web.json_response(entity.serialize())
+
+    @routes.route(
+        "PUT", "/kubernetes/namespaces/{namespace}/applications/{name}/retry"
+    )
+    @protected(api="kubernetes", resource="applications/status", verb="update")
+    @load("entity", Application)
+    async def retry_application(request, entity):
+
+        if entity.status.state == ApplicationState.DEGRADED:
+            entity.status.state = ApplicationState.WAITING_FOR_CLEANING
+            entity.status.shutdown_grace_period = None
+            await session(request).put(entity)
+            logger.info(
+                "Deleting %s %r (%s)",
+                "Application",
+                entity.metadata.name,
+                entity.metadata.uid,
+            )
+
+        else:
+            logger.info(
+                "No migration or deletion retry for %s %r (%s) needed",
+                "Application",
+                entity.metadata.name,
+                entity.metadata.uid,
+            )
 
         return web.json_response(entity.serialize())
 
@@ -303,8 +365,7 @@ class KubernetesApi(object):
         namespace = request.match_info.get("namespace")
         kwargs["namespace"] = namespace
 
-        # Ensure that a resource with the same name does not already
-        # exists.
+        # Ensure that a resource with the same name does not already exist.
         existing = await session(request).get(body.__class__, **kwargs)
 
         if existing is not None:

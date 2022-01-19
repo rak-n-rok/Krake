@@ -96,6 +96,10 @@ services:
         target: "{{ krake.cert_dir }}/system:complete-signing.pem"
       - source: complete-signing-key
         target: "{{ krake.cert_dir }}/system:complete-signing-key.pem"
+      - source: shutdown-signing-cert
+        target: "{{ krake.cert_dir }}/system:shutdown-signing.pem"
+      - source: shutdown-signing-key
+        target: "{{ krake.cert_dir }}/system:shutdown-signing-key.pem"
       {%- endif %}
 
   krake-ctrl-scheduler:
@@ -177,6 +181,10 @@ secrets:
     file: "{{ krake.cert_dir }}/system:complete-signing.pem"
   complete-signing-key:
     file: "{{ krake.cert_dir }}/system:complete-signing-key.pem"
+  shutdown-signing-cert:
+    file: "{{ krake.cert_dir }}/system:shutdown-signing.pem"
+  shutdown-signing-key:
+    file: "{{ krake.cert_dir }}/system:shutdown-signing-key.pem"
 
   scheduler-cert:
     file: "{{ krake.cert_dir }}/system:scheduler.pem"

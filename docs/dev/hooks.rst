@@ -15,7 +15,7 @@ The application `complete` hook gives the ability to signals job completion.
 The Krake Kubernetes controller calls the application `complete`
 hook before the deployment of the application on a Kubernetes
 cluster. The hook is disabled by default. The user can enable this hook with the
-``--hook`` argument in rok CLI.
+``--hook-complete`` argument in rok CLI.
 
 See also :ref:`user/rok-documentation:Rok documentation`.
 
@@ -30,13 +30,48 @@ leveraged. It specifies an endpoint of the Krake API, which can be accessed by t
 application. The endpoint is only overridden if the ``external_endpoint``
 parameter is set.
 
+Applications signal the job completion by calling the `complete` hook URL.
+The token is used for authentication and should be sent in a PUT request body.
+
+Shutdown
+========
+
+
+The application `shutdown` hook gives the ability to gracefully stop an application
+before a migration or deletion happens. This in turn allows to save data or bring other
+important processes to a safe conclusion.
+
+The Krake Kubernetes controller calls the application `shutdown`
+hook before the deployment of the application on a Kubernetes
+cluster. The hook is disabled by default. The user can enable this hook with the
+``--hook-shutdown`` argument in rok CLI.
+
+See also :ref:`user/rok-documentation:Rok documentation`.
+
+The shutdown hook injects the ``KRAKE_TOKEN`` and the ``KRAKE_SHUTDOWN_URL``
+environment variable, which respectively store the Krake authentication token and the
+Krake `shutdown` hook URL for a given application.
+
+By default, this URL is the Krake API endpoint as specified in the Kubernetes Controller
+configuration. This endpoint may be only internal and thus not accessible by an
+application that runs on a cluster. Thus, the ``external_endpoint`` parameter can be
+leveraged. It specifies an endpoint of the Krake API, which can be accessed by the
+application. The endpoint is only overridden if the ``external_endpoint``
+parameter is set.
+
+If the application should be migrated or deleted, Krake calls the ``shutdown`` services
+URL, which is set via the manifest file of the application.
+The integrated service gracefully shuts down the application via a SIGTERM call.
+After the shutdown, the service sends a completion signal to the `shutdown` hook URL.
+The token is used for authentication and should be sent in a PUT request body.
+
 
 TLS
----
+===
 
-If TLS is enabled on the Krake API, the `complete` hook needs to be authenticated with
+If TLS is enabled on the Krake API, the both hooks needs to be authenticated with
 some certificates signed directly or indirectly by the Krake CA. For that purpose, the
-hook injects a Kubernetes ConfigMap for different files and mounts it in a volume:
+hooks inject a Kubernetes ConfigMap for different files and mounts it in a volume:
 
     ``ca-bundle.pem``
         It contains the CA certificate of Krake, and the hook certificate that was used
@@ -64,12 +99,9 @@ The name of the environment variables and the directory where the ConfigMap is
 mounted are defined in the Kubernetes controller configuration file, see
 :ref:`user/configuration:Krake configuration`.
 
-Applications signal the job completion by calling the `complete` hook URL.
-The token is used for authentication and should be sent in a PUT request body.
-
 
 Examples
---------
+========
 
 cURL
 ~~~~

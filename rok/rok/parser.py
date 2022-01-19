@@ -78,7 +78,7 @@ class ParserSpec(object):
         return decorator
 
     def add_spec(self, subparser):
-        """Register a another specification as subparser
+        """Register another specification as subparser
 
         Args:
             subparser (ParserSpec): Sub-specification defining subcommands

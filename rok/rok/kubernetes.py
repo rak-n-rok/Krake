@@ -6,7 +6,7 @@
 
 """
 import sys
-from argparse import FileType
+from argparse import FileType, Action
 from base64 import b64encode
 
 import yaml
@@ -68,13 +68,42 @@ arg_cluster_label_constraints = argument(
     help="Constraint for labels of the cluster. Can be specified multiple times",
 )
 
-arg_hooks = argument(
-    "-H",
-    "--hook",
+arg_hook_complete = argument(
+    "--hook-complete",
     dest="hooks",
-    default=[],
-    action="append",
-    help="Application hook. Can be specified multiple times",
+    const=["complete"],
+    action="append_const",
+    help="Enables the application complete hook.",
+)
+
+TIMEOUT_PERIOD = 60
+
+
+class ShutdownAction(Action):
+    def __call__(self, parser, namespace, values=None, option_string=None):
+        if values is None:
+            values = []
+        if len(values) < 1:
+            defaults = [TIMEOUT_PERIOD]
+            values = ['shutdown'] + values + defaults[len(values):]
+        else:
+            values = ['shutdown'] + values
+        setattr(namespace, self.dest, [values])
+
+
+arg_hook_shutdown = argument(
+    "--hook-shutdown",
+    dest="hooks",
+    metavar=(
+        "timeout-period"
+    ),
+    nargs="*",
+    action=ShutdownAction,
+    help=(
+        f"Enables the application shutdown hook. Additional arguments are possible:"
+        f" timeout-period [{TIMEOUT_PERIOD}]s"
+    ),
+
 )
 
 arg_cluster_resource_constraints = argument(
@@ -166,7 +195,8 @@ class ApplicationTable(ApplicationListTable):
 @arg_cluster_resource_constraints
 @arg_namespace
 @arg_labels
-@arg_hooks
+@arg_hook_complete
+@arg_hook_shutdown
 @arg_formatting
 @depends("config", "session")
 @printer(table=ApplicationTable())
@@ -205,7 +235,6 @@ def create_application(
     app = {
         "metadata": {"name": name, "labels": labels},
         "spec": {
-            "hooks": hooks,
             "manifest": manifest,
             "observer_schema": observer_schema,
             "constraints": {
@@ -217,6 +246,15 @@ def create_application(
             },
         },
     }
+
+    if hooks:
+        app["spec"]["hooks"] = []
+        for hook in hooks:
+            app["spec"]["hooks"].append(hook[0])
+            if isinstance(hook, list) and \
+               len(hook) > 1 and \
+               hook[0] == "shutdown":
+                app["spec"]["shutdown_grace_time"] = hook[1]
 
     blocking_state = False
     if wait is not None:
@@ -270,7 +308,8 @@ def get_application(config, session, namespace, name):
 @arg_cluster_resource_constraints
 @arg_namespace
 @arg_labels
-@arg_hooks
+@arg_hook_complete
+@arg_hook_shutdown
 @arg_formatting
 @depends("config", "session")
 @printer(table=ApplicationTable())
@@ -362,6 +401,30 @@ def delete_application(config, session, namespace, name, wait):
         f"/kubernetes/namespaces/{namespace}/applications/{name}",
         raise_for_status=False,
         params={"blocking": blocking_state},
+    )
+    if resp.status_code == 404:
+        raise SystemExit(f"Error 404: Application {name!r} not found")
+    resp.raise_for_status()
+
+    if resp.status_code == 204:
+        return None
+
+    return resp.json()
+
+
+@application.command("retry", help="Retry to migrate or delete an application")
+@argument("name", help="Kubernetes application name")
+@arg_namespace
+@arg_formatting
+@depends("config", "session")
+@printer(table=ApplicationTable())
+def retry_application(config, session, namespace, name):
+    if namespace is None:
+        namespace = config["user"]
+
+    resp = session.put(
+        f"/kubernetes/namespaces/{namespace}/applications/{name}/retry",
+        raise_for_status=False
     )
     if resp.status_code == 404:
         raise SystemExit(f"Error 404: Application {name!r} not found")

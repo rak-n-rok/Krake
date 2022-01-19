@@ -382,6 +382,35 @@ hooks (string)
             env_complete_). By default, the value stored in the variable is the
             api_endpoint_. Example: ``https://krake.external.host:1234``.
 
+    shutdown (string)
+        This section defines the parameters needed for the Application ``shutdown`` hook. If is not defined the Application ``shutdown`` hook is disabled.
+
+        hook_user (string)
+            Name of the user that will be set as CN in the certificates generated for
+            the hook. If RBAC is enabled, should match a ``RoleBinding`` for the
+            ``applications/shutdown`` subresource. Example ``system:shutdown-hook``
+        intermediate_src (path)
+            Path to the certificate which will be used to sign new generated
+            certificates for the hook. Not needed if TLS is not enabled. Example:
+            ``/etc/krake/certs/system:shutdown-signing.pem``
+        intermediate_key_src (path)
+            Path to the key of the certificate which will be used to sign new generated
+            certificates for the hook. Not needed if TLS is not enabled. Example:
+            ``/etc/krake/certs/system:shutdown-signing-key.pem``
+        cert_dest (path)
+            Set the path to the certificate authority on the deployed Application. Example: ``/etc/krake_cert``
+        env_token (string)
+            Name of the environment variable, which stores Krake authentication token. Example: ``KRAKE_TOKEN``
+        env_complete (string)
+            .. _env_shutdown:
+
+            Name of the environment variable, which stores Krake ``shutdown`` hook URL. Example: ``KRAKE_SHUTDOWN_URL``
+        external_endpoint (URL, optional)
+            If set, replaces the host and port in the value of environment variable in
+            the Krake ``shutdown`` hook URL (the name of this variable is given by
+            env_shutdown_). By default, the value stored in the variable is the
+            api_endpoint_. Example: ``https://krake.external.host:1234``.
+
 Scheduler
 ---------
 Additional parameters, specific for the Scheduler:

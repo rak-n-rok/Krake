@@ -538,6 +538,7 @@ class KubernetesHandler(Handler):
             )
         else:
             logger.info("Scheduled %r to %r", app, cluster)
+
         await self.api.update_application_binding(
             namespace=app.metadata.namespace,
             name=app.metadata.name,
@@ -597,7 +598,7 @@ class KubernetesHandler(Handler):
         # took place very recently. For example, the kubernetes controller updates
         # the app in reaction to the scheduler's scheduling, in which case
         # the scheduler will try and select the best cluster yet again.
-        # Therefore we have to make sure the previous scheduling was not too recent.
+        # Therefore, we have to make sure the previous scheduling was not too recent.
         # If it was, we want to stay at the current cluster - if it is still matching.
         # The above reasoning is also true in the case when the user has performed an
         # update of the application's cluster label constraints. Also in this case, the

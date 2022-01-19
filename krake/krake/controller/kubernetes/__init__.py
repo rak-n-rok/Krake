@@ -6,7 +6,7 @@ from .hooks import (
     KubernetesObserver,
     get_kubernetes_resource_idx,
     listen,
-    Hook,
+    HookType,
     update_last_applied_manifest_from_resp,
     update_last_observed_manifest_from_resp,
 )
@@ -20,7 +20,7 @@ __all__ = [
     "KubernetesObserver",
     "get_kubernetes_resource_idx",
     "listen",
-    "Hook",
+    "HookType",
     "update_last_applied_manifest_from_resp",
     "update_last_observed_manifest_from_resp",
 ]

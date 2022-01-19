@@ -41,7 +41,7 @@ from kubernetes_asyncio.config.kube_config import KubeConfigLoader
 logger = logging.getLogger(__name__)
 
 
-class Hook(Enum):
+class HookType(Enum):
     ResourcePreCreate = auto()
     ResourcePostCreate = auto()
     ResourcePreUpdate = auto()
@@ -70,15 +70,15 @@ class HookDispatcher(object):
 
         listen = HookDispatcher()
 
-        @listen.on(Hook.PreApply)
+        @listen.on(HookType.PreApply)
         def to_perform_before_app_creation(app, cluster, resource, controller):
             # Do Stuff
 
-        @listen.on(Hook.PostApply)
+        @listen.on(HookType.PostApply)
         def another_to_perform_after_app_creation(app, cluster, resource, resp):
             # Do Stuff
 
-        @listen.on(Hook.PostDelete)
+        @listen.on(HookType.PostDelete)
         def to_perform_after_app_deletion(app, cluster, resource, resp):
             # Do Stuff
 
@@ -91,7 +91,7 @@ class HookDispatcher(object):
         """Decorator function to add a new handler to the registry.
 
         Args:
-            hook (Hook): Hook attribute for which to register the handler.
+            hook (HookType): Hook attribute for which to register the handler.
 
         Returns:
             callable: Decorator for registering listeners for the specified
@@ -111,7 +111,7 @@ class HookDispatcher(object):
         attribute.
 
         Args:
-            hook (Hook): Hook attribute for which to execute handlers.
+            hook (HookType): The hook attribute for which to execute handlers.
 
         """
         try:
@@ -129,8 +129,8 @@ class HookDispatcher(object):
 listen = HookDispatcher()
 
 
-@listen.on(Hook.ResourcePostCreate)
-@listen.on(Hook.ResourcePostUpdate)
+@listen.on(HookType.ResourcePostCreate)
+@listen.on(HookType.ResourcePostUpdate)
 async def register_service(app, cluster, resource, response):
     """Register endpoint of Kubernetes Service object on creation and update.
 
@@ -197,7 +197,7 @@ async def register_service(app, cluster, resource, response):
     app.status.services[service_name] = f"{cluster_url.host}:{node_port}"
 
 
-@listen.on(Hook.ResourcePostDelete)
+@listen.on(HookType.ResourcePostDelete)
 async def unregister_service(app, resource, **kwargs):
     """Unregister endpoint of Kubernetes Service object on deletion.
 
@@ -217,7 +217,7 @@ async def unregister_service(app, resource, **kwargs):
         pass
 
 
-@listen.on(Hook.ResourcePostDelete)
+@listen.on(HookType.ResourcePostDelete)
 async def remove_resource_from_last_observed_manifest(app, resource, **kwargs):
     """Remove a given resource from the last_observed_manifest after its deletion
 
@@ -249,7 +249,7 @@ def update_last_applied_manifest_dict_from_resp(
         response (dict): partial response from the Kubernetes API.
 
     Raises:
-        KeyError: If the an observed field is not present in the Kubernetes response
+        KeyError: If the observed field is not present in the Kubernetes response
 
     This function go through all observed fields, and initialized their value in
     last_applied_manifest if they are not yet present
@@ -344,8 +344,8 @@ def update_last_applied_manifest_list_from_resp(
             last_applied_manifest.append(response[idx])
 
 
-@listen.on(Hook.ResourcePostCreate)
-@listen.on(Hook.ResourcePostUpdate)
+@listen.on(HookType.ResourcePostCreate)
+@listen.on(HookType.ResourcePostUpdate)
 def update_last_applied_manifest_from_resp(app, response, **kwargs):
     """Hook run after the creation or update of an application in order to update the
     `status.last_applied_manifest` using the k8s response.
@@ -380,8 +380,8 @@ def update_last_applied_manifest_from_resp(app, response, **kwargs):
     )
 
 
-@listen.on(Hook.ResourcePostCreate)
-@listen.on(Hook.ResourcePostUpdate)
+@listen.on(HookType.ResourcePostCreate)
+@listen.on(HookType.ResourcePostUpdate)
 def update_last_observed_manifest_from_resp(app, response, **kwargs):
     """Handler to run after the creation or update of a Kubernetes resource to update
     the last_observed_manifest from the response of the Kubernetes API.
@@ -404,7 +404,8 @@ def update_last_observed_manifest_from_resp(app, response, **kwargs):
 
     try:
         idx_observed = get_kubernetes_resource_idx(
-            app.status.mangled_observer_schema, resp
+            app.status.mangled_observer_schema,
+            resp
         )
     except IndexError:
         # All created resources should be observed
@@ -412,7 +413,8 @@ def update_last_observed_manifest_from_resp(app, response, **kwargs):
 
     try:
         idx_last_observed = get_kubernetes_resource_idx(
-            app.status.last_observed_manifest, resp
+            app.status.last_observed_manifest,
+            resp
         )
     except IndexError:
         # If the resource is not yes present in last_observed_manifest, append it.
@@ -658,7 +660,8 @@ def update_last_applied_manifest_from_spec(app):
         # matter.
         try:
             idx_status_old = get_kubernetes_resource_idx(
-                app.status.last_applied_manifest, resource_observed
+                app.status.last_applied_manifest,
+                resource_observed
             )
         except IndexError:
             continue
@@ -670,7 +673,8 @@ def update_last_applied_manifest_from_spec(app):
         try:
             # Check if the observed resource is present in spec.manifest
             idx_status_new = get_kubernetes_resource_idx(
-                new_last_applied_manifest, resource_observed
+                new_last_applied_manifest,
+                resource_observed
             )
         except IndexError:
             # The resource is observed but is not present in the spec.manifest.
@@ -768,8 +772,8 @@ class KubernetesObserver(Observer):
         return status
 
 
-@listen.on(Hook.ApplicationPostReconcile)
-@listen.on(Hook.ApplicationPostMigrate)
+@listen.on(HookType.ApplicationPostReconcile)
+@listen.on(HookType.ApplicationPostMigrate)
 async def register_observer(controller, app, start=True, **kwargs):
     """Create an observer for the given Application, and start it as background
     task if wanted.
@@ -805,9 +809,9 @@ async def register_observer(controller, app, start=True, **kwargs):
     controller.observers[app.metadata.uid] = (observer, task)
 
 
-@listen.on(Hook.ApplicationPreReconcile)
-@listen.on(Hook.ApplicationPreMigrate)
-@listen.on(Hook.ApplicationPreDelete)
+@listen.on(HookType.ApplicationPreReconcile)
+@listen.on(HookType.ApplicationPreMigrate)
+@listen.on(HookType.ApplicationPreDelete)
 async def unregister_observer(controller, app, **kwargs):
     """Stop and delete the observer for the given Application. If no observer is
     started, do nothing.
@@ -882,7 +886,7 @@ def generate_certificate(config):
     client_key.generate_key(crypto.TYPE_RSA, 2048)
     client_cert.set_pubkey(client_key)
 
-    client_cert.sign(intermediate_key_src, "sha256")  # Should be done at the very end.
+    client_cert.sign(intermediate_key_src, "sha256")
 
     cert_dump = crypto.dump_certificate(crypto.FILETYPE_PEM, client_cert).decode()
     key_dump = crypto.dump_privatekey(crypto.FILETYPE_PEM, client_key).decode()
@@ -906,7 +910,8 @@ def generate_default_observer_schema(app, default_namespace="default"):
     for resource_manifest in app.spec.manifest:
         try:
             idx = get_kubernetes_resource_idx(
-                app.status.mangled_observer_schema, resource_manifest
+                app.status.mangled_observer_schema,
+                resource_manifest
             )
 
             # In case a custom observer schema is provided for this resource, the
@@ -916,8 +921,8 @@ def generate_default_observer_schema(app, default_namespace="default"):
             ] = resource_manifest["metadata"].get("namespace", default_namespace)
 
         except IndexError:
-            # Only create a default observer schema is a custom observer schema hasn't
-            # be set by the user.
+            # Only create a default observer schema, if a custom observer schema hasn't
+            # been set by the user.
             app.status.mangled_observer_schema.append(
                 generate_default_observer_schema_dict(
                     resource_manifest,
@@ -1021,13 +1026,13 @@ def generate_default_observer_schema_list(manifest_list):
     return observer_schema_list
 
 
-@listen.on(Hook.ApplicationMangling)
+@listen.on(HookType.ApplicationMangling)
 async def complete(app, api_endpoint, ssl_context, config, default_namespace="default"):
     """Execute application complete hook defined by :class:`Complete`.
     Hook mangles given application and injects complete hooks variables.
 
     Application complete hook is disabled by default.
-    User enables this hook by the --hook argument in rok cli.
+    User enables this hook by the --hook-complete argument in rok cli.
 
     Args:
         app (krake.data.kubernetes.Application): Application object processed
@@ -1079,6 +1084,78 @@ async def complete(app, api_endpoint, ssl_context, config, default_namespace="de
     )
 
 
+@listen.on(HookType.ApplicationMangling)
+async def shutdown(app, api_endpoint, ssl_context, config, default_namespace="default"):
+    """Executes an application shutdown hook defined by :class:`Shutdown`.
+    The hook mangles the given application and injects shutdown hooks variables.
+
+    Application shutdown hook is disabled by default.
+    User enables this hook by the --hook-shutdown argument in rok cli.
+
+    Args:
+        app (krake.data.kubernetes.Application): Application object processed
+            when the hook is called
+        api_endpoint (str): the given API endpoint
+        ssl_context (ssl.SSLContext): SSL context to communicate with the API endpoint
+        config (krake.data.config.HooksConfiguration): Shutdown hook
+            configuration.
+        default_namespace (str, optional): The default namespace to use if no namespace
+            is specified in the resource declaration. Fetched from the cluster's
+            kubeconfig file
+
+    """
+    if "shutdown" not in app.spec.hooks:
+        return
+
+    # Use the endpoint of the API only if the external endpoint has not been set.
+    if config.shutdown.external_endpoint:
+        api_endpoint = config.shutdown.external_endpoint
+
+    app.status.token = app.status.token if app.status.token else token_urlsafe()
+
+    # Generate only once the certificate and key for a specific Application
+    generated_cert = CertificatePair(
+        cert=app.status.shutdown_cert, key=app.status.shutdown_key
+    )
+    if ssl_context and generated_cert == (None, None):
+        generated_cert = generate_certificate(config.shutdown)
+        app.status.shutdown_cert = generated_cert.cert
+        app.status.shutdown_key = generated_cert.key
+
+    hook = Shutdown(
+        api_endpoint,
+        ssl_context,
+        hook_user=config.shutdown.hook_user,
+        cert_dest=config.shutdown.cert_dest,
+        env_token=config.shutdown.env_token,
+        env_shutdown=config.shutdown.env_shutdown,
+    )
+    hook.mangle_app(
+        app.metadata.name,
+        app.metadata.namespace,
+        app.status.token,
+        app.status.last_applied_manifest,
+        config.shutdown.intermediate_src,
+        generated_cert,
+        app.status.mangled_observer_schema,
+        default_namespace,
+    )
+
+
+@listen.on(HookType.ResourcePreDelete)
+async def pre_shutdown(controller, app, **kwargs):
+    """
+
+    Args:
+        app (krake.data.kubernetes.Application): Application object processed
+            when the hook is called
+    """
+    if "shutdown" not in app.spec.hooks:
+        return
+
+    return
+
+
 class SubResource(NamedTuple):
     group: str
     name: str
@@ -1099,6 +1176,19 @@ class CertificatePair(NamedTuple):
     key: str
 
 
+class Hook(object):
+
+    def __init__(
+        self, api_endpoint, ssl_context, hook_user, cert_dest, env_token, env_url
+    ):
+        self.api_endpoint = api_endpoint
+        self.ssl_context = ssl_context
+        self.hook_user = hook_user
+        self.cert_dest = cert_dest
+        self.env_token = env_token
+        self.env_url = env_url
+
+
 class Complete(object):
     """Mangle given application and injects complete hooks variables into it.
 
@@ -1111,8 +1201,8 @@ class Complete(object):
     Names of environment variables are defined in the application controller
     configuration file.
 
-    If TLS is enabled on the Krake API, the complete hook injects a Kubernetes secret
-    and it corresponding volume and volume mount definitions for the Krake CA,
+    If TLS is enabled on the Krake API, the complete hook injects a Kubernetes secret,
+    and it's corresponding volume and volume mount definitions for the Krake CA,
     the client certificate with the right CN, and its key. The directory where the
     secret is mounted is defined in the configuration.
 
@@ -1154,7 +1244,7 @@ class Complete(object):
         mangled_observer_schema,
         default_namespace="default",
     ):
-        """Mangle given application and injects complete hook resources and
+        """Mangle given application and inject complete hook resources and
         sub-resources into :attr:`last_applied_manifest` object by :meth:`mangle`. Also
         mangle the observer_schema as new resources and sub-resources should be observed
 
@@ -1249,7 +1339,7 @@ class Complete(object):
 
     @staticmethod
     def attribute_map(obj):
-        """Convert Kubernetes object to dict based on its attribute mapping
+        """Convert a Kubernetes object to dict based on its attribute mapping
 
         Example:
             .. code:: python
@@ -1310,8 +1400,8 @@ class Complete(object):
         is_sub_resource=False,
         default_namespace="default",
     ):
-        """Mangle application desired state with custom hook resources or
-        sub-resources
+        """Mangle applications desired state with custom hook resources or
+        sub-resources.
 
         Example:
             .. code:: python
@@ -1447,7 +1537,7 @@ class Complete(object):
             return
 
         def inject(sub_resource, sub_resource_to_mangle, observed_resource_to_mangle):
-            """Inject hook defined sub-resource into Kubernetes sub-resource
+            """Inject a hooks defined sub-resource into a Kubernetes sub-resource.
 
             Args:
                 sub_resource (SubResource): Hook sub-resource that needs to be injected
@@ -1518,7 +1608,8 @@ class Complete(object):
             for sub_resource in items:
                 sub_resources_to_mangle = None
                 idx_observed = get_kubernetes_resource_idx(
-                    mangled_observer_schema, resource
+                    mangled_observer_schema,
+                    resource
                 )
                 for keys in sub_resource.path:
                     try:
@@ -1581,7 +1672,7 @@ class Complete(object):
         intermediate_src=None,
         generated_cert=None,
     ):
-        """Create a complete hook secret resource.
+        """Create a complete hooks secret resource.
 
         Complete hook secret stores Krake CAs and client certificates to communicate
         with the Krake API.
@@ -1620,7 +1711,7 @@ class Complete(object):
     def secret_token(
         self, secret_name, name, namespace, resource_namespace, api_endpoint, token
     ):
-        """Create complete hook secret resource.
+        """Create complete hooks secret resource.
 
         Complete hook secret stores Krake authentication token
         and complete hook URL for given application.
@@ -1646,7 +1737,7 @@ class Complete(object):
         return self.secret(secret_name, data, resource_namespace)
 
     def volumes(self, secret_name, volume_name, mount_path):
-        """Create complete hook volume and volume mount sub-resources
+        """Create complete hooks volume and volume mount sub-resources
 
         Complete hook volume gives access to hook's secret, which stores
         Krake CAs and client certificates to communicate with the Krake API.
@@ -1720,7 +1811,7 @@ class Complete(object):
 
     @staticmethod
     def create_complete_url(name, namespace, api_endpoint):
-        """Create application complete URL.
+        """Create an applications complete URL.
 
         Args:
             name (str): Application name
@@ -1739,7 +1830,7 @@ class Complete(object):
         )
 
     def env_vars(self, secret_name):
-        """Create complete hook environment variables sub-resources
+        """Create complete hooks environment variables sub-resources
 
         Create complete hook environment variables store Krake authentication token
         and complete hook URL for given application.
@@ -1776,6 +1867,675 @@ class Complete(object):
                     )
                 )
             ),
+        )
+
+        for env in (env_token, env_url):
+            sub_resources.append(
+                SubResource(
+                    group="env",
+                    name=env.name,
+                    body=self.attribute_map(env),
+                    path=(
+                        ("spec", "template", "spec", "containers"),
+                        ("spec", "containers"),  # kind: Pod
+                    ),
+                )
+            )
+        return sub_resources
+
+
+class Shutdown(object):
+
+    shutdown_resources = ("Pod", "Deployment", "ReplicationController")
+    ca_name = "ca-bundle.pem"
+    cert_name = "cert.pem"
+    key_name = "key.pem"
+
+    def __init__(
+        self, api_endpoint, ssl_context, hook_user, cert_dest, env_token, env_shutdown
+    ):
+        self.api_endpoint = api_endpoint
+        self.ssl_context = ssl_context
+        self.hook_user = hook_user
+        self.cert_dest = cert_dest
+        self.env_token = env_token
+        self.env_shutdown = env_shutdown
+
+    def mangle_app(
+        self,
+        name,
+        namespace,
+        token,
+        last_applied_manifest,
+        intermediate_src,
+        generated_cert,
+        mangled_observer_schema,
+        default_namespace="default",
+    ):
+        """Mangle a given application and inject complete hook resources and
+        sub-resources into the :attr:`last_applied_manifest` object by :meth:`mangle`.
+        Also mangle the observer_schema as new resources and sub-resources should
+        be observed.
+
+        :attr:`last_applied_manifest` is created as a deep copy of the desired
+        application resources, as defined by user. It can be updated by custom hook
+        resources or modified by custom hook sub-resources. It is used as a desired
+        state for the Krake deployment process.
+
+        Args:
+            name (str): Application name
+            namespace (str): Application namespace
+            token (str): Complete hook authentication token
+            last_applied_manifest (list): Application resources
+            intermediate_src (str): content of the certificate that is used to sign new
+                certificates for the complete hook.
+            generated_cert (CertificatePair): tuple that contains the content of the
+                new signed certificate for the Application, and the content of its
+                corresponding key.
+            mangled_observer_schema (list): Observed fields
+            default_namespace (str, optional): The default namespace to use if no
+                namespace is specified in the resource declaration. Fetched from the
+                cluster's kubeconfig file
+
+        """
+        secret_certs_name = "-".join([name, "krake", "secret", "certs"])
+        secret_token_name = "-".join([name, "krake", "secret", "token"])
+        volume_name = "-".join([name, "krake", "volume"])
+        ca_certs = (
+            self.ssl_context.get_ca_certs(binary_form=True)
+            if self.ssl_context
+            else None
+        )
+
+        # Extract all different namespaces
+        # FIXME: too many assumptions here: do we create one ConfigMap for each
+        #  namespace?
+        resource_namespaces = {
+            resource["metadata"].get("namespace", "default")
+            for resource in last_applied_manifest
+        }
+
+        hook_resources = []
+        hook_sub_resources = []
+        if ca_certs:
+            hook_resources.extend([
+                self.secret_certs(
+                    secret_certs_name,
+                    resource_namespace,
+                    intermediate_src=intermediate_src,
+                    generated_cert=generated_cert,
+                    ca_certs=ca_certs,
+                )
+                for resource_namespace in resource_namespaces
+            ])
+            hook_sub_resources.extend([
+                *self.volumes(secret_certs_name, volume_name, self.cert_dest)
+            ])
+
+        hook_resources.extend([
+            self.secret_token(
+                secret_token_name,
+                name,
+                namespace,
+                resource_namespace,
+                self.api_endpoint,
+                token,
+            ) for resource_namespace in resource_namespaces
+        ])
+        hook_sub_resources.extend([
+            *self.env_vars(secret_token_name),
+        ])
+
+        self.mangle(
+            hook_resources,
+            last_applied_manifest,
+            mangled_observer_schema,
+            default_namespace=default_namespace,
+        )
+        self.mangle(
+            hook_sub_resources,
+            last_applied_manifest,
+            mangled_observer_schema,
+            is_sub_resource=True,
+        )
+
+    @staticmethod
+    def attribute_map(obj):
+        """Convert a Kubernetes object to a dict based on its attribute mapping.
+
+        Example:
+            .. code:: python
+
+            from kubernetes_asyncio.client import V1VolumeMount
+
+            d = attribute_map(
+                    V1VolumeMount(name="name", mount_path="path")
+            )
+            assert d == {'mountPath': 'path', 'name': 'name'}
+
+        Args:
+            obj (object): Kubernetes object
+
+        Returns:
+            dict: Converted Kubernetes object
+
+        """
+        return {
+            obj.attribute_map[attr]: getattr(obj, attr)
+            for attr, _ in obj.to_dict().items()
+            if getattr(obj, attr) is not None
+        }
+
+    @staticmethod
+    def create_path(mangled_observer_schema, keys):
+        """Create the path to the observed field in the observer schema.
+
+        When a sub-resource is mangled, it should be observed. This function creates
+        the path to the subresource to observe.
+
+        Args:
+            mangled_observer_schema (dict): Partial observer schema of a resource
+            keys (list): list of keys forming the path to the sub-resource to
+                observe
+
+        FIXME: This assumes we are only adding keys to dict. We don't consider lists
+
+        """
+
+        # Unpack the first key first, as it contains the base directory
+        key = keys.pop(0)
+
+        # If the key is the last of the list, we reached the end of the path.
+        if len(keys) == 0:
+            mangled_observer_schema[key] = None
+            return
+
+        if key not in mangled_observer_schema:
+            mangled_observer_schema[key] = {}
+        Shutdown.create_path(mangled_observer_schema[key], keys)
+
+    def mangle(
+        self,
+        items,
+        last_applied_manifest,
+        mangled_observer_schema,
+        is_sub_resource=False,
+        default_namespace="default",
+    ):
+        """Mangle applications desired state with custom hook resources or
+        sub-resources.
+
+        Example:
+            .. code:: python
+
+            last_applied_manifest = [
+                {
+                    'apiVersion': 'v1',
+                    'kind': 'Pod',
+                    'metadata': {'name': 'test', 'namespace': 'default'},
+                    'spec': {'containers': [{'name': 'test'}]}
+                }
+            ]
+            mangled_observer_schema = [
+                {
+                    'apiVersion': 'v1',
+                    'kind': 'Pod',
+                    'metadata': {'name': 'test', 'namespace': 'default'},
+                    'spec': {
+                        'containers': [
+                            {'name': None},
+                            {
+                                'observer_schema_list_max_length': 1,
+                                'observer_schema_list_min_length': 1,
+                            },
+                        ]
+                    },
+                }
+            ]
+            hook_resources = [
+                {
+                    'apiVersion': 'v1',
+                    'kind': 'ConfigMap',
+                    'metadata': {'name': 'cfg', 'namespace': 'default'}
+                }
+            ]
+            hook_sub_resources = [
+                SubResource(
+                    group='env', name='env', body={'name': 'test', 'value': 'test'},
+                    path=(('spec', 'containers'),)
+                )
+            ]
+
+            mangle(
+                hook_resources,
+                last_applied_manifest,
+                mangled_observer_schema,
+                default_namespace="default",
+            )
+            mangle(
+                hook_sub_resources,
+                last_applied_manifest,
+                mangled_observer_schema,
+                is_sub_resource=True
+            )
+
+            assert last_applied_manifest == [
+                {
+                    "apiVersion": "v1",
+                    "kind": "Pod",
+                    "metadata": {"name": "test", 'namespace': 'default'},
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": "test",
+                                "env": [{"name": "test", "value": "test"}]
+                            }
+                        ]
+                    },
+                },
+                {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "cfg"}},
+            ]
+
+            assert mangled_observer_schema == [
+                {
+                    "apiVersion": "v1",
+                    "kind": "Pod",
+                    "metadata": {"name": "test", "namespace": "default"},
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": None,
+                                "env": [
+                                    {"name": None, "value": None},
+                                    {
+                                        "observer_schema_list_max_length": 1,
+                                        "observer_schema_list_min_length": 1,
+                                    },
+                                ],
+                            },
+                            {
+                                "observer_schema_list_max_length": 1,
+                                "observer_schema_list_min_length": 1,
+                            },
+                        ]
+                    },
+                },
+                {
+                    "apiVersion": "v1",
+                    "kind": "ConfigMap",
+                    "metadata": {"name": "cfg", "namespace": "default"},
+                },
+            ]
+
+        Args:
+            items (list[SubResource]): Custom hook resources or sub-resources
+            last_applied_manifest (list): Application resources
+            mangled_observer_schema (list): Observed resources
+            is_sub_resource (bool, optional): if False, the function only extend the
+                list of Kubernetes resources defined in :attr:`last_applied_manifest`
+                with new hook resources. Otherwise, the function injects each new hook
+                sub-resource into the :attr:`last_applied_manifest` object
+                sub-resources. Defaults to False.
+            default_namespace (str, optional): The default namespace to use if no
+                namespace is specified in the resource declaration. Fetched from the
+                cluster's kubeconfig file
+
+        """
+
+        if not items:
+            return
+
+        if not is_sub_resource:
+            last_applied_manifest.extend(items)
+            for sub_resource in items:
+                # Generate the default observer schema for each resource
+                mangled_observer_schema.append(
+                    generate_default_observer_schema_dict(
+                        sub_resource,
+                        first_level=True,
+                        default_namespace=default_namespace,
+                    )
+                )
+            return
+
+        def inject(sub_resource, sub_resource_to_mangle, observed_resource_to_mangle):
+            """Inject a hooks defined sub-resource into a Kubernetes sub-resource.
+
+            Args:
+                sub_resource (SubResource): Hook sub-resource that needs to be injected
+                    into :attr:`last_applied_manifest`
+                sub_resource_to_mangle (object): Kubernetes sub-resources from
+                    :attr:`last_applied_manifest` which need to be processed
+                observed_resource_to_mangle (dict): partial mangled_observer_schema
+                    corresponding to the Kubernetes sub-resource.
+
+            Raises:
+                InvalidManifestError: if the to-be mangled sub-resource is not a
+                    list or a dict.
+
+            """
+
+            # Create sub-resource group if not present in the Kubernetes sub-resource
+            if sub_resource.group not in sub_resource_to_mangle:
+                # FIXME: This assumes the subresource group contains a list
+                sub_resource_to_mangle.update({sub_resource.group: []})
+
+            # Create sub-resource group if not present in the observed fields
+            if sub_resource.group not in observed_resource_to_mangle:
+                observed_resource_to_mangle.update(
+                    {
+                        sub_resource.group: [
+                            {
+                                "observer_schema_list_min_length": 0,
+                                "observer_schema_list_max_length": 0,
+                            }
+                        ]
+                    }
+                )
+
+            # Inject sub-resource
+            # If sub-resource name is already there update it, if not, append it
+            if sub_resource.name in [
+                g["name"] for g in sub_resource_to_mangle[sub_resource.group]
+            ]:
+                # FIXME: Assuming we are dealing with a list
+                for idx, item in enumerate(sub_resource_to_mangle[sub_resource.group]):
+
+                    # FIXME: Assuming we are dealing with a "name" key acting as an
+                    # identifier
+                    if item.name == item["name"]:
+                        sub_resource_to_mangle[item.group][idx] = item.body
+            else:
+                sub_resource_to_mangle[sub_resource.group].append(sub_resource.body)
+
+            # Make sure the value is observed
+            if sub_resource.name not in [
+                g["name"] for g in observed_resource_to_mangle[sub_resource.group][:-1]
+            ]:
+                observed_resource_to_mangle[sub_resource.group].insert(
+                    -1, generate_default_observer_schema_dict(sub_resource.body)
+                )
+                observed_resource_to_mangle[sub_resource.group][-1][
+                    "observer_schema_list_min_length"
+                ] += 1
+                observed_resource_to_mangle[sub_resource.group][-1][
+                    "observer_schema_list_max_length"
+                ] += 1
+
+        for resource in last_applied_manifest:
+            # Complete hook is applied only on defined Kubernetes resources
+            if resource["kind"] not in self.shutdown_resources:
+                continue
+
+            for sub_resource in items:
+                sub_resources_to_mangle = None
+                idx_observed = get_kubernetes_resource_idx(
+                    mangled_observer_schema,
+                    resource
+                )
+                for keys in sub_resource.path:
+                    try:
+                        sub_resources_to_mangle = reduce(getitem, keys, resource)
+                    except KeyError:
+                        continue
+
+                    break
+
+                # Create the path to the observed sub-resource, if it doesn't yet exist
+                try:
+                    observed_sub_resources = reduce(
+                        getitem, keys, mangled_observer_schema[idx_observed]
+                    )
+                except KeyError:
+                    Shutdown.create_path(
+                        mangled_observer_schema[idx_observed], list(keys)
+                    )
+                    observed_sub_resources = reduce(
+                        getitem, keys, mangled_observer_schema[idx_observed]
+                    )
+
+                if isinstance(sub_resources_to_mangle, list):
+                    for idx, sub_resource_to_mangle in enumerate(
+                        sub_resources_to_mangle
+                    ):
+
+                        # Ensure that each element of the list is observed.
+                        idx_observed = idx
+                        if idx >= len(observed_sub_resources[:-1]):
+                            idx_observed = len(observed_sub_resources[:-1])
+                            # FIXME: Assuming each element of the list contains a
+                            # dictionary, therefore initializing new elements with an
+                            # empty dict
+                            observed_sub_resources.insert(-1, {})
+                        observed_sub_resource = observed_sub_resources[idx_observed]
+
+                        # FIXME: This is assuming a list always contains dict
+                        inject(
+                            sub_resource, sub_resource_to_mangle, observed_sub_resource
+                        )
+
+                elif isinstance(sub_resources_to_mangle, dict):
+                    inject(
+                        sub_resource, sub_resources_to_mangle, observed_sub_resources
+                    )
+
+                else:
+                    message = (
+                        f"The sub-resource to mangle {sub_resources_to_mangle!r} has an"
+                        "invalid type, should be in '[dict, list]'"
+                    )
+                    raise InvalidManifestError(message)
+
+    def secret_certs(
+        self,
+        secret_name,
+        namespace,
+        ca_certs=None,
+        intermediate_src=None,
+        generated_cert=None,
+    ):
+        """Create a shutdown hook secret resource.
+
+        Shutdown hook secret stores Krake CAs and client certificates to communicate
+        with the Krake API.
+
+        Args:
+            secret_name (str): Secret name
+            namespace (str): Kubernetes namespace where the Secret will be created.
+            ca_certs (list): Krake CA list
+            intermediate_src (str): content of the certificate that is used to sign new
+                certificates for the complete hook.
+            generated_cert (CertificatePair): tuple that contains the content of the
+                new signed certificate for the Application, and the content of its
+                corresponding key.
+
+        Returns:
+            dict: shutdown hook secret resource
+
+        """
+        ca_certs_pem = ""
+        for ca_cert in ca_certs:
+            x509 = crypto.load_certificate(crypto.FILETYPE_ASN1, ca_cert)
+            ca_certs_pem += crypto.dump_certificate(crypto.FILETYPE_PEM, x509).decode()
+
+        # Add the intermediate certificate into the chain
+        with open(intermediate_src, "r") as f:
+            intermediate_src_content = f.read()
+        ca_certs_pem += intermediate_src_content
+
+        data = {
+            self.ca_name: self._encode_to_64(ca_certs_pem),
+            self.cert_name: self._encode_to_64(generated_cert.cert),
+            self.key_name: self._encode_to_64(generated_cert.key),
+        }
+        return self.secret(secret_name, data, namespace)
+
+    def secret_token(
+        self, secret_name, name, namespace, resource_namespace, api_endpoint, token
+    ):
+        """Create shutdown hooks secret resource.
+
+        Shutdown hook secret stores Krake authentication token
+        and shutdown hook URL for given application.
+
+        Args:
+            secret_name (str): Secret name
+            name (str): Application name
+            namespace (str): Application namespace
+            resource_namespace (str): Kubernetes namespace where the
+                Secret will be created.
+            api_endpoint (str): Krake API endpoint
+            token (str): Shutdown hook authentication token
+
+        Returns:
+            dict: shutdown hook secret resource
+
+        """
+        shutdown_url = self.create_shutdown_url(name, namespace, api_endpoint)
+        data = {
+            self.env_token.lower(): self._encode_to_64(token),
+            self.env_shutdown.lower(): self._encode_to_64(shutdown_url),
+        }
+        return self.secret(secret_name, data, resource_namespace)
+
+    def volumes(self, secret_name, volume_name, mount_path):
+        """Create shutdown hooks volume and volume mount sub-resources.
+
+        Shutdown hook volume gives access to a configmap, which stores Krake CAs
+        Shutdown hook volume mount hooks volume into application.
+
+        Args:
+            secret_name (str): Secret name
+            volume_name (str): Volume name
+            mount_path (list): Volume mount path
+
+        Returns:
+            list: List of shutdown hook volume and volume mount sub-resources
+
+        """
+        volume = V1Volume(name=volume_name, secret={"secretName": secret_name})
+        volume_mount = V1VolumeMount(name=volume_name, mount_path=mount_path)
+        return [
+            SubResource(
+                group="volumes",
+                name=volume.name,
+                body=self.attribute_map(volume),
+                path=(("spec", "template", "spec"), ("spec",)),
+            ),
+            SubResource(
+                group="volumeMounts",
+                name=volume_mount.name,
+                body=self.attribute_map(volume_mount),
+                path=(
+                    ("spec", "template", "spec", "containers"),
+                    ("spec", "containers"),  # kind: Pod
+                ),
+            ),
+        ]
+
+    @staticmethod
+    def _encode_to_64(string):
+        """Compute the base 64 encoding of a string.
+
+        Args:
+            string (str): the string to encode.
+
+        Returns:
+            str: the result of the encoding.
+
+        """
+        # b64encode accepts only bytes.
+        return b64encode(string.encode()).decode()
+
+    def secret(
+        self,
+        secret_name,
+        secret_data,
+        namespace,
+        _type="Opaque"
+    ):
+        """Creates a secret resource.
+
+        Args:
+            secret_name (str): Secret name
+            secret_data (dict): Secret data
+            namespace (str): Kubernetes namespace where the Secret will be created.
+            _type (str, optional): Secret type. Defaults to Opaque.
+
+        Returns:
+            dict: secret resource
+
+        """
+        return self.attribute_map(
+            V1Secret(
+                api_version="v1",
+                kind="Secret",
+                data=secret_data,
+                metadata={"name": secret_name, "namespace": namespace},
+                type=_type,
+            )
+        )
+
+    @staticmethod
+    def create_shutdown_url(name, namespace, api_endpoint):
+        """Create an applications shutdown URL.
+
+        Args:
+            name (str): Application name
+            namespace (str): Application namespace
+            api_endpoint (str): Krake API endpoint
+
+        Returns:
+            str: Application shutdown url
+
+        """
+        api_url = URL(api_endpoint)
+        return str(
+            api_url.with_path(
+                f"/kubernetes/namespaces/{namespace}/applications/{name}/shutdown"
+            )
+        )
+
+    def env_vars(self, secret_name):
+        """Create shutdown hooks environment variables sub-resources.
+
+        Creates shutdown hook environment variables to store Krake authentication token
+        and a shutdown hook URL for given applications.
+
+        Args:
+            secret_name (str): Secret name
+
+        Returns:
+            list: List of shutdown hook environment variables sub-resources
+
+        """
+        sub_resources = []
+
+        env_token = V1EnvVar(
+            name=self.env_token,
+            value_from=self.attribute_map(
+                V1EnvVarSource(
+                    secret_key_ref=self.attribute_map(
+                        V1SecretKeySelector(
+                            name=secret_name,
+                            key=self.env_token.lower()
+                        )
+                    )
+                )
+            )
+        )
+        env_url = V1EnvVar(
+            name=self.env_shutdown,
+            value_from=self.attribute_map(
+                V1EnvVarSource(
+                    secret_key_ref=self.attribute_map(
+                        V1SecretKeySelector(
+                            name=secret_name,
+                            key=self.env_shutdown.lower()
+                        )
+                    )
+                )
+            )
         )
 
         for env in (env_token, env_url):
