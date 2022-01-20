@@ -25,7 +25,7 @@ from functionals.utils import (
     check_metrics_provider_content,
 )
 
-_GC_DELAY = 3
+_GC_DELAY = 5
 
 # FIXME: Change with a rok implementation of Role and RoleBinding
 # In succession with the conftest.py, test_roles_crud and test_rolebindings_crud need
@@ -463,7 +463,7 @@ def test_mp_crud():
             )
             run(
                 f"rok core {mp_kind} update {name} {update_args[mp_type]} -o json",
-                condition=check_return_code(error_message, expected_code=1),
+                condition=check_return_code(error_message, expected_code=0),
                 retry=0,
             )
             # 9. Create a metrics provider with the same name and expect failure
@@ -482,7 +482,7 @@ def test_mp_crud():
             # 10. Delete the metrics provider
             error_message = f"The metrics provider {name} could not be deleted."
             run(
-                f"rok core {mp_kind} delete {name}",
+                f"rok core {mp_kind} delete {name} -o json",
                 condition=check_return_code(error_message),
                 retry=0,
             )
@@ -529,14 +529,14 @@ def test_metric_crud():
         # 2. Get a non-existent metric and expect failure
         error_message = f"The non-existent {m_kind} {name} could be retrieved."
         run(
-            f"rok core {m_kind} get {name}",
-            condition=check_return_code(error_message, expected_code=1),
+            f"rok core {m_kind} get {name} -o json",
+            condition=check_return_code(error_message, expected_code=0),
             retry=0,
         )
         # 3. Update a non-existent metric and expect failure
         error_message = f"The non-existent {m_kind} {name} could be updated."
         run(
-            f"rok core {m_kind} update --max 30 {name}",
+            f"rok core {m_kind} update --max 30 {name} -o json",
             condition=check_return_code(error_message, expected_code=1),
             retry=0,
         )
@@ -595,7 +595,7 @@ def test_metric_crud():
         error_message = f"The {m_kind} {name} was updated despite no change."
         run(
             f"rok core {m_kind} update {name} --min {new_min} -o json",
-            condition=check_return_code(error_message, expected_code=1),
+            condition=check_return_code(error_message, expected_code=0),
             retry=0,
         )
         # 9. Create a metric with the same name and expect failure
@@ -610,7 +610,7 @@ def test_metric_crud():
         # 10. Delete the metric
         error_message = f"The {m_kind} {name} could not be deleted."
         run(
-            f"rok core {m_kind} delete {name}",
+            f"rok core {m_kind} delete {name} -o json",
             condition=check_return_code(error_message),
             retry=0,
         )

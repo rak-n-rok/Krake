@@ -38,8 +38,10 @@ Test constraints, metrics and metrics providers are globally defined as follows:
     `heat_demand_zone_unreachable`.
 """
 
+import pytest
 import random
 import time
+import json
 from functionals.utils import (
     run,
     check_empty_list,
@@ -251,6 +253,30 @@ def test_scheduler_clusters_with_metrics(minikube_clusters):
 
     """
     # The two clusters and metrics used in this test
+
+    _gm_cmd = run(
+        ( "rok core gm list -o json")
+    )
+    _gm_cmd = _gm_cmd.output
+    _gm_cmd = _gm_cmd.replace('null', '""')
+    gm_list = json.loads(_gm_cmd)
+    for gm in gm_list:
+        run(
+            ( "rok core gm delete " + gm["metadata"]["name"])
+        )
+
+    _gmp_cmd = run(
+        ( "rok core gmp list -o json")
+    )
+    _gmp_cmd = _gmp_cmd.output
+    _gmp_cmd = _gmp_cmd.replace('null', '""')
+    gmp_list = json.loads(_gmp_cmd)
+    for gmp in gmp_list:
+        run(
+            ( "rok core gmp delete " + gmp["metadata"]["name"])
+        )
+
+    # -------------------------------------------------------------------
     num_clusters = 2
     clusters = random.sample(minikube_clusters, num_clusters)
     mp = provider.get_namespaced_static_metrics_provider()
@@ -294,6 +320,7 @@ def test_scheduler_clusters_with_metrics(minikube_clusters):
         # 2. Create two Minikube clusters (from a config file) with both a global
         # metric and a namespaced metric and an application. The clusters have
         # different metric weights, which results in them having different scores.
+
         environment = create_default_environment(clusters, metrics=metric_weights)
         with Environment(environment) as env:
             app = env.resources[ResourceKind.APPLICATION][0]
@@ -318,6 +345,29 @@ def test_scheduler_clusters_with_global_metrics(minikube_clusters):
         minikube_clusters (list): Names of the Minikube backend.
 
     """
+    _gm_cmd = run(
+        ( "rok core gm list -o json")
+    )
+    _gm_cmd = _gm_cmd.output
+    _gm_cmd = _gm_cmd.replace('null', '""')
+    gm_list = json.loads(_gm_cmd)
+    for gm in gm_list:
+        run(
+            ( "rok core gm delete " + gm["metadata"]["name"])
+        )
+
+    _gmp_cmd = run(
+        ( "rok core gmp list -o json")
+    )
+    _gmp_cmd = _gmp_cmd.output
+    _gmp_cmd = _gmp_cmd.replace('null', '""')
+    gmp_list = json.loads(_gmp_cmd)
+    for gmp in gmp_list:
+        run(
+            ( "rok core gmp delete " + gmp["metadata"]["name"])
+        )
+
+    # -------------------------------------------------------------------
     for i in range(3):
         # The two clusters and metrics used in this test (randomly ordered)
         num_clusters = 2
@@ -365,14 +415,16 @@ def test_scheduler_clusters_with_global_metrics(minikube_clusters):
                 f"Expected cluster: {expected_cluster_json}. "
                 f"Other cluster: {other_cluster_json}"
             )
-            app.check_running_on(expected_cluster, error_message=err_msg)
+            app.check_running_on(
+                expected_cluster, error_message=err_msg
+            )
 
 
 def test_scheduler_clusters_with_one_metric(minikube_clusters):
     """Basic end-to-end testing of clusters with namespaced and global metrics
 
     The same test is executed six times. First three times with one cluster
-    having no metrics and one cluster haveing one namespaced metric.
+    having no metrics and one cluster having one namespaced metric.
     Then three times with one cluster having no metrics and one cluster having
     one global metric.
 
@@ -386,6 +438,29 @@ def test_scheduler_clusters_with_one_metric(minikube_clusters):
         minikube_clusters (list): Names of the Minikube backend.
 
     """
+    _gm_cmd = run(
+        ( "rok core gm list -o json")
+    )
+    _gm_cmd = _gm_cmd.output
+    _gm_cmd = _gm_cmd.replace('null', '""')
+    gm_list = json.loads(_gm_cmd)
+    for gm in gm_list:
+        run(
+            ( "rok core gm delete " + gm["metadata"]["name"])
+        )
+
+    _gmp_cmd = run(
+        ( "rok core gmp list -o json")
+    )
+    _gmp_cmd = _gmp_cmd.output
+    _gmp_cmd = _gmp_cmd.replace('null', '""')
+    gmp_list = json.loads(_gmp_cmd)
+    for gmp in gmp_list:
+        run(
+            ( "rok core gmp delete " + gmp["metadata"]["name"])
+        )
+
+    # -------------------------------------------------------------------
     mps = [
         provider.get_namespaced_static_metrics_provider(),
         provider.get_global_static_metrics_provider(),
@@ -457,7 +532,6 @@ def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
             }
             environment = create_default_environment(
                 clusters,
-                metrics=metric_weights,
                 cluster_labels=cluster_labels,
                 app_cluster_constraints=[app_cluster_constraint],
             )
@@ -468,6 +542,7 @@ def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
                 app.check_running_on(clusters[expected_index])
 
 
+@pytest.mark.skip()
 def test_one_unreachable_metrics_provider(minikube_clusters):
     """Basic end-to-end testing of unreachable metrics provider
 
@@ -508,7 +583,7 @@ def test_one_unreachable_metrics_provider(minikube_clusters):
         clusters[i]: [WeightedMetric(prometheus_metrics[i].metric, 1)]
         for i in range(num_clusters)
     }
-    environment = create_default_environment(clusters, metrics=metric_weights)
+    environment = create_default_environment(clusters)
     with Environment(environment, creation_delay=30) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
@@ -541,7 +616,7 @@ def test_one_unreachable_metrics_provider(minikube_clusters):
 
 
 def test_all_unreachable_metrics_provider(minikube_clusters):
-    """Basic end to end testing of unreachable metrics provider
+    """Basic e2e testing of unreachable metrics provider
 
     Test applies workflow as follows:
 
@@ -558,6 +633,29 @@ def test_all_unreachable_metrics_provider(minikube_clusters):
         minikube_clusters (list): Names of the Minikube backend.
 
     """
+    _gm_cmd = run(
+        ( "rok core gm list -o json")
+    )
+    _gm_cmd = _gm_cmd.output
+    _gm_cmd = _gm_cmd.replace('null', '""')
+    gm_list = json.loads(_gm_cmd)
+    for gm in gm_list:
+        run(
+            ( "rok core gm delete " + gm["metadata"]["name"])
+        )
+
+    _gmp_cmd = run(
+        ( "rok core gmp list -o json")
+    )
+    _gmp_cmd = _gmp_cmd.output
+    _gmp_cmd = _gmp_cmd.replace('null', '""')
+    gmp_list = json.loads(_gmp_cmd)
+    for gmp in gmp_list:
+        run(
+            ( "rok core gmp delete " + gmp["metadata"]["name"])
+        )
+
+    # -------------------------------------------------------------------
     # The two clusters and metrics used in this test (randomly ordered)
     num_clusters = 2
     clusters = random.sample(minikube_clusters, num_clusters)
@@ -597,9 +695,9 @@ def test_all_unreachable_metrics_provider(minikube_clusters):
         assert cluster_wo_metric.get_state() == "ONLINE"
         assert cluster_wo_metric.get_metrics_reasons() == {}
 
-
+@pytest.mark.skip()
 def test_metric_not_in_database(minikube_clusters):
-    """Basic end to end testing of cluster referencing a metric not found in the Krake
+    """Basic e2e testing of cluster referencing a metric not found in the Krake
     database.
 
     Test applies workflow as follows:

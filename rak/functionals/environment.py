@@ -1,7 +1,7 @@
 import os
 from collections import defaultdict
 
-from functionals.utils import KRAKE_HOMEDIR
+from functionals.utils import KRAKE_HOMEDIR, run
 from functionals.resource_definitions import (
     ClusterDefinition,
     ApplicationDefinition,
@@ -94,7 +94,8 @@ class Environment(object):
     """
 
     def __init__(
-        self, resources, before_handlers=None, after_handlers=None, creation_delay=10
+        self, resources, before_handlers=None, after_handlers=None,
+        creation_delay=10, ignore_check=False
     ):
         # Dictionary: "priority: list of resources to create"
         self.res_to_create = resources
@@ -103,6 +104,8 @@ class Environment(object):
 
         self.before_handlers = before_handlers if before_handlers else []
         self.after_handlers = after_handlers if after_handlers else []
+
+        self.ignore_check = ignore_check
 
     def __enter__(self):
         """Create all given resources and check that they have been actually created.
@@ -115,31 +118,33 @@ class Environment(object):
         for handler in self.before_handlers:
             handler(self.resources)
 
-        # Create resources with highest priority first
+        # Create resources with the highest priority first
         for _, resource_list in sorted(self.res_to_create.items(), reverse=True):
             for resource in resource_list:
                 self.resources[resource.kind] += [resource]
                 resource.create_resource()
 
         # Check for each resource if it has been created
-        for _, resource_list in sorted(self.res_to_create.items(), reverse=True):
-            for resource in resource_list:
-                resource.check_created(delay=self.creation_delay)
+        if not self.ignore_check:
+            for _, resource_list in sorted(self.res_to_create.items(), reverse=True):
+                for resource in resource_list:
+                    resource.check_created(delay=self.creation_delay)
 
         return self
 
     def __exit__(self, *exceptions):
         """Delete all given resources and check that they have been actually deleted."""
-        # Delete resources with lowest priority first
+        # Delete resources with the lowest priority first
         for _, resource_list in sorted(self.res_to_create.items()):
             for resource in resource_list:
                 resource.delete_resource()
 
         # Check for each resource if it has been deleted
-        for _, resource_list in sorted(self.res_to_create.items()):
-            for resource in resource_list:
-                if hasattr(resource, "check_deleted"):
-                    resource.check_deleted()
+        if not self.ignore_check:
+            for _, resource_list in sorted(self.res_to_create.items()):
+                for resource in resource_list:
+                    if hasattr(resource, "check_deleted"):
+                        resource.check_deleted()
 
         for handler in self.after_handlers:
             handler(self.resources)
@@ -147,7 +152,7 @@ class Environment(object):
     def get_resource_definition(self, kind, name):
         """
         If there exists exactly one resource in 'resources' of kind 'kind'
-        with name 'name', return it. Otherwise raise AssertionError.
+        with name 'name', return it. Otherwise, raise an AssertionError.
         Args:
             kind (ResourceKind): the kind of resource which is sought.
             name (str): the name of the resource that is sought.
@@ -252,8 +257,8 @@ def create_multiple_cluster_environment(
         # A non-existent metric do not have a metrics provider, so its
         # get_metrics_provider() method returns None.
         weighted_metric.metric.get_metrics_provider()
-        for c in kubeconfig_paths
-        for weighted_metric in metrics[c]
+        for cluster_name in kubeconfig_paths
+        for weighted_metric in metrics[cluster_name]
     }
     # Discard None metrics providers from non-existent metrics present in metrics
     all_unique_metrics_providers.discard(None)

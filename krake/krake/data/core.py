@@ -500,4 +500,4 @@ class GlobalMetricsProviderList(ApiObject):
 class MetricRef(Serializable):
     name: str
     weight: float
-    namespaced: bool
+    namespaced: bool = False

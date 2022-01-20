@@ -353,10 +353,21 @@ class Handler(object):
         fetching = []
         for metric_spec in metrics:
             try:
-                metric = await self.core_api.read_global_metric(name=metric_spec.name)
-                metrics_provider = await self.core_api.read_global_metrics_provider(
-                    name=metric.spec.provider.name
-                )
+                if metric_spec.namespaced:
+                    metric = await self.core_api.read_metric(
+                        name=metric_spec.name, namespace=resource.metadata.namespace
+                    )
+                    metrics_provider = await self.core_api.read_metrics_provider(
+                        name=metric.spec.provider.name,
+                        namespace=resource.metadata.namespace
+                    )
+                else:
+                    metric = await self.core_api.read_global_metric(
+                        name=metric_spec.name
+                    )
+                    metrics_provider = await self.core_api.read_global_metrics_provider(
+                        name=metric.spec.provider.name
+                    )
                 fetching.append(
                     fetch_query(
                         self.client.session,
@@ -825,7 +836,7 @@ class OpenstackHandler(Handler):
         )
 
     async def select_openstack_project(self, cluster, projects):
-        """Select "best" OpenStack project for the Magnum cluster.
+        """Select the "best" OpenStack project for the Magnum cluster.
 
         Args:
             cluster (krake.data.openstack.MagnumCluster): Cluster that should
@@ -944,10 +955,10 @@ class OpenstackHandler(Handler):
 
         if resource.kind == "Cluster":
             resource.status.state = ClusterState.FAILING_METRICS
-            update_status_client = self.kubernetes_api.update_cluster_status
+            update_status_client = self.api.update_cluster_status
         elif resource.kind == "Project":
             resource.status.state = ProjectState.FAILING_METRICS
-            update_status_client = self.openstack_api.update_project_status
+            update_status_client = self.api.update_project_status
         else:
             raise ValueError(f"Unsupported kind: {resource.kind}.")
 
@@ -997,7 +1008,6 @@ class OpenstackHandler(Handler):
         fetching = []
         for metric_spec in metrics:
             try:
-                # we do not know if the metric is a global or namespaced metric
                 if metric_spec.namespaced:
                     metric = await self.core_api.read_metric(
                         namespace=resource.metadata.namespace,
@@ -1064,33 +1074,6 @@ class OpenstackHandler(Handler):
             )
 
         yield fetched
-
-    def calculate_kubernetes_cluster_rank(self, metrics, cluster, app):
-        """Calculate weighted sum of metrics values.
-
-        Args:
-            metrics (List[.metrics.QueryResult]): List of metric query results
-            cluster (krake.data.kubernetes.Cluster): Cluster that is ranked
-            app (krake.data.kubernetes.Application): Application object that
-                should be scheduled.
-
-        Returns:
-            ClusterRank: rank of the passed cluster based on metrics and
-            application.
-
-        """
-        sticky = self.calculate_kubernetes_cluster_stickiness(cluster, app)
-
-        if not metrics:
-            return ClusterRank(rank=sticky.weight * sticky.value, cluster=cluster)
-
-        norm = sum(metric.weight for metric in metrics) + sticky.weight
-        rank = (
-            sum(metric.value * metric.weight for metric in metrics)
-            + (sticky.value * sticky.weight)
-        ) / norm
-
-        return ClusterRank(rank=rank, cluster=cluster)
 
     def calculate_kubernetes_cluster_stickiness(self, cluster, app):
         """Return extra metric for clusters to make the application "stick" to

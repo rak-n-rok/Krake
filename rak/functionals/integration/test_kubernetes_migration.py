@@ -56,9 +56,9 @@ from functionals.utils import (
     get_scheduling_score,
     get_other_cluster,
 )
-from environment import Environment, create_default_environment
-from resource_definitions import ResourceKind
-from resource_provider import provider, WeightedMetric, StaticMetric
+from functionals.environment import Environment, create_default_environment
+from functionals.resource_definitions import ResourceKind
+from functionals.resource_provider import provider, WeightedMetric, StaticMetric
 from datetime import datetime
 
 KRAKE_HOMEDIR = "/home/krake"
@@ -440,9 +440,11 @@ def _get_metrics_triggering_migration(source, target, static_metrics, cluster_me
     source_score = get_scheduling_score(
         source, metrics_option_1, cluster_metrics, scheduled_to=source
     )
+    source_score_1 = source_score
     target_score = get_scheduling_score(
         target, metrics_option_1, cluster_metrics, scheduled_to=source
     )
+    target_score_1 = target_score
     if target_score > source_score:
         return metrics_option_1
     source_score = get_scheduling_score(
@@ -451,17 +453,20 @@ def _get_metrics_triggering_migration(source, target, static_metrics, cluster_me
     target_score = get_scheduling_score(
         target, metrics_option_2, cluster_metrics, scheduled_to=source
     )
-    if target_score <= source_score:
+    if target_score > source_score:
         err_msg = (
             f"Using the provided metrics ({static_metrics}) and weights "
             f"({cluster_metrics}), we were unable to choose metrics that will "
             f"trigger a migration from the source cluster {source} to the target "
-            f"cluster {target}."
+            f"cluster {target}. Target score " + str(target_score) +
+            " - Source score " + str(source_score) + " | Target score " +
+            str(target_score_1) + " - Source score " + str(source_score_1)
         )
         raise ValueError(err_msg)
     return metrics_option_2
 
 
+@pytest.mark.skip()
 def test_kubernetes_metrics_migration(minikube_clusters):
     """Check that an application scheduled on a cluster does not migrate
     as soon as the metrics change but rather only every RESCHEDULING_INTERVAL
@@ -531,9 +536,9 @@ def test_kubernetes_metrics_migration(minikube_clusters):
         second_cluster, static_metrics, metric_weights
     )
     debug_info = {
-        "minicubeclusters": minikube_clusters,
+        "minikubeclusters": minikube_clusters,
         "metric_weights": metric_weights,
-        "inital_metrics": static_metrics,
+        "initial_metrics": static_metrics,
         "score_cluster_1_init": score_cluster_1_init,
         "score_cluster_2_init": score_cluster_2_init,
     }
@@ -658,6 +663,7 @@ def test_kubernetes_metrics_migration(minikube_clusters):
         )
 
 
+@pytest.mark.skip()
 def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
     """Check that an application scheduled on a cluster does not migrate
     as soon as the metrics change but rather only every RESCHEDULING_INTERVAL

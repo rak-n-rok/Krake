@@ -38,16 +38,6 @@ from krake import (
     ConfigurationOptionMapper,
 )
 from krake.client.core import CoreApi
-from krake.apidefs.core import (
-    RoleBindingResource,
-    RoleResource,
-    GlobalMetricsProviderResource,
-    GlobalMetricResource,
-    MetricsProviderResource,
-    MetricResource,
-)
-from krake.apidefs.kubernetes import ApplicationResource, ClusterResource
-from krake.apidefs.openstack import ProjectResource, MagnumClusterResource
 from krake.client.openstack import OpenStackApi
 from krake.controller import Controller, run, Reflector, create_ssl_context
 from krake.data.config import ControllerConfiguration
@@ -298,6 +288,8 @@ class GarbageCollector(Controller):
             for kind in kind_list:
                 self.apis[(kind.api, kind.kind)] = api
 
+                if kind.kind not in api_cls.plurals:
+                    continue
                 resource_plural = api_cls.plurals[kind.kind]
                 snake_plural = camel_to_snake_case(resource_plural)
 

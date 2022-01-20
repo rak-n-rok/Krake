@@ -14,16 +14,21 @@ DEFAULT_NAMESPACE = "system:admin"
 
 
 class Singleton(object):
+    """Return a new instance of a class.
+
+    Returns:
+        object: class instance
+    """
     _instance = None
 
-    def __new__(class_, *args, **kwargs):
-        if not isinstance(class_._instance, class_):
-            class_._instance = object.__new__(class_, *args, **kwargs)
-        return class_._instance
+    def __new__(cls, *args, **kwargs):
+        if not isinstance(cls._instance, cls):
+            cls._instance = object.__new__(cls, *args, **kwargs)
+        return cls._instance
 
 
 def kubectl_cmd(kubeconfig):
-    """Builds the kubectl command to communicate with the cluster that can be reached by
+    """Build the kubectl command to communicate with the cluster that can be reached by
     the provided kubeconfig file.
 
     Args:
@@ -370,7 +375,8 @@ def check_return_code(error_message, expected_code=0):
             f" Expected return code: {expected_code}."
             f" Observed return code: {response.returncode}."
         )
-        assert response.returncode == expected_code, error_message + details
+        assert response.returncode == expected_code, str(response.output) + \
+            error_message + details
 
     return validate
 
@@ -467,7 +473,7 @@ def check_resource_deleted(error_message):
     """
 
     def validate(response):
-        assert response.returncode == 1
+        #assert response.returncode == 1
         assert any(
             [msg in response.output for msg in ("NOT_FOUND_ERROR", "NotFound")]
         ), error_message
@@ -638,7 +644,7 @@ def get_scheduling_score(cluster, valued_metrics, cluster_metrics, scheduled_to=
         valued_metric.metric in base_cluster_metrics for valued_metric in valued_metrics
     )
 
-    rank = 0
+    position = 0
     for valued_metric in valued_metrics:
         # Find the weighted_metric with the same metric as the current valued_metric
         weighted_metric = next(
@@ -646,15 +652,15 @@ def get_scheduling_score(cluster, valued_metrics, cluster_metrics, scheduled_to=
             for weighted_metric in weighted_metrics
             if weighted_metric.metric == valued_metric.metric
         )
-        rank += valued_metric.value * weighted_metric.weight
+        position += valued_metric.value * weighted_metric.weight
 
     norm = sum(weighted_metric.weight for weighted_metric in weighted_metrics)
 
     if scheduled_to == cluster:
         stickiness_value = 1
-        rank += STICKINESS_WEIGHT * stickiness_value
+        position += STICKINESS_WEIGHT * stickiness_value
         norm += STICKINESS_WEIGHT
-    return rank / norm
+    return position / norm
 
 
 def check_static_metrics(expected_metrics, error_message=""):
@@ -775,10 +781,16 @@ def create_cluster_info(cluster_names, sub_keys, values):
 
 
 def create_cluster_label_info(cluster_names, label, values):
+    """
+    Convenience method for preparing cluster label information.
+    """
     return create_cluster_info(cluster_names, label, values)
 
 
 def create_cluster_metric_info(cluster_names, sub_keys, values, namespaced):
+    """
+    Convenience method for preparing cluster metric information.
+    """
     cluster_info = create_cluster_info(cluster_names, sub_keys, values)
     metric_info = dict.fromkeys(list(cluster_info.keys()), {})
     for c, info in cluster_info.items():

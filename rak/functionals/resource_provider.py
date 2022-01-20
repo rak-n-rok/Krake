@@ -23,7 +23,7 @@ class BaseMetricsProviderDefinition(ResourceDefinition, ABC):
         kind (ResourceKind): kind of metrics provider. Must be either
             ResourceKind.METRICSPROVIDER or ResourceKind.GLOBALMETRICSPROVIDER
         namespace (str, optional): the namespace of the metrics provider.
-            None iff kind == ResourceKind.GLOBALMETRICSPROVIDER
+            None if kind == ResourceKind.GLOBALMETRICSPROVIDER
         mp_type (functionals.resource_provider.MetricsProviderType): type of
             metrics provider
         _base_metrics (list[BaseMetricDefinition]): list of metric resource definitions
@@ -45,7 +45,7 @@ class BaseMetricsProviderDefinition(ResourceDefinition, ABC):
 
     @abstractmethod
     def _get_mutable_attributes(self):
-        raise Exception("Not yet implemented")
+        raise NotImplementedError("Not yet implemented")
 
     def _get_default_values(self):
         return dict.fromkeys(self._mutable_attributes, None)
@@ -58,8 +58,8 @@ class BaseMetricsProviderDefinition(ResourceDefinition, ABC):
         }
 
     @abstractmethod
-    def creation_command(self):
-        raise Exception("Not yet implemented")
+    def creation_command(self, wait):
+        raise NotImplementedError("Not yet implemented")
 
     def creation_acceptance_criteria(self, error_message=None):
         if not error_message:
@@ -68,7 +68,7 @@ class BaseMetricsProviderDefinition(ResourceDefinition, ABC):
             )
         return check_resource_exists(error_message=error_message)
 
-    def delete_command(self):
+    def delete_command(self, wait):
         return f"rok core {self.kind.value} delete {self.name}".split()
 
     def get_command(self):
@@ -101,20 +101,21 @@ class BaseMetricsProviderDefinition(ResourceDefinition, ABC):
         """Set the valued metrics of this metrics provider
 
         Of the krake metrics provider resources, only the static metrics provider
-        keeps the values of the metrics it provides. However, during the tests the
+        keeps the values of the metrics it provides. However, during the tests
         we need to be able to 'predict' which values a metrics provider will provide
-        during the tests. Therefore we provide the valued metrics to all types of
+        during the tests. Therefore, we provide the valued metrics to all types of
         metrics providers using this method.
         The values are however never used and can only be retrieved using the
         get_valued_metrics() method.
 
         For metrics providers of type MetricsProviderType.STATIC, calling this
-        method changes the metrics this metrics provider resource definition provides,
-        without updating the actual database resource associated with it.
-        This is useful when the provided needs to be set correctly already at creation
-        of the actual database resource. (Otherwise the inital values of the provider
-        resource definition would be used when an application is scheduled to a cluster
-        at the entry of an environment.Environment.)
+        method changes the metrics which the metrics providers resource definition
+        uses, without updating the actual database resource associated with it.
+        This is useful when the provider needs to be set with a correct value already
+        at creation of the actual database resource.
+        (Otherwise, the initial values of the provider resource definition would be used
+        when an application is scheduled to a cluster at the entry of an
+        environment.Environment, which could contain incorrect information.)
 
         Args:
             metrics (list[ValuedMetric]):
@@ -124,12 +125,10 @@ class BaseMetricsProviderDefinition(ResourceDefinition, ABC):
         self._valued_metrics = metrics
 
     def _validate_metrics(self, metrics):
-        """
+        """Validate the metrics list based on their namespaces.
 
         Args:
             metrics (list(StaticMetric)): metrics to validate
-
-        Returns:
 
         """
         if metrics is None:
@@ -149,7 +148,7 @@ class BaseKafkaMetricsProviderDefinition(BaseMetricsProviderDefinition):
         kind (ResourceKind): kind of metrics provider. Valid values are
             ResourceKind.METRICSPROVIDER and ResourceKind.GLOBALMETRICSPROVIDER
         namespace (str, optional): the namespace of the metrics provider.
-            None iff kind == ResourceKind.GLOBALMETRICSPROVIDER
+            None if kind == ResourceKind.GLOBALMETRICSPROVIDER
         url (str): url at which this metrics provider provides.
         table (str): name of the ksql table.
         comparison_column (str): Name of the column whose value will be compared
@@ -173,7 +172,7 @@ class BaseKafkaMetricsProviderDefinition(BaseMetricsProviderDefinition):
     def _get_mutable_attributes(self):
         return ["url", "table", "comparison_column", "value_column"]
 
-    def creation_command(self):
+    def creation_command(self, wait):
         return (
             f"rok core {self.kind.value} create --type {self.type.value} "
             f"--url {self.url} --comparison-column {self.comparison_column} "
@@ -221,7 +220,7 @@ class BasePrometheusMetricsProviderDefinition(BaseMetricsProviderDefinition):
     def _get_mutable_attributes(self):
         return ["url"]
 
-    def creation_command(self):
+    def creation_command(self, wait):
         return (
             f"rok core {self.kind.value} create --type {self.type.value} "
             f"--url {self.url} {self.name}".split()
@@ -259,7 +258,7 @@ class BaseStaticMetricsProviderDefinition(BaseMetricsProviderDefinition):
     def _get_mutable_attributes(self):
         return ["metrics"]
 
-    def creation_command(self):
+    def creation_command(self, wait):
         cmd = (
             f"rok core {self.kind.value} create --type {self.type.value} "
             f"{self.name}".split()
@@ -350,7 +349,7 @@ class BaseMetricDefinition(ResourceDefinition, ABC):
         min (float): minimum value of this metric
         max (float): maximum value of this metric
         mp_name (str): name of the metrics provider which privides this metric.
-        mp_metric_name (str, optional): name of this metric at its metrics provider
+        mp_metric_name (str, optional): metric name for a specific metrics provider
 
     Raises:
         ValueError: if kind is incorrect or does not match the namespace
@@ -386,7 +385,7 @@ class BaseMetricDefinition(ResourceDefinition, ABC):
             "mp_metric_name": metric["spec"]["provider"]["metric"],
         }
 
-    def creation_command(self):
+    def creation_command(self, wait):
         cmd = (
             f"rok core {self.kind.value} create --min {self.min} --max {self.max} "
             f"{self._mp_name_param} {self.mp_name} --metric-name {self.mp_metric_name} "
@@ -403,7 +402,7 @@ class BaseMetricDefinition(ResourceDefinition, ABC):
             )
         return check_resource_exists(error_message=error_message)
 
-    def delete_command(self):
+    def delete_command(self, wait):
         return f"rok core {self.kind.value} delete {self.name}".split()
 
     def get_command(self):
@@ -470,7 +469,7 @@ class NonExistentMetric(BaseMetricDefinition):
     def check_created(self, delay=10):
         pass
 
-    def creation_command(self):
+    def creation_command(self, wait):
         raise ValueError("This metric does not exist and cannot be created.")
 
     def creation_acceptance_criteria(self, error_message=None):
@@ -483,7 +482,7 @@ class NonExistentMetric(BaseMetricDefinition):
     def delete_resource(self):
         pass
 
-    def delete_command(self):
+    def delete_command(self, wait):
         raise ValueError("This metric does not exist and cannot be deleted.")
 
     def check_deleted(self, delay=10):
@@ -569,6 +568,54 @@ class WeightedMetric(WrappedMetric):
 
 
 class ResourceProvider(Singleton):
+    """Resource provider class, which contains data for the resource provider as well
+    as useful functions.
+
+    """
+
+    def __init__(self):
+        self._metric_to_metrics_provider = {}
+        prometheus_metrics_providers = {
+            None: self._init_metrics_providers(MetricsProviderType.PROMETHEUS, None),
+        }
+        static_metrics_providers = {
+            NAMESPACE: self._init_metrics_providers(
+                MetricsProviderType.STATIC, NAMESPACE
+            ),
+            None: self._init_metrics_providers(MetricsProviderType.STATIC, None),
+        }
+        self.metrics_providers = {
+            MetricsProviderType.STATIC: static_metrics_providers,
+            MetricsProviderType.PROMETHEUS: prometheus_metrics_providers,
+        }
+
+        self.unreachable_metrics_providers = {
+            MetricsProviderType.PROMETHEUS: {
+                None: self._init_metrics_providers(
+                    MetricsProviderType.PROMETHEUS, None, unreachable=True
+                )
+            },
+        }
+
+        static_metrics = {
+            NAMESPACE: self._init_metrics(MetricsProviderType.STATIC, NAMESPACE),
+            None: self._init_metrics(MetricsProviderType.STATIC, None),
+        }
+        prometheus_metrics = {
+            None: self._init_metrics(MetricsProviderType.PROMETHEUS, None),
+        }
+        self.metrics = {
+            MetricsProviderType.STATIC: static_metrics,
+            MetricsProviderType.PROMETHEUS: prometheus_metrics,
+        }
+
+        self.unreachable_metrics = {
+            MetricsProviderType.PROMETHEUS: {
+                None: self._init_metrics(
+                    MetricsProviderType.PROMETHEUS, None, unreachable=True
+                )
+            }
+        }
 
     # Metrics providers
     _METRICS_PROVIDER_INFO = {
@@ -710,6 +757,7 @@ class ResourceProvider(Singleton):
             if provider_info["name"] == mp.name
         )
 
+        # Check if the provided metrics are equal to the metrics
         num_metrics = len(metrics)
         if len(provided_metrics) != num_metrics:
             raise ValueError(
@@ -717,12 +765,14 @@ class ResourceProvider(Singleton):
                 f"{mp.name}. Expected {num_metrics}."
             )
 
+        # Check what type of provider is used at the moment
         if mp.type == MetricsProviderType.STATIC:
             valued_metric_class = StaticMetric
         elif mp.type == MetricsProviderType.PROMETHEUS:
             valued_metric_class = PrometheusMetric
         else:
             raise NotImplementedError()
+        # Iterate through the provided metrics
         valued_metrics = []
         for i, (metric_name, metric_value) in enumerate(provided_metrics):
             metric = metrics[i]
@@ -826,7 +876,7 @@ class ResourceProvider(Singleton):
         mps = mps_list.get(mp_type, {}).get(namespace, {})
 
         # Mapping from metrics provider resource definition to its metrics.
-        # Initally empty.
+        # Initially empty.
         metrics_for_mp = dict.fromkeys([mp for mp in mps], [])
         for metric_info in metrics_info:
             # check if metric has the correct reachability. Skip if not.
@@ -862,7 +912,7 @@ class ResourceProvider(Singleton):
                 metrics_for_mp[mp].append(metric)
 
         # The metrics providers need their metrics, so we add them here - also for
-        # non-static metrics providers, sinc information about the metrics they
+        # non-static metrics providers, since information about the metrics they
         # provide is needed in the tests.
         sanity_check_number_of_metrics = 0
         for mp, mp_metrics in metrics_for_mp.items():
@@ -877,49 +927,6 @@ class ResourceProvider(Singleton):
 
         return metrics
 
-    def __init__(self):
-        self._metric_to_metrics_provider = {}
-        prometheus_metrics_providers = {
-            None: self._init_metrics_providers(MetricsProviderType.PROMETHEUS, None),
-        }
-        static_metrics_providers = {
-            NAMESPACE: self._init_metrics_providers(
-                MetricsProviderType.STATIC, NAMESPACE
-            ),
-            None: self._init_metrics_providers(MetricsProviderType.STATIC, None),
-        }
-        self.metrics_providers = {
-            MetricsProviderType.STATIC: static_metrics_providers,
-            MetricsProviderType.PROMETHEUS: prometheus_metrics_providers,
-        }
-
-        self.unreachable_metrics_providers = {
-            MetricsProviderType.PROMETHEUS: {
-                None: self._init_metrics_providers(
-                    MetricsProviderType.PROMETHEUS, None, unreachable=True
-                )
-            },
-        }
-
-        static_metrics = {
-            NAMESPACE: self._init_metrics(MetricsProviderType.STATIC, NAMESPACE),
-            None: self._init_metrics(MetricsProviderType.STATIC, None),
-        }
-        prometheus_metrics = {
-            None: self._init_metrics(MetricsProviderType.PROMETHEUS, None),
-        }
-        self.metrics = {
-            MetricsProviderType.STATIC: static_metrics,
-            MetricsProviderType.PROMETHEUS: prometheus_metrics,
-        }
-
-        self.unreachable_metrics = {
-            MetricsProviderType.PROMETHEUS: {
-                None: self._init_metrics(
-                    MetricsProviderType.PROMETHEUS, None, unreachable=True
-                )
-            }
-        }
 
     def get_metrics_provider(self, metric):
         """
@@ -1020,7 +1027,7 @@ class ResourceProvider(Singleton):
         mps = self.metrics_providers[MetricsProviderType.STATIC][NAMESPACE]
         if len(mps) != 1:
             raise ValueError(
-                f"Expected 1 global static metrics provider. " f"Found {len(mps)}."
+                f"Expected 1 namespaced static metrics provider. " f"Found {len(mps)}."
             )
         return mps[0]
 

@@ -55,12 +55,39 @@ GLOBAL_METRIC_BASE_URL = "/core/globalmetrics"
 
 
 def _create_base_resource(session, base_url, resource, config=None, namespace=None):
+    """
+    Creation function for a basic resource
+
+    Args:
+        session (requests.Session): the session used to connect to the krake API
+        base_url (str): the base url at which the krake API serves the request
+        resource (str): name of the resource kind
+        config (dict): the config
+        namespace (str, optional): the namespace within which the resource
+            should be created
+
+    Returns:
+        dict(str, object): The updated Metric resource in json representation
+    """
     request_url = _get_request_url(base_url, config=config, namespace=namespace)
     resp = session.post(request_url, json=resource)
     return resp.json()
 
 
 def _list_base_resource(session, base_url, config=None, namespace=None):
+    """
+    List function for a basic resource
+
+    Args:
+        session (requests.Session): the session used to connect to the krake API
+        base_url (str): the base url at which the krake API serves the request
+        config (dict): the config
+        namespace (str, optional): the namespace within which the resource
+            should be created
+
+    Returns:
+        dict(str, object): The updated Metric resource in json representation
+    """
     request_url = _get_request_url(base_url, config=config, namespace=namespace)
     resp = session.get(request_url)
     body = resp.json()
@@ -68,6 +95,21 @@ def _list_base_resource(session, base_url, config=None, namespace=None):
 
 
 def _get_base_resource(session, base_url, kind, name, config=None, namespace=None):
+    """
+    Get function for a basic resource
+
+    Args:
+        session (requests.Session): the session used to connect to the krake API
+        base_url (str): the base url at which the krake API serves the request
+        kind (ResourceKind): the kind of resource which is sought
+        name (str): name of the resource
+        config (dict): the config
+        namespace (str, optional): the namespace within which the resource
+            should be created
+
+    Returns:
+        dict(str, object): The updated Metric resource in json representation
+    """
     request_url = _get_request_url(
         base_url, config=config, namespace=namespace, url_ext=name
     )
@@ -78,6 +120,21 @@ def _get_base_resource(session, base_url, kind, name, config=None, namespace=Non
 def _update_base_resource(
     session, base_url, resource, name, config=None, namespace=None
 ):
+    """
+    Update function for a basic resource
+
+    Args:
+        session (requests.Session): the session used to connect to the krake API
+        base_url (str): the base url at which the krake API serves the request
+        resource (str): name of the resource kind
+        name (str): name of the resource
+        config (dict): the config
+        namespace (str, optional): the namespace within which the resource
+            should be created
+
+    Returns:
+        dict(str, object): The updated Metric resource in json representation
+    """
     request_url = _get_request_url(
         base_url, config=config, namespace=namespace, url_ext=name
     )
@@ -86,6 +143,21 @@ def _update_base_resource(
 
 
 def _delete_base_resource(session, base_url, kind, name, config=None, namespace=None):
+    """
+    Delete function for a basic resource
+
+    Args:
+        session (requests.Session): the session used to connect to the krake API
+        base_url (str): the base url at which the krake API serves the request
+        kind (ResourceKind): the kind of resource which is sought
+        name (str): name of the resource
+        config (dict): the config
+        namespace (str, optional): the namespace within which the resource
+            should be created
+
+    Returns:
+        dict(str, object): The updated Metric resource in json representation
+    """
     request_url = _get_request_url(
         base_url, config=config, namespace=namespace, url_ext=name
     )
@@ -97,6 +169,9 @@ def _delete_base_resource(session, base_url, kind, name, config=None, namespace=
 
 
 def _get_request_url(base_url, config=None, namespace="", url_ext=""):
+    """
+    Returns a GET request url (I don't know what this does exactly)
+    """
     if namespace and not config:
         raise ValueError(
             f"Expected a config together with namespace '{namespace}'. "
@@ -184,48 +259,6 @@ def _list_base_metrics_providers(session, base_url, config=None, namespace=None)
     return _list_base_resource(session, base_url, config=config, namespace=namespace)
 
 
-@globalmetricsprovider.command("create", help="Create a global metrics provider")
-@argument("--name", required=True, help="Global metrics provider name")
-@argument(
-    "--url",
-    help=f"Global metrics provider url. "
-    f"Not valid together with --type {_MetricsProviderType.STATIC}.",
-)
-@argument(
-    "--type",
-    dest="mp_type",
-    required=True,
-    help=f"Global metrics provider type. Valid types: "
-    f"{', '.join(t.value for t in _MetricsProviderType)}",
-)
-@argument(
-    "-m",
-    "--metric",
-    action=MetricAction,
-    dest="metrics",
-    help=f"Name and value of a global metric the provider provides. "
-    f"Can be specified multiple times. "
-    f"Only valid together with --type {_MetricsProviderType.STATIC}.",
-)
-@argument(
-    "--table",
-    help=f"Name of the KSQL table. Only valid together with "
-    f"--type {_MetricsProviderType.KAFKA.value}.",
-)
-@argument(
-    "--comparison-column",
-    help=f"Name of the column whose value will be compared to the metric name "
-    f"when selecting a metric. Only valid together with --type "
-    f"{_MetricsProviderType.KAFKA.value}.",
-)
-@argument(
-    "--value-column",
-    help=f"Name of the column where the value of a metric is stored. "
-    f"Only valid together with --type {_MetricsProviderType.KAFKA.value}.",
-)
-@arg_formatting
-@depends("session")
-@printer(table=BaseMetricsProviderTable())
 def _create_base_metrics_provider(
     session,
     base_url,

@@ -299,8 +299,8 @@ class MetricAction(Action):
         namespaced = self.dest == "metrics"
         if not (not_namespaced or namespaced):
             msg = (
-                f"Expected the destination to be either metrics or global_metrics. "
-                f"Was '{self.dest}'."
+                f"Expected the destination to be either metrics or global_metrics, "
+                f"but it was '{self.dest}'. Check with the developers, if you see this."
             )
             raise ValueError(msg)
         metric_dict = {"name": name, "weight": weight, "namespaced": namespaced}
@@ -309,7 +309,6 @@ class MetricAction(Action):
 
 arg_metric = argument(
     "--metric",
-    "-m",
     dest="metrics",
     action=MetricAction,
     help=(
@@ -321,7 +320,6 @@ arg_metric = argument(
 
 arg_global_metric = argument(
     "--global-metric",
-    "-gm",
     dest="global_metrics",
     action=MetricAction,
     help=(

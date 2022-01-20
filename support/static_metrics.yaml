@@ -1,0 +1,51 @@
+# This bootstrap file adds two static metrics and their metric provider, to be used
+# in tests.
+#
+# These resources can be loaded using the ``krake_bootstrap_db`` script.
+
+################################
+### Static Metrics Providers ###
+################################
+
+
+api: core
+kind: GlobalMetricsProvider
+metadata:
+  name: static_provider
+spec:
+  static:
+    metrics:
+      electricity_cost_1: 0.9
+      green_energy_ratio_1: 0.1
+  type: static
+
+---
+
+
+######################
+### Static Metrics ###
+######################
+
+api: core
+kind: GlobalMetric
+metadata:
+  name: electricity_cost_1
+spec:
+  max: 1.0
+  min: 0.0
+  provider:
+    metric: electricity_cost_1
+    name: static_provider
+
+---
+
+api: core
+kind: GlobalMetric
+metadata:
+  name: green_energy_ratio_1
+spec:
+  max: 1.0
+  min: 0.0
+  provider:
+    metric: green_energy_ratio_1
+    name: static_provider

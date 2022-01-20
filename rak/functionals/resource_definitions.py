@@ -49,7 +49,8 @@ class ResourceDefinition(ABC):
         if not name:
             raise ValueError("name must be provided")
         if bool(namespace) != kind.is_namespaced():
-            raise ValueError(f"kind '{kind}' and namespace '{namespace}' do not match.")
+            raise ValueError(f"kind {kind!r} does not support namespace, "
+                             f"but {namespace!r} was provided")
         self.name = name
         self.namespace = namespace
         self.kind = kind
@@ -719,7 +720,8 @@ class ClusterDefinition(ResourceDefinition):
         self.metrics = metrics
 
     def _validate_metrics(self, metrics):
-        """
+        """Validate the metrics list based on their weighting.
+
         Args:
             metrics (list(WeightedMetric)): metrics to validate
         """
@@ -727,8 +729,8 @@ class ClusterDefinition(ResourceDefinition):
             raise ValueError("Expected metrics to be a list. Was None.")
         if any(
             [
-                self.namespace != weighted_metric.metric.namespace
-                and weighted_metric.metric.namespace
+                weighted_metric.metric.namespace
+                and self.namespace != weighted_metric.metric.namespace
                 for weighted_metric in metrics
             ]
         ):
@@ -795,9 +797,9 @@ class ClusterDefinition(ResourceDefinition):
         if metrics is None:
             metrics = []
         for weighted_metric in metrics:
-            rok_cli_flag = "-gm"
+            rok_cli_flag = "--global-metric"
             if weighted_metric.metric.kind.is_namespaced():
-                rok_cli_flag = "-m"
+                rok_cli_flag = "--metric"
             metrics_options += [
                 rok_cli_flag,
                 weighted_metric.metric.name,
