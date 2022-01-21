@@ -352,6 +352,9 @@ class KubernetesApi(object):
                 entity.metadata.name,
                 entity.metadata.uid,
             )
+            reason = HttpReason(reason="No migration or deletion retry needed",
+                                code=HttpReasonCode.UPDATE_ERROR)
+            raise json_error(web.HTTPBadRequest, reason.serialize())
 
         return web.json_response(entity.serialize())
 

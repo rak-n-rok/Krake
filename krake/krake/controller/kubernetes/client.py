@@ -457,13 +457,12 @@ class KubernetesClient(object):
                 error on the cluster's side.
 
         """
-        logger.debug("URL: " + app.status.services["shutdown"])
 
         try:
             resp = requests.put("http://"+app.status.services["shutdown"]+"/shutdown")
         except requests.exceptions.RequestException as err:
             if err.response is None:
-                logger.debug("URL: " + app.status.services["shutdown"])
+                logger.debug("There was no response")
                 raise
             if err.response.statuscode == 404:
                 logger.debug("Resource already deleted")

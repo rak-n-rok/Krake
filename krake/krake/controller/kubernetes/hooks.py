@@ -317,8 +317,8 @@ def update_last_applied_manifest_list_from_resp(
             # elements will also not exist.
             #
             # This doesn't raise an Exception as observing the element of a list
-            # doesn't ensure its presence. The list length is controlled by the special
-            # control dictionary
+            # doesn't ensure its presence. The list length is controlled by the
+            # special control dictionary
             return
 
         if isinstance(val, dict):
