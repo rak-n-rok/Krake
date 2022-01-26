@@ -255,6 +255,33 @@ users:
   - system:complete-hook
 ---
 
+#####################
+### Shutdown hook ###
+#####################
+
+api: core
+kind: Role
+metadata:
+  name: role:system:shutdown-hook
+rules:
+- api: 'kubernetes'
+  namespaces:
+  - ''
+  resources:
+  - "applications/shutdown"
+  verbs:
+  - update
+---
+
+api: core
+kind: RoleBinding
+metadata:
+  name: rolebinding:system:shutdown-hook
+roles:
+- role:system:shutdown-hook
+users:
+  - system:shutdown-hook
+---
 
 #########################
 ### Magnum Controller ###

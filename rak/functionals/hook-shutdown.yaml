@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sd-container
+  name: sd-deployment
 spec:
   selector:
     matchLabels:
