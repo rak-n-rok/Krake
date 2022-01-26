@@ -172,7 +172,7 @@ class CompleteHookConfiguration(Serializable):
             )
         },
     )
-    env_complete: str = field(
+    env_url: str = field(
         default="KRAKE_COMPLETE_URL",
         metadata={
             "help": (
@@ -237,7 +237,7 @@ class ShutdownHookConfiguration(Serializable):
             )
         },
     )
-    env_shutdown: str = field(
+    env_url: str = field(
         default="KRAKE_SHUTDOWN_URL",
         metadata={
             "help": (

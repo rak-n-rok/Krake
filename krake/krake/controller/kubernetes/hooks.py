@@ -1070,7 +1070,7 @@ async def complete(app, api_endpoint, ssl_context, config, default_namespace="de
         hook_user=config.complete.hook_user,
         cert_dest=config.complete.cert_dest,
         env_token=config.complete.env_token,
-        env_complete=config.complete.env_complete,
+        env_url=config.complete.env_url,
     )
     hook.mangle_app(
         app.metadata.name,
@@ -1128,7 +1128,7 @@ async def shutdown(app, api_endpoint, ssl_context, config, default_namespace="de
         hook_user=config.shutdown.hook_user,
         cert_dest=config.shutdown.cert_dest,
         env_token=config.shutdown.env_token,
-        env_shutdown=config.shutdown.env_shutdown,
+        env_url=config.shutdown.env_url,
     )
     hook.mangle_app(
         app.metadata.name,
@@ -1815,7 +1815,7 @@ class Complete(Hook):
             certificate and key to the Krake API will be stored.
         env_token (str, optional): Name of the environment variable, which stores Krake
             authentication token.
-        env_complete (str, optional): Name of the environment variable,
+        env_url (str, optional): Name of the environment variable,
             which stores Krake complete hook URL.
 
     """
@@ -1823,13 +1823,13 @@ class Complete(Hook):
     hook_resources = ("Pod", "Deployment", "ReplicationController")
 
     def __init__(
-        self, api_endpoint, ssl_context, hook_user, cert_dest, env_token, env_complete
+        self, api_endpoint, ssl_context, hook_user, cert_dest, env_token, env_url
     ):
         super().__init__(
             api_endpoint, ssl_context, hook_user,
-            cert_dest, env_token, env_complete
+            cert_dest, env_token, env_url
         )
-        self.env_complete = env_complete
+        self.env_url = env_url
 
     def secret_token(
         self, secret_name, name, namespace, resource_namespace, api_endpoint, token
@@ -1855,7 +1855,7 @@ class Complete(Hook):
         complete_url = self.create_hook_url(name, namespace, api_endpoint)
         data = {
             self.env_token.lower(): self._encode_to_64(token),
-            self.env_complete.lower(): self._encode_to_64(complete_url),
+            self.env_url.lower(): self._encode_to_64(complete_url),
         }
         return self.secret(secret_name, data, resource_namespace)
 
@@ -1907,12 +1907,12 @@ class Complete(Hook):
             ),
         )
         env_url = V1EnvVar(
-            name=self.env_complete,
+            name=self.env_url,
             value_from=self.attribute_map(
                 V1EnvVarSource(
                     secret_key_ref=self.attribute_map(
                         V1SecretKeySelector(
-                            name=secret_name, key=self.env_complete.lower()
+                            name=secret_name, key=self.env_url.lower()
                         )
                     )
                 )
@@ -1958,7 +1958,7 @@ class Shutdown(Hook):
             certificate and key to the Krake API will be stored.
         env_token (str, optional): Name of the environment variable, which stores Krake
             authentication token.
-        env_complete (str, optional): Name of the environment variable,
+        env_url (str, optional): Name of the environment variable,
             which stores Krake complete hook URL.
 
     """
@@ -1966,13 +1966,13 @@ class Shutdown(Hook):
     hook_resources = ("Pod", "Deployment", "ReplicationController")
 
     def __init__(
-        self, api_endpoint, ssl_context, hook_user, cert_dest, env_token, env_shutdown
+        self, api_endpoint, ssl_context, hook_user, cert_dest, env_token, env_url
     ):
         super().__init__(
             api_endpoint, ssl_context, hook_user,
-            cert_dest, env_token, env_shutdown
+            cert_dest, env_token, env_url
         )
-        self.env_shutdown = env_shutdown
+        self.env_url = env_url
 
     def secret_token(
         self, secret_name, name, namespace, resource_namespace, api_endpoint, token
@@ -1998,7 +1998,7 @@ class Shutdown(Hook):
         shutdown_url = self.create_hook_url(name, namespace, api_endpoint)
         data = {
             self.env_token.lower(): self._encode_to_64(token),
-            self.env_shutdown.lower(): self._encode_to_64(shutdown_url),
+            self.env_url.lower(): self._encode_to_64(shutdown_url),
         }
         return self.secret(secret_name, data, resource_namespace)
 
@@ -2051,13 +2051,13 @@ class Shutdown(Hook):
             )
         )
         env_url = V1EnvVar(
-            name=self.env_shutdown,
+            name=self.env_url,
             value_from=self.attribute_map(
                 V1EnvVarSource(
                     secret_key_ref=self.attribute_map(
                         V1SecretKeySelector(
                             name=secret_name,
-                            key=self.env_shutdown.lower()
+                            key=self.env_url.lower()
                         )
                     )
                 )

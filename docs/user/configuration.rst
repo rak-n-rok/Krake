@@ -161,7 +161,7 @@ command-line options. The arguments and available options are:
     value of the token, which will be given to the Application. See
     :ref:`dev/hooks:Complete`. Default: ``"KRAKE_TOKEN"``.
 
-``--complete-hook-env-complete``
+``--complete-hook-env-url``
     For the complete hook, set the name of the environment variable that contain the
     URL of the Krake API, which will be given to the Application. See
     :ref:`dev/hooks:Complete`. Default: ``"KRAKE_COMPLETE_URL"``.
@@ -372,14 +372,14 @@ hooks (string)
             Set the path to the certificate authority on the deployed Application. Example: ``/etc/krake_cert``
         env_token (string)
             Name of the environment variable, which stores Krake authentication token. Example: ``KRAKE_TOKEN``
-        env_complete (string)
-            .. _env_complete:
+        env_url (string)
+            .. _env_url:
 
             Name of the environment variable, which stores Krake ``complete`` hook URL. Example: ``KRAKE_COMPLETE_URL``
         external_endpoint (URL, optional)
             If set, replaces the host and port in the value of environment variable in
             the Krake ``complete`` hook URL (the name of this variable is given by
-            env_complete_). By default, the value stored in the variable is the
+            env_url_). By default, the value stored in the variable is the
             api_endpoint_. Example: ``https://krake.external.host:1234``.
 
     shutdown (string)
@@ -401,14 +401,14 @@ hooks (string)
             Set the path to the certificate authority on the deployed Application. Example: ``/etc/krake_cert``
         env_token (string)
             Name of the environment variable, which stores Krake authentication token. Example: ``KRAKE_TOKEN``
-        env_complete (string)
-            .. _env_shutdown:
+        env_url (string)
+            .. _env_url:
 
             Name of the environment variable, which stores Krake ``shutdown`` hook URL. Example: ``KRAKE_SHUTDOWN_URL``
         external_endpoint (URL, optional)
             If set, replaces the host and port in the value of environment variable in
             the Krake ``shutdown`` hook URL (the name of this variable is given by
-            env_shutdown_). By default, the value stored in the variable is the
+            env_url_). By default, the value stored in the variable is the
             api_endpoint_. Example: ``https://krake.external.host:1234``.
 
 Scheduler
