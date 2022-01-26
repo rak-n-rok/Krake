@@ -13,6 +13,13 @@ variables:
   # can only cache local items.
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
 
+workflow:
+  rules:
+    - if: $CI_MERGE_REQUEST_IID
+    - if: $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
 
 # Pip's cache doesn't store the python packages
 # https://pip.pypa.io/en/stable/reference/pip_install/#caching
@@ -170,12 +177,16 @@ coverage-krake:
     - pip install coverage
     - coverage combine krake/.coverage.*
     - coverage report --fail-under 85
+    - coverage html
+    - tar -czvf coverage.tar.gz htmlcov
   only:
     - tags
     - branches
     - merge_requests
     - schedules
-
+  artifacts:
+    paths:
+      - coverage.tar.gz
 
 # Following job is for end to end testing. We provisioning the staging
 # infrastructure, run the smoke tests and the end to end tests, and cleanup
