@@ -27,7 +27,6 @@ cache:
   paths:
     - .cache/pip
 
-
 # Unit tests and flake8 are run on commits on branches which are not yet in a
 # merge requests (including master), on merge requests, and on scheduled
 # pipeline (night runs). Unfortunately, this configuration create duplicates
