@@ -49,7 +49,7 @@ cluster. The hook is disabled by default. The user can enable this hook with the
 See also :ref:`user/rok-documentation:Rok documentation`.
 
 The shutdown hook injects the ``KRAKE_TOKEN`` and the ``KRAKE_SHUTDOWN_URL``
-environment variable, which respectively store the Krake authentication token and the
+environment variables, which respectively store the Krake authentication token and the
 Krake `shutdown` hook URL for a given application.
 
 By default, this URL is the Krake API endpoint as specified in the Kubernetes Controller
@@ -61,15 +61,30 @@ parameter is set.
 
 If the application should be migrated or deleted, Krake calls the ``shutdown`` services
 URL, which is set via the manifest file of the application.
-The integrated service gracefully shuts down the application via a SIGTERM call.
-After the shutdown, the service sends a completion signal to the `shutdown` hook URL.
-The token is used for authentication and should be sent in a PUT request body.
+The integrated service gracefully shuts down the application, preferably via SIGTERM
+call, but the exact implementation is up to the individual developer.
+After the shutdown process is complete, the service sends a completion signal
+to the `shutdown` hook endpoint of the specific application on the Krake API.
+The previously set token is used for authentication and should be sent in a PUT
+request body. This requirement prevents the malicious or unintentional deletion of an
+application. The workflow of this process can be seen in the following figure:
 
+.. figure:: /img/shutdown_hook.png
+
+    Shutdown hook workflow in Krake
+
+The shutdown hook was developed especially to enable stateful applications. Since these
+services generate data or are in specific states, it was difficult to migrate or even
+delete these applications without disrupting their workflow. The shutdown hook enables
+these normal Krake features for these applications by allowing saving of the current
+state. But be aware, that Krake doesn't implement a specific graceful shutdown for these
+applications and merely gives them a possibility to be informed about the intentions of
+Krake.
 
 TLS
 ===
 
-If TLS is enabled on the Krake API, the both hooks needs to be authenticated with
+If TLS is enabled on the Krake API, both hooks need to be authenticated with
 some certificates signed directly or indirectly by the Krake CA. For that purpose, the
 hooks inject a Kubernetes ConfigMap for different files and mounts it in a volume:
 
