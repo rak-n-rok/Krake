@@ -20,14 +20,14 @@ Configuration is loaded from the ``controllers.kubernetes.application`` section:
         intermediate_key_src: tmp/pki/system:complete-signing-key.pem
         cert_dest: /etc/krake_cert
         env_token: KRAKE_TOKEN
-        env_complete: KRAKE_COMPLETE_URL
+        env_url: KRAKE_COMPLETE_URL
       shutdown:
         hook_user: system:shutdown-hook
         intermediate_src: tmp/pki/system:shutdown-signing.pem
         intermediate_key_src: tmp/pki/system:shutdown-signing-key.pem
         cert_dest: /etc/krake_cert
         env_token: KRAKE_TOKEN
-        env_shutdown: KRAKE_SHUTDOWN_URL
+        env_url: KRAKE_SHUTDOWN_URL
 
     tls:
       enabled: false

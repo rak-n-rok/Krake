@@ -11,7 +11,7 @@
 #     intermediate_key_src: tmp/pki/system:complete-signing-key.pem
 #     cert_dest: /etc/krake_cert
 #     env_token: KRAKE_TOKEN
-#     env_complete: KRAKE_COMPLETE_URL
+#     env_url: KRAKE_COMPLETE_URL
 #     external_endpoint: https://<krake_IP>  # optional
 #   shutdown:
 #     hook_user: system:shutdown-hook
@@ -19,7 +19,7 @@
 #     intermediate_key_src: tmp/pki/system:shutdown-signing-key.pem
 #     cert_dest: /etc/krake_cert
 #     env_token: KRAKE_TOKEN
-#     env_shutdown: KRAKE_SHUTDOWN_URL
+#     env_url: KRAKE_SHUTDOWN_URL
 #     external_endpoint: https://<krake_IP>  # optional
 #
 # tls:
@@ -40,7 +40,7 @@ hooks:
     intermediate_key_src: $cert_dir/system:complete-signing-key.pem
     cert_dest: $complete_hook_cert_dest
     env_token: $complete_hook_env_token
-    env_complete: $complete_hook_env_complete
+    env_url: $complete_hook_env_url
     $external_complete_endpoint_key_and_value
   shutdown:
     hook_user: $shutdown_hook_user
@@ -48,7 +48,7 @@ hooks:
     intermediate_key_src: $cert_dir/system:shutdown-signing-key.pem
     cert_dest: $shutdown_hook_cert_dest
     env_token: $shutdown_hook_env_token
-    env_shutdown: $shutdown_hook_env_shutdown
+    env_url: $shutdown_hook_env_url
     $external_shutdown_endpoint_key_and_value
 
 tls:

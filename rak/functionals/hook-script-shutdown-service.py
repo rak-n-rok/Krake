@@ -3,7 +3,6 @@
 in a Deployment that belongs to a Krake Application.
 """
 import os.path
-import signal
 import time
 
 import requests
@@ -21,10 +20,14 @@ def shutdown_pod():
 
     cert_and_key = None
     ca = False
-    # Only set if TLS is enabled. Otherwise the files do not exist.
+    # Only set if TLS is enabled. Otherwise, the files do not exist.
     if os.path.isfile(default_cert_path) and os.path.isfile(default_key_path):
         cert_and_key = (default_cert_path, default_key_path)
         ca = default_ca_bundle
+
+        print(default_ca_bundle)
+        print(default_cert_path)
+        print(default_key_path)
 
     endpoint = os.getenv(endpoint_env)
     token = os.getenv(token_env)
@@ -38,6 +41,10 @@ def shutdown_pod():
         endpoint, verify=ca, json={"token": token}, cert=cert_and_key
     )
     print(response)
+    print(response.reason)
+    print(response.content)
+    print(response.headers)
+    print(response.raw)
 
 
 class ShutdownRequestHandler(BaseHTTPRequestHandler):

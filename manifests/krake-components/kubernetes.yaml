@@ -15,14 +15,14 @@ data:
         intermediate_key_src: ""
         cert_dest: /etc/krake_cert
         env_token: KRAKE_TOKEN
-        env_complete: KRAKE_COMPLETE_URL
+        env_url: KRAKE_COMPLETE_URL
       shutdown:
         hook_user: system:shutdown-hook
         intermediate_src: ""
         intermediate_key_src: ""
         cert_dest: /etc/krake_cert
         env_token: KRAKE_TOKEN
-        env_shutdown: KRAKE_SHUTDOWN_URL
+        env_url: KRAKE_SHUTDOWN_URL
     tls:
       enabled: False
       client_ca: ""

@@ -6,6 +6,7 @@ from itertools import count
 from operator import attrgetter
 from secrets import token_urlsafe
 from copy import deepcopy
+from krake.utils import now
 
 from krake.api.app import create_app
 from krake.api.helpers import HttpReason, HttpReasonCode
@@ -15,6 +16,7 @@ from krake.data.kubernetes import (
     ApplicationList,
     ApplicationState,
     ApplicationComplete,
+    ApplicationShutdown,
     Cluster,
     ClusterList,
     ClusterBinding,
@@ -642,6 +644,137 @@ async def test_update_application_complete_rbac(rbac_allow, config, aiohttp_clie
             "/kubernetes/namespaces/testing/applications/my-resource/complete"
         )
         assert resp.status == 415
+
+
+async def test_update_application_shutdown(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    token = token_urlsafe()
+    data = ApplicationFactory(
+        status__token=token,
+        status__state=ApplicationState.WAITING_FOR_CLEANING,
+        metadata__deleted=now()
+    )
+    await db.put(data)
+
+    shutdown = ApplicationShutdown(token=token)
+
+    resp = await client.put(
+        f"/kubernetes/namespaces/testing/applications/{data.metadata.name}/shutdown",
+        json=shutdown.serialize(),
+    )
+    assert resp.status == 200
+    received = Application.deserialize(await resp.json())
+    assert resource_ref(received) == resource_ref(data)
+    assert received.metadata.deleted is not None
+
+    stored = await db.get(Application, namespace="testing", name=data.metadata.name)
+    assert stored == received
+
+
+# async def test_update_application_shutdown_unauthorized(aiohttp_client, config, db):
+#     client = await aiohttp_client(create_app(config=config))
+#
+#     token = token_urlsafe()
+#     data = ApplicationFactory(
+#         status__token=token,
+#         status__state=ApplicationState.WAITING_FOR_CLEANING
+#     )
+#     await db.put(data)
+#
+#     shutdown = ApplicationShutdown()
+#
+#     resp = await client.put(
+#         f"/kubernetes/namespaces/testing/applications/{data.metadata.name}/shutdown",
+#         json=shutdown.serialize(),
+#     )
+#     assert resp.status == 401
+
+
+# async def test_update_application_shutdown_disabled(aiohttp_client, config, db):
+#     """An Application for which the "shutdown" hook is not set should not be able tobe
+#     deleted.
+#     """
+#     client = await aiohttp_client(create_app(config=config))
+#
+#     app = ApplicationFactory(
+#         status__token=None
+#     )
+#     await db.put(app)
+#
+#     resp = await client.put(
+#         f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/shutdown",
+#         json=ApplicationShutdown(token=None).serialize(),
+#     )
+#     assert resp.status == 401
+#
+#     stored = await db.get(Application, namespace="testing", name=app.metadata.name)
+#     assert stored.metadata.deleted is None
+
+
+async def test_update_application_shutdown_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.put(
+        "/kubernetes/namespaces/testing/applications/my-resource/complete"
+    )
+    assert resp.status == 403
+
+    async with rbac_allow("kubernetes", "applications/shutdown", "update"):
+        resp = await client.put(
+            "/kubernetes/namespaces/testing/applications/my-resource/shutdown"
+        )
+        assert resp.status == 415
+
+
+async def test_retry_application_shutdown(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    token = token_urlsafe()
+    data = ApplicationFactory(
+        status__token=token,
+        status__state=ApplicationState.DEGRADED,
+        metadata__deleted=now()
+    )
+    await db.put(data)
+
+    shutdown = ApplicationShutdown(token=token)
+
+    resp = await client.put(
+        f"/kubernetes/namespaces/testing/applications/{data.metadata.name}/retry",
+        json=shutdown.serialize(),
+    )
+    assert resp.status == 200
+    received = Application.deserialize(await resp.json())
+    assert resource_ref(received) == resource_ref(data)
+    assert received.status.shutdown_grace_period is None
+
+    stored = await db.get(Application, namespace="testing", name=data.metadata.name)
+    assert stored == received
+
+
+async def test_retry_application_shutdown_wrong_state(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    token = token_urlsafe()
+    app = ApplicationFactory(
+        status__token=token,
+        status__state=ApplicationState.RUNNING,
+        metadata__deleted=now()
+    )
+    await db.put(app)
+
+    shutdown = ApplicationShutdown(token=token)
+
+    resp = await client.put(
+        f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/retry",
+        json=shutdown.serialize(),
+    )
+    assert resp.status == 400
+
+    stored = await db.get(Application, namespace="testing", name=app.metadata.name)
+    assert stored.metadata.deleted is not None
 
 
 async def test_update_application_status(aiohttp_client, config, db):

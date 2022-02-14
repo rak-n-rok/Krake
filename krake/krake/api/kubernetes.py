@@ -279,6 +279,11 @@ class KubernetesApi(object):
     async def update_application_shutdown(request, body, app):
         # If the hook is not enabled for the Application or if the token is invalid
         if app.status.token is None or app.status.token != body.token:
+            logger.info(
+                "The given token %s doesn't equal the required token %s",
+                body.token,
+                app.status.token
+            )
             raise web.HTTPUnauthorized(
                reason="No token has been provided or the provided one is invalid."
             )
@@ -352,6 +357,9 @@ class KubernetesApi(object):
                 entity.metadata.name,
                 entity.metadata.uid,
             )
+            reason = HttpReason(reason="No migration or deletion retry needed",
+                                code=HttpReasonCode.UPDATE_ERROR)
+            raise json_error(web.HTTPBadRequest, reason.serialize())
 
         return web.json_response(entity.serialize())
 

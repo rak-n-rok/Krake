@@ -22,6 +22,11 @@ from kubernetes_asyncio.client import (
 )
 
 from krake.api.app import create_app
+from krake.data.config import (
+    HooksConfiguration,
+    CompleteHookConfiguration,
+    ShutdownHookConfiguration
+)
 from krake.data.core import resource_ref, ReasonCode
 from krake.data.kubernetes import Application, ApplicationState
 from krake.controller.kubernetes.__main__ import main
@@ -1129,6 +1134,201 @@ async def test_app_multi_migration(aiohttp_server, config, db, loop):
             assert app_name not in kube_servers[target_index].app["deleted"]
 
 
+async def test_app_migration_with_shutdown_hook(
+    aiohttp_server, config, db, loop, httpserver
+):
+    """Test the migration of an application
+
+    The Application is scheduled to a different cluster. The controller should delete
+    objects from the old cluster and create objects on the new cluster.
+
+    """
+    routes = web.RouteTableDef()
+
+    # As part of the migration started by ``controller.resource_received``, the k8s
+    # controller checks if the Deployment already exists
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/{name}")
+    async def _(request):
+        # The k8s API only replies with the full Deployment resource if it is existing.
+        if request.match_info["name"] in request.app["existing"]:
+            # Personalize the name of the Deployment in the response with the name of
+            # the Deployment which is "get"
+            response = deepcopy(deployment_response)
+            response["metadata"]["name"] = request.match_info["name"]
+            return web.json_response(response)
+
+        # If the resource doesn't exist, return a 404 response
+        return web.Response(status=404)
+
+    # As part of the migration, the k8s controller creates a new Deployment on the
+    # target cluster
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
+    async def _(request):
+        body = await request.json()
+        request.app["created"].add(body["metadata"]["name"])
+        response = deepcopy(deployment_response)
+        response["metadata"]["name"] = body["metadata"]["name"]
+        response["spec"]["template"]["spec"]["containers"][0]["env"] = []
+        return web.json_response(response)
+
+    # As part of the migration, the k8s controller deletes a Deployment on the old
+    # cluster
+    @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/{name}")
+    async def delete_deployment(request):
+        request.app["deleted"].add(request.match_info["name"])
+        return web.Response(status=200)
+
+    # As part of the migration, the k8s controller creates a new Deployment on the
+    # target cluster
+    @routes.post("/api/v1/namespaces/secondary/secrets")
+    async def _(request):
+        body = await request.json()
+        response = {
+                        'apiVersion': 'v1',
+                        'data': {
+                            'krake_token': 'SVotTXM4MXZ5eTkxcHdZZ3FjUG9RdDRJaUlYa2sxY1JwVUxBYW82b2tqVQ==',
+                            'krake_shutdown_url': 'aHR0cDovLzEyNy4wLjAuMTo0NTYyOS9rdWJlcm5ldGVzL25hbWVzcGFjZXMvdGVzdGluZy9hcHBsaWNhdGlvbnMvamFtZXMtc3RyaWNrbGFuZC1tZC9zaHV0ZG93bg=='
+                        },
+                        'kind': 'Secret',
+                        'metadata': {
+                            'name': body["metadata"]["name"],
+                            'namespace': 'secondary'},
+                        'type': None
+                    }
+        return web.json_response(response)
+
+    async def make_kubernetes_api(existing=()):
+        app = web.Application()
+        app["created"] = set()
+        app["deleted"] = set()
+        app["existing"] = set(existing)  # Set of existing deployments
+
+        app.add_routes(routes)
+
+        return await aiohttp_server(app)
+
+    kubernetes_server_a = await make_kubernetes_api({"nginx-demo"})
+    kubernetes_server_b = await make_kubernetes_api()
+
+    cluster_a = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server_a))
+    cluster_b = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server_b))
+
+    # Craft a last_observed_manifest, reflecting the resources previously created via
+    # Krake: a Deployment named "nginx-demo-1"
+    nginx_initial_last_observed_manifest_old = deepcopy(
+        initial_last_observed_manifest_deployment
+    )
+    nginx_initial_last_observed_manifest_old["metadata"]["name"] = "nginx-demo-1"
+
+    # Craft the new manifest file of the application: a Deployment name "nginx-demo-2".
+    # Also set the number of replicas to 1, as this field is observed by the custom
+    # observer schema
+    nginx_manifest_new = deepcopy(deployment_manifest)
+    nginx_manifest_new["metadata"]["name"] = "nginx-demo-2"
+    nginx_manifest_new["spec"]["replicas"] = 1
+
+    # Craft a custom observer_schema matching the resources in spec.manifest
+    nginx_observer_schema_new = deepcopy(custom_deployment_observer_schema)
+    nginx_observer_schema_new["metadata"]["name"] = "nginx-demo-2"
+
+    # Craft the last_observed_manifest as it should be after the migration
+    nginx_target_last_observed_manifest = deepcopy(
+        initial_last_observed_manifest_deployment
+    )
+    nginx_target_last_observed_manifest["metadata"]["name"] = "nginx-demo-2"
+
+    # The application is in RUNNING state on cluster_A, and is scheduled on cluster_B.
+    # The controller should trigger a migration (i.e. delete existing resources defined
+    # by last_observed_manifest on cluster_A and create new resources on cluster_B)
+    app = ApplicationFactory(
+        spec__manifest=[nginx_manifest_new],
+        spec__observer_schema=[nginx_observer_schema_new],
+        spec__hooks=["shutdown"],
+        status__state=ApplicationState.RUNNING,
+        status__is_scheduled=True,
+        status__running_on=resource_ref(cluster_a),
+        status__scheduled_to=resource_ref(cluster_b),
+        status__last_observed_manifest=[nginx_initial_last_observed_manifest_old],
+        status__services={"shutdown": httpserver.server.server_name + ":" + str(httpserver.server.server_port)},
+        metadata__finalizers=["kubernetes_resources_deletion"],
+    )
+
+    assert resource_ref(cluster_a) in app.metadata.owners
+    assert resource_ref(cluster_b) in app.metadata.owners
+
+    await db.put(cluster_a)
+    await db.put(cluster_b)
+    await db.put(app)
+
+    server = await aiohttp_server(create_app(config))
+
+    httpserver.expect_request("/shutdown").respond_with_json({})
+
+    hooks_config = HooksConfiguration(
+        complete=CompleteHookConfiguration(
+            hook_user="system:complete-hook",
+            intermediate_src="tmp/pki/system:complete-signing.pem",
+            intermediate_key_src="tmp/pki/system:complete-signing-key.pem",
+            cert_dest="/etc/krake_cert",
+            env_token="KRAKE_TOKEN",
+            env_url="KRAKE_COMPLETE_URL",
+            external_endpoint=server_endpoint(server)
+        ),
+        shutdown=ShutdownHookConfiguration(
+            hook_user="system:shutdown-hook",
+            intermediate_src="tmp/pki/system:shutdown-signing.pem",
+            intermediate_key_src="tmp/pki/system:shutdown-signing-key.pem",
+            cert_dest="/etc/krake_cert",
+            env_token="KRAKE_TOKEN",
+            env_url="KRAKE_SHUTDOWN_URL",
+            external_endpoint=server_endpoint(server)
+        ),
+    )
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesController(
+            server_endpoint(server), worker_count=0, hooks=hooks_config
+        )
+        await controller.prepare(client)
+
+        reflector_task = loop.create_task(controller.reflector())
+
+        await controller.handle_resource(run_once=True)
+        assert controller.queue.size() == 1
+
+        reflector_task.cancel()
+
+        with suppress(asyncio.CancelledError):
+            await reflector_task
+
+    # Needs to be set up a second time or the queue gets "buggy"
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+
+        controller = KubernetesController(
+            server_endpoint(server), worker_count=0, hooks=hooks_config
+        )
+
+        await controller.prepare(client)
+
+        app.status.state = ApplicationState.READY_FOR_ACTION
+        app.status.shutdown_grace_period = None
+
+        await controller.queue.put(app.metadata.uid, app)
+        await controller.handle_resource(run_once=True)
+        assert controller.queue.size() == 0
+
+    assert kubernetes_server_a.app["deleted"] == {"nginx-demo-1"}
+    assert kubernetes_server_b.app["created"] == {"nginx-demo-2"}
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored.status.state == ApplicationState.RUNNING
+    assert stored.status.running_on == resource_ref(cluster_b)
+    assert resource_ref(cluster_a) not in stored.metadata.owners
+    assert resource_ref(cluster_b) in stored.metadata.owners
+
+
 async def test_app_deletion(aiohttp_server, config, db, loop):
     """Test the deletion of an application
 
@@ -1208,6 +1408,350 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
     assert "Deployment" in deleted
     assert "Service" in deleted
     assert "Secret" in deleted
+
+
+async def test_app_deletion_with_shutdown_hook(
+    aiohttp_server, config, db, loop, httpserver
+):
+    """Test the deletion of an application with a shutdown hook
+
+    The Kubernetes Controller should delete the application and updates the DB, after
+    the shutdown hook was executed.
+
+    """
+    kubernetes_app = web.Application()
+    routes = web.RouteTableDef()
+    deleted = set()
+
+    # As part of the deletion, the k8s controller deletes the Deployment, Service, and
+    # Secret from the k8s cluster
+    @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
+    async def _(request):
+        deleted.add("Deployment")
+        return web.Response(status=200)
+
+    @routes.delete("/api/v1/namespaces/secondary/services/nginx-demo")
+    async def _(request):
+        deleted.add("Service")
+        return web.Response(status=200)
+
+    @routes.delete("/api/v1/namespaces/secondary/secrets/nginx-demo")
+    async def _(request):
+        deleted.add("Secret")
+        return web.Response(status=200)
+
+
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    # The application possesses the deleted timestamp, meaning it should be deleted.
+    app = ApplicationFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        spec__manifest=nginx_manifest,
+        spec__observer_schema=custom_observer_schema,
+        spec__hooks=["shutdown"],
+        status__state=ApplicationState.WAITING_FOR_CLEANING,
+        status__scheduled_to=resource_ref(cluster),
+        status__running_on=resource_ref(cluster),
+        status__last_observed_manifest=initial_last_observed_manifest,
+        status__services={"shutdown": httpserver.server.server_name + ":" + str(httpserver.server.server_port)},
+        metadata__finalizers=["kubernetes_resources_deletion"],
+    )
+    assert resource_ref(cluster) in app.metadata.owners
+
+    await db.put(cluster)
+    await db.put(app)
+
+    server = await aiohttp_server(create_app(config))
+
+    httpserver.expect_request("/shutdown").respond_with_json({})
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        await controller.prepare(client)
+
+        reflector_task = loop.create_task(controller.reflector())
+
+        # try:
+        await controller.handle_resource(run_once=True)
+        assert controller.queue.size() <= 1
+        # except BaseException as e:
+        #    assert 1 == 0, str(e) + "\n" + str(app) + "\n" + str(kubernetes_app) + \
+        #        "\n" + str(kubernetes_server)
+
+        reflector_task.cancel()
+
+        with suppress(asyncio.CancelledError):
+            await reflector_task
+
+    # Needs to be set up a second time or the queue gets "buggy"
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        await controller.prepare(client)
+
+        app.status.state = ApplicationState.READY_FOR_ACTION
+        app.status.shutdown_grace_period = None
+
+        await controller.queue.put(app.metadata.uid, app)
+        await controller.handle_resource(run_once=True)
+        assert controller.queue.size() == 0
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored is None
+    assert len(deleted) == 3
+    assert "Deployment" in deleted
+    assert "Service" in deleted
+    assert "Secret" in deleted
+
+
+async def test_app_deletion_with_shutdown_hook_running_state(
+    aiohttp_server, config, db, loop, httpserver
+):
+    """Test the deletion of an application
+
+    The Kubernetes Controller should delete the application and updates the DB.
+
+    """
+    kubernetes_app = web.Application()
+    routes = web.RouteTableDef()
+    deleted = set()
+
+    # As part of the deletion, the k8s controller deletes the Deployment, Service, and
+    # Secret from the k8s cluster
+    @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
+    async def _(request):
+        deleted.add("Deployment")
+        return web.Response(status=200)
+
+    @routes.delete("/api/v1/namespaces/secondary/services/nginx-demo")
+    async def _(request):
+        deleted.add("Service")
+        return web.Response(status=200)
+
+    @routes.delete("/api/v1/namespaces/secondary/secrets/nginx-demo")
+    async def _(request):
+        deleted.add("Secret")
+        return web.Response(status=200)
+
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    # The application possesses the deleted timestamp, meaning it should be deleted.
+    app = ApplicationFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        spec__manifest=nginx_manifest,
+        spec__observer_schema=custom_observer_schema,
+        spec__hooks=["shutdown"],
+        status__state=ApplicationState.RUNNING,
+        status__scheduled_to=resource_ref(cluster),
+        status__running_on=resource_ref(cluster),
+        status__last_observed_manifest=initial_last_observed_manifest,
+        status__services={"shutdown": httpserver.server.server_name + ":" + str(httpserver.server.server_port)},
+        metadata__finalizers=["kubernetes_resources_deletion"],
+    )
+    assert resource_ref(cluster) in app.metadata.owners
+
+    await db.put(cluster)
+    await db.put(app)
+
+    server = await aiohttp_server(create_app(config))
+
+    httpserver.expect_request("/shutdown").respond_with_json({})
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        await controller.prepare(client)
+
+        reflector_task = loop.create_task(controller.reflector())
+
+        await controller.handle_resource(run_once=True)
+        assert controller.queue.size() == 0
+
+        reflector_task.cancel()
+
+        with suppress(asyncio.CancelledError):
+            await reflector_task
+
+    # Needs to be set up a second time or the queue gets "buggy"
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        await controller.prepare(client)
+
+        app.status.state = ApplicationState.READY_FOR_ACTION
+        app.status.shutdown_grace_period = None
+
+        await controller.queue.put(app.metadata.uid, app)
+        await controller.handle_resource(run_once=True)
+        assert controller.queue.size() == 0
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored is None
+    assert len(deleted) == 3
+    assert "Deployment" in deleted
+    assert "Service" in deleted
+    assert "Secret" in deleted
+
+
+async def test_app_deletion_with_shutdown_hook_app_not_found(
+    aiohttp_server, config, db, loop, httpserver
+):
+    """For the shutdown() method of the KubernetesClient, test the handling of response
+    with a 404 error and with an error with another status.
+    There are three states:
+
+        0. initialisation
+        1. when deleting a resource from the cluster, a 403 is sent. The Kubernetes
+            client does not know how to handle it, and raises an exception.
+        2. when deleting a resource from the cluster, a 404 is sent. The Kubernetes
+            client must handle it as if the resource was already deleted.
+    """
+    kubernetes_app = web.Application()
+    routes = web.RouteTableDef()
+    deleted = set()
+
+    # As part of the deletion, the k8s controller deletes the Deployment, Service, and
+    # Secret from the k8s cluster
+    @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
+    async def _(request):
+        deleted.add("Deployment")
+        return web.Response(status=200)
+
+    @routes.delete("/api/v1/namespaces/secondary/services/nginx-demo")
+    async def _(request):
+        deleted.add("Service")
+        return web.Response(status=200)
+
+    @routes.delete("/api/v1/namespaces/secondary/secrets/nginx-demo")
+    async def _(request):
+        deleted.add("Secret")
+        return web.Response(status=200)
+
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    # The application possesses the deleted timestamp, meaning it should be deleted.
+    app = ApplicationFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        spec__manifest=nginx_manifest,
+        spec__observer_schema=custom_observer_schema,
+        spec__hooks=["shutdown"],
+        status__state=ApplicationState.WAITING_FOR_CLEANING,
+        status__scheduled_to=resource_ref(cluster),
+        status__running_on=resource_ref(cluster),
+        status__last_observed_manifest=initial_last_observed_manifest,
+        status__services={"shutdown": httpserver.server.server_name + ":" + str(httpserver.server.server_port)},
+        metadata__finalizers=["kubernetes_resources_deletion"],
+    )
+    assert resource_ref(cluster) in app.metadata.owners
+
+    await db.put(cluster)
+
+    server = await aiohttp_server(create_app(config))
+
+    httpserver.expect_request("/shutdown").respond_with_json({})
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        await controller.prepare(client)
+
+        await controller.queue.put(app.metadata.uid, app)
+
+        await controller.handle_resource(run_once=True)
+        assert controller.queue.size() == 0
+
+
+async def test_app_deletion_with_shutdown_hook_timeout(
+    aiohttp_server, config, db, loop, httpserver
+):
+    """Test the deletion of an application with a shutdown hook
+
+    The Kubernetes Controller should delete the application and updates the DB, after
+    the shutdown hook was executed.
+
+    """
+    kubernetes_app = web.Application()
+    routes = web.RouteTableDef()
+    deleted = set()
+
+    # As part of the deletion, the k8s controller deletes the Deployment, Service, and
+    # Secret from the k8s cluster
+    @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
+    async def _(request):
+        deleted.add("Deployment")
+        return web.Response(status=200)
+
+    @routes.delete("/api/v1/namespaces/secondary/services/nginx-demo")
+    async def _(request):
+        deleted.add("Service")
+        return web.Response(status=200)
+
+    @routes.delete("/api/v1/namespaces/secondary/secrets/nginx-demo")
+    async def _(request):
+        deleted.add("Secret")
+        return web.Response(status=200)
+
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    # The application possesses the deleted timestamp, meaning it should be deleted.
+    app = ApplicationFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        spec__manifest=nginx_manifest,
+        spec__observer_schema=custom_observer_schema,
+        spec__hooks=["shutdown"],
+        status__state=ApplicationState.WAITING_FOR_CLEANING,
+        status__scheduled_to=resource_ref(cluster),
+        status__running_on=resource_ref(cluster),
+        status__last_observed_manifest=initial_last_observed_manifest,
+        status__services={"shutdown": httpserver.server.server_name + ":" + str(httpserver.server.server_port)},
+        metadata__finalizers=["kubernetes_resources_deletion"],
+    )
+    assert resource_ref(cluster) in app.metadata.owners
+
+    await db.put(cluster)
+    await db.put(app)
+
+    server = await aiohttp_server(create_app(config))
+
+    httpserver.expect_request("/shutdown").respond_with_json({})
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        await controller.prepare(client)
+
+        reflector_task = loop.create_task(controller.reflector())
+
+        await controller.handle_resource(run_once=True)
+        assert controller.queue.size() <= 1
+
+        reflector_task.cancel()
+
+        with suppress(asyncio.CancelledError):
+            await reflector_task
+
+        time.sleep(30)
+        await asyncio.sleep(30)
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored.status.state == ApplicationState.DEGRADED
 
 
 async def test_app_management_no_error_logs(aiohttp_server, config, db, loop, caplog):
@@ -2060,7 +2604,7 @@ async def test_resource_delta(loop):
     ] = 0
 
     # Number of elements is below the authorized list length. Service should be
-    # rollbacked
+    # rolled back
     new, deleted, modified = ResourceDelta.calculate(app)
     assert len(new) == 0
     assert len(deleted) == 0

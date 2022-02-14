@@ -104,7 +104,7 @@ krake_apps.yml
     complete_hook_env_token (string)
         Name of the environment variable that will contain the token in the deployed
         Application.
-    complete_hook_env_complete (string)
+    complete_hook_env_url (string)
         Name of the environment variable that will contain the URL of the Krake API in
         the deployed Application.
     external_endpoint (URL, optional)
@@ -123,7 +123,7 @@ krake_apps.yml
     shutdown_hook_env_token (string)
         Name of the environment variable that will contain the token in the deployed
         Application.
-    shutdown_hook_env_shutdown (string)
+    shutdown_hook_env_url (string)
         Name of the environment variable that will contain the URL of the Krake API in
         the deployed Application.
 

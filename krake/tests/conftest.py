@@ -986,7 +986,7 @@ def hooks_config(pki):
                     "intermediate_key_src": client_complete_cert.key,
                     "cert_dest": "/etc/krake_certs",
                     "env_token": "KRAKE_TOKEN",
-                    "env_complete": "KRAKE_COMPLETE_URL",
+                    "env_url": "KRAKE_COMPLETE_URL",
                 },
                 "shutdown": {
                     "hook_user": "test-shutdown-hook-user",
@@ -994,7 +994,7 @@ def hooks_config(pki):
                     "intermediate_key_src": client_shutdown_cert.key,
                     "cert_dest": "/etc/krake_certs",
                     "env_token": "KRAKE_TOKEN",
-                    "env_shutdown": "KRAKE_SHUTDOWN_URL",
+                    "env_url": "KRAKE_SHUTDOWN_URL",
                 }
             }
         )

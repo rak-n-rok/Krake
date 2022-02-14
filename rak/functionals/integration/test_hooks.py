@@ -1,6 +1,6 @@
 import os.path
 import random
-import pytest
+import time
 
 from utils import run, check_return_code, kubectl_cmd
 from environment import Environment
@@ -68,11 +68,6 @@ def test_complete_hook(minikube_clusters):
         )
 
 
-@pytest.mark.skip(
-    reason="The spawned krake instance can't find the clusters ip. But even the error"
-    "handling is inconsistent here, so I prefer to skip the test for now and redo"
-    "it in a later version attempt."
-)
 def test_shutdown_hook(minikube_clusters):
     """Test the functionality of the "shutdown" hook.
 
@@ -115,18 +110,16 @@ def test_shutdown_hook(minikube_clusters):
             condition=check_return_code(error_message),
         )
 
-        run(
-            (
-                f"{kubectl_cmd(kubeconfig_path)} describe configmap"
-            )
-        )
-
         # 2. Start a deployment that uses the script for the Krake hook
         app_def.create_resource()
-        app_def.check_created()
+        app_def.check_created(delay=20)
+
+        time.sleep(30)
 
         # 3. Tell the application to shut down.
         app_def.delete_resource()
+
+        time.sleep(60)
 
         # 4. Wait for the script to send the request to the API, that the shutdown
         # is finished
