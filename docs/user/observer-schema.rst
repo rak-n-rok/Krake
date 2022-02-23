@@ -8,19 +8,22 @@ Purpose
 When a user creates Kubernetes resources on a Kubernetes cluster via Krake, those
 resources are managed by Krake and should be "observed". That's the role of the
 Kubernetes Observer (see the :ref:`dev/observers:Observers` documentation). But what
-parts of the Kubernetes resources should be "observed" by Krake ? The purpose of the
-Observer Schema is to provide a flexible mean to the Krake users to define which fields
+parts of the Kubernetes resources should be "observed" by Krake? The purpose of the
+Observer Schema is to provide a flexible mean for the Krake users to define which fields
 of the Kubernetes resources should be "observed" and which shouldn't.
 
-When a field is "observed", every changes to the value of this field made outside of
+When a field is "observed", every change to the value of this field made outside of
 Krake is reverted to the last known state of this field. When a field is not "observed",
-Krake don't act on external changes made to this field.
+Krake doesn't act on external changes made to this field. This is needed to keep a
+consistent and predictable application state, especially since changes could also be
+done in the Kubernetes infrastructure or by the Kubernetes plane itself.
 
 .. note::
 
   As Kubernetes manages some fields of a Kubernetes resource (for instance the
   ResourceVersion), simply observing the entirety of a Kubernetes resource is not
-  possible, as this would lead to infinite reconciliation loops in Krake and Kubernetes.
+  possible. This would lead to infinite reconciliation loops between
+  Krake and Kubernetes, which is not a desirable state.
 
 Format
 ======
