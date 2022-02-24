@@ -4,7 +4,7 @@ import pytest
 from aiohttp import ClientSession
 from aiohttp.test_utils import TestServer as Server
 from krake.api.app import create_app
-from krake.api.helpers import HttpReasonCode
+from krake.api.helpers import HttpProblemTitle
 from krake.client import Client
 from krake.controller import create_ssl_context
 from krake.data.config import (
@@ -150,7 +150,7 @@ async def test_keystone_auth_invalid_token(keystone, aiohttp_client, config):
     assert resp.status == 401
 
     data = await resp.json()
-    assert data["code"] == HttpReasonCode.INVALID_KEYSTONE_TOKEN.name
+    assert data["title"] == HttpProblemTitle.INVALID_KEYSTONE_TOKEN.name
 
 
 async def test_keystone_auth_no_token(aiohttp_client, config):

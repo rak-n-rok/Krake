@@ -7,7 +7,6 @@ from itertools import cycle, count
 from functools import wraps
 from time import time
 from aiohttp import web
-from krake.api.helpers import json_error
 
 from krake.controller.kubernetes import listen
 from kubernetes_asyncio.client import ApiClient
@@ -302,7 +301,7 @@ def make_kafka(table, columns, rows):
                 "statementText": query,
                 "entities": [],
             }
-            raise json_error(web.HTTPBadRequest, result)
+            raise web.HTTPBadRequest(reason=json.dumps(result))
 
         elif comparison_column not in columns:
             result = {
@@ -314,7 +313,7 @@ def make_kafka(table, columns, rows):
                 "statementText": query,
                 "entities": [],
             }
-            raise json_error(web.HTTPBadRequest, result)
+            raise web.HTTPBadRequest(reason=json.dumps(result))
 
         else:
             comp_index = columns.index(comparison_column)

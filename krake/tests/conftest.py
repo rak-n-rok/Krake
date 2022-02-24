@@ -248,6 +248,7 @@ def base_config(user, etcd_host="localhost", etcd_port=2379):
         },
         "authorization": "always-allow",
         "etcd": {"host": etcd_host, "port": etcd_port, "retry_transactions": 0},
+        "docs": {"problem_base_url": "http://example.com/problem"},
         "log": {},
     }
 

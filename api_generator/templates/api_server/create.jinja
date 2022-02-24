@@ -20,18 +20,18 @@ async def create_{{ operation.signature_name }}(request, body):
     existing = await session(request).get(body.__class__, **kwargs)
 
     if existing is not None:
-        {% if operation.resource.namespaced -%}
-        message = (
-            f"{{ operation.resource.singular }} {body.metadata.name!r} already "
-            f"exists in namespace {namespace!r}"
+        problem = HttpProblem(
+            {% if operation.resource.namespaced -%}
+            detail=(
+                f"{{ operation.resource.singular }} {body.metadata.name!r} already "
+                f"exists in namespace {namespace!r}"
+            ),
+            {%- else -%}
+            detail=f"{{ operation.resource.singular }} {body.metadata.name!r} already exists",
+            {%- endif %}
+            title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
         )
-        {%- else -%}
-        message = f"{{ operation.resource.singular }} {body.metadata.name!r} already exists"
-        {%- endif %}
-        reason = HttpReason(
-            reason=message, code=HttpReasonCode.RESOURCE_ALREADY_EXISTS
-        )
-        raise json_error(web.HTTPConflict, reason.serialize())
+        raise HttpProblemError(web.HTTPConflict, problem)
 
     now = utils.now()
 

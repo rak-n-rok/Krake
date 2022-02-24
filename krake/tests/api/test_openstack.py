@@ -6,7 +6,7 @@ from itertools import count
 from operator import attrgetter
 
 from krake.api.app import create_app
-from krake.api.helpers import HttpReason, HttpReasonCode
+from krake.api.helpers import HttpProblem, HttpProblemTitle
 from krake.data.core import WatchEventType, WatchEvent, resource_ref, ResourceRef
 from krake.data.openstack import (
     MagnumClusterList,
@@ -72,8 +72,8 @@ async def test_create_magnum_cluster_with_existing_name(aiohttp_client, config, 
     assert resp.status == 409
 
     received = await resp.json()
-    reason = HttpReason.deserialize(received)
-    assert reason.code == HttpReasonCode.RESOURCE_ALREADY_EXISTS
+    problem = HttpProblem.deserialize(received)
+    assert problem.title == HttpProblemTitle.RESOURCE_ALREADY_EXISTS
 
 
 async def test_delete_magnum_cluster(aiohttp_client, config, db):
@@ -110,7 +110,7 @@ async def test_add_finalizer_in_deleted_magnum_cluster(aiohttp_client, config, d
     )
     assert resp.status == 409
     body = await resp.json()
-    assert len(body["metadata"]["finalizers"]) == 1
+    assert body["detail"] == "Finalizers can only be removed if deletion is in progress."
 
 
 async def test_delete_magnum_cluster_rbac(rbac_allow, config, aiohttp_client):
@@ -453,10 +453,11 @@ async def test_update_magnum_cluster_immutable_field(aiohttp_client, config, db)
         json=data.serialize(),
     )
     assert resp.status == 400
-    assert await resp.json() == {
-        "code": "UPDATE_ERROR",
-        "reason": "Trying to update an immutable field: namespace",
-    }
+
+    received = await resp.json()
+    problem = HttpProblem.deserialize(received)
+    assert problem.title == HttpProblemTitle.UPDATE_ERROR
+    assert problem.detail == "Trying to update an immutable field: namespace"
 
 
 async def test_update_magnum_cluster_binding(aiohttp_client, config, db):
@@ -595,8 +596,8 @@ async def test_create_project_with_existing_name(aiohttp_client, config, db):
     assert resp.status == 409
 
     received = await resp.json()
-    reason = HttpReason.deserialize(received)
-    assert reason.code == HttpReasonCode.RESOURCE_ALREADY_EXISTS
+    problem = HttpProblem.deserialize(received)
+    assert problem.title == HttpProblemTitle.RESOURCE_ALREADY_EXISTS
 
 
 async def test_delete_project(aiohttp_client, config, db):
@@ -633,7 +634,7 @@ async def test_add_finalizer_in_deleted_project(aiohttp_client, config, db):
     )
     assert resp.status == 409
     body = await resp.json()
-    assert len(body["metadata"]["finalizers"]) == 1
+    assert body["detail"] == "Finalizers can only be removed if deletion is in progress."
 
 
 async def test_delete_project_rbac(rbac_allow, config, aiohttp_client):
@@ -972,10 +973,11 @@ async def test_update_project_immutable_field(aiohttp_client, config, db):
         json=data.serialize(),
     )
     assert resp.status == 400
-    assert await resp.json() == {
-        "code": "UPDATE_ERROR",
-        "reason": "Trying to update an immutable field: namespace",
-    }
+
+    received = await resp.json()
+    problem = HttpProblem.deserialize(received)
+    assert problem.title == HttpProblemTitle.UPDATE_ERROR
+    assert problem.detail == "Trying to update an immutable field: namespace"
 
 
 async def test_update_project_status(aiohttp_client, config, db):

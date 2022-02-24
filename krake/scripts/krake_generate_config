@@ -333,6 +333,12 @@ if __name__ == "__main__":
     add_option(
         parser, "--etcd-peer-port", "Peer port for the etcd endpoint.", default=2380
     )
+    add_option(
+        parser,
+        "--docs-problem-base-url",
+        "URL of the problem documentation.",
+        default="https://rak-n-rok.readthedocs.io/projects/krake/en/latest/user/problem.html",
+    )
     add_option(parser, "--docker-daemon-mtu", "The Docker daemon MTU.", default=1450)
     add_option(
         parser,

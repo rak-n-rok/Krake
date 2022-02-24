@@ -39,6 +39,15 @@ class EtcdConfiguration(Serializable):
     )
 
 
+class DocsConfiguration(Serializable):
+    problem_base_url: str = field(
+        default=(
+            "https://rak-n-rok.readthedocs.io/projects/krake/en/latest/user/problem.html"  # noqa: E501
+        ),
+        metadata={"help": "URL of the problem documentation."}
+    )
+
+
 class KeystoneAuthenticationConfiguration(Serializable):
     enabled: bool = field(
         default=False, metadata={"help": "If true, enables the Keystone authentication"}
@@ -323,6 +332,7 @@ class ApiConfiguration(Serializable):
         default=8080, metadata={"help": "Port to which the Krake API listens to."}
     )
     etcd: EtcdConfiguration
+    docs: DocsConfiguration
     tls: TlsServerConfiguration
     authentication: AuthenticationConfiguration
     authorization: str = field(metadata={"help": "Authorization mode"})

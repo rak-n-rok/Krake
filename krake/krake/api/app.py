@@ -92,6 +92,7 @@ def create_app(config):
     app = web.Application(
         logger=logger,
         middlewares=[
+            middlewares.problem_response(problem_base_url=config.docs.problem_base_url),
             middlewares.error_log(),
             authentication,
             middlewares.retry_transaction(retry=config.etcd.retry_transactions),
