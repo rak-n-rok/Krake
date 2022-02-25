@@ -9,3 +9,4 @@ User Documentation
     configuration
     observer-schema
     user-stories
+    problem

@@ -1,6 +1,6 @@
-=====================
+==========================
 HTTP Problem documentation
-=====================
+==========================
 
 The failure reason on the Krake API HTTP layer is stored as RFC7807_ Problem.
 It is a way how to define machine-readable and uniform details of errors in an HTTP response.
@@ -41,8 +41,8 @@ transaction-error
 A database transaction failed.
 
 
-transaction-error
-=================
+update-error
+============
 
 A update of resource field.
 
