@@ -691,7 +691,7 @@ def test_all_unreachable_metrics_provider(minikube_clusters):
         # 4. Ensure that the cluster without metrics is not reporting any failing
         # metrics.
         cluster_wo_metric = env.resources[ResourceKind.CLUSTER][1]
-        assert cluster_wo_metric.get_state() == "ONLINE"
+        assert cluster_wo_metric.get_state() == "CONNECTING"
         assert cluster_wo_metric.get_metrics_reasons() == {}
 
 

@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import logging
 from contextlib import suppress
 from copy import deepcopy
@@ -24,8 +25,7 @@ from krake.controller.kubernetes.hooks import (
 )
 from krake.utils import now, get_kubernetes_resource_idx
 from krake.data.core import ReasonCode, resource_ref, Reason
-from krake.data.kubernetes import ApplicationState
-
+from krake.data.kubernetes import ApplicationState, ClusterState, Application, Cluster
 
 logger = logging.getLogger(__name__)
 
@@ -231,18 +231,14 @@ class ResourceDelta(NamedTuple):
         for observed_resource in app.status.mangled_observer_schema:
 
             desired_idx = get_kubernetes_resource_idx(
-                app.status.last_applied_manifest,
-                observed_resource,
-                True
+                app.status.last_applied_manifest, observed_resource, True
             )
             desired_resource = app.status.last_applied_manifest[desired_idx]
 
             current_resource = None
             with suppress(IndexError):
                 current_idx = get_kubernetes_resource_idx(
-                    app.status.last_observed_manifest,
-                    observed_resource,
-                    True
+                    app.status.last_observed_manifest, observed_resource, True
                 )
                 current_resource = app.status.last_observed_manifest[current_idx]
 
@@ -266,9 +262,7 @@ class ResourceDelta(NamedTuple):
         for current_resource in app.status.last_observed_manifest:
             try:
                 get_kubernetes_resource_idx(
-                    app.status.last_applied_manifest,
-                    current_resource,
-                    True
+                    app.status.last_applied_manifest, current_resource, True
                 )
             except IndexError:
                 deleted.append(current_resource)
@@ -280,23 +274,27 @@ class ResourceDelta(NamedTuple):
 
 
 class KubernetesController(Controller):
-    """Controller responsible for :class:`krake.data.kubernetes.Application`
-    resources in "SCHEDULED" and "DELETING" state.
+    """Controller responsible for :class:`krake.data.kubernetes.Application` and
+    :class:`krake.data.kubernetes.Cluster` resources. The controller manages
+    Application resources in "SCHEDULED" and "DELETING" state and Clusters in any state.
 
     Attributes:
         kubernetes_api (KubernetesApi): Krake internal API to connect to the
             "kubernetes" API of Krake.
-        reflector (Reflector): reflector for the resource of the "kubernetes" API of
-            Krake.
+        application_reflector (Reflector): reflector for the Application resource of the
+        "kubernetes" API of Krake.
+        cluster_reflector (Reflector): reflector for the Cluster resource of the
+        "kubernetes" API of Krake.
         worker_count (int): the amount of worker function that should be run as
             background tasks.
         hooks (krake.data.config.HooksConfiguration): configuration to be used by the
             hooks supported by the controller.
         observer_time_step (float): for the Observers: the number of seconds between two
             observations of the actual resource.
-        observers (dict[str, (Observer, Coroutine)]): mapping of all Applications' UID
-            to their respective Observer and task responsible for the Observer. The
-            signature is: ``<uid> --> <observer>, <reference_to_observer's_task>``.
+        observers (dict[str, (Observer, Coroutine)]): mapping of all Application or
+            Cluster resource' UID to their respective Observer and task responsible for
+            the Observer.
+            The signature is: ``<uid> --> <observer>, <reference_to_observer's_task>``.
 
     Args:
         api_endpoint (str): URL to the API
@@ -327,7 +325,8 @@ class KubernetesController(Controller):
             api_endpoint, loop=loop, ssl_context=ssl_context, debounce=debounce
         )
         self.kubernetes_api = None
-        self.reflector = None
+        self.application_reflector = None
+        self.cluster_reflector = None
 
         self.worker_count = worker_count
         self.hooks = hooks
@@ -424,6 +423,23 @@ class KubernetesController(Controller):
 
         await self.simple_on_receive(app, self.scheduled_or_deleting)
 
+    async def list_cluster(self, cluster):
+        """Accept the Clusters that need to be managed by the Controller on listing
+        them at startup. Starts the observer for the Cluster.
+
+        Args:
+            cluster (krake.data.kubernetes.Cluster): the cluster to accept or not.
+
+        """
+        if cluster.status.kube_controller_triggered:
+            if cluster.metadata.uid in self.observers:
+                # If an observer was started before, stop it
+                await unregister_observer(self, cluster)
+            # Start an observer only if an actual resource exists on a cluster
+            await register_observer(self, cluster)
+
+        await self.simple_on_receive(cluster)
+
     async def prepare(self, client):
         assert client is not None
         self.client = client
@@ -435,8 +451,7 @@ class KubernetesController(Controller):
         receive_app = partial(
             self.simple_on_receive, condition=self.scheduled_or_deleting
         )
-
-        self.reflector = Reflector(
+        self.application_reflector = Reflector(
             listing=self.kubernetes_api.list_all_applications,
             watching=self.kubernetes_api.watch_all_applications,
             on_list=self.list_app,
@@ -444,10 +459,22 @@ class KubernetesController(Controller):
             on_update=receive_app,
             resource_plural="Kubernetes Applications",
         )
-        self.register_task(self.reflector, name="Reflector")
+        self.register_task(self.application_reflector, name="Application_Reflector")
+
+        receive_cluster = partial(self.simple_on_receive)
+        self.cluster_reflector = Reflector(
+            listing=self.kubernetes_api.list_all_clusters,
+            watching=self.kubernetes_api.watch_all_clusters,
+            on_list=self.list_cluster,
+            on_add=receive_cluster,
+            on_update=receive_cluster,
+            resource_plural="Kubernetes Clusters",
+        )
+        self.register_task(self.cluster_reflector, name="Cluster_Reflector")
 
     async def cleanup(self):
-        self.reflector = None
+        self.application_reflector = None
+        self.cluster_reflector = None
         self.kubernetes_api = None
 
         # Stop the observers
@@ -460,29 +487,51 @@ class KubernetesController(Controller):
 
         self.observers = {}
 
-    async def on_status_update(self, app):
-        """Called when an Observer noticed a difference of the status of an Application.
+    async def on_status_update(self, resource):
+        """Called when an Observer noticed a difference of the status of a resource.
         Request an update of the status on the API.
 
         Args:
-            app (krake.data.kubernetes.Application): the Application whose status has
-                been updated.
+            resource (krake.data.kubernetes.Application): the Application whose status
+            has been updated or
+            resource (krake.data.kubernetes.Cluster): the Cluster whose status
+            has been updated.
 
         Returns:
             krake.data.kubernetes.Application: the updated Application sent by the API.
+            or
+            krake.data.kubernetes.Cluster: the updated Cluster sent by the API.
 
         """
-        logger.error("resource %s is different", resource_ref(app))
+        if resource.kind == Application.kind:
+            logger.debug("resource %s is different", resource_ref(resource))
 
-        # The Application needs to be processed (thus accepted) by the Kubernetes
-        # Controller
-        app.status.kube_controller_triggered = now()
-        assert app.metadata.modified is not None
+            # The Application needs to be processed (thus accepted) by the Kubernetes
+            # Controller
+            resource.status.kube_controller_triggered = now()
+            assert resource.metadata.modified is not None
 
-        app = await self.kubernetes_api.update_application_status(
-            namespace=app.metadata.namespace, name=app.metadata.name, body=app
-        )
-        return app
+            app = await self.kubernetes_api.update_application_status(
+                namespace=resource.metadata.namespace,
+                name=resource.metadata.name,
+                body=resource,
+            )
+            return app
+        if resource.kind == Cluster.kind:
+            logger.debug(
+                "resource status for %s is different, updating status now.",
+                resource_ref(resource),
+            )
+
+            resource.status.kube_controller_triggered = now()
+            assert resource.metadata.modified is not None
+
+            cluster = await self.kubernetes_api.update_cluster_status(
+                namespace=resource.metadata.namespace,
+                name=resource.metadata.name,
+                body=resource,
+            )
+            return cluster
 
     async def handle_resource(self, run_once=False):
         """Infinite loop which fetches and hand over the resources to the right
@@ -498,126 +547,183 @@ class KubernetesController(Controller):
 
         """
         while True:
-            key, app = await self.queue.get()
+            key, resource = await self.queue.get()
             try:
-                await self.resource_received(app)
+                await self.resource_received(resource)
             except ApiException as error:
-                app.status.reason = Reason(
+                resource.status.reason = Reason(
                     code=ReasonCode.KUBERNETES_ERROR, message=str(error)
                 )
-                app.status.state = ApplicationState.FAILED
+                if resource.kind == Application.kind:
+                    resource.status.state = ApplicationState.FAILED
 
-                await self.kubernetes_api.update_application_status(
-                    namespace=app.metadata.namespace, name=app.metadata.name, body=app
-                )
+                    await self.kubernetes_api.update_application_status(
+                        namespace=resource.metadata.namespace,
+                        name=resource.metadata.name,
+                        body=resource,
+                    )
+                elif resource.kind == Cluster.kind:
+                    resource.status.state = ClusterState.OFFLINE
+
+                    await self.kubernetes_api.update_cluster_status(
+                        namespace=resource.metadata.namespace,
+                        name=resource.metadata.name,
+                        body=resource,
+                    )
             except ControllerError as error:
-                app.status.reason = Reason(code=error.code, message=error.message)
-                app.status.state = ApplicationState.FAILED
+                resource.status.reason = Reason(code=error.code, message=error.message)
+                if resource.kind == Application.kind:
+                    resource.status.state = ApplicationState.FAILED
 
-                await self.kubernetes_api.update_application_status(
-                    namespace=app.metadata.namespace, name=app.metadata.name, body=app
-                )
+                    await self.kubernetes_api.update_application_status(
+                        namespace=resource.metadata.namespace,
+                        name=resource.metadata.name,
+                        body=resource,
+                    )
+                elif resource.kind == Cluster.kind:
+                    resource.status.state = ClusterState.OFFLINE
+
+                    await self.kubernetes_api.update_cluster_status(
+                        namespace=resource.metadata.namespace,
+                        name=resource.metadata.name,
+                        body=resource,
+                    )
             finally:
                 await self.queue.done(key)
             if run_once:
                 break  # TODO: should we keep this? Only useful for tests
 
-    async def resource_received(self, app, start_observer=True):
-        logger.debug("Handle %r", app)
+    async def resource_received(self, resource, start_observer=True):
+        logger.debug("Handle %r", resource)
 
-        copy = deepcopy(app)
-        if copy.metadata.deleted:
-            # Delete the Application
-            try:
+        copy = deepcopy(resource)
+        if copy.kind == Application.kind:
+            if copy.metadata.deleted:
+                # Delete the Application
+                try:
+                    if (
+                        "shutdown" in copy.spec.hooks
+                        and copy.status.state is ApplicationState.WAITING_FOR_CLEANING
+                    ):
+
+                        await self._shutdown_application(copy)
+
+                    elif (
+                        # Don't need to check for shutdown hook here, since the state
+                        # READY_FOR_ACTION is only set
+                        copy.status.state is ApplicationState.READY_FOR_ACTION
+                        or "shutdown" not in copy.spec.hooks
+                    ):
+                        await listen.hook(
+                            HookType.ApplicationPreDelete,
+                            controller=self,
+                            resource=copy,
+                            start=start_observer,
+                        )
+                        await self._delete_application(copy)
+                        await listen.hook(
+                            HookType.ApplicationPostDelete,
+                            controller=self,
+                            app=copy,
+                            start=start_observer,
+                        )
+
+                except ClientResponseError as err:
+                    if err.status == 404:
+                        return
+                    raise
+            elif (
+                copy.status.running_on
+                and copy.status.running_on != copy.status.scheduled_to
+            ):
                 if (
                     "shutdown" in copy.spec.hooks
-                    and copy.status.state is ApplicationState.WAITING_FOR_CLEANING
+                    and copy.status.state is not ApplicationState.READY_FOR_ACTION
                 ):
+                    if copy.status.state in [
+                        ApplicationState.RUNNING,
+                        ApplicationState.RECONCILING,
+                    ]:
+                        copy.status.state = ApplicationState.WAITING_FOR_CLEANING
+                        await self.kubernetes_api.update_application_status(
+                            namespace=copy.metadata.namespace,
+                            name=copy.metadata.name,
+                            body=copy,
+                        )
 
-                    await self._shutdown_application(copy)
+                    if copy.status.state is ApplicationState.WAITING_FOR_CLEANING:
+                        await self._shutdown_application(copy)
 
+                # elif copy.status.state is ApplicationState.FAILED:
+                #     logger.debug("No migration possible since the app is in %r",
+                #                  app.status.state)
                 elif (
                     # Don't need to check for shutdown hook here, since the state
                     # READY_FOR_ACTION is only set
                     copy.status.state is ApplicationState.READY_FOR_ACTION
                     or "shutdown" not in copy.spec.hooks
                 ):
+                    # Migrate the Application
                     await listen.hook(
-                        HookType.ApplicationPreDelete,
+                        HookType.ApplicationPreMigrate,
                         controller=self,
-                        app=copy,
+                        resource=copy,
                         start=start_observer,
                     )
-                    await self._delete_application(copy)
+                    await self._migrate_application(copy)
                     await listen.hook(
-                        HookType.ApplicationPostDelete,
+                        HookType.ApplicationPostMigrate,
                         controller=self,
-                        app=copy,
+                        resource=copy,
                         start=start_observer,
                     )
-
-            except ClientResponseError as err:
-                if err.status == 404:
-                    return
-                raise
-        elif (
-            copy.status.running_on
-            and copy.status.running_on != copy.status.scheduled_to
-        ):
+            else:
+                # Reconcile the Application
+                await listen.hook(
+                    HookType.ApplicationPreReconcile,
+                    controller=self,
+                    resource=copy,
+                    start=start_observer,
+                )
+                await self._reconcile_application(copy)
+                await listen.hook(
+                    HookType.ApplicationPostReconcile,
+                    controller=self,
+                    resource=copy,
+                    start=start_observer,
+                )
+        elif copy.kind == Cluster.kind:
             if (
-                "shutdown" in copy.spec.hooks
-                and copy.status.state is not ApplicationState.READY_FOR_ACTION
+                copy.status.state is ClusterState.CONNECTING
+                and copy.metadata.deleted is None
             ):
-                if copy.status.state in [ApplicationState.RUNNING,
-                                         ApplicationState.RECONCILING]:
-                    copy.status.state = ApplicationState.WAITING_FOR_CLEANING
-                    await self.kubernetes_api.update_application_status(
-                        namespace=copy.metadata.namespace,
-                        name=copy.metadata.name,
-                        body=copy,
-                    )
-
-                if copy.status.state is ApplicationState.WAITING_FOR_CLEANING:
-                    await self._shutdown_application(copy)
-
-            # elif copy.status.state is ApplicationState.FAILED:
-            #     logger.debug("No migration possible since the app is in %r",
-            #                  app.status.state)
+                await listen.hook(
+                    HookType.ClusterCreation,
+                    controller=self,
+                    resource=copy,
+                    start=True,
+                )
+            elif isinstance(copy.metadata.deleted, datetime.datetime):
+                await listen.hook(
+                    HookType.ClusterDeletion,
+                    controller=self,
+                    resource=copy,
+                )
             elif (
-                # Don't need to check for shutdown hook here, since the state
-                # READY_FOR_ACTION is only set
-                app.status.state is ApplicationState.READY_FOR_ACTION
-                or "shutdown" not in app.spec.hooks
+                copy != self.observers[copy.metadata.uid][0].cluster
+                and not isinstance(copy.metadata.deleted, datetime.datetime)
             ):
-                # Migrate the Application
                 await listen.hook(
-                    HookType.ApplicationPreMigrate,
+                    HookType.ClusterDeletion,
                     controller=self,
-                    app=copy,
-                    start=start_observer,
+                    resource=copy,
                 )
-                await self._migrate_application(copy)
                 await listen.hook(
-                    HookType.ApplicationPostMigrate,
+                    HookType.ClusterCreation,
                     controller=self,
-                    app=copy,
-                    start=start_observer,
+                    resource=copy,
+                    start=True,
                 )
-        else:
-            # Reconcile the Application
-            await listen.hook(
-                HookType.ApplicationPreReconcile,
-                controller=self,
-                app=copy,
-                start=start_observer,
-            )
-            await self._reconcile_application(copy)
-            await listen.hook(
-                HookType.ApplicationPostReconcile,
-                controller=self,
-                app=copy,
-                start=start_observer,
-            )
 
     async def _delete_application(self, app):
         # FIXME: during its deletion, an Application is updated, and thus put into the
@@ -708,12 +814,13 @@ class KubernetesController(Controller):
         ) as kube:
             for _ in last_observed_manifest_copy:
                 if app.status.shutdown_grace_period is None:
-                    app.status.shutdown_grace_period = \
-                        now() + timedelta(seconds=app.spec.shutdown_grace_time)
+                    app.status.shutdown_grace_period = now() + timedelta(
+                        seconds=app.spec.shutdown_grace_time
+                    )
                     await self.kubernetes_api.update_application_status(
                         namespace=app.metadata.namespace,
                         name=app.metadata.name,
-                        body=app
+                        body=app,
                     )
 
                     await kube.shutdown(app)
@@ -723,9 +830,7 @@ class KubernetesController(Controller):
                         await callback(app)
 
                     asyncio.ensure_future(
-                        grace_period_job(
-                            app, self._check_grace_period
-                        )
+                        grace_period_job(app, self._check_grace_period)
                     )
 
         return

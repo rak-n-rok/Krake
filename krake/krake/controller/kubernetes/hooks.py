@@ -19,10 +19,15 @@ from OpenSSL import crypto
 from typing import NamedTuple
 
 import yarl
+from aiohttp import ClientConnectorError
+
 from krake.controller import Observer
 from krake.controller.kubernetes.client import KubernetesClient, InvalidManifestError
 from krake.utils import camel_to_snake_case, get_kubernetes_resource_idx
 from kubernetes_asyncio.client.rest import ApiException
+from kubernetes_asyncio.client.api_client import ApiClient
+from kubernetes_asyncio import client
+from krake.data.kubernetes import ClusterState, Application, Cluster
 from yarl import URL
 from secrets import token_urlsafe
 
@@ -55,6 +60,8 @@ class HookType(Enum):
     ApplicationPostReconcile = auto()
     ApplicationPreDelete = auto()
     ApplicationPostDelete = auto()
+    ClusterCreation = auto()
+    ClusterDeletion = auto()
 
 
 class HookDispatcher(object):
@@ -154,8 +161,8 @@ async def register_service(app, cluster, resource, response):
         # by a load balancer controller to the service. In this case, the "port"
         # specified in the spec is reachable from the outside.
         if (
-            not response.status.load_balancer or
-            not response.status.load_balancer.ingress
+            not response.status.load_balancer
+            or not response.status.load_balancer.ingress
         ):
             # When a "LoadBalancer" type of service is created, the IP is given by an
             # additional controller (e.g. a controller that requests a floating IP to an
@@ -404,8 +411,7 @@ def update_last_observed_manifest_from_resp(app, response, **kwargs):
 
     try:
         idx_observed = get_kubernetes_resource_idx(
-            app.status.mangled_observer_schema,
-            resp
+            app.status.mangled_observer_schema, resp
         )
     except IndexError:
         # All created resources should be observed
@@ -413,8 +419,7 @@ def update_last_observed_manifest_from_resp(app, response, **kwargs):
 
     try:
         idx_last_observed = get_kubernetes_resource_idx(
-            app.status.last_observed_manifest,
-            resp
+            app.status.last_observed_manifest, resp
         )
     except IndexError:
         # If the resource is not yes present in last_observed_manifest, append it.
@@ -660,8 +665,7 @@ def update_last_applied_manifest_from_spec(app):
         # matter.
         try:
             idx_status_old = get_kubernetes_resource_idx(
-                app.status.last_applied_manifest,
-                resource_observed
+                app.status.last_applied_manifest, resource_observed
             )
         except IndexError:
             continue
@@ -673,8 +677,7 @@ def update_last_applied_manifest_from_spec(app):
         try:
             # Check if the observed resource is present in spec.manifest
             idx_status_new = get_kubernetes_resource_idx(
-                new_last_applied_manifest,
-                resource_observed
+                new_last_applied_manifest, resource_observed
             )
         except IndexError:
             # The resource is observed but is not present in the spec.manifest.
@@ -693,7 +696,7 @@ def update_last_applied_manifest_from_spec(app):
     app.status.last_applied_manifest = new_last_applied_manifest
 
 
-class KubernetesObserver(Observer):
+class KubernetesApplicationObserver(Observer):
     """Observer specific for Kubernetes Applications. One observer is created for each
     Application managed by the Controller, but not one per Kubernetes resource
     (Deployment, Service...). If several resources are defined by an Application, they
@@ -772,62 +775,173 @@ class KubernetesObserver(Observer):
         return status
 
 
+class KubernetesClusterObserver(Observer):
+    """Observer specific for Kubernetes Clusters. One observer is created for each
+    Cluster managed by the Controller.
+
+    The observer gets the actual status of the cluster using the
+    Kubernetes API, and compare it to the status stored in the API.
+
+    The observer is:
+     * started at initial Krake resource creation;
+
+     * deleted when a resource needs to be updated, then started again when it is done;
+
+     * simply deleted on resource deletion.
+
+    Args:
+        cluster (krake.data.kubernetes.Cluster): the cluster which will be observed.
+        on_res_update (coroutine): a coroutine called when a resource's actual status
+            differs from the status sent by the database. Its signature is:
+            ``(resource) -> updated_resource``. ``updated_resource`` is the instance of
+            the resource that is up-to-date with the API. The Observer internal instance
+            of the resource to observe will be updated. If the API cannot be contacted,
+            ``None`` can be returned. In this case the internal instance of the Observer
+            will not be updated.
+        time_step (int, optional): how frequently the Observer should watch the actual
+            status of the resources.
+
+    """
+
+    def __init__(self, cluster, on_res_update, time_step=2):
+        super().__init__(cluster, on_res_update, time_step)
+        self.cluster = cluster
+
+    async def poll_resource(self):
+        """Fetch the current status of the Cluster monitored by the Observer.
+
+        Returns:
+            krake.data.core.Status: the status object created using information from the
+                real world Cluster.
+
+        """
+        status = deepcopy(self.cluster.status)
+        # For each observed kubernetes cluster registered in Krake,
+        # get its current node status.
+        loader = KubeConfigLoader(self.cluster.spec.kubeconfig)
+        config = Configuration()
+        await loader.load_and_set(config)
+        kube = ApiClient(config)
+
+        async with kube as api:
+            v1 = client.CoreV1Api(api)
+            try:
+                response = await v1.list_node()
+
+            except ClientConnectorError as err:
+                status.state = ClusterState.OFFLINE
+                self.cluster.status.state = ClusterState.OFFLINE
+                # Log the error
+                logger.debug(err)
+                return status
+
+            condition_dict = {
+                "MemoryPressure": [],
+                "DiskPressure": [],
+                "PIDPressure": [],
+                "Ready": [],
+            }
+
+            for item in response.items:
+                for condition in item.status.conditions:
+                    condition_dict[condition.type].append(condition.status)
+                if (
+                    condition_dict["MemoryPressure"] == ["True"]
+                    or condition_dict["DiskPressure"] == ["True"]
+                    or condition_dict["PIDPressure"] == ["True"]
+                ):
+                    status.state = ClusterState.UNHEALTHY
+                    self.cluster.status.state = ClusterState.UNHEALTHY
+                    return status
+                elif (
+                    condition_dict["Ready"] == ["True"]
+                    and status.state is ClusterState.OFFLINE
+                ):
+                    status.state = ClusterState.CONNECTING
+                    self.cluster.status.state = ClusterState.CONNECTING
+                    return status
+                elif condition_dict["Ready"] == ["True"]:
+                    status.state = ClusterState.ONLINE
+                    self.cluster.status.state = ClusterState.ONLINE
+                    return status
+                else:
+                    status.state = ClusterState.NOTREADY
+                    self.cluster.status.state = ClusterState.NOTREADY
+                    return status
+
+
 @listen.on(HookType.ApplicationPostReconcile)
 @listen.on(HookType.ApplicationPostMigrate)
-async def register_observer(controller, app, start=True, **kwargs):
-    """Create an observer for the given Application, and start it as background
-    task if wanted.
+@listen.on(HookType.ClusterCreation)
+async def register_observer(controller, resource, start=True, **kwargs):
+    """Create an observer for the given Application or Cluster, and start it as a
+    background task if wanted.
 
-    If an observer already existed for this Application, it is stopped and deleted.
+    If an observer already existed for this Application or Cluster, it is stopped
+    and deleted.
 
     Args:
         controller (KubernetesController): the controller for which the observer will be
             added in the list of working observers.
-        app (krake.data.kubernetes.Application): the Application to observe
+        resource (krake.data.kubernetes.Application): the Application to observe or
+        resource (krake.data.kubernetes.Cluster): the Cluster to observe.
         start (bool, optional): if False, does not start the observer as background
             task.
 
     """
-    from krake.controller.kubernetes import KubernetesObserver
+    if resource.kind == Application.kind:
+        cluster = await controller.kubernetes_api.read_cluster(
+            namespace=resource.status.running_on.namespace,
+            name=resource.status.running_on.name,
+        )
 
-    cluster = await controller.kubernetes_api.read_cluster(
-        namespace=app.status.running_on.namespace, name=app.status.running_on.name
-    )
+        observer = KubernetesApplicationObserver(
+            cluster,
+            resource,
+            controller.on_status_update,
+            time_step=controller.observer_time_step,
+        )
 
-    observer = KubernetesObserver(
-        cluster,
-        app,
-        controller.on_status_update,
-        time_step=controller.observer_time_step,
-    )
+    elif resource.kind == Cluster.kind:
+        observer = KubernetesClusterObserver(
+            resource,
+            controller.on_status_update,
+            time_step=controller.observer_time_step,
+        )
+    else:
+        logger.debug("Unknown resource kind. No observer was registered.", resource)
+        return
 
-    logger.debug("Start observer for %r", app)
+    logger.debug(f"Start observer for {resource.kind} %r", resource.metadata.name)
     task = None
     if start:
         task = controller.loop.create_task(observer.run())
 
-    controller.observers[app.metadata.uid] = (observer, task)
+    controller.observers[resource.metadata.uid] = (observer, task)
 
 
 @listen.on(HookType.ApplicationPreReconcile)
 @listen.on(HookType.ApplicationPreMigrate)
 @listen.on(HookType.ApplicationPreDelete)
-async def unregister_observer(controller, app, **kwargs):
-    """Stop and delete the observer for the given Application. If no observer is
-    started, do nothing.
+@listen.on(HookType.ClusterDeletion)
+async def unregister_observer(controller, resource, **kwargs):
+    """Stop and delete the observer for the given Application or Cluster. If no observer
+    is started, do nothing.
 
     Args:
         controller (KubernetesController): the controller for which the observer will be
             removed from the list of working observers.
-        app (krake.data.kubernetes.Application): the Application whose observer will
-            be stopped.
+        resource (krake.data.kubernetes.Application): the Application whose observer
+        will be stopped or
+        resource (krake.data.kubernetes.Cluster): the Cluster whose observer will be
+        stopped.
 
     """
-    if app.metadata.uid not in controller.observers:
+    if resource.metadata.uid not in controller.observers:
         return
 
-    logger.debug("Stop observer for %r", app)
-    _, task = controller.observers.pop(app.metadata.uid)
+    logger.debug(f"Stop observer for {resource.kind} %r", resource.metadata.name)
+    _, task = controller.observers.pop(resource.metadata.uid)
     task.cancel()
 
     with suppress(asyncio.CancelledError):
@@ -910,8 +1024,7 @@ def generate_default_observer_schema(app, default_namespace="default"):
     for resource_manifest in app.spec.manifest:
         try:
             idx = get_kubernetes_resource_idx(
-                app.status.mangled_observer_schema,
-                resource_manifest
+                app.status.mangled_observer_schema, resource_manifest
             )
 
             # In case a custom observer schema is provided for this resource, the
@@ -977,9 +1090,11 @@ def generate_default_observer_schema_dict(
         observer_schema_dict["metadata"]["namespace"] = manifest_dict["metadata"].get(
             "namespace", default_namespace
         )
-        if "spec" in manifest_dict and \
-                "type" in manifest_dict["spec"] and \
-                manifest_dict["spec"]["type"] == "LoadBalancer":
+        if (
+            "spec" in manifest_dict
+            and "type" in manifest_dict["spec"]
+            and manifest_dict["spec"]["type"] == "LoadBalancer"
+        ):
             observer_schema_dict["status"] = {"load_balancer": {"ingress": None}}
 
     return observer_schema_dict
@@ -1508,8 +1623,7 @@ class Hook(object):
             for sub_resource in items:
                 sub_resources_to_mangle = None
                 idx_observed = get_kubernetes_resource_idx(
-                    mangled_observer_schema,
-                    resource
+                    mangled_observer_schema, resource
                 )
                 for keys in sub_resource.path:
                     try:
@@ -2043,12 +2157,11 @@ class Shutdown(Hook):
                 V1EnvVarSource(
                     secret_key_ref=self.attribute_map(
                         V1SecretKeySelector(
-                            name=secret_name,
-                            key=self.env_token.lower()
+                            name=secret_name, key=self.env_token.lower()
                         )
                     )
                 )
-            )
+            ),
         )
         env_url = V1EnvVar(
             name=self.env_url,
@@ -2061,7 +2174,7 @@ class Shutdown(Hook):
                         )
                     )
                 )
-            )
+            ),
         )
 
         for env in (env_token, env_url):
