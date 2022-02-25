@@ -15,7 +15,7 @@ from .parser import (
     arg_namespace,
     arg_metric,
 )
-from .fixtures import depends, rok_response_handler
+from .fixtures import depends
 from .formatters import BaseTable, Cell, printer, dict_formatter
 
 openstack = ParserSpec("openstack", aliases=["os"], help="Manage OpenStack resources")
@@ -67,13 +67,6 @@ def list_projects(config, session, namespace, all):
 @arg_metric
 @depends("config", "session")
 @printer(table=ProjectTable())
-# FIXME: The attempt to introduce better response handling of rok CLI
-#  caused a minor bug. Response handling of :func:`rok_response_handler`
-#  was suppressed by hotfix, see Krake issue #452.
-#  Anyway, the rok CLI responses should be improved and the
-#  :func:`rok_response_handler` should be more generic,
-#  see Krake issue #455
-@rok_response_handler
 def create_project(
     config,
     session,
@@ -132,7 +125,7 @@ def create_project(
         },
     }
     resp = session.post(f"/openstack/namespaces/{namespace}/projects", json=project)
-    return resp, name
+    return resp.json()
 
 
 @project.command("get", help="Get OpenStack project")
@@ -146,12 +139,8 @@ def get_project(config, session, namespace, name):
         namespace = config["user"]
 
     resp = session.get(
-        f"/openstack/namespaces/{namespace}/projects/{name}", raise_for_status=False
+        f"/openstack/namespaces/{namespace}/projects/{name}"
     )
-    if resp.status_code == 404:
-        raise SystemExit(f"Error 404: Project {name!r} not found")
-
-    resp.raise_for_status()
     return resp.json()
 
 
@@ -190,11 +179,8 @@ def update_project(
         namespace = config["user"]
 
     resp = session.get(
-        f"/openstack/namespaces/{namespace}/projects/{name}", raise_for_status=False
+        f"/openstack/namespaces/{namespace}/projects/{name}"
     )
-    if resp.status_code == 404:
-        raise SystemExit(f"Error 404: Project {name!r} not found")
-    resp.raise_for_status()
 
     project = resp.json()
 
@@ -255,11 +241,8 @@ def delete_project(config, session, namespace, name):
         namespace = config["user"]
 
     resp = session.delete(
-        f"/openstack/namespaces/{namespace}/projects/{name}", raise_for_status=False
+        f"/openstack/namespaces/{namespace}/projects/{name}"
     )
-    if resp.status_code == 404:
-        raise SystemExit(f"Error 404: Project {name!r} not found")
-    resp.raise_for_status()
 
     if resp.status_code == 204:
         return None
@@ -313,13 +296,6 @@ class ClusterTable(ClusterListTable):
 @argument("--node-count", type=int, help="Number of worker nodes")
 @depends("config", "session")
 @printer(table=ClusterTable())
-# FIXME: The attempt to introduce better response handling of rok CLI
-#  caused a minor bug. Response handling of :func:`rok_response_handler`
-#  was suppressed by hotfix, see Krake issue #452.
-#  Anyway, the rok CLI responses should be improved and the
-#  :func:`rok_response_handler` should be more generic,
-#  see Krake issue #455
-@rok_response_handler
 def create_cluster(
     config,
     session,
@@ -349,9 +325,8 @@ def create_cluster(
     resp = session.post(
         f"/openstack/namespaces/{namespace}/magnumclusters",
         json=cluster,
-        raise_for_status=False,
     )
-    return resp, name
+    return resp.json()
 
 
 @cluster.command("list", help="List Magnum clusters")
@@ -385,13 +360,8 @@ def get_cluster(config, session, namespace, name):
         namespace = config["user"]
 
     resp = session.get(
-        f"/openstack/namespaces/{namespace}/magnumclusters/{name}",
-        raise_for_status=False,
+        f"/openstack/namespaces/{namespace}/magnumclusters/{name}"
     )
-    if resp.status_code == 404:
-        raise SystemExit(f"Error 404: Magnum cluster {name!r} not found")
-
-    resp.raise_for_status()
     return resp.json()
 
 
@@ -411,12 +381,8 @@ def update_cluster(
         namespace = config["user"]
 
     resp = session.get(
-        f"/openstack/namespaces/{namespace}/magnumclusters/{name}",
-        raise_for_status=False,
+        f"/openstack/namespaces/{namespace}/magnumclusters/{name}"
     )
-    if resp.status_code == 404:
-        raise SystemExit(f"Error 404: Magnum cluster {name!r} not found")
-    resp.raise_for_status()
     cluster = resp.json()
 
     if node_count is not None:
@@ -449,12 +415,8 @@ def delete_cluster(config, session, namespace, name):
         namespace = config["user"]
 
     resp = session.delete(
-        f"/openstack/namespaces/{namespace}/magnumclusters/{name}",
-        raise_for_status=False,
+        f"/openstack/namespaces/{namespace}/magnumclusters/{name}"
     )
-    if resp.status_code == 404:
-        raise SystemExit(f"Error 404: Magnum cluster {name!r} not found")
-    resp.raise_for_status()
 
     if resp.status_code == 204:
         return None

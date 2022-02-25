@@ -413,6 +413,12 @@ def check_resource_exists(error_message=""):
     To be used with the :meth:`run` function. The callable will raise an
     :class:`AssertionError` if the chosen resource does not exist.
 
+    The stdout using kubectl CLI against the kubernetes cluster contains
+    `NotFound` string when the resource does not exist in kubernetes cluster.
+    Krake API uses RFC7807 Problem representation of failures on the HTTP layer.
+    The stdout using rok CLI against the krake API contains
+    `NOT_FOUND_ERROR` string when the resource does not exist in krake.
+
     Args:
         error_message (str, optional): the message that will be displayed on failure.
 
@@ -424,8 +430,9 @@ def check_resource_exists(error_message=""):
 
     def validate(response):
         assert response.returncode == 0
-        assert "Error 404" not in response.output, error_message
-        assert "not found" not in response.output, error_message
+        assert not any(
+            [msg in response.output for msg in ("NOT_FOUND_ERROR", "NotFound")]
+        ), error_message
 
     return validate
 
@@ -437,6 +444,12 @@ def check_resource_deleted(error_message):
     :class:`AssertionError` if the chosen resource is shown as existing in the response
     given to the callable
 
+    The stdout using kubectl CLI against the kubernetes cluster contains
+    `NotFound` string when the resource does not exist in kubernetes cluster.
+    Krake API uses RFC7807 Problem representation of failures on the HTTP layer.
+    The stdout using rok CLI against the krake API contains
+    `NOT_FOUND_ERROR` string when the resource does not exist in krake.
+
     Args:
         error_message (str): the message that will be displayed if the check fails.
 
@@ -447,8 +460,10 @@ def check_resource_deleted(error_message):
     """
 
     def validate(response):
-        assert "not found" in response.output, error_message
         assert response.returncode == 1
+        assert any(
+            [msg in response.output for msg in ("NOT_FOUND_ERROR", "NotFound")]
+        ), error_message
 
     return validate
 

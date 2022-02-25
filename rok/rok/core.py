@@ -13,7 +13,7 @@ from .parser import (
     arg_formatting,
     MetricAction,
 )
-from .fixtures import depends, rok_response_handler
+from .fixtures import depends
 from .formatters import (
     BaseTable,
     Cell,
@@ -132,13 +132,6 @@ def list_globalmetricsproviders(session):
 @arg_formatting
 @depends("session")
 @printer(table=GlobalMetricsProviderTable())
-# FIXME: The attempt to introduce better response handling of rok CLI
-#  caused a minor bug. Response handling of :func:`rok_response_handler`
-#  was suppressed by hotfix, see Krake issue #452.
-#  Anyway, the rok CLI responses should be improved and the
-#  :func:`rok_response_handler` should be more generic,
-#  see Krake issue #455
-@rok_response_handler
 def create_globalmetricsprovider(
     session, name, url, mp_type, metrics, comparison_column, value_column, table
 ):
@@ -174,7 +167,7 @@ def create_globalmetricsprovider(
     }
 
     resp = session.post(GLOBAL_METRICS_PROVIDER_BASE_URL, json=mp)
-    return resp, name
+    return resp.json()
 
 
 def _validate_for_create_gmp(
@@ -232,11 +225,8 @@ def _validate_for_create_gmp(
 @printer(table=GlobalMetricsProviderTable())
 def get_globalmetricsprovider(session, name):
     resp = session.get(
-        f"{GLOBAL_METRICS_PROVIDER_BASE_URL}/{name}", raise_for_status=False
+        f"{GLOBAL_METRICS_PROVIDER_BASE_URL}/{name}"
     )
-    if resp.status_code == 404:
-        raise SystemExit(f"HttpError 404: GlobalMetricsProvider {name!r} not found")
-    resp.raise_for_status()
     return resp.json()
 
 
@@ -359,10 +349,7 @@ def update_globalmetricsprovider(
     table,
 ):
     url = f"{GLOBAL_METRICS_PROVIDER_BASE_URL}/{name}"
-    resp = session.get(url, raise_for_status=False)
-    if resp.status_code == 404:
-        raise SystemExit(f"HttpError 404: GlobalMetricsProvider {name!r} not found")
-    resp.raise_for_status()
+    resp = session.get(url)
     mp = resp.json()
     mp_type = mp["spec"]["type"]
 
@@ -381,12 +368,7 @@ def update_globalmetricsprovider(
     if table:
         mp["spec"][mp_type]["table"] = table
 
-    resp = session.put(url, json=mp, raise_for_status=False)
-    if resp.status_code != 200:
-        raise SystemExit(
-            f"HttpError {resp.status_code}: {resp.content.decode('utf-8')}"
-        )
-    resp.raise_for_status()
+    resp = session.put(url, json=mp)
     return resp.json()
 
 
@@ -398,11 +380,7 @@ def update_globalmetricsprovider(
 def delete_globalmetricsprovider(session, name):
     resp = session.delete(
         f"{GLOBAL_METRICS_PROVIDER_BASE_URL}/{name}",
-        raise_for_status=False,
     )
-    if resp.status_code == 404:
-        raise SystemExit(f"HttpError 404: GlobalMetricsProvider {name!r} not found")
-    resp.raise_for_status()
 
     if resp.status_code == 204:
         return None
@@ -450,13 +428,6 @@ def list_globalmetrics(session):
 @arg_formatting
 @depends("session")
 @printer(table=GlobalMetricTable())
-# FIXME: The attempt to introduce better response handling of rok CLI
-#  caused a minor bug. Response handling of :func:`rok_response_handler`
-#  was suppressed by hotfix, see Krake issue #452.
-#  Anyway, the rok CLI responses should be improved and the
-#  :func:`rok_response_handler` should be more generic,
-#  see Krake issue #455
-@rok_response_handler
 def create_globalmetric(session, name, gmp_name, min, max, metric_name=None):
     """Create a GlobalMetric resource.
 
@@ -491,7 +462,7 @@ def create_globalmetric(session, name, gmp_name, min, max, metric_name=None):
     }
 
     resp = session.post(GLOBAL_METRIC_BASE_URL, json=metric)
-    return resp, name
+    return resp.json()
 
 
 @global_metric.command("get", help="Get a global metric")
@@ -500,10 +471,7 @@ def create_globalmetric(session, name, gmp_name, min, max, metric_name=None):
 @depends("session")
 @printer(table=GlobalMetricTable())
 def get_globalmetric(session, name):
-    resp = session.get(f"{GLOBAL_METRIC_BASE_URL}/{name}", raise_for_status=False)
-    if resp.status_code == 404:
-        raise SystemExit(f"HttpError 404: GlobalMetric {name!r} not found")
-    resp.raise_for_status()
+    resp = session.get(f"{GLOBAL_METRIC_BASE_URL}/{name}")
     return resp.json()
 
 
@@ -540,10 +508,7 @@ def update_globalmetric(session, name, max, min, gmp_name, metric_name):
         )
 
     url = f"{GLOBAL_METRIC_BASE_URL}/{name}"
-    resp = session.get(url, raise_for_status=False)
-    if resp.status_code == 404:
-        raise SystemExit(f"HttpError 404: GlobalMetric {name!r} not found")
-    resp.raise_for_status()
+    resp = session.get(url)
     metric = resp.json()
     if max:
         metric["spec"]["max"] = max
@@ -554,12 +519,7 @@ def update_globalmetric(session, name, max, min, gmp_name, metric_name):
     if metric_name:
         metric["spec"]["provider"]["metric"] = metric_name
 
-    resp = session.put(url, json=metric, raise_for_status=False)
-    if resp.status_code != 200:
-        raise SystemExit(
-            f"HttpError {resp.status_code}: {resp.content.decode('utf-8')}"
-        )
-    resp.raise_for_status()
+    resp = session.put(url, json=metric)
     return resp.json()
 
 
@@ -569,10 +529,7 @@ def update_globalmetric(session, name, max, min, gmp_name, metric_name):
 @depends("session")
 @printer(table=GlobalMetricTable())
 def delete_globalmetric(session, name):
-    resp = session.delete(f"{GLOBAL_METRIC_BASE_URL}/{name}", raise_for_status=False)
-    if resp.status_code == 404:
-        raise SystemExit(f"HttpError 404: GlobalMetric {name!r} not found")
-    resp.raise_for_status()
+    resp = session.delete(f"{GLOBAL_METRIC_BASE_URL}/{name}")
 
     if resp.status_code == 204:
         return None

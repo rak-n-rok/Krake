@@ -87,6 +87,12 @@ def printer(file=sys.stdout, **formatters):
             try:
                 value = func(*args, **kwargs)
             except HTTPError as he:
+                if "application/problem+json" in he.response.headers.get(
+                    "content-type", ""
+                ):
+                    problem = json.dumps(he.response.json(), indent=2, sort_keys=True)
+                    sys.exit(problem)
+
                 sys.exit(str(he))
 
             if value is None:
