@@ -206,9 +206,17 @@ e2e-tests:
   variables:
     ANSIBLE_CONFIG: ansible/ansible.cfg
     ANSIBLE_INVENTORY: ansible/hosts-CI
+    # minio service variables
+    MINIO_ENDPOINT: minio:9000
+    MINIO_ROOT_USER: minio-user
+    MINIO_ROOT_PASSWORD: minio-user-super-secret
+  services:
+    - name: minio/minio
+      command: [ 'server', '/minio' ]
+      alias: minio
   script:
     # Pre-requisites: openstack, ansible and pytest
-    - pip install python-openstackclient openstacksdk "ansible>=2.9" pytest
+    - pip install python-openstackclient openstacksdk "ansible>=2.9" pytest minio
     - apt-get update -y && apt-get install openssh-client rsync -y
 
     # Create SSH keys for to use during the whole pipeline
@@ -222,6 +230,11 @@ e2e-tests:
 
     # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
     - chmod -v 700 ansible/
+
+    #########################
+    ### MinIO test script ###
+    #########################
+    - python rak/functionals/minio-script.py
 
     ###################################
     ### Provision the staging infra ###
