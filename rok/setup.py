@@ -11,7 +11,7 @@ install_requires = [
 setup(
     name="rok",
     version="1.0.0",
-    python_requires=">=3.6",
+    python_requires=">=3.7",
     packages=find_packages(),
     install_requires=install_requires,
     entry_points={"console_scripts": ["rok=rok.__main__:main"]},
