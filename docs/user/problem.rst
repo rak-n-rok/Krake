@@ -2,14 +2,14 @@
 HTTP Problem documentation
 ==========================
 
-The failure reason on the Krake API HTTP layer is stored as RFC7807_ Problem.
-It is a way how to define machine-readable and uniform details of errors in an HTTP response.
+The failure reason of the Krake API HTTP layer is stored as an RFC7807_ Problem.
+It is a way to define uniform, machine-readable details of errors in an HTTP response.
 
-In case of failure on Krake API HTTP layer, the Krake API responses with well-formatted RFC7807_ Problem
-message which could contain the following fields:
+In case of a failure on the Krake API HTTP layer, the Krake API responds with a well-formatted RFC7807_ Problem
+message, which could contain the following fields:
 
 ``type``
-  A URI reference that identifies the problem type. It should point Krake API users to the
+  A URI reference that identifies the problem type. It should point the Krake API users to the
   concrete part of the Krake documentation where the problem type is explained in detail.
   Defaults to about:blank.
 ``title``
@@ -50,19 +50,19 @@ A update of resource field.
 invalid-keystone-token
 ======================
 
-A authentication through keystone token failed.
+An authentication attempt with a keystone token failed.
 
 
 invalid-keycloak-token
 ======================
 
-A authentication through keycloak token failed.
+An authentication attempt with a keycloak token failed.
 
 
 resource-already-exists
 =======================
 
-A resource already in database is requested to be created.
+A resource already defined in the database is requested to be created.
 
 
 .. _RFC7807: https://tools.ietf.org/html/rfc7807

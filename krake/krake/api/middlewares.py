@@ -68,7 +68,7 @@ def problem_response(problem_base_url=None):
     """Middleware factory for HTTP exceptions in request handlers
 
     Args:
-        problem_base_url (str, optional): Base URL of Krake documentation where
+        problem_base_url (str, optional): Base URL of the Krake documentation where
             HTTP problems are explained in detail.
 
     Returns:

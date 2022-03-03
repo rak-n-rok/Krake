@@ -15,11 +15,11 @@ from marshmallow.validate import Range
 
 
 class HttpProblemTitle(Enum):
-    """Store the title of the RFC 7807 problem.
+    """Store the title of an RFC 7807 problem.
 
-    RFC 7807 Problem title is a short, human-readable summary of
+    The RFC 7807 Problem title is a short, human-readable summary of
     the problem type. The name defines the title itself.
-    The value is used a part of URI reference that identifies
+    The value is used as part of the URI reference that identifies
     the problem type, see :func:`.middlewares.problem_response`
     for details.
     """
@@ -38,15 +38,15 @@ class HttpProblemTitle(Enum):
 
 
 class HttpProblem(Serializable):
-    """Store the reasons for failures on the HTTP layers for the API.
+    """Store the reasons for failures of the HTTP layers for the API.
 
-    The reason is stored as RFC 7807 Problem. It is a way how to define
-    a machine-readable and uniform details of errors in a HTTP response.
+    The reason is stored as an RFC 7807 Problem. It is a way to define
+    a uniform, machine-readable details of errors in a HTTP response.
     See https://tools.ietf.org/html/rfc7807 for details.
 
     Attributes:
         type (str): A URI reference that identifies the
-            problem type. It should point Krake API users to the
+            problem type. It should point the Krake API users to the
             concrete part of the Krake documentation where the problem
             type is explained in detail. Defaults to about:blank.
         title (HttpProblemTitle): A short, human-readable summary of

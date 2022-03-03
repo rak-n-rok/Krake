@@ -106,7 +106,8 @@ async def test_add_finalizer_in_deleted_global_metric(aiohttp_client, config, db
     )
     assert resp.status == 409
     body = await resp.json()
-    assert body["detail"] == "Finalizers can only be removed if deletion is in progress."
+    assert body["detail"] == "Finalizers can only be removed" \
+                             " if a deletion is in progress."
 
 
 async def test_delete_global_metric_rbac(rbac_allow, config, aiohttp_client):
@@ -411,7 +412,8 @@ async def test_add_finalizer_in_deleted_global_metrics_provider(
     )
     assert resp.status == 409
     body = await resp.json()
-    assert body["detail"] == "Finalizers can only be removed if deletion is in progress."
+    assert body["detail"] == "Finalizers can only be removed" \
+                             " if a deletion is in progress."
 
 
 async def test_delete_global_metrics_provider_rbac(rbac_allow, config, aiohttp_client):
@@ -749,7 +751,8 @@ async def test_add_finalizer_in_deleted_role(aiohttp_client, config, db):
     resp = await client.put(f"/core/roles/{data.metadata.name}", json=data.serialize())
     assert resp.status == 409
     body = await resp.json()
-    assert body["detail"] == "Finalizers can only be removed if deletion is in progress."
+    assert body["detail"] == "Finalizers can only be removed" \
+                             " if a deletion is in progress."
 
 
 async def test_delete_role_rbac(rbac_allow, config, aiohttp_client):
@@ -1045,7 +1048,8 @@ async def test_add_finalizer_in_deleted_role_binding(aiohttp_client, config, db)
     )
     assert resp.status == 409
     body = await resp.json()
-    assert body["detail"] == "Finalizers can only be removed if deletion is in progress."
+    assert body["detail"] == "Finalizers can only be removed" \
+                             " if a deletion is in progress."
 
 
 async def test_delete_role_binding_rbac(rbac_allow, config, aiohttp_client):

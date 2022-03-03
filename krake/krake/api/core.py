@@ -150,7 +150,8 @@ class CoreApi(object):
         if entity.metadata.deleted:
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 problem = HttpProblem(
-                    detail="Finalizers can only be removed if deletion is in progress.",
+                    detail="Finalizers can only be removed"
+                           " if a deletion is in progress.",
                     title=HttpProblemTitle.UPDATE_ERROR
                 )
                 raise HttpProblemError(web.HTTPConflict, problem)
@@ -306,7 +307,8 @@ class CoreApi(object):
         if entity.metadata.deleted:
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 problem = HttpProblem(
-                    detail="Finalizers can only be removed if deletion is in progress.",
+                    detail="Finalizers can only be removed"
+                           " if a deletion is in progress.",
                     title=HttpProblemTitle.UPDATE_ERROR
                 )
                 raise HttpProblemError(web.HTTPConflict, problem)
@@ -452,7 +454,8 @@ class CoreApi(object):
         if entity.metadata.deleted:
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 problem = HttpProblem(
-                    detail="Finalizers can only be removed if deletion is in progress.",
+                    detail="Finalizers can only be removed"
+                           " if a deletion is in progress.",
                     title=HttpProblemTitle.UPDATE_ERROR
                 )
                 raise HttpProblemError(web.HTTPConflict, problem)
@@ -597,7 +600,8 @@ class CoreApi(object):
         if entity.metadata.deleted:
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 problem = HttpProblem(
-                    detail="Finalizers can only be removed if deletion is in progress.",
+                    detail="Finalizers can only be removed"
+                           " if a deletion is in progress.",
                     title=HttpProblemTitle.UPDATE_ERROR
                 )
                 raise HttpProblemError(web.HTTPConflict, problem)
