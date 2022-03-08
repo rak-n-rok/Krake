@@ -17,12 +17,13 @@ install_requires = [
     "python-magnumclient==3.*",
     "PyYAML==5.*",
     "requests==2.*",
-    "webargs==6.*",
 ]
 
 # dataclasses backport
-if sys.version_info < (3, 7):
-    install_requires.append("dataclasses==0.6.*")
+if sys.version_info < (3, 10):
+    install_requires.append("webargs==8.*")
+else:
+    install_requires.append("webargs==6.*")
 
 setup(
     name="krake",
