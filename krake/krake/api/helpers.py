@@ -183,7 +183,6 @@ class Heartbeat(object):
         :attr:`interval`.
         """
         while True:
-            #await asyncio.sleep(self.interval, loop=self.loop)
             await asyncio.sleep(self.interval)
             await self.response.write(b"\n")
 
