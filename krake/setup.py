@@ -19,7 +19,7 @@ install_requires = [
     "requests==2.*",
 ]
 
-# dataclasses backport
+# webargs
 if sys.version_info < (3, 10):
     install_requires.append("webargs==8.*")
 else:
