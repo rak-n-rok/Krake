@@ -271,7 +271,7 @@ async def test_static_provider_metric_unavailable(aiohttp_server):
 
 
 @pytest.mark.slow
-async def test_kafka_provider_against_kafka(ksql):
+async def test_kafka_provider_against_kafka(ksql,loop):
     """Test that the Kafka Provider works against an actual KSQL database."""
     heat_demand_1_metric = ksql.kafka_table.metrics[0]
     metric = GlobalMetricFactory(
