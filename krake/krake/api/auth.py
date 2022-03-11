@@ -89,7 +89,7 @@ from aiohttp import web
 from krake.data.core import Verb, Role, RoleBinding
 from yarl import URL
 
-from .helpers import session, json_error, HttpReason, HttpReasonCode
+from .helpers import session, HttpProblemError, HttpProblem, HttpProblemTitle
 
 
 def static_authentication(name):
@@ -172,11 +172,11 @@ def keystone_authentication(endpoint):
             headers={"X-Auth-Token": token, "X-Subject-Token": token},
         )
         if resp.status != 200:
-            message = f"Invalid Keystone token (HTTP {resp.status} {resp.reason})"
-            reason = HttpReason(
-                reason=message, code=HttpReasonCode.INVALID_KEYSTONE_TOKEN
+            problem = HttpProblem(
+                detail=f"Invalid Keystone token (HTTP {resp.status} {resp.reason})",
+                title=HttpProblemTitle.INVALID_KEYSTONE_TOKEN
             )
-            raise json_error(web.HTTPUnauthorized, reason.serialize())
+            raise HttpProblemError(web.HTTPUnauthorized, problem)
 
         data = await resp.json()
         return data["token"]["user"]["name"]
@@ -212,11 +212,11 @@ def keycloak_authentication(endpoint, realm):
         url = URL(endpoint) / path
         resp = await request.app["http"].post(url, data={"access_token": token})
         if resp.status != 200:
-            message = f"Invalid Keycloak token " f"(HTTP {resp.status} {resp.reason})"
-            reason = HttpReason(
-                reason=message, code=HttpReasonCode.INVALID_KEYCLOAK_TOKEN
+            problem = HttpProblem(
+                detail=f"Invalid Keycloak token " f"(HTTP {resp.status} {resp.reason})",
+                title=HttpProblemTitle.INVALID_KEYCLOAK_TOKEN
             )
-            raise json_error(web.HTTPUnauthorized, reason.serialize())
+            raise HttpProblemError(web.HTTPUnauthorized, problem)
 
         data = await resp.json()
         return data["preferred_username"]

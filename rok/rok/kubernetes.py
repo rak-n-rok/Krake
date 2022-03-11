@@ -20,7 +20,7 @@ from .parser import (
     arg_namespace,
     arg_metric,
 )
-from .fixtures import depends, rok_response_handler
+from .fixtures import depends
 from .formatters import (
     BaseTable,
     Cell,
@@ -200,13 +200,6 @@ class ApplicationTable(ApplicationListTable):
 @arg_formatting
 @depends("config", "session")
 @printer(table=ApplicationTable())
-# FIXME: The attempt to introduce better response handling of rok CLI
-#  caused a minor bug. Response handling of :func:`rok_response_handler`
-#  was suppressed by hotfix, see Krake issue #452.
-#  Anyway, the rok CLI responses should be improved and the
-#  :func:`rok_response_handler` should be more generic,
-#  see Krake issue #455
-@rok_response_handler
 def create_application(
     config,
     session,
@@ -265,7 +258,7 @@ def create_application(
         json=app,
         params={"blocking": blocking_state},
     )
-    return resp, name
+    return resp.json()
 
 
 @application.command("get", help="Get Kubernetes application")
@@ -279,14 +272,8 @@ def get_application(config, session, namespace, name):
         namespace = config["user"]
 
     resp = session.get(
-        f"/kubernetes/namespaces/{namespace}/applications/{name}",
-        raise_for_status=False,
+        f"/kubernetes/namespaces/{namespace}/applications/{name}"
     )
-    if resp.status_code == 404:
-        raise SystemExit(f"Error 404: Application {name!r} not found")
-    resp.raise_for_status()
-
-    resp.raise_for_status()
     return resp.json()
 
 
@@ -332,12 +319,8 @@ def update_application(
         namespace = config["user"]
 
     resp = session.get(
-        f"/kubernetes/namespaces/{namespace}/applications/{name}",
-        raise_for_status=False,
+        f"/kubernetes/namespaces/{namespace}/applications/{name}"
     )
-    if resp.status_code == 404:
-        raise SystemExit(f"Error 404: Application {name!r} not found")
-    resp.raise_for_status()
     app = resp.json()
 
     if file:
@@ -399,12 +382,8 @@ def delete_application(config, session, namespace, name, wait):
 
     resp = session.delete(
         f"/kubernetes/namespaces/{namespace}/applications/{name}",
-        raise_for_status=False,
         params={"blocking": blocking_state},
     )
-    if resp.status_code == 404:
-        raise SystemExit(f"Error 404: Application {name!r} not found")
-    resp.raise_for_status()
 
     if resp.status_code == 204:
         return None
@@ -423,12 +402,8 @@ def retry_application(config, session, namespace, name):
         namespace = config["user"]
 
     resp = session.put(
-        f"/kubernetes/namespaces/{namespace}/applications/{name}/retry",
-        raise_for_status=False
+        f"/kubernetes/namespaces/{namespace}/applications/{name}/retry"
     )
-    if resp.status_code == 404:
-        raise SystemExit(f"Error 404: Application {name!r} not found")
-    resp.raise_for_status()
 
     if resp.status_code == 204:
         return None
@@ -533,13 +508,6 @@ def create_cluster_config(kubeconfig, context_name=None):
 @arg_formatting
 @depends("config", "session")
 @printer(table=ClusterTable(many=False))
-# FIXME: The attempt to introduce better response handling of rok CLI
-#  caused a minor bug. Response handling of :func:`rok_response_handler`
-#  was suppressed by hotfix, see Krake issue #452.
-#  Anyway, the rok CLI responses should be improved and the
-#  :func:`rok_response_handler` should be more generic,
-#  see Krake issue #455
-@rok_response_handler
 def create_cluster(
     config, session, namespace, kubeconfig, context, metrics, labels, custom_resources
 ):
@@ -559,7 +527,7 @@ def create_cluster(
 
     resp = session.post(f"/kubernetes/namespaces/{namespace}/clusters", json=to_create)
 
-    return resp, cluster_name
+    return resp.json()
 
 
 @cluster.command("list", help="List Kubernetes clusters")
@@ -593,12 +561,8 @@ def get_cluster(config, session, namespace, name):
         namespace = config["user"]
 
     resp = session.get(
-        f"/kubernetes/namespaces/{namespace}/clusters/{name}", raise_for_status=False
+        f"/kubernetes/namespaces/{namespace}/clusters/{name}"
     )
-    if resp.status_code == 404:
-        raise SystemExit(f"Error 404: Kubernetes cluster {name!r} not found")
-
-    resp.raise_for_status()
     return resp.json()
 
 
@@ -622,11 +586,8 @@ def update_cluster(
         namespace = config["user"]
 
     resp = session.get(
-        f"/kubernetes/namespaces/{namespace}/clusters/{name}", raise_for_status=False
+        f"/kubernetes/namespaces/{namespace}/clusters/{name}"
     )
-    if resp.status_code == 404:
-        raise SystemExit(f"Error 404: Kubernetes cluster {name!r} not found")
-    resp.raise_for_status()
     cluster = resp.json()
 
     if file:
@@ -657,12 +618,8 @@ def delete_cluster(config, session, namespace, name):
         namespace = config["user"]
 
     resp = session.delete(
-        f"/kubernetes/namespaces/{namespace}/clusters/{name}", raise_for_status=False
+        f"/kubernetes/namespaces/{namespace}/clusters/{name}"
     )
-
-    if resp.status_code == 404:
-        raise SystemExit(f"Error 404: Kubernetes cluster {name!r} not found")
-    resp.raise_for_status()
 
     if resp.status_code == 204:
         return None

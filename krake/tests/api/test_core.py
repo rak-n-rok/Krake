@@ -5,7 +5,7 @@ from itertools import count
 from operator import attrgetter
 
 from krake.api.app import create_app
-from krake.api.helpers import HttpReason, HttpReasonCode
+from krake.api.helpers import HttpProblem, HttpProblemTitle
 
 from krake.data.core import WatchEventType, WatchEvent, resource_ref
 from krake.data.core import (
@@ -71,8 +71,8 @@ async def test_create_global_metric_with_existing_name(aiohttp_client, config, d
     assert resp.status == 409
 
     received = await resp.json()
-    reason = HttpReason.deserialize(received)
-    assert reason.code == HttpReasonCode.RESOURCE_ALREADY_EXISTS
+    problem = HttpProblem.deserialize(received)
+    assert problem.title == HttpProblemTitle.RESOURCE_ALREADY_EXISTS
 
 
 async def test_delete_global_metric(aiohttp_client, config, db):
@@ -106,7 +106,8 @@ async def test_add_finalizer_in_deleted_global_metric(aiohttp_client, config, db
     )
     assert resp.status == 409
     body = await resp.json()
-    assert len(body["metadata"]["finalizers"]) == 1
+    assert body["detail"] == "Finalizers can only be removed" \
+                             " if a deletion is in progress."
 
 
 async def test_delete_global_metric_rbac(rbac_allow, config, aiohttp_client):
@@ -324,10 +325,11 @@ async def test_update_global_metric_immutable_field(aiohttp_client, config, db):
         f"/core/globalmetrics/{data.metadata.name}", json=data.serialize()
     )
     assert resp.status == 400
-    assert await resp.json() == {
-        "code": "UPDATE_ERROR",
-        "reason": "Trying to update an immutable field: namespace",
-    }
+
+    received = await resp.json()
+    problem = HttpProblem.deserialize(received)
+    assert problem.title == HttpProblemTitle.UPDATE_ERROR
+    assert problem.detail == "Trying to update an immutable field: namespace"
 
 
 async def test_create_global_metrics_provider(aiohttp_client, config, db):
@@ -373,8 +375,8 @@ async def test_create_global_metrics_provider_with_existing_name(
     assert resp.status == 409
 
     received = await resp.json()
-    reason = HttpReason.deserialize(received)
-    assert reason.code == HttpReasonCode.RESOURCE_ALREADY_EXISTS
+    problem = HttpProblem.deserialize(received)
+    assert problem.title == HttpProblemTitle.RESOURCE_ALREADY_EXISTS
 
 
 async def test_delete_global_metrics_provider(aiohttp_client, config, db):
@@ -410,7 +412,8 @@ async def test_add_finalizer_in_deleted_global_metrics_provider(
     )
     assert resp.status == 409
     body = await resp.json()
-    assert len(body["metadata"]["finalizers"]) == 1
+    assert body["detail"] == "Finalizers can only be removed" \
+                             " if a deletion is in progress."
 
 
 async def test_delete_global_metrics_provider_rbac(rbac_allow, config, aiohttp_client):
@@ -638,10 +641,11 @@ async def test_update_global_metrics_provider_immutable_field(
         f"/core/globalmetricsproviders/{data.metadata.name}", json=data.serialize()
     )
     assert resp.status == 400
-    assert await resp.json() == {
-        "code": "UPDATE_ERROR",
-        "reason": "Trying to update an immutable field: namespace",
-    }
+
+    received = await resp.json()
+    problem = HttpProblem.deserialize(received)
+    assert problem.title == HttpProblemTitle.UPDATE_ERROR
+    assert problem.detail == "Trying to update an immutable field: namespace"
 
 
 async def test_update_global_metrics_provider_with_changes(aiohttp_client, config, db):
@@ -714,8 +718,8 @@ async def test_create_role_with_existing_name(aiohttp_client, config, db):
     assert resp.status == 409
 
     received = await resp.json()
-    reason = HttpReason.deserialize(received)
-    assert reason.code == HttpReasonCode.RESOURCE_ALREADY_EXISTS
+    problem = HttpProblem.deserialize(received)
+    assert problem.title == HttpProblemTitle.RESOURCE_ALREADY_EXISTS
 
 
 async def test_delete_role(aiohttp_client, config, db):
@@ -747,7 +751,8 @@ async def test_add_finalizer_in_deleted_role(aiohttp_client, config, db):
     resp = await client.put(f"/core/roles/{data.metadata.name}", json=data.serialize())
     assert resp.status == 409
     body = await resp.json()
-    assert len(body["metadata"]["finalizers"]) == 1
+    assert body["detail"] == "Finalizers can only be removed" \
+                             " if a deletion is in progress."
 
 
 async def test_delete_role_rbac(rbac_allow, config, aiohttp_client):
@@ -961,10 +966,11 @@ async def test_update_role_immutable_field(aiohttp_client, config, db):
 
     resp = await client.put(f"/core/roles/{data.metadata.name}", json=data.serialize())
     assert resp.status == 400
-    assert await resp.json() == {
-        "code": "UPDATE_ERROR",
-        "reason": "Trying to update an immutable field: namespace",
-    }
+
+    received = await resp.json()
+    problem = HttpProblem.deserialize(received)
+    assert problem.title == HttpProblemTitle.UPDATE_ERROR
+    assert problem.detail == "Trying to update an immutable field: namespace"
 
 
 async def test_create_role_binding(aiohttp_client, config, db):
@@ -1007,8 +1013,8 @@ async def test_create_role_binding_with_existing_name(aiohttp_client, config, db
     assert resp.status == 409
 
     received = await resp.json()
-    reason = HttpReason.deserialize(received)
-    assert reason.code == HttpReasonCode.RESOURCE_ALREADY_EXISTS
+    problem = HttpProblem.deserialize(received)
+    assert problem.title == HttpProblemTitle.RESOURCE_ALREADY_EXISTS
 
 
 async def test_delete_role_binding(aiohttp_client, config, db):
@@ -1042,7 +1048,8 @@ async def test_add_finalizer_in_deleted_role_binding(aiohttp_client, config, db)
     )
     assert resp.status == 409
     body = await resp.json()
-    assert len(body["metadata"]["finalizers"]) == 1
+    assert body["detail"] == "Finalizers can only be removed" \
+                             " if a deletion is in progress."
 
 
 async def test_delete_role_binding_rbac(rbac_allow, config, aiohttp_client):
@@ -1262,7 +1269,8 @@ async def test_update_role_binding_immutable_field(aiohttp_client, config, db):
         f"/core/rolebindings/{data.metadata.name}", json=data.serialize()
     )
     assert resp.status == 400
-    assert await resp.json() == {
-        "code": "UPDATE_ERROR",
-        "reason": "Trying to update an immutable field: namespace",
-    }
+
+    received = await resp.json()
+    problem = HttpProblem.deserialize(received)
+    assert problem.title == HttpProblemTitle.UPDATE_ERROR
+    assert problem.detail == "Trying to update an immutable field: namespace"

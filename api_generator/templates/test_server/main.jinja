@@ -6,7 +6,7 @@ from itertools import count
 from operator import attrgetter
 
 from krake.api.app import create_app
-from krake.api.helpers import HttpReason, HttpReasonCode
+from krake.api.helpers import HttpProblem, HttpProblemTitle
 from krake.data.core import WatchEventType, WatchEvent, resource_ref
 {% for module_path, classes in api_def.import_classes.items() -%}
     from {{ module_path }} import {% for cls_name in classes -%}

@@ -1,7 +1,10 @@
 """This modules defines aiohttp middlewares for the Krake HTTP API"""
 import asyncio
+import json
+
 from aiohttp import web, hdrs
-from krake.api.helpers import HttpReason, HttpReasonCode, json_error
+
+from krake.api.helpers import HttpProblemError, HttpProblem, HttpProblemTitle
 
 from .database import TransactionError
 
@@ -30,11 +33,11 @@ def retry_transaction(retry=1):
             except TransactionError as err:
                 request.app.logger.warn("Transaction failed (%s)", err)
 
-        reason = HttpReason(
-            reason="Concurrent writes to database",
-            code=HttpReasonCode.TRANSACTION_ERROR,
+        problem = HttpProblem(
+            detail="Concurrent writes to database",
+            title=HttpProblemTitle.TRANSACTION_ERROR,
         )
-        raise json_error(web.HTTPConflict, reason.serialize())
+        raise HttpProblemError(web.HTTPConflict, problem)
 
     return retry_transaction_middleware
 
@@ -59,6 +62,56 @@ def error_log():
             raise
 
     return logging_middleware
+
+
+def problem_response(problem_base_url=None):
+    """Middleware factory for HTTP exceptions in request handlers
+
+    Args:
+        problem_base_url (str, optional): Base URL of the Krake documentation where
+            HTTP problems are explained in detail.
+
+    Returns:
+        aiohttp middleware catching HttpProblemError or HTTPException based exception
+        transforming the excpetion text to the :class:`.helpers.HttpProblem`
+        (RFC 7807 Problem representation of failure) and reraising the exception.
+
+    """
+    @web.middleware
+    async def problem_middleware(request, handler):
+        try:
+            return await handler(request)
+        except web.HTTPException as e:
+            problem = HttpProblem(
+                status=e.status_code,
+                detail=e.text
+            )
+            e.text = json.dumps(problem.serialize())
+            e.content_type = "application/problem+json"
+            raise
+
+        except HttpProblemError as e:
+            if all(
+                [
+                    e.problem.type == HttpProblem.type,
+                    e.problem.title,
+                    problem_base_url,
+                ]
+            ):
+                e.problem.type = "#".join([problem_base_url, e.problem.title.value])
+
+            if not e.problem.status:
+                e.problem.status = e.exc.status_code
+
+            if not e.problem.detail:
+                e.problem.detail = e.exc().text
+
+            raise e.exc(
+                text=json.dumps(e.problem.serialize()),
+                content_type="application/problem+json"
+            )
+
+    return problem_middleware
 
 
 def authentication(authenticators, allow_anonymous):

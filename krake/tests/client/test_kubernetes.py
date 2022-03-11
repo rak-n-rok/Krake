@@ -11,7 +11,6 @@ from krake.data.kubernetes import (
     ApplicationState,
     ClusterBinding,
     ApplicationComplete,
-    ApplicationShutdown,
     ClusterState,
 )
 from krake.test_utils import with_timeout, aenumerate
