@@ -14,10 +14,10 @@ from krake.api.helpers import (
     session,
     Heartbeat,
     use_schema,
-    HttpReason,
-    HttpReasonCode,
+    HttpProblem,
+    HttpProblemTitle,
+    HttpProblemError,
     make_create_request_schema,
-    json_error,
     ListQuery,
 )
 from krake.data.core import WatchEvent, WatchEventType, ListMetadata
@@ -60,10 +60,10 @@ class KubernetesApi(object):
                 f"Application {body.metadata.name!r} already "
                 f"exists in namespace {namespace!r}"
             )
-            reason = HttpReason(
-                reason=message, code=HttpReasonCode.RESOURCE_ALREADY_EXISTS
+            problem = HttpProblem(
+                detail=message, title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
             )
-            raise json_error(web.HTTPConflict, reason.serialize())
+            raise HttpProblemError(web.HTTPConflict, problem)
 
         now = utils.now()
 
@@ -182,26 +182,25 @@ class KubernetesApi(object):
         # can only be removed.
         if entity.metadata.deleted:
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
-                raise json_error(
-                    web.HTTPConflict,
-                    {
-                        "metadata": {
-                            "finalizers": [
-                                "Finalizers can only be removed if "
-                                "deletion is in progress."
-                            ]
-                        }
-                    },
+                problem = HttpProblem(
+                    detail="Finalizers can only be removed"
+                           " if a deletion is in progress.",
+                    title=HttpProblemTitle.UPDATE_ERROR
                 )
+                raise HttpProblemError(web.HTTPConflict, problem)
 
         if body == entity:
-            raise json_error(web.HTTPBadRequest, "The body contained no update.")
+            problem = HttpProblem(
+                detail="The body contained no update.",
+                title=HttpProblemTitle.UPDATE_ERROR
+            )
+            raise HttpProblemError(web.HTTPBadRequest, problem)
 
         try:
             entity.update(body)
         except ValueError as e:
-            reason = HttpReason(reason=str(e), code=HttpReasonCode.UPDATE_ERROR)
-            raise json_error(web.HTTPBadRequest, reason.serialize())
+            problem = HttpProblem(detail=str(e), title=HttpProblemTitle.UPDATE_ERROR)
+            raise HttpProblemError(web.HTTPBadRequest, problem)
 
         entity.metadata.modified = utils.now()
 
@@ -318,8 +317,8 @@ class KubernetesApi(object):
         try:
             dest.update(source)
         except ValueError as e:
-            reason = HttpReason(reason=str(e), code=HttpReasonCode.UPDATE_ERROR)
-            raise json_error(web.HTTPBadRequest, reason.serialize())
+            problem = HttpProblem(detail=str(e), title=HttpProblemTitle.UPDATE_ERROR)
+            raise HttpProblemError(web.HTTPBadRequest, problem)
 
         await session(request).put(entity)
         logger.info(
@@ -357,9 +356,11 @@ class KubernetesApi(object):
                 entity.metadata.name,
                 entity.metadata.uid,
             )
-            reason = HttpReason(reason="No migration or deletion retry needed",
-                                code=HttpReasonCode.UPDATE_ERROR)
-            raise json_error(web.HTTPBadRequest, reason.serialize())
+            problem = HttpProblem(
+                detail="No migration or deletion retry needed",
+                title=HttpProblemTitle.UPDATE_ERROR
+            )
+            raise HttpProblemError(web.HTTPBadRequest, problem)
 
         return web.json_response(entity.serialize())
 
@@ -381,10 +382,10 @@ class KubernetesApi(object):
                 f"Cluster {body.metadata.name!r} already "
                 f"exists in namespace {namespace!r}"
             )
-            reason = HttpReason(
-                reason=message, code=HttpReasonCode.RESOURCE_ALREADY_EXISTS
+            problem = HttpProblem(
+                detail=message, title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
             )
-            raise json_error(web.HTTPConflict, reason.serialize())
+            raise HttpProblemError(web.HTTPConflict, problem)
 
         now = utils.now()
 
@@ -497,26 +498,25 @@ class KubernetesApi(object):
         # can only be removed.
         if entity.metadata.deleted:
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
-                raise json_error(
-                    web.HTTPConflict,
-                    {
-                        "metadata": {
-                            "finalizers": [
-                                "Finalizers can only be removed if "
-                                "deletion is in progress."
-                            ]
-                        }
-                    },
+                problem = HttpProblem(
+                    detail="Finalizers can only be removed"
+                           " if a deletion is in progress.",
+                    title=HttpProblemTitle.UPDATE_ERROR
                 )
+                raise HttpProblemError(web.HTTPConflict, problem)
 
         if body == entity:
-            raise json_error(web.HTTPBadRequest, "The body contained no update.")
+            problem = HttpProblem(
+                detail="The body contained no update.",
+                title=HttpProblemTitle.UPDATE_ERROR
+            )
+            raise HttpProblemError(web.HTTPBadRequest, problem)
 
         try:
             entity.update(body)
         except ValueError as e:
-            reason = HttpReason(reason=str(e), code=HttpReasonCode.UPDATE_ERROR)
-            raise json_error(web.HTTPBadRequest, reason.serialize())
+            problem = HttpProblem(detail=str(e), title=HttpProblemTitle.UPDATE_ERROR)
+            raise HttpProblemError(web.HTTPBadRequest, problem)
 
         entity.metadata.modified = utils.now()
 
@@ -552,8 +552,8 @@ class KubernetesApi(object):
         try:
             dest.update(source)
         except ValueError as e:
-            reason = HttpReason(reason=str(e), code=HttpReasonCode.UPDATE_ERROR)
-            raise json_error(web.HTTPBadRequest, reason.serialize())
+            problem = HttpProblem(detail=str(e), title=HttpProblemTitle.UPDATE_ERROR)
+            raise HttpProblemError(web.HTTPBadRequest, problem)
 
         await session(request).put(entity)
         logger.info(

@@ -120,6 +120,9 @@ command-line options. The arguments and available options are:
 ``--etcd-port <etcd_port>`` (integer)
     Peer port for the etcd endpoint. Default: ``2380``.
 
+``--docs-problem-base-url <docs_problem_base_url>`` (string)
+    URL of the problem documentation. Default: ``https://rak-n-rok.readthedocs.io/projects/krake/en/latest/user/problem``.
+
 ``--docker-daemon-mtu <docker_daemon_mtu>`` (integer)
     The Docker daemon MTU. Default: ``1450``.
 

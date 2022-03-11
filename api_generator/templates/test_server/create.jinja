@@ -45,5 +45,5 @@ async def test_create_{{ operation.signature_name }}_with_existing_name(aiohttp_
     assert resp.status == 409
 
     received = await resp.json()
-    reason = HttpReason.deserialize(received)
-    assert reason.code == HttpReasonCode.RESOURCE_ALREADY_EXISTS
+    problem = HttpProblem.deserialize(received)
+    assert problem.title == HttpProblemTitle.RESOURCE_ALREADY_EXISTS

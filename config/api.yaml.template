@@ -48,6 +48,8 @@ authentication:
 #
 authorization: $authorization_mode
 
+docs:
+  problem_base_url: $docs_problem_base_url
 
 log:
   version: 1

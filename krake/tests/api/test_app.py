@@ -11,7 +11,7 @@ import pytest
 from krake.api import __version__ as version
 from krake.api.__main__ import main
 from krake.api.app import create_app
-from krake.api.helpers import session, HttpReason, HttpReasonCode
+from krake.api.helpers import session, HttpProblem, HttpProblemTitle
 from krake.api.database import revision, TransactionError
 from krake.data import Key
 from krake.data.config import AuthenticationConfiguration, TlsServerConfiguration
@@ -216,8 +216,8 @@ async def test_transaction_error(aiohttp_client, db, config, loop):
     assert resp.status == 409
 
     json = await resp.json()
-    reason = HttpReason.deserialize(json)
-    assert reason.code == HttpReasonCode.TRANSACTION_ERROR
+    problem = HttpProblem.deserialize(json)
+    assert problem.title == HttpProblemTitle.TRANSACTION_ERROR
 
 
 async def test_cors_setup(aiohttp_client, db, config, loop):

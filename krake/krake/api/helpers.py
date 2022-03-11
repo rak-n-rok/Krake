@@ -3,46 +3,92 @@ import asyncio
 import json
 import time
 
-from enum import Enum, auto
+from enum import Enum
 from functools import wraps
 from aiohttp import web
+from aiohttp.web_exceptions import HTTPException
+
 from krake.data.serializable import Serializable
 from krake.data.kubernetes import ApplicationState
-from marshmallow import ValidationError, fields, missing
+from marshmallow import ValidationError, fields, missing, post_dump
 from marshmallow.validate import Range
 
 
-class HttpReasonCode(Enum):
-    # When a database transaction failed
-    TRANSACTION_ERROR = auto()
-    # When the update field
-    UPDATE_ERROR = auto()
-    # When the authentication through keystone failed
-    INVALID_KEYSTONE_TOKEN = auto()
-    # When the authentication through keycloak failed
-    INVALID_KEYCLOAK_TOKEN = auto()
-    # When a resource already in database is requested to be created
-    RESOURCE_ALREADY_EXISTS = auto()
+class HttpProblemTitle(Enum):
+    """Store the title of an RFC 7807 problem.
 
-
-class HttpReason(Serializable):
-    """Store the reasons for failures on the HTTP layers for the API."""
-
-    code: HttpReasonCode
-    reason: str
-
-
-def json_error(exc, content):
-    """Create an aiohttp exception with JSON body.
-
-    Args:
-        exc (type): aiohttp exception class
-        content (object): JSON serializable object
-
-    Returns:
-        Instance of the exception with JSON-serialized content as body
+    The RFC 7807 Problem title is a short, human-readable summary of
+    the problem type. The name defines the title itself.
+    The value is used as part of the URI reference that identifies
+    the problem type, see :func:`.middlewares.problem_response`
+    for details.
     """
-    return exc(text=json.dumps(content), content_type="application/json")
+    # When a requested resource cannot be found in the database
+    NOT_FOUND_ERROR = "not-found-error"
+    # When a database transaction failed
+    TRANSACTION_ERROR = "transaction-error"
+    # When the update failed
+    UPDATE_ERROR = "update-error"
+    # When the authentication through keystone failed
+    INVALID_KEYSTONE_TOKEN = "invalid-keystone-token"
+    # When the authentication through keycloak failed
+    INVALID_KEYCLOAK_TOKEN = "invalid-keycloak-token"
+    # When a resource already in database is requested to be created
+    RESOURCE_ALREADY_EXISTS = "resource-already-exists"
+
+
+class HttpProblem(Serializable):
+    """Store the reasons for failures of the HTTP layers for the API.
+
+    The reason is stored as an RFC 7807 Problem. It is a way to define
+    a uniform, machine-readable details of errors in a HTTP response.
+    See https://tools.ietf.org/html/rfc7807 for details.
+
+    Attributes:
+        type (str): A URI reference that identifies the
+            problem type. It should point the Krake API users to the
+            concrete part of the Krake documentation where the problem
+            type is explained in detail. Defaults to about:blank.
+        title (HttpProblemTitle): A short, human-readable summary of
+            the problem type
+        status (int): The HTTP status code
+        detail (str): A human-readable explanation of the problem
+        instance (str): A URI reference that identifies the specific
+            occurrence of the problem
+
+    """
+    type: str = "about:blank"
+    title: HttpProblemTitle = None
+    status: int = None
+    detail: str = None
+    instance: str = None
+
+    def __post_init__(self):
+        """HACK:
+            :class:`marshmallow.Schema` allows registering hooks like ``post_dump``.
+            This is not allowed in krake :class:`Serializable`, therefore within
+            the __post_init__ method the hook is registered directly.
+        """
+        self.Schema._hooks.update({('post_dump', False): ['remove_none_values']})
+        setattr(self.Schema, "remove_none_values", self.remove_none_values)
+
+    @post_dump
+    def remove_none_values(self, data, **kwargs):
+        """Remove attributes if value equals None"""
+        return {
+            key: value for key, value in data.items()
+            if value is not None
+        }
+
+
+class HttpProblemError(Exception):
+    """Custom exception raised if failures on the HTTP layers occur"""
+    def __init__(
+        self, exc: HTTPException, problem: HttpProblem = HttpProblem(), **kwargs
+    ):
+        self.exc = exc
+        self.problem = problem
+        self.kwargs = kwargs
 
 
 def session(request):
@@ -181,7 +227,16 @@ def load(argname, cls):
 
             instance = await session(request).get(cls, **key_params)
             if instance is None:
-                raise web.HTTPNotFound()
+                problem = HttpProblem(
+                    detail=(
+                        f"{getattr(cls, 'kind', 'Entity')!r} "
+                        f"{key_params['name']!r} does not "
+                        f"exist in namespace {namespace!r}"
+                    ),
+                    title=HttpProblemTitle.NOT_FOUND_ERROR
+                )
+                raise HttpProblemError(web.HTTPNotFound, problem)
+
             kwargs[argname] = instance
             return await handler(request, *args, **kwargs)
 
@@ -222,7 +277,10 @@ def use_schema(argname, schema):
             try:
                 payload = schema.load(body)
             except ValidationError as err:
-                raise json_error(web.HTTPUnprocessableEntity, err.messages)
+                problem = HttpProblem(
+                    detail=err.messages,
+                )
+                raise HttpProblemError(web.HTTPUnprocessableEntity, problem)
 
             kwargs[argname] = payload
 

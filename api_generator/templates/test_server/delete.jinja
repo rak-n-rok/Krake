@@ -32,7 +32,7 @@ async def test_add_finalizer_in_deleted_{{ operation.signature_name }}(aiohttp_c
     )
     assert resp.status == 409
     body = await resp.json()
-    assert len(body["metadata"]["finalizers"]) == 1
+    assert body["detail"] == "Finalizers can only be removed if a deletion is in progress."
 
 
 async def test_delete_{{ operation.signature_name }}_rbac(rbac_allow, config, aiohttp_client):
