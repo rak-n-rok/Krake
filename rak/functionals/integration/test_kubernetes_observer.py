@@ -20,7 +20,7 @@ import tempfile
 import time
 import pytest
 
-from utils import (
+from functionals.utils import (
     run,
     check_resource_deleted,
     check_return_code,
@@ -28,14 +28,14 @@ from utils import (
     check_spec_replicas,
     kubectl_cmd,
 )
-from environment import (
+from functionals.environment import (
     Environment,
     MANIFEST_PATH,
     create_default_environment,
     get_default_kubeconfig_path,
     create_simple_environment,
 )
-from resource_definitions import ApplicationDefinition, ResourceKind
+from functionals.resource_definitions import ApplicationDefinition, ResourceKind
 
 KRAKE_HOMEDIR = "/home/krake"
 CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"

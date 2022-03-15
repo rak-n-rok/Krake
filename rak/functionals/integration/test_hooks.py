@@ -2,9 +2,9 @@ import os.path
 import random
 import time
 
-from utils import run, check_return_code, kubectl_cmd
-from environment import Environment
-from resource_definitions import ClusterDefinition, ApplicationDefinition
+from functionals.utils import run, check_return_code, kubectl_cmd
+from functionals.environment import Environment
+from functionals.resource_definitions import ClusterDefinition, ApplicationDefinition
 
 KRAKE_HOMEDIR = "/home/krake"
 CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"

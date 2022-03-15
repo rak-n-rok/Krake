@@ -295,16 +295,35 @@ class MetricAction(Action):
         except ValueError as err:
             raise ArgumentError(self, f"invalid weight {values[1]!r}") from err
 
-        getattr(namespace, self.dest).append(({"name": name, "weight": weight}))
+        not_namespaced = self.dest == "global_metrics"
+        namespaced = self.dest == "metrics"
+        if not (not_namespaced or namespaced):
+            msg = (
+                f"Expected the destination to be either metrics or global_metrics, "
+                f"but it was '{self.dest}'. Check with the developers, if you see this."
+            )
+            raise ValueError(msg)
+        metric_dict = {"name": name, "weight": weight, "namespaced": namespaced}
+        getattr(namespace, self.dest).append((metric_dict))
 
 
 arg_metric = argument(
     "--metric",
-    "-m",
     dest="metrics",
     action=MetricAction,
     help=(
         "Metric name and its weight that should be used for this cluster. "
+        "Can be specified multiple times"
+    ),
+)
+
+
+arg_global_metric = argument(
+    "--global-metric",
+    dest="global_metrics",
+    action=MetricAction,
+    help=(
+        "Name and weight of the global metric that should be used for this cluster. "
         "Can be specified multiple times"
     ),
 )

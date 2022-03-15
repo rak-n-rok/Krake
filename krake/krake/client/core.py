@@ -1,13 +1,17 @@
 from krake.client import Watcher, ApiClient
 from krake.data.core import (
-    GlobalMetricsProvider,
     Role,
     RoleList,
-    GlobalMetric,
-    GlobalMetricList,
     RoleBinding,
     RoleBindingList,
+    GlobalMetric,
+    GlobalMetricList,
+    GlobalMetricsProvider,
     GlobalMetricsProviderList,
+    Metric,
+    MetricsProvider,
+    MetricsProviderList,
+    MetricList,
 )
 
 
@@ -28,14 +32,16 @@ class CoreApi(ApiClient):
     """
 
     plurals = {
-        "GlobalMetric": "GlobalMetrics",
-        "GlobalMetricsProvider": "GlobalMetricsProviders",
         "Role": "Roles",
         "RoleBinding": "RoleBindings",
+        "GlobalMetric": "GlobalMetrics",
+        "GlobalMetricsProvider": "GlobalMetricsProviders",
+        "Metric": "Metrics",
+        "MetricsProvider": "MetricsProviders"
     }
 
     async def create_global_metric(self, body):
-        """Creates the specified GlobalMetric.
+        """Create the specified GlobalMetric.
 
         Args:
             body (GlobalMetric): Body of the HTTP request.
@@ -52,7 +58,7 @@ class CoreApi(ApiClient):
         return GlobalMetric.deserialize(data)
 
     async def delete_global_metric(self, name):
-        """Deletes the specified GlobalMetric.
+        """Delete the specified GlobalMetric.
 
         Args:
             name (str): name of the GlobalMetric.
@@ -71,7 +77,7 @@ class CoreApi(ApiClient):
         return GlobalMetric.deserialize(data)
 
     async def list_global_metrics(self):
-        """Lists the GlobalMetrics in the namespace.
+        """List the GlobalMetrics in the namespace.
 
         Returns:
             GlobalMetricList: Body of the HTTP response.
@@ -85,7 +91,7 @@ class CoreApi(ApiClient):
         return GlobalMetricList.deserialize(data)
 
     def watch_global_metrics(self, heartbeat=None):
-        """Generates a watcher for the GlobalMetrics in the namespace.
+        """Generate a watcher for the GlobalMetrics in the namespace.
 
         Args:
             heartbeat (int): Number of seconds after which the server sends a heartbeat
@@ -107,7 +113,7 @@ class CoreApi(ApiClient):
         return Watcher(self.client.session, url, GlobalMetric)
 
     async def read_global_metric(self, name):
-        """Reads the specified GlobalMetric.
+        """Read the specified GlobalMetric.
 
         Args:
             name (str): name of the GlobalMetric.
@@ -124,7 +130,7 @@ class CoreApi(ApiClient):
         return GlobalMetric.deserialize(data)
 
     async def update_global_metric(self, body, name):
-        """Updates the specified GlobalMetric.
+        """Update the specified GlobalMetric.
 
         Args:
             body (GlobalMetric): Body of the HTTP request.
@@ -142,7 +148,7 @@ class CoreApi(ApiClient):
         return GlobalMetric.deserialize(data)
 
     async def create_global_metrics_provider(self, body):
-        """Creates the specified GlobalMetricsProvider.
+        """Create the specified GlobalMetricsProvider.
 
         Args:
             body (GlobalMetricsProvider): Body of the HTTP request.
@@ -159,7 +165,7 @@ class CoreApi(ApiClient):
         return GlobalMetricsProvider.deserialize(data)
 
     async def delete_global_metrics_provider(self, name):
-        """Deletes the specified GlobalMetricsProvider.
+        """Delete the specified GlobalMetricsProvider.
 
         Args:
             name (str): name of the GlobalMetricsProvider.
@@ -178,7 +184,7 @@ class CoreApi(ApiClient):
         return GlobalMetricsProvider.deserialize(data)
 
     async def list_global_metrics_providers(self):
-        """Lists the GlobalMetricsProviders in the namespace.
+        """List the GlobalMetricsProviders in the namespace.
 
         Returns:
             GlobalMetricsProviderList: Body of the HTTP response.
@@ -192,7 +198,7 @@ class CoreApi(ApiClient):
         return GlobalMetricsProviderList.deserialize(data)
 
     def watch_global_metrics_providers(self, heartbeat=None):
-        """Generates a watcher for the GlobalMetricsProviders in the namespace.
+        """Generate a watcher for the GlobalMetricsProviders in the namespace.
 
         Args:
             heartbeat (int): Number of seconds after which the server sends a heartbeat
@@ -230,7 +236,7 @@ class CoreApi(ApiClient):
         return GlobalMetricsProvider.deserialize(data)
 
     async def update_global_metrics_provider(self, body, name):
-        """Updates the specified GlobalMetricsProvider.
+        """Update the specified GlobalMetricsProvider.
 
         Args:
             body (GlobalMetricsProvider): Body of the HTTP request.
@@ -247,8 +253,260 @@ class CoreApi(ApiClient):
         data = await resp.json()
         return GlobalMetricsProvider.deserialize(data)
 
+    async def create_metric(self, body, namespace):
+        """Create the specified Metric.
+
+        Args:
+            body (Metric): Body of the HTTP request.
+            namespace (str): namespace of the Metric
+
+        Returns:
+            Metric: Body of the HTTP response.
+
+        """
+        path = "/core/namespaces/{namespace}/metrics".format(namespace=namespace)
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("POST", url, json=body.serialize())
+        data = await resp.json()
+        return Metric.deserialize(data)
+
+    async def delete_metric(self, name, namespace):
+        """Delete the specified Metric.
+
+        Args:
+            name (str): name of the Metric.
+            namespace (str): namespace of the Metric
+
+        Returns:
+            Metric: Body of the HTTP response.
+
+        """
+        path = "/core/namespaces/{namespace}/metrics/{name}"\
+            .format(name=name, namespace=namespace)
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("DELETE", url)
+        if resp.status == 204:
+            return None
+        data = await resp.json()
+        return Metric.deserialize(data)
+
+    async def list_metrics(self, namespace=None):
+        """List the Metrics in the namespace.
+
+        Args:
+            namespace (str): namespace of the Metric
+
+        Returns:
+            MetricList: Body of the HTTP response.
+
+        """
+        if namespace:
+            path = "/core/namespaces/{namespace}/metrics".format(namespace=namespace)
+        else:
+            path = "/core/metrics".format()
+
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("GET", url)
+        data = await resp.json()
+        return MetricList.deserialize(data)
+
+    def watch_metrics(self, namespace=None, heartbeat=None):
+        """Generate a watcher for the Metrics in the namespace.
+
+        Args:
+            namespace (str): namespace of the Metric
+            heartbeat (int): Number of seconds after which the server sends a heartbeat
+                in form of an empty newline. Passing 0 disables the heartbeat. Default:
+                10 seconds
+
+        Returns:
+            MetricList: Body of the HTTP response.
+
+        """
+        if namespace:
+            path = "/core/namespaces/{namespace}/metrics".format(namespace=namespace)
+        else:
+            path = "/core/metrics".format()
+
+        query = {"watch": ""}
+        if heartbeat is not None:
+            query["heartbeat"] = heartbeat
+
+        url = self.client.url.with_path(path).with_query(query)
+
+        return Watcher(self.client.session, url, Metric)
+
+    async def read_metric(self, name, namespace):
+        """Read the specified Metric.
+
+        Args:
+            name (str): name of the Metric.
+            namespace (str): namespace of the Metric
+
+        Returns:
+            Metric: Body of the HTTP response.
+
+        """
+        path = "/core/namespaces/{namespace}/metrics/{name}"\
+            .format(name=name, namespace=namespace)
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("GET", url)
+        data = await resp.json()
+        return Metric.deserialize(data)
+
+    async def update_metric(self, body, name, namespace):
+        """Update the specified GlobalMetric.
+
+        Args:
+            body (GlobalMetric): Body of the HTTP request.
+            name (str): name of the Metric.
+            namespace (str): namespace of the Metric
+
+        Returns:
+            GlobalMetric: Body of the HTTP response.
+
+        """
+        path = "/core/namespaces/{namespace}/metrics/{name}"\
+            .format(name=name, namespace=namespace)
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("PUT", url, json=body.serialize())
+        data = await resp.json()
+        return Metric.deserialize(data)
+
+    async def create_metrics_provider(self, body, namespace):
+        """Create the specified MetricsProvider.
+
+        Args:
+            body (MetricsProvider): Body of the HTTP request.
+            namespace (str): Namespace of the MetricsProvider.
+
+        Returns:
+            MetricsProvider: Body of the HTTP response.
+
+        """
+        path = "/core/namespaces/{namespace}/metricsproviders/"\
+            .format(namespace=namespace)
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("POST", url, json=body.serialize())
+        data = await resp.json()
+        return MetricsProvider.deserialize(data)
+
+    async def delete_metrics_provider(self, name, namespace):
+        """Delete the specified MetricsProvider.
+
+        Args:
+            name (str): name of the MetricsProvider.
+            namespace (str): namespace of the MetricsProvider.
+
+        Returns:
+            MetricsProvider: Body of the HTTP response.
+
+        """
+        path = "/core/namespaces/{namespace}/metricsproviders/{name}"\
+            .format(name=name, namespace=namespace)
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("DELETE", url)
+        if resp.status == 204:
+            return None
+        data = await resp.json()
+        return MetricsProvider.deserialize(data)
+
+    async def list_metrics_providers(self, namespace=None):
+        """List the MetricsProviders in the namespace.
+
+        Args:
+            namespace (str): namespace of the MetricsProvider.
+
+        Returns:
+            MetricsProviderList: Body of the HTTP response.
+
+        """
+        if namespace:
+            path = "/core/namespaces/{namespace}/metricsproviders"\
+                .format(namespace=namespace)
+        else:
+            path = "/core/metricsproviders".format()
+
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("GET", url)
+        data = await resp.json()
+        return MetricsProviderList.deserialize(data)
+
+    def watch_metrics_providers(self, namespace=None, heartbeat=None):
+        """Generate a watcher for the MetricsProviders in the namespace.
+
+        Args:
+            namespace (str): namespace of the MetricsProvider.
+            heartbeat (int): Number of seconds after which the server sends a heartbeat
+                in form of an empty newline. Passing 0 disables the heartbeat. Default:
+                10 seconds
+        Returns:
+            MetricsProviderList: Body of the HTTP response.
+
+        """
+        if namespace:
+            path = "/core/namespaces/{namespace}/metricsproviders"\
+                .format(namespace=namespace)
+        else:
+            path = "/core/metricsproviders".format()
+
+        query = {"watch": ""}
+        if heartbeat is not None:
+            query["heartbeat"] = heartbeat
+
+        url = self.client.url.with_path(path).with_query(query)
+
+        return Watcher(self.client.session, url, MetricsProvider)
+
+    async def read_metrics_provider(self, name, namespace):
+        """Read the specified MetricsProvider.
+
+        Args:
+            name (str): name of the MetricsProvider.
+            namespace (str): namespace of the MetricsProvider.
+
+        Returns:
+            MetricsProvider: Body of the HTTP response.
+
+        """
+        path = "/core/namespaces/{namespace}/metricsproviders/{name}"\
+            .format(name=name, namespace=namespace)
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("GET", url)
+        data = await resp.json()
+        return MetricsProvider.deserialize(data)
+
+    async def update_metrics_provider(self, body, name, namespace):
+        """Update the specified MetricsProvider.
+
+        Args:
+            body (MetricsProvider): Body of the HTTP request.
+            name (str): name of the MetricsProvider.
+            namespace (str): namespace of the MetricsProvider.
+
+        Returns:
+            MetricsProvider: Body of the HTTP response.
+
+        """
+        path = "/core/namespaces/{namespace}/metricsproviders/{name}"\
+            .format(name=name, namespace=namespace)
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("PUT", url, json=body.serialize())
+        data = await resp.json()
+        return MetricsProvider.deserialize(data)
+
     async def create_role(self, body):
-        """Creates the specified Role.
+        """Create the specified Role.
 
         Args:
             body (Role): Body of the HTTP request.
@@ -265,7 +523,7 @@ class CoreApi(ApiClient):
         return Role.deserialize(data)
 
     async def delete_role(self, name):
-        """Deletes the specified Role.
+        """Delete the specified Role.
 
         Args:
             name (str): name of the Role.
@@ -284,7 +542,7 @@ class CoreApi(ApiClient):
         return Role.deserialize(data)
 
     async def list_roles(self):
-        """Lists the Roles in the namespace.
+        """List the Roles in the namespace.
 
         Returns:
             RoleList: Body of the HTTP response.
@@ -298,7 +556,7 @@ class CoreApi(ApiClient):
         return RoleList.deserialize(data)
 
     def watch_roles(self, heartbeat=None):
-        """Generates a watcher for the Roles in the namespace.
+        """Generate a watcher for the Roles in the namespace.
 
         Args:
             heartbeat (int): Number of seconds after which the server sends a heartbeat
@@ -320,7 +578,7 @@ class CoreApi(ApiClient):
         return Watcher(self.client.session, url, Role)
 
     async def read_role(self, name):
-        """Reads the specified Role.
+        """Read the specified Role.
 
         Args:
             name (str): name of the Role.
@@ -337,7 +595,7 @@ class CoreApi(ApiClient):
         return Role.deserialize(data)
 
     async def update_role(self, body, name):
-        """Updates the specified Role.
+        """Update the specified Role.
 
         Args:
             body (Role): Body of the HTTP request.
@@ -355,7 +613,7 @@ class CoreApi(ApiClient):
         return Role.deserialize(data)
 
     async def create_role_binding(self, body):
-        """Creates the specified RoleBinding.
+        """Create the specified RoleBinding.
 
         Args:
             body (RoleBinding): Body of the HTTP request.
@@ -372,7 +630,7 @@ class CoreApi(ApiClient):
         return RoleBinding.deserialize(data)
 
     async def delete_role_binding(self, name):
-        """Deletes the specified RoleBinding.
+        """Delete the specified RoleBinding.
 
         Args:
             name (str): name of the RoleBinding.
@@ -391,7 +649,7 @@ class CoreApi(ApiClient):
         return RoleBinding.deserialize(data)
 
     async def list_role_bindings(self):
-        """Lists the RoleBindings in the namespace.
+        """List the RoleBindings in the namespace.
 
         Returns:
             RoleBindingList: Body of the HTTP response.
@@ -405,7 +663,7 @@ class CoreApi(ApiClient):
         return RoleBindingList.deserialize(data)
 
     def watch_role_bindings(self, heartbeat=None):
-        """Generates a watcher for the RoleBindings in the namespace.
+        """Generate a watcher for the RoleBindings in the namespace.
 
         Args:
             heartbeat (int): Number of seconds after which the server sends a heartbeat
@@ -427,7 +685,7 @@ class CoreApi(ApiClient):
         return Watcher(self.client.session, url, RoleBinding)
 
     async def read_role_binding(self, name):
-        """Reads the specified RoleBinding.
+        """Read the specified RoleBinding.
 
         Args:
             name (str): name of the RoleBinding.
@@ -444,7 +702,7 @@ class CoreApi(ApiClient):
         return RoleBinding.deserialize(data)
 
     async def update_role_binding(self, body, name):
-        """Updates the specified RoleBinding.
+        """Update the specified RoleBinding.
 
         Args:
             body (RoleBinding): Body of the HTTP request.

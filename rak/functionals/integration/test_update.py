@@ -16,15 +16,15 @@ Application are present. The general workflow is as follow:
 import random
 
 import yaml
-from utils import (
+from functionals.utils import (
     run,
     check_return_code,
     check_spec_container_image,
     check_spec_replicas,
     check_http_code_in_output,
 )
-from environment import Environment, create_simple_environment
-from resource_definitions import ClusterDefinition, ResourceKind
+from functionals.environment import Environment, create_simple_environment
+from functionals.resource_definitions import ClusterDefinition, ResourceKind
 
 
 KRAKE_HOMEDIR = "/home/krake"

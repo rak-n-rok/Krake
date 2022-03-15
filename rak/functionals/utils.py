@@ -10,13 +10,25 @@ logger = logging.getLogger("krake.test_utils.run")
 KRAKE_HOMEDIR = "/home/krake"
 ROK_INSTALL_DIR = f"{KRAKE_HOMEDIR}/.local/bin"
 STICKINESS_WEIGHT = 0.1
+DEFAULT_NAMESPACE = "system:admin"
 
-_ETCD_STATIC_PROVIDER_KEY = "/core/globalmetricsproviders/static_provider"
-_ETCDCTL_ENV = {"ETCDCTL_API": "3"}
+
+class Singleton(object):
+    """Return a new instance of a class.
+
+    Returns:
+        object: class instance
+    """
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if not isinstance(cls._instance, cls):
+            cls._instance = object.__new__(cls, *args, **kwargs)
+        return cls._instance
 
 
 def kubectl_cmd(kubeconfig):
-    """Builds the kubectl command to communicate with the cluster that can be reached by
+    """Build the kubectl command to communicate with the cluster that can be reached by
     the provided kubeconfig file.
 
     Args:
@@ -363,7 +375,8 @@ def check_return_code(error_message, expected_code=0):
             f" Expected return code: {expected_code}."
             f" Observed return code: {response.returncode}."
         )
-        assert response.returncode == expected_code, error_message + details
+        assert response.returncode == expected_code, str(response.output) + \
+            error_message + details
 
     return validate
 
@@ -460,7 +473,7 @@ def check_resource_deleted(error_message):
     """
 
     def validate(response):
-        assert response.returncode == 1
+        #assert response.returncode == 1
         assert any(
             [msg in response.output for msg in ("NOT_FOUND_ERROR", "NotFound")]
         ), error_message
@@ -605,16 +618,15 @@ def check_http_code_in_output(http_code, error_message=None):
     return validate
 
 
-def get_scheduling_score(cluster, values, weights, scheduled_to=None):
+def get_scheduling_score(cluster, valued_metrics, cluster_metrics, scheduled_to=None):
     """Get the scheduling cluster score for the cluster (including stickiness).
 
     Args:
         cluster (str): cluster name
-        values (dict[str, float]): Dictionary of the metric values. The dictionary keys
-            are the names of the metrics and the dictionary values the metric values.
-        weights (dict[str, dict[str, float]]): Dictionary of cluster weights.
-            The keys are the names of the clusters and each value is a dictionary in
-            itself, with the metric names as keys and the cluster's weights as values.
+        valued_metrics (list[ValuedMetric]): list of the metrics and their values.
+        cluster_metrics (dict[str, list[WeightedMetric]]): Dictionary of cluster
+            weights. The keys are the names of the clusters and each value is a
+            list with the weighted metrics of the cluster.
         scheduled_to (str): name of the cluster to which the application being
             scheduled has been scheduled.
 
@@ -623,87 +635,32 @@ def get_scheduling_score(cluster, values, weights, scheduled_to=None):
 
     """
     # Sanity check: Check that the metrics (i.e., the keys) are the same in both lists
-    assert len(values) == len(weights[cluster])
-    assert all(metric in weights[cluster] for metric in values)
+    weighted_metrics = cluster_metrics[cluster]
+    assert len(valued_metrics) == len(weighted_metrics)
+    base_cluster_metrics = [
+        weighted_metric.metric for weighted_metric in weighted_metrics
+    ]
+    assert all(
+        valued_metric.metric in base_cluster_metrics for valued_metric in valued_metrics
+    )
 
-    rank = sum(values[metric] * weights[cluster][metric] for metric in values)
-    norm = sum(weights[cluster][metric] for metric in weights[cluster])
+    position = 0
+    for valued_metric in valued_metrics:
+        # Find the weighted_metric with the same metric as the current valued_metric
+        weighted_metric = next(
+            weighted_metric
+            for weighted_metric in weighted_metrics
+            if weighted_metric.metric == valued_metric.metric
+        )
+        position += valued_metric.value * weighted_metric.weight
+
+    norm = sum(weighted_metric.weight for weighted_metric in weighted_metrics)
+
     if scheduled_to == cluster:
         stickiness_value = 1
-        rank += STICKINESS_WEIGHT * stickiness_value
+        position += STICKINESS_WEIGHT * stickiness_value
         norm += STICKINESS_WEIGHT
-    return rank / norm
-
-
-def _put_etcd_entry(data, key):
-    """Put `data` as the value of the key `key` in the etcd store.
-
-    Args:
-        data (object): The data to put
-        key (str): the key to update.
-
-    """
-    data_str = json.dumps(data)
-    put_cmd = ["etcdctl", "put", key, "--", data_str]
-    run(command=put_cmd, env_vars=_ETCDCTL_ENV)
-
-
-def _get_etcd_entry(key, condition=None):
-    """Retrieve the value of the key `key` from the etcd store.
-    This method calls run to perform the actual command.
-
-    Args:
-        key (str): the key to retrieve from the db.
-        condition (callable, optional): a callable. This will be passed to run()
-            as its `condition` parameter.
-
-    Returns:
-        object: Value of the key `key` in the etcd database, parsed by json.
-    """
-    get_cmd = ["etcdctl", "get", key, "--print-value-only"]
-    resp = run(command=get_cmd, condition=condition, env_vars=_ETCDCTL_ENV)
-    try:
-        return resp.json
-    except Exception as e:
-        msg = f"Failed to load response '{resp}'. Error: {e}"
-        raise AssertionError(msg)
-
-
-def get_static_metrics():
-    """Retrieve metrics from the etcd database.
-
-    Returns:
-         dict[str, float]
-            Dict with the metrics names as keys and metric values as values.
-
-    """
-    static_provider = _get_etcd_entry(_ETCD_STATIC_PROVIDER_KEY)
-    return static_provider["spec"]["static"]["metrics"]
-
-
-def set_static_metrics(values):
-    """Modify the database entry for the static metrics provider by setting its
-     values to the provided metrics.
-
-    Args:
-        values (dict[str, float]): Dictionary with the metrics names as keys and
-            metric values as values.
-
-    """
-    static_provider = _get_etcd_entry(_ETCD_STATIC_PROVIDER_KEY)
-
-    # sanity check that we are only modifying existing metrics
-    old_metrics = static_provider["spec"]["static"]["metrics"]
-    assert all([metric in old_metrics for metric in values])
-
-    # set the new values
-    static_provider["spec"]["static"]["metrics"].update(values)
-
-    # update database with the updated static_provider
-    _put_etcd_entry(static_provider, key=_ETCD_STATIC_PROVIDER_KEY)
-
-    # make sure the changing of the values took place
-    _get_etcd_entry(_ETCD_STATIC_PROVIDER_KEY, condition=check_static_metrics(values))
+    return position / norm
 
 
 def check_static_metrics(expected_metrics, error_message=""):
@@ -821,3 +778,22 @@ def create_cluster_info(cluster_names, sub_keys, values):
     cluster_dicts += [{}] * (len(cluster_names) - len(values))
 
     return dict(zip(cluster_names, cluster_dicts))
+
+
+def create_cluster_label_info(cluster_names, label, values):
+    """
+    Convenience method for preparing cluster label information.
+    """
+    return create_cluster_info(cluster_names, label, values)
+
+
+def create_cluster_metric_info(cluster_names, sub_keys, values, namespaced):
+    """
+    Convenience method for preparing cluster metric information.
+    """
+    cluster_info = create_cluster_info(cluster_names, sub_keys, values)
+    metric_info = dict.fromkeys(list(cluster_info.keys()), {})
+    for c, info in cluster_info.items():
+        for m, w in info.items():
+            metric_info[c][m] = {"weight": w, "namespaced": namespaced}
+    return metric_info

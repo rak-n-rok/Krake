@@ -7,7 +7,7 @@ import tarfile
 import docker
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from utils import run, check_return_code
+from functionals.utils import run, check_return_code
 
 client = docker.from_env()
 

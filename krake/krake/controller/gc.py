@@ -47,6 +47,8 @@ from krake.data.core import (
     Role,
     GlobalMetricsProvider,
     GlobalMetric,
+    MetricsProvider,
+    Metric,
 )
 from krake.client.kubernetes import KubernetesApi
 from krake.data.kubernetes import Application, Cluster
@@ -263,7 +265,9 @@ class GarbageCollector(Controller):
         self.worker_count = worker_count
 
         self.resources = {
-            CoreApi: [Role, RoleBinding, GlobalMetric, GlobalMetricsProvider],
+            CoreApi: [Role, RoleBinding,
+                      GlobalMetric, GlobalMetricsProvider,
+                      Metric, MetricsProvider],
             KubernetesApi: [Application, Cluster],
             OpenStackApi: [Project, MagnumCluster],
         }
@@ -284,6 +288,8 @@ class GarbageCollector(Controller):
             for kind in kind_list:
                 self.apis[(kind.api, kind.kind)] = api
 
+                if kind.kind not in api_cls.plurals:
+                    continue
                 resource_plural = api_cls.plurals[kind.kind]
                 snake_plural = camel_to_snake_case(resource_plural)
 

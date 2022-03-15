@@ -59,6 +59,8 @@ rules:
   - "rolebindings"
   - "globalmetrics"
   - "globalmetricsproviders"
+  - "metrics"
+  - "metricsproviders"
   verbs:
   - list
   - get
@@ -92,6 +94,8 @@ rules:
   resources:
     - "globalmetrics"
     - "globalmetricsproviders"
+    - "metrics"
+    - "metricsproviders"
   verbs:
   - get
 
