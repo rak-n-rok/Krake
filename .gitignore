@@ -49,3 +49,10 @@ __pycache__/
 
 # Krake dot env configuration variables file
 .env
+.idea
+.vscode
+
+# Files
+venv
+krake-tmux.sh
+cluster_certs
