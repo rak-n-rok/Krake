@@ -1321,6 +1321,18 @@ def test_update_last_applied_manifest_from_spec():
     assert app.status.last_applied_manifest[0]["spec"]["revisionHistoryLimit"] == 20
     assert app.status.last_applied_manifest[0]["spec"]["progressDeadlineSeconds"] == 300
 
+    # State (1): The Deployment's manifest file specifies a value for the previously
+    # unset `revisionHistoryLimit` and `progressDeadlineSeconds`. Only the first one is
+    # observed.
+    app.status.mangled_observer_schema[0]["spec"]["revisionHistoryLimit"] = None
+    app.spec.manifest[0]["spec"]["revisionHistoryLimit"] = 20
+    app.spec.manifest[0]["spec"]["progressDeadlineSeconds"] = 300
+
+    # Both values should be initialized
+    update_last_applied_manifest_from_spec(app)
+    assert app.status.last_applied_manifest[0]["spec"]["revisionHistoryLimit"] == 20
+    assert app.status.last_applied_manifest[0]["spec"]["progressDeadlineSeconds"] == 300
+
     # State (2): The Deployment's manifest file specifies a new value for previously
     # set `revisionHistoryLimit` and `progressDeadlineSeconds`.
     app.spec.manifest[0]["spec"]["revisionHistoryLimit"] = 40
@@ -1340,6 +1352,65 @@ def test_update_last_applied_manifest_from_spec():
     update_last_applied_manifest_from_spec(app)
     assert app.status.last_applied_manifest[0]["spec"]["revisionHistoryLimit"] == 40
     assert "progressDeadlineSeconds" not in app.status.last_applied_manifest[0]["spec"]
+
+
+def test_update_last_applied_manifest_from_spec_multiple_types():
+    """Test the ``update_last_applied_manifest_from_spec`` function.
+
+    An application containing a Deployment is created. The default observer schema is
+    used. Multiple types are tested for the ``last_applied_manifest``.
+
+    State (0):
+        `last_applied_manifest` is empty. It should be initialized to spec.manifest
+
+    State (1):
+        The manifest is extended with a list in list structure.
+
+    State (2):
+        The manifest is extended with a dict in list structure.
+
+    State (3):
+        The manifest is extended with a list in dict structure.
+
+    State (4):
+        The manifest is extended with a dict in dict structure.
+    """
+
+    app = ApplicationFactory(spec__manifest=deepcopy([deployment_manifest]))
+
+    # State (0): last_applied_manifest` is empty. It should be initialized to
+    # spec.manifest
+    generate_default_observer_schema(app)
+    update_last_applied_manifest_from_spec(app)
+    assert app.status.last_applied_manifest == app.spec.manifest
+
+    # State (1): The manifest is extended with a list in list structure.
+    app.spec.manifest[0]["spec"]["containers"] = [["List in List"]]
+
+    # Both values should be initialized
+    update_last_applied_manifest_from_spec(app)
+    assert app.status.last_applied_manifest[0]["spec"]["containers"][0][0] == "List in List"
+
+    # State (2): The manifest is extended with a dict in list structure.
+    app.spec.manifest[0]["spec"]["containers"] = [{"dict": "Dict in List"}]
+
+    # Both values should be initialized
+    update_last_applied_manifest_from_spec(app)
+    assert app.status.last_applied_manifest[0]["spec"]["containers"][0]["dict"] == "Dict in List"
+
+    # State (3): The manifest is extended with a list in dict structure.
+    app.spec.manifest[0]["spec"]["containers"] = {"dict": ["List in Dict"]}
+
+    # Both values should be initialized
+    update_last_applied_manifest_from_spec(app)
+    assert app.status.last_applied_manifest[0]["spec"]["containers"]["dict"][0] == "List in Dict"
+
+    # State (4): The manifest is extended with a dict in dict structure.
+    app.spec.manifest[0]["spec"]["containers"] = {"dict": {"dict": "Dict in Dict"}}
+
+    # Both values should be initialized
+    update_last_applied_manifest_from_spec(app)
+    assert app.status.last_applied_manifest[0]["spec"]["containers"]["dict"]["dict"] == "Dict in Dict"
 
 
 async def test_update_last_applied_manifest_from_resp(loop):
