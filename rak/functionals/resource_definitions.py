@@ -133,6 +133,9 @@ class ResourceDefinition(ABC):
     def creation_command(self, wait):
         """Get the command for creating the resource.
 
+        Args:
+            wait (int): time to wait for the resource creation
+
         Returns:
             list[str]: the command to create the resource, as a list of its parts.
         """
@@ -233,6 +236,9 @@ class ResourceDefinition(ABC):
 
         Args:
             **kwargs: keyword arguments matching the arguments of update_command().
+
+        Raises:
+            AssertionError: if some attributes don't match
         """
         for attr in kwargs:
             # we do not allow updating name and kind attributes
@@ -268,6 +274,8 @@ class ResourceDefinition(ABC):
                 ResourceDefinition as keys and their new values as values.
                 A value of None signalizes that no update should be performed.
 
+        Raises:
+            AssertionError: if the update is empty
         """
         # For each attribute in 'attributes', set the corresponding attribute of this
         # ResourceDefinition object.
@@ -503,6 +511,8 @@ class ApplicationDefinition(ResourceDefinition):
         Returns:
             str: The migration cli option.
 
+        Raises:
+            RuntimeError: if migration has an invalid state
         """
         if migration is False:
             migration_flag = "--disable-migration"
@@ -724,6 +734,10 @@ class ClusterDefinition(ResourceDefinition):
 
         Args:
             metrics (list(WeightedMetric)): metrics to validate
+
+        Raises:
+            ValueError: if the metrics are a list or the metrics and clusters
+                namespace don't match
         """
         if metrics is None:
             raise ValueError("Expected metrics to be a list. Was None.")
@@ -826,6 +840,9 @@ class ClusterDefinition(ResourceDefinition):
 
         Returns:
              list[str]: the command to update the application, as a list of its parts.
+
+        Raises:
+            AssertionError: if the labels or metrics are not present
         """
         if not (labels or metrics):
             msg = (

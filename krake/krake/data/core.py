@@ -88,7 +88,6 @@ def validate_key(key):
 
     Raises:
         ValidationError: if the given key is not conform to the regular expression.
-
     """
     key_regex, _ = _get_labels_regex()
     if not key_regex.fullmatch(key):
@@ -105,7 +104,6 @@ def validate_value(value):
 
     Raises:
         ValidationError: if the given value is not conform to the regular expression.
-
     """
     _, value_regex = _get_labels_regex()
     if not value_regex.fullmatch(value):
@@ -148,7 +146,6 @@ def _validate_labels(labels):
                         {'True': 'expected string or bytes-like object'},
                         {'True': 'expected string or bytes-like object'},
                     ]
-
     """
     errors = []
     for key, value in labels.items():
@@ -173,10 +170,10 @@ _resource_name_regex = None
 def _get_resource_name_regex():
     """Build or return the regular expressions that are used to validate
     the name of the Krake resources.
+
     Returns:
         (re.Pattern): the compiled regular expressions, to validate
         the resource name.
-
     """
     global _resource_name_regex, _resource_name_pattern
 
@@ -210,7 +207,6 @@ def _validate_resource_name(name):
     Raises:
         ValidationError: if any resource name does not match their respective
             regular expression.
-
     """
     resource_name_regex = _get_resource_name_regex()
     if not resource_name_regex.fullmatch(name):
@@ -227,7 +223,6 @@ def _validate_resource_namespace(namespace):
     Raises:
         ValidationError: if any resource namespace does not match their respective
             regular expression.
-
     """
     resource_namespace_regex = _get_resource_name_regex()
     if not resource_namespace_regex.fullmatch(namespace):
@@ -368,7 +363,6 @@ def resource_ref(resource):
 
     Returns:
         ResourceRef: Corresponding reference to the API object
-
     """
     return ResourceRef(
         api=resource.api,

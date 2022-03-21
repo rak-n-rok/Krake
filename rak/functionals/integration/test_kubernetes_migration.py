@@ -663,7 +663,6 @@ def test_kubernetes_metrics_migration(minikube_clusters):
         )
 
 
-@pytest.mark.skip()
 def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
     """Check that an application scheduled on a cluster does not migrate
     as soon as the metrics change but rather only every RESCHEDULING_INTERVAL

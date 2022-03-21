@@ -113,7 +113,7 @@ def _get_base_resource(session, base_url, kind, name, config=None, namespace=Non
     request_url = _get_request_url(
         base_url, config=config, namespace=namespace, url_ext=name
     )
-    resp = session.get(request_url, raise_for_status=False)
+    resp = session.get(request_url)
     return resp.json()
 
 

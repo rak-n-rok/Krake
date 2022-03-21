@@ -79,7 +79,6 @@ def orderable_by_score(cls):
 
     Returns:
         type: Class with injected :class:`RankMixin` base class
-
     """
     if RankMixin not in cls.__mro__:
         cls.__bases__ = (RankMixin,) + cls.__bases__
@@ -125,7 +124,6 @@ class Scheduler(Controller):
             before it reacts to a state change.
         loop (asyncio.AbstractEventLoop, optional): Event loop that should be
             used.
-
     """
 
     def __init__(
@@ -256,7 +254,6 @@ class Handler(object):
 
         Returns:
             Reason: reason generated from the provided error.
-
         """
         message = None
         if isinstance(error, MetricsProviderError):
@@ -295,6 +292,9 @@ class Handler(object):
                 should be one element in this argument: the reason for the metric
                 failing, or None if it did not fail.
 
+        Raises:
+            AssertionError: if length of metrics and reasons don't match up
+            ValueError: if the resource kind is not supported
         """
         assert len(metrics) == len(reasons)
 
@@ -341,10 +341,12 @@ class Handler(object):
             metrics (list[krake.data.core.MetricRef]): References to metrics
                 that should be fetched.
 
+        Raises:
+            AssertionError: if metrics are not set or stopped is set
+
         Yields:
             list[krake.controller.scheduler.metrics.QueryResult]: List of fetched
                 metrics with their value and weight.
-
         """
         assert metrics, "Got empty list of metric references"
 
