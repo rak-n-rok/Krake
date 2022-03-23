@@ -11,10 +11,9 @@ Currently supported infrastructure bundles:
 
 ## Prerequisites
 
- - [docker](https://www.docker.com/)
- - [docker-compose](https://docs.docker.com/compose/)
- - [Jinja2](https://pypi.org/project/Jinja2/) (optional)
-
+- [docker](https://www.docker.com/)
+- [docker-compose](https://docs.docker.com/compose/)
+- [Jinja2](https://pypi.org/project/Jinja2/) (optional)
 
 ## Configuration
 
@@ -36,9 +35,10 @@ for defined docker infrastructure bundles.
   - It can either be crafted by hand, using the `docker/docker.yaml.template` as a base
     example, or can be generated using the `krake_generate_config` script,
     which is used to generate all Krake configuration files.
-      - The minimal recommended configuration is as follow:
+    - The minimal recommended configuration is as follow:
+  
       ```bash
-      $ krake_generate_config --dst docker docker/docker.yaml.template --api-host krake-api --etcd-host krake-db
+      krake_generate_config --dst docker docker/docker.yaml.template --api-host krake-api --etcd-host krake-db
       ```
 
   - The `docker/generate` script also accepts using an alternative configuration file by
@@ -46,10 +46,10 @@ for defined docker infrastructure bundles.
 
 ```bash
 # Install Jinja2
-$ pip3 install Jinja2
+pip3 install Jinja2
 
 # Configure corresponding docker bundle
-$ docker/generate --config docker.yaml [docker/krake] [docker/prometheus]
+docker/generate --config docker.yaml [docker/krake] [docker/prometheus]
 ```
 
 ## Install
@@ -63,24 +63,28 @@ Krake docker infrastructure bundle running Krake Api, Krake Controllers and Krak
 - The configuration files for all Krake components need to be generated, see krake/README.
 
   - The minimal recommended configuration is as follows:
+  
   ```bash
-  $ mkdir /etc/krake
-  $ krake_generate_config --dst /etc/krake config/*.template rok.yaml.template --api-host krake-api --etcd-host --allow-anonymous --static-authentication-enabled krake-db
+  mkdir /etc/krake
+  krake_generate_config --dst /etc/krake config/*.template rok.yaml.template \
+    --api-host krake-api --etcd-host --allow-anonymous \
+    --static-authentication-enabled krake-db
   ```
 
 #### Build Krake image
+
 ```bash
 # Get the latest version of Krake
-$ git clone https://gitlab.com/rak-n-rok/krake
-$ cd krake
+git clone https://gitlab.com/rak-n-rok/krake
+cd krake
 # Build and tag the Krake image
-$ docker build --tag krake:latest --file docker/krake/Dockerfile .
+docker build --tag krake:latest --file docker/krake/Dockerfile .
 ```
 
 #### Run Krake infrastructure
 
 ```bash
-$ docker-compose --file krake/docker-compose.yaml up --detach
+docker-compose --file krake/docker-compose.yaml up --detach
 ```
 
 ### Prometheus
@@ -98,7 +102,7 @@ Random heat demand metric value is regenerated (each 10s) from interval :
 #### Run Prometheus infrastructure
 
 ```bash
-$ docker-compose --file prometheus/docker-compose.yaml up --detach
+docker-compose --file prometheus/docker-compose.yaml up --detach
 ```
 
 ### Krake + Prometheus infrastructure
@@ -106,13 +110,15 @@ $ docker-compose --file prometheus/docker-compose.yaml up --detach
 Multiple infrastructure bundles can be executed in one docker network
 
 ```bash
-$ docker-compose --file krake/docker-compose.yaml --file prometheus/docker-compose.yaml up --detach
+docker-compose --file krake/docker-compose.yaml \
+  --file prometheus/docker-compose.yaml up \
+  --detach
 ```
 
 ## Manage infrastructure containers
 
 ```bash
 # Each container can be managed by standard docker-compose commands e.g.:
-$ docker-compose --file krake/docker-compose.yaml stop krake-api
-$ docker-compose --file krake/docker-compose.yaml restart krake-api
+docker-compose --file krake/docker-compose.yaml stop krake-api
+docker-compose --file krake/docker-compose.yaml restart krake-api
 ```

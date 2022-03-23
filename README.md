@@ -19,7 +19,6 @@ Krake can be leveraged for a wide range of application scenarios such as
 central management of distributed compute capacities as well as application
 management in Edge Cloud infrastructures.
 
-
 ## Getting Started
 
 In order to get started and play with Krake, you'll need to deploy Krake plus
@@ -31,7 +30,6 @@ This section describes a quickstart for developers to get started with a Krake
 development setup. Advanced topics are covered in the
 [Developer Documentation][dev-docs] and the [Admin Documentation][admin-docs].
 
-
 ### Requirements
 
 #### Krake deployment
@@ -40,14 +38,12 @@ development setup. Advanced topics are covered in the
 - [Python][python] >= 3.6
 - [Setup at least one Minikube VM][minikube] or [KinD instance][kind] alternatively
 
-#### Testing
+#### Test applications
 
-- Zookeeper, Kafka and KSQL, for instance with the
-  [Confluent Platform][confluent_packages]. The following commands need to be available:
-    * `zookeeper-server-start`;
-    * `kafka-server-start`;
-    * `ksql-server-start`.
-
+- Zookeeper, Kafka and KSQL, for instance with the [Confluent Platform][confluent_packages]. The following commands need to be available:
+  - `zookeeper-server-start`;
+  - `kafka-server-start`;
+  - `ksql-server-start`.
 
 Optional requirement:
 
@@ -55,37 +51,36 @@ Optional requirement:
 - [Prometheus][prometheus], also available in the official repository of the main
   distributions.
 
-
 ### Installation
 
 As Krake is not yet on the Python Package Index (PyPI), the repository first
 has to be cloned.
 
 ```bash
-$ git clone https://gitlab.com/rak-n-rok/krake.git
-$ cd krake
+git clone https://gitlab.com/rak-n-rok/krake.git
+cd krake
 ```
 
 All dependencies can be installed via the corresponding `setup.py` scripts,
 either with or without development dependencies. Installing them into a
 [Python virtualenv][virtualenv] is recommended.
 
-
 ```bash
 # Install "krake" and "rok" without development dependencies
-$ pip install --editable rok/
-$ pip install --editable krake/
+pip install --editable rok/
+pip install --editable krake/
 ```
 
 ```bash
 # Install "krake" and "rok" with development dependencies
-$ pip install --editable "rok/[dev]"
-$ pip install --editable "krake/[dev]"
+pip install --editable "rok/[dev]"
+pip install --editable "krake/[dev]"
 ```
 
 ### Running
 
 #### Configuration
+
 First, the configuration files need to be generated with a script. They can
 then be modified at will.
 
@@ -109,6 +104,7 @@ information, take a look at the "Security principles" chapter of the
 [Admin Documentation][admin-docs].
 
 #### Bootstrapping of the database
+
 The database can be bootstrapped, by adding resources in the database before
 starting Krake:
 
@@ -121,6 +117,7 @@ krake_bootstrap_db support/prometheus_metrics.yaml support/static_metrics.yaml
 ```
 
 #### Starting all components
+
 All services can be run as Python modules with the `-m` option of the Python
 interpreter:
 
@@ -144,7 +141,6 @@ python -m krake.controller.scheduler
 python -m krake.controller.kubernetes
 ```
 
-
 ### Basic Usage
 
 This provides a simple demonstration of Krake's functionalities. Please refer
@@ -159,12 +155,12 @@ Create Minikube instance and download the kubeconfig file, as well as the certif
 necessary to connect to your Minikube instance.
 
 ```bash
-$ MINIKUBE_IP="" # Fill in with the Minikube IP address
+MINIKUBE_IP="" # Fill in with the Minikube IP address
 
-$ mkdir -p cluster_certs/certs cluster_certs/config
+mkdir -p cluster_certs/certs cluster_certs/config
 
-$ scp ubuntu@$MINIKUBE_IP:~/.kubectl/config cluster_certs/config/
-$ scp ubuntu@$MINIKUBE_IP:~/.minikube/\{ca.crt,client.crt,client.key\} cluster_certs/certs
+scp ubuntu@$MINIKUBE_IP:~/.kubectl/config cluster_certs/config/
+scp ubuntu@$MINIKUBE_IP:~/.minikube/\{ca.crt,client.crt,client.key\} cluster_certs/certs
 
 # Adjust paths to certificates
 $ sed -i "/certificate-authority/c\    certificate-authority: `pwd`/cluster_certs/certs/ca.crt" cluster_certs/config
@@ -178,13 +174,16 @@ $ sed -i "/client-key/c\    client-key: `pwd`/cluster_certs/certs/client.key" cl
 Create KinD instance and save the kubeconfig file in `cluster_certs` directory
 
 Prerequisites
+
 - [Docker][docker]
 - [KinD][kind]
 
 ```bash
-$ mkdir cluster_certs
-$ CLUSTER_NAME=""  # The name of your k8s cluster
-$ kind create cluster --name $CLUSTER_NAME --kubeconfig cluster_certs/$CLUSTER_NAME  # Start single node k8s cluster
+mkdir cluster_certs
+# The name of your k8s cluster
+CLUSTER_NAME=""
+# Start single node k8s cluster
+kind create cluster --name $CLUSTER_NAME --kubeconfig cluster_certs/$CLUSTER_NAME  
 ```
 
 Now we register the Minikube (or KinD) instance as a Krake backend and use Krake to
@@ -192,13 +191,13 @@ deploy an `echoserver` application.
 
 ```bash
 # Register your Minikube instance
-$ rok kube cluster create cluster_certs/config
+rok kube cluster create cluster_certs/config
 
 # Run an application on Krake
-$ rok kube app create -f rak/functionals/echo-demo.yaml echo-demo
+rok kube app create -f rak/functionals/echo-demo.yaml echo-demo
 
 # Check the status of the application
-$ rok kube app get echo-demo
+rok kube app get echo-demo
 +-----------+-------------------------------+
 | reason    | None                          |
 | name      | echo-demo                     |
@@ -240,18 +239,16 @@ Request Body:
 
 
 # Delete the application
-$ rok kube app delete echo-demo
+rok kube app delete echo-demo
 
 # Delete the cluster
-$ rok kube cluster delete minikube
+rok kube cluster delete minikube
 ```
-
 
 ### Testing
 
 Tests are placed in the `tests/` directory inside the Python packages and can
 be run via `pytest`.
-
 
 ```bash
 # Run tests of the "krake" package
@@ -261,11 +258,9 @@ pytest krake/tests
 pytest rok/tests
 ```
 
-
 ## Documentation
 
 The project's documentation is hosted on [Read the Docs][rtfd].
-
 
 ## Get in touch!
 
@@ -275,13 +270,11 @@ us, find us on our [Krake Matrix room][krake-matrix].
 If you wish to contribute, you can also check the
 [Contributing](CONTRIBUTING.md) guide.
 
-
 ## Project Background
 
 The Rak'n'Rok project has initially been developed at
 [Cloud&Heat](https://www.cloudandheat.com/). The development of Krake was
 transformed to an open source project in September 2019.
-
 
 <!-- References -->
 
