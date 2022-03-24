@@ -11,18 +11,24 @@ from krake.data.core import WatchEventType, WatchEvent, resource_ref
 from krake.data.core import (
     GlobalMetric,
     GlobalMetricsProvider,
-    RoleList,
+    Metric,
+    MetricsProvider,
     GlobalMetricList,
+    GlobalMetricsProviderList,
+    MetricsProviderList,
+    MetricList,
+    RoleList,
     RoleBinding,
     RoleBindingList,
     Role,
-    GlobalMetricsProviderList,
 )
 
 from tests.factories.core import (
     GlobalMetricFactory,
+    MetricFactory,
     MetricSpecFactory,
     GlobalMetricsProviderFactory,
+    MetricsProviderFactory,
     MetricsProviderSpecFactory,
     RoleBindingFactory,
     RoleFactory,
@@ -675,6 +681,708 @@ async def test_update_global_metrics_provider_with_changes(aiohttp_client, confi
     )
     assert resp.status == 200
     received = GlobalMetricsProvider.deserialize(await resp.json())
+    assert received.spec == data.spec
+
+
+async def test_create_metric(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+    data = MetricFactory()
+
+    resp = await client.post(f"/core/namespaces/{data.metadata.namespace}/metrics",
+                             json=data.serialize())
+    assert resp.status == 200
+    received = Metric.deserialize(await resp.json())
+
+    assert received.metadata.created
+    assert received.metadata.modified
+    assert received.metadata.namespace == 'testing'
+    assert received.metadata.uid
+
+    stored = await db.get(Metric,
+                          name=data.metadata.name,
+                          namespace=data.metadata.namespace)
+    assert stored == received
+
+
+async def test_create_metric_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.post(f"/core/namespaces/testing/metrics")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "metrics", "create"):
+        resp = await client.post(f"/core/namespaces/testing/metrics")
+        assert resp.status == 415
+
+
+async def test_create_metric_with_existing_name(aiohttp_client, config, db):
+    existing = MetricFactory(metadata__name="existing")
+    await db.put(existing)
+
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.post(f"/core/namespaces/{existing.metadata.namespace}/metrics",
+                             json=existing.serialize())
+    assert resp.status == 409
+
+    received = await resp.json()
+    problem = HttpProblem.deserialize(received)
+    assert problem.title == HttpProblemTitle.RESOURCE_ALREADY_EXISTS
+
+
+async def test_delete_metric(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = MetricFactory()
+    await db.put(data)
+
+    resp = await client.delete(f"/core/namespaces/{data.metadata.namespace}/metrics/{data.metadata.name}")
+    assert resp.status == 200
+    received = Metric.deserialize(await resp.json())
+    assert resource_ref(received) == resource_ref(data)
+    assert received.metadata.deleted is not None
+
+    deleted = await db.get(Metric,
+                           name=data.metadata.name,
+                           namespace=data.metadata.namespace)
+    assert deleted.metadata.deleted is not None
+    assert "cascade_deletion" in deleted.metadata.finalizers
+
+
+async def test_add_finalizer_in_deleted_metric(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = MetricFactory(
+        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+    )
+    await db.put(data)
+
+    data.metadata.finalizers = ["a-different-finalizer"]
+    resp = await client.put(
+        f"/core/namespaces/{data.metadata.namespace}/metrics/{data.metadata.name}",
+        json=data.serialize()
+    )
+    assert resp.status == 409
+    body = await resp.json()
+    assert body["detail"] == "Finalizers can only be removed" \
+                             " if a deletion is in progress."
+
+
+async def test_delete_metric_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.delete(f"/core/namespaces/testing/metrics/my-resource")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "metrics", "delete"):
+        resp = await client.delete(f"/core/namespaces/testing/metrics/my-resource")
+        assert resp.status == 404
+
+
+async def test_delete_metric_already_in_deletion(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    in_deletion = MetricFactory(metadata__deleted=fake.date_time())
+    await db.put(in_deletion)
+
+    resp = await client.delete(f"/core/namespaces/{in_deletion.metadata.namespace}/metrics/{in_deletion.metadata.name}")
+    assert resp.status == 200
+
+
+async def test_list_metrics(aiohttp_client, config, db):
+    resources = [
+        MetricFactory(),
+        MetricFactory(),
+        MetricFactory(),
+        MetricFactory(),
+        MetricFactory(),
+        MetricFactory(),
+    ]
+    for elt in resources:
+        await db.put(elt)
+
+    client = await aiohttp_client(create_app(config=config))
+    resp = await client.get(f"/core/namespaces/{resources[0].metadata.namespace}/metrics")
+    assert resp.status == 200
+
+    body = await resp.json()
+    received = MetricList.deserialize(body)
+
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(resources, key=key)
+
+
+async def test_list_metrics_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
+
+    resp = await client.get(f"/core/namespaces/testing/metrics")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "metrics", "list"):
+        resp = await client.get(f"/core/namespaces/testing/metrics")
+        assert resp.status == 200
+
+
+async def test_watch_metrics(aiohttp_client, config, db, loop):
+    client = await aiohttp_client(create_app(config=config))
+    resources = [MetricFactory(), MetricFactory()]
+
+    async def watch(created):
+        resp = await client.get(f"/core/namespaces/testing/metrics?watch&heartbeat=0")
+        assert resp.status == 200
+        created.set_result(None)
+
+        for i in count():
+            line = await resp.content.readline()
+            assert line, "Unexpected EOF"
+
+            event = WatchEvent.deserialize(json.loads(line.decode()))
+            data = Metric.deserialize(event.object)
+
+            if i == 0:
+                assert event.type == WatchEventType.ADDED
+                assert data.metadata.name == resources[0].metadata.name
+                assert data.spec == resources[0].spec
+            elif i == 1:
+                assert event.type == WatchEventType.ADDED
+                assert data.metadata.name == resources[1].metadata.name
+                assert data.spec == resources[1].spec
+            elif i == 2:
+                assert event.type == WatchEventType.MODIFIED
+                assert data.metadata.name == resources[0].metadata.name
+                assert data.spec == resources[0].spec
+                return
+            elif i == 3:
+                assert False
+
+    async def modify(created):
+        # Wait for watcher to be established
+        await created
+
+        # Create the Metrics
+        for data in resources:
+            resp = await client.post(f"/core/namespaces/{resources[0].metadata.namespace}/metrics",
+                                     json=data.serialize())
+            assert resp.status == 200
+
+        resp = await client.delete(f"/core/namespaces/{resources[0].metadata.namespace}/metrics/{resources[0].metadata.name}")
+        assert resp.status == 200
+
+        received = Metric.deserialize(await resp.json())
+        assert resource_ref(received) == resource_ref(resources[0])
+        assert received.metadata.deleted is not None
+
+    created = loop.create_future()
+    watching = loop.create_task(watch(created))
+    modifying = loop.create_task(modify(created))
+
+    await asyncio.wait_for(asyncio.gather(modifying, watching), timeout=3)
+
+
+async def test_read_metric(aiohttp_client, config, db):
+    data = MetricFactory()
+    await db.put(data)
+
+    client = await aiohttp_client(create_app(config=config))
+    resp = await client.get(
+        f"/core/namespaces/{data.metadata.namespace}/metrics/{data.metadata.name}"
+    )
+    assert resp.status == 200
+    received = Metric.deserialize(await resp.json())
+    assert received == data
+
+
+async def test_read_metric_rbac(rbac_allow, config, aiohttp_client, db):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
+
+    resp = await client.get(f"/core/namespaces/testing/metrics/my-resource")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "metrics", "get"):
+        resp = await client.get(f"/core/namespaces/testing/metrics/my-resource")
+        assert resp.status == 404
+
+
+async def test_update_metric(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = MetricFactory()
+    await db.put(data)
+    data.spec = MetricSpecFactory(min=-10, max=10)
+
+    resp = await client.put(
+        f"/core/namespaces/{data.metadata.namespace}/metrics/{data.metadata.name}",
+        json=data.serialize()
+    )
+    assert resp.status == 200
+    received = Metric.deserialize(await resp.json())
+
+    assert received.api == "core"
+    assert received.kind == "Metric"
+    assert data.metadata.modified < received.metadata.modified
+    assert received.spec == data.spec
+
+    stored = await db.get(
+        Metric, name=data.metadata.name, namespace=data.metadata.namespace
+    )
+    assert stored == received
+
+
+async def test_update_metric_to_delete(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = MetricFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__finalizers=["cascade_deletion"],
+    )
+    await db.put(data)
+
+    # Delete the Metric
+    data.metadata.finalizers = []
+    resp = await client.put(
+        f"/core/namespaces/{data.metadata.namespace}/metrics/{data.metadata.name}",
+        json=data.serialize()
+    )
+    assert resp.status == 200
+    received = Metric.deserialize(await resp.json())
+    assert resource_ref(received) == resource_ref(data)
+
+    # The Metric should be deleted from the database
+    stored = await db.get(
+        Metric, name=data.metadata.name, namespace=data.metadata.namespace
+    )
+    assert stored is None
+
+
+async def test_update_metric_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.put(f"/core/namespaces/testing/metrics/my-resource")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "metrics", "update"):
+        resp = await client.put(f"/core/namespaces/testing/metrics/my-resource")
+        assert resp.status == 415
+
+
+async def test_update_metric_no_changes(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = MetricFactory()
+    await db.put(data)
+
+    resp = await client.put(
+        f"/core/namespaces/{data.metadata.namespace}/metrics/{data.metadata.name}",
+        json=data.serialize()
+    )
+    assert resp.status == 400
+
+
+async def test_update_metric_immutable_field(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = MetricFactory()
+    await db.put(data)
+    data.metadata.namespace = "override"
+
+    resp = await client.put(
+        f"/core/namespaces/testing/metrics/{data.metadata.name}",
+        json=data.serialize()
+    )
+    assert resp.status == 400
+
+    received = await resp.json()
+    problem = HttpProblem.deserialize(received)
+    assert problem.title == HttpProblemTitle.UPDATE_ERROR
+    assert problem.detail == "Trying to update an immutable field: namespace"
+
+
+async def test_create_metrics_provider(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = MetricsProviderFactory()
+
+    resp = await client.post(
+        f"/core/namespaces/{data.metadata.namespace}/metricsproviders",
+        json=data.serialize()
+    )
+    assert resp.status == 200
+    received = MetricsProvider.deserialize(await resp.json())
+
+    assert received.metadata.created
+    assert received.metadata.modified
+    assert received.metadata.namespace
+    assert received.metadata.uid
+    assert received.spec == data.spec
+
+    stored = await db.get(
+        MetricsProvider, name=data.metadata.name, namespace=data.metadata.namespace
+    )
+    assert stored == received
+
+
+async def test_create_metrics_provider_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.post(
+        "/core/namespaces/testing/metricsproviders"
+    )
+    assert resp.status == 403
+
+    async with rbac_allow("core", "metricsproviders", "create"):
+        resp = await client.post(
+            "/core/namespaces/testing/metricsproviders"
+        )
+        assert resp.status == 415
+
+
+async def test_create_metrics_provider_with_existing_name(
+    aiohttp_client, config, db
+):
+    existing = MetricsProviderFactory(metadata__name="existing")
+    await db.put(existing)
+
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.post(
+        f"/core/namespaces/{existing.metadata.namespace}/metricsproviders",
+        json=existing.serialize()
+    )
+    assert resp.status == 409
+
+    received = await resp.json()
+    problem = HttpProblem.deserialize(received)
+    assert problem.title == HttpProblemTitle.RESOURCE_ALREADY_EXISTS
+
+
+async def test_delete_metrics_provider(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = MetricsProviderFactory()
+    await db.put(data)
+
+    resp = await client.delete(
+        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/{data.metadata.name}"
+    )
+    assert resp.status == 200
+    received = MetricsProvider.deserialize(await resp.json())
+    assert resource_ref(received) == resource_ref(data)
+    assert received.metadata.deleted is not None
+
+    deleted = await db.get(
+        MetricsProvider, name=data.metadata.name, namespace=data.metadata.namespace
+    )
+    assert deleted.metadata.deleted is not None
+    assert "cascade_deletion" in deleted.metadata.finalizers
+
+
+async def test_add_finalizer_in_deleted_metrics_provider(
+    aiohttp_client, config, db
+):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = MetricsProviderFactory(
+        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+    )
+    await db.put(data)
+
+    data.metadata.finalizers = ["a-different-finalizer"]
+    resp = await client.put(
+        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/{data.metadata.name}",
+        json=data.serialize()
+    )
+    assert resp.status == 409
+    body = await resp.json()
+    assert body["detail"] == "Finalizers can only be removed" \
+                             " if a deletion is in progress."
+
+
+async def test_delete_metrics_provider_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.delete(
+        "/core/namespaces/testing/metricsproviders/my-resource"
+    )
+    assert resp.status == 403
+
+    async with rbac_allow("core", "metricsproviders", "delete"):
+        resp = await client.delete(
+            "/core/namespaces/testing/metricsproviders/my-resource"
+        )
+        assert resp.status == 404
+
+
+async def test_delete_metrics_provider_already_in_deletion(
+    aiohttp_client, config, db
+):
+    client = await aiohttp_client(create_app(config=config))
+
+    in_deletion = MetricsProviderFactory(metadata__deleted=fake.date_time())
+    await db.put(in_deletion)
+
+    resp = await client.delete(
+        f"/core/namespaces/{in_deletion.metadata.namespace}/metricsproviders/{in_deletion.metadata.name}"
+    )
+    assert resp.status == 200
+
+
+async def test_list_metrics_providers(aiohttp_client, config, db):
+    resources = [
+        MetricsProviderFactory(),
+        MetricsProviderFactory(),
+        MetricsProviderFactory(),
+        MetricsProviderFactory(),
+        MetricsProviderFactory(),
+        MetricsProviderFactory(),
+    ]
+    for elt in resources:
+        await db.put(elt)
+
+    client = await aiohttp_client(create_app(config=config))
+    resp = await client.get(f"/core/namespaces/{resources[0].metadata.namespace}/metricsproviders")
+    assert resp.status == 200
+
+    body = await resp.json()
+    received = MetricsProviderList.deserialize(body)
+
+    key = attrgetter("metadata.name")
+    assert sorted(received.items, key=key) == sorted(resources, key=key)
+
+
+async def test_list_metrics_providers_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
+
+    resp = await client.get("/core/namespaces/testing/metricsproviders")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "metricsproviders", "list"):
+        resp = await client.get("/core/namespaces/testing/metricsproviders")
+        assert resp.status == 200
+
+
+async def test_watch_metrics_providers(aiohttp_client, config, db, loop):
+    client = await aiohttp_client(create_app(config=config))
+    resources = [MetricsProviderFactory(), MetricsProviderFactory()]
+
+    async def watch(created):
+        resp = await client.get(
+            "/core/namespaces/testing/metricsproviders?watch&heartbeat=0"
+        )
+        assert resp.status == 200
+        created.set_result(None)
+
+        for i in count():
+            line = await resp.content.readline()
+            assert line, "Unexpected EOF"
+
+            event = WatchEvent.deserialize(json.loads(line.decode()))
+            data = MetricsProvider.deserialize(event.object)
+
+            if i == 0:
+                assert event.type == WatchEventType.ADDED
+                assert data.metadata.name == resources[0].metadata.name
+                assert data.spec == resources[0].spec
+            elif i == 1:
+                assert event.type == WatchEventType.ADDED
+                assert data.metadata.name == resources[1].metadata.name
+                assert data.spec == resources[1].spec
+            elif i == 2:
+                assert event.type == WatchEventType.MODIFIED
+                assert data.metadata.name == resources[0].metadata.name
+                assert data.spec == resources[0].spec
+                return
+            elif i == 3:
+                assert False
+
+    async def modify(created):
+        # Wait for watcher to be established
+        await created
+
+        # Create the  GlobalMetricsProviders
+        for data in resources:
+            resp = await client.post(
+                f"/core/namespaces/{data.metadata.namespace}/metricsproviders",
+                json=data.serialize()
+            )
+            assert resp.status == 200
+
+        resp = await client.delete(
+            f"/core/namespaces/{resources[0].metadata.namespace}/metricsproviders/{resources[0].metadata.name}"
+        )
+        assert resp.status == 200
+
+        received = MetricsProvider.deserialize(await resp.json())
+        assert resource_ref(received) == resource_ref(resources[0])
+        assert received.metadata.deleted is not None
+
+    created = loop.create_future()
+    watching = loop.create_task(watch(created))
+    modifying = loop.create_task(modify(created))
+
+    await asyncio.wait_for(asyncio.gather(modifying, watching), timeout=3)
+
+
+async def test_read_metrics_provider(aiohttp_client, config, db):
+    data = MetricsProviderFactory()
+    await db.put(data)
+
+    client = await aiohttp_client(create_app(config=config))
+    resp = await client.get(
+        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/{data.metadata.name}"
+    )
+    assert resp.status == 200
+    received = MetricsProvider.deserialize(await resp.json())
+    assert received == data
+
+
+async def test_read_metrics_provider_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config))
+
+    resp = await client.get(
+        "/core/namespaces/testing/metricsproviders/my-resource"
+    )
+    assert resp.status == 403
+
+    async with rbac_allow("core", "metricsproviders", "get"):
+        resp = await client.get("/core/namespaces/testing/metricsproviders/my-resource")
+        assert resp.status == 404
+
+
+async def test_update_metrics_provider(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = MetricsProviderFactory(spec__type="prometheus")
+    await db.put(data)
+    data.spec = MetricsProviderSpecFactory(type="static")
+
+    resp = await client.put(
+        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/{data.metadata.name}",
+        json=data.serialize()
+    )
+    assert resp.status == 200
+    received = MetricsProvider.deserialize(await resp.json())
+
+    assert received.api == "core"
+    assert received.kind == "MetricsProvider"
+    assert data.metadata.modified < received.metadata.modified
+    assert received.spec == data.spec
+
+    stored = await db.get(
+        MetricsProvider, name=data.metadata.name, namespace=data.metadata.namespace
+    )
+    assert stored == received
+
+
+async def test_update_metrics_provider_to_delete(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = MetricsProviderFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__finalizers=["cascade_deletion"],
+    )
+    await db.put(data)
+
+    # Delete the GlobalMetricsProvider
+    data.metadata.finalizers = []
+    resp = await client.put(
+        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/{data.metadata.name}",
+        json=data.serialize()
+    )
+    assert resp.status == 200
+    received = MetricsProvider.deserialize(await resp.json())
+    assert resource_ref(received) == resource_ref(data)
+
+    # The GlobalMetricsProvider should be deleted from the database
+    stored = await db.get(
+        MetricsProvider, name=data.metadata.name, namespace=data.metadata.namespace
+    )
+    assert stored is None
+
+
+async def test_update_metrics_provider_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.put("/core/namespaces/testing/metricsproviders/my-resource")
+    assert resp.status == 403
+
+    async with rbac_allow("core", "metricsproviders", "update"):
+        resp = await client.put("/core/namespaces/testing/metricsproviders/my-resource")
+        assert resp.status == 415
+
+
+async def test_update_metrics_provider_no_changes(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = MetricsProviderFactory()
+    await db.put(data)
+
+    resp = await client.put(
+        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/{data.metadata.name}",
+        json=data.serialize()
+    )
+    assert resp.status == 400
+
+
+async def test_update_metrics_provider_immutable_field(
+    aiohttp_client, config, db
+):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = MetricsProviderFactory()
+    await db.put(data)
+    data.metadata.namespace = "override"
+
+    resp = await client.put(
+        f"/core/namespaces/testing/metricsproviders/{data.metadata.name}",
+        json=data.serialize()
+    )
+    # assert resp.status == 400
+
+    received = await resp.json()
+    problem = HttpProblem.deserialize(received)
+    assert problem.title == HttpProblemTitle.UPDATE_ERROR
+    assert problem.detail == "Trying to update an immutable field: namespace"
+
+
+async def test_update_metrics_provider_with_changes(aiohttp_client, config, db):
+    """Ensures that updates in the GlobalMetricsProvider's PolymorphicContainer are
+    considered as well.
+    """
+    client = await aiohttp_client(create_app(config=config))
+
+    data = MetricsProviderFactory(spec__type="prometheus")
+    await db.put(data)
+
+    # Modifying only an attribute from the contained specs.
+    data.spec.prometheus.url += "/other/path"
+
+    resp = await client.put(
+        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/{data.metadata.name}",
+        json=data.serialize()
+    )
+    assert resp.status == 200
+    received = MetricsProvider.deserialize(await resp.json())
+    assert received.spec.prometheus.url == data.spec.prometheus.url
+
+    # Modifying the whole spec to a different type.
+    data.spec = MetricsProviderSpecFactory(type="kafka")
+
+    resp = await client.put(
+        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/{data.metadata.name}",
+        json=data.serialize()
+    )
+    assert resp.status == 200
+    received = MetricsProvider.deserialize(await resp.json())
     assert received.spec == data.spec
 
 
