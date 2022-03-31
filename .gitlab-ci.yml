@@ -206,6 +206,7 @@ e2e-tests:
   variables:
     ANSIBLE_CONFIG: ansible/ansible.cfg
     ANSIBLE_INVENTORY: ansible/hosts-CI
+
   script:
     # Pre-requisites: openstack, ansible and pytest
     - pip install python-openstackclient "openstacksdk<=0.66" "ansible>=2.9" pytest

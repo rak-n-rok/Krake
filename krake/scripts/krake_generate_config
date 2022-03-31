@@ -403,7 +403,7 @@ if __name__ == "__main__":
             " that contain the value of the token,"
             " which will be given to the Application."
         ),
-        default="KRAKE_TOKEN",
+        default="KRAKE_COMPLETE_TOKEN",
     )
     add_option(
         parser,
@@ -447,11 +447,11 @@ if __name__ == "__main__":
         parser,
         "--shutdown-hook-env-token",
         (
-            "For the shtudown hook, set the name of the environment variable"
+            "For the shutdown hook, set the name of the environment variable"
             " that contain the value of the token,"
             " which will be given to the Application."
         ),
-        default="KRAKE_TOKEN",
+        default="KRAKE_SHUTDOWN_TOKEN",
     )
     add_option(
         parser,

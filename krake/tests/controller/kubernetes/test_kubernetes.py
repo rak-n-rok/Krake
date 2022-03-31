@@ -1192,7 +1192,7 @@ async def test_app_migration_with_shutdown_hook(
         response = {
             'apiVersion': 'v1',
             'data': {
-                'krake_token': 'SVotTXM4MXZ5eTkxcHdZZ3FjUG9RdDRJaUlYa2sxY1JwVUxBYW82b2tqVQ==',
+                'krake_shutdown_token': 'SVotTXM4MXZ5eTkxcHdZZ3FjUG9RdDRJaUlYa2sxY1JwVUxBYW82b2tqVQ==',
                 'krake_shutdown_url': 'aHR0cDovLzEyNy4wLjAuMTo0NTYyOS9rdWJlcm5ldGVzL25hbWVzcGFjZXMvdGVzdGluZy9hcHBsaWNhdGlvbnMvamFtZXMtc3RyaWNrbGFuZC1tZC9zaHV0ZG93bg=='
             },
             'kind': 'Secret',
@@ -1277,7 +1277,7 @@ async def test_app_migration_with_shutdown_hook(
             intermediate_src="tmp/pki/system:complete-signing.pem",
             intermediate_key_src="tmp/pki/system:complete-signing-key.pem",
             cert_dest="/etc/krake_cert",
-            env_token="KRAKE_TOKEN",
+            env_token="KRAKE_COMPLETE_TOKEN",
             env_url="KRAKE_COMPLETE_URL",
             external_endpoint=server_endpoint(server)
         ),
@@ -1286,7 +1286,7 @@ async def test_app_migration_with_shutdown_hook(
             intermediate_src="tmp/pki/system:shutdown-signing.pem",
             intermediate_key_src="tmp/pki/system:shutdown-signing-key.pem",
             cert_dest="/etc/krake_cert",
-            env_token="KRAKE_TOKEN",
+            env_token="KRAKE_SHUTDOWN_TOKEN",
             env_url="KRAKE_SHUTDOWN_URL",
             external_endpoint=server_endpoint(server)
         ),

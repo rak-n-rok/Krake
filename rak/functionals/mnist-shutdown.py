@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""This script is used by the "shutdown" hook test, to act as a dummy job being started
-in a Deployment that belongs to a Krake Application.
+"""This script is used by the mnist container to "shutdown" hook test.
+It's a more practical abbreviation of the normal shutdown hook script.
 """
 import os.path
-import time
+import subprocess
 
 import requests
 import socketserver
@@ -25,26 +25,40 @@ def shutdown_pod():
         cert_and_key = (default_cert_path, default_key_path)
         ca = default_ca_bundle
 
-        print(default_ca_bundle)
-        print(default_cert_path)
-        print(default_key_path)
-
     endpoint = os.getenv(endpoint_env)
     token = os.getenv(token_env)
 
-    print(endpoint)
-    print(token)
+    print("\nENDPOINT: " + endpoint, flush=True)
+    print("\nTOKEN: " + token + "\n", flush=True)
 
-    time.sleep(10)
+    try:
+        pgrep = subprocess.Popen(
+            ("pgrep", "-fx", "python /mnist/mnist_training_ci.py"),
+            stdout=subprocess.PIPE)
+        result = subprocess.run(
+            ["head", "-n", "1"],
+            stdin=pgrep.stdout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT
+        )
+
+        pid = (result.stdout).decode("utf-8")
+        print("PID: " + pid, flush=True)
+
+        result = subprocess.run(
+            ["kill", "-15", pid.rstrip('\n')],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT
+        )
+        print(result.stdout.decode("utf-8"), flush=True)
+        print("Process termination requested...", flush=True)
+    except Exception as e:
+        print("STDERR: ", e, flush=True)
 
     response = requests.put(
         endpoint, verify=ca, json={"token": token}, cert=cert_and_key
     )
-    print(response)
-    print(response.reason)
-    print(response.content)
-    print(response.headers)
-    print(response.raw)
+    print(response, flush=True)
 
 
 class ShutdownRequestHandler(BaseHTTPRequestHandler):

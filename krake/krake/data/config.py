@@ -167,13 +167,13 @@ class CompleteHookConfiguration(Serializable):
         }
     )
     cert_dest: str = field(
-        default="/etc/krake_certs/",
+        default="/etc/krake_complete_certs/",
         metadata={
             "help": "Environment variable to be used in the Kubernetes Application"
         },
     )
     env_token: str = field(
-        default="KRAKE_TOKEN",
+        default="KRAKE_COMPLETE_TOKEN",
         metadata={
             "help": (
                 "Name of the environment variable to be used in the Kubernetes"
@@ -232,13 +232,13 @@ class ShutdownHookConfiguration(Serializable):
         }
     )
     cert_dest: str = field(
-        default="/etc/krake_certs/",
+        default="/etc/krake_shutdown_certs/",
         metadata={
             "help": "Environment variable to be used in the Kubernetes Application"
         },
     )
     env_token: str = field(
-        default="KRAKE_TOKEN",
+        default="KRAKE_SHUTDOWN_TOKEN",
         metadata={
             "help": (
                 "Name of the environment variable to be used in the Kubernetes"

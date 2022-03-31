@@ -308,10 +308,16 @@ class ApplicationStatus(Status):
             Krake. The manifest is augmented by additional resources needed to be
             created for the functioning of internal mechanisms, such as the "Complete
             Hook".
-        token (str): Token for the identification of the "Complete Hook" request
+        complete_token (str): Token to identify the "Complete Hook" request
         complete_cert (str): certificate for the identification of the "Complete Hook".
         complete_key (str): key for the certificate of the "Complete Hook"
             identification.
+        shutdown_token (str): Token to identify the "Shutdown Hook" request
+        shutdown_cert (str): certificate for the identification of the "Shutdown Hook".
+        shutdown_key (str): key for the certificate of the "Shutdown Hook"
+            identification.
+        shutdown_grace_period (datetime): time period the shutdown method waits on after
+            the shutdown command was issued to an object
     """
 
     state: ApplicationState = ApplicationState.PENDING
@@ -323,9 +329,10 @@ class ApplicationStatus(Status):
     mangled_observer_schema: List[dict] = field(default_factory=list)
     last_observed_manifest: List[dict] = field(default_factory=list)
     last_applied_manifest: List[dict] = field(default_factory=list)
-    token: str = None
+    complete_token: str = None
     complete_cert: str = None
     complete_key: str = None
+    shutdown_token: str = None
     shutdown_cert: str = None
     shutdown_key: str = None
     shutdown_grace_period: datetime = None

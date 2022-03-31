@@ -29,6 +29,23 @@
         state: present
         build: no
 
+    - name: Setup Minio docker container
+      docker_container:
+        name: minio
+        image: quay.io/minio/minio
+        command: server /data
+        state: started
+        pull: yes
+        container_default_behavior: compatibility
+        ports:
+        - "9000:9000"
+        - "9001:9001"
+        volumes:
+        - /data
+        env:
+          MINIO_ROOT_USER: "minio-user"
+          MINIO_ROOT_PASSWORD: "minio-user-super-secret"
+
     - name: Bootstrap etcd database with the test-specific resources
       shell : >
         docker exec -i {{ api_host }} krake_bootstrap_db --force -
@@ -108,6 +125,13 @@
           command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_scripts.py --krake_container {{ api_host }} --etcd_container {{ etcd_host }} --etcd_container_port {{ etcd_port }}"
           tags:
             - test_scripts
+
+        - name: Run application example tests for krake
+          command: "pytest -s {{ git_dir }}/{{test_dir}}/integration/test_example_applications.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
+          tags:
+            - test_example_applications
+          register: app_out
+        - debug: msg="{{ app_out.stdout }}"
 
       always:
 

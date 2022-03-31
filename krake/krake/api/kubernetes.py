@@ -254,11 +254,17 @@ class KubernetesApi(object):
     @load("app", Application)
     async def update_application_complete(request, body, app):
         # If the hook is not enabled for the Application or if the token is invalid
-        if app.status.token is None or app.status.token != body.token:
+        if app.status.complete_token is None or app.status.complete_token != body.token:
+            logger.debug(
+                "The given token %s doesn't equal the required token %s",
+                body.token,
+                app.status.complete_token
+            )
             raise web.HTTPUnauthorized(
                 reason="No token has been provided or the provided one is invalid."
             )
 
+        app.status.state = ApplicationState.READY_FOR_ACTION
         # Resource marked as deletion, to be deleted by the Garbage Collector
         app.metadata.deleted = utils.now()
         await session(request).put(app)
@@ -277,11 +283,11 @@ class KubernetesApi(object):
     @load("app", Application)
     async def update_application_shutdown(request, body, app):
         # If the hook is not enabled for the Application or if the token is invalid
-        if app.status.token is None or app.status.token != body.token:
-            logger.info(
+        if app.status.shutdown_token is None or app.status.shutdown_token != body.token:
+            logger.debug(
                 "The given token %s doesn't equal the required token %s",
                 body.token,
-                app.status.token
+                app.status.shutdown_token
             )
             raise web.HTTPUnauthorized(
                reason="No token has been provided or the provided one is invalid."
