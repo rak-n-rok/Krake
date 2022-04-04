@@ -66,6 +66,8 @@ either with or without development dependencies. Installing them into a
 [Python virtualenv][virtualenv] is recommended.
 
 ```bash
+python3 -m venv .env
+source .env/bin/activate
 # Install "krake" and "rok" without development dependencies
 pip install --editable rok/
 pip install --editable krake/
@@ -85,22 +87,27 @@ First, the configuration files need to be generated with a script. They can
 then be modified at will.
 
 ```bash
-# Start by copying the templates of the configuration files for all components.
-# You can then modify each file at your preference.
+# first, start the generate script to have initial config files
+krake_generate_config config/*.template rok.yaml.template
+
 krake_generate_config --allow-anonymous --static-authentication-enabled config/api.yaml.template
 
-# Optional: you can use the rok configuration template as you prefer. It can also be generated.
-#   Otherwise rok will use the default configuration
-krake_generate_config rok.yaml.template
+# You can then modify each file at your preference.
+# afterwards create that folder which is expected:
+sudo mkdir /etc/krake
 
-# Multiple files can be generated at the same time:
-krake_generate_config config/*.template rok.yaml.template
+# last, copy generated files to that directory with 
+sudo cp *.yaml /etc/krake
+
+# Optional: you can use the rok configuration template as you prefer. It can also be generated.
+# Otherwise rok will use the default configuration
+krake_generate_config rok.yaml.template
 ```
 
 The `--allow-anonymous` and `--static-authentication-enabled` options set the API with
 minimal authentication and authorization protections. It should not be used with a
 production deployment, but are easier to work with in a test deployment. For more
-information, take a look at the "Security principles" chapter of the
+information, take a look at the "Security principle s" chapter of the
 [Admin Documentation][admin-docs].
 
 #### Bootstrapping of the database
@@ -155,18 +162,10 @@ Create Minikube instance and download the kubeconfig file, as well as the certif
 necessary to connect to your Minikube instance.
 
 ```bash
-MINIKUBE_IP="" # Fill in with the Minikube IP address
+mkdir cluster_certs
+minikube start
 
-mkdir -p cluster_certs/certs cluster_certs/config
 
-scp ubuntu@$MINIKUBE_IP:~/.kubectl/config cluster_certs/config/
-scp ubuntu@$MINIKUBE_IP:~/.minikube/\{ca.crt,client.crt,client.key\} cluster_certs/certs
-
-# Adjust paths to certificates
-$ sed -i "/certificate-authority/c\    certificate-authority: `pwd`/cluster_certs/certs/ca.crt" cluster_certs/config
-$ sed -i "/server:/c\    server: https://$MINIKUBE_IP:8443" cluster_certs/config
-$ sed -i "/client-certificate/c\    client-certificate: `pwd`/cluster_certs/certs/client.crt" cluster_certs/config
-$ sed -i "/client-key/c\    client-key: `pwd`/cluster_certs/certs/client.key" cluster_certs/config
 ```
 
 ##### KinD
@@ -176,14 +175,20 @@ Create KinD instance and save the kubeconfig file in `cluster_certs` directory
 Prerequisites
 
 - [Docker][docker]
-- [KinD][kind]
+- [kind][kind]
 
 ```bash
 mkdir cluster_certs
 # The name of your k8s cluster
 CLUSTER_NAME=""
 # Start single node k8s cluster
-kind create cluster --name $CLUSTER_NAME --kubeconfig cluster_certs/$CLUSTER_NAME  
+kind create cluster --name $CLUSTER_NAME --kubeconfig cluster_certs/$CLUSTER_NAME.yaml
+```
+
+If your are planning to use Minikube you could use the ‚kubectl‘ command:
+
+```bash
+kubectl config view >> krake/cluster_certs/minikube_conf.yaml
 ```
 
 Now we register the Minikube (or KinD) instance as a Krake backend and use Krake to
@@ -191,7 +196,7 @@ deploy an `echoserver` application.
 
 ```bash
 # Register your Minikube instance
-rok kube cluster create cluster_certs/config
+rok kube cluster create cluster_certs/config/minikube_conf.yaml
 
 # Run an application on Krake
 rok kube app create -f rak/functionals/echo-demo.yaml echo-demo
