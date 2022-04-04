@@ -1200,7 +1200,7 @@ async def write_command_to_port(loop, host, port, command=b"dump"):
     # FIXME: the OSError may be changed with another error, for instance
     #  ConnectionRefusedError. This works locally but not on the pipeline.
     with suppress(OSError):
-        reader, writer = await asyncio.open_connection(host, port, loop=loop)
+        reader, writer = await asyncio.open_connection(host, port)
         writer.write(command)
         data = await reader.read(512)
         writer.close()

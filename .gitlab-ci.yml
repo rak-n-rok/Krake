@@ -104,14 +104,6 @@ cache:
     - docker
 
 
-unittests-krake-3.6:
-  <<: *unittests-krake
-  image: python:3.6
-  variables:
-    TOXENV: py36
-    COVERAGE_FILE: krake/.coverage.py36
-
-
 unittests-krake-3.7:
   <<: *unittests-krake
   image: python:3.7
@@ -136,9 +128,17 @@ unittests-krake-3.9:
     COVERAGE_FILE: krake/.coverage.py39
 
 
+unittests-krake-3.10:
+  <<: *unittests-krake
+  image: python:3.10
+  variables:
+    TOXENV: py310
+    COVERAGE_FILE: krake/.coverage.py310
+
+
 flake8-krake:
   stage: test
-  image: python:3.6
+  image: python:3.7
   only:
     - tags
     - branches
@@ -153,7 +153,7 @@ flake8-krake:
 
 flake8-rok:
   stage: test
-  image: python:3.6
+  image: python:3.7
   only:
     - tags
     - branches
@@ -171,7 +171,7 @@ flake8-rok:
 # with non-zero if the code coverage ratio is under 85%.
 coverage-krake:
   stage: coverage
-  image: python:3.6
+  image: python:3.7
   script:
     - pip install coverage
     - coverage combine krake/.coverage.*
@@ -194,7 +194,7 @@ coverage-krake:
 
 e2e-tests:
   stage: e2e
-  image: python:3.6
+  image: python:3.7
   artifacts:
     when: on_failure
     paths:
