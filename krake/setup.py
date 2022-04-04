@@ -17,17 +17,18 @@ install_requires = [
     "python-magnumclient==3.*",
     "PyYAML==5.*",
     "requests==2.*",
-    "webargs==6.*",
 ]
 
-# dataclasses backport
-if sys.version_info < (3, 7):
-    install_requires.append("dataclasses==0.6.*")
+# webargs
+if sys.version_info < (3, 10):
+    install_requires.append("webargs==8.*")
+else:
+    install_requires.append("webargs==6.*")
 
 setup(
     name="krake",
     version="1.0.0",
-    python_requires=">=3.6",
+    python_requires=">=3.7",
     packages=find_packages(),
     install_requires=install_requires,
     extras_require={
@@ -38,9 +39,12 @@ setup(
             "prometheus-client==0.7.*",
             "pytest==6.*",
             "pytest-aiohttp==0.3.*",
+            "pytest-cov==3.*",
+            "pytest-httpserver==1.*",
             "pytz==2021.*",
             "tox==3.*",
             "pre-commit==2.*",
+            "keystone==20.*",
             "pytest-httpserver==1.*",
         },
         "api_generator": {"black==21.11b1", "jinja2==3.*"},

@@ -405,7 +405,7 @@ async def test_client_cert_auth(aiohttp_client, config, pki):
 
         client = await aiohttp_client(server)
         context = ssl.create_default_context(
-            purpose=ssl.Purpose.CLIENT_AUTH, cafile=pki.ca.cert
+            purpose=ssl.Purpose.SERVER_AUTH, cafile=pki.ca.cert
         )
         context.load_cert_chain(*client_cert)
         resp = await client.get("/me", ssl=context)

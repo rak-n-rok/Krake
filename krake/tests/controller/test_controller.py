@@ -178,7 +178,7 @@ async def test_queue_multiple_puts(loop):
     # As the get() method should only be stopped because of the timeout, what is
     # verified here is that the only exception raised is a TimeoutError.
     with pytest.raises(asyncio.TimeoutError):
-        await asyncio.wait_for(queue.get(), loop=loop, timeout=1)
+        await asyncio.wait_for(queue.get(), timeout=1)
 
     # Free the key from the queue
     await queue.done(key)
@@ -186,7 +186,7 @@ async def test_queue_multiple_puts(loop):
     # After the key was freed, no other key was added, so the get() method should hang
     # again, and should be stopped only because of a timeout.
     with pytest.raises(asyncio.TimeoutError):
-        await asyncio.wait_for(queue.get(), loop=loop, timeout=1)
+        await asyncio.wait_for(queue.get(), timeout=1)
 
 
 async def test_queue_active(loop):
