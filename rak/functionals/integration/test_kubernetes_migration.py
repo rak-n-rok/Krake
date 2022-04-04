@@ -410,7 +410,14 @@ def test_kubernetes_auto_metrics_migration(minikube_clusters):
         app.check_running_on(clusters[1], within=RESCHEDULING_INTERVAL + 10)
 
 
-def _get_metrics_triggering_migration(source, target, static_metrics, cluster_metrics):
+def _get_metrics_triggering_migration(
+    source,
+    target,
+    static_metrics,
+    cluster_metrics,
+    values_option_1=None,
+    values_option_2=None
+):
     """Return static metrics that the static metrics provider need to return in
     order for a migration to be triggered from the source to the target cluster.
 
@@ -429,11 +436,13 @@ def _get_metrics_triggering_migration(source, target, static_metrics, cluster_me
     num_metrics = len(static_metrics)
     if num_metrics != 2:
         raise NotImplementedError()
-    values_option_1 = [0.01, 0.2]
+    if values_option_1 is None:
+        values_option_1 = [0.01, 0.2]
     metrics_option_1 = [
         StaticMetric(m.metric, values_option_1[i]) for i, m in enumerate(static_metrics)
     ]
-    values_option_2 = [0.2, 0.01]
+    if values_option_2 is None:
+        values_option_2 = [0.2, 0.01]
     metrics_option_2 = [
         StaticMetric(m.metric, values_option_2[i]) for i, m in enumerate(static_metrics)
     ]
@@ -453,7 +462,7 @@ def _get_metrics_triggering_migration(source, target, static_metrics, cluster_me
     target_score = get_scheduling_score(
         target, metrics_option_2, cluster_metrics, scheduled_to=source
     )
-    if target_score > source_score:
+    if target_score < source_score:
         err_msg = (
             f"Using the provided metrics ({static_metrics}) and weights "
             f"({cluster_metrics}), we were unable to choose metrics that will "
@@ -466,7 +475,6 @@ def _get_metrics_triggering_migration(source, target, static_metrics, cluster_me
     return metrics_option_2
 
 
-@pytest.mark.skip()
 def test_kubernetes_metrics_migration(minikube_clusters):
     """Check that an application scheduled on a cluster does not migrate
     as soon as the metrics change but rather only every RESCHEDULING_INTERVAL
@@ -694,7 +702,7 @@ def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
     static_metrics = random.sample(mp.get_valued_metrics(), num_clusters)
 
     # 1. Set the metrics provided by the metrics provider
-    static_metrics[0].value = 0.01
+    static_metrics[0].value = 0.9
     static_metrics[1].value = 0.1
     mp.set_valued_metrics(metrics=static_metrics)
 
@@ -705,12 +713,12 @@ def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
     # the score of cluster 2.
     metric_weights = {
         clusters[0]: [
-            WeightedMetric(static_metrics[0].metric, 1),
-            WeightedMetric(static_metrics[1].metric, 1.5),
+            WeightedMetric(static_metrics[0].metric, 10),
+            WeightedMetric(static_metrics[1].metric, 1),
         ],
         clusters[1]: [
-            WeightedMetric(static_metrics[0].metric, 1.5),
-            WeightedMetric(static_metrics[1].metric, 1),
+            WeightedMetric(static_metrics[0].metric, 1),
+            WeightedMetric(static_metrics[1].metric, 10),
         ],
     }
     score_cluster_1_init = get_scheduling_score(
@@ -742,7 +750,12 @@ def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
             # 5a. Change the metrics so that score of other cluster is higher
             # than the score of current cluster.
             static_metrics = _get_metrics_triggering_migration(
-                this_cluster, next_cluster, static_metrics, metric_weights
+                this_cluster,
+                next_cluster,
+                static_metrics,
+                metric_weights,
+                values_option_1=[0.1, 0.9],
+                values_option_2=[0.9, 0.1]
             )
             mp.update_resource(metrics=static_metrics)
 

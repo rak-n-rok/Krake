@@ -771,6 +771,69 @@ async def test_kubernetes_score_failing_metrics_provider(
     )
 
 
+async def test_kubernetes_score_failing_globalmetrics_provider(
+    aiohttp_server, config, db, loop
+):
+    """Test the error handling of the Scheduler in the case of fetching the value of a
+    metric (referenced by a Cluster) from its provider, but the connection has an issue.
+    """
+    routes = web.RouteTableDef()
+
+    @routes.get("/api/v1/query")
+    async def _(request):
+        raise web.HTTPServiceUnavailable()
+
+    prometheus_app = web.Application()
+    prometheus_app.add_routes(routes)
+
+    prometheus = await aiohttp_server(prometheus_app)
+
+    app = ApplicationFactory(status__is_scheduled=False)
+    clusters = [
+        ClusterFactory(
+            spec__metrics=[MetricRef(name="my-metric", weight=1, namespaced=False)]
+        )
+    ]
+    await db.put(clusters[0])
+    metrics = [
+        GlobalMetricFactory(
+            metadata__name="my-metric",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="my-provider",
+            spec__provider__metric="my-metric",
+        )
+    ]
+    provider = GlobalMetricsProviderFactory(
+        metadata__name="my-provider",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+    for metric in metrics:
+        await db.put(metric)
+    await db.put(provider)
+
+    api = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(api), worker_count=0)
+        await scheduler.prepare(client)
+        scored = await scheduler.kubernetes.rank_kubernetes_clusters(app, clusters)
+
+    assert len(scored) == 0
+
+    cluster = clusters[0]
+    stored_cluster = await db.get(
+        Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+    )
+    assert stored_cluster.status.state == ClusterState.FAILING_METRICS
+    assert len(stored_cluster.status.metrics_reasons) == 1
+    assert (
+        stored_cluster.status.metrics_reasons["my-metric"].code
+        == ReasonCode.UNREACHABLE_METRICS_PROVIDER
+    )
+
+
 async def test_kubernetes_prefer_cluster_with_global_metrics(
     aiohttp_server, config, db, loop
 ):

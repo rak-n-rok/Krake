@@ -542,7 +542,6 @@ def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
                 app.check_running_on(clusters[expected_index])
 
 
-@pytest.mark.skip()
 def test_one_unreachable_metrics_provider(minikube_clusters):
     """Basic end-to-end testing of unreachable metrics provider
 
@@ -573,7 +572,7 @@ def test_one_unreachable_metrics_provider(minikube_clusters):
     prometheus_metrics = [unreachable_prometheus_metric, reachable_prometheus_metric]
 
     # Determine to which cluster we expect the application to be scheduled.
-    # (The cluster with the reachable metric is expected to be chosen by the scheduler,
+    # The cluster with the reachable metric is expected to be chosen by the scheduler,
     # and the reachable metrics will be given to the last cluster.
     expected_cluster = clusters[-1]
 
@@ -583,7 +582,7 @@ def test_one_unreachable_metrics_provider(minikube_clusters):
         clusters[i]: [WeightedMetric(prometheus_metrics[i].metric, 1)]
         for i in range(num_clusters)
     }
-    environment = create_default_environment(clusters)
+    environment = create_default_environment(clusters, metrics=metric_weights)
     with Environment(environment, creation_delay=30) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
@@ -695,7 +694,7 @@ def test_all_unreachable_metrics_provider(minikube_clusters):
         assert cluster_wo_metric.get_state() == "ONLINE"
         assert cluster_wo_metric.get_metrics_reasons() == {}
 
-@pytest.mark.skip()
+
 def test_metric_not_in_database(minikube_clusters):
     """Basic e2e testing of cluster referencing a metric not found in the Krake
     database.
