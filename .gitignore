@@ -25,6 +25,7 @@
 # Cluster certificates
 /ansible/cluster_certs/**
 !/ansible/cluster_certs/.gitkeep
+cluster_certs
 
 # Temporary Python files and caches
 *.pyc
@@ -51,8 +52,5 @@ __pycache__/
 .env
 .idea
 .vscode
-
-# Files
 venv
-krake-tmux.sh
-cluster_certs
+my_*
