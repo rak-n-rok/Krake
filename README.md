@@ -23,7 +23,7 @@ management in Edge Cloud infrastructures.
 
 In order to get started and play with Krake, you'll need to deploy Krake plus
 at least one Kubernetes cluster to act as a backend for Krake. We recommend
-[Minikube][minikube] or [KinD][kind], which are a simple ways to get a Kubernetes
+[minikube][minikube] or [kind][kind], which are a simple ways to get a Kubernetes
 environment for development purposes.
 
 This section describes a quickstart for developers to get started with a Krake
@@ -35,8 +35,8 @@ development setup. Advanced topics are covered in the
 #### Krake deployment
 
 - [etcdv3][etcd]
-- [Python][python] >= 3.6
-- [Setup at least one Minikube VM][minikube] or [KinD instance][kind] alternatively
+- [Python][python] >= 3.7
+- [Setup at least one minikube VM][minikube] or [kind instance][kind] alternatively
 
 #### Test applications
 
@@ -79,7 +79,7 @@ pip install --editable "rok/[dev]"
 pip install --editable "krake/[dev]"
 ```
 
-### Running
+### Setup
 
 #### Configuration
 
@@ -110,7 +110,7 @@ production deployment, but are easier to work with in a test deployment. For mor
 information, take a look at the "Security principle s" chapter of the
 [Admin Documentation][admin-docs].
 
-#### Bootstrapping of the database
+#### Bootstrapping the database
 
 The database can be bootstrapped, by adding resources in the database before
 starting Krake:
@@ -121,6 +121,90 @@ krake_bootstrap_db bootstrapping/base_roles.yaml
 
 # Create metrics and metrics providers, for development purposes.
 krake_bootstrap_db support/prometheus_metrics.yaml support/static_metrics.yaml
+```
+
+### Basic Usage
+
+This provides a simple demonstration of Krake's functionalities. Please refer
+to the [User Documentation][user-docs] for extended usage guidelines,
+explanations, and examples.
+
+#### Prepare Kubernetes environment
+
+Initialize all needed folders to store certificates and configuration files.
+
+```bash
+mkdir -p cluster_certs/certs cluster_certs/config
+```
+
+#### 1. Minikube
+
+Create minikube instance and download the kubeconfig file, as well as the certificate and key file
+necessary to connect to your minikube instance.
+
+```bash
+minikube start
+# copy client and ca certificate to the above created folders
+cp /home/USER/.minikube/profiles/minikube/client.* cluster_certs/certs
+cp /home/USER/.minikube/ca.crt cluster_certs/certs
+
+# copy/generate config.yaml for later use with krake
+kubectl config view >> cluster_certs/config/minikube_conf.yaml
+```
+
+**Attention:** If you have installed both kind and minikube this command would list both configurations. You then should remove the kind configuration.
+
+Here you can see an example configuration of minikube for Krake.
+
+```bash
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority: /home/USER/.minikube/ca.crt
+    extensions:
+    - extension:
+        last-update: Wed, 30 Mar 2022 12:36:02 CEST
+        provider: minikube.sigs.k8s.io
+        version: v1.23.2
+      name: cluster_info
+    server: https://192.168.49.2:8443
+  name: minikube2
+contexts:
+- context:
+    cluster: minikube2
+    extensions:
+    - extension:
+        last-update: Wed, 30 Mar 2022 12:36:02 CEST
+        provider: minikube.sigs.k8s.io
+        version: v1.23.2
+      name: context_info
+    namespace: default
+    user: minikube2
+  name: minikube2
+current-context: minikube2
+kind: Config
+preferences: {}
+users:
+- name: minikube2
+  user:
+    client-certificate: /home/USER/.minikube/profiles/minikube/client.crt
+    client-key: /home/USER/.minikube/profiles/minikube/client.key
+```
+
+#### 2. KinD
+
+Create kind instance and save the kubeconfig file in `cluster_certs` directory
+
+Prerequisites
+
+- [Docker][docker]
+- [kind][kind]
+
+```bash
+# The name of your k8s cluster
+CLUSTER_NAME="mykindcluter"
+# Start single node k8s cluster
+kind create cluster --name $CLUSTER_NAME --kubeconfig cluster_certs/config/$CLUSTER_NAME.yaml
 ```
 
 #### Starting all components
@@ -148,106 +232,155 @@ python -m krake.controller.scheduler
 python -m krake.controller.kubernetes
 ```
 
-### Basic Usage
+There is also a _script_ (see snippets section on git) provided in the git repository to start all parts of Krake using „tmux“.
 
-This provides a simple demonstration of Krake's functionalities. Please refer
-to the [User Documentation][user-docs] for extended usage guidelines,
-explanations, and examples.
-
-#### Prepare Kubernetes environment
-
-##### Minikube
-
-Create Minikube instance and download the kubeconfig file, as well as the certificate and key file
-necessary to connect to your Minikube instance.
-
-```bash
-mkdir cluster_certs
-minikube start
-
-
-```
-
-##### KinD
-
-Create KinD instance and save the kubeconfig file in `cluster_certs` directory
-
-Prerequisites
-
-- [Docker][docker]
-- [kind][kind]
-
-```bash
-mkdir cluster_certs
-# The name of your k8s cluster
-CLUSTER_NAME=""
-# Start single node k8s cluster
-kind create cluster --name $CLUSTER_NAME --kubeconfig cluster_certs/$CLUSTER_NAME.yaml
-```
-
-If your are planning to use Minikube you could use the ‚kubectl‘ command:
-
-```bash
-kubectl config view >> krake/cluster_certs/minikube_conf.yaml
-```
-
-Now we register the Minikube (or KinD) instance as a Krake backend and use Krake to
+Finally we register the minikube (or kind) instance as a Krake backend and use Krake to
 deploy an `echoserver` application.
 
 ```bash
-# Register your Minikube instance
-rok kube cluster create cluster_certs/config/minikube_conf.yaml
+# list current clusters; there should be none
+$ rok kube cluster list
++------+-----------+--------+---------+----------+---------+-------+
+| name | namespace | labels | created | modified | deleted | state |
++======+===========+========+=========+==========+=========+=======+
++------+-----------+--------+---------+----------+---------+-------+
 
-# Run an application on Krake
-rok kube app create -f rak/functionals/echo-demo.yaml echo-demo
+# Register your minikube instance
+$ rok kube cluster create cluster_certs/config/minikube_conf.yaml
++------------------+---------------------+
+| name             | minikube2           |
+| namespace        | system:admin        |
+| labels           | None                |
+| created          | 2022-03-30 16:00:21 |
+| modified         | 2022-03-30 16:00:21 |
+| deleted          | None                |
+| state            | ONLINE              |
+| custom_resources | []                  |
+| metrics          | []                  |
+| failing_metrics  | None                |
++------------------+---------------------+
 
-# Check the status of the application
-rok kube app get echo-demo
-+-----------+-------------------------------+
-| reason    | None                          |
-| name      | echo-demo                     |
-| namespace | system                        |
-| user      | system:anonymous              |
-| created   | 2019-08-14 13:42:16           |
-| modified  | 2019-08-14 13:42:17           |
-| services  | echo-demo: 192.168.0.15:30421 |
-| state     | RUNNING                       |
-+-----------+-------------------------------+
+# now there is a cluster named minikube2
+$ rok kube cluster list
++-----------+--------------+--------+---------------------+---------------------+---------+--------+
+|   name    |  namespace   | labels |       created       |      modified       | deleted | state  |
++===========+==============+========+=====================+=====================+=========+========+
+| minikube2 | system:admin | None   | 2022-03-30 16:00:21 | 2022-03-30 16:00:21 | None    | ONLINE |
++-----------+--------------+--------+---------------------+---------------------+---------+--------+
+
+# run an application on Krake
+$ rok kube app create -f rak/functionals/echo-demo.yaml echo-demo
++-----------------------+---------------------+
+| name                  | echo-demo           |
+| namespace             | system:admin        |
+| labels                | None                |
+| created               | 2022-03-30 16:01:03 |
+| modified              | 2022-03-30 16:01:03 |
+| deleted               | None                |
+| state                 | PENDING             |
+| reason                | None                |
+| services              | None                |
+| allow migration       | True                |
+| label constraints     | []                  |
+| resources constraints | []                  |
+| hooks                 | []                  |
+| scheduled_to          | None                |
+| scheduled             | None                |
+| running_on            | None                |
++-----------------------+---------------------+
+
+# check the status of the application
+$ rok kube app get echo-demo
++-----------------------+-------------------------------------------------------------------------------------------+
+| name                  | echo-demo                                                                                 |
+| namespace             | system:admin                                                                              |
+| labels                | None                                                                                      |
+| created               | 2022-03-30 16:01:03                                                                       |
+| modified              | 2022-03-30 16:01:05                                                                       |
+| deleted               | None                                                                                      |
+| state                 | RUNNING                                                                                   |
+| reason                | None                                                                                      |
+| services              | echo-demo: 192.168.49.2:30285                                                             |
+| allow migration       | True                                                                                      |
+| label constraints     | []                                                                                        |
+| resources constraints | []                                                                                        |
+| hooks                 | []                                                                                        |
+| scheduled_to          | {'kind': 'Cluster', 'api': 'kubernetes', 'name': 'minikube2', 'namespace': 'system:admin'}|
+| scheduled             | 2022-03-30 16:01:04                                                                       |
+| running_on            | {'kind': 'Cluster', 'api': 'kubernetes', 'name': 'minikube2', 'namespace': 'system:admin'}|
++-----------------------+-------------------------------------------------------------------------------------------+
 
 # Access the application
-$ curl 192.168.0.15:30421
+$ curl 192.168.49.2:30285
 
-Hostname: echo-demo-79bd46c485-qq75m
+Hostname: echo-demo-6ff4d6b744-mcxhb
 
 Pod Information:
-  -no pod information available-
+	-no pod information available-
 
 Server values:
-  server_version=nginx: 1.13.3 - lua: 10008
+	server_version=nginx: 1.13.3 - lua: 10008
 
 Request Information:
-  client_address=172.17.0.1
-  method=GET
-  real path=/
-  query=
-  request_version=1.1
-  request_scheme=http
-  request_uri=http://192.168.0.15:8080/
+	client_address=172.17.0.1
+	method=GET
+	real path=/
+	query=
+	request_version=1.1
+	request_scheme=http
+	request_uri=http://192.168.49.2:8080/
 
 Request Headers:
-  accept=*/*
-  host=192.168.0.15:30421
-  user-agent=curl/7.58.0
+	accept=*/*
+	host=192.168.49.2:30285
+	user-agent=curl/7.74.0
 
 Request Body:
-  -no body in request-
+	-no body in request-
 
+# delete the application
+$ rok kube app delete echo-demo
++-----------------------+-----------------------------------------------+
+| name                  | echo-demo                                     |
+| namespace             | system:admin                                  |
+| labels                | None                                          |
+| created               | 2022-03-30 16:09:34                           |
+| modified              | 2022-03-30 16:09:34                           |
+| deleted               | 2022-03-30 16:11:30                           |
+| state                 | FAILED                                        |
+| reason                | code: NO_SUITABLE_RESOURCE                    |
+|                       | message: No matching Kubernetes cluster found |
+| services              | None                                          |
+| allow migration       | True                                          |
+| label constraints     | []                                            |
+| resources constraints | []                                            |
+| hooks                 | []                                            |
+| scheduled_to          | None                                          |
+| scheduled             | None                                          |
+| running_on            | None                                          |
++-----------------------+-----------------------------------------------+
 
-# Delete the application
-rok kube app delete echo-demo
+# delete the cluster
+$ rok kube cluster delete minikube2
++------------------+---------------------+
+| name             | minikube2           |
+| namespace        | system:admin        |
+| labels           | None                |
+| created          | 2022-03-30 16:00:21 |
+| modified         | 2022-03-30 16:00:21 |
+| deleted          | 2022-03-30 16:08:18 |
+| state            | ONLINE              |
+| custom_resources | []                  |
+| metrics          | []                  |
+| failing_metrics  | None                |
++------------------+---------------------+
 
-# Delete the cluster
-rok kube cluster delete minikube
+# check that cluster is deleted
+$ rok kube cluster list 
++------+-----------+--------+---------+----------+---------+-------+
+| name | namespace | labels | created | modified | deleted | state |
++======+===========+========+=========+==========+=========+=======+
++------+-----------+--------+---------+----------+---------+-------+
 ```
 
 ### Testing
