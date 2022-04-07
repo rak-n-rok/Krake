@@ -105,17 +105,19 @@ krake_generate_config rok.yaml.template
 ```
 
 The `--allow-anonymous` and `--static-authentication-enabled` options set the API with
-minimal authentication and authorization protections. It should not be used with a
+minimal authentication and authorization protections (for development purpose). It should not be used with a
 production deployment, but are easier to work with in a test deployment. For more
 information, take a look at the "Security principle s" chapter of the
 [Admin Documentation][admin-docs].
 
 #### Bootstrapping the database
 
-The database can be bootstrapped, by adding resources in the database before
+The database can be bootstrapped, by adding resources in the database (etcd) before
 starting Krake:
 
 ```bash
+# run the neccessary etcd server first
+support/etcd
 # Create roles for the RBAC authorization mode.
 krake_bootstrap_db bootstrapping/base_roles.yaml
 
@@ -131,9 +133,10 @@ explanations, and examples.
 
 #### Prepare Kubernetes environment
 
-Initialize all needed folders to store certificates and configuration files.
+Initialize folders needed to store certificates and configuration files. These will be used in the next steps.
 
 ```bash
+# in the Krake folder execute this command
 mkdir -p cluster_certs/certs cluster_certs/config
 ```
 
@@ -154,7 +157,7 @@ kubectl config view >> cluster_certs/config/minikube_conf.yaml
 
 **Attention:** If you have installed both kind and minikube this command would list both configurations. You then should remove the kind configuration.
 
-Here you can see an example configuration of minikube for Krake.
+Here you can see an example configuration of minikube for Krake:
 
 ```bash
 apiVersion: v1
