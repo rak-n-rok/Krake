@@ -109,6 +109,13 @@ accordingly.
 The list of fields which are observed by the Kubernetes Observer can be controlled by
 specifying a :ref:`user/observer-schema:custom observer schema`.
 
+This observer schema uses the two fields ``last_applied_manifest`` and ``last_observed_manifest``,
+both of which can be found in ``app.status``. ``last_applied_manifest`` contains the
+information about the latest applied data, which the application should currently be running
+on. ``last_observed_manifest`` on the other hand contains information about the latest
+observed manifest state of this application.
+By comparing both datasets, the differences between the desired and observed status can
+be determined and the corresponding parts can be created, updated or deleted.
 
 The actual workflow of the Kubernetes Observer is as follow:
 

@@ -5,6 +5,7 @@ import time
 from contextlib import suppress
 from copy import deepcopy
 
+import sys
 import mock
 import pytest
 from aiohttp import web, ClientConnectorError
@@ -128,7 +129,7 @@ async def test_main_help(loop):
     command = "python -m krake.controller.kubernetes -h"
     # The loop parameter is mandatory otherwise the test fails if started with others.
     process = await asyncio.create_subprocess_exec(
-        *command.split(" "), stdout=PIPE, stderr=STDOUT, loop=loop
+        *command.split(" "), stdout=PIPE, stderr=STDOUT
     )
     stdout, _ = await process.communicate()
     output = stdout.decode()
@@ -136,11 +137,15 @@ async def test_main_help(loop):
     to_check = [
         "Kubernetes application controller",
         "usage:",
-        "optional arguments:",
         "default:",  # Present if the default value of the arguments are displayed
         "str",  # Present if the type of the arguments are displayed
         "int",
     ]
+    # Because python3.10 argparse version changed 'optional arguments:' to 'options:'
+    if sys.version_info < (3, 10):
+        to_check.append("optional arguments:")
+    else:
+        to_check.append("options:")
 
     for expression in to_check:
         assert expression in output
@@ -2336,10 +2341,34 @@ async def test_client_app_delete_error_handling(
     assert already_deleted == 1
 
 
-async def test_resource_delta(loop):
-    """Test if the controller correctly calculates the delta between
-    ``last_applied_manifest`` and ``last_observed_manifest``
+async def test_default_observer_schema(loop):
+    """
+    Create an app and generate a default observer schema for it to test if the function
+    actually creates the expected schema.
+    """
 
+    app = ApplicationFactory(
+        spec__manifest=deepcopy(nginx_manifest),
+        spec__observer_schema=deepcopy(custom_observer_schema),
+    )
+
+    generate_default_observer_schema(app)
+
+    assert app.spec.observer_schema[0]["apiVersion"] == \
+           app.status.mangled_observer_schema[0]["apiVersion"]
+    assert app.spec.observer_schema[0]["kind"] == \
+           app.status.mangled_observer_schema[0]["kind"]
+    assert app.spec.observer_schema[0]["spec"] == \
+           app.status.mangled_observer_schema[0]["spec"]
+    assert app.status.mangled_observer_schema[0]["metadata"]["namespace"] == \
+           app.spec.manifest[0]["metadata"]["namespace"]
+
+
+async def prepare_resource_delta_test():
+    """
+    Pre-test setup function for the test_resource_delta_x tests. This function sets up a
+    test environment to test ``last_applied_manifest`` and ``last_observed_manifest``.
+    The following repeating parts are in this function:
 
     State (0):
         The application possesses a last_applied_manifest which specifies a Deployment,
@@ -2360,52 +2389,6 @@ async def test_resource_delta(loop):
     State (1):
         The application possesses a last_observed_manifest which matches the
         last_applied_manifest.
-
-    State (2):
-        Update a field in the last_applied_manifest, which is observed and present in
-        last_observed_manifest
-
-    State (3):
-        Update a field in the last_applied_manifest, which is observed and not present
-        in last_observed_manifest
-
-    State (4):
-        Update a field in the last_applied_manifest, which is not observed and present
-        in last_observed_manifest
-
-    State (5):
-        Update a field in the last_applied_manifest, which is not observed and not
-        present in last_observed_manifest
-
-    State (6):
-        Update a field in the last_observed_manifest, which is observed and present in
-        last_applied_manifest
-
-    State (7):
-        Update a field in the last_observed_manifest, which is observed and not
-        present in last_applied_manifest
-
-    State (8):
-        Update a field in the last_observed_manifest, which is not observed and
-        present in last_applied_manifest
-
-    State (9):
-        Update a field in the last_observed_manifest, which is not observed and not
-        present in last_applied_manifest
-
-    State (10):
-        Update the namespace field in the last_observed_manifest,
-        which is observed and present in last_applied_manifest
-
-    State (11):
-        Add additional elements to a list in last_observed_manifest
-
-    State (12):
-        Remove elements from a list in last_observed_manifest
-
-    State (13):
-        Remove Secret
-
     """
 
     # State(0): Observed and non observed resources are added to last_applied_manifest
@@ -2439,13 +2422,41 @@ async def test_resource_delta(loop):
     initial_last_applied_manifest = deepcopy(app.status.last_applied_manifest)
     app.status.last_observed_manifest = deepcopy(initial_last_observed_manifest)
 
-    # No changes should be detected
-    new, deleted, modified = ResourceDelta.calculate(app)
-    assert len(new) == 0
-    assert len(deleted) == 0
-    assert len(modified) == 0
+    return app, initial_last_applied_manifest, initial_mangled_observer_schema
 
-    # State (2): Update a field in the last_applied_manifest, which is observed and
+
+async def test_resource_delta_field_in_last_applied_manifest(loop):
+    """Test if the controller correctly calculates the delta between
+    ``last_applied_manifest`` and ``last_observed_manifest``
+
+    State (0):
+        Prepare the test with the ``prepare_resource_delta_test`` function
+
+    State (1):
+        Update a field in the last_applied_manifest, which is observed and present in
+        last_observed_manifest
+
+    State (2):
+        Update a field in the last_applied_manifest, which is observed and not present
+        in last_observed_manifest
+
+    State (3):
+        Update a field in the last_applied_manifest, which is not observed and present
+        in last_observed_manifest
+
+    State (4):
+        Update a field in the last_applied_manifest, which is not observed and not
+        present in last_observed_manifest
+
+    State (5):
+        Remove Secret completely
+
+    """
+
+    # State (0): Prepare the test with the ``prepare_resource_delta_test`` function
+    app, initial_last_applied_manifest, _ = await prepare_resource_delta_test()
+
+    # State (1): Update a field in the last_applied_manifest, which is observed and
     # present in last_observed_manifest
     app.status.last_applied_manifest[1]["spec"]["type"] = "LoadBalancer"
 
@@ -2457,7 +2468,7 @@ async def test_resource_delta(loop):
     assert len(modified) == 1
     assert app.status.last_applied_manifest[1] in modified  # Service
 
-    # State (3): Update a field in the last_applied_manifest, which is observed and not
+    # State (2): Update a field in the last_applied_manifest, which is observed and not
     # present in last_observed_manifest
     app.status.last_observed_manifest[1]["spec"].pop("type")
 
@@ -2469,32 +2480,85 @@ async def test_resource_delta(loop):
     assert len(modified) == 1
     assert app.status.last_applied_manifest[1] in modified  # Service
 
-    # State (4): Update a field in the last_applied_manifest, which is not observed and
+    # State (3): Update a field in the last_applied_manifest, which is not observed and
     # present in last_observed_manifest
     app.status.last_applied_manifest = deepcopy(initial_last_applied_manifest)
     app.status.last_observed_manifest = deepcopy(initial_last_observed_manifest)
     app.status.mangled_observer_schema[0]["spec"].pop("replicas")
     app.status.last_applied_manifest[0]["spec"]["replicas"] = 2
 
-    # The modification of an non observed field should not trigger an update of the
+    # The modification of a non observed field should not trigger an update of the
     # Kubernetes resource.
     new, deleted, modified = ResourceDelta.calculate(app)
     assert len(new) == 0
     assert len(deleted) == 0
     assert len(modified) == 0
 
-    # State (5): Update a field in the last_applied_manifest, which is not observed and
+    # State (4): Update a field in the last_applied_manifest, which is not observed and
     # not present in last_observed_manifest
     app.status.last_observed_manifest[0]["spec"].pop("replicas")
 
-    # The modification of an non observed field should not trigger an update of the
+    # The modification of a non observed field should not trigger an update of the
     # Kubernetes resource.
     new, deleted, modified = ResourceDelta.calculate(app)
     assert len(new) == 0
     assert len(deleted) == 0
     assert len(modified) == 0
 
-    # State (6): Update a field in the last_observed_manifest, which is observed and
+    # State (5): Remove Secret
+    app.status.last_applied_manifest = deepcopy(initial_last_applied_manifest)
+    app.status.last_observed_manifest = deepcopy(initial_last_observed_manifest)
+    app.status.mangled_observer_schema.pop(2)
+    app.spec.manifest.pop(2)
+    app.status.last_applied_manifest.pop(2)
+
+    # Secret should be deleted
+    new, deleted, modified = ResourceDelta.calculate(app)
+    assert len(new) == 0
+    assert len(deleted) == 1
+    assert len(modified) == 0
+    assert app.status.last_observed_manifest[2] in deleted  # Secret
+
+
+async def test_resource_delta_field_in_last_observerd_manifest(loop):
+    """Test if the controller correctly calculates the delta between
+    ``last_applied_manifest`` and ``last_observed_manifest``,
+    especially for fields in ``last_observer_manifest``
+
+    State (0):
+        Prepare the test with the ``prepare_resource_delta_test`` function
+
+    State (1):
+        Update a field in the last_observed_manifest, which is observed and present in
+        last_applied_manifest
+
+    State (2):
+        Update a field in the last_observed_manifest, which is observed and not
+        present in last_applied_manifest
+
+    State (3):
+        Update a field in the last_observed_manifest, which is not observed and
+        present in last_applied_manifest
+
+    State (4):
+        Update a field in the last_observed_manifest, which is not observed and not
+        present in last_applied_manifest
+
+    State (5):
+        Update the namespace field in the last_observed_manifest,
+        which is observed and present in last_applied_manifest
+
+    State (6):
+        Remove Secret completely
+
+    """
+
+    # State (0): Prepare the test with the ``prepare_resource_delta_test`` function
+    app, initial_last_applied_manifest, initial_mangled_observer_schema = \
+        await prepare_resource_delta_test()
+
+
+    # State (1): Update a field in the last_observed_manifest, which is observed and
     # present in last_applied_manifest
     app.status.mangled_observer_schema = deepcopy(initial_mangled_observer_schema)
     app.status.last_applied_manifest = deepcopy(initial_last_applied_manifest)
@@ -2510,7 +2574,7 @@ async def test_resource_delta(loop):
     assert len(modified) == 1
     assert app.status.last_applied_manifest[1] in modified  # Service
 
-    # State (7): Update a field in the last_observed_manifest, which is observed and not
+    # State (2): Update a field in the last_observed_manifest, which is observed and not
     # present in last_applied_manifest
     app.status.last_applied_manifest[1]["spec"].pop("type")
 
@@ -2522,7 +2586,7 @@ async def test_resource_delta(loop):
     assert len(modified) == 1
     assert app.status.last_applied_manifest[1] in modified  # Service
 
-    # State (8): Update a field in the last_observed_manifest, which is not observed and
+    # State (3): Update a field in the last_observed_manifest, which is not observed and
     # present in last_applied_manifest
     app.status.last_applied_manifest = deepcopy(initial_last_applied_manifest)
     app.status.last_observed_manifest = deepcopy(initial_last_observed_manifest)
@@ -2535,7 +2599,7 @@ async def test_resource_delta(loop):
     assert len(deleted) == 0
     assert len(modified) == 0
 
-    # State (9): Update a field in the last_observed_manifest, which is not observed and
+    # State (4): Update a field in the last_observed_manifest, which is not observed and
     # not present in last_applied_manifest
     app.status.last_applied_manifest[1]["spec"]["ports"][0].pop("protocol")
 
@@ -2546,7 +2610,7 @@ async def test_resource_delta(loop):
     assert len(deleted) == 0
     assert len(modified) == 0
 
-    # State (10): Update the namespace field in the last_observed_manifest,
+    # State (5): Update the namespace field in the last_observed_manifest,
     # which is observed and present in last_applied_manifest
 
     app.status.last_observed_manifest[1]["metadata"]["namespace"] = "Secondary"
@@ -2560,7 +2624,45 @@ async def test_resource_delta(loop):
     assert len(deleted) == 1
     assert len(modified) == 0
 
-    # State (11): Add additional elements to a list in last_observed_manifest
+
+    # State (6): Remove Secret
+    app.status.last_applied_manifest = deepcopy(initial_last_applied_manifest)
+    app.status.last_observed_manifest = deepcopy(initial_last_observed_manifest)
+    app.status.mangled_observer_schema.pop(2)
+    app.spec.manifest.pop(2)
+    app.status.last_applied_manifest.pop(2)
+
+    # Secret should be deleted
+    new, deleted, modified = ResourceDelta.calculate(app)
+    assert len(new) == 0
+    assert len(deleted) == 1
+    assert len(modified) == 0
+    assert app.status.last_observed_manifest[2] in deleted  # Secret
+
+
+async def test_resource_delta_list_in_last_observed_manifest(loop):
+    """Test if the controller correctly calculates the delta between
+    ``last_applied_manifest`` and ``last_observed_manifest``,
+    especially for lists in the ``last_observer_manifest``
+
+    State (0):
+        Prepare the test with the ``prepare_resource_delta_test`` function
+
+    State (1):
+        Add additional elements to a list in last_observed_manifest
+
+    State (2):
+        Remove elements from a list in last_observed_manifest
+
+    State (3):
+        Remove Secret completely
+
+    """
+
+    # State (0): Prepare the test with the ``prepare_resource_delta_test`` function
+    app, initial_last_applied_manifest, _ = await prepare_resource_delta_test()
+
+    # State (1): Add additional elements to a list in last_observed_manifest
     app.status.last_applied_manifest = deepcopy(initial_last_applied_manifest)
     app.status.last_observed_manifest = deepcopy(initial_last_observed_manifest)
     app.status.last_observed_manifest[1]["spec"]["ports"].insert(
@@ -2585,14 +2687,14 @@ async def test_resource_delta(loop):
     ] += 1
 
     # Number of elements is above the authorized list length. Service should be
-    # rollbacked
+    # rolled back
     new, deleted, modified = ResourceDelta.calculate(app)
     assert len(new) == 0
     assert len(deleted) == 0
     assert len(modified) == 1
     assert app.status.last_applied_manifest[1] in modified  # Service
 
-    # State (12): Remove elements from a list in last_observed_manifest
+    # State (2): Remove elements from a list in last_observed_manifest
     app.status.mangled_observer_schema[1]["spec"]["ports"][-1][
         "observer_schema_list_min_length"
     ] = 1
@@ -2611,7 +2713,7 @@ async def test_resource_delta(loop):
     assert len(modified) == 1
     assert app.status.last_applied_manifest[1] in modified  # Service
 
-    # State (13): Remove Secret
+    # State (3): Remove Secret
     app.status.last_applied_manifest = deepcopy(initial_last_applied_manifest)
     app.status.last_observed_manifest = deepcopy(initial_last_observed_manifest)
     app.status.mangled_observer_schema.pop(2)

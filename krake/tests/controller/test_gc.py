@@ -5,6 +5,7 @@ import time
 from contextlib import suppress
 from itertools import count
 
+import sys
 import pytest
 import pytz
 from factory import Factory, SubFactory
@@ -238,7 +239,7 @@ async def test_main_help(loop):
     command = "python -m krake.controller.gc -h"
     # The loop parameter is mandatory otherwise the test fails if started with others.
     process = await asyncio.create_subprocess_exec(
-        *command.split(" "), stdout=PIPE, stderr=STDOUT, loop=loop
+        *command.split(" "), stdout=PIPE, stderr=STDOUT
     )
     stdout, _ = await process.communicate()
     output = stdout.decode()
@@ -246,11 +247,15 @@ async def test_main_help(loop):
     to_check = [
         "Garbage Collector for Krake",
         "usage:",
-        "optional arguments:",
         "default:",  # Present if the default value of the arguments are displayed
         "str",  # Present if the type of the arguments are displayed
         "int",
     ]
+    # Because python3.10 argparse version changed 'optional arguments:' to 'options:'
+    if sys.version_info < (3, 10):
+        to_check.append("optional arguments:")
+    else:
+        to_check.append("options:")
 
     for expression in to_check:
         assert expression in output
