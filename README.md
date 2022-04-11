@@ -154,7 +154,7 @@ cp /home/USER/.minikube/ca.crt cluster_certs/certs
 kubectl config view >> cluster_certs/config/minikube_conf.yaml
 ```
 
-**Attention:** If you have installed both kind and minikube this command would list both configurations. You then should remove the kind configuration.
+**Attention:** If you have installed both kind and minikube this command would list both configurations. In this case, you should remove the kind configuration.
 
 Here you can see an example configuration of minikube for Krake:
 
