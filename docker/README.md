@@ -35,7 +35,7 @@ for defined docker infrastructure bundles.
   - It can either be crafted by hand, using the `docker/docker.yaml.template` as a base
     example, or can be generated using the `krake_generate_config` script,
     which is used to generate all Krake configuration files.
-    - The minimal recommended configuration is as follow:
+    - The minimal recommended configuration is as follows:
   
       ```bash
       krake_generate_config --dst docker docker/docker.yaml.template --api-host krake-api --etcd-host krake-db
