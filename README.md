@@ -87,7 +87,7 @@ First, the configuration files need to be generated with a script. They can
 then be modified at will.
 
 ```bash
-# first, start the generate script to have initial config files
+# First, start the generate script to have initial config files
 krake_generate_config config/*.template rok.yaml.template
 
 krake_generate_config --allow-anonymous --static-authentication-enabled config/api.yaml.template
@@ -96,7 +96,7 @@ krake_generate_config --allow-anonymous --static-authentication-enabled config/a
 # afterwards create that folder which is expected:
 sudo mkdir /etc/krake
 
-# last, copy generated files to that directory with 
+# Last, copy generated files to that directory with 
 sudo cp *.yaml /etc/krake
 
 # Optional: you can use the rok configuration template as you prefer. It can also be generated.
@@ -105,18 +105,17 @@ krake_generate_config rok.yaml.template
 ```
 
 The `--allow-anonymous` and `--static-authentication-enabled` options set the API with
-minimal authentication and authorization protections (for development purpose). It should not be used with a
+minimal authentication and authorization protections. It should not be used with a
 production deployment, but are easier to work with in a test deployment. For more
-information, take a look at the "Security principle s" chapter of the
-[Admin Documentation][admin-docs].
+information, take a look at the "Security principles" chapter of the [Admin Documentation][admin-docs].
 
 #### Bootstrapping the database
 
-The database can be bootstrapped, by adding resources in the database (etcd) before
+The `etc` database can be bootstrapped, by adding resources to it before
 starting Krake:
 
 ```bash
-# run the neccessary etcd server first
+# Run the neccessary etcd server first
 support/etcd
 # Create roles for the RBAC authorization mode.
 krake_bootstrap_db bootstrapping/base_roles.yaml
@@ -136,22 +135,22 @@ explanations, and examples.
 Initialize folders needed to store certificates and configuration files. These will be used in the next steps.
 
 ```bash
-# in the Krake folder execute this command
+# In Krake folder execute this command
 mkdir -p cluster_certs/certs cluster_certs/config
 ```
 
 #### 1. Minikube
 
-Create minikube instance and download the kubeconfig file, as well as the certificate and key file
+Create a minikube instance and download the kubeconfig file, as well as the certificate and key file
 necessary to connect to your minikube instance.
 
 ```bash
 minikube start
-# copy client and ca certificate to the above created folders
+# Copy client and ca certificate to the above created folders
 cp /home/USER/.minikube/profiles/minikube/client.* cluster_certs/certs
 cp /home/USER/.minikube/ca.crt cluster_certs/certs
 
-# copy/generate config.yaml for later use with krake
+# Copy/generate config.yaml for later use with krake
 kubectl config view >> cluster_certs/config/minikube_conf.yaml
 ```
 
@@ -196,7 +195,7 @@ users:
 
 #### 2. KinD
 
-Create kind instance and save the kubeconfig file in `cluster_certs` directory
+Create a kind instance and save the kubeconfig file in the `cluster_certs` directory
 
 Prerequisites
 
@@ -235,13 +234,13 @@ python -m krake.controller.scheduler
 python -m krake.controller.kubernetes
 ```
 
-There is also a _script_ (see snippets section on git) provided in the git repository to start all parts of Krake using „tmux“.
+There is also a [script](https://gitlab.com/rak-n-rok/krake/-/snippets/2042674) (see snippets section on git) provided in the git repository to start all parts of Krake using „tmux“.
 
 Finally we register the minikube (or kind) instance as a Krake backend and use Krake to
 deploy an `echoserver` application.
 
 ```bash
-# list current clusters; there should be none
+# List current clusters; there should be none
 $ rok kube cluster list
 +------+-----------+--------+---------+----------+---------+-------+
 | name | namespace | labels | created | modified | deleted | state |
@@ -263,7 +262,7 @@ $ rok kube cluster create cluster_certs/config/minikube_conf.yaml
 | failing_metrics  | None                |
 +------------------+---------------------+
 
-# now there is a cluster named minikube2
+# Now there is a cluster named minikube2
 $ rok kube cluster list
 +-----------+--------------+--------+---------------------+---------------------+---------+--------+
 |   name    |  namespace   | labels |       created       |      modified       | deleted | state  |
@@ -271,7 +270,7 @@ $ rok kube cluster list
 | minikube2 | system:admin | None   | 2022-03-30 16:00:21 | 2022-03-30 16:00:21 | None    | ONLINE |
 +-----------+--------------+--------+---------------------+---------------------+---------+--------+
 
-# run an application on Krake
+# Run an application on Krake
 $ rok kube app create -f rak/functionals/echo-demo.yaml echo-demo
 +-----------------------+---------------------+
 | name                  | echo-demo           |
@@ -292,7 +291,7 @@ $ rok kube app create -f rak/functionals/echo-demo.yaml echo-demo
 | running_on            | None                |
 +-----------------------+---------------------+
 
-# check the status of the application
+# Check the status of the application
 $ rok kube app get echo-demo
 +-----------------------+-------------------------------------------------------------------------------------------+
 | name                  | echo-demo                                                                                 |
@@ -319,29 +318,29 @@ $ curl 192.168.49.2:30285
 Hostname: echo-demo-6ff4d6b744-mcxhb
 
 Pod Information:
-	-no pod information available-
+  -no pod information available-
 
 Server values:
-	server_version=nginx: 1.13.3 - lua: 10008
+  server_version=nginx: 1.13.3 - lua: 10008
 
 Request Information:
-	client_address=172.17.0.1
-	method=GET
-	real path=/
-	query=
-	request_version=1.1
-	request_scheme=http
-	request_uri=http://192.168.49.2:8080/
+  client_address=172.17.0.1
+  method=GET
+  real path=/
+  query=
+  request_version=1.1
+  request_scheme=http
+  request_uri=http://192.168.49.2:8080/
 
 Request Headers:
-	accept=*/*
-	host=192.168.49.2:30285
-	user-agent=curl/7.74.0
+  accept=*/*
+  host=192.168.49.2:30285
+  user-agent=curl/7.74.0
 
 Request Body:
-	-no body in request-
+  -no body in request-
 
-# delete the application
+# Delete the application
 $ rok kube app delete echo-demo
 +-----------------------+-----------------------------------------------+
 | name                  | echo-demo                                     |
@@ -363,7 +362,7 @@ $ rok kube app delete echo-demo
 | running_on            | None                                          |
 +-----------------------+-----------------------------------------------+
 
-# delete the cluster
+# Delete the cluster
 $ rok kube cluster delete minikube2
 +------------------+---------------------+
 | name             | minikube2           |
@@ -378,7 +377,7 @@ $ rok kube cluster delete minikube2
 | failing_metrics  | None                |
 +------------------+---------------------+
 
-# check that cluster is deleted
+# Check that cluster is deleted
 $ rok kube cluster list 
 +------+-----------+--------+---------+----------+---------+-------+
 | name | namespace | labels | created | modified | deleted | state |
