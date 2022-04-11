@@ -111,7 +111,7 @@ information, take a look at the "Security principles" chapter of the [Admin Docu
 
 #### Bootstrapping the database
 
-The `etc` database can be bootstrapped, by adding resources to it before
+The `etcd` database can be bootstrapped, by adding resources to it before
 starting Krake:
 
 ```bash
