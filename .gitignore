@@ -25,6 +25,7 @@
 # Cluster certificates
 /ansible/cluster_certs/**
 !/ansible/cluster_certs/.gitkeep
+cluster_certs
 
 # Temporary Python files and caches
 *.pyc
@@ -49,3 +50,5 @@ __pycache__/
 
 # Krake dot env configuration variables file
 .env
+.idea
+.vscode
