@@ -125,7 +125,7 @@ Preparation
     +-----------+----------------------+
 
 
-- Register ``minikube-cluster-1`` and ``minikube-cluster-1`` clusters, and associate the ``electricity_cost_1`` and ``green_energy_ratio_1`` metrics to them using different weights to get different ranking scores:
+- Register ``minikube-cluster-1`` and ``minikube-cluster-2`` clusters, and associate the ``electricity_cost_1`` and ``green_energy_ratio_1`` metrics to them using different weights to get different ranking scores:
 
 .. prompt:: bash $ auto
 
@@ -136,7 +136,7 @@ Preparation
   weights for the two static metrics:
 
   +--------------------------+------------------------+------------------------+-------+
-  |                          | ``minikube-cluster-1`` | ``minikube-cluster-1`` | Value |
+  |                          | ``minikube-cluster-1`` | ``minikube-cluster-2`` | Value |
   +==========================+========================+========================+=======+
   | ``electricity_cost_1``   | Weight: 10             | Weight: 1              | 0.9   |
   +--------------------------+------------------------+------------------------+-------+
@@ -186,7 +186,7 @@ Observe a migration
   * ``green_energy_ratio_1``: to have a value of 0.9;
 
   +--------------------------+------------------------+------------------------+-----------+
-  |                          | ``minikube-cluster-1`` | ``minikube-cluster-1`` | New value |
+  |                          | ``minikube-cluster-1`` | ``minikube-cluster-2`` | New value |
   +==========================+========================+========================+===========+
   | ``electricity_cost_1``   | Weight: 10             | Weight: 1              | 0.1       |
   +--------------------------+------------------------+------------------------+-----------+
