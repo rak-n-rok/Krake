@@ -389,7 +389,7 @@ class CoreApi(ApiClient):
             MetricsProvider: Body of the HTTP response.
 
         """
-        path = "/core/namespaces/{namespace}/metricsproviders/"\
+        path = "/core/namespaces/{namespace}/metricsproviders"\
             .format(namespace=namespace)
         url = self.client.url.with_path(path)
 

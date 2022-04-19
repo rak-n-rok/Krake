@@ -517,24 +517,41 @@ def test_metric_crud():
     10. Delete the metric
     11. List the metrics and verify that the deleted metrics aren't present
     """
+
+    ml = run(
+        (
+            "rok core metric list"
+        )
+    )
+    strml = ml.output
+    gml = run(
+        (
+            "rok core gm list"
+        )
+    )
+    strgml = gml.output
+
     for m_kind in ["metric", "globalmetric"]:
         # 1. Delete a non-existent metric and expect failure
         name = "e2e_test_metric_2_be_deleted"
-        error_message = f"The non-existent {m_kind} {name} could be deleted."
+        error_message = f"The non-existent {m_kind} {name} could be deleted." + "\n" \
+                        + strml + "\n" + strgml + "\n"
         run(
             f"rok core {m_kind} delete {name}",
             condition=check_return_code(error_message, expected_code=1),
             retry=0,
         )
         # 2. Get a non-existent metric and expect failure
-        error_message = f"The non-existent {m_kind} {name} could be retrieved."
+        error_message = f"The non-existent {m_kind} {name} could be retrieved." + "\n" \
+                        + strml + "\n" + strgml + "\n"
         run(
             f"rok core {m_kind} get {name} -o json",
-            condition=check_return_code(error_message, expected_code=0),
+            condition=check_return_code(error_message, expected_code=1),
             retry=0,
         )
         # 3. Update a non-existent metric and expect failure
-        error_message = f"The non-existent {m_kind} {name} could be updated."
+        error_message = f"The non-existent {m_kind} {name} could be updated." + "\n" \
+                        + strml + "\n" + strgml + "\n"
         run(
             f"rok core {m_kind} update --max 30 {name} -o json",
             condition=check_return_code(error_message, expected_code=1),
@@ -544,7 +561,8 @@ def test_metric_crud():
         mp_name = "non-existent-mp-name"
         mmin = 5
         mmax = 6
-        error_message = f"The {m_kind} {name} could not be created."
+        error_message = f"The {m_kind} {name} could not be created." + "\n" \
+                        + strml + "\n" + strgml + "\n"
         mp_name_arg_flag = "--mp-name" if m_kind == "metric" else "--gmp-name"
         run(
             f"rok core {m_kind} create {name} {mp_name_arg_flag} {mp_name} "
@@ -555,7 +573,8 @@ def test_metric_crud():
             retry=0,
         )
         # 5. Get the metric and check the content
-        error_message = f"The {m_kind} {name} could not be retrieved."
+        error_message = f"The {m_kind} {name} could not be retrieved." + "\n" \
+                        + strml + "\n" + strgml + "\n"
         run(
             f"rok core {m_kind} get {name} -o json",
             condition=check_metric_content(
@@ -564,7 +583,8 @@ def test_metric_crud():
             retry=0,
         )
         # 6. Update the metric
-        error_message = f"The {m_kind} {name} could not be updated."
+        error_message = f"The {m_kind} {name} could not be updated." + "\n" \
+                        + strml + "\n" + strgml + "\n"
         new_min = -2
         new_max = -1
         run(
@@ -579,7 +599,8 @@ def test_metric_crud():
             retry=0,
         )
         # 7. Get the metric and check the content
-        error_message = f"The {m_kind} {name} could not be retrieved."
+        error_message = f"The {m_kind} {name} could not be retrieved."+ "\n" \
+                        + strml + "\n" + strgml + "\n"
         run(
             f"rok core {m_kind} get {name} -o json",
             condition=check_metric_content(
@@ -592,14 +613,16 @@ def test_metric_crud():
             retry=0,
         )
         # 8. Perform an empty update of the metric and expect failure
-        error_message = f"The {m_kind} {name} was updated despite no change."
+        error_message = f"The {m_kind} {name} was updated despite no change." + "\n" \
+                        + strml + "\n" + strgml + "\n"
         run(
             f"rok core {m_kind} update {name} --min {new_min} -o json",
             condition=check_return_code(error_message, expected_code=0),
             retry=0,
         )
         # 9. Create a metric with the same name and expect failure
-        error_message = f"The existing {m_kind} {name} could be created."
+        error_message = f"The existing {m_kind} {name} could be created." + "\n" \
+                        + strml + "\n" + strgml + "\n"
         new_mp_name = "other-non-existent-mp"
         run(
             f"rok core {m_kind} create {name} {mp_name_arg_flag} {new_mp_name} "
@@ -608,7 +631,8 @@ def test_metric_crud():
             retry=0,
         )
         # 10. Delete the metric
-        error_message = f"The {m_kind} {name} could not be deleted."
+        error_message = f"The {m_kind} {name} could not be deleted." + "\n" \
+                        + strml + "\n" + strgml + "\n"
         run(
             f"rok core {m_kind} delete {name} -o json",
             condition=check_return_code(error_message),
@@ -616,7 +640,8 @@ def test_metric_crud():
         )
         # 11. List the metrics and verify that the deleted metric is not present
         time.sleep(_GC_DELAY)
-        error_message = f"The {m_kind}s could not be retrieved."
+        error_message = f"The {m_kind}s could not be retrieved." + "\n" \
+                        + strml + "\n" + strgml + "\n"
         metrics = run(
             f"rok core {m_kind} list -o json",
             condition=check_return_code(error_message),

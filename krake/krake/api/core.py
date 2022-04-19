@@ -756,7 +756,7 @@ class CoreApi(object):
                 f"exists in namespace {namespace!r}"
             )
             problem = HttpProblem(
-                reason=message, title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
+                detail=message, title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
             )
             raise HttpProblemError(web.HTTPConflict, problem)
 
@@ -904,7 +904,7 @@ class CoreApi(object):
             entity.update(body)
         except ValueError as e:
             problem = HttpProblem(
-                reason=str(e), title=HttpProblemTitle.UPDATE_ERROR
+                detail=str(e), title=HttpProblemTitle.UPDATE_ERROR
             )
             raise HttpProblemError(web.HTTPBadRequest, problem)
 
@@ -950,7 +950,7 @@ class CoreApi(object):
                 f"exists in namespace {namespace!r}"
             )
             problem = HttpProblem(
-                reason=message, title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
+                detail=message, title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
             )
             raise HttpProblemError(web.HTTPConflict, problem)
 
@@ -1100,7 +1100,7 @@ class CoreApi(object):
             entity.update(body)
         except ValueError as e:
             problem = HttpProblem(
-                reason=str(e), title=HttpProblemTitle.UPDATE_ERROR
+                detail=str(e), title=HttpProblemTitle.UPDATE_ERROR
             )
             raise HttpProblemError(web.HTTPBadRequest, problem)
 

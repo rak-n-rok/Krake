@@ -1,3 +1,56 @@
+"""
+This module provides some basic metricsprovider and metric classes and functionalities,
+which are used in the E2E tests to ease the execution flow.
+Functions include creation, read, update and deletion commands as well as receiving of
+other useful information like corresponding metrics and providers.
+
+The following classes can be found:
+    MetricsProviderType (Enum):
+        Enum class for all metrics provider types.
+
+    BaseMetricsProviderDefinition (ResourceDefinition, ABC):
+        Base class for both namespaced and global metrics provider
+        resource definitions.
+
+    BaseKafkaMetricsProviderDefinition (BaseMetricsProviderDefinition):
+        Base class for all kafka metrics provider resource definitions.
+
+    BasePrometheusMetricsProviderDefinition (BaseMetricsProviderDefinition):
+        Base class for all prometheus metrics provider resource definitions.
+
+    BaseStaticMetricsProviderDefinition (BaseMetricsProviderDefinition):
+        Base class for all static metrics provider resource definitions.
+
+    BaseMetricDefinition (ResourceDefinition, ABC):
+        Base class for namespaced and global metrics.
+
+    NonExistentMetric (BaseMetricDefinition):
+        Used by tests which require a metric that is not in the database.
+
+    WrappedMetric (ABC):
+        A wrapper around a BaseMetricDefinition object with kind
+        ResourceKind.Metric or ResourceKind.GlobalMetric.
+
+    ValuedMetric (WrappedMetric, ABC):
+        A wrapper around a BaseMetricDefinition object and a value.
+
+    StaticMetric (ValuedMetric):
+        Used by the static metrics providers.
+
+    PrometheusMetric (ValuedMetric):
+        Used by the prometheus metrics providers.
+
+    WeightedMetric (ValuedMetric):
+        A wrapper around a BaseMetricDefinition object and a weight.
+
+    ResourceProvider (Singleton):
+        Resource provider class, which contains data for the resource provider as well
+        as useful functions.
+
+Some of these classes are inherited from abstract base classes, which function as a
+virtual parent class (import ABC).
+"""
+
 from abc import ABC, abstractmethod
 from enum import Enum
 import random
@@ -15,7 +68,7 @@ class MetricsProviderType(Enum):
 
 
 class BaseMetricsProviderDefinition(ResourceDefinition, ABC):
-    """base class for both namespaced and global metrics provider
+    """Base class for both namespaced and global metrics provider
     resource definitions.
 
     Attributes:
@@ -85,6 +138,8 @@ class BaseMetricsProviderDefinition(ResourceDefinition, ABC):
         Returns:
             dict[str, float]: dictionary with the metric names and values as
                 keys and values.
+        Raises:
+            NotImplementedError: if the metrics are not found
         """
         raise NotImplementedError()
 
@@ -130,6 +185,9 @@ class BaseMetricsProviderDefinition(ResourceDefinition, ABC):
         Args:
             metrics (list(StaticMetric)): metrics to validate
 
+        Raises:
+            ValueError:
+                if metrics are no list or if metrics and metricsprovider do not match
         """
         if metrics is None:
             raise ValueError("Expected metrics to be a list. Was None.")
@@ -154,7 +212,6 @@ class BaseKafkaMetricsProviderDefinition(BaseMetricsProviderDefinition):
         comparison_column (str): Name of the column whose value will be compared
             to the metric name when selecting a metric.
         value_column (str): Name of the column where the value of a metric is stored.
-
 
     Raises:
         ValueError: if kind is incorrect or does not match the namespace
@@ -749,6 +806,9 @@ class ResourceProvider(Singleton):
         Args:
             mp (BaseMetricsProviderDefinition): the metrics provider
             metrics (list[BaseMetricDefinition): the metrics
+
+        Raises:
+            NotImplementedError: if the MetricsProviderType is not set
         """
         providers_info = cls._METRICS_PROVIDER_INFO[mp.type][mp.namespace]["providers"]
         provided_metrics = next(
@@ -800,6 +860,9 @@ class ResourceProvider(Singleton):
         Returns:
             BaseMetricsProviderDefinition:
                 The resource definition created.
+
+        Raises:
+            NotImplementedError: if the MetricsProviderType is not set
         """
         kind = (
             ResourceKind.METRICSPROVIDER
@@ -926,7 +989,6 @@ class ResourceProvider(Singleton):
             raise ValueError(msg)
 
         return metrics
-
 
     def get_metrics_provider(self, metric):
         """

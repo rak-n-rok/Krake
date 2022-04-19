@@ -244,6 +244,13 @@ The Krake scheduler filters backends based on defined backend metrics. The appro
 metrics definition can prioritize the backend as a potential destination for a given
 resource.
 
+Krake provides two kinds of Metrics and MetricsProviders. ``GlobalMetric`` as well as
+the ``GlobalMetricsProvider`` can be used throughout the entire Krake infrastructure by
+all users, apps and clusters. In contrast, the ``Metric`` and ``MetricsProvider`` object
+are bound to a namespace (hence why they're called 'namespaced') and can only be used in
+their respective context. In most of the documentation chapters, only ``GlobalMetrics``
+are talked about, but namespaced ``Metrics`` can also be used to follow these sections.
+
 The metrics for the Kubernetes clusters, Magnum clusters and OpenStack projects
 resources are defined by the ``-m`` or ``--metric`` option in the rok CLI, see
 :ref:`user/rok-documentation:Rok documentation`. Multiple metrics can be specified for
@@ -263,9 +270,9 @@ Examples:
   rok os project create --user-id $OS_USER_ID --template $TEMPLATE_ID my-project --metric heat_demand_zone_1 3
 
 
-By design, the Krake metric resource (called ``GlobalMetric``) is a core api object,
-that contains its value normalization interval (min, max) and metrics provider name,
-from which the metric current value should be requested. For the moment, Krake
+By design, the general Krake metric resource (called ``GlobalMetric``) is a core api
+object, that contains its value normalization interval (min, max) and metrics provider
+name, from which the metric current value should be requested. For the moment, Krake
 supports the following types of metrics providers:
 
 - **Prometheus** metrics provider, which can be used to fetch the current value of a

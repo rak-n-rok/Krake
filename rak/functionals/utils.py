@@ -190,6 +190,8 @@ def check_app_state(state, error_message, reason=None):
         callable: a condition that will check its given response against the parameters
             of the current function.
 
+    Raises:
+        AssertionError: if a KeyError or JSONDecodeError is caught
     """
 
     def validate(response):
@@ -368,6 +370,8 @@ def check_return_code(error_message, expected_code=0):
         callable: a condition that will check its given response against the parameters
             of the current function.
 
+    Raises:
+        AssertionError: if the return code doesn't equal the expected code
     """
 
     def validate(response):
@@ -388,6 +392,9 @@ def check_status_code(response, expected_code=200):
         response (requests.Response): the response object, that will be checked.
         expected_code (int, optional): a http return code, to check against the one of
             the given response.
+
+    Raises:
+        AssertionError: if the status code doesn't equal the expected code
     """
     error_message = (
         f" Expected return code: {expected_code}."
@@ -409,6 +416,8 @@ def check_empty_list(error_message):
         callable: a condition that will check its given response against the parameters
             of the current function.
 
+    Raises:
+        AssertionError: if a JSONDecodeError is caught
     """
 
     def validate(response):
@@ -439,6 +448,9 @@ def check_resource_exists(error_message=""):
         callable: a condition that will check its given response against the parameters
             of the current function.
 
+    Raises:
+        AssertionError: if the return code doesn't equal 0 or the response message
+            contains 'not found'
     """
 
     def validate(response):
@@ -470,6 +482,9 @@ def check_resource_deleted(error_message):
         callable: a condition that will check its given response against the parameters
             of the current function.
 
+    Raises:
+        AssertionError: if the return code doesn't equal 1 or the response message
+            contains 'not found'
     """
 
     def validate(response):
@@ -494,7 +509,12 @@ def check_spec_container_image(expected_image, error_message):
         error_message (str): the message that will be displayed if the check fails.
 
     Returns:
+        callable: a condition that will check its given response against the parameters
+            of the current function.
 
+    Raises:
+        AssertionError: if a JSONDecodeError is caught or the image doesn't equal the
+            expected image
     """
 
     def validate(response):
@@ -521,7 +541,12 @@ def check_spec_replicas(expected_replicas, error_message):
         error_message (str): the message that will be displayed if the check fails.
 
     Returns:
+        callable: a condition that will check its given response against the parameters
+            of the current function.
 
+    Raises:
+        AssertionError: if a JSONDecodeError is caught or the replica doesn't equal the
+            expected replica
     """
 
     def validate(response):
@@ -552,6 +577,9 @@ def check_app_running_on(expected_cluster, error_message):
         callable: a condition that will check its given response against
             the parameters of the current function.
 
+    Raises:
+        AssertionError: if a KeyError or JSONDecodeError is caught or
+            the cluster the app is running on doesn't equal the expected cluster
     """
 
     def validate(response):
@@ -604,6 +632,8 @@ def check_http_code_in_output(http_code, error_message=None):
         callable: a condition that will check its given response against the parameters
             of the current function.
 
+    Raises:
+        AssertionError: if the expected HTTP code doesn't match the response code
     """
 
     def validate(response):
@@ -681,6 +711,9 @@ def check_static_metrics(expected_metrics, error_message=""):
         callable: a condition that will check its given response against
             the parameters of the current function.
 
+    Raises:
+        AssertionError: if the observed metrics don't equal the expected metrics or
+            another exception is caught
     """
     if not error_message:
         error_message = (
