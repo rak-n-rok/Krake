@@ -21,7 +21,7 @@ import ssl
 from aiohttp import ClientError
 
 from krake.client import Client
-
+from krake.data.kubernetes import Cluster, Application
 
 logger = logging.getLogger(__name__)
 
@@ -458,7 +458,7 @@ class Observer(object):
         """
         status = await self.poll_resource()
 
-        if self.resource.kind == "Application":
+        if self.resource.kind == Application.kind:
             if self.resource.status != status:
                 logger.info(
                     "Actual resource for %s changed.", resource_ref(self.resource)
@@ -476,7 +476,7 @@ class Observer(object):
             else:
                 logger.debug("Resource %s did not change", resource_ref(self.resource))
 
-        if self.resource.kind == "Cluster":
+        if self.resource.kind == Cluster.kind:
             if self.resource.status.state != status.state:
                 logger.info(
                     "Actual resource for %s changed.", resource_ref(self.resource)

@@ -594,7 +594,7 @@ def test_one_unreachable_metrics_provider(minikube_clusters):
         expected_cluster_res = env.get_resource_definition(
             ResourceKind.CLUSTER, expected_cluster
         )
-        assert expected_cluster_res.get_state() == "ONLINE"
+        assert expected_cluster_res.get_state() == "CONNECTING"
         assert expected_cluster_res.get_metrics_reasons() == {}
 
         # 4. Ensure that the status of the cluster with failing metrics was updated to
