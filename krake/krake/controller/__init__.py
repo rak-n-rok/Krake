@@ -21,7 +21,7 @@ import ssl
 from aiohttp import ClientError
 
 from krake.client import Client
-
+from krake.data.kubernetes import Cluster, Application
 
 logger = logging.getLogger(__name__)
 
@@ -458,20 +458,41 @@ class Observer(object):
         """
         status = await self.poll_resource()
 
-        if self.resource.status != status:
-            logger.info("Actual resource for %s changed.", resource_ref(self.resource))
+        if self.resource.kind == Application.kind:
+            if self.resource.status != status:
+                logger.info(
+                    "Actual resource for %s changed.", resource_ref(self.resource)
+                )
 
-            to_update = deepcopy(self.resource)
-            to_update.status = status
-            updated = await self.on_res_update(to_update)
+                to_update = deepcopy(self.resource)
+                to_update.status = status
+                updated = await self.on_res_update(to_update)
 
-            # If the API accepted the update, observe the new status.
-            # If not, there may be a connectivity issue for now, so the Observer will
-            # try again in the next iteration of its main loop.
-            if updated:
-                self.resource = updated
-        else:
-            logger.debug("Resource %s did not change", resource_ref(self.resource))
+                # If the API accepted the update, observe the new status.
+                # If not, there may be a connectivity issue for now, so the Observer
+                # will try again in the next iteration of its main loop.
+                if updated:
+                    self.resource = updated
+            else:
+                logger.debug("Resource %s did not change", resource_ref(self.resource))
+
+        if self.resource.kind == Cluster.kind:
+            if self.resource.status.state != status.state:
+                logger.info(
+                    "Actual resource for %s changed.", resource_ref(self.resource)
+                )
+
+                to_update = deepcopy(self.resource)
+                to_update.status = status
+                updated = await self.on_res_update(to_update)
+
+                # If the API accepted the update, observe the new status.
+                # If not, there may be a connectivity issue for now, so the Observer
+                # will try again in the next iteration of its main loop.
+                if updated:
+                    self.resource = updated
+            else:
+                logger.debug("Resource %s did not change", resource_ref(self.resource))
 
     async def run(self):
         """Start the observing process indefinitely, with the Observer time step."""
