@@ -1,5 +1,6 @@
 import asyncio
 import json
+import datetime
 from contextlib import suppress
 
 import pytest
@@ -9,6 +10,7 @@ from copy import deepcopy
 from krake.api.app import create_app
 from krake.controller.kubernetes.client import KubernetesClient
 from krake.controller.kubernetes.hooks import (
+    unregister_observer,
     register_observer,
     update_last_applied_manifest_from_spec,
     update_last_applied_manifest_from_resp,
@@ -16,8 +18,12 @@ from krake.controller.kubernetes.hooks import (
     generate_default_observer_schema,
 )
 from krake.data.core import resource_ref
-from krake.data.kubernetes import Application, ApplicationState
-from krake.controller.kubernetes import KubernetesController, KubernetesObserver
+from krake.data.kubernetes import Application, ApplicationState, ClusterState
+from krake.controller.kubernetes import (
+    KubernetesController,
+    KubernetesApplicationObserver,
+    KubernetesClusterObserver
+)
 from krake.client import Client
 from krake.test_utils import server_endpoint, get_first_container, serialize_k8s_object
 
@@ -45,7 +51,7 @@ from tests.controller.kubernetes import (
 )
 
 
-async def test_reception_for_observer(aiohttp_server, config, db, loop):
+async def test_reception_for_application_observer(aiohttp_server, config, db, loop):
     """Test the condition to start an Observer
 
     When an received application is in PENDING state, no Observer should be started.
@@ -69,7 +75,7 @@ async def test_reception_for_observer(aiohttp_server, config, db, loop):
         controller = KubernetesController(server_endpoint(server), worker_count=0)
         # Update the client, to be used by the background tasks
         await controller.prepare(client)  # need to be called explicitly
-        await controller.reflector.list_resource()
+        await controller.application_reflector.list_resource()
     # Each running Application has a corresponding observer
     assert len(controller.observers) == 1
     assert running.metadata.uid in controller.observers
@@ -243,7 +249,7 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
             # State (7): The Secret is deleted
             assert len(manifests) == 2
 
-    observer = KubernetesObserver(cluster, app, on_res_update, time_step=-1)
+    observer = KubernetesApplicationObserver(cluster, app, on_res_update, time_step=-1)
 
     # Observe an unmodified resource
     # As no changes are noticed by the Observer, the res_update function will not be
@@ -428,7 +434,7 @@ async def test_observer_on_poll_update_default_namespace(
         spec_image = get_first_container(resource.spec.manifest[0])["image"]
         assert spec_image == "nginx:1.7.9"
 
-    observer = KubernetesObserver(cluster, app, on_res_update, time_step=-1)
+    observer = KubernetesApplicationObserver(cluster, app, on_res_update, time_step=-1)
 
     # Observe an unmodified resource
     # As no changes are noticed by the Observer, the res_update function will not be
@@ -568,7 +574,7 @@ async def test_observer_on_poll_update_cluster_default_namespace(
         spec_image = get_first_container(resource.spec.manifest[0])["image"]
         assert spec_image == "nginx:1.7.9"
 
-    observer = KubernetesObserver(cluster, app, on_res_update, time_step=-1)
+    observer = KubernetesApplicationObserver(cluster, app, on_res_update, time_step=-1)
 
     # Observe an unmodified resource
     # As no changes are noticed by the Observer, the res_update function will not be
@@ -695,7 +701,7 @@ async def test_observer_on_poll_update_manifest_namespace_set(
 
     kube = KubernetesClient(cluster.spec.kubeconfig)
     generate_default_observer_schema(app, kube.default_namespace)
-    observer = KubernetesObserver(cluster, app, on_res_update, time_step=-1)
+    observer = KubernetesApplicationObserver(cluster, app, on_res_update, time_step=-1)
 
     # Observe an unmodified resource
     # As no changes are noticed by the Observer, the res_update function will not be
@@ -774,7 +780,7 @@ async def test_observer_on_status_update(aiohttp_server, db, config, loop):
         controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
-        observer = KubernetesObserver(
+        observer = KubernetesApplicationObserver(
             cluster, app, controller.on_status_update, time_step=-1
         )
 
@@ -953,7 +959,7 @@ async def check_observer_does_not_update(observer, app, db):
     """Ensure that the given observer is up-to-date with the Application on the API.
 
     Args:
-        observer (KubernetesObserver): the observer to check.
+        observer (KubernetesApplicationObserver): the observer to check.
         app (Application): the Application that the observer has to monitor. Used just
             for its references (name and namespace).
         db (krake.api.database.Session): the database session to access the API data
@@ -1684,3 +1690,129 @@ async def test_update_last_observed_manifest_from_resp(loop):
         == 0
     )
     assert len(app.status.last_observed_manifest[1]["spec"]["ports"]) == 1
+
+
+async def test_reception_for_cluster_observers(aiohttp_server, config, loop):
+    """Test the condition to start an Observer
+
+    When a received cluster is in CONNECTING state, an Observer should be started.
+
+    """
+
+    # set the number of clusters to be created
+    cluster_count = 3
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        for i in range(cluster_count):
+            cluster = ClusterFactory()
+            # Just before an observer is created, the iterator should be equal to the
+            # current iteration number.
+            assert len(controller.observers) == i
+            # The method resource_received handles the cluster and calls corountines.
+            # If the cluster is in CONNECTING state an observer will be created.
+            assert cluster.status.state == ClusterState.CONNECTING
+            await controller.resource_received(cluster)  # needs to be called explicitly
+            # The length of the observer list in the controller should now match i+1.
+            assert len(controller.observers) == i + 1
+            # Also the uid of the cluster should be located in the observer list.
+            assert cluster.metadata.uid in controller.observers
+
+    # Each running Cluster has a corresponding observer. The length should sum up to
+    # cluster_count.
+    assert len(controller.observers) == cluster_count
+
+
+async def test_create_kubernetes_cluster_observer(aiohttp_server, config):
+    """Test the creation of a KubernetesClusterObserver.
+
+    When an observer is created, it should be updated with the cluster's status.
+
+    """
+    server = await aiohttp_server(create_app(config))
+    controller = KubernetesController(server_endpoint(server), worker_count=0)
+
+    cluster = ClusterFactory()
+    observer = KubernetesClusterObserver(cluster, controller.handle_resource)
+
+    # the initial state of the observer should be CONNECTING
+    assert observer.cluster.status.state == ClusterState.CONNECTING
+    # after the poll_resource method is called, the observer should return the cluster's
+    # polled status.
+    await observer.poll_resource()
+    # since there is no real connection to the cluster, the state should be OFFLINE
+    assert observer.cluster.status.state == ClusterState.OFFLINE
+    # the clusters status should be updated by the kubernetes controller
+    assert observer.cluster.status.state == cluster.status.state
+
+async def test_kubernetes_cluster_observer_on_cluster_update(aiohttp_server, db, loop, config):
+    """Test the behavior of the Kubernetes Controller and Observer when a cluster
+    is being updated.
+
+    """
+    server = await aiohttp_server(create_app(config))
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        cluster = ClusterFactory()
+        await db.put(cluster)
+        await controller.prepare(client)
+        await controller.resource_received(cluster)
+        # change the clusters status
+        cluster.status.state = ClusterState.NOTREADY
+        # now the cluster in the observer and the actual cluster are not equal
+        assert controller.observers[cluster.metadata.uid][0].cluster != cluster
+        # by calling the resource_received method, the observer is unregistered and
+        # registered again, therefore the cluster in the observer should be updated
+        await controller.resource_received(cluster)
+        assert controller.observers[cluster.metadata.uid][0].cluster == cluster
+
+        controller.observers[cluster.metadata.uid][0].cluster.status.state = ClusterState.ONLINE
+        assert controller.observers[cluster.metadata.uid][0].cluster != cluster
+        cluster = await controller.on_status_update(controller.observers[cluster.metadata.uid][0].cluster)
+        assert controller.observers[cluster.metadata.uid][0].cluster == cluster
+
+async def test_kubernetes_cluster_observer_on_cluster_delete(aiohttp_server, config):
+    """Test the behavior of the Kubernetes Controller and Observer when a cluster
+    is being deleted.
+
+    """
+    server = await aiohttp_server(create_app(config))
+    controller = KubernetesController(server_endpoint(server), worker_count=0)
+    cluster = ClusterFactory()
+
+    await controller.resource_received(cluster)
+    # when a datetime is set in cluster.medata.deleted the cluster should be deleted
+    # with calling the resource_received method
+    cluster.metadata.deleted = datetime.datetime.now()
+    await controller.resource_received(cluster)
+    assert controller.observers == {}
+
+
+async def test_register_kubernetes_cluster_observer(aiohttp_server, config):
+    """Test the registration of a KubernetesClusterObserver.
+
+    """
+    server = await aiohttp_server(create_app(config))
+    controller = KubernetesController(server_endpoint(server), worker_count=0)
+
+    cluster = ClusterFactory()
+
+    await controller.resource_received(cluster)
+    # the observer dict should not be empty
+    assert controller.observers != {}
+
+
+async def test_unregister_kubernetes_cluster_observer(aiohttp_server, config):
+    """Test the unregistration of a KubernetesClusterObserver.
+
+    """
+    server = await aiohttp_server(create_app(config))
+    controller = KubernetesController(server_endpoint(server), worker_count=0)
+
+    cluster = ClusterFactory()
+
+    await controller.resource_received(cluster)
+    await unregister_observer(controller,cluster)
+    # the observer dict should be empty
+    assert controller.observers == {}

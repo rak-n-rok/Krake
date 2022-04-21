@@ -393,6 +393,10 @@ class ClusterSpec(Serializable):
 
 class ClusterState(Enum):
     ONLINE = auto()
+    CONNECTING = auto()
+    OFFLINE = auto()
+    UNHEALTHY = auto()
+    NOTREADY = auto()
     FAILING_METRICS = auto()
 
 
@@ -400,13 +404,16 @@ class ClusterStatus(Serializable):
     """Status subresource of :class:`Cluster`.
 
     Attributes:
+        kube_controller_triggered (datetime): Time when the Kubernetes controller was
+        triggered. This is used to handle cluster state transitions.
         state (ClusterState): Current state of the cluster.
         metrics_reasons (dict[str, Reason]): mapping of the name of the metrics for
             which an error occurred to the reason for which it occurred.
 
     """
 
-    state: ClusterState = ClusterState.ONLINE
+    kube_controller_triggered: datetime = None
+    state: ClusterState = ClusterState.CONNECTING
     metrics_reasons: Dict[str, Reason] = field(default_factory=dict)
 
 

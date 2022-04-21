@@ -3,7 +3,7 @@ import logging
 import multiprocessing
 import time
 from contextlib import suppress
-from copy import deepcopy
+from copy import deepcopy, copy
 
 import sys
 import mock
@@ -29,7 +29,7 @@ from krake.data.config import (
     ShutdownHookConfiguration
 )
 from krake.data.core import resource_ref, ReasonCode
-from krake.data.kubernetes import Application, ApplicationState
+from krake.data.kubernetes import Application, ApplicationState, ClusterState
 from krake.controller.kubernetes.__main__ import main
 from krake.controller.kubernetes import (
     KubernetesController,
@@ -43,6 +43,7 @@ from krake.controller.kubernetes.hooks import (
     update_last_applied_manifest_from_spec,
     update_last_applied_manifest_from_resp,
     generate_default_observer_schema,
+    KubernetesClusterObserver,
 )
 from krake.client import Client
 from krake.test_utils import server_endpoint, with_timeout, serialize_k8s_object
@@ -275,7 +276,7 @@ async def test_app_reception(aiohttp_server, config, db, loop):
         controller = KubernetesController(server_endpoint(server), worker_count=0)
         # Update the client, to be used by the background tasks
         await controller.prepare(client)  # need to be called explicitly
-        await controller.reflector.list_resource()
+        await controller.application_reflector.list_resource()
 
     assert pending.metadata.uid not in controller.queue.dirty
     assert waiting.metadata.uid not in controller.queue.dirty
@@ -1189,17 +1190,17 @@ async def test_app_migration_with_shutdown_hook(
     async def _(request):
         body = await request.json()
         response = {
-                        'apiVersion': 'v1',
-                        'data': {
-                            'krake_token': 'SVotTXM4MXZ5eTkxcHdZZ3FjUG9RdDRJaUlYa2sxY1JwVUxBYW82b2tqVQ==',
-                            'krake_shutdown_url': 'aHR0cDovLzEyNy4wLjAuMTo0NTYyOS9rdWJlcm5ldGVzL25hbWVzcGFjZXMvdGVzdGluZy9hcHBsaWNhdGlvbnMvamFtZXMtc3RyaWNrbGFuZC1tZC9zaHV0ZG93bg=='
-                        },
-                        'kind': 'Secret',
-                        'metadata': {
-                            'name': body["metadata"]["name"],
-                            'namespace': 'secondary'},
-                        'type': None
-                    }
+            'apiVersion': 'v1',
+            'data': {
+                'krake_token': 'SVotTXM4MXZ5eTkxcHdZZ3FjUG9RdDRJaUlYa2sxY1JwVUxBYW82b2tqVQ==',
+                'krake_shutdown_url': 'aHR0cDovLzEyNy4wLjAuMTo0NTYyOS9rdWJlcm5ldGVzL25hbWVzcGFjZXMvdGVzdGluZy9hcHBsaWNhdGlvbnMvamFtZXMtc3RyaWNrbGFuZC1tZC9zaHV0ZG93bg=='
+            },
+            'kind': 'Secret',
+            'metadata': {
+                'name': body["metadata"]["name"],
+                'namespace': 'secondary'},
+            'type': None
+        }
         return web.json_response(response)
 
     async def make_kubernetes_api(existing=()):
@@ -1254,7 +1255,8 @@ async def test_app_migration_with_shutdown_hook(
         status__running_on=resource_ref(cluster_a),
         status__scheduled_to=resource_ref(cluster_b),
         status__last_observed_manifest=[nginx_initial_last_observed_manifest_old],
-        status__services={"shutdown": httpserver.server.server_name + ":" + str(httpserver.server.server_port)},
+        status__services={"shutdown": httpserver.server.server_name + ":" + str(
+            httpserver.server.server_port)},
         metadata__finalizers=["kubernetes_resources_deletion"],
     )
 
@@ -1296,7 +1298,7 @@ async def test_app_migration_with_shutdown_hook(
         )
         await controller.prepare(client)
 
-        reflector_task = loop.create_task(controller.reflector())
+        reflector_task = loop.create_task(controller.application_reflector())
 
         await controller.handle_resource(run_once=True)
         assert controller.queue.size() == 1
@@ -1308,7 +1310,6 @@ async def test_app_migration_with_shutdown_hook(
 
     # Needs to be set up a second time or the queue gets "buggy"
     async with Client(url=server_endpoint(server), loop=loop) as client:
-
         controller = KubernetesController(
             server_endpoint(server), worker_count=0, hooks=hooks_config
         )
@@ -1389,7 +1390,7 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
         controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
-        reflector_task = loop.create_task(controller.reflector())
+        reflector_task = loop.create_task(controller.application_reflector())
 
         await controller.handle_resource(run_once=True)
         # During deletion, the Application is updated, thus reenqueued
@@ -1445,7 +1446,6 @@ async def test_app_deletion_with_shutdown_hook(
         deleted.add("Secret")
         return web.Response(status=200)
 
-
     kubernetes_app.add_routes(routes)
 
     kubernetes_server = await aiohttp_server(kubernetes_app)
@@ -1462,7 +1462,8 @@ async def test_app_deletion_with_shutdown_hook(
         status__scheduled_to=resource_ref(cluster),
         status__running_on=resource_ref(cluster),
         status__last_observed_manifest=initial_last_observed_manifest,
-        status__services={"shutdown": httpserver.server.server_name + ":" + str(httpserver.server.server_port)},
+        status__services={"shutdown": httpserver.server.server_name + ":" + str(
+            httpserver.server.server_port)},
         metadata__finalizers=["kubernetes_resources_deletion"],
     )
     assert resource_ref(cluster) in app.metadata.owners
@@ -1478,7 +1479,7 @@ async def test_app_deletion_with_shutdown_hook(
         controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
-        reflector_task = loop.create_task(controller.reflector())
+        reflector_task = loop.create_task(controller.application_reflector())
 
         # try:
         await controller.handle_resource(run_once=True)
@@ -1559,7 +1560,8 @@ async def test_app_deletion_with_shutdown_hook_running_state(
         status__scheduled_to=resource_ref(cluster),
         status__running_on=resource_ref(cluster),
         status__last_observed_manifest=initial_last_observed_manifest,
-        status__services={"shutdown": httpserver.server.server_name + ":" + str(httpserver.server.server_port)},
+        status__services={"shutdown": httpserver.server.server_name + ":" + str(
+            httpserver.server.server_port)},
         metadata__finalizers=["kubernetes_resources_deletion"],
     )
     assert resource_ref(cluster) in app.metadata.owners
@@ -1575,7 +1577,7 @@ async def test_app_deletion_with_shutdown_hook_running_state(
         controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
-        reflector_task = loop.create_task(controller.reflector())
+        reflector_task = loop.create_task(controller.application_reflector())
 
         await controller.handle_resource(run_once=True)
         assert controller.queue.size() == 0
@@ -1657,7 +1659,8 @@ async def test_app_deletion_with_shutdown_hook_app_not_found(
         status__scheduled_to=resource_ref(cluster),
         status__running_on=resource_ref(cluster),
         status__last_observed_manifest=initial_last_observed_manifest,
-        status__services={"shutdown": httpserver.server.server_name + ":" + str(httpserver.server.server_port)},
+        status__services={"shutdown": httpserver.server.server_name + ":" + str(
+            httpserver.server.server_port)},
         metadata__finalizers=["kubernetes_resources_deletion"],
     )
     assert resource_ref(cluster) in app.metadata.owners
@@ -1724,7 +1727,8 @@ async def test_app_deletion_with_shutdown_hook_timeout(
         status__scheduled_to=resource_ref(cluster),
         status__running_on=resource_ref(cluster),
         status__last_observed_manifest=initial_last_observed_manifest,
-        status__services={"shutdown": httpserver.server.server_name + ":" + str(httpserver.server.server_port)},
+        status__services={"shutdown": httpserver.server.server_name + ":" + str(
+            httpserver.server.server_port)},
         metadata__finalizers=["kubernetes_resources_deletion"],
     )
     assert resource_ref(cluster) in app.metadata.owners
@@ -1740,7 +1744,7 @@ async def test_app_deletion_with_shutdown_hook_timeout(
         controller = KubernetesController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
-        reflector_task = loop.create_task(controller.reflector())
+        reflector_task = loop.create_task(controller.application_reflector())
 
         await controller.handle_resource(run_once=True)
         assert controller.queue.size() <= 1
@@ -2557,7 +2561,6 @@ async def test_resource_delta_field_in_last_observerd_manifest(loop):
     app, initial_last_applied_manifest, initial_mangled_observer_schema = \
         await prepare_resource_delta_test()
 
-
     # State (1): Update a field in the last_observed_manifest, which is observed and
     # present in last_applied_manifest
     app.status.mangled_observer_schema = deepcopy(initial_mangled_observer_schema)
@@ -2623,7 +2626,6 @@ async def test_resource_delta_field_in_last_observerd_manifest(loop):
     assert len(new) == 1
     assert len(deleted) == 1
     assert len(modified) == 0
-
 
     # State (6): Remove Secret
     app.status.last_applied_manifest = deepcopy(initial_last_applied_manifest)
@@ -2726,3 +2728,54 @@ async def test_resource_delta_list_in_last_observed_manifest(loop):
     assert len(deleted) == 1
     assert len(modified) == 0
     assert app.status.last_observed_manifest[2] in deleted  # Secret
+
+
+async def test_list_cluster(aiohttp_server, config):
+    """Test the list_cluster method in the kubernetes controller
+
+    After a cluster has been registered, an observer is started. By calling
+    list_cluster(cluster) the controller unregisters the corresponding cluster observer
+    and registers it again. The method list_cluster() is tested by manually altering the
+    cluster's state before calling list_cluster(). Immediately before and after the
+    call, the observer's state is stored and finally compared for inequality.
+
+    """
+    server = await aiohttp_server(create_app(config))
+    controller = KubernetesController(server_endpoint(server), worker_count=0)
+
+    cluster = ClusterFactory()
+    observer = KubernetesClusterObserver(cluster, controller.handle_resource)
+
+    # initializing the observer
+    await controller.resource_received(cluster)  # needs to be called explicitly
+    # the initial state of the observer should be CONNECTING
+    assert observer.cluster.status.state == ClusterState.CONNECTING
+    # the length should be 1
+    assert len(controller.observers) == 1
+    # this state is saved in a variable
+    observer_pre_list_cluster = copy(controller.observers)
+    # manually alter the state of the cluster
+    cluster.status.state = ClusterState.NOTREADY
+    # needs to be set explicitly
+    cluster.status.kube_controller_triggered = True
+    # call list_cluster()
+    await controller.list_cluster(cluster)
+    # this state is saved in another variable
+    observer_post_list_cluster = controller.observers
+    # finally, the variables should be unequal
+    assert observer_pre_list_cluster != observer_post_list_cluster
+
+
+async def test_creation_of_cluster_reflector(aiohttp_server, config, loop):
+    """Test the registration of a cluster_reflector in the kubernetes controller on
+    controller startup, which is triggered by the prepare method.
+
+    """
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        await controller.prepare(client)
+
+    # the cluster_reflector should be registered, so the dictionary should not be empty
+    assert controller.cluster_reflector != {}
