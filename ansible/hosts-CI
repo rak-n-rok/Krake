@@ -50,21 +50,9 @@ all:
         minikube-cluster-$CI_PIPELINE_ID-1:
           name: minikube-cluster-$CI_PIPELINE_ID-1
           network: krake-$CI_PIPELINE_ID-network
-          # Inventory name of the IdP that should be used for getting the certificate
-          # TODO Should be removed if trusted CA certificate takes place
-          # This will be done in: https://publicgitlab.cloudandheat.com/ragnarok/krake/issues/168
-          idp: krake-central-idp
-          # Enable keystone deployment on the cluster
-          use_keystone: false
         minikube-cluster-$CI_PIPELINE_ID-2:
           name: minikube-cluster-$CI_PIPELINE_ID-2
           network: krake-$CI_PIPELINE_ID-network
-          # Inventory name of the IdP that should be used for getting the certificate
-          # TODO Should be removed if trusted CA certificate takes place
-          # This will be done in: https://publicgitlab.cloudandheat.com/ragnarok/krake/issues/168
-          idp: krake-central-idp
-          # Enable keystone deployment on the cluster
-          use_keystone: false
 
     krake_apps:
       hosts:
