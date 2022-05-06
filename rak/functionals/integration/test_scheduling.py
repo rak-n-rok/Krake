@@ -476,7 +476,7 @@ def test_scheduler_clusters_with_one_metric(k8s_clusters):
                 app = env.resources[ResourceKind.APPLICATION][0]
 
                 # 2. Ensure that the app was scheduled to the cluster with the metric;
-                app.check_running_on(cluster_w_metrics)
+                app.check_running_on(cluster_w_metrics, after_delay=60)
 
 
 def test_scheduler_cluster_label_constraints_with_metrics(k8s_clusters):

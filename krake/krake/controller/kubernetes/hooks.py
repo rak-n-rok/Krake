@@ -561,8 +561,7 @@ def update_last_applied_manifest_dict_from_spec(
                 )
 
         else:
-            # If the key is not present the spec.manifest, we first need to
-            # initialize it
+            # If the key isn't present the spec.manifest, we first need to initialize it
 
             if isinstance(value, dict):
                 resource_status_new[key] = {}
@@ -1060,8 +1059,11 @@ async def unregister_observer(controller, resource, **kwargs):
     _, task = controller.observers.pop(resource.metadata.uid)
     task.cancel()
 
-    with suppress(asyncio.CancelledError):
-        await task
+    try:
+        with suppress(asyncio.CancelledError):
+            await task
+    except asyncio.TimeoutError:
+        logger.debug("Observer timed out before being unregistered")
 
 
 @listen.on(HookType.ApplicationToscaTranslation)

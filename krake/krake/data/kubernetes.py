@@ -463,6 +463,7 @@ class ApplicationSpec(Serializable):
     backoff: int = field(default=1)
     backoff_delay: int = field(default=1)
     backoff_limit: int = field(default=-1)
+    storage_migration: str = "none"
     auto_cluster_create: bool = False
 
     def __post_init__(self):
@@ -800,7 +801,7 @@ class ClusterStatus(Status):
         scheduled_to (ResourceRef): Reference to the cloud where the cluster should run.
         running_on (ResourceRef): Reference to the cloud where the cluster is running.
         retries (int): Count of remaining retries to access the cluster. Is set
-            via the Attribute backoff in ClusterSpec.
+            via the Attribute backoff in the ClusterSpec.
     """
 
     kube_controller_triggered: datetime = None

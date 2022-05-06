@@ -105,14 +105,18 @@ def test_shutdown_hook(k8s_clusters):
 
     application_name = "test-hook-shutdown"
     manifest_path = os.path.join(MANIFEST_PATH, "hook-shutdown.yaml")
+    observer_schema_path = os.path.join(MANIFEST_PATH, "hook-shutdown-observer.yaml")
     app_def = ApplicationDefinition(
-        name=application_name, manifest_path=manifest_path, hooks=["shutdown"]
+        name=application_name,
+        manifest_path=manifest_path,
+        observer_schema_path=observer_schema_path,
+        hooks=["shutdown"]
     )
 
     with Environment(environment):
         # 1. Add a configmap with the script that can use the Krake hook
         configmap_name = "sd-service-configmap"
-        error_message = f"The configMap {configmap_name} could not be created."
+        error_message = f"The configmap {configmap_name} could not be created."
         script_path = os.path.join(MANIFEST_PATH, "hook-script-shutdown-service.py")
         run(
             (
@@ -133,7 +137,7 @@ def test_shutdown_hook(k8s_clusters):
         # is finished
         app_def.check_deleted(delay=RESCHEDULING_INTERVAL+APP_DELETION_TIME)
 
-        # 4. Delete the added configmap
+        # 5. Delete the added configmap
         error_message = f"The configmap {configmap_name} could not be deleted."
         run(
             f"{kubectl_cmd(kubeconfig_path)} delete configmap {configmap_name}",
