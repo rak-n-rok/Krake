@@ -2,10 +2,9 @@ import logging
 
 import requests
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
+from kubernetes_asyncio import client as k8s_client
 from kubernetes_asyncio.client import (
     ApiClient,
-    CoreV1Api,
-    AppsV1Api,
     Configuration,
     ApiextensionsV1Api,
     CustomObjectsApi,
@@ -35,11 +34,11 @@ class InvalidCustomResourceDefinitionError(ControllerError):
 
 
 class UnsupportedResourceError(ControllerError):
-    """Raised when the kind of a Kubernetes resource in a manifest is not supported by
+    """Raised when the Kubernetes resource is not supported by
     the Kubernetes controller.
     """
 
-    code = ReasonCode.UNSUPPORTED_KIND
+    code = ReasonCode.UNSUPPORTED_RESOURCE
 
 
 class ApiAdapter(object):
@@ -58,20 +57,56 @@ class ApiAdapter(object):
         self.api = api
 
     async def read(self, kind, name=None, namespace=None):
-        fn = getattr(self.api, f"read_namespaced_{camel_to_snake_case(kind)}")
-        return await fn(name=name, namespace=namespace)
+        if hasattr(self.api, f"read_namespaced_{camel_to_snake_case(kind)}"):
+            return await getattr(
+                self.api, f"read_namespaced_{camel_to_snake_case(kind)}"
+            )(name=name, namespace=namespace)
+
+        if hasattr(self.api, f"read_{camel_to_snake_case(kind)}"):
+            return await getattr(self.api, f"read_{camel_to_snake_case(kind)}")(
+                name=name
+            )
+
+        raise UnsupportedResourceError(f"{kind} resources are not supported.")
 
     async def create(self, kind, body=None, namespace=None):
-        fn = getattr(self.api, f"create_namespaced_{camel_to_snake_case(kind)}")
-        return await fn(body=body, namespace=namespace)
+        if hasattr(self.api, f"create_namespaced_{camel_to_snake_case(kind)}"):
+            return await getattr(
+                self.api, f"create_namespaced_{camel_to_snake_case(kind)}"
+            )(body=body, namespace=namespace)
+
+        if hasattr(self.api, f"create_{camel_to_snake_case(kind)}"):
+            return await getattr(self.api, f"create_{camel_to_snake_case(kind)}")(
+                body=body
+            )
+
+        raise UnsupportedResourceError(f"{kind} resources are not supported.")
 
     async def patch(self, kind, name=None, body=None, namespace=None):
-        fn = getattr(self.api, f"patch_namespaced_{camel_to_snake_case(kind)}")
-        return await fn(name=name, body=body, namespace=namespace)
+        if hasattr(self.api, f"patch_namespaced_{camel_to_snake_case(kind)}"):
+            return await getattr(
+                self.api, f"patch_namespaced_{camel_to_snake_case(kind)}"
+            )(name=name, body=body, namespace=namespace)
+
+        if hasattr(self.api, f"patch_{camel_to_snake_case(kind)}"):
+            return await getattr(self.api, f"patch_{camel_to_snake_case(kind)}")(
+                name=name, body=body
+            )
+
+        raise UnsupportedResourceError(f"{kind} resources are not supported.")
 
     async def delete(self, kind, name=None, namespace=None):
-        fn = getattr(self.api, f"delete_namespaced_{camel_to_snake_case(kind)}")
-        return await fn(name=name, namespace=namespace)
+        if hasattr(self.api, f"delete_namespaced_{camel_to_snake_case(kind)}"):
+            return await getattr(
+                self.api, f"delete_namespaced_{camel_to_snake_case(kind)}"
+            )(name=name, namespace=namespace)
+
+        if hasattr(self.api, f"delete_{camel_to_snake_case(kind)}"):
+            return await getattr(self.api, f"delete_{camel_to_snake_case(kind)}")(
+                name=name
+            )
+
+        raise UnsupportedResourceError(f"{kind} resources are not supported.")
 
 
 class ApiAdapterCustom(object):
@@ -207,32 +242,6 @@ class KubernetesClient(object):
         await loader.load_and_set(config)
 
         self.api_client = ApiClient(config)
-        core_v1_api = ApiAdapter(CoreV1Api(self.api_client))
-        apps_v1_api = ApiAdapter(AppsV1Api(self.api_client))
-
-        self.resource_apis = {
-            "ConfigMap": core_v1_api,
-            "Deployment": apps_v1_api,
-            "Endpoints": core_v1_api,
-            "Event": core_v1_api,
-            "LimitRange": core_v1_api,
-            "PersistentVolumeClaim": core_v1_api,
-            "PersistentVolumeClaimStatus": core_v1_api,
-            "Pod": core_v1_api,
-            "PodLog": core_v1_api,
-            "PodStatus": core_v1_api,
-            "PodTemplate": core_v1_api,
-            "ReplicationController": core_v1_api,
-            "ReplicationControllerScale": core_v1_api,
-            "ReplicationControllerStatus": core_v1_api,
-            "ResourceQuota": core_v1_api,
-            "ResourceQuotaStatus": core_v1_api,
-            "Secret": core_v1_api,
-            "Service": core_v1_api,
-            "ServiceAccount": core_v1_api,
-            "ServiceStatus": core_v1_api,
-        }
-
         return self
 
     async def __aexit__(self, *exec):
@@ -310,37 +319,71 @@ class KubernetesClient(object):
             )
         return custom_resource_apis
 
-    async def get_resource_api(self, kind):
-        """Get the Kubernetes API corresponding to the given kind from the supported
-        Kubernetes resources. If not found, look for it into the supported custom
-        resources for the cluster.
+    async def get_resource_api(self, group, version, kind):
+        """Get the Kubernetes API corresponding to the given group and version.
+         If not found, look for it into the supported custom resources for the cluster.
 
         Args:
-            kind (str): name of the Kubernetes resource, for which the Kubernetes API
-                should be retrieved.
+            group (str): group of the Kubernetes resource,
+                for which the Kubernetes API should be retrieved.
+            version (str): version of the Kubernetes resource,
+                for which the Kubernetes API should be retrieved.
+            kind (str): name of the Kubernetes resource,
+                for which the Kubernetes API should be retrieved.
 
         Returns:
             ApiAdapter: the API adapter to use for this resource.
 
         Raises:
-            UnsupportedResourceError: if the kind given is not supported by the
-                Controller, and is not a supported custom resource.
+            UnsupportedResourceError: if the group and version given are not
+                supported by the Controller, and given kind is not a
+                supported custom resource.
 
         """
+        # Convert group name from DNS subdomain format to
+        # python class name convention.
+        group = "".join(word.capitalize() for word in group.split("."))
+
         try:
-            resource_api = self.resource_apis[kind]
-        except KeyError:
+            fcn_to_call = getattr(k8s_client, f"{group}{version.capitalize()}Api")
+            return ApiAdapter(fcn_to_call(self.api_client))
+        except AttributeError:
             try:
                 custom_resource_apis = await self.custom_resource_apis
-                resource_api = custom_resource_apis[kind]
+                return custom_resource_apis[kind]
             except KeyError:
-                raise UnsupportedResourceError(f"{kind} resources are not supported")
+                raise UnsupportedResourceError(
+                    f"{kind} resources are not supported. "
+                    f"{group}{version.capitalize()}Api not found."
+                )
 
-        return resource_api
+    @staticmethod
+    def _parse_api_version(api_version):
+        """Parse resource manifest api version.
 
-    def _get_immutables(self, resource):
-        """From a resource manifest, look for the kind, name and namespace of the
-        resource. If the latter is not present, the default namespace of the cluster is
+        Args:
+            api_version (str): Resource api version.
+
+        Returns:
+            (str, str): the group and version of the resource.
+
+        """
+        group, _, version = api_version.partition("/")
+        if not version:
+            version = group
+            group = "core"
+
+        # Take care for the case e.g "apiextensions.k8s.io"
+        # Only replace the last instance.
+        group = "".join(group.rsplit(".k8s.io", 1))
+
+        return group, version
+
+    def get_immutables(self, resource):
+        """From a resource manifest, look for the group, version, kind, name and
+        namespace of the resource.
+
+        If the latter is not present, the default namespace of the cluster is
         used instead.
 
         Args:
@@ -348,19 +391,26 @@ class KubernetesClient(object):
                 resource from which the fields will be extracted.
 
         Returns:
-            (str, str, str): the kind, name and namespace of the resource.
+            (str, str, str, str, str): the group, version, kind, name and
+                namespace of the resource.
 
         Raises:
-            InvalidResourceError: if the kind or the name is not present.
+            InvalidResourceError: if the apiVersion, kind or the name is not present.
 
         Raises:
-            InvalidManifestError: if the kind or name is not present in the resource.
+            InvalidManifestError: if the apiVersion, kind or name is not
+                present in the resource.
             ApiException: by the Kubernetes API in case of malformed content or
                 error on the cluster's side.
 
         """
         metadata = resource["metadata"]
         namespace = metadata.get("namespace", self.default_namespace)
+
+        try:
+            group, version = self._parse_api_version(resource["apiVersion"])
+        except KeyError:
+            raise InvalidManifestError('Resource must define "apiVersion"')
 
         try:
             kind = resource["kind"]
@@ -372,7 +422,7 @@ class KubernetesClient(object):
         except KeyError:
             raise InvalidManifestError('Resource must define "metadata.name"')
 
-        return kind, name, namespace
+        return group, version, kind, name, namespace
 
     async def apply(self, resource):
         """Apply the given resource on the cluster using its internal data as reference.
@@ -385,9 +435,9 @@ class KubernetesClient(object):
             object: response from the cluster as given by the Kubernetes client.
 
         """
-        kind, name, namespace = self._get_immutables(resource)
+        group, version, kind, name, namespace = self.get_immutables(resource)
 
-        resource_api = await self.get_resource_api(kind)
+        resource_api = await self.get_resource_api(group, version, kind)
 
         try:
             resp = await resource_api.read(kind, name=name, namespace=namespace)
@@ -425,9 +475,9 @@ class KubernetesClient(object):
                 error on the cluster's side.
 
         """
-        kind, name, namespace = self._get_immutables(resource)
+        group, version, kind, name, namespace = self.get_immutables(resource)
 
-        resource_api = await self.get_resource_api(kind)
+        resource_api = await self.get_resource_api(group, version, kind)
         try:
             resp = await resource_api.delete(kind, name=name, namespace=namespace)
         except ApiException as err:

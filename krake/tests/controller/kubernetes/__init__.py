@@ -141,6 +141,79 @@ mangled_observer_schema = [
 ]
 
 
+job_manifest = yaml.safe_load(
+    """
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pi
+spec:
+  template:
+    metadata:
+      name: pi
+    spec:
+      containers:
+        - name: pi
+          image: perl
+          command: ['perl', '-Mbignum=bpi', '-wle', 'print bpi(2000)']
+      restartPolicy: Never
+    """
+)
+
+job_response = yaml.safe_load(
+    """
+apiVersion: batch/v1
+kind: Job
+metadata:
+  creationTimestamp: "2022-05-12T09:01:00Z"
+  name: pi
+  namespace: default
+  resourceVersion: "5314"
+  uid: d2a00bbb-0682-49d9-be86-fe100f504786
+spec:
+  backoffLimit: 6
+  completions: 1
+  parallelism: 1
+  selector:
+    matchLabels:
+      controller-uid: d2a00bbb-0682-49d9-be86-fe100f504786
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        controller-uid: d2a00bbb-0682-49d9-be86-fe100f504786
+        job-name: pi
+      name: pi
+    spec:
+      containers:
+      - command:
+        - perl
+        - -Mbignum=bpi
+        - -wle
+        - print bpi(2000)
+        image: perl
+        imagePullPolicy: Always
+        name: pi
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Never
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+status:
+  completionTime: "2022-05-12T09:01:15Z"
+  conditions:
+  - lastProbeTime: "2022-05-12T09:01:15Z"
+    lastTransitionTime: "2022-05-12T09:01:15Z"
+    status: "True"
+    type: Complete
+  startTime: "2022-05-12T09:01:00Z"
+  succeeded: 1
+    """
+)
+
 deployment_response = yaml.safe_load(
     """
 apiVersion: apps/v1

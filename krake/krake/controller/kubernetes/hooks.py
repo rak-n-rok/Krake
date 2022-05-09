@@ -754,14 +754,11 @@ class KubernetesApplicationObserver(Observer):
             kube = KubernetesClient(self.cluster.spec.kubeconfig)
             async with kube:
                 try:
-                    resource_api = await kube.get_resource_api(
-                        observed_resource["kind"]
+                    group, version, kind, name, namespace = kube.get_immutables(
+                        observed_resource
                     )
-                    resp = await resource_api.read(
-                        observed_resource["kind"],
-                        observed_resource["metadata"]["name"],
-                        observed_resource["metadata"]["namespace"],
-                    )
+                    resource_api = await kube.get_resource_api(group, version, kind)
+                    resp = await resource_api.read(kind, name, namespace)
                 except ApiException as err:
                     if err.status == 404:
                         # Resource does not exist
@@ -1375,33 +1372,40 @@ class Hook(object):
         hook_resources = []
         hook_sub_resources = []
         if ca_certs:
-            hook_resources.extend([
-                self.secret_certs(
-                    secret_certs_name,
+            hook_resources.extend(
+                [
+                    self.secret_certs(
+                        secret_certs_name,
+                        resource_namespace,
+                        intermediate_src=intermediate_src,
+                        generated_cert=generated_cert,
+                        ca_certs=ca_certs,
+                    )
+                    for resource_namespace in resource_namespaces
+                ]
+            )
+            hook_sub_resources.extend(
+                [*self.volumes(secret_certs_name, volume_name, self.cert_dest)]
+            )
+
+        hook_resources.extend(
+            [
+                self.secret_token(
+                    secret_token_name,
+                    name,
+                    namespace,
                     resource_namespace,
-                    intermediate_src=intermediate_src,
-                    generated_cert=generated_cert,
-                    ca_certs=ca_certs,
+                    self.api_endpoint,
+                    token,
                 )
                 for resource_namespace in resource_namespaces
-            ])
-            hook_sub_resources.extend([
-                *self.volumes(secret_certs_name, volume_name, self.cert_dest)
-            ])
-
-        hook_resources.extend([
-            self.secret_token(
-                secret_token_name,
-                name,
-                namespace,
-                resource_namespace,
-                self.api_endpoint,
-                token,
-            ) for resource_namespace in resource_namespaces
-        ])
-        hook_sub_resources.extend([
-            *self.env_vars(secret_token_name),
-        ])
+            ]
+        )
+        hook_sub_resources.extend(
+            [
+                *self.env_vars(secret_token_name),
+            ]
+        )
 
         self.mangle(
             hook_resources,
@@ -1947,8 +1951,7 @@ class Complete(Hook):
         self, api_endpoint, ssl_context, hook_user, cert_dest, env_token, env_url
     ):
         super().__init__(
-            api_endpoint, ssl_context, hook_user,
-            cert_dest, env_token, env_url
+            api_endpoint, ssl_context, hook_user, cert_dest, env_token, env_url
         )
         self.env_url = env_url
 
@@ -2032,9 +2035,7 @@ class Complete(Hook):
             value_from=self.attribute_map(
                 V1EnvVarSource(
                     secret_key_ref=self.attribute_map(
-                        V1SecretKeySelector(
-                            name=secret_name, key=self.env_url.lower()
-                        )
+                        V1SecretKeySelector(name=secret_name, key=self.env_url.lower())
                     )
                 )
             ),
@@ -2090,8 +2091,7 @@ class Shutdown(Hook):
         self, api_endpoint, ssl_context, hook_user, cert_dest, env_token, env_url
     ):
         super().__init__(
-            api_endpoint, ssl_context, hook_user,
-            cert_dest, env_token, env_url
+            api_endpoint, ssl_context, hook_user, cert_dest, env_token, env_url
         )
         self.env_url = env_url
 
@@ -2180,10 +2180,7 @@ class Shutdown(Hook):
             value_from=self.attribute_map(
                 V1EnvVarSource(
                     secret_key_ref=self.attribute_map(
-                        V1SecretKeySelector(
-                            name=secret_name,
-                            key=self.env_url.lower()
-                        )
+                        V1SecretKeySelector(name=secret_name, key=self.env_url.lower())
                     )
                 )
             ),

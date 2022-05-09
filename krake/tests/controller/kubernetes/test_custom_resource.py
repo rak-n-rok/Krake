@@ -1,6 +1,5 @@
 from textwrap import dedent
 
-import pytest
 from aiohttp import web
 from copy import deepcopy
 
@@ -9,9 +8,8 @@ import pytz
 import yaml
 
 from krake.api.app import create_app
-from krake.controller.kubernetes.client import InvalidCustomResourceDefinitionError
 from krake.controller.kubernetes.kubernetes import ResourceDelta
-from krake.data.core import resource_ref
+from krake.data.core import resource_ref, ReasonCode
 from krake.data.kubernetes import Application, ApplicationState
 from krake.controller.kubernetes import KubernetesController, KubernetesClient
 from krake.client import Client
@@ -951,12 +949,18 @@ async def test_app_custom_resource_deletion_non_ns(aiohttp_server, config, db, l
     assert stored is None
 
 
-async def test_app_custom_resource_error_handling(aiohttp_server, config, db, loop):
+async def test_app_invalid_custom_resource_error_handling(
+    aiohttp_server, config, db, loop
+):
+    """Test the behavior of the Controller in case of forbidden (HTTP 403) custom resource
+    apis in given cluster
+    """
     routes = web.RouteTableDef()
 
     # Determine scope, version, group and plural of custom resource definition
     @routes.get("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/{name}")
     async def _(request):
+        # Forbid determining the custom resource api
         return web.Response(status=403)
 
     kubernetes_app = web.Application()
@@ -984,5 +988,68 @@ async def test_app_custom_resource_error_handling(aiohttp_server, config, db, lo
         controller = KubernetesController(server_endpoint(api_server), worker_count=0)
         await controller.prepare(client)
 
-        with pytest.raises(InvalidCustomResourceDefinitionError, match="403"):
-            await controller.resource_received(app)
+        await controller.queue.put(app.metadata.uid, app)
+        await controller.handle_resource(run_once=True)
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+
+    assert stored.status.state == ApplicationState.FAILED
+    assert stored.status.reason.code == ReasonCode.INVALID_CUSTOM_RESOURCE
+
+
+async def test_app_unknown_custom_resource_error_handling(
+    aiohttp_server, config, db, loop
+):
+    """Test the behavior of the Controller in case of unknown custom resource
+    apis for given cluster
+    """
+    routes = web.RouteTableDef()
+
+    # Determine scope, version, group and plural of custom resource definition
+    @routes.get("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/{name}")
+    async def _(request):
+        if request.match_info["name"] == "crontabs.stable.example.com":
+            return web.Response(
+                status=200,
+                body=json.dumps(crontab_crd(namespaced=False)),
+                content_type="application/json",
+            )
+        return web.Response(status=404)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(
+        spec__kubeconfig=make_kubeconfig(kubernetes_server),
+        # Note that cluster does not contain any custom resource
+        spec__custom_resources=[],
+    )
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
+        spec__manifest=[create_cron_resource()],
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        controller = KubernetesController(server_endpoint(api_server), worker_count=0)
+        await controller.prepare(client)
+
+        await controller.queue.put(app.metadata.uid, app)
+        await controller.handle_resource(run_once=True)
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+
+    assert stored.status.state == ApplicationState.FAILED
+    assert stored.status.reason.code == ReasonCode.UNSUPPORTED_RESOURCE
