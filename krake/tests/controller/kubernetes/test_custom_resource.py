@@ -75,7 +75,7 @@ async def test_custom_resource_cached_property_called_once(
     routes = web.RouteTableDef()
 
     # Determine scope, version, group and plural of custom resource definition
-    @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
+    @routes.get("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/{name}")
     async def _(request):
         nonlocal only_once
         assert only_once, "Function should only be called only once"
@@ -109,7 +109,7 @@ async def test_custom_resource_cached_property_called_once(
         resp["spec"]["image"] = app["spec"]["image"]
         resp["spec"]["cron_spec"] = app["spec"]["cronSpec"]
 
-        return web.json_response(resp)
+        return web.json_response(resp, status=201)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -173,7 +173,7 @@ async def test_custom_resource_cached_property(aiohttp_server):
             status=200,
             body=json.dumps(
                 {
-                    "api_version": "apiextensions.k8s.io/v1beta1",
+                    "api_version": "apiextensions.k8s.io/v1",
                     "kind": "CustomResourceDefinition",
                     "metadata": {"clusterName": cluster_name},
                     "spec": {
@@ -190,13 +190,13 @@ async def test_custom_resource_cached_property(aiohttp_server):
         )
 
     # Determine scope, version, group and plural of custom resource definition
-    @routes_a.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
+    @routes_a.get("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/{name}")
     async def _(request):
         if request.match_info["name"] == crd_name:
             return get_crd(cluster_a_name)
         return web.Response(status=404)
 
-    @routes_b.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
+    @routes_b.get("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/{name}")
     async def _(request):
         if request.match_info["name"] == crd_name:
             return get_crd(cluster_b_name)
@@ -259,7 +259,7 @@ async def test_app_custom_resource_creation(aiohttp_server, config, db, loop):
     routes = web.RouteTableDef()
 
     # Determine scope, version, group and plural of custom resource definition
-    @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
+    @routes.get("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/{name}")
     async def _(request):
         if request.match_info["name"] == "crontabs.stable.example.com":
             return web.Response(
@@ -279,7 +279,7 @@ async def test_app_custom_resource_creation(aiohttp_server, config, db, loop):
     # the k8s controller creates the CronTab named `cron`.
     @routes.post("/apis/stable.example.com/v1/namespaces/default/crontabs")
     async def _(request):
-        return web.json_response(crontab_response)
+        return web.json_response(crontab_response, status=201)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -336,7 +336,7 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
     patched = set()
 
     # Determine scope, version, group and plural of custom resource definition
-    @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
+    @routes.get("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/{name}")
     async def _(request):
         if request.match_info["name"] == "crontabs.stable.example.com":
             return web.Response(
@@ -443,7 +443,7 @@ async def test_app_custom_resource_migration(aiohttp_server, config, db, loop):
     routes = web.RouteTableDef()
 
     # Determine scope, version, group and plural of custom resource definition
-    @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
+    @routes.get("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/{name}")
     async def _(request):
         if request.match_info["name"] == "crontabs.stable.example.com":
             return web.Response(
@@ -475,7 +475,7 @@ async def test_app_custom_resource_migration(aiohttp_server, config, db, loop):
         resp["spec"]["cron_spec"] = app["spec"]["cronSpec"]
 
         request.app["created"].add(app["metadata"]["name"])
-        return web.json_response(resp)
+        return web.json_response(resp, status=201)
 
     # As part of the migration, the k8s controller deletes the Deployment on the old
     # cluster
@@ -555,7 +555,7 @@ async def test_app_custom_resource_deletion(aiohttp_server, config, db, loop):
     routes = web.RouteTableDef()
 
     # Determine scope, version, group and plural of custome resource definition
-    @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
+    @routes.get("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/{name}")
     async def _(request):
         if request.match_info["name"] == "crontabs.stable.example.com":
             return web.Response(
@@ -607,7 +607,7 @@ async def test_app_custom_resource_creation_non_ns(aiohttp_server, config, db, l
     routes = web.RouteTableDef()
 
     # Determine scope, version, group and plural of custom resource definition
-    @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
+    @routes.get("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/{name}")
     async def _(request):
         if request.match_info["name"] == "crontabs.stable.example.com":
             return web.Response(
@@ -627,7 +627,7 @@ async def test_app_custom_resource_creation_non_ns(aiohttp_server, config, db, l
     # the k8s controller creates the CronTab named `cron`.
     @routes.post("/apis/stable.example.com/v1/crontabs")
     async def _(request):
-        return web.json_response(crontab_response)
+        return web.json_response(crontab_response, status=201)
 
     kubernetes_app = web.Application()
     kubernetes_app.add_routes(routes)
@@ -684,7 +684,7 @@ async def test_app_custom_resource_update_non_ns(aiohttp_server, config, db, loo
     patched = set()
 
     # Determine scope, version, group and plural of custom resource definition
-    @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
+    @routes.get("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/{name}")
     async def _(request):
         if request.match_info["name"] == "crontabs.stable.example.com":
             return web.Response(
@@ -791,7 +791,7 @@ async def test_app_custom_resource_migration_non_ns(aiohttp_server, config, db, 
     routes = web.RouteTableDef()
 
     # Determine scope, version, group and plural of custom resource definition
-    @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
+    @routes.get("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/{name}")
     async def _(request):
         if request.match_info["name"] == "crontabs.stable.example.com":
             return web.Response(
@@ -823,7 +823,7 @@ async def test_app_custom_resource_migration_non_ns(aiohttp_server, config, db, 
         resp["spec"]["cron_spec"] = app["spec"]["cronSpec"]
 
         request.app["created"].add(app["metadata"]["name"])
-        return web.json_response(resp)
+        return web.json_response(resp, status=201)
 
     # As part of the migration, the k8s controller deletes the Deployment on the old
     # cluster
@@ -903,7 +903,7 @@ async def test_app_custom_resource_deletion_non_ns(aiohttp_server, config, db, l
     routes = web.RouteTableDef()
 
     # Determine scope, version, group and plural of custome resource definition
-    @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
+    @routes.get("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/{name}")
     async def _(request):
         if request.match_info["name"] == "crontabs.stable.example.com":
             return web.Response(
@@ -955,7 +955,7 @@ async def test_app_custom_resource_error_handling(aiohttp_server, config, db, lo
     routes = web.RouteTableDef()
 
     # Determine scope, version, group and plural of custom resource definition
-    @routes.get("/apis/apiextensions.k8s.io/v1beta1/customresourcedefinitions/{name}")
+    @routes.get("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/{name}")
     async def _(request):
         return web.Response(status=403)
 

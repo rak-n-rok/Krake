@@ -7,7 +7,7 @@ from kubernetes_asyncio.client import (
     CoreV1Api,
     AppsV1Api,
     Configuration,
-    ApiextensionsV1beta1Api,
+    ApiextensionsV1Api,
     CustomObjectsApi,
 )
 from kubernetes_asyncio.client.rest import ApiException
@@ -283,7 +283,7 @@ class KubernetesClient(object):
         if not self.custom_resources:
             return custom_resource_apis
 
-        extensions_v1_api = ApiextensionsV1beta1Api(self.api_client)
+        extensions_v1_api = ApiextensionsV1Api(self.api_client)
         for custom_resource in self.custom_resources:
 
             try:
@@ -459,7 +459,9 @@ class KubernetesClient(object):
         """
 
         try:
-            resp = requests.put("http://"+app.status.services["shutdown"]+"/shutdown")
+            resp = requests.put(
+                "http://" + app.status.services["shutdown"] + "/shutdown"
+            )
         except requests.exceptions.RequestException as err:
             if err.response is None:
                 logger.debug("There was no response")

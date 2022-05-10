@@ -350,7 +350,7 @@ def crontab_crd(namespaced=True):
     """
     return deepcopy(
         {
-            "api_version": "apiextensions.k8s.io/v1beta1",
+            "api_version": "apiextensions.k8s.io/v1",
             "kind": "CustomResourceDefinition",
             "spec": {
                 "group": "stable.example.com",
