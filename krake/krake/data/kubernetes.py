@@ -11,13 +11,21 @@ from kubernetes_asyncio.config import ConfigException
 from krake.utils import get_kubernetes_resource_idx
 from . import persistent
 from .serializable import Serializable, ApiObject
-from .core import Metadata, ListMetadata, Status, ResourceRef, MetricRef, Reason
-from .constraints import LabelConstraint
+from .core import (
+    Metadata,
+    ListMetadata,
+    Status,
+    ResourceRef,
+    MetricRef,
+    Reason
+)
+from .constraints import LabelConstraint, MetricConstraint
 
 
 class ClusterConstraints(Serializable):
     labels: List[LabelConstraint] = None
     custom_resources: List[str] = field(default_factory=list)
+    metrics: List[MetricConstraint] = None
 
 
 class Constraints(Serializable):

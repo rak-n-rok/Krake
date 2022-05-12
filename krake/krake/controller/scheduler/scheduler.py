@@ -596,9 +596,17 @@ class KubernetesHandler(Handler):
 
         """
         # Reject clusters marked as deleted
-        clusters = (cluster for cluster in clusters if cluster.metadata.deleted is None)
+        existing_clusters = \
+            (cluster for cluster in clusters if cluster.metadata.deleted is None)
+        fetched_metrics = dict()
+        for cluster in clusters:
+            if cluster.spec.metrics:
+                async for metrics in self.fetch_metrics(cluster, cluster.spec.metrics):
+                    fetched_metrics[cluster.metadata.name] = metrics
+
         matching = [
-            cluster for cluster in clusters if match_cluster_constraints(app, cluster)
+            cluster for cluster in existing_clusters
+            if match_cluster_constraints(app, cluster, fetched_metrics)
         ]
 
         if not matching:

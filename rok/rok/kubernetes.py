@@ -136,6 +136,15 @@ arg_custom_resources = argument(
     "Can be specified multiple times",
 )
 
+arg_cluster_metric_constraints = argument(
+    "-M",
+    "--cluster-metric-constraint",
+    dest="cluster_metric_constraints",
+    default=[],
+    action="append",
+    help="Constraint for metrics of the cluster. Can be specified multiple times",
+)
+
 
 class ApplicationListTable(BaseTable):
     state = Cell("status.state")
@@ -217,6 +226,9 @@ class ApplicationTable(ApplicationListTable):
     resources_constraints = Cell(
         "spec.constraints.cluster.custom_resources", name="resources constraints"
     )
+    metric_constraints = Cell(
+        "spec.constraints.cluster.metrics", name="metric constraints"
+    )
     hooks = Cell("spec.hooks")
     scheduled_to = Cell("status.scheduled_to")
     scheduled = Cell("status.scheduled", formatter=format_datetime)
@@ -247,6 +259,7 @@ class ApplicationTable(ApplicationListTable):
 )
 @arg_cluster_label_constraints
 @arg_cluster_resource_constraints
+@arg_cluster_metric_constraints
 @arg_namespace
 @arg_labels
 @arg_hook_complete
@@ -266,6 +279,7 @@ def create_application(
     cluster_label_constraints,
     labels,
     cluster_resource_constraints,
+    cluster_metric_constraints,
     hooks,
     wait,
 ):
@@ -291,6 +305,7 @@ def create_application(
                 "cluster": {
                     "labels": cluster_label_constraints,
                     "custom_resources": cluster_resource_constraints,
+                    "metrics": cluster_metric_constraints
                 },
             },
         },
@@ -347,6 +362,7 @@ def get_application(config, session, namespace, name):
 @arg_migration_constraints()
 @arg_cluster_label_constraints
 @arg_cluster_resource_constraints
+@arg_cluster_metric_constraints
 @arg_namespace
 @arg_labels
 @arg_hook_complete
@@ -366,6 +382,7 @@ def update_application(
     enable_migration,
     cluster_label_constraints,
     cluster_resource_constraints,
+    cluster_metric_constraints,
     hooks,
     wait,
 ):
@@ -393,6 +410,8 @@ def update_application(
         app_constraints["cluster"]["labels"] = cluster_label_constraints
     if cluster_resource_constraints:
         app_constraints["cluster"]["custom_resources"] = cluster_resource_constraints
+    if cluster_metric_constraints:
+        app_constraints["cluster"]["metrics"] = cluster_metric_constraints
     if disable_migration or enable_migration:
         app_constraints["migration"] = enable_migration
 

@@ -6,7 +6,8 @@ algorithm as a potential clusters for application deployment.
 import logging
 from typing import NamedTuple, Callable
 
-from krake.data.core import resource_ref
+from krake.data.core import resource_ref, MetricRef
+
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ class AppClusterConstraint(NamedTuple):
     condition: Callable
 
 
-def _evaluate(app, cluster, constraints):
+def _evaluate(app, cluster, constraints, fetched_metrics):
     """Evaluate if all given application constraints defined in :args:`constraints`
     match given cluster definition.
 
@@ -36,7 +37,11 @@ def _evaluate(app, cluster, constraints):
     for constraint in constraints:
         if constraint.values:
             for value in constraint.values:
-                if constraint.condition(value, cluster):
+                if constraint.name == "label" or constraint.name == "custom resource":
+                    callable = constraint.condition(value, cluster)
+                else:
+                    callable = constraint.condition(value, cluster, fetched_metrics)
+                if callable:
                     logger.debug(
                         f"Cluster %s matches {constraint.name} constraint %r",
                         resource_ref(cluster),
@@ -66,7 +71,20 @@ def _condition_label(constraint, cluster):
     return constraint.match(cluster.metadata.labels or {})
 
 
-def match_cluster_constraints(app, cluster):
+def _condition_metric(constraint, cluster, fetched_metrics):
+    metrics = fetched_metrics[cluster.metadata.name]
+    refs = dict()
+    for m in metrics:
+        namespaced = False
+        if m.metric.metadata.namespace:
+            namespaced = True
+        refs[m.metric.metadata.name] = MetricRef(name=m.metric.metadata.name,
+                                                 weight=(m.weight * m.value),
+                                                 namespaced=namespaced)
+    return constraint.match(refs or {})
+
+
+def match_cluster_constraints(app, cluster, fetched_metrics=None):
     """Evaluate if all application cluster constraints match cluster.
 
     Args:
@@ -74,6 +92,7 @@ def match_cluster_constraints(app, cluster):
             bound.
         cluster (krake.data.kubernetes.Cluster): Cluster to which the
             application should be bound.
+        fetched_metrics(dict): A dict containing the metrics for each cluster
 
     Returns:
         bool: True if the cluster fulfills all application cluster constraints
@@ -91,9 +110,14 @@ def match_cluster_constraints(app, cluster):
             app.spec.constraints.cluster.custom_resources,
             _condition_custom_resources,
         ),
+        AppClusterConstraint(
+            "metric",
+            app.spec.constraints.cluster.metrics,
+            _condition_metric
+        )
     ]
 
-    return _evaluate(app, cluster, constraints)
+    return _evaluate(app, cluster, constraints, fetched_metrics)
 
 
 def match_project_constraints(cluster, project):
