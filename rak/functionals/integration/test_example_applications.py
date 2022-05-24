@@ -107,7 +107,7 @@ def test_mnist_application(minikube_clusters):
     assert score_cluster_1 < score_cluster_2, f"debug_info: {debug_info}"
 
     manifest_path = os.path.join(APP_PATH, "mnist/mnist.yaml")
-    observer_schema_path = os.path.join(APP_PATH, "mnist-observer-schema.yaml")
+    observer_schema_path = os.path.join(APP_PATH, "mnist/mnist-observer-schema.yaml")
     app_def = ApplicationDefinition(
         name="mnist",
         manifest_path=manifest_path,
@@ -124,7 +124,7 @@ def test_mnist_application(minikube_clusters):
         # 4. Add a configmap for the shutdown hook script on both clusters
         configmap_name = "mnist-shutdown"
         error_message = f"The configmap {configmap_name} could not be created."
-        script_path = os.path.join(APP_PATH, "mnist-shutdown.py")
+        script_path = os.path.join(APP_PATH, "mnist/mnist-shutdown.py")
         for i in [0, 1]:
             run(
                 (

@@ -31,7 +31,7 @@ spec:
           echo "apply 'chmod +x' to /tmp/mnist-shutdown.py"
           chmod +x /tmp/mnist-shutdown.py
           /tmp/mnist-shutdown.py &
-          python /mnist/mnist_training_ci.py
+          python /mnist/mnist_training.py
   volumes:
     - name: mnist-volume
       configMap:

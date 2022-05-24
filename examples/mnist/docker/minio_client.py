@@ -65,7 +65,7 @@ def upload_directory(
 
     list_objects = minio.list_objects(bucket_name)
 
-    # Note that there are no such things as directories in Minio. Object keys will
+    # Note that there are no such things as directories in AWS S3. Object keys will
     # look like "mydir/myfile"
     objects_to_delete = []
     for obj in list_objects:
