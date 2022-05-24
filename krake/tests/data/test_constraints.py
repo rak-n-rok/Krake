@@ -6,6 +6,13 @@ from krake.data.constraints import (
     NotEqualConstraint,
     InConstraint,
     NotInConstraint,
+    MetricConstraint,
+    EqualMetricConstraint,
+    NotEqualMetricConstraint,
+    LesserThanMetricConstraint,
+    LesserThanOrEqualMetricConstraint,
+    GreaterThanMetricConstraint,
+    GreaterThanOrEqualMetricConstraint
 )
 from krake.data.kubernetes import ClusterConstraints
 from krake.data.core import MetricRef
@@ -369,9 +376,6 @@ def test_invalid_value_parse_equal_constraint(expression):
         LabelConstraint.parse(expression)
 
 
-
-
-
 def test_metric_constraint_class_methods():
     """Verify the base methods of the LabelConstraint class (__eq__, __hash__...)"""
     mc_five = MetricConstraint.parse("load is 5")
@@ -424,11 +428,12 @@ def test_metric_constraint_deserialization():
         "labels": [],
         "custom_resources": [],
         "metrics": [
-            "load is over 1000"
+            "load is over 9000"
         ]
     }
     with pytest.raises(ValidationError, match="Invalid metric constraint"):
         ClusterConstraints.deserialize(serialized_constraints)
+
 
 def valid_metric_serialization(constraint):
     """Attempt the serialization and deserialization processes of the given constraint
@@ -436,7 +441,7 @@ def valid_metric_serialization(constraint):
 
 
     Args:
-        constraint (LabelConstraint): the constraint to serialize and deserialize.
+        constraint (MetricConstraint): the constraint to serialize and deserialize.
 
     Returns:
         bool: True if the constraint is valid, False otherwise.
@@ -492,7 +497,6 @@ def test_parse_notequal_constraint(expression):
     "expression",
     [
         "load < 5",
-        # "load<5",
         "load lesser than 5",
         "load lt 5",
     ],
@@ -511,7 +515,6 @@ def test_parse_lesser_than_metric_constraint(expression):
     "expression",
     [
         "load <= 5",
-        # "load<=5",
         "load lesser than or equal 5",
         "load lte 5",
     ],
@@ -530,7 +533,6 @@ def test_parse_lesser_than_or_equal_metric_constraint(expression):
     "expression",
     [
         "load > 5",
-        # "load>5",
         "load greater than 5",
         "load gt 5",
     ],
@@ -549,7 +551,6 @@ def test_parse_greater_than_metric_constraint(expression):
     "expression",
     [
         "load >= 5",
-        # "load>=5",
         "load greater than or equal 5",
         "load gte 5",
     ],
@@ -730,12 +731,6 @@ def test_invalid_grammar_parse_equal_metric_constraint(expression):
         "-k = 5",
         "url/com/load != 5",
         "url.com/ is not 5",
-        # "/load in (5, 7)",
-        # "k" * 300 + "/load in (5, 7,)",
-        # "url.com/" + "k" * 70 + " in (5, 7,)",
-        # "url.com/load. in (5.6,)",
-        # "url.com/" + "k" * 70 + " in (5, 7,)",
-        # "url.com/load. in (5.6,)",
     ],
 )
 def test_invalid_key_parse_equal_metric_constraint(expression):
@@ -751,9 +746,6 @@ def test_invalid_key_parse_equal_metric_constraint(expression):
         "url.com/load is .",
         "url/com/load != 5",
         "url.com/ is not 5",
-        # "/load in (5, 7)",
-        # "url.com/load in (5-, 7)",
-        # "url.com/load in (5, /7,)",
     ],
 )
 def test_invalid_value_parse_equal_metric_constraint(expression):

@@ -2,7 +2,6 @@ from krake.data.core import validate_value, validate_key
 from lark import Lark, UnexpectedInput
 from marshmallow import ValidationError, fields
 from marshmallow.utils import ensure_text_type
-from copy import deepcopy
 
 
 class LabelConstraint(object):
@@ -308,7 +307,8 @@ class NotInConstraint(InConstraint):
 
 
 class MetricConstraint(object):
-    """A metric constraint is used to filter :class:`.serializable.ApiObject`
+    """
+    A metric constraint is used to filter :class:`.serializable.ApiObject`
     based on their attached metrics.
 
     A very simple language for expressing label constraints is used. The
@@ -421,7 +421,8 @@ class MetricConstraint(object):
         return f"<{self.__class__.__name__} {self.__str__()!r}>"
 
     def expression(self):
-        """Returns an expression representing the constraint.
+        """
+        Returns an expression representing the constraint.
 
         Returns:
             str: String expression of the constraint
@@ -431,7 +432,8 @@ class MetricConstraint(object):
 
     @classmethod
     def parse(cls, expression):
-        """Parse a constraint expression into its Python representation.
+        """
+        Parse a constraint expression into its Python representation.
 
         Args:
             expression (str): Constraint expression
@@ -486,7 +488,8 @@ class MetricConstraint(object):
             raise ValueError(f"Unknown operation {operation!r}")
 
     def match(self, labels):
-        """Match the constraint against a set label mapping.
+        """
+        Match the constraint against a set label mapping.
 
         Args:
             labels (dict): Mapping of labels
@@ -499,7 +502,8 @@ class MetricConstraint(object):
         raise NotImplementedError()
 
     def _as_tuple(self):
-        """Returns a tuple representation of the constraint.
+        """
+        Returns a tuple representation of the constraint.
 
         This tuple is used by the :meth:`__eq__` and :meth:`__hash__` methods.
         This makes constraints hashable and comparable across each other.
@@ -510,7 +514,8 @@ class MetricConstraint(object):
         raise NotImplementedError()
 
     class Field(fields.Field):
-        """Serializer for :class:`MetricConstraint`.
+        """
+        Serializer for :class:`MetricConstraint`.
 
         Constraints are represented as string expressions. This field parses
         the expressions on deserialization and returns the string
@@ -541,8 +546,9 @@ class MetricConstraint(object):
 
 
 class EqualMetricConstraint(MetricConstraint):
-    """Metric constraint where the value of a label needs to be equal to a specific
-    value.
+    """
+    Metric constraint where the value of a label needs to be equal to a
+    specific value.
 
     Example:
         .. code:: python
@@ -573,8 +579,9 @@ class EqualMetricConstraint(MetricConstraint):
 
 
 class NotEqualMetricConstraint(MetricConstraint):
-    """Metric constraint where the value of a metric needs to be not equal to a specific
-    value.
+    """
+    Metric constraint where the value of a metric needs to be not equal to a
+    specific value.
 
     Example:
         .. code:: python
@@ -604,8 +611,9 @@ class NotEqualMetricConstraint(MetricConstraint):
 
 
 class GreaterThanMetricConstraint(MetricConstraint):
-    """Metric constraint where the value of a label needs to be greater than a specific
-    value.
+    """
+    Metric constraint where the value of a label needs to be greater than a
+    specific value.
 
     Example:
         .. code:: python
@@ -636,7 +644,8 @@ class GreaterThanMetricConstraint(MetricConstraint):
 
 
 class GreaterThanOrEqualMetricConstraint(MetricConstraint):
-    """Metric constraint where the value of a metric needs to be greater than or equal
+    """
+    Metric constraint where the value of a metric needs to be greater than or equal
     to a specific value.
 
     Example:
@@ -669,8 +678,9 @@ class GreaterThanOrEqualMetricConstraint(MetricConstraint):
 
 
 class LesserThanMetricConstraint(MetricConstraint):
-    """Metric constraint where the value of a metric needs to be lesser than a specific
-    value.
+    """
+    Metric constraint where the value of a metric needs to be lesser than a
+    specific value.
 
     Example:
         .. code:: python
@@ -701,7 +711,8 @@ class LesserThanMetricConstraint(MetricConstraint):
 
 
 class LesserThanOrEqualMetricConstraint(MetricConstraint):
-    """Metric constraint where the value of a metric needs to lesser than or equal to
+    """
+    Metric constraint where the value of a metric needs to lesser than or equal to
     a specific value.
 
     Example:
