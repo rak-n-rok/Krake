@@ -2436,10 +2436,9 @@ async def test_default_observer_schema(loop):
         app.spec.observer_schema[0]["spec"]
         == app.status.mangled_observer_schema[0]["spec"]
     )
-    assert (
-        app.status.mangled_observer_schema[0]["metadata"]["namespace"]
-        == app.spec.manifest[0]["metadata"]["namespace"]
-    )
+
+    assert "namespace" in app.status.mangled_observer_schema[0]["metadata"]
+    assert app.status.mangled_observer_schema[0]["metadata"]["namespace"] is None
 
 
 async def prepare_resource_delta_test():

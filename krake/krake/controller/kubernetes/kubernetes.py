@@ -140,6 +140,15 @@ class ResourceDelta(NamedTuple):
                         observed[key], desired[key], current[key]
                     )
                 else:
+                    # The response from Kubernetes API does not contain a namespace
+                    # field when the non-namespaced resource is observed. The infinite
+                    # loop may occur when the end-user wrongly defines the namespace
+                    # field in non-namespaced resource or in its custom observer schema.
+                    # Hence, we should skip the comparison of field namespace for
+                    # non-namespaced resources.
+                    if key == "namespace" and current[key] is None:
+                        continue
+
                     if desired[key] != current[key]:
                         raise ModifiedResourceException(
                             f"current {key} not matching desired value.",
@@ -228,24 +237,31 @@ class ResourceDelta(NamedTuple):
         deleted = []
         modified = []
 
-        for observed_resource in app.status.mangled_observer_schema:
-
-            desired_idx = get_kubernetes_resource_idx(
-                app.status.last_applied_manifest,
-                observed_resource,
-                True,
+        for desired_resource in app.status.last_applied_manifest:
+            observed_idx = get_kubernetes_resource_idx(
+                app.status.mangled_observer_schema, desired_resource
             )
-            desired_resource = app.status.last_applied_manifest[desired_idx]
+            observed_resource = app.status.mangled_observer_schema[observed_idx]
 
             current_resource = None
             with suppress(IndexError):
 
                 current_idx = get_kubernetes_resource_idx(
-                    app.status.last_observed_manifest,
-                    observed_resource,
-                    True,
+                    app.status.last_observed_manifest, desired_resource
                 )
                 current_resource = app.status.last_observed_manifest[current_idx]
+                # The response from Kubernetes API does not contain a namespace
+                # field when the non-namespaced resource is observed. The infinite
+                # loop may occur when the end-user wrongly defines the namespace
+                # field in non-namespaced resource or in its custom observer schema.
+                # Hence, we should evaluate if the observed resource is namespace-scoped
+                # first and if so, we should compare also namespace of the resource.
+                if current_resource["metadata"].get("namespace") is not None:
+                    current_resource = None
+                    current_idx = get_kubernetes_resource_idx(
+                        app.status.last_observed_manifest, desired_resource, True
+                    )
+                    current_resource = app.status.last_observed_manifest[current_idx]
 
             if not current_resource:
                 # If the resource is not present in the last_observed_manifest, it has
@@ -265,9 +281,15 @@ class ResourceDelta(NamedTuple):
         # last_observed_manifest) and which should be deleted (not present in
         # last_applied_manifest nor observer_schema)
         for current_resource in app.status.last_observed_manifest:
+            # Check namespace only if the observed resource is namespace-scoped.
+            check_namespace = (
+                True
+                if current_resource["metadata"].get("namespace") is not None
+                else False
+            )
             try:
                 get_kubernetes_resource_idx(
-                    app.status.last_applied_manifest, current_resource, True
+                    app.status.last_applied_manifest, current_resource, check_namespace
                 )
             except IndexError:
                 deleted.append(current_resource)
@@ -714,10 +736,9 @@ class KubernetesController(Controller):
                     controller=self,
                     resource=copy,
                 )
-            elif (
-                copy != self.observers[copy.metadata.uid][0].cluster
-                and not isinstance(copy.metadata.deleted, datetime.datetime)
-            ):
+            elif copy != self.observers[copy.metadata.uid][
+                0
+            ].cluster and not isinstance(copy.metadata.deleted, datetime.datetime):
                 await listen.hook(
                     HookType.ClusterDeletion,
                     controller=self,
@@ -861,12 +882,11 @@ class KubernetesController(Controller):
             )
 
         # Mangle desired spec resource by Mangling hook
-        cluster = await self.kubernetes_api.read_cluster(
+        await self.kubernetes_api.read_cluster(
             namespace=app.status.scheduled_to.namespace,
             name=app.status.scheduled_to.name,
         )
-        kube = KubernetesClient(cluster.spec.kubeconfig)
-        generate_default_observer_schema(app, kube.default_namespace)
+        generate_default_observer_schema(app)
         update_last_applied_manifest_from_spec(app)
         await listen.hook(
             HookType.ApplicationMangling,
@@ -874,7 +894,6 @@ class KubernetesController(Controller):
             api_endpoint=self.api_endpoint,
             ssl_context=self.ssl_context,
             config=self.hooks,
-            default_namespace=kube.default_namespace,
         )
 
         if not app.status.last_observed_manifest:
@@ -1017,12 +1036,11 @@ class KubernetesController(Controller):
         await self._delete_manifest(app)
 
         # Mangle desired spec resource by Mangling hook
-        cluster = await self.kubernetes_api.read_cluster(
+        await self.kubernetes_api.read_cluster(
             namespace=app.status.scheduled_to.namespace,
             name=app.status.scheduled_to.name,
         )
-        kube = KubernetesClient(cluster.spec.kubeconfig)
-        generate_default_observer_schema(app, kube.default_namespace)
+        generate_default_observer_schema(app)
         update_last_applied_manifest_from_spec(app)
         await listen.hook(
             HookType.ApplicationMangling,
@@ -1030,7 +1048,6 @@ class KubernetesController(Controller):
             api_endpoint=self.api_endpoint,
             ssl_context=self.ssl_context,
             config=self.hooks,
-            default_namespace=kube.default_namespace,
         )
         # Create complete manifest on the new cluster
         delta = ResourceDelta(

@@ -206,7 +206,7 @@ async def test_custom_resource_cached_property(aiohttp_server):
 
     @routes_common.post("/apis/stable.example.com/v1/namespaces/default/crontabs")
     async def _(request):
-        return web.Response(status=200)
+        return web.Response(status=201)
 
     async def make_kubernetes_api(cluster):
         kubernetes_app = web.Application()
@@ -229,15 +229,15 @@ async def test_custom_resource_cached_property(aiohttp_server):
         spec__kubeconfig=make_kubeconfig(kubernetes_server_b),
         spec__custom_resources=[crd_name],
     )
-
+    mangled_observer_schema = list(observer_schema)
     for cluster in cluster_a, cluster_b:
         app = ApplicationFactory(
             status__state=ApplicationState.PENDING,
             status__scheduled_to=resource_ref(cluster),
             status__is_scheduled=False,
             status__last_applied_manifest=[create_cron_resource()],
+            status__mangled_observer_schema=mangled_observer_schema,
             spec__manifest=[create_cron_resource()],
-            spec__observer_schema=list(observer_schema),
         )
         async with KubernetesClient(
             cluster.spec.kubeconfig, cluster.spec.custom_resources

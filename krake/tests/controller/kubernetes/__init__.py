@@ -130,10 +130,6 @@ mangled_deployment_observer_schema = deepcopy(custom_deployment_observer_schema)
 mangled_service_observer_schema = deepcopy(custom_service_observer_schema)
 mangled_secret_observer_schema = deepcopy(custom_secret_observer_schema)
 
-mangled_deployment_observer_schema["metadata"]["namespace"] = "secondary"
-mangled_service_observer_schema["metadata"]["namespace"] = "secondary"
-mangled_secret_observer_schema["metadata"]["namespace"] = "secondary"
-
 mangled_observer_schema = [
     mangled_deployment_observer_schema,
     mangled_service_observer_schema,
@@ -147,6 +143,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: pi
+  namespace: secondary
 spec:
   template:
     metadata:
@@ -160,6 +157,7 @@ spec:
     """
 )
 
+
 job_response = yaml.safe_load(
     """
 apiVersion: batch/v1
@@ -167,7 +165,7 @@ kind: Job
 metadata:
   creationTimestamp: "2022-05-12T09:01:00Z"
   name: pi
-  namespace: default
+  namespace: secondary
   resourceVersion: "5314"
   uid: d2a00bbb-0682-49d9-be86-fe100f504786
 spec:
@@ -213,6 +211,120 @@ status:
   succeeded: 1
     """
 )
+
+
+initial_last_observed_manifest_job = yaml.safe_load(
+    """
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pi
+  namespace: secondary
+    """
+)
+
+
+pv_manifest = yaml.safe_load(
+    """
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: pv
+  labels:
+    type: local
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: '/somepath/data'
+    """
+)
+
+
+pv_response = yaml.safe_load(
+    """
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  creationTimestamp: "2022-05-30T12:51:39Z"
+  finalizers:
+  - kubernetes.io/pv-protection
+  labels:
+    type: local
+  name: pv
+  resourceVersion: "28264"
+  uid: 9614f82f-7f9d-4676-8252-723731d259be
+spec:
+  accessModes:
+  - ReadWriteOnce
+  capacity:
+    storage: 10Gi
+  hostPath:
+    path: /somepath/data01
+    type: ""
+  persistentVolumeReclaimPolicy: Retain
+  volumeMode: Filesystem
+status:
+  phase: Available
+    """
+)
+
+
+initial_last_observed_manifest_pv = yaml.safe_load(
+    """
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv
+    """
+)
+
+
+cluster_role_manifest = yaml.safe_load(
+    """
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: admin
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["*"]
+    """
+)
+
+
+cluster_role_response = yaml.safe_load(
+    """
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: "2022-06-01T12:45:37Z"
+  name: admin
+  resourceVersion: "126747"
+  uid: 581ace3d-f2f4-406d-8b4b-c131715bcce5
+rules:
+- apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - '*'
+    """
+)
+
+
+initial_last_observed_manifest_cluster_role = yaml.safe_load(
+    """
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: admin
+    """
+)
+
 
 deployment_response = yaml.safe_load(
     """
