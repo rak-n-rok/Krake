@@ -299,7 +299,7 @@ async def test_update_application_binding(aiohttp_server, config, db, loop):
 
 async def test_update_application_complete(aiohttp_server, config, db, loop):
     token = "a_random_token"
-    data = ApplicationFactory(status__token=token)
+    data = ApplicationFactory(status__complete_token=token)
     await db.put(data)
 
     complete = ApplicationComplete(token=token)

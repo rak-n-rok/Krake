@@ -411,7 +411,8 @@ def update_last_observed_manifest_from_resp(app, response, **kwargs):
 
     try:
         idx_observed = get_kubernetes_resource_idx(
-            app.status.mangled_observer_schema, resp
+            app.status.mangled_observer_schema,
+            resp,
         )
     except IndexError:
         # All created resources should be observed
@@ -419,7 +420,8 @@ def update_last_observed_manifest_from_resp(app, response, **kwargs):
 
     try:
         idx_last_observed = get_kubernetes_resource_idx(
-            app.status.last_observed_manifest, resp
+            app.status.last_observed_manifest,
+            resp,
         )
     except IndexError:
         # If the resource is not yes present in last_observed_manifest, append it.
@@ -1168,7 +1170,8 @@ async def complete(app, api_endpoint, ssl_context, config, default_namespace="de
     if config.complete.external_endpoint:
         api_endpoint = config.complete.external_endpoint
 
-    app.status.token = app.status.token if app.status.token else token_urlsafe()
+    app.status.complete_token = \
+        app.status.complete_token if app.status.complete_token else token_urlsafe()
 
     # Generate only once the certificate and key for a specific Application
     generated_cert = CertificatePair(
@@ -1190,12 +1193,13 @@ async def complete(app, api_endpoint, ssl_context, config, default_namespace="de
     hook.mangle_app(
         app.metadata.name,
         app.metadata.namespace,
-        app.status.token,
+        app.status.complete_token,
         app.status.last_applied_manifest,
         config.complete.intermediate_src,
         generated_cert,
         app.status.mangled_observer_schema,
         default_namespace,
+        "complete"
     )
 
 
@@ -1226,7 +1230,8 @@ async def shutdown(app, api_endpoint, ssl_context, config, default_namespace="de
     if config.shutdown.external_endpoint:
         api_endpoint = config.shutdown.external_endpoint
 
-    app.status.token = app.status.token if app.status.token else token_urlsafe()
+    app.status.shutdown_token = \
+        app.status.shutdown_token if app.status.shutdown_token else token_urlsafe()
 
     # Generate only once the certificate and key for a specific Application
     generated_cert = CertificatePair(
@@ -1248,12 +1253,13 @@ async def shutdown(app, api_endpoint, ssl_context, config, default_namespace="de
     hook.mangle_app(
         app.metadata.name,
         app.metadata.namespace,
-        app.status.token,
+        app.status.shutdown_token,
         app.status.last_applied_manifest,
         config.shutdown.intermediate_src,
         generated_cert,
         app.status.mangled_observer_schema,
         default_namespace,
+        "shutdown"
     )
 
 
@@ -1319,6 +1325,7 @@ class Hook(object):
         generated_cert,
         mangled_observer_schema,
         default_namespace="default",
+        hook_type="",
     ):
         """Mangle a given application and inject complete hook resources and
         sub-resources into the :attr:`last_applied_manifest` object by :meth:`mangle`.
@@ -1344,11 +1351,13 @@ class Hook(object):
             default_namespace (str, optional): The default namespace to use if no
                 namespace is specified in the resource declaration. Fetched from the
                 cluster's kubeconfig file
+            hook_type (str, optional): Name of the hook the app should be mangled for
 
         """
-        secret_certs_name = "-".join([name, "krake", "secret", "certs"])
-        secret_token_name = "-".join([name, "krake", "secret", "token"])
-        volume_name = "-".join([name, "krake", "volume"])
+
+        secret_certs_name = "-".join([name, "krake", hook_type, "secret", "certs"])
+        secret_token_name = "-".join([name, "krake", hook_type, "secret", "token"])
+        volume_name = "-".join([name, "krake", hook_type, "volume"])
         ca_certs = (
             self.ssl_context.get_ca_certs(binary_form=True)
             if self.ssl_context
@@ -1593,11 +1602,9 @@ class Hook(object):
             ]:
                 # FIXME: Assuming we are dealing with a list
                 for idx, item in enumerate(sub_resource_to_mangle[sub_resource.group]):
-
-                    # FIXME: Assuming we are dealing with a "name" key acting as an
-                    # identifier
-                    if item.name == item["name"]:
-                        sub_resource_to_mangle[item.group][idx] = item.body
+                    if item["name"]:
+                        if hasattr(item, "body"):
+                            sub_resource_to_mangle[item.group][idx] = item["body"]
             else:
                 sub_resource_to_mangle[sub_resource.group].append(sub_resource.body)
 
@@ -2151,18 +2158,23 @@ class Shutdown(Hook):
         """
         sub_resources = []
 
+        env_resources = []
+
         env_token = V1EnvVar(
             name=self.env_token,
             value_from=self.attribute_map(
                 V1EnvVarSource(
                     secret_key_ref=self.attribute_map(
                         V1SecretKeySelector(
-                            name=secret_name, key=self.env_token.lower()
+                            name=secret_name,
+                            key=self.env_token.lower()
                         )
                     )
                 )
-            ),
+            )
         )
+        env_resources.append(env_token)
+
         env_url = V1EnvVar(
             name=self.env_url,
             value_from=self.attribute_map(
@@ -2176,8 +2188,9 @@ class Shutdown(Hook):
                 )
             ),
         )
+        env_resources.append(env_url)
 
-        for env in (env_token, env_url):
+        for env in env_resources:
             sub_resources.append(
                 SubResource(
                     group="env",

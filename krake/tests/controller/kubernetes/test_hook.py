@@ -174,7 +174,7 @@ async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
     for resource in stored.status.last_applied_manifest:
         if resource["kind"] == "Deployment":
             for container in resource["spec"]["template"]["spec"]["containers"]:
-                assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
+                assert "KRAKE_COMPLETE_TOKEN" in [env["name"] for env in container["env"]]
                 assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
 
         if resource["kind"] == "Secret":
@@ -188,7 +188,7 @@ async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
         if resource["kind"] == "Deployment":
             # Loop over observed containers, but exclude special control list
             for container in resource["spec"]["template"]["spec"]["containers"][:-1]:
-                assert "KRAKE_TOKEN" in [env["name"] for env in container["env"][:-1]]
+                assert "KRAKE_COMPLETE_TOKEN" in [env["name"] for env in container["env"][:-1]]
                 assert "KRAKE_COMPLETE_URL" in [
                     env["name"] for env in container["env"][:-1]
                 ]
@@ -443,7 +443,7 @@ async def test_complete_hook_tls(
     assert stored.status.last_applied_manifest[0]["kind"] == "Deployment"
     for container in containers:
         assert "volumeMounts" in container
-        assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
+        assert "KRAKE_COMPLETE_TOKEN" in [env["name"] for env in container["env"]]
         assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
 
     assert stored.status.last_observed_manifest[0]["kind"] == "Deployment"
@@ -454,7 +454,7 @@ async def test_complete_hook_tls(
         "spec"
     ]["containers"][:-1]:
         assert "volumeMounts" in container
-        assert "KRAKE_TOKEN" in [env["name"] for env in container["env"][:-1]]
+        assert "KRAKE_COMPLETE_TOKEN" in [env["name"] for env in container["env"][:-1]]
         assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"][:-1]]
         assert len(container["env"]) == 3
         assert container["env"][-1] == {"observer_schema_list_current_length": 2}
@@ -619,7 +619,7 @@ async def test_complete_hook_default_namespace(
     for resource in stored.status.last_applied_manifest:
         if resource["kind"] == "Deployment":
             for container in resource["spec"]["template"]["spec"]["containers"]:
-                assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
+                assert "KRAKE_COMPLETE_TOKEN" in [env["name"] for env in container["env"]]
                 assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
 
         if resource["kind"] == "Secret":
@@ -633,7 +633,7 @@ async def test_complete_hook_default_namespace(
         if resource["kind"] == "Deployment":
             # Loop over observed containers, but exclude special control list
             for container in resource["spec"]["template"]["spec"]["containers"][:-1]:
-                assert "KRAKE_TOKEN" in [env["name"] for env in container["env"][:-1]]
+                assert "KRAKE_COMPLETE_TOKEN" in [env["name"] for env in container["env"][:-1]]
                 assert "KRAKE_COMPLETE_URL" in [
                     env["name"] for env in container["env"][:-1]
                 ]
@@ -673,7 +673,7 @@ def get_complete_hook_environment_value(application):
     secret = {}
     for manifest in application.status.last_observed_manifest:
         if manifest["kind"] == "Secret" and manifest["metadata"]["name"].endswith(
-            "krake-secret-token"
+            "krake-complete-secret-token"
         ):
             secret = manifest
 
@@ -683,7 +683,7 @@ def get_complete_hook_environment_value(application):
     url_key = None
     for container in deployment["spec"]["template"]["spec"]["containers"][:-1]:
         for env in container["env"][:-1]:
-            if env["name"] == "KRAKE_TOKEN":
+            if env["name"] == "KRAKE_COMPLETE_TOKEN":
                 token_key = env["valueFrom"]["secretKeyRef"]["key"]
             if env["name"] == "KRAKE_COMPLETE_URL":
                 url_key = env["valueFrom"]["secretKeyRef"]["key"]
@@ -1531,7 +1531,7 @@ async def test_shutdown_hook(aiohttp_server, config, db, loop, hooks_config):
     for resource in stored.status.last_applied_manifest:
         if resource["kind"] == "Deployment":
             for container in resource["spec"]["template"]["spec"]["containers"]:
-                assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
+                assert "KRAKE_SHUTDOWN_TOKEN" in [env["name"] for env in container["env"]]
                 assert "KRAKE_SHUTDOWN_URL" in [env["name"] for env in container["env"]]
 
         if resource["kind"] == "Secret":
@@ -1542,7 +1542,7 @@ async def test_shutdown_hook(aiohttp_server, config, db, loop, hooks_config):
         if resource["kind"] == "Deployment":
             # Loop over observed containers, but exclude special control list
             for container in resource["spec"]["template"]["spec"]["containers"][:-1]:
-                assert "KRAKE_TOKEN" in [env["name"] for env in container["env"][:-1]]
+                assert "KRAKE_SHUTDOWN_TOKEN" in [env["name"] for env in container["env"][:-1]]
                 assert "KRAKE_SHUTDOWN_URL" in [
                     env["name"] for env in container["env"][:-1]
                 ]
@@ -1791,7 +1791,7 @@ async def test_shutdown_hook_tls(
     assert stored.status.last_applied_manifest[0]["kind"] == "Deployment"
     for container in containers:
         assert "volumeMounts" in container
-        assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
+        assert "KRAKE_SHUTDOWN_TOKEN" in [env["name"] for env in container["env"]]
         assert "KRAKE_SHUTDOWN_URL" in [env["name"] for env in container["env"]]
 
     assert stored.status.last_observed_manifest[0]["kind"] == "Deployment"
@@ -1802,7 +1802,7 @@ async def test_shutdown_hook_tls(
         "spec"
     ]["containers"][:-1]:
         assert "volumeMounts" in container
-        assert "KRAKE_TOKEN" in [env["name"] for env in container["env"][:-1]]
+        assert "KRAKE_SHUTDOWN_TOKEN" in [env["name"] for env in container["env"][:-1]]
         assert "KRAKE_SHUTDOWN_URL" in [env["name"] for env in container["env"][:-1]]
         assert len(container["env"]) == 3
         assert container["env"][-1] == {"observer_schema_list_current_length": 2}
@@ -1967,7 +1967,7 @@ async def test_shutdown_hook_default_namespace(
     for resource in stored.status.last_applied_manifest:
         if resource["kind"] == "Deployment":
             for container in resource["spec"]["template"]["spec"]["containers"]:
-                assert "KRAKE_TOKEN" in [env["name"] for env in container["env"]]
+                assert "KRAKE_SHUTDOWN_TOKEN" in [env["name"] for env in container["env"]]
                 assert "KRAKE_SHUTDOWN_URL" in [env["name"] for env in container["env"]]
 
         if resource["kind"] == "Secret":
@@ -1978,7 +1978,7 @@ async def test_shutdown_hook_default_namespace(
         if resource["kind"] == "Deployment":
             # Loop over observed containers, but exclude special control list
             for container in resource["spec"]["template"]["spec"]["containers"][:-1]:
-                assert "KRAKE_TOKEN" in [env["name"] for env in container["env"][:-1]]
+                assert "KRAKE_SHUTDOWN_TOKEN" in [env["name"] for env in container["env"][:-1]]
                 assert "KRAKE_SHUTDOWN_URL" in [
                     env["name"] for env in container["env"][:-1]
                 ]
@@ -2013,7 +2013,7 @@ def get_shutdown_hook_environment_value(application):
     secret = {}
     for manifest in application.status.last_observed_manifest:
         if manifest["kind"] == "Secret" and manifest["metadata"]["name"].endswith(
-            "krake-secret-token"
+            "krake-shutdown-secret-token"
         ):
             secret = manifest
 
@@ -2023,7 +2023,7 @@ def get_shutdown_hook_environment_value(application):
     url_key = None
     for container in deployment["spec"]["template"]["spec"]["containers"][:-1]:
         for env in container["env"][:-1]:
-            if env["name"] == "KRAKE_TOKEN":
+            if env["name"] == "KRAKE_SHUTDOWN_TOKEN":
                 token_key = env["valueFrom"]["secretKeyRef"]["key"]
             if env["name"] == "KRAKE_SHUTDOWN_URL":
                 url_key = env["valueFrom"]["secretKeyRef"]["key"]

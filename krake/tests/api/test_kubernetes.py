@@ -580,7 +580,7 @@ async def test_update_application_complete(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     token = token_urlsafe()
-    data = ApplicationFactory(status__token=token)
+    data = ApplicationFactory(status__complete_token=token)
     await db.put(data)
 
     complete = ApplicationComplete(token=token)
@@ -602,7 +602,7 @@ async def test_update_application_complete_unauthorized(aiohttp_client, config, 
     client = await aiohttp_client(create_app(config=config))
 
     token = token_urlsafe()
-    data = ApplicationFactory(status__token=token)
+    data = ApplicationFactory(status__complete_token=token)
     await db.put(data)
 
     complete = ApplicationComplete()
@@ -620,7 +620,7 @@ async def test_update_application_complete_disabled(aiohttp_client, config, db):
     """
     client = await aiohttp_client(create_app(config=config))
 
-    app = ApplicationFactory(status__token=None)
+    app = ApplicationFactory(status__complete_token=None)
     await db.put(app)
 
     resp = await client.put(
@@ -654,7 +654,7 @@ async def test_update_application_shutdown(aiohttp_client, config, db):
 
     token = token_urlsafe()
     data = ApplicationFactory(
-        status__token=token,
+        status__shutdown_token=token,
         status__state=ApplicationState.WAITING_FOR_CLEANING,
         metadata__deleted=now()
     )
@@ -673,46 +673,6 @@ async def test_update_application_shutdown(aiohttp_client, config, db):
 
     stored = await db.get(Application, namespace="testing", name=data.metadata.name)
     assert stored == received
-
-
-# async def test_update_application_shutdown_unauthorized(aiohttp_client, config, db):
-#     client = await aiohttp_client(create_app(config=config))
-#
-#     token = token_urlsafe()
-#     data = ApplicationFactory(
-#         status__token=token,
-#         status__state=ApplicationState.WAITING_FOR_CLEANING
-#     )
-#     await db.put(data)
-#
-#     shutdown = ApplicationShutdown()
-#
-#     resp = await client.put(
-#         f"/kubernetes/namespaces/testing/applications/{data.metadata.name}/shutdown",
-#         json=shutdown.serialize(),
-#     )
-#     assert resp.status == 401
-
-
-# async def test_update_application_shutdown_disabled(aiohttp_client, config, db):
-#     """An Application for which the "shutdown" hook is not set should not be able tobe
-#     deleted.
-#     """
-#     client = await aiohttp_client(create_app(config=config))
-#
-#     app = ApplicationFactory(
-#         status__token=None
-#     )
-#     await db.put(app)
-#
-#     resp = await client.put(
-#         f"/kubernetes/namespaces/testing/applications/{app.metadata.name}/shutdown",
-#         json=ApplicationShutdown(token=None).serialize(),
-#     )
-#     assert resp.status == 401
-#
-#     stored = await db.get(Application, namespace="testing", name=app.metadata.name)
-#     assert stored.metadata.deleted is None
 
 
 async def test_update_application_shutdown_rbac(rbac_allow, config, aiohttp_client):
@@ -736,7 +696,7 @@ async def test_retry_application_shutdown(aiohttp_client, config, db):
 
     token = token_urlsafe()
     data = ApplicationFactory(
-        status__token=token,
+        status__shutdown_token=token,
         status__state=ApplicationState.DEGRADED,
         metadata__deleted=now()
     )
@@ -762,7 +722,7 @@ async def test_retry_application_shutdown_wrong_state(aiohttp_client, config, db
 
     token = token_urlsafe()
     app = ApplicationFactory(
-        status__token=token,
+        status__shutdown_token=token,
         status__state=ApplicationState.RUNNING,
         metadata__deleted=now()
     )

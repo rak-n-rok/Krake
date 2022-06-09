@@ -162,7 +162,7 @@ command-line options. The arguments and available options are:
 ``--complete-hook-env-token``
     For the complete hook, set the name of the environment variable that contain the
     value of the token, which will be given to the Application. See
-    :ref:`dev/hooks:Complete`. Default: ``"KRAKE_TOKEN"``.
+    :ref:`dev/hooks:Complete`. Default: ``"KRAKE_COMPLETE_TOKEN"``.
 
 ``--complete-hook-env-url``
     For the complete hook, set the name of the environment variable that contain the
@@ -374,7 +374,7 @@ hooks (string)
         cert_dest (path)
             Set the path to the certificate authority on the deployed Application. Example: ``/etc/krake_cert``
         env_token (string)
-            Name of the environment variable, which stores Krake authentication token. Example: ``KRAKE_TOKEN``
+            Name of the environment variable, which stores Krake authentication token. Example: ``KRAKE_COMPLETE_TOKEN``
         env_url (string)
             .. _env_url:
 
@@ -403,7 +403,7 @@ hooks (string)
         cert_dest (path)
             Set the path to the certificate authority on the deployed Application. Example: ``/etc/krake_cert``
         env_token (string)
-            Name of the environment variable, which stores Krake authentication token. Example: ``KRAKE_TOKEN``
+            Name of the environment variable, which stores Krake authentication token. Example: ``KRAKE_SHUTDOWN_TOKEN``
         env_url (string)
             .. _env_url:
 

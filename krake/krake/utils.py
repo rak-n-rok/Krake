@@ -94,7 +94,9 @@ def get_namespace_as_kwargs(namespace):
     return kwargs
 
 
-def get_kubernetes_resource_idx(manifest, resource, check_namespace=False):
+def get_kubernetes_resource_idx(
+    manifest, resource, check_namespace=False
+):
     """Get a resource identified by its resource api, kind and name, from a manifest
     file
 

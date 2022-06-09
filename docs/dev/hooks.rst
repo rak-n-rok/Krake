@@ -19,7 +19,7 @@ cluster. The hook is disabled by default. The user can enable this hook with the
 
 See also :ref:`user/rok-documentation:Rok documentation`.
 
-The complete hook injects the ``KRAKE_TOKEN`` environment variable, which stores the
+The complete hook injects the ``KRAKE_COMPLETE_TOKEN`` environment variable, which stores the
 Krake authentication token, and the ``KRAKE_COMPLETE_URL`` environment variable, which
 stores the Krake `complete` hook URL for a given application.
 
@@ -48,7 +48,7 @@ cluster. The hook is disabled by default. The user can enable this hook with the
 
 See also :ref:`user/rok-documentation:Rok documentation`.
 
-The shutdown hook injects the ``KRAKE_TOKEN`` and the ``KRAKE_SHUTDOWN_URL``
+The shutdown hook injects the ``KRAKE_SHUTDOWN_TOKEN`` and the ``KRAKE_SHUTDOWN_URL``
 environment variables, which respectively store the Krake authentication token and the
 Krake `shutdown` hook URL for a given application.
 
@@ -125,10 +125,10 @@ Example using `cURL`:
 
 .. code:: bash
 
-    $ curl -X PUT -d "{\"token\":\"$KRAKE_TOKEN\"}" $KRAKE_COMPLETE_URL
+    $ curl -X PUT -d "{\"token\":\"$KRAKE_COMPLETE_TOKEN\"}" $KRAKE_COMPLETE_URL
 
     # If TLS is enabled on the Krake API
-    $ curl -X PUT -d "{\"token\":\"$KRAKE_TOKEN\"}" $KRAKE_COMPLETE_URL \
+    $ curl -X PUT -d "{\"token\":\"$KRAKE_COMPLETE_TOKEN\"}" $KRAKE_COMPLETE_URL \
         --cacert /etc/krake_cert/ca-bundle.pem \
         --cert /etc/krake_cert/cert.pem \
         --key /etc/krake_cert/key.pem
@@ -158,7 +158,7 @@ If TLS is not enabled:
     import os
 
     endpoint = os.getenv("KRAKE_COMPLETE_URL")
-    token = os.getenv("KRAKE_TOKEN")
+    token = os.getenv("KRAKE_COMPLETE_TOKEN")
 
     requests.put(endpoint, json={"token": token})
 
@@ -174,6 +174,6 @@ If TLS is enabled, using the default configuration for the certificate directory
     key_path = "/etc/krake_cert/key.pem"
     cert_and_key = (cert_path, key_path)
     endpoint = os.getenv("KRAKE_COMPLETE_URL")
-    token = os.getenv("KRAKE_TOKEN")
+    token = os.getenv("KRAKE_COMPLETE_TOKEN")
 
     requests.put(endpoint, verify=ca_bundle, json={"token": token}, cert=cert_and_key)

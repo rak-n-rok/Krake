@@ -10,3 +10,4 @@ User Stories
     user-story/2-labels
     user-story/3-metrics
     user-story/4-openstack
+    user-story/5-advanced-applications

@@ -119,7 +119,7 @@ krake_apps.yml
         Name of the user for the "shutdown" hook.
     shutdown_hook_cert_dest (file path)
         Path inside the deployed Application where the certificate and its key will be
-        stored (for the "complete" hook).
+        stored (for the "shutdown" hook).
     shutdown_hook_env_token (string)
         Name of the environment variable that will contain the token in the deployed
         Application.

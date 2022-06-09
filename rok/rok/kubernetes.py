@@ -89,7 +89,10 @@ class ShutdownAction(Action):
             values = ['shutdown'] + values + defaults[len(values):]
         else:
             values = ['shutdown'] + values
-        setattr(namespace, self.dest, [values])
+        attr = getattr(namespace, self.dest)
+        if attr is None:
+            attr = []
+        setattr(namespace, self.dest, attr + [values])
 
 
 arg_hook_shutdown = argument(

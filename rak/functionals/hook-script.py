@@ -6,10 +6,10 @@ import os.path
 import requests
 
 endpoint_env = "KRAKE_COMPLETE_URL"
-token_env = "KRAKE_TOKEN"
-default_ca_bundle = "/etc/krake_cert/ca-bundle.pem"
-default_cert_path = "/etc/krake_cert/cert.pem"
-default_key_path = "/etc/krake_cert/key.pem"
+token_env = "KRAKE_COMPLETE_TOKEN"
+default_ca_bundle = "/etc/krake_complete_cert/ca-bundle.pem"
+default_cert_path = "/etc/krake_complete_cert/cert.pem"
+default_key_path = "/etc/krake_complete_cert/key.pem"
 
 
 def main():
@@ -33,7 +33,7 @@ def main():
     token = os.getenv(token_env)
 
     print(f"KRAKE_COMPLETE_URL:  {endpoint}")
-    print(f"KRAKE_TOKEN:         {token}")
+    print(f"KRAKE_COMPLETE_TOKEN:{token}")
 
     response = requests.put(
         endpoint, verify=ca, json={"token": token}, cert=cert_and_key

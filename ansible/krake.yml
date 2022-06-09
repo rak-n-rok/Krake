@@ -216,6 +216,7 @@
             - config
             - docker
             - krake
+            - examples
             - rak
             - rok
             - rok.yaml.template

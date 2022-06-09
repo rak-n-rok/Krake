@@ -40,7 +40,7 @@ def test_complete_hook(minikube_clusters):
     )
 
     with Environment(environment):
-        # 1. Add a configMap with the script that can use the Krake hook
+        # 1. Add a configmap with the script that can use the Krake hook
         configmap_name = "scripts-configmap"
         error_message = f"The configMap {configmap_name} could not be created."
         script_path = os.path.join(MANIFEST_PATH, "hook-script.py")
@@ -58,10 +58,43 @@ def test_complete_hook(minikube_clusters):
 
         # 3. Check that after some time, the Application has been deleted on the Krake
         # API.
-        app_def.check_deleted()
+        try:
+            app_def.check_deleted(delay=60)
+        except AssertionError as e:
+            pods = run(
+                (
+                    f"{kubectl_cmd(kubeconfig_path)} get pods -o wide"
+                )
+            )
+            pdsc = run(
+                (
+                    f"{kubectl_cmd(kubeconfig_path)} describe pods"
+                )
+            )
+            rkag = run(
+                (
+                    "rok kube app get test-hook-shutdown -oyaml"
+                )
+            )
+            pdev = run(
+                (
+                    f"{kubectl_cmd(kubeconfig_path)} get events"
+                )
+            )
+            pdlgs = run(
+                (
+                    f"{kubectl_cmd(kubeconfig_path)} logs -lapp=script-deploy"
+                )
+            )
+            assert 1 == 0, str(e) + "\n----------------------------\n" + \
+                           pods.output + "\n----------------------------\n" + \
+                           pdsc.output + "\n----------------------------\n" + \
+                           rkag.output + "\n----------------------------\n" + \
+                           pdev.output + "\n----------------------------\n" + \
+                           pdlgs.output
 
-        # 4. Delete the added configMap
-        error_message = f"The configMap {configmap_name} could not be deleted."
+        # 4. Delete the added configmap
+        error_message = f"The configmap {configmap_name} could not be deleted."
         run(
             f"{kubectl_cmd(kubeconfig_path)} delete configmap {configmap_name}",
             condition=check_return_code(error_message),
@@ -98,7 +131,7 @@ def test_shutdown_hook(minikube_clusters):
     )
 
     with Environment(environment):
-        # 1. Add a configMap with the script that can use the Krake hook
+        # 1. Add a configmap with the script that can use the Krake hook
         configmap_name = "sd-service-configmap"
         error_message = f"The configMap {configmap_name} could not be created."
         script_path = os.path.join(MANIFEST_PATH, "hook-script-shutdown-service.py")
@@ -123,10 +156,31 @@ def test_shutdown_hook(minikube_clusters):
 
         # 4. Wait for the script to send the request to the API, that the shutdown
         # is finished
-        app_def.check_deleted(delay=60)
+        try:
+            app_def.check_deleted(delay=60)
+        except AssertionError as e:
+            pods = run(
+                (
+                    f"{kubectl_cmd(kubeconfig_path)} get pods -o wide"
+                )
+            )
+            pdsc = run(
+                (
+                    f"{kubectl_cmd(kubeconfig_path)} describe pods"
+                )
+            )
+            rkag = run(
+                (
+                    "rok kube app get test-hook-shutdown -oyaml"
+                )
+            )
+            assert 1 == 0, str(e) + "\n----------------------------\n" + \
+                           pods.output + "\n----------------------------\n" + \
+                           pdsc.output + "\n----------------------------\n" + \
+                           rkag.output
 
-        # 4. Delete the added configMap
-        error_message = f"The configMap {configmap_name} could not be deleted."
+        # 4. Delete the added configmap
+        error_message = f"The configmap {configmap_name} could not be deleted."
         run(
             f"{kubectl_cmd(kubeconfig_path)} delete configmap {configmap_name}",
             condition=check_return_code(error_message),
