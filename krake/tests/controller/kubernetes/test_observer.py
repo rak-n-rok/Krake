@@ -8,6 +8,7 @@ from aiohttp import web
 from copy import deepcopy
 
 from krake.api.app import create_app
+from krake.controller.kubernetes.cluster import KubernetesClusterController
 from krake.controller.kubernetes.hooks import (
     unregister_observer,
     register_observer,
@@ -18,8 +19,8 @@ from krake.controller.kubernetes.hooks import (
 )
 from krake.data.core import resource_ref
 from krake.data.kubernetes import Application, ApplicationState, ClusterState
-from krake.controller.kubernetes import (
-    KubernetesController,
+from krake.controller.kubernetes.application import KubernetesApplicationController
+from krake.controller.kubernetes.hooks import (
     KubernetesApplicationObserver,
     KubernetesClusterObserver,
 )
@@ -71,7 +72,8 @@ async def test_reception_for_application_observer(aiohttp_server, config, db, lo
     await db.put(running)
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server),
+                                                     worker_count=0)
         # Update the client, to be used by the background tasks
         await controller.prepare(client)  # need to be called explicitly
         await controller.application_reflector.list_resource()
@@ -780,7 +782,8 @@ async def test_observer_on_status_update(aiohttp_server, db, config, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server),
+                                                     worker_count=0)
         await controller.prepare(client)
 
         observer = KubernetesApplicationObserver(
@@ -920,14 +923,14 @@ async def test_observer_on_status_update_mangled(
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         generate_default_observer_schema(app)
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(server), worker_count=0, hooks=hooks_config
         )
         controller.on_status_update = update_decorator(controller.on_status_update)
         await controller.prepare(client)
 
         await controller.resource_received(app, start_observer=False)
-        # Remove from dict to prevent cancellation in KubernetesController.stop_observer
+        # Remove from dict to prevent cancellation in KubernetesApplicationController.stop_observer
         observer, _ = controller.observers.pop(app.metadata.uid)
 
         assert "env" in get_first_container(
@@ -1087,7 +1090,8 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
         await asyncio.sleep(1)
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server),
+                                                     worker_count=0)
         controller.on_status_update = update_decorator(controller.on_status_update)
 
         await controller.prepare(client)
@@ -1204,7 +1208,7 @@ async def test_observer_on_delete(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(server), worker_count=0, time_step=100
         )
         await controller.prepare(client)
@@ -1266,7 +1270,7 @@ async def test_observer_creation_deletion(aiohttp_server, config, db, loop):
 
     server = await aiohttp_server(create_app(config))
 
-    controller = KubernetesController(
+    controller = KubernetesApplicationController(
         server_endpoint(server), worker_count=0, time_step=1
     )
 
@@ -1400,7 +1404,8 @@ def test_update_last_applied_manifest_from_spec_multiple_types():
     # Both values should be initialized
     update_last_applied_manifest_from_spec(app)
     assert (
-        app.status.last_applied_manifest[0]["spec"]["containers"][0][0]
+        app.status.last_applied_manifest[0]["spec"]["containers"][0][
+               0]
         == "List in List"
     )
 
@@ -1410,7 +1415,8 @@ def test_update_last_applied_manifest_from_spec_multiple_types():
     # Both values should be initialized
     update_last_applied_manifest_from_spec(app)
     assert (
-        app.status.last_applied_manifest[0]["spec"]["containers"][0]["dict"]
+        app.status.last_applied_manifest[0]["spec"]["containers"][0][
+               "dict"]
         == "Dict in List"
     )
 
@@ -1420,7 +1426,8 @@ def test_update_last_applied_manifest_from_spec_multiple_types():
     # Both values should be initialized
     update_last_applied_manifest_from_spec(app)
     assert (
-        app.status.last_applied_manifest[0]["spec"]["containers"]["dict"][0]
+        app.status.last_applied_manifest[0]["spec"]["containers"]["dict"][
+               0]
         == "List in Dict"
     )
 
@@ -1430,7 +1437,8 @@ def test_update_last_applied_manifest_from_spec_multiple_types():
     # Both values should be initialized
     update_last_applied_manifest_from_spec(app)
     assert (
-        app.status.last_applied_manifest[0]["spec"]["containers"]["dict"]["dict"]
+        app.status.last_applied_manifest[0]["spec"]["containers"]["dict"][
+               "dict"]
         == "Dict in Dict"
     )
 
@@ -1720,7 +1728,8 @@ async def test_reception_for_cluster_observers(aiohttp_server, config, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop):
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesClusterController(server_endpoint(server),
+                                                 worker_count=0)
         for i in range(cluster_count):
             cluster = ClusterFactory()
             # Just before an observer is created, the iterator should be equal to the
@@ -1747,7 +1756,7 @@ async def test_create_kubernetes_cluster_observer(aiohttp_server, config):
 
     """
     server = await aiohttp_server(create_app(config))
-    controller = KubernetesController(server_endpoint(server), worker_count=0)
+    controller = KubernetesClusterController(server_endpoint(server), worker_count=0)
 
     cluster = ClusterFactory()
     observer = KubernetesClusterObserver(cluster, controller.handle_resource)
@@ -1772,7 +1781,8 @@ async def test_kubernetes_cluster_observer_on_cluster_update(
     """
     server = await aiohttp_server(create_app(config))
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesClusterController(server_endpoint(server),
+                                                 worker_count=0)
         cluster = ClusterFactory()
         await db.put(cluster)
         await controller.prepare(client)
@@ -1802,7 +1812,7 @@ async def test_kubernetes_cluster_observer_on_cluster_delete(aiohttp_server, con
 
     """
     server = await aiohttp_server(create_app(config))
-    controller = KubernetesController(server_endpoint(server), worker_count=0)
+    controller = KubernetesClusterController(server_endpoint(server), worker_count=0)
     cluster = ClusterFactory()
 
     await controller.resource_received(cluster)
@@ -1816,7 +1826,7 @@ async def test_kubernetes_cluster_observer_on_cluster_delete(aiohttp_server, con
 async def test_register_kubernetes_cluster_observer(aiohttp_server, config):
     """Test the registration of a KubernetesClusterObserver."""
     server = await aiohttp_server(create_app(config))
-    controller = KubernetesController(server_endpoint(server), worker_count=0)
+    controller = KubernetesClusterController(server_endpoint(server), worker_count=0)
 
     cluster = ClusterFactory()
 
@@ -1828,7 +1838,7 @@ async def test_register_kubernetes_cluster_observer(aiohttp_server, config):
 async def test_unregister_kubernetes_cluster_observer(aiohttp_server, config):
     """Test the unregistration of a KubernetesClusterObserver."""
     server = await aiohttp_server(create_app(config))
-    controller = KubernetesController(server_endpoint(server), worker_count=0)
+    controller = KubernetesClusterController(server_endpoint(server), worker_count=0)
 
     cluster = ClusterFactory()
 

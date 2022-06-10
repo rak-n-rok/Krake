@@ -26,7 +26,8 @@ There are 5 different configuration files:
 
 *  ``api.yaml`` for the Krake API;
 *  ``scheduler.yaml`` for the Scheduler as controller;
-*  ``kubernetes.yaml`` for the Kubernetes Application controller;
+*  ``kubernetes_application.yaml`` for the Kubernetes Application controller;
+*  ``kubernetes_cluster.yaml`` for the Kubernetes Cluster controller;
 *  ``garbage_collection.yaml`` for the Garbage Collector as controller;
 *  ``rok.yaml`` for the Rok utility.
 

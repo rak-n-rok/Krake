@@ -18,8 +18,8 @@ Configuration is loaded from the ``controllers.scheduler`` section:
     tls:
       enabled: false
       client_ca: tmp/pki/ca.pem
-      client_cert: tmp/pki/system:kubernetes.pem
-      client_key: tmp/pki/system:kubernetes-key.pem
+      client_cert: tmp/pki/system:magnum.pem
+      client_key: tmp/pki/system:magnum-key.pem
 
 
     log:

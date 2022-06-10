@@ -81,17 +81,17 @@ services:
     tty: true
     depends_on:
       - krake-api
-    command: python3 -m krake.controller.kubernetes
+    command: python3 -m krake.controller.kubernetes.application
     secrets:
-      - source: kubernetes-config
-        target: "{{ krake.config.path }}/kubernetes.yaml"
+      - source: kubernetes-application-config
+        target: "{{ krake.config.path }}/kubernetes_application.yaml"
       {% if krake.enable_tls -%}
       - source: ca-cert
         target: "{{ krake.cert_dir }}/ca.pem"
-      - source: kubernetes-cert
-        target: "{{ krake.cert_dir }}/system:kubernetes.pem"
-      - source: kubernetes-key
-        target: "{{ krake.cert_dir }}/system:kubernetes-key.pem"
+      - source: kubernetes-application-cert
+        target: "{{ krake.cert_dir }}/system:kubernetes-application.pem"
+      - source: kubernetes-application-key
+        target: "{{ krake.cert_dir }}/system:kubernetes-application-key.pem"
       - source: complete-signing-cert
         target: "{{ krake.cert_dir }}/system:complete-signing.pem"
       - source: complete-signing-key
@@ -100,6 +100,25 @@ services:
         target: "{{ krake.cert_dir }}/system:shutdown-signing.pem"
       - source: shutdown-signing-key
         target: "{{ krake.cert_dir }}/system:shutdown-signing-key.pem"
+      {%- endif %}
+
+  krake-ctrl-kubernetes-cluster:
+    image: krake:latest
+    restart: always
+    tty: true
+    depends_on:
+      - krake-api
+    command: python3 -m krake.controller.kubernetes.cluster
+    secrets:
+      - source: kubernetes-cluster-config
+        target: "{{ krake.config.path }}/kubernetes_cluster.yaml"
+      {% if krake.enable_tls -%}
+      - source: ca-cert
+        target: "{{ krake.cert_dir }}/ca.pem"
+      - source: kubernetes-cluster-cert
+        target: "{{ krake.cert_dir }}/system:kubernetes-cluster.pem"
+      - source: kubernetes-cluster-key
+        target: "{{ krake.cert_dir }}/system:kubernetes-cluster-key.pem"
       {%- endif %}
 
   krake-ctrl-scheduler:
@@ -150,8 +169,11 @@ secrets:
   gc-config:
     file: "{{ krake.config.path }}/garbage_collector.yaml"
 
-  kubernetes-config:
-    file: "{{ krake.config.path }}/kubernetes.yaml"
+  kubernetes-application-config:
+    file: "{{ krake.config.path }}/kubernetes_application.yaml"
+
+  kubernetes-cluster-config:
+    file: "{{ krake.config.path }}/kubernetes_cluster.yaml"
 
   scheduler-config:
     file: "{{ krake.config.path }}/scheduler.yaml"
@@ -173,10 +195,10 @@ secrets:
   gc-key:
     file: "{{ krake.cert_dir }}/system:gc-key.pem"
 
-  kubernetes-cert:
-    file: "{{ krake.cert_dir }}/system:kubernetes.pem"
-  kubernetes-key:
-    file: "{{ krake.cert_dir }}/system:kubernetes-key.pem"
+  kubernetes-application-cert:
+    file: "{{ krake.cert_dir }}/system:kubernetes-application.pem"
+  kubernetes-application-key:
+    file: "{{ krake.cert_dir }}/system:kubernetes-application-key.pem"
   complete-signing-cert:
     file: "{{ krake.cert_dir }}/system:complete-signing.pem"
   complete-signing-key:
@@ -185,6 +207,11 @@ secrets:
     file: "{{ krake.cert_dir }}/system:shutdown-signing.pem"
   shutdown-signing-key:
     file: "{{ krake.cert_dir }}/system:shutdown-signing-key.pem"
+
+  kubernetes-cluster-cert:
+    file: "{{ krake.cert_dir }}/system:kubernetes-cluster.pem"
+  kubernetes-cluster-key:
+    file: "{{ krake.cert_dir }}/system:kubernetes-cluster-key.pem"
 
   scheduler-cert:
     file: "{{ krake.cert_dir }}/system:scheduler.pem"

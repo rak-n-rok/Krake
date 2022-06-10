@@ -23,7 +23,8 @@ API reference of all modules is provided.
     scheduling
     hooks
     observers
-    kubernetes-controller
+    kubernetes-application-controller
+    kubernetes-cluster-controller
     garbage-collection
     api-generation
     ref/krake

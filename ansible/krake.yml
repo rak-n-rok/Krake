@@ -308,7 +308,8 @@
             - system:api-server
             - system:scheduler
             - system:gc
-            - system:kubernetes
+            - system:kubernetes-application
+            - system:kubernetes-cluster
             - system:magnum
             - system:admin
           when: enable_tls is defined and enable_tls

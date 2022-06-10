@@ -1,6 +1,6 @@
 """Module for Krake controller responsible for
 :class:`krake.data.kubernetes.Application` resources and entry point of
-Kubernetes controller.
+Kubernetes application controller.
 
 .. code:: bash
 
@@ -32,8 +32,8 @@ Configuration is loaded from the ``controllers.kubernetes.application`` section:
     tls:
       enabled: false
       client_ca: tmp/pki/ca.pem
-      client_cert: tmp/pki/system:kubernetes.pem
-      client_key: tmp/pki/system:kubernetes-key.pem
+      client_cert: tmp/pki/system:kubernetes-application.pem
+      client_key: tmp/pki/system:kubernetes-application-key.pem
 
 
     log:
@@ -53,11 +53,11 @@ from krake import (
 from krake.data.config import KubernetesConfiguration
 from krake.utils import KrakeArgumentFormatter
 
-from ...controller import create_ssl_context, run
-from .kubernetes import KubernetesController
+from ....controller import create_ssl_context, run
+from .application import KubernetesApplicationController
 
 
-logger = logging.getLogger("krake.controller.kubernetes")
+logger = logging.getLogger("krake.controller.kubernetes.application")
 
 
 parser = ArgumentParser(
@@ -73,7 +73,7 @@ mapper.add_arguments(parser)
 def main(config):
     setup_logging(config.log)
     logger.debug(
-        "Krake Kubernetes Controller configuration settings:\n %s",
+        "Krake Kubernetes application controller configuration settings:\n %s",
         pprint.pformat(config.serialize()),
     )
 
@@ -81,7 +81,7 @@ def main(config):
     ssl_context = create_ssl_context(tls_config)
     logger.debug("TLS is %s", "enabled" if ssl_context else "disabled")
 
-    controller = KubernetesController(
+    controller = KubernetesApplicationController(
         api_endpoint=config.api_endpoint,
         worker_count=config.worker_count,
         ssl_context=ssl_context,
@@ -94,7 +94,9 @@ def main(config):
 if __name__ == "__main__":
     args = vars(parser.parse_args())
 
-    config = load_yaml_config(args["config"] or search_config("kubernetes.yaml"))
+    config = load_yaml_config(
+        args["config"] or search_config("kubernetes_application.yaml")
+    )
     kubernetes_config = mapper.merge(config, args)
 
     main(kubernetes_config)
