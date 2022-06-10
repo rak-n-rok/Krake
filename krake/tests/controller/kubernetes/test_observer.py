@@ -8,7 +8,6 @@ from aiohttp import web
 from copy import deepcopy
 
 from krake.api.app import create_app
-from krake.controller.kubernetes.client import KubernetesClient
 from krake.controller.kubernetes.hooks import (
     unregister_observer,
     register_observer,
@@ -22,7 +21,7 @@ from krake.data.kubernetes import Application, ApplicationState, ClusterState
 from krake.controller.kubernetes import (
     KubernetesController,
     KubernetesApplicationObserver,
-    KubernetesClusterObserver
+    KubernetesClusterObserver,
 )
 from krake.client import Client
 from krake.test_utils import server_endpoint, get_first_container, serialize_k8s_object
@@ -193,6 +192,7 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
         spec__manifest=nginx_manifest,
         status__mangled_observer_schema=mangled_observer_schema,
         status__last_observed_manifest=initial_last_observed_manifest,
+        status__last_applied_manifest=nginx_manifest,
     )
 
     calls_to_res_update = 0
@@ -406,6 +406,7 @@ async def test_observer_on_poll_update_default_namespace(
         spec__manifest=copy_nginx_manifest,
         status__mangled_observer_schema=copy_mangled_observer_schema,
         status__last_observed_manifest=copy_initial_last_observed_manifest,
+        status__last_applied_manifest=copy_nginx_manifest,
     )
 
     calls_to_res_update = 0
@@ -546,6 +547,7 @@ async def test_observer_on_poll_update_cluster_default_namespace(
         spec__manifest=copy_nginx_manifest,
         status__last_observed_manifest=copy_initial_last_observed_manifest,
         status__mangled_observer_schema=copy_mangled_observer_schema,
+        status__last_applied_manifest=copy_nginx_manifest,
     )
 
     calls_to_res_update = 0
@@ -671,6 +673,7 @@ async def test_observer_on_poll_update_manifest_namespace_set(
         status__running_on=resource_ref(cluster),
         spec__manifest=nginx_manifest,
         status__last_observed_manifest=initial_last_observed_manifest,
+        status__last_applied_manifest=nginx_manifest,
     )
 
     calls_to_res_update = 0
@@ -699,8 +702,7 @@ async def test_observer_on_poll_update_manifest_namespace_set(
         spec_image = get_first_container(resource.spec.manifest[0])["image"]
         assert spec_image == "nginx:1.7.9"
 
-    kube = KubernetesClient(cluster.spec.kubeconfig)
-    generate_default_observer_schema(app, kube.default_namespace)
+    generate_default_observer_schema(app)
     observer = KubernetesApplicationObserver(cluster, app, on_res_update, time_step=-1)
 
     # Observe an unmodified resource
@@ -770,6 +772,7 @@ async def test_observer_on_status_update(aiohttp_server, db, config, loop):
         status__mangled_observer_schema=mangled_observer_schema,
         status__last_observed_manifest=initial_last_observed_manifest,
         spec__manifest=nginx_manifest,
+        status__last_applied_manifest=nginx_manifest,
     )
     await db.put(cluster)
     await db.put(app)
@@ -1193,6 +1196,7 @@ async def test_observer_on_delete(aiohttp_server, config, db, loop):
         status__running_on=resource_ref(cluster),
         spec__manifest=nginx_manifest,
         metadata__finalizers=["kubernetes_resources_deletion"],
+        status__last_applied_manifest=nginx_manifest,
     )
     await db.put(cluster)
     await db.put(app)
@@ -1395,28 +1399,40 @@ def test_update_last_applied_manifest_from_spec_multiple_types():
 
     # Both values should be initialized
     update_last_applied_manifest_from_spec(app)
-    assert app.status.last_applied_manifest[0]["spec"]["containers"][0][0] == "List in List"
+    assert (
+        app.status.last_applied_manifest[0]["spec"]["containers"][0][0]
+        == "List in List"
+    )
 
     # State (2): The manifest is extended with a dict in list structure.
     app.spec.manifest[0]["spec"]["containers"] = [{"dict": "Dict in List"}]
 
     # Both values should be initialized
     update_last_applied_manifest_from_spec(app)
-    assert app.status.last_applied_manifest[0]["spec"]["containers"][0]["dict"] == "Dict in List"
+    assert (
+        app.status.last_applied_manifest[0]["spec"]["containers"][0]["dict"]
+        == "Dict in List"
+    )
 
     # State (3): The manifest is extended with a list in dict structure.
     app.spec.manifest[0]["spec"]["containers"] = {"dict": ["List in Dict"]}
 
     # Both values should be initialized
     update_last_applied_manifest_from_spec(app)
-    assert app.status.last_applied_manifest[0]["spec"]["containers"]["dict"][0] == "List in Dict"
+    assert (
+        app.status.last_applied_manifest[0]["spec"]["containers"]["dict"][0]
+        == "List in Dict"
+    )
 
     # State (4): The manifest is extended with a dict in dict structure.
     app.spec.manifest[0]["spec"]["containers"] = {"dict": {"dict": "Dict in Dict"}}
 
     # Both values should be initialized
     update_last_applied_manifest_from_spec(app)
-    assert app.status.last_applied_manifest[0]["spec"]["containers"]["dict"]["dict"] == "Dict in Dict"
+    assert (
+        app.status.last_applied_manifest[0]["spec"]["containers"]["dict"]["dict"]
+        == "Dict in Dict"
+    )
 
 
 async def test_update_last_applied_manifest_from_resp(loop):
@@ -1703,7 +1719,7 @@ async def test_reception_for_cluster_observers(aiohttp_server, config, loop):
     cluster_count = 3
     server = await aiohttp_server(create_app(config))
 
-    async with Client(url=server_endpoint(server), loop=loop) as client:
+    async with Client(url=server_endpoint(server), loop=loop):
         controller = KubernetesController(server_endpoint(server), worker_count=0)
         for i in range(cluster_count):
             cluster = ClusterFactory()
@@ -1746,7 +1762,10 @@ async def test_create_kubernetes_cluster_observer(aiohttp_server, config):
     # the clusters status should be updated by the kubernetes controller
     assert observer.cluster.status.state == cluster.status.state
 
-async def test_kubernetes_cluster_observer_on_cluster_update(aiohttp_server, db, loop, config):
+
+async def test_kubernetes_cluster_observer_on_cluster_update(
+    aiohttp_server, db, loop, config
+):
     """Test the behavior of the Kubernetes Controller and Observer when a cluster
     is being updated.
 
@@ -1767,10 +1786,15 @@ async def test_kubernetes_cluster_observer_on_cluster_update(aiohttp_server, db,
         await controller.resource_received(cluster)
         assert controller.observers[cluster.metadata.uid][0].cluster == cluster
 
-        controller.observers[cluster.metadata.uid][0].cluster.status.state = ClusterState.ONLINE
+        controller.observers[cluster.metadata.uid][
+            0
+        ].cluster.status.state = ClusterState.ONLINE
         assert controller.observers[cluster.metadata.uid][0].cluster != cluster
-        cluster = await controller.on_status_update(controller.observers[cluster.metadata.uid][0].cluster)
+        cluster = await controller.on_status_update(
+            controller.observers[cluster.metadata.uid][0].cluster
+        )
         assert controller.observers[cluster.metadata.uid][0].cluster == cluster
+
 
 async def test_kubernetes_cluster_observer_on_cluster_delete(aiohttp_server, config):
     """Test the behavior of the Kubernetes Controller and Observer when a cluster
@@ -1790,9 +1814,7 @@ async def test_kubernetes_cluster_observer_on_cluster_delete(aiohttp_server, con
 
 
 async def test_register_kubernetes_cluster_observer(aiohttp_server, config):
-    """Test the registration of a KubernetesClusterObserver.
-
-    """
+    """Test the registration of a KubernetesClusterObserver."""
     server = await aiohttp_server(create_app(config))
     controller = KubernetesController(server_endpoint(server), worker_count=0)
 
@@ -1804,15 +1826,13 @@ async def test_register_kubernetes_cluster_observer(aiohttp_server, config):
 
 
 async def test_unregister_kubernetes_cluster_observer(aiohttp_server, config):
-    """Test the unregistration of a KubernetesClusterObserver.
-
-    """
+    """Test the unregistration of a KubernetesClusterObserver."""
     server = await aiohttp_server(create_app(config))
     controller = KubernetesController(server_endpoint(server), worker_count=0)
 
     cluster = ClusterFactory()
 
     await controller.resource_received(cluster)
-    await unregister_observer(controller,cluster)
+    await unregister_observer(controller, cluster)
     # the observer dict should be empty
     assert controller.observers == {}

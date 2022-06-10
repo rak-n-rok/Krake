@@ -26,7 +26,7 @@ from krake.api.app import create_app
 from krake.data.config import (
     HooksConfiguration,
     CompleteHookConfiguration,
-    ShutdownHookConfiguration
+    ShutdownHookConfiguration,
 )
 from krake.data.core import resource_ref, ReasonCode
 from krake.data.kubernetes import Application, ApplicationState, ClusterState
@@ -1190,16 +1190,14 @@ async def test_app_migration_with_shutdown_hook(
     async def _(request):
         body = await request.json()
         response = {
-            'apiVersion': 'v1',
-            'data': {
-                'krake_shutdown_token': 'SVotTXM4MXZ5eTkxcHdZZ3FjUG9RdDRJaUlYa2sxY1JwVUxBYW82b2tqVQ==',
-                'krake_shutdown_url': 'aHR0cDovLzEyNy4wLjAuMTo0NTYyOS9rdWJlcm5ldGVzL25hbWVzcGFjZXMvdGVzdGluZy9hcHBsaWNhdGlvbnMvamFtZXMtc3RyaWNrbGFuZC1tZC9zaHV0ZG93bg=='
+            "apiVersion": "v1",
+            "data": {
+                "krake_shutdown_token": "SVotTXM4MXZ5eTkxcHdZZ3FjUG9RdDRJaUlYa2sxY1JwVUxBYW82b2tqVQ==",  # noqa: E501
+                "krake_shutdown_url": "aHR0cDovLzEyNy4wLjAuMTo0NTYyOS9rdWJlcm5ldGVzL25hbWVzcGFjZXMvdGVzdGluZy9hcHBsaWNhdGlvbnMvamFtZXMtc3RyaWNrbGFuZC1tZC9zaHV0ZG93bg==",  # noqa: E501
             },
-            'kind': 'Secret',
-            'metadata': {
-                'name': body["metadata"]["name"],
-                'namespace': 'secondary'},
-            'type': None
+            "kind": "Secret",
+            "metadata": {"name": body["metadata"]["name"], "namespace": "secondary"},
+            "type": None,
         }
         return web.json_response(response)
 
@@ -1255,8 +1253,11 @@ async def test_app_migration_with_shutdown_hook(
         status__running_on=resource_ref(cluster_a),
         status__scheduled_to=resource_ref(cluster_b),
         status__last_observed_manifest=[nginx_initial_last_observed_manifest_old],
-        status__services={"shutdown": httpserver.server.server_name + ":" + str(
-            httpserver.server.server_port)},
+        status__services={
+            "shutdown": httpserver.server.server_name
+            + ":"
+            + str(httpserver.server.server_port)
+        },
         metadata__finalizers=["kubernetes_resources_deletion"],
     )
 
@@ -1279,7 +1280,7 @@ async def test_app_migration_with_shutdown_hook(
             cert_dest="/etc/krake_cert",
             env_token="KRAKE_COMPLETE_TOKEN",
             env_url="KRAKE_COMPLETE_URL",
-            external_endpoint=server_endpoint(server)
+            external_endpoint=server_endpoint(server),
         ),
         shutdown=ShutdownHookConfiguration(
             hook_user="system:shutdown-hook",
@@ -1288,7 +1289,7 @@ async def test_app_migration_with_shutdown_hook(
             cert_dest="/etc/krake_cert",
             env_token="KRAKE_SHUTDOWN_TOKEN",
             env_url="KRAKE_SHUTDOWN_URL",
-            external_endpoint=server_endpoint(server)
+            external_endpoint=server_endpoint(server),
         ),
     )
 
@@ -1462,8 +1463,11 @@ async def test_app_deletion_with_shutdown_hook(
         status__scheduled_to=resource_ref(cluster),
         status__running_on=resource_ref(cluster),
         status__last_observed_manifest=initial_last_observed_manifest,
-        status__services={"shutdown": httpserver.server.server_name + ":" + str(
-            httpserver.server.server_port)},
+        status__services={
+            "shutdown": httpserver.server.server_name
+            + ":"
+            + str(httpserver.server.server_port)
+        },
         metadata__finalizers=["kubernetes_resources_deletion"],
     )
     assert resource_ref(cluster) in app.metadata.owners
@@ -1560,8 +1564,11 @@ async def test_app_deletion_with_shutdown_hook_running_state(
         status__scheduled_to=resource_ref(cluster),
         status__running_on=resource_ref(cluster),
         status__last_observed_manifest=initial_last_observed_manifest,
-        status__services={"shutdown": httpserver.server.server_name + ":" + str(
-            httpserver.server.server_port)},
+        status__services={
+            "shutdown": httpserver.server.server_name
+            + ":"
+            + str(httpserver.server.server_port)
+        },
         metadata__finalizers=["kubernetes_resources_deletion"],
     )
     assert resource_ref(cluster) in app.metadata.owners
@@ -1659,8 +1666,11 @@ async def test_app_deletion_with_shutdown_hook_app_not_found(
         status__scheduled_to=resource_ref(cluster),
         status__running_on=resource_ref(cluster),
         status__last_observed_manifest=initial_last_observed_manifest,
-        status__services={"shutdown": httpserver.server.server_name + ":" + str(
-            httpserver.server.server_port)},
+        status__services={
+            "shutdown": httpserver.server.server_name
+            + ":"
+            + str(httpserver.server.server_port)
+        },
         metadata__finalizers=["kubernetes_resources_deletion"],
     )
     assert resource_ref(cluster) in app.metadata.owners
@@ -1727,8 +1737,11 @@ async def test_app_deletion_with_shutdown_hook_timeout(
         status__scheduled_to=resource_ref(cluster),
         status__running_on=resource_ref(cluster),
         status__last_observed_manifest=initial_last_observed_manifest,
-        status__services={"shutdown": httpserver.server.server_name + ":" + str(
-            httpserver.server.server_port)},
+        status__services={
+            "shutdown": httpserver.server.server_name
+            + ":"
+            + str(httpserver.server.server_port)
+        },
         metadata__finalizers=["kubernetes_resources_deletion"],
     )
     assert resource_ref(cluster) in app.metadata.owners
@@ -2133,11 +2146,49 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
     assert stored.status.services == {}
 
 
-async def test_kubernetes_controller_unsupported_error_handling(
+async def test_kubernetes_controller_unsupported_api_version_error_handling(
     aiohttp_server, config, db, loop
 ):
     """Test the behavior of the Controller in case of an error due to an unsupported
-    resource.
+    resource apiVersion.
+    """
+    failed_manifest = deepcopy(nginx_manifest)
+    for resource in failed_manifest:
+        resource["apiVersion"] = "Unsupported"
+
+    cluster = ClusterFactory(spec__custom_resources=[])
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=True,
+        status__scheduled_to=resource_ref(cluster),
+        status__last_observed_manifest=[],
+        spec__manifest=failed_manifest,
+    )
+
+    await db.put(cluster)
+    await db.put(app)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        await controller.prepare(client)
+
+        await controller.queue.put(app.metadata.uid, app)
+        await controller.handle_resource(run_once=True)
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored.status.state == ApplicationState.FAILED
+    assert stored.status.reason.code == ReasonCode.UNSUPPORTED_RESOURCE
+
+
+async def test_kubernetes_controller_unsupported_kind_error_handling(
+    aiohttp_server, config, db, loop
+):
+    """Test the behavior of the Controller in case of an error due to an unsupported
+    resource kind.
     """
     failed_manifest = deepcopy(nginx_manifest)
     for resource in failed_manifest:
@@ -2168,7 +2219,7 @@ async def test_kubernetes_controller_unsupported_error_handling(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
     assert stored.status.state == ApplicationState.FAILED
-    assert stored.status.reason.code == ReasonCode.UNSUPPORTED_KIND
+    assert stored.status.reason.code == ReasonCode.UNSUPPORTED_RESOURCE
 
 
 async def test_kubernetes_api_error_handling(aiohttp_server, config, db, loop):
@@ -2219,6 +2270,21 @@ async def test_client_app_kind_error_handling(aiohttp_server, config, db, loop):
     kube = KubernetesClient(cluster.spec.kubeconfig, [])
 
     with pytest.raises(InvalidManifestError, match="kind"):
+        await kube.apply(copy_deployment_manifest[0])
+
+
+async def test_client_app_api_version_error_handling(aiohttp_server, config, db, loop):
+    """Test the error handling in the KubernetesClient when attempting to create a
+    resource if the apiVersion of a resource is removed from a manifest file.
+    """
+    copy_deployment_manifest = deepcopy(nginx_manifest[:1])
+    del copy_deployment_manifest[0]["apiVersion"]
+
+    cluster = ClusterFactory()
+
+    kube = KubernetesClient(cluster.spec.kubeconfig, [])
+
+    with pytest.raises(InvalidManifestError, match="apiVersion"):
         await kube.apply(copy_deployment_manifest[0])
 
 
@@ -2358,14 +2424,21 @@ async def test_default_observer_schema(loop):
 
     generate_default_observer_schema(app)
 
-    assert app.spec.observer_schema[0]["apiVersion"] == \
-           app.status.mangled_observer_schema[0]["apiVersion"]
-    assert app.spec.observer_schema[0]["kind"] == \
-           app.status.mangled_observer_schema[0]["kind"]
-    assert app.spec.observer_schema[0]["spec"] == \
-           app.status.mangled_observer_schema[0]["spec"]
-    assert app.status.mangled_observer_schema[0]["metadata"]["namespace"] == \
-           app.spec.manifest[0]["metadata"]["namespace"]
+    assert (
+        app.spec.observer_schema[0]["apiVersion"]
+        == app.status.mangled_observer_schema[0]["apiVersion"]
+    )
+    assert (
+        app.spec.observer_schema[0]["kind"]
+        == app.status.mangled_observer_schema[0]["kind"]
+    )
+    assert (
+        app.spec.observer_schema[0]["spec"]
+        == app.status.mangled_observer_schema[0]["spec"]
+    )
+
+    assert "namespace" in app.status.mangled_observer_schema[0]["metadata"]
+    assert app.status.mangled_observer_schema[0]["metadata"]["namespace"] is None
 
 
 async def prepare_resource_delta_test():
@@ -2558,8 +2631,11 @@ async def test_resource_delta_field_in_last_observerd_manifest(loop):
     """
 
     # State (0): Prepare the test with the ``prepare_resource_delta_test`` function
-    app, initial_last_applied_manifest, initial_mangled_observer_schema = \
-        await prepare_resource_delta_test()
+    (
+        app,
+        initial_last_applied_manifest,
+        initial_mangled_observer_schema,
+    ) = await prepare_resource_delta_test()
 
     # State (1): Update a field in the last_observed_manifest, which is observed and
     # present in last_applied_manifest

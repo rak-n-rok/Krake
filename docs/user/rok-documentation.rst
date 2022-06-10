@@ -222,3 +222,21 @@ These options are common to all commands:
 
 ``-o | --output <format>`` (optional):
     The format of the displayed response. Three are available: YAML: ``yaml``, JSON: ``json`` or table: ``table``.
+
+
+Warnings
+========
+
+Warning messages are issued in situations where it is useful to alert the user of some
+condition in a Krake, which may exhibit errors or unexpected behavior.
+Warnings_ standard library is used, hence the warning messages could be filtered
+by ``PYTHONWARNINGS`` environment variable.
+
+An example to disable all warnings:
+
+.. code:: bash
+
+    $ PYTHONWARNINGS=ignore rok kube app create <...>
+
+
+.. _Warnings: https://docs.python.org/3/library/warnings.html

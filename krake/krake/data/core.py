@@ -259,7 +259,8 @@ class ReasonCode(IntEnum):
     INTERNAL_ERROR = 1  # Default error
 
     INVALID_RESOURCE = 10  # Invalid values in the Manifest
-    UNSUPPORTED_KIND = 11  # Kubernetes kind not supported by the Kubernetes controller
+    # Kubernetes' resource is not supported by the Kubernetes controller
+    UNSUPPORTED_RESOURCE = 11
     # The custom resource provided does not exist or is invalid
     INVALID_CUSTOM_RESOURCE = 12
 

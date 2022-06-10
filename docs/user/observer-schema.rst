@@ -164,13 +164,16 @@ Example of a minimal observer schema for the ``Service`` resource:
     known at the creation of the application. It can depend from the Kubernetes cluster
     the application is scheduled to.
 
-    Whether or not the Kubernetes namespace is specified in the custom Observer Schema,
-    Krake will *always* observe it, as it is needed to identify a resource uniquely on a
-    Kubernetes cluster.
+    Please note that not all Kubernetes objects are in a namespace. Most Kubernetes
+    resources (e.g. pods, services, replication controllers, and others) are in some
+    namespaces. However, namespace resources are not themselves in a namespace.
+    And low-level resources, such as nodes and persistentVolumes, are not in any
+    namespace.
 
-    As a result, users may choose to omit the ``metadata.namespace`` key from their
-    custom observer schema. Alternatively, they may decide to set it (to ``null``). In
-    either cases, the behavior of Krake will be similar: the key will be observed.
+    Therefore, Krake (by default) does not observe a Kubernetes namespace field.
+
+    Users may choose to add the ``metadata.namespace`` key to their custom observer schema,
+    then the ``metadata.namespace`` field will be observed.
 
 
 Observed fields

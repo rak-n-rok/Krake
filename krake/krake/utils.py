@@ -120,8 +120,8 @@ def get_kubernetes_resource_idx(
             and found_resource["metadata"]["name"] == resource["metadata"]["name"]
             and (
                 not check_namespace
-                or found_resource["metadata"]["namespace"]
-                == resource["metadata"]["namespace"]
+                or found_resource["metadata"].get("namespace")
+                == resource["metadata"].get("namespace")
             )
         ):
             return idx

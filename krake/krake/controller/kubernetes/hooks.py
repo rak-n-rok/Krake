@@ -747,21 +747,21 @@ class KubernetesApplicationObserver(Observer):
 
         status = deepcopy(app.status)
         status.last_observed_manifest = []
-
         # For each observed kubernetes resource of the Application,
         # get its current status on the cluster.
-        for observed_resource in app.status.mangled_observer_schema:
+        for desired_resource in app.status.last_applied_manifest:
             kube = KubernetesClient(self.cluster.spec.kubeconfig)
+            idx_observed = get_kubernetes_resource_idx(
+                app.status.mangled_observer_schema, desired_resource
+            )
+            observed_resource = app.status.mangled_observer_schema[idx_observed]
             async with kube:
                 try:
-                    resource_api = await kube.get_resource_api(
-                        observed_resource["kind"]
+                    group, version, kind, name, namespace = kube.get_immutables(
+                        desired_resource
                     )
-                    resp = await resource_api.read(
-                        observed_resource["kind"],
-                        observed_resource["metadata"]["name"],
-                        observed_resource["metadata"]["namespace"],
-                    )
+                    resource_api = await kube.get_resource_api(group, version, kind)
+                    resp = await resource_api.read(kind, name, namespace)
                 except ApiException as err:
                     if err.status == 404:
                         # Resource does not exist
@@ -1009,31 +1009,22 @@ def generate_certificate(config):
     return CertificatePair(cert=cert_dump, key=key_dump)
 
 
-def generate_default_observer_schema(app, default_namespace="default"):
+def generate_default_observer_schema(app):
     """Generate the default observer schema for each Kubernetes resource present in
     ``spec.manifest`` for which a custom observer schema hasn't been specified.
 
     Args:
         app (krake.data.kubernetes.Application): The application for which to generate a
             default observer schema
-        default_namespace (str, optional): The default namespace to use if no namespace
-            is specified in the resource declaration. Fetched from the cluster's
-            kubeconfig file
     """
 
     app.status.mangled_observer_schema = deepcopy(app.spec.observer_schema)
 
     for resource_manifest in app.spec.manifest:
         try:
-            idx = get_kubernetes_resource_idx(
+            get_kubernetes_resource_idx(
                 app.status.mangled_observer_schema, resource_manifest
             )
-
-            # In case a custom observer schema is provided for this resource, the
-            # namespace still needs to bet set.
-            app.status.mangled_observer_schema[idx]["metadata"][
-                "namespace"
-            ] = resource_manifest["metadata"].get("namespace", default_namespace)
 
         except IndexError:
             # Only create a default observer schema, if a custom observer schema hasn't
@@ -1042,14 +1033,11 @@ def generate_default_observer_schema(app, default_namespace="default"):
                 generate_default_observer_schema_dict(
                     resource_manifest,
                     first_level=True,
-                    default_namespace=default_namespace,
                 )
             )
 
 
-def generate_default_observer_schema_dict(
-    manifest_dict, first_level=False, default_namespace="default"
-):
+def generate_default_observer_schema_dict(manifest_dict, first_level=False):
     """Together with :func:``generate_default_observer_schema_list``, this function is
     called recursively to generate part of a default ``observer_schema`` from part of a
     Kubernetes resource, defined respectively by ``manifest_dict`` or ``manifest_list``.
@@ -1058,9 +1046,6 @@ def generate_default_observer_schema_dict(
         manifest_dict (dict): Partial Kubernetes resources
         first_level (bool, optional): If True, indicates that the dictionary represents
             the whole observer schema of a Kubernetes resource
-        default_namespace (str, optional): The default namespace to use if no namespace
-            is specified in the resource declaration. Fetched from the cluster's
-            kubeconfig file
 
     Returns:
         dict: Generated partial observer_schema
@@ -1089,9 +1074,7 @@ def generate_default_observer_schema_dict(
         observer_schema_dict["apiVersion"] = manifest_dict["apiVersion"]
         observer_schema_dict["kind"] = manifest_dict["kind"]
         observer_schema_dict["metadata"]["name"] = manifest_dict["metadata"]["name"]
-        observer_schema_dict["metadata"]["namespace"] = manifest_dict["metadata"].get(
-            "namespace", default_namespace
-        )
+
         if (
             "spec" in manifest_dict
             and "type" in manifest_dict["spec"]
@@ -1144,7 +1127,7 @@ def generate_default_observer_schema_list(manifest_list):
 
 
 @listen.on(HookType.ApplicationMangling)
-async def complete(app, api_endpoint, ssl_context, config, default_namespace="default"):
+async def complete(app, api_endpoint, ssl_context, config):
     """Execute application complete hook defined by :class:`Complete`.
     Hook mangles given application and injects complete hooks variables.
 
@@ -1158,9 +1141,6 @@ async def complete(app, api_endpoint, ssl_context, config, default_namespace="de
         ssl_context (ssl.SSLContext): SSL context to communicate with the API endpoint
         config (krake.data.config.HooksConfiguration): Complete hook
             configuration.
-        default_namespace (str, optional): The default namespace to use if no namespace
-            is specified in the resource declaration. Fetched from the cluster's
-            kubeconfig file
 
     """
     if "complete" not in app.spec.hooks:
@@ -1198,13 +1178,12 @@ async def complete(app, api_endpoint, ssl_context, config, default_namespace="de
         config.complete.intermediate_src,
         generated_cert,
         app.status.mangled_observer_schema,
-        default_namespace,
         "complete"
     )
 
 
 @listen.on(HookType.ApplicationMangling)
-async def shutdown(app, api_endpoint, ssl_context, config, default_namespace="default"):
+async def shutdown(app, api_endpoint, ssl_context, config):
     """Executes an application shutdown hook defined by :class:`Shutdown`.
     The hook mangles the given application and injects shutdown hooks variables.
 
@@ -1218,9 +1197,6 @@ async def shutdown(app, api_endpoint, ssl_context, config, default_namespace="de
         ssl_context (ssl.SSLContext): SSL context to communicate with the API endpoint
         config (krake.data.config.HooksConfiguration): Shutdown hook
             configuration.
-        default_namespace (str, optional): The default namespace to use if no namespace
-            is specified in the resource declaration. Fetched from the cluster's
-            kubeconfig file
 
     """
     if "shutdown" not in app.spec.hooks:
@@ -1258,7 +1234,6 @@ async def shutdown(app, api_endpoint, ssl_context, config, default_namespace="de
         config.shutdown.intermediate_src,
         generated_cert,
         app.status.mangled_observer_schema,
-        default_namespace,
         "shutdown"
     )
 
@@ -1324,7 +1299,6 @@ class Hook(object):
         intermediate_src,
         generated_cert,
         mangled_observer_schema,
-        default_namespace="default",
         hook_type="",
     ):
         """Mangle a given application and inject complete hook resources and
@@ -1348,9 +1322,6 @@ class Hook(object):
                 new signed certificate for the Application, and the content of its
                 corresponding key.
             mangled_observer_schema (list): Observed fields
-            default_namespace (str, optional): The default namespace to use if no
-                namespace is specified in the resource declaration. Fetched from the
-                cluster's kubeconfig file
             hook_type (str, optional): Name of the hook the app should be mangled for
 
         """
@@ -1375,39 +1346,45 @@ class Hook(object):
         hook_resources = []
         hook_sub_resources = []
         if ca_certs:
-            hook_resources.extend([
-                self.secret_certs(
-                    secret_certs_name,
+            hook_resources.extend(
+                [
+                    self.secret_certs(
+                        secret_certs_name,
+                        resource_namespace,
+                        intermediate_src=intermediate_src,
+                        generated_cert=generated_cert,
+                        ca_certs=ca_certs,
+                    )
+                    for resource_namespace in resource_namespaces
+                ]
+            )
+            hook_sub_resources.extend(
+                [*self.volumes(secret_certs_name, volume_name, self.cert_dest)]
+            )
+
+        hook_resources.extend(
+            [
+                self.secret_token(
+                    secret_token_name,
+                    name,
+                    namespace,
                     resource_namespace,
-                    intermediate_src=intermediate_src,
-                    generated_cert=generated_cert,
-                    ca_certs=ca_certs,
+                    self.api_endpoint,
+                    token,
                 )
                 for resource_namespace in resource_namespaces
-            ])
-            hook_sub_resources.extend([
-                *self.volumes(secret_certs_name, volume_name, self.cert_dest)
-            ])
-
-        hook_resources.extend([
-            self.secret_token(
-                secret_token_name,
-                name,
-                namespace,
-                resource_namespace,
-                self.api_endpoint,
-                token,
-            ) for resource_namespace in resource_namespaces
-        ])
-        hook_sub_resources.extend([
-            *self.env_vars(secret_token_name),
-        ])
+            ]
+        )
+        hook_sub_resources.extend(
+            [
+                *self.env_vars(secret_token_name),
+            ]
+        )
 
         self.mangle(
             hook_resources,
             last_applied_manifest,
             mangled_observer_schema,
-            default_namespace=default_namespace,
         )
         self.mangle(
             hook_sub_resources,
@@ -1422,7 +1399,6 @@ class Hook(object):
         last_applied_manifest,
         mangled_observer_schema,
         is_sub_resource=False,
-        default_namespace="default",
     ):
         """Mangle applications desired state with custom hook resources or
         sub-resources.
@@ -1472,7 +1448,6 @@ class Hook(object):
                 hook_resources,
                 last_applied_manifest,
                 mangled_observer_schema,
-                default_namespace="default",
             )
             mangle(
                 hook_sub_resources,
@@ -1502,7 +1477,7 @@ class Hook(object):
                 {
                     "apiVersion": "v1",
                     "kind": "Pod",
-                    "metadata": {"name": "test", "namespace": "default"},
+                    "metadata": {"name": "test", "namespace": None},
                     "spec": {
                         "containers": [
                             {
@@ -1525,7 +1500,7 @@ class Hook(object):
                 {
                     "apiVersion": "v1",
                     "kind": "Secret",
-                    "metadata": {"name": "sct", "namespace": "default"},
+                    "metadata": {"name": "sct", "namespace": None},
                 },
             ]
 
@@ -1538,9 +1513,6 @@ class Hook(object):
                 with new hook resources. Otherwise, the function injects each new hook
                 sub-resource into the :attr:`last_applied_manifest` object
                 sub-resources. Defaults to False.
-                default_namespace (str, optional): The default namespace to use if no
-                    namespace is specified in the resource declaration. Fetched from the
-                    cluster's kubeconfig file
 
         """
 
@@ -1555,7 +1527,6 @@ class Hook(object):
                     generate_default_observer_schema_dict(
                         sub_resource,
                         first_level=True,
-                        default_namespace=default_namespace,
                     )
                 )
             return
@@ -1947,8 +1918,7 @@ class Complete(Hook):
         self, api_endpoint, ssl_context, hook_user, cert_dest, env_token, env_url
     ):
         super().__init__(
-            api_endpoint, ssl_context, hook_user,
-            cert_dest, env_token, env_url
+            api_endpoint, ssl_context, hook_user, cert_dest, env_token, env_url
         )
         self.env_url = env_url
 
@@ -2032,9 +2002,7 @@ class Complete(Hook):
             value_from=self.attribute_map(
                 V1EnvVarSource(
                     secret_key_ref=self.attribute_map(
-                        V1SecretKeySelector(
-                            name=secret_name, key=self.env_url.lower()
-                        )
+                        V1SecretKeySelector(name=secret_name, key=self.env_url.lower())
                     )
                 )
             ),
@@ -2090,8 +2058,7 @@ class Shutdown(Hook):
         self, api_endpoint, ssl_context, hook_user, cert_dest, env_token, env_url
     ):
         super().__init__(
-            api_endpoint, ssl_context, hook_user,
-            cert_dest, env_token, env_url
+            api_endpoint, ssl_context, hook_user, cert_dest, env_token, env_url
         )
         self.env_url = env_url
 
@@ -2180,10 +2147,7 @@ class Shutdown(Hook):
             value_from=self.attribute_map(
                 V1EnvVarSource(
                     secret_key_ref=self.attribute_map(
-                        V1SecretKeySelector(
-                            name=secret_name,
-                            key=self.env_url.lower()
-                        )
+                        V1SecretKeySelector(name=secret_name, key=self.env_url.lower())
                     )
                 )
             ),

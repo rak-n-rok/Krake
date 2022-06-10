@@ -33,9 +33,6 @@ where none have been provided. In our example, a default observer schema is
 created for the ``Artist``, while the custom observer schema provided by the
 user for the ``Song`` is used as-is.
 
-Then, the controller adds, if not present already, the mandatory
-``metadata.namespace`` key in all observer schemas.
-
 The result is stored in ``status.mangled_observer_schema``.
 
 This step is performed by the ``generate_default_observer_schema`` function.
@@ -56,7 +53,7 @@ updates the observed fields present in ``spec.manifest``.
 
 This the role of the ``update_last_applied_manifest_from_spec`` function.
 
-In the example above, looking at the ``Song`` resource: 
+In the example above, looking at the ``Song`` resource:
 
 - ``key1`` is initialized in ``spec.manifest`` and is observed.
 - ``key2`` is initialized in ``spec.manifest`` but is not observed. Its

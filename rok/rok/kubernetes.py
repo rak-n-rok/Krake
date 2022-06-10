@@ -6,6 +6,7 @@
 
 """
 import sys
+import warnings
 from argparse import FileType, Action
 from base64 import b64encode
 
@@ -30,6 +31,14 @@ from .formatters import (
     bool_formatter,
     format_datetime,
 )
+
+warnings.formatwarning = lambda message, *args, **kwargs: f"WARNING: {message}\n"
+
+WARN_RESOURCES = {
+    "Job",
+    "CronJob",
+    "StatefulSet",
+}
 
 kubernetes = ParserSpec(
     "kubernetes", aliases=["kube"], help="Manage Kubernetes resources"
@@ -86,9 +95,9 @@ class ShutdownAction(Action):
             values = []
         if len(values) < 1:
             defaults = [TIMEOUT_PERIOD]
-            values = ['shutdown'] + values + defaults[len(values):]
+            values = ["shutdown"] + values + defaults[len(values) :]
         else:
-            values = ['shutdown'] + values
+            values = ["shutdown"] + values
         attr = getattr(namespace, self.dest)
         if attr is None:
             attr = []
@@ -98,16 +107,13 @@ class ShutdownAction(Action):
 arg_hook_shutdown = argument(
     "--hook-shutdown",
     dest="hooks",
-    metavar=(
-        "timeout-period"
-    ),
+    metavar=("timeout-period"),
     nargs="*",
     action=ShutdownAction,
     help=(
         f"Enables the application shutdown hook. Additional arguments are possible:"
         f" timeout-period [{TIMEOUT_PERIOD}]s"
     ),
-
 )
 
 arg_cluster_resource_constraints = argument(
@@ -133,6 +139,50 @@ arg_custom_resources = argument(
 
 class ApplicationListTable(BaseTable):
     state = Cell("status.state")
+
+
+def handle_warning(app):
+    """Handle warning message print out
+
+    A warning message is printed out when an application
+    contains resources that we considered as non-optimal for migration,
+    the migration is enabled and the user did not set shutdown hook for
+    the requested application.
+
+    The warning messages could be filtered by `PYTHONWARNINGS`
+    environment variable.
+    see https://docs.python.org/3/library/warnings.html#default-warning-filter
+
+    The following syntax should be used to disable all warnings:
+
+    .. code:: bash
+
+        PYTHONWARNINGS=ignore rok kube app create -f example.yaml example
+
+    Args:
+        app (dict): Application to evaluate
+
+    """
+    manifest = app["spec"]["manifest"]
+    hooks = app["spec"].get("hooks", [])
+    migration = app["spec"]["constraints"]["migration"]
+
+    if "shutdown" not in [hook[0] for hook in hooks if hook] and migration:
+        warn_resources = set(
+            [
+                resource["kind"]
+                for resource in manifest
+                if resource["kind"] in WARN_RESOURCES
+            ]
+        )
+        if warn_resources:
+            warnings.warn(
+                f"Migration of k8s resources like `{', '.join(warn_resources)}`"
+                " without graceful shutdown may exhibit errors or unexpected behavior."
+                " Consider applying a shutdown hook or alternatively, disabling"
+                " migration of the application by `--disable-migration` optional"
+                " argument."
+            )
 
 
 @application.command("list", help="List Kubernetes application")
@@ -227,8 +277,10 @@ def create_application(
         migration = enable_migration
     manifest = list(yaml.safe_load_all(file))
     observer_schema = []
+
     if observer_schema_file:
         observer_schema = list(yaml.safe_load_all(observer_schema_file))
+
     app = {
         "metadata": {"name": name, "labels": labels},
         "spec": {
@@ -248,10 +300,10 @@ def create_application(
         app["spec"]["hooks"] = []
         for hook in hooks:
             app["spec"]["hooks"].append(hook[0])
-            if isinstance(hook, list) and \
-               len(hook) > 1 and \
-               hook[0] == "shutdown":
+            if isinstance(hook, list) and len(hook) > 1 and hook[0] == "shutdown":
                 app["spec"]["shutdown_grace_time"] = hook[1]
+
+    handle_warning(app)
 
     blocking_state = False
     if wait is not None:
@@ -275,9 +327,7 @@ def get_application(config, session, namespace, name):
     if namespace is None:
         namespace = config["user"]
 
-    resp = session.get(
-        f"/kubernetes/namespaces/{namespace}/applications/{name}"
-    )
+    resp = session.get(f"/kubernetes/namespaces/{namespace}/applications/{name}")
     return resp.json()
 
 
@@ -322,9 +372,7 @@ def update_application(
     if namespace is None:
         namespace = config["user"]
 
-    resp = session.get(
-        f"/kubernetes/namespaces/{namespace}/applications/{name}"
-    )
+    resp = session.get(f"/kubernetes/namespaces/{namespace}/applications/{name}")
     app = resp.json()
 
     if file:
@@ -347,6 +395,8 @@ def update_application(
         app_constraints["cluster"]["custom_resources"] = cluster_resource_constraints
     if disable_migration or enable_migration:
         app_constraints["migration"] = enable_migration
+
+    handle_warning(app)
 
     blocking_state = False
     if wait is not None:
@@ -405,9 +455,7 @@ def retry_application(config, session, namespace, name):
     if namespace is None:
         namespace = config["user"]
 
-    resp = session.put(
-        f"/kubernetes/namespaces/{namespace}/applications/{name}/retry"
-    )
+    resp = session.put(f"/kubernetes/namespaces/{namespace}/applications/{name}/retry")
 
     if resp.status_code == 204:
         return None
@@ -573,9 +621,7 @@ def get_cluster(config, session, namespace, name):
     if namespace is None:
         namespace = config["user"]
 
-    resp = session.get(
-        f"/kubernetes/namespaces/{namespace}/clusters/{name}"
-    )
+    resp = session.get(f"/kubernetes/namespaces/{namespace}/clusters/{name}")
     return resp.json()
 
 
@@ -598,9 +644,7 @@ def update_cluster(
     if namespace is None:
         namespace = config["user"]
 
-    resp = session.get(
-        f"/kubernetes/namespaces/{namespace}/clusters/{name}"
-    )
+    resp = session.get(f"/kubernetes/namespaces/{namespace}/clusters/{name}")
     cluster = resp.json()
 
     if file:
@@ -630,9 +674,7 @@ def delete_cluster(config, session, namespace, name):
     if namespace is None:
         namespace = config["user"]
 
-    resp = session.delete(
-        f"/kubernetes/namespaces/{namespace}/clusters/{name}"
-    )
+    resp = session.delete(f"/kubernetes/namespaces/{namespace}/clusters/{name}")
 
     if resp.status_code == 204:
         return None
