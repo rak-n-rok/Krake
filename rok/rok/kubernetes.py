@@ -633,13 +633,23 @@ def get_cluster(config, session, namespace, name):
 )
 @arg_custom_resources
 @arg_metric
+@arg_global_metric
 @arg_namespace
 @arg_formatting
 @arg_labels
 @depends("config", "session")
 @printer(table=ClusterTable())
 def update_cluster(
-    config, session, name, namespace, file, context, metrics, labels, custom_resources
+    config,
+    session,
+    name,
+    namespace,
+    file,
+    context,
+    metrics,
+    global_metrics,
+    labels,
+    custom_resources
 ):
     if namespace is None:
         namespace = config["user"]
@@ -652,8 +662,8 @@ def update_cluster(
 
     if labels:
         cluster["metadata"]["labels"] = labels
-    if metrics:
-        cluster["spec"]["metrics"] = metrics
+    if metrics or global_metrics:
+        cluster["spec"]["metrics"] = metrics + global_metrics
     if custom_resources:
         cluster["spec"]["custom_resources"] = custom_resources
 
