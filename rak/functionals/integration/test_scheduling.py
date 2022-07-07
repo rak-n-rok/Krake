@@ -72,6 +72,20 @@ CONSTRAINT_EXPRESSIONS = {
     False: ["location is not DE", "location != DE", "location not in (DE,)"],
 }
 
+METRIC_CONSTRAINT_EXPRESSIONS = {
+    True: [
+        "load=5",
+        "load = 5",
+        "load == 5",
+        "load is 5",
+    ],
+    False: [
+        "load!=5",
+        "load != 5",
+        "load is not 5"
+    ],
+}
+
 
 def test_create_cluster_and_app(minikube_clusters):
     """Basic end-to-end testing
@@ -526,6 +540,61 @@ def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
             # with cluster labels (randomly selected from: `location=DE`,
             # `location=IT`) and randomly selected metrics.
             cluster_labels = create_cluster_label_info(clusters, "location", countries)
+            metric_weights = {
+                clusters[i]: [WeightedMetric(prometheus_metrics[i].metric, 1)]
+                for i in range(num_clusters)
+            }
+            environment = create_default_environment(
+                clusters,
+                cluster_labels=cluster_labels,
+                app_cluster_constraints=[app_cluster_constraint],
+            )
+            with Environment(environment) as env:
+                app = env.resources[ResourceKind.APPLICATION][0]
+
+                # 2. Ensure that the application was scheduled to the requested cluster;
+                app.check_running_on(clusters[expected_index])
+
+
+def test_scheduler_cluster_metric_constraints(minikube_clusters):
+    """
+    Basic end-to-end testing of application cluster metric constraints (with metrics)
+
+    Test iterates over the `CONSTRAINT_EXPRESSIONS` and applies workflow as follows:
+
+        1. Create an application (with a cluster metric constraint given from
+            `CONSTRAINT_EXPRESSIONS`) and two Minikube clusters (from a config file)
+            with cluster metrics (randomly selected from: ``minikube_clusters
+            ``) and randomly selected metrics.
+        2. Ensure that the application was scheduled to the cluster, which the
+            application selected through its cluster label constraints. The cluster
+            label constraints have priority over the rank calculated from the metrics.
+
+    Args:
+        minikube_clusters (list): Names of the Minikube backend.
+
+    """
+    mp = provider.get_global_prometheus_metrics_provider()
+    num_clusters = 2
+    load_values = ["5", "15"]
+    for match, constraints in METRIC_CONSTRAINT_EXPRESSIONS.items():
+
+        # We expect the app to be scheduled on the DE cluster if match and
+        # otherwise on the IT cluster, so we remember this index into the
+        # 'countries' list (and later also into the 'clusters' list).
+        expected_index = 0 if match else 1  # choose DE if match else IT
+
+        for app_cluster_constraint in constraints:
+            # The two clusters, countries and metrics used in this test
+            # (randomly ordered)
+            clusters = random.sample(minikube_clusters, num_clusters)
+            prometheus_metrics = random.sample(mp.get_valued_metrics(), num_clusters)
+
+            # 1. Create an application (with a cluster label constraint given from
+            # `CONSTRAINT_EXPRESSIONS`) and two Minikube clusters (from a config file)
+            # with cluster labels (randomly selected from: `location=DE`,
+            # `location=IT`) and randomly selected metrics.
+            cluster_labels = create_cluster_label_info(clusters, "load", load_values)
             metric_weights = {
                 clusters[i]: [WeightedMetric(prometheus_metrics[i].metric, 1)]
                 for i in range(num_clusters)

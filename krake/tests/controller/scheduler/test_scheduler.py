@@ -14,13 +14,14 @@ from krake.api.app import create_app
 from krake.client import Client
 from krake.client.kubernetes import KubernetesApi
 from krake.controller.scheduler import Scheduler
+from krake.controller.scheduler.metrics import QueryResult
 from krake.controller.scheduler.__main__ import main
 from krake.controller.scheduler.constraints import (
     match_cluster_constraints,
     match_project_constraints,
 )
 from krake.controller.scheduler.scheduler import NoProjectFound
-from krake.data.constraints import LabelConstraint
+from krake.data.constraints import LabelConstraint, MetricConstraint
 from krake.data.core import ResourceRef, MetricRef
 from krake.data.core import resource_ref, ReasonCode
 from krake.data.kubernetes import Application, ApplicationState, Cluster, ClusterState
@@ -277,6 +278,7 @@ def test_kubernetes_match_cluster_label_constraints():
     cluster = ClusterFactory(metadata__labels={"location": "IT"})
     app = ApplicationFactory(
         spec__constraints__cluster__labels=[LabelConstraint.parse("location is IT")],
+        spec__constraints__cluster__metrics=[],
         spec__constraints__cluster__custom_resources=[],
     )
     assert match_cluster_constraints(app, cluster)
@@ -286,6 +288,7 @@ def test_kubernetes_not_match_cluster_label_constraints():
     cluster = ClusterFactory()
     app = ApplicationFactory(
         spec__constraints__cluster__labels=[LabelConstraint.parse("location is IT")],
+        spec__constraints__cluster__metrics=[],
         spec__constraints__cluster__custom_resources=[],
     )
 
@@ -297,6 +300,7 @@ def test_kubernetes_match_cluster_custom_resources_constraints():
     app = ApplicationFactory(
         spec__constraints__cluster__custom_resources=["crontabs.stable.example.com"],
         spec__constraints__cluster__labels=[],
+        spec__constraints__cluster__metrics=[],
     )
 
     assert match_cluster_constraints(app, cluster)
@@ -307,9 +311,55 @@ def test_kubernetes_not_match_cluster_custom_resources_constraints():
     app = ApplicationFactory(
         spec__constraints__cluster__custom_resources=["crontabs.stable.example.com"],
         spec__constraints__cluster__labels=[],
+        spec__constraints__cluster__metrics=[],
     )
 
     assert not match_cluster_constraints(app, cluster)
+
+
+def test_kubernetes_match_cluster_metric_constraints():
+    cluster = ClusterFactory(spec__metrics=[MetricRef(name="load", weight=6.0, namespaced=False)])
+    app = ApplicationFactory(
+        spec__constraints__cluster__metrics=[MetricConstraint.parse("load > 5")],
+        spec__constraints__cluster__custom_resources=[],
+        spec__constraints__cluster__labels=[]
+    )
+    fetched_metrics = {
+        cluster.metadata.name: [
+            QueryResult(
+                metric=MetricFactory(
+                    metadata__name="load",
+                    metadata__namespace="system:admin",
+                ),
+                weight=1.0,
+                value=6.0
+            )
+        ]
+    }
+
+    assert match_cluster_constraints(app, cluster, fetched_metrics)
+
+
+def test_kubernetes_not_match_cluster_metrics_constraints():
+    cluster = ClusterFactory(spec__metrics=[MetricRef(name="load", weight=5.0, namespaced=False)])
+    app = ApplicationFactory(
+        spec__constraints__cluster__metrics=[MetricConstraint.parse("load > 5")],
+        spec__constraints__cluster__custom_resources=[],
+        spec__constraints__cluster__labels=[]
+    )
+    fetched_metrics = {
+        cluster.metadata.name: [
+            QueryResult(
+                metric=MetricFactory(
+                    metadata__name="load",
+                    metadata__namespace="system:admin",
+                ),
+                weight=1.0,
+                value=5.0
+            )
+        ]
+    }
+    assert match_cluster_constraints(app, cluster, fetched_metrics) == False
 
 
 def test_kubernetes_match_empty_cluster_constraints():
@@ -319,6 +369,7 @@ def test_kubernetes_match_empty_cluster_constraints():
     app3 = ApplicationFactory(
         spec__constraints__cluster__labels=None,
         spec__constraints__cluster__custom_resources=None,
+        spec__constraints__cluster__metrics=None,
     )
 
     assert match_cluster_constraints(app1, cluster)
@@ -837,7 +888,7 @@ async def test_kubernetes_score_failing_globalmetrics_provider(
 async def test_kubernetes_prefer_cluster_with_global_metrics(
     aiohttp_server, config, db, loop
 ):
-    prometheus = await aiohttp_server(make_prometheus({"my_metric": ["0.4"]}))
+    prometheus = await aiohttp_server(make_prometheus({"my_metric": 2 * ["0.4"]}))
 
     cluster_miss = ClusterFactory(spec__metrics=[])
     cluster = ClusterFactory(
@@ -973,6 +1024,7 @@ async def test_kubernetes_select_cluster_with_constraints_without_metric(
 
     app = ApplicationFactory(
         spec__constraints__cluster__labels=[LabelConstraint.parse("location is IT")],
+        spec__constraints__cluster__metrics=[],
         spec__constraints__cluster__custom_resources=[],
     )
 
@@ -1198,7 +1250,7 @@ async def test_kubernetes_select_cluster_sticky_others_with_metric(
 ):
     """Test that metric has higher priority than stickiness"""
     prometheus = await aiohttp_server(
-        make_prometheus({"heat-demand": 2 * ["0.4"], "some-metric": 2 * ["1.0"]})
+        make_prometheus({"heat-demand": 4 * ["0.4"], "some-metric": 4 * ["1.0"]})
     )
 
     current_wo_metric = ClusterFactory(spec__metrics=[])
@@ -1266,7 +1318,7 @@ async def test_kubernetes_select_cluster_sticky_reachable_metric(
     aiohttp_server, config, db, loop
 ):
     """Test that stickiness is taken into account when metrics are used"""
-    prometheus = await aiohttp_server(make_prometheus({"heat-demand": 2 * ["0.4"]}))
+    prometheus = await aiohttp_server(make_prometheus({"heat-demand": 4 * ["0.4"]}))
 
     cluster_wo_metric = ClusterFactory(spec__metrics=[])
     current_w_metric = ClusterFactory(
@@ -1417,6 +1469,7 @@ async def test_kubernetes_scheduling(aiohttp_server, config, db, loop):
     )
     app = ApplicationFactory(
         spec__constraints__cluster__labels=[],
+        spec__constraints__cluster__metrics=[],
         spec__constraints__cluster__custom_resources=[],
         status__state=ApplicationState.PENDING,
         status__is_scheduled=False,
@@ -1478,7 +1531,10 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
     since the last schedule was long enough."""
     prometheus = await aiohttp_server(
         make_prometheus(
-            {"heat_demand_1": ("0.5", "0.25"), "heat_demand_2": ("0.25", "0.5")}
+            {
+                "heat_demand_1": ("0.5", "0.5", "0.25", "0.25", "0.25", "0.25"),
+                "heat_demand_2": ("0.25", "0.25", "0.5", "0.5",  "0.5", "0.5")
+            }
         )
     )
 
@@ -1491,6 +1547,7 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
     app = ApplicationFactory(
         metadata__modified=datetime.now(timezone.utc),
         spec__constraints__cluster__labels=[],
+        spec__constraints__cluster__metrics=[],
         spec__constraints__cluster__custom_resources=[],
         status__state=ApplicationState.PENDING,
         status__is_scheduled=False,
@@ -1707,7 +1764,7 @@ async def test_kubernetes_no_migration(aiohttp_server, config, db, loop):
     """
     prometheus = await aiohttp_server(
         make_prometheus(
-            {"heat_demand_1": ("0.5", "0.25"), "heat_demand_2": ("0.25", "0.5")}
+            {"heat_demand_1": ("0.5", "0.5", "0.25"), "heat_demand_2": ("0.25", "0.25", "0.5")}
         )
     )
 
@@ -1720,6 +1777,7 @@ async def test_kubernetes_no_migration(aiohttp_server, config, db, loop):
     app = ApplicationFactory(
         metadata__modified=datetime.now(timezone.utc),
         spec__constraints__cluster__labels=[],
+        spec__constraints__cluster__metrics=[],
         spec__constraints__cluster__custom_resources=[],
         spec__constraints__migration=False,
         status__state=ApplicationState.PENDING,
@@ -1804,6 +1862,7 @@ async def test_kubernetes_application_update(aiohttp_server, config, db, loop):
     app = ApplicationFactory(
         metadata__modified=datetime.now(timezone.utc),
         spec__constraints__cluster__labels=[],
+        spec__constraints__cluster__metrics=[],
         spec__constraints__cluster__custom_resources=[],
         status__state=ApplicationState.PENDING,
         status__is_scheduled=False,
@@ -1904,6 +1963,7 @@ async def test_kubernetes_application_reschedule_no_update(
     app = ApplicationFactory(
         metadata__modified=datetime.now(timezone.utc),
         spec__constraints__cluster__labels=[],
+        spec__constraints__cluster__metrics=[],
         spec__constraints__cluster__custom_resources=[],
         status__state=ApplicationState.PENDING,
         status__is_scheduled=False,

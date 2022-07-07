@@ -29,8 +29,8 @@ Scheduling of Applications
 
 - The application handler evaluates if all constraints of an application match the
   available Kubernetes cluster resources. The application constraints define
-  restrictions for the scheduling algorithm. Currently, the custom resources constraint
-  and the cluster label constraint are supported, see
+  restrictions for the scheduling algorithm. Currently, the custom resources constraint,
+  the cluster label constraint and the metric constraint are supported, see
   :ref:`dev/scheduling:Constraints`. This is a first **filtering** step.
 
 - Selected Kubernetes clusters could contain metrics definition. If the cluster contains
@@ -386,6 +386,7 @@ resource only if it matches all defined resource constraints.
 The Krake scheduler supports the following resource constraints:
 
 - Label constraints
+- Metric constraints
 - Custom resources constraints
 
 The Krake users are allowed to define these restrictions for the scheduling algorithm
@@ -446,6 +447,74 @@ Examples:
 
   # Magnum clusters:
   rok os cluster create <cluster_name> -L 'location is DE'
+
+
+Metric constraints
+------------------
+
+Krake allows the user to define a metric constraint and to restrict the deployment of
+resources only to backends that matches the metric constraint. Based on the resource,
+Krake supports the following metric constraints:
+
+- The cluster metric constraints for the application resource
+
+A simple language for expressing metric constraints is used. The following operations
+can be expressed:
+
+    equality
+        The value of a label must be equal to a specific value::
+
+            <metric> is <value>
+            <metric> = <value>
+            <metric> == <value>
+
+    non-equality
+        The value of a metric must not be equal to a specific value::
+
+            <metric> is not <value>
+            <metric> != <value>
+
+    greater than
+        The value of a metric must be greater than a specific value::
+
+            <metric> greater than <value>
+            <metric> gt <value>
+            <metric> > <value>
+
+    greater than or equal
+        The value of a metric must be greater or equal than a specific value::
+
+            <metric> greater than or equal <value>
+            <metric> gte <value>
+            <metric> >= <value>
+            <metric> => <value>
+
+    less than
+        The value of a metric must be less than a specific value::
+
+            <metric> less than <value>
+            <metric> lt <value>
+            <metric> < <value>
+
+    less than or equal
+        The value of a metric must be less or equal than a specific value::
+
+            <metric> less than or equal <value>
+            <metric> lte <value>
+            <metric> <= <value>
+            <metric> =< <value>
+
+The metric label constraints for the Kubernetes application resources are defined
+by ``-M`` or ``--cluster-metric-constraint`` option in the rok CLI,
+see :ref:`user/rok-documentation:Rok documentation`. The constraints can be
+specified multiple times with the syntax: `<metric> expression <value>`.
+
+Examples:
+
+.. code:: bash
+
+  # Kubernetes Application
+  rok kube app create <application_name> -f <path_to_manifest> -M 'load = 5'
 
 
 Custom resources:

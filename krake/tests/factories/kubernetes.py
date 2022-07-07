@@ -31,6 +31,12 @@ from krake.data.constraints import (
     NotEqualConstraint,
     InConstraint,
     NotInConstraint,
+    EqualMetricConstraint,
+    NotEqualMetricConstraint,
+    GreaterThanMetricConstraint,
+    GreaterThanOrEqualMetricConstraint,
+    LesserThanMetricConstraint,
+    LesserThanOrEqualMetricConstraint,
 )
 
 
@@ -51,12 +57,24 @@ label_constraints = cycle(
     )
 )
 
+metric_constraints = cycle(
+    (
+        EqualMetricConstraint(metric="load", value="5"),
+        NotEqualMetricConstraint(metric="load", value="5"),
+        GreaterThanMetricConstraint(metric="load", value="5"),
+        GreaterThanOrEqualMetricConstraint(metric="load", value="5"),
+        LesserThanMetricConstraint(metric="load", value="5"),
+        LesserThanOrEqualMetricConstraint(metric="load", value="5"),
+    )
+)
+
 
 class ClusterConstraintsFactory(Factory):
     class Meta:
         model = ClusterConstraints
 
     labels = Iterator(map(lambda constraint: [constraint], label_constraints))
+    metrics = Iterator(map(lambda constraint: [constraint], metric_constraints))
 
     @lazy_attribute
     def custom_resources(self):
