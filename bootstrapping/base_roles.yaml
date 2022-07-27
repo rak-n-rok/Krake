@@ -200,6 +200,7 @@ rules:
   resources:
   - "applications"
   verbs:
+  - get
   - list
   - update
 
@@ -209,6 +210,8 @@ rules:
   resources:
   - "applications/status"
   verbs:
+  - get
+  - list
   - update
 
 - api: 'kubernetes'
@@ -218,6 +221,7 @@ rules:
   - "clusters"
   verbs:
   - get
+  - list
 ---
 
 api: core
@@ -302,9 +306,19 @@ rules:
   resources:
   - "cluster"
   verbs:
+  - get
   - list
   - update
+
+- api: 'kubernetes'
+  namespaces:
+  - ''
+  resources:
+  - "clusters"
+  verbs:
   - get
+  - list
+  - update
 
 - api: 'kubernetes'
   namespaces:
@@ -312,6 +326,8 @@ rules:
   resources:
   - "clusters/status"
   verbs:
+  - get
+  - list
   - update
 ---
 

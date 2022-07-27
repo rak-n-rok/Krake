@@ -862,6 +862,8 @@ class KubernetesClusterObserver(Observer):
                     status.state = ClusterState.CONNECTING
                     self.cluster.status.state = ClusterState.CONNECTING
                     return status
+                elif status.state == ClusterState.FAILING_METRICS:
+                    return status
                 elif condition_dict["Ready"] == ["True"]:
                     status.state = ClusterState.ONLINE
                     self.cluster.status.state = ClusterState.ONLINE
