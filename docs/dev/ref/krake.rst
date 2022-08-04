@@ -42,9 +42,13 @@ krake.controller
 
     All new controller should be added in this module.
 
-    krake.controller.kubernetes
+    krake.controller.kubernetes.application
         This sub-module contains the definition of the controller specialized
-        for the Kubernetes clusters and applications handling.
+        for the Kubernetes application handling.
+
+    krake.controller.kubernetes.cluster
+        This sub-module contains the definition of the controller specialized
+        for the Kubernetes cluster handling.
 
     krake.controller.scheduler
         This sub-module defines the Scheduler controller, responsible for binding
@@ -148,7 +152,14 @@ Controllers
 Controller Kubernetes Application
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: krake.controller.kubernetes
+.. automodule:: krake.controller.kubernetes.application
+    :members:
+    :show-inheritance:
+
+Controller Kubernetes Cluster
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: krake.controller.kubernetes.cluster
     :members:
     :show-inheritance:
 

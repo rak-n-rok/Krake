@@ -45,6 +45,8 @@ __pycache__/
 /api.yaml
 /garbage_collector.yaml
 /kubernetes.yaml
+/kubernetes_application.yaml
+/kubernetes_cluster.yaml
 /magnum.yaml
 /scheduler.yaml
 

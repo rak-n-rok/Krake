@@ -141,6 +141,7 @@
             - krake-db
             - krake-api
             - krake_krake-ctrl-scheduler_1
+            - krake_krake-ctrl-kubernetes-cluster_1
             - krake_krake-ctrl-kubernetes-application_1
             - krake_krake-ctrl-garbage-collector_1
             - krake_krake-ctrl-magnum_1

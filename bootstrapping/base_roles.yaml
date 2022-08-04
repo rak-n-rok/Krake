@@ -185,14 +185,14 @@ users:
 ---
 
 
-#############################
-### Kubernetes Controller ###
-#############################
+#########################################
+### Kubernetes Application Controller ###
+#########################################
 
 api: core
 kind: Role
 metadata:
-  name: role:system:kubernetes
+  name: role:system:kubernetes-application
 rules:
 - api: 'kubernetes'
   namespaces:
@@ -200,6 +200,7 @@ rules:
   resources:
   - "applications"
   verbs:
+  - get
   - list
   - update
 
@@ -209,6 +210,8 @@ rules:
   resources:
   - "applications/status"
   verbs:
+  - get
+  - list
   - update
 
 - api: 'kubernetes'
@@ -218,16 +221,17 @@ rules:
   - "clusters"
   verbs:
   - get
+  - list
 ---
 
 api: core
 kind: RoleBinding
 metadata:
-  name: rolebinding:system:kubernetes
+  name: rolebinding:system:kubernetes-application
 roles:
-- role:system:kubernetes
+- role:system:kubernetes-application
 users:
-  - system:kubernetes
+  - system:kubernetes-application
 ---
 
 
@@ -285,6 +289,56 @@ roles:
 - role:system:shutdown-hook
 users:
   - system:shutdown-hook
+---
+
+#####################################
+### Kubernetes Cluster Controller ###
+#####################################
+
+api: core
+kind: Role
+metadata:
+  name: role:system:kubernetes-cluster
+rules:
+- api: 'kubernetes'
+  namespaces:
+  - ''
+  resources:
+  - "cluster"
+  verbs:
+  - get
+  - list
+  - update
+
+- api: 'kubernetes'
+  namespaces:
+  - ''
+  resources:
+  - "clusters"
+  verbs:
+  - get
+  - list
+  - update
+
+- api: 'kubernetes'
+  namespaces:
+  - ''
+  resources:
+  - "clusters/status"
+  verbs:
+  - get
+  - list
+  - update
+---
+
+api: core
+kind: RoleBinding
+metadata:
+  name: rolebinding:system:kubernetes-cluster
+roles:
+- role:system:kubernetes-cluster
+users:
+  - system:kubernetes-cluster
 ---
 
 #########################

@@ -3,7 +3,7 @@ import logging
 import multiprocessing
 import time
 from contextlib import suppress
-from copy import deepcopy, copy
+from copy import deepcopy
 
 import sys
 import mock
@@ -29,21 +29,20 @@ from krake.data.config import (
     ShutdownHookConfiguration,
 )
 from krake.data.core import resource_ref, ReasonCode
-from krake.data.kubernetes import Application, ApplicationState, ClusterState
-from krake.controller.kubernetes.__main__ import main
-from krake.controller.kubernetes import (
-    KubernetesController,
+from krake.data.kubernetes import Application, ApplicationState
+from krake.controller.kubernetes.application.__main__ import main
+from krake.controller.kubernetes.application import (
+    KubernetesApplicationController,
     register_service,
     unregister_service,
     KubernetesClient,
 )
 from krake.controller.kubernetes.client import InvalidManifestError
-from krake.controller.kubernetes.kubernetes import ResourceDelta
+from krake.controller.kubernetes.application.application import ResourceDelta
 from krake.controller.kubernetes.hooks import (
     update_last_applied_manifest_from_spec,
     update_last_applied_manifest_from_resp,
     generate_default_observer_schema,
-    KubernetesClusterObserver,
 )
 from krake.client import Client
 from krake.test_utils import server_endpoint, with_timeout, serialize_k8s_object
@@ -82,17 +81,17 @@ async def test_api_endpoint(hooks_config, client_ssl_context, caplog, base):
     """
     # No endpoint provided
     hooks_config.complete.external_endpoint = None
-    controller = KubernetesController("http://krake.api", hooks=hooks_config)
+    controller = KubernetesApplicationController("http://krake.api", hooks=hooks_config)
     assert controller.hooks.complete.external_endpoint is None
 
     # Simple behavior
     hooks_config.complete.external_endpoint = f"http://{base}"
-    controller = KubernetesController("http://krake.api", hooks=hooks_config)
+    controller = KubernetesApplicationController("http://krake.api", hooks=hooks_config)
     assert controller.hooks.complete.external_endpoint == f"http://{base}"
 
     # Setting the scheme as https when TLS is disabled will result in a warning
     hooks_config.complete.external_endpoint = f"https://{base}"
-    controller = KubernetesController("http://krake.api", hooks=hooks_config)
+    controller = KubernetesApplicationController("http://krake.api", hooks=hooks_config)
     assert controller.hooks.complete.external_endpoint == f"http://{base}"
     record = next(iter(caplog.records))
     assert record.levelname == "WARNING"
@@ -105,14 +104,14 @@ async def test_api_endpoint(hooks_config, client_ssl_context, caplog, base):
 
     # Simple behavior
     hooks_config.complete.external_endpoint = f"https://{base}"
-    controller = KubernetesController(
+    controller = KubernetesApplicationController(
         "https://krake.api", hooks=hooks_config, ssl_context=ssl_context
     )
     assert controller.hooks.complete.external_endpoint == f"https://{base}"
 
     # Setting the scheme as https when TLS is enabled will result in a warning
     hooks_config.complete.external_endpoint = f"http://{base}"
-    controller = KubernetesController(
+    controller = KubernetesApplicationController(
         "https://krake.api", hooks=hooks_config, ssl_context=ssl_context
     )
     assert controller.hooks.complete.external_endpoint == f"https://{base}"
@@ -127,7 +126,7 @@ async def test_main_help(loop):
     elements added by the argparse formatters (default value and expected types of the
     parameters).
     """
-    command = "python -m krake.controller.kubernetes -h"
+    command = "python -m krake.controller.kubernetes.application -h"
     # The loop parameter is mandatory otherwise the test fails if started with others.
     process = await asyncio.create_subprocess_exec(
         *command.split(" "), stdout=PIPE, stderr=STDOUT
@@ -273,7 +272,7 @@ async def test_app_reception(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
         # Update the client, to be used by the background tasks
         await controller.prepare(client)  # need to be called explicitly
         await controller.application_reflector.list_resource()
@@ -332,7 +331,7 @@ async def test_app_creation(aiohttp_server, config, db, loop):
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(api_server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(api_server), worker_count=0)
         await controller.prepare(client)
 
         # The resource is received by the controller, which starts the reconciliation
@@ -412,7 +411,7 @@ async def test_app_creation_default_namespace(aiohttp_server, config, db, loop):
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(api_server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(api_server), worker_count=0)
         await controller.prepare(client)
         await controller.resource_received(app, start_observer=False)
 
@@ -497,7 +496,7 @@ async def test_app_creation_cluster_default_namespace(aiohttp_server, config, db
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(api_server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(api_server), worker_count=0)
         await controller.prepare(client)
 
         await controller.resource_received(app, start_observer=False)
@@ -584,7 +583,7 @@ async def test_app_creation_manifest_namespace_set(aiohttp_server, config, db, l
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(api_server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(api_server), worker_count=0)
         await controller.prepare(client)
         await controller.resource_received(app, start_observer=False)
 
@@ -665,7 +664,7 @@ async def test_app_observer_schema_generation(aiohttp_server, config, db, loop):
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(api_server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(api_server), worker_count=0)
         await controller.prepare(client)
 
         # The resource is received by the controller, which starts the reconciliation
@@ -816,7 +815,7 @@ async def test_app_update(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         # The resource is received by the controller, which starts the reconciliation
@@ -941,7 +940,7 @@ async def test_app_migration(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         # The resource is received by the controller, which starts the migration and
@@ -1075,7 +1074,7 @@ async def test_app_multi_migration(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         # Let the kubernetes controller create the application
@@ -1294,7 +1293,7 @@ async def test_app_migration_with_shutdown_hook(
     )
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(server), worker_count=0, hooks=hooks_config
         )
         await controller.prepare(client)
@@ -1311,7 +1310,7 @@ async def test_app_migration_with_shutdown_hook(
 
     # Needs to be set up a second time or the queue gets "buggy"
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(server), worker_count=0, hooks=hooks_config
         )
 
@@ -1388,7 +1387,7 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         reflector_task = loop.create_task(controller.application_reflector())
@@ -1480,7 +1479,7 @@ async def test_app_deletion_with_shutdown_hook(
     httpserver.expect_request("/shutdown").respond_with_json({})
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         reflector_task = loop.create_task(controller.application_reflector())
@@ -1499,7 +1498,7 @@ async def test_app_deletion_with_shutdown_hook(
 
     # Needs to be set up a second time or the queue gets "buggy"
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         app.status.state = ApplicationState.READY_FOR_ACTION
@@ -1581,7 +1580,7 @@ async def test_app_deletion_with_shutdown_hook_running_state(
     httpserver.expect_request("/shutdown").respond_with_json({})
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         reflector_task = loop.create_task(controller.application_reflector())
@@ -1596,7 +1595,7 @@ async def test_app_deletion_with_shutdown_hook_running_state(
 
     # Needs to be set up a second time or the queue gets "buggy"
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         app.status.state = ApplicationState.READY_FOR_ACTION
@@ -1682,7 +1681,7 @@ async def test_app_deletion_with_shutdown_hook_app_not_found(
     httpserver.expect_request("/shutdown").respond_with_json({})
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         await controller.queue.put(app.metadata.uid, app)
@@ -1754,7 +1753,7 @@ async def test_app_deletion_with_shutdown_hook_timeout(
     httpserver.expect_request("/shutdown").respond_with_json({})
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         reflector_task = loop.create_task(controller.application_reflector())
@@ -1833,7 +1832,7 @@ async def test_app_management_no_error_logs(aiohttp_server, config, db, loop, ca
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
         # The time step prevents the observer from running in parallel, it should only
         # observe when requested in the test.
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(api_server), worker_count=0, time_step=1000
         )
         await controller.prepare(client)
@@ -1908,7 +1907,7 @@ async def test_session_closed(aiohttp_server, config, db, loop):
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(api_server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(api_server), worker_count=0)
         await controller.prepare(client)
 
         with mock.patch.object(
@@ -2060,7 +2059,7 @@ async def test_service_registration(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         # The application is received by the Controller, which starts the reconciliation
@@ -2132,7 +2131,7 @@ async def test_service_unregistration(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         # The application is received by the Controller, which starts the reconciliation
@@ -2171,7 +2170,7 @@ async def test_kubernetes_controller_unsupported_api_version_error_handling(
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         await controller.queue.put(app.metadata.uid, app)
@@ -2209,7 +2208,7 @@ async def test_kubernetes_controller_unsupported_kind_error_handling(
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         await controller.queue.put(app.metadata.uid, app)
@@ -2245,7 +2244,7 @@ async def test_kubernetes_api_error_handling(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         await controller.queue.put(app.metadata.uid, app)
@@ -2804,54 +2803,3 @@ async def test_resource_delta_list_in_last_observed_manifest(loop):
     assert len(deleted) == 1
     assert len(modified) == 0
     assert app.status.last_observed_manifest[2] in deleted  # Secret
-
-
-async def test_list_cluster(aiohttp_server, config):
-    """Test the list_cluster method in the kubernetes controller
-
-    After a cluster has been registered, an observer is started. By calling
-    list_cluster(cluster) the controller unregisters the corresponding cluster observer
-    and registers it again. The method list_cluster() is tested by manually altering the
-    cluster's state before calling list_cluster(). Immediately before and after the
-    call, the observer's state is stored and finally compared for inequality.
-
-    """
-    server = await aiohttp_server(create_app(config))
-    controller = KubernetesController(server_endpoint(server), worker_count=0)
-
-    cluster = ClusterFactory()
-    observer = KubernetesClusterObserver(cluster, controller.handle_resource)
-
-    # initializing the observer
-    await controller.resource_received(cluster)  # needs to be called explicitly
-    # the initial state of the observer should be CONNECTING
-    assert observer.cluster.status.state == ClusterState.CONNECTING
-    # the length should be 1
-    assert len(controller.observers) == 1
-    # this state is saved in a variable
-    observer_pre_list_cluster = copy(controller.observers)
-    # manually alter the state of the cluster
-    cluster.status.state = ClusterState.NOTREADY
-    # needs to be set explicitly
-    cluster.status.kube_controller_triggered = True
-    # call list_cluster()
-    await controller.list_cluster(cluster)
-    # this state is saved in another variable
-    observer_post_list_cluster = controller.observers
-    # finally, the variables should be unequal
-    assert observer_pre_list_cluster != observer_post_list_cluster
-
-
-async def test_creation_of_cluster_reflector(aiohttp_server, config, loop):
-    """Test the registration of a cluster_reflector in the kubernetes controller on
-    controller startup, which is triggered by the prepare method.
-
-    """
-    server = await aiohttp_server(create_app(config))
-
-    async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
-        await controller.prepare(client)
-
-    # the cluster_reflector should be registered, so the dictionary should not be empty
-    assert controller.cluster_reflector != {}

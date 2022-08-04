@@ -10,8 +10,8 @@ from aiohttp import web
 from krake.api.app import create_app
 from krake.data.core import resource_ref
 from krake.data.kubernetes import Application, ApplicationState
-from krake.controller.kubernetes import (
-    KubernetesController,
+from krake.controller.kubernetes.application import (
+    KubernetesApplicationController,
 )
 from krake.client import Client
 from krake.test_utils import server_endpoint
@@ -181,7 +181,7 @@ async def test_resource_creation(aiohttp_server, config, db, loop, resources):
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(api_server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(api_server), worker_count=0)
         await controller.prepare(client)
 
         # The resource is received by the controller, which starts the reconciliation
@@ -247,7 +247,7 @@ async def test_resource_deletion(aiohttp_server, config, db, loop, resources):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         reflector_task = loop.create_task(controller.application_reflector())
@@ -344,7 +344,7 @@ async def test_resource_update(aiohttp_server, config, db, loop, resources):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         # The resource is received by the controller, which starts the reconciliation
@@ -453,7 +453,7 @@ async def test_resource_migration(aiohttp_server, config, db, loop, resources):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
         await controller.prepare(client)
 
         # The resource is received by the controller, which starts the migration and

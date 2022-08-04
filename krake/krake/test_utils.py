@@ -8,7 +8,7 @@ from functools import wraps
 from time import time
 from aiohttp import web
 
-from krake.controller.kubernetes import listen
+from krake.controller.kubernetes.application.application import listen
 from kubernetes_asyncio.client import ApiClient
 
 

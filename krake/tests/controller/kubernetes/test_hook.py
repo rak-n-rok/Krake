@@ -22,7 +22,7 @@ from krake.data.kubernetes import (
     ApplicationComplete,
     ApplicationShutdown
 )
-from krake.controller.kubernetes import KubernetesController
+from krake.controller.kubernetes.application import KubernetesApplicationController
 from krake.client import Client
 from krake.test_utils import server_endpoint, get_first_container
 
@@ -122,7 +122,7 @@ async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
         # Create the controller and configure the hooks
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(api_server), worker_count=0, hooks=hooks_config
         )
         await controller.prepare(client)
@@ -265,7 +265,7 @@ async def test_complete_hook_disable_by_user(
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
         # Create the controller and configure the hooks
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(api_server), worker_count=0, hooks=hooks_config
         )
         await controller.prepare(client)
@@ -394,7 +394,7 @@ async def test_complete_hook_tls(
     async with Client(
         url=server_endpoint(api_server), loop=loop, ssl_context=ssl_context
     ) as client:
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(api_server),
             worker_count=0,
             ssl_context=ssl_context,
@@ -599,7 +599,7 @@ async def test_complete_hook_default_namespace(
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(api_server), worker_count=0, hooks=hooks_config
         )
         await controller.prepare(client)
@@ -783,7 +783,7 @@ async def test_complete_hook_external_endpoint(
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(api_server), worker_count=0, hooks=hooks_config
         )
         await controller.prepare(client)
@@ -884,7 +884,7 @@ async def test_complete_hook_sending(aiohttp_server, config, db, loop, hooks_con
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(api_server), worker_count=0, hooks=hooks_config
         )
         await controller.prepare(client)
@@ -1013,7 +1013,7 @@ async def test_complete_hook_sending_tls(
     async with Client(
         url=server_endpoint(api_server), loop=loop, ssl_context=ssl_context
     ) as client:
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(api_server),
             worker_count=0,
             ssl_context=ssl_context,
@@ -1184,7 +1184,7 @@ async def test_complete_hook_sending_tls_rbac(
     async with Client(
         url=server_endpoint(api_server), loop=loop, ssl_context=controller_ssl_context
     ) as client:
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(api_server),
             worker_count=0,
             ssl_context=controller_ssl_context,
@@ -1377,7 +1377,7 @@ async def test_complete_hook_reschedule(
     async with Client(
         url=server_endpoint(api_server), loop=loop, ssl_context=ssl_context
     ) as client:
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(api_server),
             worker_count=0,
             ssl_context=ssl_context,
@@ -1486,7 +1486,7 @@ async def test_shutdown_hook(aiohttp_server, config, db, loop, hooks_config):
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
         # Create the controller and configure the hooks
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(api_server), worker_count=0, hooks=hooks_config
         )
         await controller.prepare(client)
@@ -1614,7 +1614,7 @@ async def test_shutdown_hook_disable_by_user(
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
         # Create the controller and configure the hooks
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(api_server), worker_count=0, hooks=hooks_config
         )
         await controller.prepare(client)
@@ -1742,7 +1742,7 @@ async def test_shutdown_hook_tls(
     async with Client(
         url=server_endpoint(api_server), loop=loop, ssl_context=ssl_context
     ) as client:
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(api_server),
             worker_count=0,
             ssl_context=ssl_context,
@@ -1947,7 +1947,7 @@ async def test_shutdown_hook_default_namespace(
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(api_server), worker_count=0, hooks=hooks_config
         )
         await controller.prepare(client)
@@ -2123,7 +2123,7 @@ async def test_shutdown_hook_external_endpoint(
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(api_server), worker_count=0, hooks=hooks_config
         )
         await controller.prepare(client)
@@ -2225,7 +2225,7 @@ async def test_shutdown_hook_sending(aiohttp_server, config, db, loop, hooks_con
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(api_server), worker_count=0, hooks=hooks_config
         )
         await controller.prepare(client)
@@ -2373,7 +2373,7 @@ async def test_shutdown_hook_sending_tls(
     async with Client(
         url=server_endpoint(api_server), loop=loop, ssl_context=ssl_context
     ) as client:
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(api_server),
             worker_count=0,
             ssl_context=ssl_context,
@@ -2563,7 +2563,7 @@ async def test_shutdown_hook_sending_tls_rbac(
     async with Client(
         url=server_endpoint(api_server), loop=loop, ssl_context=controller_ssl_context
     ) as client:
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(api_server),
             worker_count=0,
             ssl_context=controller_ssl_context,
@@ -2784,7 +2784,7 @@ async def test_shutdown_hook_reschedule(
     async with Client(
         url=server_endpoint(api_server), loop=loop, ssl_context=ssl_context
     ) as client:
-        controller = KubernetesController(
+        controller = KubernetesApplicationController(
             server_endpoint(api_server),
             worker_count=0,
             ssl_context=ssl_context,

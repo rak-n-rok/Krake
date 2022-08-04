@@ -54,8 +54,8 @@ hooks:
 tls:
   enabled: $tls_enabled
   client_ca: $cert_dir/ca.pem
-  client_cert: $cert_dir/system:kubernetes.pem
-  client_key: $cert_dir/system:kubernetes-key.pem
+  client_cert: $cert_dir/system:kubernetes-application.pem
+  client_key: $cert_dir/system:kubernetes-application-key.pem
 
 
 log:

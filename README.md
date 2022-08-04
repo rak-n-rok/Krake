@@ -96,7 +96,7 @@ krake_generate_config --allow-anonymous --static-authentication-enabled config/a
 # afterwards create that folder which is expected:
 sudo mkdir /etc/krake
 
-# Last, copy generated files to that directory with 
+# Last, copy generated files to that directory with
 sudo cp *.yaml /etc/krake
 
 # Optional: you can use the rok configuration template as you prefer. It can also be generated.
@@ -230,8 +230,11 @@ python -m krake.controller.gc
 # Run the krake Scheduler
 python -m krake.controller.scheduler
 
+# Run the Kubernetes cluster controller
+python -m krake.controller.kubernetes.cluster
+
 # Run the Kubernetes application controller
-python -m krake.controller.kubernetes
+python -m krake.controller.kubernetes.application
 ```
 
 There is also a [script](https://gitlab.com/rak-n-rok/krake/-/snippets/2042674) (see snippets section on git) provided in the git repository to start all parts of Krake using „tmux“.
@@ -378,7 +381,7 @@ $ rok kube cluster delete minikube2
 +------------------+---------------------+
 
 # Check that cluster is deleted
-$ rok kube cluster list 
+$ rok kube cluster list
 +------+-----------+--------+---------+----------+---------+-------+
 | name | namespace | labels | created | modified | deleted | state |
 +======+===========+========+=========+==========+=========+=======+

@@ -101,10 +101,10 @@ def test_create_cluster_and_app(minikube_clusters):
     """
     cluster = random.choice(minikube_clusters)
     environment = create_default_environment([cluster])
-
     # 1. Create cluster and application
     # 2. Check that the application is in RUNNING state
     # (Checks 1-2 are performed automatically when entering the environment);
+
     with Environment(environment, creation_delay=30) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
@@ -157,7 +157,7 @@ def test_create_on_other_namespace(minikube_clusters):
         environment,
         before_handlers=[create_namespace],
         after_handlers=[delete_namespace],
-        creation_delay=60
+        creation_delay=60,
     ) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
@@ -268,27 +268,19 @@ def test_scheduler_clusters_with_metrics(minikube_clusters):
     """
     # The two clusters and metrics used in this test
 
-    _gm_cmd = run(
-        ( "rok core gm list -o json")
-    )
+    _gm_cmd = run(("rok core gm list -o json"))
     _gm_cmd = _gm_cmd.output
-    _gm_cmd = _gm_cmd.replace('null', '""')
+    _gm_cmd = _gm_cmd.replace("null", '""')
     gm_list = json.loads(_gm_cmd)
     for gm in gm_list:
-        run(
-            ( "rok core gm delete " + gm["metadata"]["name"])
-        )
+        run(("rok core gm delete " + gm["metadata"]["name"]))
 
-    _gmp_cmd = run(
-        ( "rok core gmp list -o json")
-    )
+    _gmp_cmd = run(("rok core gmp list -o json"))
     _gmp_cmd = _gmp_cmd.output
-    _gmp_cmd = _gmp_cmd.replace('null', '""')
+    _gmp_cmd = _gmp_cmd.replace("null", '""')
     gmp_list = json.loads(_gmp_cmd)
     for gmp in gmp_list:
-        run(
-            ( "rok core gmp delete " + gmp["metadata"]["name"])
-        )
+        run(("rok core gmp delete " + gmp["metadata"]["name"]))
 
     # -------------------------------------------------------------------
     num_clusters = 2
@@ -359,27 +351,19 @@ def test_scheduler_clusters_with_global_metrics(minikube_clusters):
         minikube_clusters (list): Names of the Minikube backend.
 
     """
-    _gm_cmd = run(
-        ( "rok core gm list -o json")
-    )
+    _gm_cmd = run(("rok core gm list -o json"))
     _gm_cmd = _gm_cmd.output
-    _gm_cmd = _gm_cmd.replace('null', '""')
+    _gm_cmd = _gm_cmd.replace("null", '""')
     gm_list = json.loads(_gm_cmd)
     for gm in gm_list:
-        run(
-            ( "rok core gm delete " + gm["metadata"]["name"])
-        )
+        run(("rok core gm delete " + gm["metadata"]["name"]))
 
-    _gmp_cmd = run(
-        ( "rok core gmp list -o json")
-    )
+    _gmp_cmd = run(("rok core gmp list -o json"))
     _gmp_cmd = _gmp_cmd.output
-    _gmp_cmd = _gmp_cmd.replace('null', '""')
+    _gmp_cmd = _gmp_cmd.replace("null", '""')
     gmp_list = json.loads(_gmp_cmd)
     for gmp in gmp_list:
-        run(
-            ( "rok core gmp delete " + gmp["metadata"]["name"])
-        )
+        run(("rok core gmp delete " + gmp["metadata"]["name"]))
 
     # -------------------------------------------------------------------
     for i in range(3):
@@ -429,9 +413,7 @@ def test_scheduler_clusters_with_global_metrics(minikube_clusters):
                 f"Expected cluster: {expected_cluster_json}. "
                 f"Other cluster: {other_cluster_json}"
             )
-            app.check_running_on(
-                expected_cluster, error_message=err_msg
-            )
+            app.check_running_on(expected_cluster, error_message=err_msg)
 
 
 def test_scheduler_clusters_with_one_metric(minikube_clusters):
@@ -452,27 +434,19 @@ def test_scheduler_clusters_with_one_metric(minikube_clusters):
         minikube_clusters (list): Names of the Minikube backend.
 
     """
-    _gm_cmd = run(
-        ( "rok core gm list -o json")
-    )
+    _gm_cmd = run(("rok core gm list -o json"))
     _gm_cmd = _gm_cmd.output
-    _gm_cmd = _gm_cmd.replace('null', '""')
+    _gm_cmd = _gm_cmd.replace("null", '""')
     gm_list = json.loads(_gm_cmd)
     for gm in gm_list:
-        run(
-            ( "rok core gm delete " + gm["metadata"]["name"])
-        )
+        run(("rok core gm delete " + gm["metadata"]["name"]))
 
-    _gmp_cmd = run(
-        ( "rok core gmp list -o json")
-    )
+    _gmp_cmd = run(("rok core gmp list -o json"))
     _gmp_cmd = _gmp_cmd.output
-    _gmp_cmd = _gmp_cmd.replace('null', '""')
+    _gmp_cmd = _gmp_cmd.replace("null", '""')
     gmp_list = json.loads(_gmp_cmd)
     for gmp in gmp_list:
-        run(
-            ( "rok core gmp delete " + gmp["metadata"]["name"])
-        )
+        run(("rok core gmp delete " + gmp["metadata"]["name"]))
 
     # -------------------------------------------------------------------
     mps = [
@@ -663,7 +637,7 @@ def test_one_unreachable_metrics_provider(minikube_clusters):
         expected_cluster_res = env.get_resource_definition(
             ResourceKind.CLUSTER, expected_cluster
         )
-        assert expected_cluster_res.get_state() == "CONNECTING"
+        assert expected_cluster_res.get_state() == "ONLINE"
         assert expected_cluster_res.get_metrics_reasons() == {}
 
         # 4. Ensure that the status of the cluster with failing metrics was updated to
@@ -701,27 +675,19 @@ def test_all_unreachable_metrics_provider(minikube_clusters):
         minikube_clusters (list): Names of the Minikube backend.
 
     """
-    _gm_cmd = run(
-        ( "rok core gm list -o json")
-    )
+    _gm_cmd = run(("rok core gm list -o json"))
     _gm_cmd = _gm_cmd.output
-    _gm_cmd = _gm_cmd.replace('null', '""')
+    _gm_cmd = _gm_cmd.replace("null", '""')
     gm_list = json.loads(_gm_cmd)
     for gm in gm_list:
-        run(
-            ( "rok core gm delete " + gm["metadata"]["name"])
-        )
+        run(("rok core gm delete " + gm["metadata"]["name"]))
 
-    _gmp_cmd = run(
-        ( "rok core gmp list -o json")
-    )
+    _gmp_cmd = run(("rok core gmp list -o json"))
     _gmp_cmd = _gmp_cmd.output
-    _gmp_cmd = _gmp_cmd.replace('null', '""')
+    _gmp_cmd = _gmp_cmd.replace("null", '""')
     gmp_list = json.loads(_gmp_cmd)
     for gmp in gmp_list:
-        run(
-            ( "rok core gmp delete " + gmp["metadata"]["name"])
-        )
+        run(("rok core gmp delete " + gmp["metadata"]["name"]))
 
     # -------------------------------------------------------------------
     # The two clusters and metrics used in this test (randomly ordered)
@@ -746,6 +712,8 @@ def test_all_unreachable_metrics_provider(minikube_clusters):
         running_on = app.get_running_on()
         assert running_on in clusters
 
+        time.sleep(30)
+
         # 3. Ensure that the status of the cluster with metrics was updated to notify
         # the user of the failing metrics (state changed and list of reasons added).
         cluster_with_metric = env.resources[ResourceKind.CLUSTER][0]
@@ -760,7 +728,7 @@ def test_all_unreachable_metrics_provider(minikube_clusters):
         # 4. Ensure that the cluster without metrics is not reporting any failing
         # metrics.
         cluster_wo_metric = env.resources[ResourceKind.CLUSTER][1]
-        assert cluster_wo_metric.get_state() == "CONNECTING"
+        assert cluster_wo_metric.get_state() == "ONLINE"
         assert cluster_wo_metric.get_metrics_reasons() == {}
 
 

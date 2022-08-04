@@ -1,11 +1,11 @@
 =====================
-Kubernetes Controller
+Kubernetes Application Controller
 =====================
 
 Reconciliation loop
 ===================
 
-In the following section, we describe what happens in the Kubernetes
+In the following section, we describe what happens in the Kubernetes Application
 controller when receiving a resource, and highlight the role of the observer
 schema.
 
@@ -127,7 +127,7 @@ In other words, the non-observed initialized fields (i.e. set by the user in
 - are not used for patching the resource.
 
 This reflects the fact that if a non-observed fields value changes on the
-Kubernetes cluster, this update should not be reverted by the Kubernetes
+Kubernetes cluster, this update should not be reverted by the Kubernetes Application
 controller, while providing the user with the ability to set the initial
 value of a non-observed field.
 
