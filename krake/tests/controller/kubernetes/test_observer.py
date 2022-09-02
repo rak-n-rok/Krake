@@ -4,9 +4,13 @@ import datetime
 from contextlib import suppress
 
 import pytest
-from aiohttp import web
+from aiohttp import web, ClientConnectorError
 from copy import deepcopy
 
+from aiohttp.client_reqrep import ConnectionKey
+from mock import mock
+
+from krake.controller.kubernetes.hooks import client as k8s_client_hooks
 from krake.api.app import create_app
 from krake.controller.kubernetes.cluster import KubernetesClusterController
 from krake.controller.kubernetes.hooks import (
@@ -2278,27 +2282,78 @@ async def test_create_kubernetes_cluster_observer_pressure_two_nodes(
     assert observer.cluster.status.state == cluster.status.state
 
 
-@pytest.mark.skip(
-    reason="FIXME: When the cluster API response has http code"
-    " not in <200, 299> interval the `ApiException` is raised,"
-    " see kubernetes_asyncio/client/rest.py:187."
-    " This is not properly handled in :func:`poll_resource`"
-    " as the `ClientConnectorError` is excepted instead."
-)
+async def test_create_kubernetes_cluster_observer_offline(
+    aiohttp_server,
+    config,
+):
+    """Test the cluster status change when the cluster API is offline.
+
+    A Kubernetes cluster API could be unreachable for any reason.
+    If the cluster API is offline the kubernetes client raises the
+    :class:`aiohttp.ClientConnectorError`.
+    In that case, the OFFLINE cluster state should be set.
+
+    """
+    # Create K8s cluster API
+    kubernetes_app = web.Application()
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+    # Create cluster to register
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    # Create Krake API
+    server = await aiohttp_server(create_app(config))
+
+    controller = KubernetesClusterController(server_endpoint(server), worker_count=0)
+    observer = KubernetesClusterObserver(cluster, controller.handle_resource)
+
+    # The initial state of the observer should be CONNECTING
+    assert observer.cluster.status.state == ClusterState.CONNECTING
+    # After the poll_resource method is called, the observer should return the cluster's
+    # polled status.
+    connection_key = ConnectionKey(
+        host="127.0.0.1",
+        port=8000,
+        is_ssl=False,
+        ssl=None,
+        proxy=None,
+        proxy_auth=None,
+        proxy_headers_hash=None,
+    )
+    with mock.patch.object(
+        k8s_client_hooks.CoreV1Api,
+        "list_node",
+        side_effect=ClientConnectorError(connection_key, OSError()),
+    ):
+        await observer.poll_resource()
+    # The state should be OFFLINE as the cluster API is unreachable
+    assert observer.cluster.status.state == ClusterState.OFFLINE
+    # The cluster's status should be updated by the kubernetes controller
+    assert observer.cluster.status.state == cluster.status.state
+
+
 @pytest.mark.parametrize(
     "reason",
     [
+        404,  # Not Found
         408,  # Request Timeout
         503,  # Service Unavailable
+        504,  # Gateway Timeout
     ],
 )
-async def test_create_kubernetes_cluster_observer_offline(
+async def test_create_kubernetes_cluster_observer_offline_non2xx_response(
     aiohttp_server, config, reason
 ):
-    """Test the cluster status change when the cluster API is offline for various reasons.
+    """Test the cluster status change when the cluster API responds with non 2xx HTTP code.
 
-    A Kubernetes cluster API could be unreachable for any reason.
+    A Kubernetes cluster API could respond with non 2xx HTTP code
+    for any reason. If the cluster API responds with non 2xx
+    the kubernetes client raises the :class:`ApiException`.
     In that case, the OFFLINE cluster state should be set.
+
+    Note regarding 503 Service Unavailable:
+        The current cluster status is fetched by :func:`poll_resource`
+        from its API. If the cluster API is shutting down the API
+        server responds with a 503 (service unavailable, apiserver
+        is shutting down) HTTP response.
 
     """
     routes = web.RouteTableDef()
@@ -2324,7 +2379,8 @@ async def test_create_kubernetes_cluster_observer_offline(
     # After the poll_resource method is called, the observer should return the cluster's
     # polled status.
     await observer.poll_resource()
-    # The state should be OFFLINE as the cluster API is unreachable
+
+    # The state should be OFFLINE as the cluster API responds with non 2xx HTTP code.
     assert observer.cluster.status.state == ClusterState.OFFLINE
     # The cluster's status should be updated by the kubernetes controller
     assert observer.cluster.status.state == cluster.status.state
