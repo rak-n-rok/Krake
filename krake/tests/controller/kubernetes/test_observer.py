@@ -87,6 +87,88 @@ async def test_reception_for_application_observer(aiohttp_server, config, db, lo
     assert running.metadata.uid in controller.observers
 
 
+async def test_observer_temporarily_unreachable_cluster(
+    aiohttp_server, config, db, loop
+):
+    """Test the behavior of the Kubernetes Controller and Observer when an application
+    is deployed in the temporarily unreachable cluster.
+
+    If the cluster is temporarily unreachable the last known application status is
+    returned from :func:`poll_resource`. The application status should not change
+    as we do not know the real current state.
+
+    """
+    routes = web.RouteTableDef()
+    # Cluster API is online and responds with HTTP 200 return code
+    is_cluster_offline = False
+
+    @routes.get("/api/v1/namespaces/secondary/services/nginx-demo")
+    async def _(request):
+        nonlocal is_cluster_offline
+        if is_cluster_offline:
+            return web.Response(status=503)
+
+        return web.json_response(service_response)
+
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
+    async def _(request):
+        nonlocal is_cluster_offline
+        if is_cluster_offline:
+            return web.Response(status=503)
+
+        return web.json_response(deployment_response)
+
+    @routes.get("/api/v1/namespaces/secondary/secrets/nginx-demo")
+    async def _(request):
+        nonlocal is_cluster_offline
+        if is_cluster_offline:
+            return web.Response(status=503)
+
+        return web.json_response(secret_response)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.RUNNING,
+        status__running_on=resource_ref(cluster),
+        spec__manifest=nginx_manifest,
+        status__mangled_observer_schema=mangled_observer_schema,
+        status__last_observed_manifest=initial_last_observed_manifest,
+        status__last_applied_manifest=nginx_manifest,
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesApplicationController(
+            server_endpoint(server), worker_count=0, time_step=-1
+        )
+        await controller.prepare(client)
+
+        await register_observer(controller, app)
+        observer, _ = controller.observers[app.metadata.uid]
+        # Observe a resource actually in deletion.
+        before = await db.get(
+            Application, namespace=app.metadata.namespace, name=app.metadata.name
+        )
+        await observer.observe_resource()
+        # Transmit cluster API to the offline state, responds with HTTP 503 return code
+        is_cluster_offline = True
+        await observer.observe_resource()
+        after = await db.get(
+            Application, namespace=app.metadata.namespace, name=app.metadata.name
+        )
+        # The application should not change as we do not know the real current state
+        assert after == before
+
+
 async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
     """Test the Observer's behavior on update of a resource on the k8s cluster directly
 

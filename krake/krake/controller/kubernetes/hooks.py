@@ -23,6 +23,7 @@ from aiohttp import ClientConnectorError
 
 from krake.controller import Observer
 from krake.controller.kubernetes.client import KubernetesClient, InvalidManifestError
+from krake.data.core import resource_ref
 from krake.utils import camel_to_snake_case, get_kubernetes_resource_idx
 from kubernetes_asyncio.client.rest import ApiException
 from kubernetes_asyncio.client.api_client import ApiClient
@@ -762,12 +763,19 @@ class KubernetesApplicationObserver(Observer):
                     )
                     resource_api = await kube.get_resource_api(group, version, kind)
                     resp = await resource_api.read(kind, name, namespace)
-                except ApiException as err:
-                    if err.status == 404:
+                except (ClientConnectorError, ApiException) as err:
+                    if hasattr(err, "status") and err.status == 404:
                         # Resource does not exist
                         continue
-                    # Otherwise, log the unexpected errors
-                    logger.error(err)
+                    # Otherwise, log the unexpected error and return the
+                    # last known application status
+                    logger.debug(
+                        "Resource %s lives in unreachable cluster %s."
+                        " Hence, fetching the current status is skipped",
+                        resource_ref(self.resource),
+                        resource_ref(self.cluster),
+                    )
+                    return app.status
 
             observed_manifest = update_last_observed_manifest_dict(
                 observed_resource, resp.to_dict()
