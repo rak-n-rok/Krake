@@ -812,6 +812,14 @@ class KubernetesClusterObserver(Observer):
     async def poll_resource(self):
         """Fetch the current status of the Cluster monitored by the Observer.
 
+        The current cluster status is fetched by :func:`poll_resource` from its API.
+        If the cluster API is shutting down the API server responds with a 503
+        (service unavailable, apiserver is shutting down) HTTP response which
+        leads to the kubernetes client ApiException. If the cluster's API has been
+        successfully shut down and there is an attempt to fetch cluster status,
+        the ClientConnectorError is raised instead.
+        Therefore, both exceptions should be handled.
+
         Returns:
             krake.data.core.Status: the status object created using information from the
                 real world Cluster.
@@ -830,7 +838,7 @@ class KubernetesClusterObserver(Observer):
             try:
                 response = await v1.list_node()
 
-            except ClientConnectorError as err:
+            except (ClientConnectorError, ApiException) as err:
                 status.state = ClusterState.OFFLINE
                 self.cluster.status.state = ClusterState.OFFLINE
                 # Log the error
@@ -1152,8 +1160,9 @@ async def complete(app, api_endpoint, ssl_context, config):
     if config.complete.external_endpoint:
         api_endpoint = config.complete.external_endpoint
 
-    app.status.complete_token = \
+    app.status.complete_token = (
         app.status.complete_token if app.status.complete_token else token_urlsafe()
+    )
 
     # Generate only once the certificate and key for a specific Application
     generated_cert = CertificatePair(
@@ -1180,7 +1189,7 @@ async def complete(app, api_endpoint, ssl_context, config):
         config.complete.intermediate_src,
         generated_cert,
         app.status.mangled_observer_schema,
-        "complete"
+        "complete",
     )
 
 
@@ -1208,8 +1217,9 @@ async def shutdown(app, api_endpoint, ssl_context, config):
     if config.shutdown.external_endpoint:
         api_endpoint = config.shutdown.external_endpoint
 
-    app.status.shutdown_token = \
+    app.status.shutdown_token = (
         app.status.shutdown_token if app.status.shutdown_token else token_urlsafe()
+    )
 
     # Generate only once the certificate and key for a specific Application
     generated_cert = CertificatePair(
@@ -1236,7 +1246,7 @@ async def shutdown(app, api_endpoint, ssl_context, config):
         config.shutdown.intermediate_src,
         generated_cert,
         app.status.mangled_observer_schema,
-        "shutdown"
+        "shutdown",
     )
 
 
@@ -2135,12 +2145,11 @@ class Shutdown(Hook):
                 V1EnvVarSource(
                     secret_key_ref=self.attribute_map(
                         V1SecretKeySelector(
-                            name=secret_name,
-                            key=self.env_token.lower()
+                            name=secret_name, key=self.env_token.lower()
                         )
                     )
                 )
-            )
+            ),
         )
         env_resources.append(env_token)
 
