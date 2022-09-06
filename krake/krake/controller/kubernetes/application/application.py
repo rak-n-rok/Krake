@@ -5,7 +5,7 @@ from copy import deepcopy
 from functools import partial
 from datetime import timedelta
 
-from aiohttp import ClientResponseError
+from aiohttp import ClientResponseError, ClientConnectorError
 from krake.controller.kubernetes.client import KubernetesClient
 
 from kubernetes_asyncio.client.rest import ApiException
@@ -523,7 +523,7 @@ class KubernetesApplicationController(Controller):
             key, app = await self.queue.get()
             try:
                 await self.resource_received(app)
-            except ApiException as error:
+            except (ClientConnectorError, ApiException) as error:
                 app.status.reason = Reason(
                     code=ReasonCode.KUBERNETES_ERROR, message=str(error)
                 )
