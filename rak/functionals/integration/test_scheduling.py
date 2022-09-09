@@ -626,7 +626,7 @@ def test_one_unreachable_metrics_provider(minikube_clusters):
         for i in range(num_clusters)
     }
     environment = create_default_environment(clusters, metrics=metric_weights)
-    with Environment(environment, creation_delay=30) as env:
+    with Environment(environment, creation_delay=60) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
         # 2. Ensure that the application was scheduled to the expected cluster;
