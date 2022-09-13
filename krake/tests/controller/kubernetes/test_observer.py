@@ -22,11 +22,10 @@ from krake.controller.kubernetes.hooks import (
     generate_default_observer_schema,
 )
 from krake.data.core import resource_ref
-from krake.data.kubernetes import Application, ApplicationState, ClusterState
+from krake.data.kubernetes import Application, ApplicationState, ClusterState, Cluster
 from krake.controller.kubernetes.application import KubernetesApplicationController
 from krake.controller.kubernetes.hooks import (
     KubernetesApplicationObserver,
-    KubernetesClusterObserver,
 )
 from krake.client import Client
 from krake.test_utils import server_endpoint, get_first_container, serialize_k8s_object
@@ -1836,27 +1835,38 @@ async def test_reception_for_cluster_observers(aiohttp_server, config, loop):
     assert len(controller.observers) == cluster_count
 
 
-async def test_create_kubernetes_cluster_observer(aiohttp_server, config):
+async def test_create_kubernetes_cluster_observer(aiohttp_server, config, loop, db):
     """Test the creation of a KubernetesClusterObserver.
 
     When an observer is created, it should be updated with the cluster's status.
 
     """
-    server = await aiohttp_server(create_app(config))
-    controller = KubernetesClusterController(server_endpoint(server), worker_count=0)
-
     cluster = ClusterFactory()
-    observer = KubernetesClusterObserver(cluster, controller.handle_resource)
+    await db.put(cluster)
 
-    # the initial state of the observer should be CONNECTING
-    assert observer.cluster.status.state == ClusterState.CONNECTING
-    # after the poll_resource method is called, the observer should return the cluster's
-    # polled status.
-    await observer.poll_resource()
-    # since there is no real connection to the cluster, the state should be OFFLINE
-    assert observer.cluster.status.state == ClusterState.OFFLINE
-    # the clusters status should be updated by the kubernetes controller
-    assert observer.cluster.status.state == cluster.status.state
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesClusterController(
+            server_endpoint(server), worker_count=0, time_step=-1
+        )
+        await controller.prepare(client)
+        await register_observer(controller, cluster)
+        observer, _ = controller.observers[cluster.metadata.uid]
+
+        # the initial state of the observer should be CONNECTING
+        assert observer.resource.status.state == ClusterState.CONNECTING
+        # After the observe_resource method is called, the observer
+        # should set the cluster's polled status.
+        await observer.observe_resource()
+        # since there is no real connection to the cluster, the state should be OFFLINE
+        assert observer.resource.status.state == ClusterState.OFFLINE
+
+        stored = await db.get(
+            Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        )
+        # the clusters status should be updated by the kubernetes controller
+        assert observer.resource.status.state == stored.status.state
 
 
 @pytest.mark.parametrize(
@@ -1867,8 +1877,9 @@ async def test_create_kubernetes_cluster_observer(aiohttp_server, config):
         ("Unknown", False),
     ],
 )
+@pytest.mark.asyncio
 async def test_create_kubernetes_cluster_observer_ready(
-    aiohttp_server, config, ready, pressure
+    aiohttp_server, config, ready, pressure, db, loop
 ):
     """Test the cluster status change based on the `Ready` condition.
 
@@ -1892,10 +1903,30 @@ async def test_create_kubernetes_cluster_observer_ready(
                 {
                     "status": {
                         "conditions": [
-                            {"status": pressure, "type": "MemoryPressure"},
-                            {"status": pressure, "type": "DiskPressure"},
-                            {"status": pressure, "type": "PIDPressure"},
-                            {"status": ready, "type": "Ready"},
+                            {
+                                "status": pressure,
+                                "type": "MemoryPressure",
+                                "message": "",
+                                "reason": "",
+                            },
+                            {
+                                "status": pressure,
+                                "type": "DiskPressure",
+                                "message": "",
+                                "reason": "",
+                            },
+                            {
+                                "status": pressure,
+                                "type": "PIDPressure",
+                                "message": "",
+                                "reason": "",
+                            },
+                            {
+                                "status": ready,
+                                "type": "Ready",
+                                "message": "",
+                                "reason": "",
+                            },
                         ]
                     }
                 },
@@ -1912,29 +1943,40 @@ async def test_create_kubernetes_cluster_observer_ready(
     kubernetes_server = await aiohttp_server(kubernetes_app)
     # Create cluster to register
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    await db.put(cluster)
+
     # Create Krake API
     server = await aiohttp_server(create_app(config))
 
-    controller = KubernetesClusterController(server_endpoint(server), worker_count=0)
-    observer = KubernetesClusterObserver(cluster, controller.handle_resource)
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesClusterController(
+            server_endpoint(server),
+            worker_count=0,
+        )
+        await controller.prepare(client)
+        await register_observer(controller, cluster)
+        observer, _ = controller.observers[cluster.metadata.uid]
 
-    # The initial state of the observer should be CONNECTING
-    assert observer.cluster.status.state == ClusterState.CONNECTING
-    # After the poll_resource method is called, the observer should return the cluster's
-    # polled status.
-    await observer.poll_resource()
+        # The initial state of the observer should be CONNECTING
+        assert observer.resource.status.state == ClusterState.CONNECTING
+        # After the observe_resource method is called, the observer
+        # should set the cluster's polled status.
+        await observer.observe_resource()
 
-    if ready is True:
-        # The state should be ONLINE as the cluster node is `Ready`
-        # and not under *Pressure
-        assert observer.cluster.status.state == ClusterState.ONLINE
-    else:
-        # The state should be NOTREADY as the cluster node is not `Ready`
-        # and not under *Pressure
-        assert observer.cluster.status.state == ClusterState.NOTREADY
+        if ready is True:
+            # The state should be ONLINE as the cluster node is `Ready`
+            # and not under *Pressure
+            assert observer.resource.status.state == ClusterState.ONLINE
+        else:
+            # The state should be NOTREADY as the cluster node is not `Ready`
+            # and not under *Pressure
+            assert observer.resource.status.state == ClusterState.NOTREADY
 
-    # The cluster's status should be updated by the kubernetes controller
-    assert observer.cluster.status.state == cluster.status.state
+        stored = await db.get(
+            Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        )
+        # The cluster's status should be updated by the kubernetes controller
+        assert observer.resource.status.state == stored.status.state
 
 
 @pytest.mark.parametrize(
@@ -1944,7 +1986,7 @@ async def test_create_kubernetes_cluster_observer_ready(
     ],
 )
 async def test_create_kubernetes_cluster_observer_ready_with_internally_offline_status(
-    aiohttp_server, config, ready, pressure
+    aiohttp_server, config, ready, pressure, db, loop
 ):
     """Test the cluster status change based on the `Ready` condition if the ClusterState
     is OFFLINE internally.
@@ -1968,10 +2010,30 @@ async def test_create_kubernetes_cluster_observer_ready_with_internally_offline_
                 {
                     "status": {
                         "conditions": [
-                            {"status": pressure, "type": "MemoryPressure"},
-                            {"status": pressure, "type": "DiskPressure"},
-                            {"status": pressure, "type": "PIDPressure"},
-                            {"status": ready, "type": "Ready"},
+                            {
+                                "status": pressure,
+                                "type": "MemoryPressure",
+                                "message": "",
+                                "reason": "",
+                            },
+                            {
+                                "status": pressure,
+                                "type": "DiskPressure",
+                                "message": "",
+                                "reason": "",
+                            },
+                            {
+                                "status": pressure,
+                                "type": "PIDPressure",
+                                "message": "",
+                                "reason": "",
+                            },
+                            {
+                                "status": ready,
+                                "type": "Ready",
+                                "message": "",
+                                "reason": "",
+                            },
                         ]
                     }
                 },
@@ -1987,32 +2049,49 @@ async def test_create_kubernetes_cluster_observer_ready_with_internally_offline_
     kubernetes_app.add_routes(routes)
     kubernetes_server = await aiohttp_server(kubernetes_app)
     # Create cluster to register
-    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    cluster = ClusterFactory(
+        spec__kubeconfig=make_kubeconfig(kubernetes_server),
+        status__state=ClusterState.OFFLINE,  # Set the initial state to OFFLINE
+    )
+    await db.put(cluster)
+
     # Create Krake API
     server = await aiohttp_server(create_app(config))
 
-    controller = KubernetesClusterController(server_endpoint(server), worker_count=0)
-    observer = KubernetesClusterObserver(cluster, controller.handle_resource)
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesClusterController(
+            server_endpoint(server),
+            worker_count=0,
+        )
+        await controller.prepare(client)
+        await register_observer(controller, cluster)
+        observer, _ = controller.observers[cluster.metadata.uid]
 
-    # The initial state of the observer should be CONNECTING
-    assert observer.cluster.status.state == ClusterState.CONNECTING
-    # After the poll_resource method is called, the observer should return the cluster's
-    # polled status.
-    cluster.status.state = ClusterState.OFFLINE
-    await observer.poll_resource()
+        # The initial state of the observer should be OFFLINE
+        assert observer.resource.status.state == ClusterState.OFFLINE
 
-    # The state should be CONNECTING as the cluster node is `Ready`
-    # but the internal ClusterState is OFFLINE
-    assert observer.cluster.status.state == ClusterState.CONNECTING
+        await observer.observe_resource()
 
-    # The cluster's status should be updated by the kubernetes controller
-    assert observer.cluster.status.state == cluster.status.state
+        # The state should be CONNECTING, as the cluster state is transiting
+        # from OFFLINE to ONLINE
+        assert observer.resource.status.state == ClusterState.CONNECTING
 
-    # On the next poll, the ClusterState should change to ONLINE
-    await observer.poll_resource()
-    assert observer.cluster.status.state == ClusterState.ONLINE
-    # The cluster's status should be updated by the kubernetes controller
-    assert observer.cluster.status.state == cluster.status.state
+        stored = await db.get(
+            Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        )
+        # The cluster's status should be updated by the kubernetes controller
+        assert observer.resource.status.state == stored.status.state
+
+        # On the next observe_resource should change to cluster state to ONLINE
+        await observer.observe_resource()
+
+        assert observer.resource.status.state == ClusterState.ONLINE
+
+        stored = await db.get(
+            Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        )
+        # The cluster's status should be updated by the kubernetes controller
+        assert observer.resource.status.state == stored.status.state
 
 
 @pytest.mark.parametrize(
@@ -2022,7 +2101,7 @@ async def test_create_kubernetes_cluster_observer_ready_with_internally_offline_
     ],
 )
 async def test_create_kubernetes_cluster_observer_failing_metrics(
-    aiohttp_server, config, ready, pressure
+    aiohttp_server, config, ready, pressure, db, loop
 ):
     """Test the cluster status based on the state internal state 'FAILING_METRICS'.
 
@@ -2045,10 +2124,30 @@ async def test_create_kubernetes_cluster_observer_failing_metrics(
                 {
                     "status": {
                         "conditions": [
-                            {"status": pressure, "type": "MemoryPressure"},
-                            {"status": pressure, "type": "DiskPressure"},
-                            {"status": pressure, "type": "PIDPressure"},
-                            {"status": ready, "type": "Ready"},
+                            {
+                                "status": pressure,
+                                "type": "MemoryPressure",
+                                "message": "",
+                                "reason": "",
+                            },
+                            {
+                                "status": pressure,
+                                "type": "DiskPressure",
+                                "message": "",
+                                "reason": "",
+                            },
+                            {
+                                "status": pressure,
+                                "type": "PIDPressure",
+                                "message": "",
+                                "reason": "",
+                            },
+                            {
+                                "status": ready,
+                                "type": "Ready",
+                                "message": "",
+                                "reason": "",
+                            },
                         ]
                     }
                 },
@@ -2064,24 +2163,38 @@ async def test_create_kubernetes_cluster_observer_failing_metrics(
     kubernetes_app.add_routes(routes)
     kubernetes_server = await aiohttp_server(kubernetes_app)
     # Create cluster to register
-    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    cluster = ClusterFactory(
+        spec__kubeconfig=make_kubeconfig(kubernetes_server),
+        # Set the initial state to FAILING_METRICS
+        status__state=ClusterState.FAILING_METRICS,
+    )
+    await db.put(cluster)
+
     # Create Krake API
     server = await aiohttp_server(create_app(config))
 
-    controller = KubernetesClusterController(server_endpoint(server), worker_count=0)
-    observer = KubernetesClusterObserver(cluster, controller.handle_resource)
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesClusterController(
+            server_endpoint(server),
+            worker_count=0,
+        )
+        await controller.prepare(client)
+        await register_observer(controller, cluster)
+        observer, _ = controller.observers[cluster.metadata.uid]
 
-    # The initial state of the observer should be CONNECTING
-    assert observer.cluster.status.state == ClusterState.CONNECTING
-    # Here the internal ClusterState of the cluster is set to FAILING_METRICS to mock
-    # this behaviour
-    cluster.status.state = ClusterState.FAILING_METRICS
-    # After the poll_resource method is called, the observer should return the cluster's
-    # polled status.
-    await observer.poll_resource()
-    # The observer cluster status should be the same as the ClusterState after the poll
-    assert observer.cluster.status.state == ClusterState.FAILING_METRICS
-    assert observer.cluster.status.state == cluster.status.state
+        # The initial state of the observer should be FAILING_METRICS
+        assert observer.resource.status.state == ClusterState.FAILING_METRICS
+        # After the observe_resource method is called, the observer
+        # should set the cluster's polled status.
+        await observer.observe_resource()
+        # The observer cluster status should be the same as the
+        # ClusterState after the poll
+        assert observer.resource.status.state == ClusterState.FAILING_METRICS
+        stored = await db.get(
+            Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        )
+        # The cluster's status should be updated by the kubernetes controller
+        assert observer.resource.status.state == stored.status.state
 
 
 @pytest.mark.parametrize(
@@ -2096,7 +2209,7 @@ async def test_create_kubernetes_cluster_observer_failing_metrics(
     ],
 )
 async def test_create_kubernetes_cluster_observer_pressure(
-    aiohttp_server, config, ready, pressure
+    aiohttp_server, config, ready, pressure, db, loop
 ):
     """Test the cluster status change based on the various pressure conditions.
 
@@ -2122,16 +2235,27 @@ async def test_create_kubernetes_cluster_observer_pressure(
                             {
                                 "status": pressure == "MemoryPressure",
                                 "type": "MemoryPressure",
+                                "message": "",
+                                "reason": "",
                             },
                             {
                                 "status": pressure == "DiskPressure",
                                 "type": "DiskPressure",
+                                "message": "",
+                                "reason": "",
                             },
                             {
                                 "status": pressure == "PIDPressure",
                                 "type": "PIDPressure",
+                                "message": "",
+                                "reason": "",
                             },
-                            {"status": ready, "type": "Ready"},
+                            {
+                                "status": ready,
+                                "type": "Ready",
+                                "message": "",
+                                "reason": "",
+                            },
                         ]
                     }
                 },
@@ -2148,31 +2272,35 @@ async def test_create_kubernetes_cluster_observer_pressure(
     kubernetes_server = await aiohttp_server(kubernetes_app)
     # Create cluster to register
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    await db.put(cluster)
+
     # Create Krake API
     server = await aiohttp_server(create_app(config))
 
-    controller = KubernetesClusterController(server_endpoint(server), worker_count=0)
-    observer = KubernetesClusterObserver(cluster, controller.handle_resource)
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesClusterController(
+            server_endpoint(server),
+            worker_count=0,
+        )
+        await controller.prepare(client)
+        await register_observer(controller, cluster)
+        observer, _ = controller.observers[cluster.metadata.uid]
 
-    # The initial state of the observer should be CONNECTING
-    assert observer.cluster.status.state == ClusterState.CONNECTING
-    # After the poll_resource method is called, the observer should return the cluster's
-    # polled status.
-    await observer.poll_resource()
-    # The state should be UNHEALTHY as the cluster node is
-    # under [Memory|Disk|PID]Pressure
-    assert observer.cluster.status.state == ClusterState.UNHEALTHY
-    # The cluster's status should be updated by the kubernetes controller
-    assert observer.cluster.status.state == cluster.status.state
+        # The initial state of the observer should be CONNECTING
+        assert observer.resource.status.state == ClusterState.CONNECTING
+        # After the observe_resource method is called, the observer
+        # should set the cluster's polled status.
+        await observer.observe_resource()
+        # The state should be UNHEALTHY as the cluster node is
+        # under [Memory|Disk|PID]Pressure
+        assert observer.resource.status.state == ClusterState.UNHEALTHY
+        stored = await db.get(
+            Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        )
+        # The cluster's status should be updated by the kubernetes controller
+        assert observer.resource.status.state == stored.status.state
 
 
-@pytest.mark.skip(
-    reason="FIXME: When the k8s cluster contains more than 1 node,"
-    " the :func:`poll_resource` evaluates cluster state based on"
-    " the first node in the cluster. The second one could in"
-    " non ready state, but the overall cluster state is set to"
-    " ONLINE."
-)
 @pytest.mark.parametrize(
     "ready,pressure",
     [
@@ -2182,7 +2310,7 @@ async def test_create_kubernetes_cluster_observer_pressure(
     ],
 )
 async def test_create_kubernetes_cluster_observer_ready_two_nodes(
-    aiohttp_server, config, ready, pressure
+    aiohttp_server, config, ready, pressure, db, loop
 ):
     """Test the cluster status change based on the `Ready` condition.
 
@@ -2208,20 +2336,60 @@ async def test_create_kubernetes_cluster_observer_ready_two_nodes(
                 {
                     "status": {
                         "conditions": [
-                            {"status": False, "type": "MemoryPressure"},
-                            {"status": False, "type": "DiskPressure"},
-                            {"status": False, "type": "PIDPressure"},
-                            {"status": True, "type": "Ready"},
+                            {
+                                "status": False,
+                                "type": "MemoryPressure",
+                                "message": "",
+                                "reason": "",
+                            },
+                            {
+                                "status": False,
+                                "type": "DiskPressure",
+                                "message": "",
+                                "reason": "",
+                            },
+                            {
+                                "status": False,
+                                "type": "PIDPressure",
+                                "message": "",
+                                "reason": "",
+                            },
+                            {
+                                "status": True,
+                                "type": "Ready",
+                                "message": "",
+                                "reason": "",
+                            },
                         ]
                     }
                 },
                 {
                     "status": {
                         "conditions": [
-                            {"status": pressure, "type": "MemoryPressure"},
-                            {"status": pressure, "type": "DiskPressure"},
-                            {"status": pressure, "type": "PIDPressure"},
-                            {"status": ready, "type": "Ready"},
+                            {
+                                "status": pressure,
+                                "type": "MemoryPressure",
+                                "message": "",
+                                "reason": "",
+                            },
+                            {
+                                "status": pressure,
+                                "type": "DiskPressure",
+                                "message": "",
+                                "reason": "",
+                            },
+                            {
+                                "status": pressure,
+                                "type": "PIDPressure",
+                                "message": "",
+                                "reason": "",
+                            },
+                            {
+                                "status": ready,
+                                "type": "Ready",
+                                "message": "",
+                                "reason": "",
+                            },
                         ]
                     }
                 },
@@ -2238,38 +2406,41 @@ async def test_create_kubernetes_cluster_observer_ready_two_nodes(
     kubernetes_server = await aiohttp_server(kubernetes_app)
     # Create cluster to register
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    await db.put(cluster)
+
     # Create Krake API
     server = await aiohttp_server(create_app(config))
 
-    controller = KubernetesClusterController(server_endpoint(server), worker_count=0)
-    observer = KubernetesClusterObserver(cluster, controller.handle_resource)
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesClusterController(
+            server_endpoint(server),
+            worker_count=0,
+        )
+        await controller.prepare(client)
+        await register_observer(controller, cluster)
+        observer, _ = controller.observers[cluster.metadata.uid]
 
-    # The initial state of the observer should be CONNECTING
-    assert observer.cluster.status.state == ClusterState.CONNECTING
-    # After the poll_resource method is called, the observer should return the cluster's
-    # polled status.
-    await observer.poll_resource()
+        # The initial state of the observer should be CONNECTING
+        assert observer.resource.status.state == ClusterState.CONNECTING
+        # After the observe_resource method is called, the observer
+        # should set the cluster's polled status.
+        await observer.observe_resource()
 
-    if ready is True:
-        # The state should be ONLINE as the cluster node is `Ready`
-        # and not under *Pressure
-        assert observer.cluster.status.state == ClusterState.ONLINE
-    else:
-        # The state should be NOTREADY as the cluster node is not `Ready`
-        # and not under *Pressure
-        assert observer.cluster.status.state == ClusterState.NOTREADY
+        if ready is True:
+            # The state should be ONLINE as the cluster node is `Ready`
+            # and not under *Pressure
+            assert observer.resource.status.state == ClusterState.ONLINE
+        else:
+            # The state should be NOTREADY as the cluster node is not `Ready`
+            # and not under *Pressure
+            assert observer.resource.status.state == ClusterState.NOTREADY
+        stored = await db.get(
+            Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        )
+        # The cluster's status should be updated by the kubernetes controller
+        assert observer.resource.status.state == stored.status.state
 
-    # The cluster's status should be updated by the kubernetes controller
-    assert observer.cluster.status.state == cluster.status.state
 
-
-@pytest.mark.skip(
-    reason="FIXME: When the k8s cluster contains more than 1 node,"
-    " the :func:`poll_resource` evaluates cluster state based on"
-    " the first node in the cluster. The second one could in"
-    " non ready state, but the overall cluster state is set to"
-    " ONLINE."
-)
 @pytest.mark.parametrize(
     "ready,pressure",
     [
@@ -2282,7 +2453,7 @@ async def test_create_kubernetes_cluster_observer_ready_two_nodes(
     ],
 )
 async def test_create_kubernetes_cluster_observer_pressure_two_nodes(
-    aiohttp_server, config, ready, pressure
+    aiohttp_server, config, ready, pressure, db, loop
 ):
     """Test the cluster status change based on the various pressure conditions.
 
@@ -2307,10 +2478,30 @@ async def test_create_kubernetes_cluster_observer_pressure_two_nodes(
                 {
                     "status": {
                         "conditions": [
-                            {"status": False, "type": "MemoryPressure"},
-                            {"status": False, "type": "DiskPressure"},
-                            {"status": False, "type": "PIDPressure"},
-                            {"status": True, "type": "Ready"},
+                            {
+                                "status": False,
+                                "type": "MemoryPressure",
+                                "message": "",
+                                "reason": "",
+                            },
+                            {
+                                "status": False,
+                                "type": "DiskPressure",
+                                "message": "",
+                                "reason": "",
+                            },
+                            {
+                                "status": False,
+                                "type": "PIDPressure",
+                                "message": "",
+                                "reason": "",
+                            },
+                            {
+                                "status": True,
+                                "type": "Ready",
+                                "message": "",
+                                "reason": "",
+                            },
                         ]
                     }
                 },
@@ -2320,16 +2511,27 @@ async def test_create_kubernetes_cluster_observer_pressure_two_nodes(
                             {
                                 "status": pressure == "MemoryPressure",
                                 "type": "MemoryPressure",
+                                "message": "",
+                                "reason": "",
                             },
                             {
                                 "status": pressure == "DiskPressure",
                                 "type": "DiskPressure",
+                                "message": "",
+                                "reason": "",
                             },
                             {
                                 "status": pressure == "PIDPressure",
                                 "type": "PIDPressure",
+                                "message": "",
+                                "reason": "",
                             },
-                            {"status": ready, "type": "Ready"},
+                            {
+                                "status": ready,
+                                "type": "Ready",
+                                "message": "",
+                                "reason": "",
+                            },
                         ]
                     }
                 },
@@ -2346,27 +2548,40 @@ async def test_create_kubernetes_cluster_observer_pressure_two_nodes(
     kubernetes_server = await aiohttp_server(kubernetes_app)
     # Create cluster to register
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    await db.put(cluster)
+
     # Create Krake API
     server = await aiohttp_server(create_app(config))
 
-    controller = KubernetesClusterController(server_endpoint(server), worker_count=0)
-    observer = KubernetesClusterObserver(cluster, controller.handle_resource)
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesClusterController(
+            server_endpoint(server),
+            worker_count=0,
+        )
+        await controller.prepare(client)
+        await register_observer(controller, cluster)
+        observer, _ = controller.observers[cluster.metadata.uid]
 
-    # The initial state of the observer should be CONNECTING
-    assert observer.cluster.status.state == ClusterState.CONNECTING
-    # After the poll_resource method is called, the observer should return the cluster's
-    # polled status.
-    await observer.poll_resource()
-    # The state should be UNHEALTHY as the cluster node is
-    # under [Memory|Disk|PID]Pressure
-    assert observer.cluster.status.state == ClusterState.UNHEALTHY
-    # The cluster's status should be updated by the kubernetes controller
-    assert observer.cluster.status.state == cluster.status.state
+        # The initial state of the observer should be CONNECTING
+        assert observer.resource.status.state == ClusterState.CONNECTING
+        # After the observe_resource method is called, the observer
+        # should set the cluster's polled status.
+        await observer.observe_resource()
+        # The state should be UNHEALTHY as the cluster node is
+        # under [Memory|Disk|PID]Pressure
+        assert observer.resource.status.state == ClusterState.UNHEALTHY
+        stored = await db.get(
+            Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        )
+        # The cluster's status should be updated by the kubernetes controller
+        assert observer.resource.status.state == stored.status.state
 
 
 async def test_create_kubernetes_cluster_observer_offline(
     aiohttp_server,
     config,
+    db,
+    loop,
 ):
     """Test the cluster status change when the cluster API is offline.
 
@@ -2381,35 +2596,45 @@ async def test_create_kubernetes_cluster_observer_offline(
     kubernetes_server = await aiohttp_server(kubernetes_app)
     # Create cluster to register
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    await db.put(cluster)
+
     # Create Krake API
     server = await aiohttp_server(create_app(config))
 
-    controller = KubernetesClusterController(server_endpoint(server), worker_count=0)
-    observer = KubernetesClusterObserver(cluster, controller.handle_resource)
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesClusterController(
+            server_endpoint(server),
+            worker_count=0,
+        )
+        await controller.prepare(client)
+        await register_observer(controller, cluster)
+        observer, _ = controller.observers[cluster.metadata.uid]
 
-    # The initial state of the observer should be CONNECTING
-    assert observer.cluster.status.state == ClusterState.CONNECTING
-    # After the poll_resource method is called, the observer should return the cluster's
-    # polled status.
-    connection_key = ConnectionKey(
-        host="127.0.0.1",
-        port=8000,
-        is_ssl=False,
-        ssl=None,
-        proxy=None,
-        proxy_auth=None,
-        proxy_headers_hash=None,
-    )
-    with mock.patch.object(
-        k8s_client_hooks.CoreV1Api,
-        "list_node",
-        side_effect=ClientConnectorError(connection_key, OSError()),
-    ):
-        await observer.poll_resource()
-    # The state should be OFFLINE as the cluster API is unreachable
-    assert observer.cluster.status.state == ClusterState.OFFLINE
-    # The cluster's status should be updated by the kubernetes controller
-    assert observer.cluster.status.state == cluster.status.state
+        # The initial state of the observer should be CONNECTING
+        assert observer.resource.status.state == ClusterState.CONNECTING
+
+        connection_key = ConnectionKey(
+            host="127.0.0.1",
+            port=8000,
+            is_ssl=False,
+            ssl=None,
+            proxy=None,
+            proxy_auth=None,
+            proxy_headers_hash=None,
+        )
+        with mock.patch.object(
+            k8s_client_hooks.CoreV1Api,
+            "list_node",
+            side_effect=ClientConnectorError(connection_key, OSError()),
+        ):
+            await observer.observe_resource()
+        # The state should be OFFLINE as the cluster API is unreachable
+        assert observer.resource.status.state == ClusterState.OFFLINE
+        stored = await db.get(
+            Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        )
+        # The cluster's status should be updated by the kubernetes controller
+        assert observer.resource.status.state == stored.status.state
 
 
 @pytest.mark.parametrize(
@@ -2422,7 +2647,7 @@ async def test_create_kubernetes_cluster_observer_offline(
     ],
 )
 async def test_create_kubernetes_cluster_observer_offline_non2xx_response(
-    aiohttp_server, config, reason
+    aiohttp_server, config, reason, db, loop
 ):
     """Test the cluster status change when the cluster API responds with non 2xx HTTP code.
 
@@ -2450,22 +2675,34 @@ async def test_create_kubernetes_cluster_observer_offline_non2xx_response(
     kubernetes_server = await aiohttp_server(kubernetes_app)
     # Create cluster to register
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    await db.put(cluster)
+
     # Create Krake API
     server = await aiohttp_server(create_app(config))
 
-    controller = KubernetesClusterController(server_endpoint(server), worker_count=0)
-    observer = KubernetesClusterObserver(cluster, controller.handle_resource)
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesClusterController(
+            server_endpoint(server),
+            worker_count=0,
+        )
+        await controller.prepare(client)
+        await register_observer(controller, cluster)
+        observer, _ = controller.observers[cluster.metadata.uid]
 
-    # The initial state of the observer should be CONNECTING
-    assert observer.cluster.status.state == ClusterState.CONNECTING
-    # After the poll_resource method is called, the observer should return the cluster's
-    # polled status.
-    await observer.poll_resource()
+        # The initial state of the observer should be CONNECTING
+        assert observer.resource.status.state == ClusterState.CONNECTING
+        # After the observe_resource method is called, the observer
+        # should set the cluster's polled status.
+        await observer.observe_resource()
 
-    # The state should be OFFLINE as the cluster API responds with non 2xx HTTP code.
-    assert observer.cluster.status.state == ClusterState.OFFLINE
-    # The cluster's status should be updated by the kubernetes controller
-    assert observer.cluster.status.state == cluster.status.state
+        # The state should be OFFLINE as the cluster API responds
+        # with non 2xx HTTP code.
+        assert observer.resource.status.state == ClusterState.OFFLINE
+        stored = await db.get(
+            Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        )
+        # The cluster's status should be updated by the kubernetes controller
+        assert observer.resource.status.state == stored.status.state
 
 
 async def test_kubernetes_cluster_observer_on_cluster_update(
@@ -2487,20 +2724,20 @@ async def test_kubernetes_cluster_observer_on_cluster_update(
         # change the clusters status
         cluster.status.state = ClusterState.NOTREADY
         # now the cluster in the observer and the actual cluster are not equal
-        assert controller.observers[cluster.metadata.uid][0].cluster != cluster
+        assert controller.observers[cluster.metadata.uid][0].resource != cluster
         # by calling the resource_received method, the observer is unregistered and
         # registered again, therefore the cluster in the observer should be updated
         await controller.resource_received(cluster)
-        assert controller.observers[cluster.metadata.uid][0].cluster == cluster
+        assert controller.observers[cluster.metadata.uid][0].resource == cluster
 
         controller.observers[cluster.metadata.uid][
             0
-        ].cluster.status.state = ClusterState.ONLINE
-        assert controller.observers[cluster.metadata.uid][0].cluster != cluster
+        ].resource.status.state = ClusterState.ONLINE
+        assert controller.observers[cluster.metadata.uid][0].resource != cluster
         cluster = await controller.on_status_update(
-            controller.observers[cluster.metadata.uid][0].cluster
+            controller.observers[cluster.metadata.uid][0].resource
         )
-        assert controller.observers[cluster.metadata.uid][0].cluster == cluster
+        assert controller.observers[cluster.metadata.uid][0].resource == cluster
 
 
 async def test_kubernetes_cluster_observer_on_cluster_delete(aiohttp_server, config):
