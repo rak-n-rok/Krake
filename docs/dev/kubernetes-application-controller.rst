@@ -25,6 +25,18 @@ special case of mangled resources.
 .. figure:: /img/kubernetes_controller_reconciliation_example.png
 
 
+Step 0 (Optional)
+------
+
+If the resource is defined by the TOSCA template file or URL or by CSAR
+archive URL, the controller translates the given TOSCA or CSAR to the Kubernetes manifest
+file if possible, see :ref:`dev/tosca:TOSCA`.
+
+The result of translation is stored in ``spec.manifest``.
+
+This step is performed by the ``ApplicationToscaTranslation`` hook.
+
+
 Step 1
 ------
 

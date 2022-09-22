@@ -18,6 +18,15 @@ Krake doesn't act on external changes made to this field. This is needed to keep
 consistent and predictable application state, especially since changes could also be
 done in the Kubernetes infrastructure or by the Kubernetes plane itself.
 
+
+.. note::
+
+  The custom observer schema could be used even when the application is described by the TOSCA template or CSAR archive.
+  TOSCA template or CSAR is translated to the Kubernetes manifests in Krake's Kubernetes application controller,
+  hence the custom observer schema file will be applied to the Kubernetes resources as in the "regular" workflow when
+  the Kubernetes manifest is used, see :ref:`dev/tosca:TOSCA Workflow`.
+
+
 .. note::
 
   As Kubernetes manages some fields of a Kubernetes resource (for instance the
