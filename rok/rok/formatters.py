@@ -154,6 +154,70 @@ def bool_formatter(attr):
     return str(attr)
 
 
+def nodes_formatter(
+    attr, pid_pressure=False, disk_pressure=False, memory_pressure=False
+):
+    """Format a cluster nodes into a "X/Y" format.
+
+    "X" represents the sum of nodes in the following node conditions:
+    1. Sum of ready nodes (default)
+    2. Sum of nodes under PID pressure
+    3. Sum of nodes under DISK pressure
+    4. Sum of nodes under MEMORY pressure
+
+    "Y" represents the total sum of nodes.
+
+    Args:
+        attr (list): an attribute with nodes elements
+        pid_pressure (bool, optional): If the sum of nodes under PID pressure,
+            should be returned. Defaults to False.
+        disk_pressure (bool, optional): If the sum of nodes under DISK pressure,
+            should be returned. Defaults to False.
+        memory_pressure (bool, optional): If the sum of nodes under MEMORY pressure,
+            should be returned. Defaults to False.
+
+    Returns:
+        str: Formatted string with the format "X/Y".
+
+    """
+    if not attr:
+        return str(None)
+
+    node_count_total = node_count_ready = len(attr)
+    node_count_memory_pressure = 0
+    node_count_disk_pressure = 0
+    node_count_pid_pressure = 0
+
+    for node in attr:
+        for condition in node["status"]["conditions"]:
+            if (
+                condition["type"].lower().endswith("pressure")
+                and condition["status"] == "True"
+            ):
+                if condition["type"].lower() == "pidpressure":
+                    node_count_pid_pressure += 1
+
+                if condition["type"].lower() == "diskpressure":
+                    node_count_disk_pressure += 1
+
+                if condition["type"].lower() == "memorypressure":
+                    node_count_memory_pressure += 1
+
+            if condition["type"].lower() == "ready" and condition["status"] != "True":
+                node_count_ready -= 1
+
+    if pid_pressure:
+        return "{0}/{1}".format(node_count_pid_pressure, node_count_total)
+
+    if disk_pressure:
+        return "{0}/{1}".format(node_count_disk_pressure, node_count_total)
+
+    if memory_pressure:
+        return "{0}/{1}".format(node_count_memory_pressure, node_count_total)
+
+    return "{0}/{1}".format(node_count_ready, node_count_total)
+
+
 def dict_formatter(attr):
     """Format a dictionary into a more readable format
 

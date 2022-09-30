@@ -25,6 +25,9 @@ from krake.data.kubernetes import (
     Constraints,
     ClusterConstraints,
     ClusterStatus,
+    ClusterNode,
+    ClusterNodeStatus,
+    ClusterNodeCondition,
 )
 from krake.data.constraints import (
     EqualConstraint,
@@ -382,13 +385,61 @@ class ClusterSpecFactory(Factory):
         return [fuzzy_name() for _ in range(fake.pyint(1, 3))]
 
 
+class ClusterNodeStatusFactory(Factory):
+    class Meta:
+        model = ClusterNodeStatus
+
+    @lazy_attribute
+    def conditions(self):
+        return [
+            ClusterNodeCondition(
+                type="Ready",
+                message="kubelet is posting ready status",
+                reason="KubeletReady",
+                status="True",
+            ),
+            ClusterNodeCondition(
+                type="DiskPressure",
+                message="kubelet has no disk pressure",
+                reason="KubeletHasNoDiskPressure",
+                status="False",
+            ),
+            ClusterNodeCondition(
+                type="PIDPressure",
+                message="kubelet has sufficient PID available",
+                reason="KubeletHasSufficientPID",
+                status="False",
+            ),
+            ClusterNodeCondition(
+                type="MemoryPressure",
+                message="kubelet has sufficient memory available",
+                reason="KubeletHasSufficientMemory",
+                status="False",
+            ),
+        ]
+
+
+class ClusterNodeFactory(Factory):
+    class Meta:
+        model = ClusterNode
+
+    status = SubFactory(ClusterNodeStatusFactory)
+
+
 class ClusterStatusFactory(Factory):
     class Meta:
         model = ClusterStatus
 
+    class Params:
+        nodes_count = 3
+
     @lazy_attribute
     def metrics_reasons(self):
         return dict()
+
+    @lazy_attribute
+    def nodes(self):
+        return [ClusterNodeFactory() for _ in range(self.nodes_count)]
 
 
 class ClusterFactory(Factory):

@@ -11,14 +11,7 @@ from kubernetes_asyncio.config import ConfigException
 from krake.utils import get_kubernetes_resource_idx
 from . import persistent
 from .serializable import Serializable, ApiObject
-from .core import (
-    Metadata,
-    ListMetadata,
-    Status,
-    ResourceRef,
-    MetricRef,
-    Reason
-)
+from .core import Metadata, ListMetadata, Status, ResourceRef, MetricRef, Reason
 from .constraints import LabelConstraint, MetricConstraint
 
 
@@ -415,6 +408,50 @@ class ClusterState(Enum):
     FAILING_METRICS = auto()
 
 
+class ClusterNodeCondition(Serializable):
+    """Cluster node condition subresource of :class:`ClusterNodeStatus`.
+
+    Attributes:
+        message (str): Human readable message indicating details about last transition.
+        reason (str): A brief reason for the condition's last transition.
+        status (str): Status of the condition, one of "True", "False", "Unknown".
+        type (str): Type of node condition.
+
+    """
+
+    message: str
+    reason: str
+    status: str
+    type: str
+
+
+class ClusterNodeStatus(Serializable):
+    """Cluster node status subresource of :class:`ClusterNode`.
+
+    Attributes:
+        conditions (list[ClusterNodeCondition]): List of current observed
+            node conditions.
+
+    """
+
+    conditions: List[ClusterNodeCondition]
+
+
+class ClusterNode(Serializable):
+    """Cluster node subresource of :class:`ClusterStatus`.
+
+    Attributes:
+        api (str, optional): Api version if the resource.
+        kind (str, optional): Kind of the resource.
+        status (ClusterNodeStatus, optional): Current status of the cluster node.
+
+    """
+
+    api: str = "kubernetes"
+    kind: str = "ClusterNode"
+    status: ClusterNodeStatus = None
+
+
 class ClusterStatus(Serializable):
     """Status subresource of :class:`Cluster`.
 
@@ -424,12 +461,14 @@ class ClusterStatus(Serializable):
         state (ClusterState): Current state of the cluster.
         metrics_reasons (dict[str, Reason]): mapping of the name of the metrics for
             which an error occurred to the reason for which it occurred.
+        nodes (list[ClusterNode]): list of cluster nodes.
 
     """
 
     kube_controller_triggered: datetime = None
     state: ClusterState = ClusterState.CONNECTING
     metrics_reasons: Dict[str, Reason] = field(default_factory=dict)
+    nodes: List[ClusterNode] = field(default_factory=list)
 
 
 @persistent("/kubernetes/clusters/{namespace}/{name}")

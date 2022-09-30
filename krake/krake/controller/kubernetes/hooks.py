@@ -28,7 +28,14 @@ from krake.utils import camel_to_snake_case, get_kubernetes_resource_idx
 from kubernetes_asyncio.client.rest import ApiException
 from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio import client
-from krake.data.kubernetes import ClusterState, Application, Cluster
+from krake.data.kubernetes import (
+    ClusterState,
+    Application,
+    Cluster,
+    ClusterNodeCondition,
+    ClusterNode,
+    ClusterNodeStatus,
+)
 from yarl import URL
 from secrets import token_urlsafe
 
@@ -800,7 +807,7 @@ class KubernetesClusterObserver(Observer):
      * simply deleted on resource deletion.
 
     Args:
-        cluster (krake.data.kubernetes.Cluster): the cluster which will be observed.
+        resource (krake.data.kubernetes.Cluster): the cluster which will be observed.
         on_res_update (coroutine): a coroutine called when a resource's actual status
             differs from the status sent by the database. Its signature is:
             ``(resource) -> updated_resource``. ``updated_resource`` is the instance of
@@ -813,30 +820,32 @@ class KubernetesClusterObserver(Observer):
 
     """
 
-    def __init__(self, cluster, on_res_update, time_step=2):
-        super().__init__(cluster, on_res_update, time_step)
-        self.cluster = cluster
+    def __init__(self, resource, on_res_update, time_step=2):
+        super().__init__(resource, on_res_update, time_step)
 
     async def poll_resource(self):
         """Fetch the current status of the Cluster monitored by the Observer.
 
-        The current cluster status is fetched by :func:`poll_resource` from its API.
-        If the cluster API is shutting down the API server responds with a 503
-        (service unavailable, apiserver is shutting down) HTTP response which
-        leads to the kubernetes client ApiException. If the cluster's API has been
-        successfully shut down and there is an attempt to fetch cluster status,
-        the ClientConnectorError is raised instead.
-        Therefore, both exceptions should be handled.
+        Note regarding exceptions handling:
+          The current cluster status is fetched by :func:`poll_resource` from its API.
+          If the cluster API is shutting down the API server responds with a 503
+          (service unavailable, apiserver is shutting down) HTTP response which
+          leads to the kubernetes client ApiException. If the cluster's API has been
+          successfully shut down and there is an attempt to fetch cluster status,
+          the ClientConnectorError is raised instead.
+          Therefore, both exceptions should be handled.
 
         Returns:
             krake.data.core.Status: the status object created using information from the
                 real world Cluster.
 
         """
-        status = deepcopy(self.cluster.status)
+        cluster = self.resource
+        status = deepcopy(cluster.status)
+        status.nodes = []
         # For each observed kubernetes cluster registered in Krake,
         # get its current node status.
-        loader = KubeConfigLoader(self.cluster.spec.kubeconfig)
+        loader = KubeConfigLoader(cluster.spec.kubeconfig)
         config = Configuration()
         await loader.load_and_set(config)
         kube = ApiClient(config)
@@ -845,49 +854,59 @@ class KubernetesClusterObserver(Observer):
             v1 = client.CoreV1Api(api)
             try:
                 response = await v1.list_node()
-
             except (ClientConnectorError, ApiException) as err:
-                status.state = ClusterState.OFFLINE
-                self.cluster.status.state = ClusterState.OFFLINE
-                # Log the error
+                # Log the error and set cluster state to OFFLINE
                 logger.debug(err)
+                status.state = ClusterState.OFFLINE
                 return status
 
-            condition_dict = {
-                "MemoryPressure": [],
-                "DiskPressure": [],
-                "PIDPressure": [],
-                "Ready": [],
-            }
+            # Fetch nodes conditions
+            nodes = []
+            for node in response.items:
+                conditions = []
+                for condition in node.status.conditions:
+                    conditions.append(
+                        ClusterNodeCondition(
+                            message=condition.message,
+                            reason=condition.reason,
+                            status=condition.status,
+                            type=condition.type,
+                        )
+                    )
 
-            for item in response.items:
-                for condition in item.status.conditions:
-                    condition_dict[condition.type].append(condition.status)
-                if (
-                    condition_dict["MemoryPressure"] == ["True"]
-                    or condition_dict["DiskPressure"] == ["True"]
-                    or condition_dict["PIDPressure"] == ["True"]
-                ):
-                    status.state = ClusterState.UNHEALTHY
-                    self.cluster.status.state = ClusterState.UNHEALTHY
-                    return status
-                elif (
-                    condition_dict["Ready"] == ["True"]
-                    and status.state is ClusterState.OFFLINE
-                ):
-                    status.state = ClusterState.CONNECTING
-                    self.cluster.status.state = ClusterState.CONNECTING
-                    return status
-                elif status.state == ClusterState.FAILING_METRICS:
-                    return status
-                elif condition_dict["Ready"] == ["True"]:
-                    status.state = ClusterState.ONLINE
-                    self.cluster.status.state = ClusterState.ONLINE
-                    return status
-                else:
-                    status.state = ClusterState.NOTREADY
-                    self.cluster.status.state = ClusterState.NOTREADY
-                    return status
+                nodes.append(
+                    ClusterNode(status=ClusterNodeStatus(conditions=conditions))
+                )
+            status.nodes = nodes
+
+            # The scheduler is unable to fetch cluster metrics, hence
+            # the cluster state should wait for it and the cluster
+            # status should not be changed by the observer.
+            if status.state == ClusterState.FAILING_METRICS:
+                return status
+
+            # Set the cluster state to CONNECTING if the previous state
+            # was OFFLINE. It is due to smooth transition from
+            # the OFFLINE to ONLINE state.
+            if status.state == ClusterState.OFFLINE:
+                status.state = ClusterState.CONNECTING
+                return status
+
+            for node in status.nodes:
+                for condition in node.status.conditions:
+                    if (
+                        condition.type.lower().endswith("pressure")
+                        and condition.status == "True"
+                    ):
+                        status.state = ClusterState.UNHEALTHY
+                        return status
+
+                    if condition.type.lower() == "ready" and condition.status != "True":
+                        status.state = ClusterState.NOTREADY
+                        return status
+
+            status.state = ClusterState.ONLINE
+            return status
 
 
 @listen.on(HookType.ApplicationPostReconcile)

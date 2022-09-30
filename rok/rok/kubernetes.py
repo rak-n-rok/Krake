@@ -9,6 +9,7 @@ import sys
 import warnings
 from argparse import FileType, Action
 from base64 import b64encode
+from functools import partial
 
 import yaml
 
@@ -30,6 +31,7 @@ from .formatters import (
     dict_formatter,
     bool_formatter,
     format_datetime,
+    nodes_formatter,
 )
 
 warnings.formatwarning = lambda message, *args, **kwargs: f"WARNING: {message}\n"
@@ -305,7 +307,7 @@ def create_application(
                 "cluster": {
                     "labels": cluster_label_constraints,
                     "custom_resources": cluster_resource_constraints,
-                    "metrics": cluster_metric_constraints
+                    "metrics": cluster_metric_constraints,
                 },
             },
         },
@@ -487,9 +489,25 @@ cluster = kubernetes.subparser("cluster", help="Manage Kubernetes clusters")
 
 class ClusterTableList(BaseTable):
     state = Cell("status.state")
+    nodes = Cell("status.nodes", formatter=nodes_formatter)
 
 
 class ClusterTable(ClusterTableList):
+    custom_resources = Cell("spec.custom_resources")
+    metrics = Cell("spec.metrics")
+    failing_metrics = Cell("status.metrics_reasons", formatter=dict_formatter)
+
+
+class ClusterTableDetail(ClusterTableList):
+    nodes_pid_pressure = Cell(
+        "status.nodes", formatter=partial(nodes_formatter, pid_pressure=True)
+    )
+    nodes_memory_pressure = Cell(
+        "status.nodes", formatter=partial(nodes_formatter, memory_pressure=True)
+    )
+    nodes_disk_pressure = Cell(
+        "status.nodes", formatter=partial(nodes_formatter, disk_pressure=True)
+    )
     custom_resources = Cell("spec.custom_resources")
     metrics = Cell("spec.metrics")
     failing_metrics = Cell("status.metrics_reasons", formatter=dict_formatter)
@@ -635,7 +653,7 @@ def list_clusters(config, session, namespace, all):
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
-@printer(table=ClusterTable())
+@printer(table=ClusterTableDetail())
 def get_cluster(config, session, namespace, name):
     if namespace is None:
         namespace = config["user"]
@@ -668,7 +686,7 @@ def update_cluster(
     metrics,
     global_metrics,
     labels,
-    custom_resources
+    custom_resources,
 ):
     if namespace is None:
         namespace = config["user"]
