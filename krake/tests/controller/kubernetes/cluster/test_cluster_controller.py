@@ -17,6 +17,7 @@ from krake.test_utils import server_endpoint
 
 from tests.factories.kubernetes import ClusterFactory
 
+
 async def test_list_cluster(aiohttp_server, config):
     """Test the list_cluster method in the kubernetes controller
 
@@ -36,7 +37,7 @@ async def test_list_cluster(aiohttp_server, config):
     # initializing the observer
     await controller.resource_received(cluster)  # needs to be called explicitly
     # the initial state of the observer should be CONNECTING
-    assert observer.cluster.status.state == ClusterState.CONNECTING
+    assert observer.resource.status.state == ClusterState.CONNECTING
     # the length should be 1
     assert len(controller.observers) == 1
     # this state is saved in a variable
@@ -61,7 +62,9 @@ async def test_creation_of_cluster_reflector(aiohttp_server, config, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesClusterController(server_endpoint(server), worker_count=0)
+        controller = KubernetesClusterController(
+            server_endpoint(server), worker_count=0
+        )
         await controller.prepare(client)
 
     # the cluster_reflector should be registered, so the dictionary should not be empty
@@ -74,7 +77,7 @@ async def test_cleanup(aiohttp_server, config, loop, db):
 
     """
     server = await aiohttp_server(create_app(config))
-    async with Client(url=server_endpoint(server), loop=loop) as client:
+    async with Client(url=server_endpoint(server), loop=loop):
 
         cluster = ClusterFactory()
         await db.put(cluster)

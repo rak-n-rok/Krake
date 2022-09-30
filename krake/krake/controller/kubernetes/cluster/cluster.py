@@ -217,6 +217,7 @@ class KubernetesClusterController(Controller):
         copy = deepcopy(cluster)
         if (
             copy.status.state is ClusterState.CONNECTING
+            and copy.metadata.uid not in self.observers
             and copy.metadata.deleted is None
         ):
             await listen.hook(
@@ -231,9 +232,9 @@ class KubernetesClusterController(Controller):
                 controller=self,
                 resource=copy,
             )
-        elif copy != self.observers[copy.metadata.uid][
-            0
-        ].cluster and not isinstance(copy.metadata.deleted, datetime.datetime):
+        elif copy != self.observers[copy.metadata.uid][0].resource and not isinstance(
+            copy.metadata.deleted, datetime.datetime
+        ):
             await listen.hook(
                 HookType.ClusterDeletion,
                 controller=self,

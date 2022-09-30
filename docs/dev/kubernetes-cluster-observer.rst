@@ -99,6 +99,34 @@ the following states:
     This status is set internally by Krake if a metrics provider is not reachable by
     Krake and thus metrics cannot be passed correctly into Krake.
 
+
+Node Health
+===========
+
+The cluster observer collects health data of a kubernetes cluster and formats it.
+Data is divided according to the nodes of the cluster and the different pressure types
+PID, memory and disk. They represent the problems that a kubernetes node could
+experience, either missing process ids due to too many process instances, memory overload
+or non-available disk space.
+These information can be found by calling:
+
+.. prompt:: bash $ auto
+
+    $ rok kube cluster get X
+    +-----------------------+---------------------+
+    | ...                   | ...                 |
+    | nodes                 | 3/3                 |
+    | nodes_pid_pressure    | 0/3                 |
+    | nodes_memory_pressure | 0/3                 |
+    | nodes_disk_pressure   | 0/3                 |
+    | ...                   | ...                 |
+    +-----------------------+---------------------+
+
+
+Nodes are shown according to their health, so 3/3 if all nodes are healthy, and the
+pressure parameters only get filled, if there is a current problem with one (or more) of
+the nodes.
+
 Summary
 -------
 
