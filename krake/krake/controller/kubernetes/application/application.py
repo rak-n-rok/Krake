@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 class InvalidStateError(ControllerError):
-    """Kubernetes application is in an invalid state"""
+    """Kubernetes' application is in an invalid state"""
 
     code = ReasonCode.INTERNAL_ERROR
 

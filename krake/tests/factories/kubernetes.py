@@ -19,6 +19,7 @@ from krake.data.kubernetes import (
     ApplicationSpec,
     ApplicationStatus,
     ApplicationState,
+    ContainerHealth,
     Application,
     ClusterSpec,
     Cluster,
@@ -109,6 +110,7 @@ class ApplicationStatusFactory(Factory):
         is_scheduled = fuzzy.FuzzyChoice([True, False])
 
     state = fuzzy.FuzzyChoice(list(ApplicationState.__members__.values()))
+    container_health = ContainerHealth()
 
     @lazy_attribute
     def reason(self):

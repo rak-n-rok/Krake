@@ -218,6 +218,19 @@ def nodes_formatter(
     return "{0}/{1}".format(node_count_ready, node_count_total)
 
 
+def pods_formatter(attr):
+    if not attr:
+        return str(None)
+
+    if attr["completed_pods"] is not None:
+        return "{0} active / {1} failed / {2} succeeded / {3} desired".\
+            format(attr["running_pods"], attr["failed_pods"],
+                   attr["completed_pods"], attr["desired_pods"])
+    elif attr["desired_pods"] is not None:
+        return "{0} active / {1} desired".\
+            format(attr["running_pods"], attr["desired_pods"])
+
+
 def dict_formatter(attr):
     """Format a dictionary into a more readable format
 

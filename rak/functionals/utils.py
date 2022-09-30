@@ -516,7 +516,7 @@ def check_resource_deleted(error_message):
         #assert response.returncode == 1
         assert any(
             [msg in response.output for msg in ("NOT_FOUND_ERROR", "NotFound")]
-        ), error_message
+        ), error_message + str(response.output)
 
     return validate
 
@@ -622,6 +622,38 @@ def check_app_running_on(expected_cluster, error_message):
             assert running_on == expected_cluster, msg
         except (KeyError, json.JSONDecodeError):
             raise AssertionError(error_message)
+
+    return validate
+
+
+def check_resource_container_health(container_health, error_message):
+    """Create a callable to verify that the pod health of a resource is as expected.
+
+    To be used with the :meth:`run` function. The callable will raise an
+    :class:`AssertionError` if the chosen resource has an unexpected pod health
+    subresource
+
+    Args:
+        container_health (ContainerHealth):
+        error_message (str): the message that will be displayed if the check fails.
+
+    Returns:
+        callable: a condition that will check its given response against the parameters
+            of the current function.
+
+    Raises:
+        AssertionError: if the return code doesn't equal 1 or the response message
+            contains 'not found'
+    """
+
+    def validate(response):
+        try:
+            assert container_health.desired_pods == \
+                response.json["spec"]["replicas"]
+            assert container_health.running_pods == \
+                response.json["status"]["readyReplicas"]
+        except Exception as e:
+            assert False, error_message + " | Error: " + str(e)
 
     return validate
 

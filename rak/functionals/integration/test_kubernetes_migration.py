@@ -500,7 +500,7 @@ def test_kubernetes_metrics_migration(minikube_clusters):
     The fraction 2/3 in Step 10 is chosen arbitrarily, under the constraint that
     the elapsed time (between changing the metrics in step 7 and the migration
     in step 8) has to be rather large in comparison to RESCHEDULING_INTERVAL.
-    Otherwise we cannot ensure that we did not sleep for almost
+    Otherwise, we cannot ensure that we did not sleep for almost
     RESCHEDULING_INTERVAL seconds after Step 6 and before Step 7. If we did,
     the two migrations could have taken place at the time of changing the metrics,
     which this test should disprove.
@@ -601,7 +601,7 @@ def test_kubernetes_metrics_migration(minikube_clusters):
         app.check_running_on(
             second_cluster,
             within=RESCHEDULING_INTERVAL + 10,
-            error_message=f"App was not runnning on the expected cluster "
+            error_message=f"App was not running on the expected cluster "
             f"{second_cluster}. debug_info: {debug_info}",
         )
         migration_one = time.time()  # the approximate time of 1st migration
@@ -660,7 +660,7 @@ def test_kubernetes_metrics_migration(minikube_clusters):
 
         # 10. Ensure that the time elapsed between the last change of the metrics
         # and the second migration was more than RESCHEDULING_INTERVAL*2/3
-        # seconds apart. (See doctring for an explanation of the value 2/3.)
+        # seconds apart. (See docstring for an explanation of the value 2/3.)
         elapsed = migration_two - metric_change_time
         assert elapsed > RESCHEDULING_INTERVAL * 0.67, (
             f"Changing the metrics occurred too close to the second migration"
@@ -776,7 +776,7 @@ def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
                     >= RESCHEDULING_INTERVAL
                 )
 
-            # setup the loop variables for the next iteration of the loop
+            # set up the loop variables for the next iteration of the loop
             this_cluster, next_cluster = next_cluster, this_cluster
             previous_migration_time = migration_time
 
