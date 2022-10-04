@@ -25,6 +25,12 @@ if sys.version_info < (3, 10):
 else:
     install_requires.append("webargs==6.*")
 
+# The newest importlib_metadata version isn't completely compatible with the oldest
+# python version Krake supports (or better so, the tests we wrote with that).
+if sys.version_info < (3, 8):
+    install_requires.append("importlib_metadata==3.6.*")
+
+
 setup(
     name="krake",
     version="1.0.0",
