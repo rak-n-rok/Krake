@@ -1,16 +1,26 @@
-async def test_create_{{ operation.signature_name }}(aiohttp_client, config, db):
+@pytest.mark.parametrize("multipart", [True, False])
+async def test_create_{{ operation.signature_name }}(aiohttp_client, config, db, multipart):
     client = await aiohttp_client(create_app(config=config))
 
     # MISSING Resource-specific elements can be set here
     data = {{ operation.body.__name__ }}Factory()
 
-    resp = await client.post("{{ operation.path.format(namespace="testing", name="{name}") }}", json=data.serialize())
+    # POST/PUT requests could be sent as a multipart media type
+    request_kwargs = {}
+    if multipart:
+        with aiohttp.MultipartWriter() as multipart_data:
+            multipart_data.append_json(data.serialize())
+        request_kwargs.update({"data": multipart_data})
+    else:
+        request_kwargs.update({"json": data.serialize()})
+
+    resp = await client.post("{{ operation.path.format(namespace="testing", name="{name}") }}", **request_kwargs)
     assert resp.status == 200
     received = {{ operation.response.__name__ }}.deserialize(await resp.json())
 
     assert received.metadata.created
     assert received.metadata.modified
-    assert received.metadata.namespace {{ '== "testing"' if operation.resource.namespaced else "is None" }}
+    assert received.metadata.namespace {{ '== "testing"' | safe if operation.resource.namespaced else "is None" | safe }}
     assert received.metadata.uid
     # MISSING The resource-specific attributes can be verified here.
     # assert received.spec == data.spec

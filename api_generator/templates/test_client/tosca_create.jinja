@@ -1,0 +1,66 @@
+async def test_create_{{ operation.signature_name }}_tosca(aiohttp_server, config, db, loop, tosca, tosca_pod):
+    # MISSING Resource-specific elements can be set here
+    data = {{ operation.body.__name__ }}Factory(
+        status=None,
+        spec__manifest=[],
+        spec__tosca=tosca,
+        status__state=ApplicationState.RUNNING,
+    )
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        {{ operation.resource.api }}_api = {{ operation.resource.api|title }}Api(client)
+        received = await {{ operation.resource.api }}_api.create_{{ operation.signature_name }}(
+            {{ namespace_metadata(operation) }}body=data
+        )
+
+    assert received.api == "{{ operation.resource.api }}"
+    assert received.kind == "{{ operation.response.__name__ }}"
+    assert received.metadata.name == data.metadata.name
+    assert received.metadata.namespace {{ '== "testing"' | safe if operation.resource.namespaced else "is None" | safe }}
+    assert received.metadata.created
+    assert received.metadata.modified
+    assert received.spec.manifest == [tosca_pod]
+
+    # MISSING The resource-specific attributes can be verified here.
+    # assert received.spec == data.spec
+
+    stored = await db.get(
+        {{ operation.response.__name__ }}, {{ namespace_metadata(operation) }}name=data.metadata.name
+    )
+    assert stored == received
+
+
+async def test_create_{{ operation.signature_name }}_csar(aiohttp_server, config, db, loop, csar, tosca_pod):
+    # MISSING Resource-specific elements can be set here
+    data = {{ operation.body.__name__ }}Factory(
+        status=None,
+        spec__manifest=[],
+        spec__csar=csar,
+        status__state=ApplicationState.RUNNING,
+    )
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        {{ operation.resource.api }}_api = {{ operation.resource.api|title }}Api(client)
+        received = await {{ operation.resource.api }}_api.create_{{ operation.signature_name }}(
+            {{ namespace_metadata(operation) }}body=data, multipart=[open(csar, "rb")]
+        )
+
+    assert received.api == "{{ operation.resource.api }}"
+    assert received.kind == "{{ operation.response.__name__ }}"
+    assert received.metadata.name == data.metadata.name
+    assert received.metadata.namespace {{ '== "testing"' | safe if operation.resource.namespaced else "is None" | safe }}
+    assert received.metadata.created
+    assert received.metadata.modified
+    assert received.spec.manifest == [tosca_pod]
+
+    # MISSING The resource-specific attributes can be verified here.
+    # assert received.spec == data.spec
+
+    stored = await db.get(
+        {{ operation.response.__name__ }}, {{ namespace_metadata(operation) }}name=data.metadata.name
+    )
+    assert stored == received

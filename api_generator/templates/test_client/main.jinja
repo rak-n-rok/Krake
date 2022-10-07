@@ -28,6 +28,10 @@ from tests.factories.{{ api_def.name }} import {{ " " }}
     {{ macros.include_operation(operation, "test_client") }}
 {% endfor %}
 
+{% for operation in resource.operations %}
+    {{ macros.include_tosca(operation, resource, "test_client") }}
+{% endfor %}
+
 {% for subresource in resource.subresources -%}
     {% for operation in subresource.operations -%}
         {{ macros.include_operation(operation, "test_client") }}

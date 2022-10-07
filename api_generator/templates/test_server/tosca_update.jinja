@@ -1,0 +1,70 @@
+@pytest.mark.parametrize("multipart", [True, False])
+async def test_update_{{ operation.signature_name }}_tosca(aiohttp_client, config, db, tosca, tosca_pod, multipart):
+    client = await aiohttp_client(create_app(config=config))
+
+    # MISSING Resource-specific elements can be set here
+    data = {{ operation.body.__name__ }}Factory(
+        spec__manifest=[tosca_pod],
+        spec__tosca=tosca,
+        status__state=ApplicationState.PENDING,
+    )
+    await db.put(data)
+    # MISSING The resource-specific attributes can be updated here
+    # data.spec.foo = bar
+
+    # POST/PUT requests could be sent as a multipart media type
+    request_kwargs = {}
+    if multipart:
+        with aiohttp.MultipartWriter() as multipart_data:
+            multipart_data.append_json(data.serialize())
+        request_kwargs.update({"data": multipart_data})
+    else:
+        request_kwargs.update({"json": data.serialize()})
+
+    resp = await client.put(
+        f"{{ operation.path.format(namespace="testing", name="{data.metadata.name}") }}", **request_kwargs
+    )
+    assert resp.status == 200
+    received = {{ operation.response.__name__ }}.deserialize(await resp.json())
+
+    assert received.api == "{{ operation.resource.api }}"
+    assert received.kind == "{{ operation.response.__name__ }}"
+    assert data.metadata.modified < received.metadata.modified
+    # MISSING Assertions on resource-specific received values.
+    # assert received.spec.foo == bar
+
+    stored = await db.get({{ operation.response.__name__ }}, {{ namespace_testing(operation) }}name=data.metadata.name)
+    assert stored == received
+
+
+async def test_update_{{ operation.signature_name }}_csar(aiohttp_client, config, db, csar, tosca_pod, tosca, tmp_path):
+    client = await aiohttp_client(create_app(config=config))
+
+    # MISSING Resource-specific elements can be set here
+    data = {{ operation.body.__name__ }}Factory(
+        spec__manifest=[tosca_pod],
+        spec__csar=csar,
+        status__state=ApplicationState.PENDING,
+    )
+    await db.put(data)
+    # MISSING The resource-specific attributes can be updated here
+    # data.spec.foo = bar
+
+    with aiohttp.MultipartWriter() as multipart_data:
+        multipart_data.append_json(data.serialize())
+        multipart_data.append(open(csar_updated, "rb"))
+
+    resp = await client.put(
+        f"{{ operation.path.format(namespace="testing", name="{data.metadata.name}") }}", data=multipart_data
+    )
+    assert resp.status == 200
+    received = {{ operation.response.__name__ }}.deserialize(await resp.json())
+
+    assert received.api == "{{ operation.resource.api }}"
+    assert received.kind == "{{ operation.response.__name__ }}"
+    assert data.metadata.modified < received.metadata.modified
+    # MISSING Assertions on resource-specific received values.
+    # assert received.spec.foo == bar
+
+    stored = await db.get({{ operation.response.__name__ }}, {{ namespace_testing(operation) }}name=data.metadata.name)
+    assert stored == received

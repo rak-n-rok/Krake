@@ -13,7 +13,7 @@ async def test_create_{{ operation.signature_name }}(aiohttp_server, config, db,
     assert received.api == "{{ operation.resource.api }}"
     assert received.kind == "{{ operation.response.__name__ }}"
     assert received.metadata.name == data.metadata.name
-    assert received.metadata.namespace {{ '== "testing"' if operation.resource.namespaced else "is None" }}
+    assert received.metadata.namespace {{ '== "testing"' | safe if operation.resource.namespaced else "is None" | safe }}
     assert received.metadata.created
     assert received.metadata.modified
 
