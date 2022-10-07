@@ -1,10 +1,20 @@
-async def create_{{ operation.signature_name }}(self, body{{ namespace_signature(operation) }}):
+async def create_{{ operation.signature_name }}(self, body{{ namespace_signature(operation) }}, multipart=None):
     """Creates the specified {{ operation.resource.singular }}.
-    {{ docstring(operation)|indent }}
+    {{ docstring(operation, args_add=["multipart (list, optional): body parts to the multipart request."])|indent }}
+
     """
     path = "{{ operation.path }}".format({{ namespace_format(operation) }})
     url = self.client.url.with_path(path)
+    request_kwargs = {}
+    if multipart:
+        with aiohttp.MultipartWriter() as multipart_data:
+            multipart_data.append_json(body.serialize())
+            for item in multipart:
+                multipart_data.append(item)
+        request_kwargs.update({"data": multipart_data})
+    else:
+        request_kwargs.update({"json": body.serialize()})
 
-    resp = await self.client.session.request("{{ operation.method }}", url, json=body.serialize())
+    resp = await self.client.session.request("{{ operation.method }}", url, **request_kwargs)
     data = await resp.json()
     return {{ operation.response.__name__ }}.deserialize(data)

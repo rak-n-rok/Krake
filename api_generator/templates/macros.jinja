@@ -22,6 +22,28 @@
 
 
 {#
+    Includes the tosca template corresponding to the given operation name.
+
+    TOSCA could be used for `create` and `update`. Currently, only
+    `Application` resource could be described by the TOSCA.
+
+    Args:
+        operation (krake.apidefs.definitions.operation): operation to include to the
+            main template.
+        resource (krake.apidefs.definitions.Resource): Resource definition to include to the
+            main template.
+        main_dir (PathLike): path to the directory that contains all template for the
+            current generator.
+#}
+{% macro include_tosca(operation, resource, main_dir) %}
+{% if operation.name|lower in ["create", "update"] and resource.singular|lower == "application" %}
+    {#- Needs "operation" as parameter for the values in the included template -#}
+    {% include '{}/tosca_{}.jinja'.format(main_dir, operation.name|lower) %}
+{% endif %}
+{% endmacro %}
+
+
+{#
     Adds "namespace=testing" in the parameters if the resource of the operation is
     namespaced.
 
@@ -29,7 +51,7 @@
         operation (krake.apidefs.definitions.operation): the current operation.
 #}
 {% macro namespace_testing(operation) -%}
-    {{ 'namespace="testing", ' if operation.resource.namespaced }}
+    {{ 'namespace="testing", ' | safe if operation.resource.namespaced }}
 {%- endmacro %}
 
 
@@ -65,7 +87,7 @@
         operation (krake.apidefs.definitions.operation): the current operation.
 #}
 {% macro namespace_metadata_namespace(operation) -%}
-    {{ 'metadata__namespace="other"' if operation.resource.namespaced }}
+    {{ 'metadata__namespace="other"' | safe if operation.resource.namespaced }}
 {%- endmacro %}
 
 
@@ -99,8 +121,8 @@
     Args:
         operation (krake.apidefs.definitions.operation): the current operation.
 #}
-{% macro docstring(operation) -%}
-{% if operation.arguments %}
+{% macro docstring(operation, args_add=[]) -%}
+{% if operation.arguments or additional_args %}
 Args:
 {%- for arg in operation.arguments %}
 {%- if arg.name == "body" %}
@@ -112,6 +134,9 @@ Args:
 {%- else %}
     {{ arg.name }} ({{ arg.kind }}): {{ arg.doc }}
 {%- endif %}
+{%- endfor %}
+{%- for arg_add in args_add %}
+    {{ arg_add }}
 {%- endfor %}
 {%- endif %}
 {% if operation.response %}

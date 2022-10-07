@@ -1,4 +1,5 @@
 {% import "macros.jinja" as macros %}
+import aiohttp
 
 from krake.client import Watcher, ApiClient
 {% for module_path, classes in api_def.import_classes.items() -%}
