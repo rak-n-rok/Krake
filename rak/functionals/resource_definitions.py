@@ -49,8 +49,10 @@ class ResourceDefinition(ABC):
         if not name:
             raise ValueError("name must be provided")
         if bool(namespace) != kind.is_namespaced():
-            raise ValueError(f"kind {kind!r} does not support namespace, "
-                             f"but {namespace!r} was provided")
+            raise ValueError(
+                f"kind {kind!r} does not support namespace, "
+                f"but {namespace!r} was provided"
+            )
         self.name = name
         self.namespace = namespace
         self.kind = kind
@@ -421,7 +423,12 @@ class ApplicationDefinition(ResourceDefinition):
 
     Args:
         name (str): name of the application
-        manifest_path (str): path to the manifest file to use for the creation.
+        manifest_path (str, optional): path to the manifest file to use for the
+            creation.
+        tosca (Union[PathLike, str], optional): path to the TOSCA file or URL that
+            should be used to create the Application.
+        csar (str, optional): URL to the CSAR file that should be used to
+            create the Application.
         constraints (list[str], optional): list of cluster label constraints
             to use for the creation of the application.
         labels (dict[str, str]): dict of application labels and their values
@@ -435,7 +442,9 @@ class ApplicationDefinition(ResourceDefinition):
     def __init__(
         self,
         name,
-        manifest_path,
+        manifest_path=None,
+        tosca=None,
+        csar=None,
         constraints=None,
         labels=None,
         hooks=None,
@@ -444,8 +453,15 @@ class ApplicationDefinition(ResourceDefinition):
         namespace=DEFAULT_NAMESPACE,
     ):
         super().__init__(name=name, kind=ResourceKind.APPLICATION, namespace=namespace)
-        assert os.path.isfile(manifest_path), f"{manifest_path} is not a file."
+        assert (
+            manifest_path or tosca or csar
+        ), "Resource should be described by Kubernetes manifest or TOSCA or CSAR"
+        if manifest_path:
+            assert os.path.isfile(manifest_path), f"{manifest_path} is not a file."
+
         self.manifest_path = manifest_path
+        self.tosca = tosca
+        self.csar = csar
         self.cluster_label_constraints = constraints or []
         self.labels = labels or {}
         self.hooks = hooks or []
@@ -473,14 +489,22 @@ class ApplicationDefinition(ResourceDefinition):
         }
 
     def creation_command(self, wait):
-
+        app_definition = self.manifest_path or self.tosca or self.csar
+        is_url = (
+            True
+            if self.csar or (self.tosca and self.tosca.startswith("http"))
+            else False
+        )
         if wait:
             cmd = (
-                f"rok kube app create -f {self.manifest_path} "
-                f"{self.name} --wait".split()
+                f"rok kube app create {'--url' if is_url else '--file'}"
+                f" {app_definition} {self.name} --wait".split()
             )
         else:
-            cmd = f"rok kube app create -f {self.manifest_path} {self.name}".split()
+            cmd = (
+                f"rok kube app create {'--url' if is_url else '--file'}"
+                f" {app_definition} {self.name}".split()
+            )
 
         cmd += self._get_cluster_label_constraint_options(
             self.cluster_label_constraints

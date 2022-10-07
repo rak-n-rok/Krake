@@ -66,6 +66,11 @@
     # default PATH
     PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
     PYTEST_TIMEOUT: 1200
+    # Overrides default listen host (localhost) in the `httpserver` pytest fixture to
+    # the IP from which the Krake host is accessible externally.
+    # Simple `httpserver` runs on this externally accessible IP and could
+    # serve files that are accessible from Krake components running in containers.
+    PYTEST_HTTPSERVER_HOST: "{{ private_ip }}"
   vars:
     git_dir: /home/krake/git/krake
     test_dir: rak/functionals
