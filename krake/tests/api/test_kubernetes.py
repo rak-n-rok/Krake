@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import pytz
 import yaml
@@ -23,8 +24,17 @@ from krake.data.kubernetes import (
     ClusterState,
 )
 
-from tests.factories.kubernetes import ClusterFactory, ApplicationFactory, ReasonFactory
+from tests.factories.kubernetes import (
+    ClusterFactory,
+    ApplicationFactory,
+    ReasonFactory,
+)
 from tests.factories.fake import fake
+from tests.controller.kubernetes import deployment_manifest
+from tests.controller.kubernetes.test_tosca import (
+    create_tosca_from_resources,
+    CSAR_META,
+)
 
 
 async def test_create_application(aiohttp_client, config, db):
@@ -111,8 +121,10 @@ async def test_add_finalizer_in_deleted_application(aiohttp_client, config, db):
     )
     assert resp.status == 409
     body = await resp.json()
-    assert body["detail"] == "Finalizers can only be removed" \
-                             " if a deletion is in progress."
+    assert (
+        body["detail"] == "Finalizers can only be removed"
+        " if a deletion is in progress."
+    )
 
 
 async def test_delete_application_rbac(rbac_allow, config, aiohttp_client):
@@ -524,6 +536,221 @@ async def test_update_application_immutable_field(aiohttp_client, config, db):
     assert problem.detail == "Trying to update an immutable field: namespace"
 
 
+async def test_create_application_tosca_from_dict(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    tosca = create_tosca_from_resources([deployment_manifest])
+    data = ApplicationFactory(
+        status=None,
+        spec__manifest=[],
+        spec__tosca=tosca,
+    )
+
+    resp = await client.post(
+        "/kubernetes/namespaces/testing/applications", json=data.serialize()
+    )
+    assert resp.status == 200
+    received = Application.deserialize(await resp.json())
+
+    assert received.metadata.created
+    assert received.metadata.modified
+    assert received.metadata.namespace == "testing"
+    assert received.metadata.uid
+    assert received.status.state == ApplicationState.PENDING
+    assert received.spec == data.spec
+
+    stored = await db.get(Application, namespace="testing", name=data.metadata.name)
+    assert stored == received
+
+
+async def test_create_application_tosca_from_url(
+    aiohttp_client, config, db, file_server
+):
+    client = await aiohttp_client(create_app(config=config))
+
+    tosca_url = file_server(create_tosca_from_resources([deployment_manifest]))
+    data = ApplicationFactory(
+        status=None,
+        spec__manifest=[],
+        spec__tosca=tosca_url,
+    )
+
+    resp = await client.post(
+        "/kubernetes/namespaces/testing/applications", json=data.serialize()
+    )
+    assert resp.status == 200
+    received = Application.deserialize(await resp.json())
+
+    assert received.metadata.created
+    assert received.metadata.modified
+    assert received.metadata.namespace == "testing"
+    assert received.metadata.uid
+    assert received.status.state == ApplicationState.PENDING
+    assert received.spec == data.spec
+
+    stored = await db.get(Application, namespace="testing", name=data.metadata.name)
+    assert stored == received
+
+
+async def test_create_application_csar_from_url(
+    aiohttp_client, config, db, archive_files, file_server
+):
+    client = await aiohttp_client(create_app(config=config))
+
+    tosca = create_tosca_from_resources([deployment_manifest])
+    csar_path = archive_files(
+        archive_name="archive.csar",
+        files=[
+            ("tosca.yaml", tosca),
+            (
+                "TOSCA-Metadata/TOSCA.meta",
+                CSAR_META.format(entry_definition="tosca.yaml"),
+            ),
+        ],
+    )
+    csar_url = file_server(csar_path, file_name="example.csar")
+    data = ApplicationFactory(
+        status=None,
+        spec__manifest=[],
+        spec__csar=csar_url,
+    )
+
+    resp = await client.post(
+        "/kubernetes/namespaces/testing/applications", json=data.serialize()
+    )
+    assert resp.status == 200
+    received = Application.deserialize(await resp.json())
+
+    assert received.metadata.created
+    assert received.metadata.modified
+    assert received.metadata.namespace == "testing"
+    assert received.metadata.uid
+    assert received.status.state == ApplicationState.PENDING
+    assert received.spec == data.spec
+
+    stored = await db.get(Application, namespace="testing", name=data.metadata.name)
+    assert stored == received
+
+
+async def test_update_application_tosca_from_dict(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+
+    tosca = create_tosca_from_resources([deployment_manifest])
+    data = ApplicationFactory(
+        spec__manifest=[deployment_manifest],
+        spec__tosca=tosca,
+        status__state=ApplicationState.PENDING,
+    )
+    await db.put(data)
+    updated_tosca = copy.deepcopy(tosca)
+    updated_tosca["topology_template"]["node_templates"][
+        deployment_manifest["metadata"]["name"]
+    ]["properties"]["spec"] = new_manifest[0]
+    data.spec.manifest = []
+    data.spec.tosca = updated_tosca
+    data.spec.observer_schema = [new_observer_schema[0]]
+
+    resp = await client.put(
+        f"/kubernetes/namespaces/testing/applications/{data.metadata.name}",
+        json=data.serialize(),
+    )
+    assert resp.status == 200
+    received = Application.deserialize(await resp.json())
+
+    assert received.api == "kubernetes"
+    assert received.kind == "Application"
+    assert data.metadata.modified < received.metadata.modified
+    assert received.status.state == data.status.state
+    assert received.spec.tosca == updated_tosca
+    assert received.spec.observer_schema == [new_observer_schema[0]]
+
+    stored = await db.get(Application, namespace="testing", name=data.metadata.name)
+    assert stored == received
+
+
+async def test_update_application_tosca_from_url(
+    aiohttp_client, config, db, file_server
+):
+    client = await aiohttp_client(create_app(config=config))
+
+    tosca_url = file_server(create_tosca_from_resources([deployment_manifest]))
+    data = ApplicationFactory(
+        spec__manifest=[deployment_manifest],
+        spec__tosca=tosca_url,
+        status__state=ApplicationState.PENDING,
+    )
+    await db.put(data)
+    # Update CSAR URL
+    tosca_updated = fake.url() + "tosca_updated.yaml"
+    data.spec.manifest = []
+    data.spec.tosca = tosca_updated
+    data.spec.observer_schema = [new_observer_schema[0]]
+
+    resp = await client.put(
+        f"/kubernetes/namespaces/testing/applications/{data.metadata.name}",
+        json=data.serialize(),
+    )
+    assert resp.status == 200
+    received = Application.deserialize(await resp.json())
+
+    assert received.api == "kubernetes"
+    assert received.kind == "Application"
+    assert data.metadata.modified < received.metadata.modified
+    assert received.status.state == data.status.state
+    assert received.spec.tosca == tosca_updated
+    assert received.spec.observer_schema == [new_observer_schema[0]]
+
+    stored = await db.get(Application, namespace="testing", name=data.metadata.name)
+    assert stored == received
+
+
+async def test_update_application_csar_from_url(
+    aiohttp_client, config, db, archive_files, file_server
+):
+    client = await aiohttp_client(create_app(config=config))
+
+    tosca = create_tosca_from_resources([deployment_manifest])
+    csar_path = archive_files(
+        archive_name="archive.csar",
+        files=[
+            ("tosca.yaml", tosca),
+            (
+                "TOSCA-Metadata/TOSCA.meta",
+                CSAR_META.format(entry_definition="tosca.yaml"),
+            ),
+        ],
+    )
+    csar_url = file_server(csar_path, file_name="example.csar")
+    data = ApplicationFactory(
+        spec__manifest=[deployment_manifest],
+        spec__csar=csar_url,
+        status__state=ApplicationState.PENDING,
+    )
+    await db.put(data)
+    # Update CSAR URL
+    csar_updated = fake.url() + "csar_updated.csar"
+    data.spec.manifest = []
+    data.spec.csar = csar_updated
+    data.spec.observer_schema = [new_observer_schema[0]]
+
+    resp = await client.put(
+        f"/kubernetes/namespaces/testing/applications/{data.metadata.name}",
+        json=data.serialize(),
+    )
+    assert resp.status == 200
+    received = Application.deserialize(await resp.json())
+
+    assert received.api == "kubernetes"
+    assert received.kind == "Application"
+    assert data.metadata.modified < received.metadata.modified
+    assert received.status.state == data.status.state
+    assert received.spec.csar == csar_updated
+    assert received.spec.observer_schema == [new_observer_schema[0]]
+
+    stored = await db.get(Application, namespace="testing", name=data.metadata.name)
+    assert stored == received
+
+
 async def test_update_application_binding(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
@@ -656,7 +883,7 @@ async def test_update_application_shutdown(aiohttp_client, config, db):
     data = ApplicationFactory(
         status__shutdown_token=token,
         status__state=ApplicationState.WAITING_FOR_CLEANING,
-        metadata__deleted=now()
+        metadata__deleted=now(),
     )
     await db.put(data)
 
@@ -698,7 +925,7 @@ async def test_retry_application_shutdown(aiohttp_client, config, db):
     data = ApplicationFactory(
         status__shutdown_token=token,
         status__state=ApplicationState.DEGRADED,
-        metadata__deleted=now()
+        metadata__deleted=now(),
     )
     await db.put(data)
 
@@ -724,7 +951,7 @@ async def test_retry_application_shutdown_wrong_state(aiohttp_client, config, db
     app = ApplicationFactory(
         status__shutdown_token=token,
         status__state=ApplicationState.RUNNING,
-        metadata__deleted=now()
+        metadata__deleted=now(),
     )
     await db.put(app)
 
@@ -881,8 +1108,10 @@ async def test_add_finalizer_in_deleted_cluster(aiohttp_client, config, db):
     )
     assert resp.status == 409
     body = await resp.json()
-    assert body["detail"] == "Finalizers can only be removed" \
-                             " if a deletion is in progress."
+    assert (
+        body["detail"] == "Finalizers can only be removed"
+        " if a deletion is in progress."
+    )
 
 
 async def test_delete_cluster_rbac(rbac_allow, config, aiohttp_client):

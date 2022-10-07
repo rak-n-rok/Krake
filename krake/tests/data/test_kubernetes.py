@@ -35,13 +35,17 @@ def test_application_cluster_constraints_null_error_handling():
 
 
 def test_application_manifest_empty_error_handling():
-    """Ensure that empty manifests are seen as invalid."""
+    """Ensure that empty manifests and tosca and csar are seen as invalid."""
     with pytest.raises(
         ValidationError,
-        match="The application should be described by non empty manifest file"
-        " or by non empty TOSCA template.",
+        match="The application should be defined by the manifest file"
+        " or by the TOSCA template or by the CSAR file.",
     ):
-        ApplicationFactory(spec__manifest=[])
+        ApplicationFactory(
+            spec__manifest=[],
+            spec__tosca={},
+            spec__csar=None,
+        )
 
 
 def test_application_manifest_invalid_structure_error_handling():
@@ -482,9 +486,9 @@ def test_observer_schema_init_invalid_custom_not_in_manifest():
         yaml.safe_load_all(
             """---
             apiVersion: v1
-            kind: NotInManifestResource
+            kind: UnknownResource
             metadata:
-              name: not-in-manifest-resource-name
+              name: resource
               namespace: null
             """
         )

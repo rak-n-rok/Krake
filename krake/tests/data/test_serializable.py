@@ -37,6 +37,7 @@ class Book(Serializable):
     name: str
     author: Person
     characters: List[Person] = field(default_factory=list)
+    edition: Union[str, dict] = field(default=None)
 
 
 def test_serializable():
@@ -118,6 +119,33 @@ def test_list_attr():
 
     assert data["characters"][1]["given_name"] == "Ford"
     assert data["characters"][1]["surname"] == "Perfect"
+
+
+def test_union_attr():
+    book_first_edition = Book(
+        id=42,
+        name="The Hitchhiker's Guide to the Galaxy",
+        author=None,
+        edition="First",
+    )
+    book_second_edition = Book(
+        id=42,
+        name="The Hitchhiker's Guide to the Galaxy",
+        author=None,
+        edition={"edition": "Second"},
+    )
+    data_first_edition = book_first_edition.serialize()
+    data_second_edition = book_second_edition.serialize()
+
+    assert data_first_edition["id"] == data_second_edition["id"] == 42
+    assert (
+        data_first_edition["name"]
+        == data_second_edition["name"]
+        == "The Hitchhiker's Guide to the Galaxy"
+    )
+    assert data_first_edition["author"] == data_first_edition["author"] is None
+    assert data_first_edition["edition"] == "First"
+    assert data_second_edition["edition"] == "{'edition': 'Second'}"
 
 
 def test_update():
@@ -481,10 +509,17 @@ def test_is_generic_subtype():
     assert is_generic_subtype(List[int], List)
     assert is_generic_subtype(List[int], List[int])
     assert is_generic_subtype(List, List)
+    assert is_generic_subtype(Union, Union)
+    assert is_generic_subtype(Union[int, dict], Union)
+    assert is_generic_subtype(Union[int, dict], Union[int, dict])
 
     assert not is_generic_subtype(List[int], Dict)
     assert not is_generic_subtype(List[int], List[str])
     assert not is_generic_subtype(List, List[int])
+    assert not is_generic_subtype(Union[int, dict], Union[int, str])
+    assert not is_generic_subtype(Union, Union[int, dict])
+    assert not is_generic_subtype(Union[int, dict], Dict)
+    assert not is_generic_subtype(List, Union[int, dict])
 
 
 def test_schema_validation():

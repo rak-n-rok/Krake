@@ -20,7 +20,11 @@ import requests
 import pytest
 import aiohttp
 import shutil
+
+import werkzeug
+import yaml
 from aiohttp import web
+
 from krake.controller import create_ssl_context
 from prometheus_async import aio
 from prometheus_client import Gauge, CollectorRegistry, CONTENT_TYPE_LATEST
@@ -974,10 +978,12 @@ def hooks_config(pki):
         HooksConfiguration: the generated configuration.
 
     """
-    client_complete_cert = pki.gencert("test-complete-hook-signing",
-                                       is_intermediate=True)
-    client_shutdown_cert = pki.gencert("test-shutdown-hook-signing",
-                                       is_intermediate=True)
+    client_complete_cert = pki.gencert(
+        "test-complete-hook-signing", is_intermediate=True
+    )
+    client_shutdown_cert = pki.gencert(
+        "test-shutdown-hook-signing", is_intermediate=True
+    )
     return deepcopy(
         HooksConfiguration.deserialize(
             {
@@ -996,7 +1002,7 @@ def hooks_config(pki):
                     "cert_dest": "/etc/krake_shutdown_certs",
                     "env_token": "KRAKE_SHUTDOWN_TOKEN",
                     "env_url": "KRAKE_SHUTDOWN_URL",
-                }
+                },
             }
         )
     )
@@ -1507,3 +1513,99 @@ async def ksql(kafka, tmp_path, loop):
             yield KsqlServer(host=ksql_host, port=ksql_port, kafka_table=kafka_table)
         finally:
             ksql.terminate()
+
+
+@pytest.fixture
+def file_server(httpserver):
+    """Start http server with endpoint to get the given file.
+
+    Given file could be `dict` or a regular file.
+
+    Example:
+        .. code:: python
+
+            import requests
+
+            def test_get_file(file_server):
+                file_url = file_server({"foo": "bar"})
+                resp = requests.get(file_url)
+                assert resp.json() == {"foo": "bar"}
+
+    """
+
+    def serve_file(file, file_name="example.yaml"):
+        def handler(request):
+            """Return a web response with the file content."""
+            if isinstance(file, dict):
+                return werkzeug.Response(json.dumps(file).encode())
+            else:
+                return werkzeug.Response(open(file, "rb"))
+
+        httpserver.expect_request(f"/{file_name}").respond_with_handler(handler)
+
+        return httpserver.url_for(f"/{file_name}")
+
+    return serve_file
+
+
+@pytest.fixture
+def archive_files(tmp_path):
+    """Archive given files to the ZIP archive.
+
+    Files should be given in format:
+        [(<file_name>, <file_content>)]
+
+    File content could be given as `dict` or as a regular file.
+
+    Example:
+        .. code:: python
+
+            import zipfile
+            import yaml
+
+            def test_archive_file(archive_files, tmp_path):
+                archive_path = archive_files([("example.yaml", {"foo": "bar"})])
+
+                extracted = tmp_path / "extracted"
+                with zipfile.ZipFile(archive_path) as zip_fd:
+                    zip_fd.extractall(extracted)
+
+                with open(extracted / "example.yaml") as fd:
+                    assert yaml.safe_load(fd) == {"foo": "bar"}
+
+    """
+
+    def create_archive(files, archive_name="example.zip"):
+        archive_path = tmp_path / archive_name
+        for name, path_content in files:
+            file_path = None
+            try:
+                if os.path.exists(path_content):
+                    file_path = path_content
+            except TypeError:
+                pass
+
+            if not file_path:
+                if isinstance(path_content, dict):
+                    file_path = tmp_path / name
+                    # ensure that parents exist
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(file_path, "w") as yaml_fd:
+                        yaml.safe_dump(path_content, yaml_fd)
+
+                elif isinstance(path_content, str):
+                    file_path = tmp_path / name
+                    # ensure that parents exist
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(file_path, "w") as str_fd:
+                        str_fd.write(path_content)
+
+                else:
+                    raise ValueError(f"Given {path_content} could not be archived.")
+
+            with ZipFile(archive_path, "a") as archive_fd:
+                archive_fd.write(file_path, name)
+
+        return archive_path
+
+    return create_archive

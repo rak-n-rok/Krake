@@ -47,6 +47,10 @@ from krake.controller.kubernetes.hooks import (
 from krake.client import Client
 from krake.test_utils import server_endpoint, with_timeout, serialize_k8s_object
 from krake import utils
+from tests.controller.kubernetes.test_tosca import (
+    create_tosca_from_resources,
+    CSAR_META,
+)
 
 from tests.factories.fake import fake
 from tests.factories.kubernetes import (
@@ -325,6 +329,160 @@ async def test_app_creation(aiohttp_server, config, db, loop):
         status__scheduled_to=resource_ref(cluster),
         status__is_scheduled=False,
         spec__manifest=[deployment_manifest],
+        spec__observer_schema=[custom_deployment_observer_schema],
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        controller = KubernetesApplicationController(
+            server_endpoint(api_server), worker_count=0
+        )
+        await controller.prepare(client)
+
+        # The resource is received by the controller, which starts the reconciliation
+        # loop, and updates the application in the DB accordingly.
+        await controller.resource_received(app, start_observer=False)
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored.status.last_observed_manifest == [
+        initial_last_observed_manifest_deployment
+    ]
+    assert stored.status.state == ApplicationState.RUNNING
+    assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
+
+
+@pytest.mark.parametrize("tosca_from", ["dict", "url"])
+async def test_app_creation_tosca_from_dict_url(
+    aiohttp_server, config, db, loop, tosca_from, file_server
+):
+    """Test the creation of an application defined by TOSCA template as dict or as URL
+
+    The Kubernetes Controller should create the application and update the DB.
+
+    """
+
+    routes = web.RouteTableDef()
+    tosca_dict = create_tosca_from_resources([deployment_manifest])
+    if tosca_from == "dict":
+        tosca = tosca_dict
+    elif tosca_from == "url":
+        tosca = file_server(tosca_dict)
+    else:
+        raise ValueError(f"{tosca_from} source not supported.")
+
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a Deployment named `nginx-demo` already exists.
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
+    async def _(request):
+        # No `nginx-demo` Deployment exist
+        return web.Response(status=404)
+
+    # As part of the reconciliation loop, the k8s controller creates the `nginx-demo`
+    # Deployment
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
+    async def _(request):
+        # As a response, the k8s API provides the full Deployment object
+        return web.json_response(deployment_response)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    # When received by the k8s controller, the application is in PENDING state and
+    # scheduled to a cluster. It contains a manifest and a custom observer_schema.
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
+        spec__manifest=[],
+        spec__tosca=tosca,
+        spec__observer_schema=[custom_deployment_observer_schema],
+    )
+    await db.put(cluster)
+    await db.put(app)
+
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        controller = KubernetesApplicationController(
+            server_endpoint(api_server), worker_count=0
+        )
+        await controller.prepare(client)
+
+        # The resource is received by the controller, which starts the reconciliation
+        # loop, and updates the application in the DB accordingly.
+        await controller.resource_received(app, start_observer=False)
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored.status.last_observed_manifest == [
+        initial_last_observed_manifest_deployment
+    ]
+    assert stored.status.state == ApplicationState.RUNNING
+    assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
+
+
+async def test_app_creation_csar_from_url(
+    aiohttp_server, config, db, loop, archive_files, file_server
+):
+    """Test the creation of an application defined by CSAR URL
+
+    The Kubernetes Controller should create the application and update the DB.
+
+    """
+
+    routes = web.RouteTableDef()
+    tosca = create_tosca_from_resources([deployment_manifest])
+    csar_path = archive_files(
+        archive_name="archive.csar",
+        files=[
+            ("tosca.yaml", tosca),
+            (
+                "TOSCA-Metadata/TOSCA.meta",
+                CSAR_META.format(entry_definition="tosca.yaml"),
+            ),
+        ],
+    )
+    csar_url = file_server(csar_path, file_name="example.csar")
+
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if a Deployment named `nginx-demo` already exists.
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
+    async def _(request):
+        # No `nginx-demo` Deployment exist
+        return web.Response(status=404)
+
+    # As part of the reconciliation loop, the k8s controller creates the `nginx-demo`
+    # Deployment
+    @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
+    async def _(request):
+        # As a response, the k8s API provides the full Deployment object
+        return web.json_response(deployment_response)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    # When received by the k8s controller, the application is in PENDING state and
+    # scheduled to a cluster. It contains a manifest and a custom observer_schema.
+    app = ApplicationFactory(
+        status__state=ApplicationState.PENDING,
+        status__scheduled_to=resource_ref(cluster),
+        status__is_scheduled=False,
+        spec__manifest=[],
+        spec__csar=csar_url,
         spec__observer_schema=[custom_deployment_observer_schema],
     )
     await db.put(cluster)
@@ -819,6 +977,348 @@ async def test_app_update(aiohttp_server, config, db, loop):
         ],
         spec__observer_schema=[nginx_observer_schema_2, nginx_observer_schema_3],
         spec__manifest=[nginx_manifest_2, nginx_manifest_3],
+    )
+
+    await db.put(cluster)
+    await db.put(app)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesApplicationController(
+            server_endpoint(server), worker_count=0
+        )
+        await controller.prepare(client)
+
+        # The resource is received by the controller, which starts the reconciliation
+        # loop, and updates the application in the DB accordingly.
+        await controller.resource_received(app, start_observer=False)
+
+    assert deleted == {"nginx-demo-1"}
+    assert patched == {"nginx-demo-2"}
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored.status.last_observed_manifest == [
+        nginx_target_last_observed_manifest_2,
+        nginx_target_last_observed_manifest_3,
+    ]
+    assert stored.status.state == ApplicationState.RUNNING
+    assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
+
+
+@pytest.mark.parametrize("tosca_from", ["dict", "url"])
+async def test_app_update_tosca_from_dict_url(
+    aiohttp_server, config, db, loop, tosca_from, file_server
+):
+    """Test the update of a running application by TOSCA template as dict or as URL
+
+    The Kubernetes Controller should patch the application and update the DB.
+
+    """
+    routes = web.RouteTableDef()
+
+    deleted = set()
+    patched = set()
+
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if the Deployments named `nginx-demo-1`, `nginx-demo-2`
+    # and `nginx-demo-3` already exists.
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/{name}")
+    async def _(request):
+        # The three Deployments already exist
+        deployments = ("nginx-demo-1", "nginx-demo-2", "nginx-demo-3")
+        if request.match_info["name"] in deployments:
+            # Personalize the name of the Deployment in the k8s API response
+            response = deepcopy(deployment_response)
+            response["metadata"]["name"] = request.match_info["name"]
+            return web.json_response(response)
+
+        # The endpoint shouldn't be called for another Deployment
+        assert False
+
+    # As part of the reconciliation loop, the k8s controller patch the existing
+    # Deployment which has been modified.
+    @routes.patch("/apis/apps/v1/namespaces/secondary/deployments/{name}")
+    async def _(request):
+        deployment_request = request.match_info["name"]
+        # Personalize the response: The name should match the name of Deployment which
+        # is patched, and the image of the `nginx-demo-2` Deployment is modified by the
+        # patch
+        response = deepcopy(deployment_response)
+        response["metadata"]["name"] = request.match_info["name"]
+        if deployment_request == "nginx-demo-2":
+            response["spec"]["template"]["spec"]["containers"][0]["image"] = "nginx:1.6"
+        patched.add(request.match_info["name"])
+        return web.json_response(response)
+
+    # As part the reconciliation loop, the k8s controller deletes the Deployment which
+    # are not present in the manifest file anymore.
+    @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/{name}")
+    async def _(request):
+        deleted.add(request.match_info["name"])
+        return web.Response(status=200)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    # Craft a last_observed_manifest, reflecting the resources previously created via
+    # Krake: 3 Deployments
+    nginx_initial_last_observed_manifest_1 = deepcopy(
+        initial_last_observed_manifest_deployment
+    )
+    nginx_initial_last_observed_manifest_1["metadata"]["name"] = "nginx-demo-1"
+
+    nginx_initial_last_observed_manifest_2 = deepcopy(
+        initial_last_observed_manifest_deployment
+    )
+    nginx_initial_last_observed_manifest_2["metadata"]["name"] = "nginx-demo-2"
+
+    nginx_initial_last_observed_manifest_3 = deepcopy(
+        initial_last_observed_manifest_deployment
+    )
+    nginx_initial_last_observed_manifest_3["metadata"]["name"] = "nginx-demo-3"
+
+    # Craft the new manifest file of the application:
+    # - nginx-demo-1 has been deleted
+    # - nginx-demo-2 has been modified
+    # - nginx-demo-3 has not changed
+    # Also set the number of replicas to 1, as this field is observed by the custom
+    # observer schema
+    nginx_manifest_2 = deepcopy(deployment_manifest)
+    nginx_manifest_2["metadata"]["name"] = "nginx-demo-2"
+    nginx_manifest_2["spec"]["replicas"] = 1
+    nginx_manifest_2["spec"]["template"]["spec"]["containers"][0]["image"] = "nginx:1.6"
+
+    nginx_manifest_3 = deepcopy(deployment_manifest)
+    nginx_manifest_3["metadata"]["name"] = "nginx-demo-3"
+    nginx_manifest_3["spec"]["replicas"] = 1
+
+    # Craft a custom observer schema matching the two resources defined in
+    # spec.manifest
+    nginx_observer_schema_2 = deepcopy(custom_deployment_observer_schema)
+    nginx_observer_schema_2["metadata"]["name"] = "nginx-demo-2"
+
+    nginx_observer_schema_3 = deepcopy(custom_deployment_observer_schema)
+    nginx_observer_schema_3["metadata"]["name"] = "nginx-demo-3"
+
+    # Craft the last_observed_manifest as it should be after the reconciliation loop:
+    # - nginx-demo-1 is absent
+    # - nginx-demo-2 container image is "nginx:1.6"
+    # - nginx-demo-3 is not modified
+    nginx_target_last_observed_manifest_2 = deepcopy(
+        initial_last_observed_manifest_deployment
+    )
+    nginx_target_last_observed_manifest_2["metadata"]["name"] = "nginx-demo-2"
+    nginx_target_last_observed_manifest_2["spec"]["template"]["spec"]["containers"][0][
+        "image"
+    ] = "nginx:1.6"
+
+    nginx_target_last_observed_manifest_3 = deepcopy(
+        initial_last_observed_manifest_deployment
+    )
+    nginx_target_last_observed_manifest_3["metadata"]["name"] = "nginx-demo-3"
+
+    tosca_dict_updated = create_tosca_from_resources(
+        [nginx_manifest_2, nginx_manifest_3]
+    )
+    if tosca_from == "dict":
+        tosca_updated = tosca_dict_updated
+    elif tosca_from == "url":
+        tosca_updated = file_server(tosca_dict_updated)
+    else:
+        raise ValueError(f"{tosca_from} source not supported.")
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.RUNNING,
+        status__is_scheduled=True,
+        status__running_on=resource_ref(cluster),
+        status__scheduled_to=resource_ref(cluster),
+        status__last_observed_manifest=[
+            nginx_initial_last_observed_manifest_1,
+            nginx_initial_last_observed_manifest_2,
+            nginx_initial_last_observed_manifest_3,
+        ],
+        spec__observer_schema=[nginx_observer_schema_2, nginx_observer_schema_3],
+        spec__manifest=[],
+        spec__tosca=tosca_updated,
+    )
+
+    await db.put(cluster)
+    await db.put(app)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesApplicationController(
+            server_endpoint(server), worker_count=0
+        )
+        await controller.prepare(client)
+
+        # The resource is received by the controller, which starts the reconciliation
+        # loop, and updates the application in the DB accordingly.
+        await controller.resource_received(app, start_observer=False)
+
+    assert deleted == {"nginx-demo-1"}
+    assert patched == {"nginx-demo-2"}
+
+    stored = await db.get(
+        Application, namespace=app.metadata.namespace, name=app.metadata.name
+    )
+    assert stored.status.last_observed_manifest == [
+        nginx_target_last_observed_manifest_2,
+        nginx_target_last_observed_manifest_3,
+    ]
+    assert stored.status.state == ApplicationState.RUNNING
+    assert stored.metadata.finalizers[-1] == "kubernetes_resources_deletion"
+
+
+async def test_app_update_csar_from_url(
+    aiohttp_server, config, db, loop, archive_files, file_server
+):
+    """Test the update of a running application by CSAR URL
+
+    The Kubernetes Controller should patch the application and update the DB.
+
+    """
+    routes = web.RouteTableDef()
+
+    deleted = set()
+    patched = set()
+
+    # As part of the reconciliation loop started by ``controller.resource_received``,
+    # the k8s controller checks if the Deployments named `nginx-demo-1`, `nginx-demo-2`
+    # and `nginx-demo-3` already exists.
+    @routes.get("/apis/apps/v1/namespaces/secondary/deployments/{name}")
+    async def _(request):
+        # The three Deployments already exist
+        deployments = ("nginx-demo-1", "nginx-demo-2", "nginx-demo-3")
+        if request.match_info["name"] in deployments:
+            # Personalize the name of the Deployment in the k8s API response
+            response = deepcopy(deployment_response)
+            response["metadata"]["name"] = request.match_info["name"]
+            return web.json_response(response)
+
+        # The endpoint shouldn't be called for another Deployment
+        assert False
+
+    # As part of the reconciliation loop, the k8s controller patch the existing
+    # Deployment which has been modified.
+    @routes.patch("/apis/apps/v1/namespaces/secondary/deployments/{name}")
+    async def _(request):
+        deployment_request = request.match_info["name"]
+        # Personalize the response: The name should match the name of Deployment which
+        # is patched, and the image of the `nginx-demo-2` Deployment is modified by the
+        # patch
+        response = deepcopy(deployment_response)
+        response["metadata"]["name"] = request.match_info["name"]
+        if deployment_request == "nginx-demo-2":
+            response["spec"]["template"]["spec"]["containers"][0]["image"] = "nginx:1.6"
+        patched.add(request.match_info["name"])
+        return web.json_response(response)
+
+    # As part the reconciliation loop, the k8s controller deletes the Deployment which
+    # are not present in the manifest file anymore.
+    @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/{name}")
+    async def _(request):
+        deleted.add(request.match_info["name"])
+        return web.Response(status=200)
+
+    kubernetes_app = web.Application()
+    kubernetes_app.add_routes(routes)
+
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+
+    # Craft a last_observed_manifest, reflecting the resources previously created via
+    # Krake: 3 Deployments
+    nginx_initial_last_observed_manifest_1 = deepcopy(
+        initial_last_observed_manifest_deployment
+    )
+    nginx_initial_last_observed_manifest_1["metadata"]["name"] = "nginx-demo-1"
+
+    nginx_initial_last_observed_manifest_2 = deepcopy(
+        initial_last_observed_manifest_deployment
+    )
+    nginx_initial_last_observed_manifest_2["metadata"]["name"] = "nginx-demo-2"
+
+    nginx_initial_last_observed_manifest_3 = deepcopy(
+        initial_last_observed_manifest_deployment
+    )
+    nginx_initial_last_observed_manifest_3["metadata"]["name"] = "nginx-demo-3"
+
+    # Craft the new manifest file of the application:
+    # - nginx-demo-1 has been deleted
+    # - nginx-demo-2 has been modified
+    # - nginx-demo-3 has not changed
+    # Also set the number of replicas to 1, as this field is observed by the custom
+    # observer schema
+    nginx_manifest_2 = deepcopy(deployment_manifest)
+    nginx_manifest_2["metadata"]["name"] = "nginx-demo-2"
+    nginx_manifest_2["spec"]["replicas"] = 1
+    nginx_manifest_2["spec"]["template"]["spec"]["containers"][0]["image"] = "nginx:1.6"
+
+    nginx_manifest_3 = deepcopy(deployment_manifest)
+    nginx_manifest_3["metadata"]["name"] = "nginx-demo-3"
+    nginx_manifest_3["spec"]["replicas"] = 1
+
+    # Craft a custom observer schema matching the two resources defined in
+    # spec.manifest
+    nginx_observer_schema_2 = deepcopy(custom_deployment_observer_schema)
+    nginx_observer_schema_2["metadata"]["name"] = "nginx-demo-2"
+
+    nginx_observer_schema_3 = deepcopy(custom_deployment_observer_schema)
+    nginx_observer_schema_3["metadata"]["name"] = "nginx-demo-3"
+
+    # Craft the last_observed_manifest as it should be after the reconciliation loop:
+    # - nginx-demo-1 is absent
+    # - nginx-demo-2 container image is "nginx:1.6"
+    # - nginx-demo-3 is not modified
+    nginx_target_last_observed_manifest_2 = deepcopy(
+        initial_last_observed_manifest_deployment
+    )
+    nginx_target_last_observed_manifest_2["metadata"]["name"] = "nginx-demo-2"
+    nginx_target_last_observed_manifest_2["spec"]["template"]["spec"]["containers"][0][
+        "image"
+    ] = "nginx:1.6"
+
+    nginx_target_last_observed_manifest_3 = deepcopy(
+        initial_last_observed_manifest_deployment
+    )
+    nginx_target_last_observed_manifest_3["metadata"]["name"] = "nginx-demo-3"
+
+    tosca_updated = create_tosca_from_resources([nginx_manifest_2, nginx_manifest_3])
+    csar_path = archive_files(
+        archive_name="archive.csar",
+        files=[
+            ("tosca.yaml", tosca_updated),
+            (
+                "TOSCA-Metadata/TOSCA.meta",
+                CSAR_META.format(entry_definition="tosca.yaml"),
+            ),
+        ],
+    )
+    csar_url = file_server(csar_path, file_name="example.csar")
+
+    app = ApplicationFactory(
+        status__state=ApplicationState.RUNNING,
+        status__is_scheduled=True,
+        status__running_on=resource_ref(cluster),
+        status__scheduled_to=resource_ref(cluster),
+        status__last_observed_manifest=[
+            nginx_initial_last_observed_manifest_1,
+            nginx_initial_last_observed_manifest_2,
+            nginx_initial_last_observed_manifest_3,
+        ],
+        spec__observer_schema=[nginx_observer_schema_2, nginx_observer_schema_3],
+        spec__manifest=[],
+        spec__csar=csar_url,
     )
 
     await db.put(cluster)
