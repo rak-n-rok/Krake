@@ -1,7 +1,7 @@
 import os
 from collections import defaultdict
 
-from functionals.utils import KRAKE_HOMEDIR, run
+from functionals.utils import KRAKE_HOMEDIR
 from functionals.resource_definitions import (
     ClusterDefinition,
     ApplicationDefinition,
@@ -94,8 +94,12 @@ class Environment(object):
     """
 
     def __init__(
-        self, resources, before_handlers=None, after_handlers=None,
-        creation_delay=10, ignore_check=False
+        self,
+        resources,
+        before_handlers=None,
+        after_handlers=None,
+        creation_delay=10,
+        ignore_check=False,
     ):
         # Dictionary: "priority: list of resources to create"
         self.res_to_create = resources
@@ -179,18 +183,30 @@ class Environment(object):
 
 
 def create_simple_environment(
-    cluster_name, kubeconfig_path, app_name, manifest_path, observer_schema_path=None
+    cluster_name,
+    kubeconfig_path,
+    app_name,
+    manifest_path=None,
+    tosca_path=None,
+    csar_path=None,
+    observer_schema_path=None,
 ):
     """Create the resource definitions for a test environment with one Cluster and one
     Application. The Cluster should be created first, and is thus given a higher
     priority.
+
+    Resource should be described by :args:`manifest_path` or by :args:`tosca_path`
 
     Args:
         cluster_name (PathLike): name of the kubernetes cluster that will be created
         kubeconfig_path (PathLike): path to the kubeconfig file for the cluster to
             create.
         app_name (PathLike): name of the Application to create.
-        manifest_path (PathLike): path to the manifest file that should be used to
+        manifest_path (PathLike, optional): path to the manifest file that should
+            be used to create the Application.
+        tosca_path (PathLike, optional): path to the TOSCA file that should be used to
+            create the Application.
+        csar_path (PathLike, optional): path to the CSAR file that should be used to
             create the Application.
         observer_schema_path (PathLike, optional): path to the observer_schema file
             that should be used by the Kubernetes Observer
@@ -199,12 +215,17 @@ def create_simple_environment(
         dict: an environment definition to use to create a test environment.
 
     """
+    assert (
+        manifest_path or tosca_path or csar_path
+    ), "Resource should be described by Kubernetes manifest or TOSCA or CSAR"
     return {
         10: [ClusterDefinition(name=cluster_name, kubeconfig_path=kubeconfig_path)],
         0: [
             ApplicationDefinition(
                 name=app_name,
                 manifest_path=manifest_path,
+                tosca_path=tosca_path,
+                csar_path=csar_path,
                 observer_schema_path=observer_schema_path,
             )
         ],
@@ -217,6 +238,8 @@ def create_multiple_cluster_environment(
     metrics=None,
     app_name=None,
     manifest_path=None,
+    tosca_path=None,
+    csar_path=None,
     app_cluster_constraints=None,
     app_migration=None,
 ):
@@ -236,6 +259,10 @@ def create_multiple_cluster_environment(
         app_name (str, optional): name of the Application to create.
         manifest_path (PathLike, optional): path to the manifest file that
             should be used to create the Application.
+        tosca_path (PathLike, optional): path to the TOSCA file that should be used to
+            create the Application.
+        csar_path (PathLike, optional): path to the CSAR file that should be used to
+            create the Application.
         app_cluster_constraints (list[str], optional): list of cluster constraints
             for the Application to create.
         app_migration (bool, optional): migration flag indicating whether the
@@ -286,6 +313,8 @@ def create_multiple_cluster_environment(
             ApplicationDefinition(
                 name=app_name,
                 manifest_path=manifest_path,
+                tosca_path=tosca_path,
+                csar_path=csar_path,
                 constraints=app_cluster_constraints,
                 migration=app_migration,
             )

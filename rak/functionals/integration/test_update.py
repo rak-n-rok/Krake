@@ -14,6 +14,10 @@ Application are present. The general workflow is as follow:
  * A request is sent to delete the Application, then the Cluster.
 """
 import random
+import shutil
+import tempfile
+import zipfile
+from pathlib import Path
 
 import yaml
 from functionals.utils import (
@@ -171,7 +175,7 @@ def test_update_cluster_kubeconfig(minikube_clusters):
 
     # Get the content of the kubeconfig file to compare with the updated value on the
     # API.
-    other_kubeconfig_path = f"{KRAKE_HOMEDIR}/clusters/config/{other_cluster}"
+    other_kubeconfig_path = f"{CLUSTERS_CONFIGS}/{other_cluster}"
     with open(other_kubeconfig_path, "r") as file:
         other_content = yaml.safe_load(file)
 
@@ -253,13 +257,17 @@ def test_update_cluster_labels(minikube_clusters):
 
 def test_update_no_changes(minikube_clusters):
     """In the test environment, attempt to update the Cluster with the same kubeconfig,
-    and the Application with the same manifest file. As the update does not change any
-    field of the resources, the update should be rejected in both cases.
+    and the Application with the same manifest file or TOSCA file.
+    As the update does not change any field of the resources,
+    the update should be rejected in both cases.
 
     1. the Cluster is updated with the same kubeconfig, it should return an HTTP 400
        error code.
     2. the Application is updated with the same manifest file, it should return an HTTP
     400 error code.
+    3. the Application is updated with the TOSCA file, that contains the
+    same application definition as the manifest file.
+    It should return an HTTP 400 error code.
 
     Args:
         minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
@@ -269,6 +277,7 @@ def test_update_no_changes(minikube_clusters):
 
     kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
     manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
+    tosca_path = f"{MANIFEST_PATH}/echo-demo-tosca.yaml"
 
     environment = create_simple_environment(
         minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
@@ -284,8 +293,369 @@ def test_update_no_changes(minikube_clusters):
             condition=check_http_code_in_output(400),
         )
 
-        # 2. "Update" the Application (no change is sent)
+        # 2. "Update" the Application with the same manifest file (no change is sent)
         run(
             f"rok kube app update {app.name} -f {manifest_path}",
             condition=check_http_code_in_output(400),
         )
+
+        # 3. "Update" the Application with TOSCA file that contains the same application
+        #   definition as the manifest file
+        run(
+            f"rok kube app update {app.name} -f {tosca_path}",
+            condition=check_http_code_in_output(400),
+        )
+
+
+def test_update_application_tosca(minikube_clusters):
+    """In the test environment, update the Application with a new TOSCA template.
+    The previous TOSCA template has an echo server image with a version 1.10.
+    The updated TOSCA reverts it to the version 1.9.
+
+    The test has the following workflow:
+
+    1. the Application is updated with another TOSCA, that changes its container
+       image;
+    2. the new state of the Application on the API is checked, to see if the image
+       changed;
+    3. the new state of the k8s resource is checked on the actual cluster to see if the
+       image changed;
+    4. the new state of the Application on the API is checked, to see if the number of
+       replicas changed;
+    5. the new state of the k8s resource is checked on the actual cluster to see if the
+       number of replicas changed.
+    Args:
+        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+
+    """
+    minikube_cluster = random.choice(minikube_clusters)
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+
+    tosca_path = f"{MANIFEST_PATH}/echo-demo-tosca.yaml"
+    tosca_update_path = f"{MANIFEST_PATH}/echo-demo-update-tosca.yaml"
+    environment = create_simple_environment(
+        minikube_cluster, kubeconfig_path, "echo-demo", tosca_path=tosca_path
+    )
+
+    with Environment(environment) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
+
+        # 1. Update the Application
+        error_message = f"The Application {app.name} could not be updated."
+        run(
+            f"rok kube app update {app.name} -f {tosca_update_path}",
+            condition=check_return_code(error_message),
+        )
+
+        # 2. Check that the image version has been changed on the API
+        app_details = app.get_resource()
+        manifest_spec = app_details["spec"]["manifest"][0]["spec"]["template"]["spec"]
+        container_image = manifest_spec["containers"][0]["image"]
+
+        assert container_image == "k8s.gcr.io/echoserver:1.9"
+
+        # 3. Check that the image version has been changed on the cluster
+        expected_image = "k8s.gcr.io/echoserver:1.9"
+        error_message = (
+            f"The image of the container of deployment {app.name}"
+            f" should have been updated to {expected_image}."
+        )
+        run(
+            f"kubectl --kubeconfig {kubeconfig_path} get deployment {app.name} -o json",
+            condition=check_spec_container_image(expected_image, error_message),
+        )
+
+        # 4. Check that the number of replicas has been changed on the API
+        replicas = app_details["spec"]["manifest"][0]["spec"].get("replicas")
+        expected_replicas = 2
+        assert replicas == expected_replicas
+
+        # 5. Check that the number of replicas has been changed on the cluster
+        error_message = (
+            f"The number of replicas of deployment {app.name}"
+            f"should have been updated to {expected_replicas}."
+        )
+        run(
+            f"kubectl --kubeconfig {kubeconfig_path} get deployment {app.name} -o json",
+            condition=check_spec_replicas(expected_replicas, error_message),
+        )
+
+
+def test_update_application_csar(minikube_clusters):
+    """In the test environment, update the Application with a new CSAR file.
+    The previous CSAR file has an echo server image with a version 1.10.
+    The updated CSAR file reverts it to the version 1.9.
+
+    The test has the following workflow:
+
+    1. the Application is updated with another CSAR file that changes its container
+       image;
+    2. the new state of the Application on the API is checked, to see if the image
+       changed;
+    3. the new state of the k8s resource is checked on the actual cluster to see if the
+       image changed;
+    4. the new state of the Application on the API is checked, to see if the number of
+       replicas changed;
+    5. the new state of the k8s resource is checked on the actual cluster to see if the
+       number of replicas changed.
+    Args:
+        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+
+    """
+    minikube_cluster = random.choice(minikube_clusters)
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+
+    tmpdir = Path(tempfile.mkdtemp())
+    csar_path = tmpdir / "echo-demo.csar"
+    csar_updated_path = tmpdir / "echo-demo-updated.csar"
+
+    meta_path = Path(f"{MANIFEST_PATH}/TOSCA-Metadata/TOSCA.meta")
+    tosca_path = Path(f"{MANIFEST_PATH}/echo-demo-tosca.yaml")
+    tosca_update_path = f"{MANIFEST_PATH}/echo-demo-update-tosca.yaml"
+
+    try:
+        # Create CSAR from TOSCA template and related meta
+        with zipfile.ZipFile(csar_path, "w") as csar:
+            csar.write(meta_path.parent, meta_path.parent.name)
+            csar.write(meta_path, f"{meta_path.parent.name}/{meta_path.name}")
+            csar.write(tosca_path, tosca_path.name)
+
+        # Create CSAR from updated TOSCA template and related meta
+        with zipfile.ZipFile(csar_updated_path, "w") as csar_updated:
+            csar_updated.write(meta_path.parent, meta_path.parent.name)
+            csar_updated.write(meta_path, f"{meta_path.parent.name}/{meta_path.name}")
+            # Add updated TOSCA template to the archive and use the origin TOSCA name
+            # due to Entry-Definitions in TOSCA.meta file
+            csar_updated.write(tosca_update_path, tosca_path.name)
+
+        environment = create_simple_environment(
+            minikube_cluster, kubeconfig_path, "echo-demo", csar_path=csar_path
+        )
+
+        with Environment(environment) as env:
+            app = env.resources[ResourceKind.APPLICATION][0]
+
+            # 1. Update the Application
+            error_message = f"The Application {app.name} could not be updated."
+            run(
+                f"rok kube app update {app.name} -f {csar_updated_path}",
+                condition=check_return_code(error_message),
+            )
+
+            # 2. Check that the image version has been changed on the API
+            app_details = app.get_resource()
+            manifest_spec = app_details["spec"]["manifest"][0]["spec"]["template"][
+                "spec"
+            ]
+            container_image = manifest_spec["containers"][0]["image"]
+
+            assert container_image == "k8s.gcr.io/echoserver:1.9"
+
+            # 3. Check that the image version has been changed on the cluster
+            expected_image = "k8s.gcr.io/echoserver:1.9"
+            error_message = (
+                f"The image of the container of deployment {app.name}"
+                f" should have been updated to {expected_image}."
+            )
+            run(
+                f"kubectl --kubeconfig {kubeconfig_path}"
+                f" get deployment {app.name} -o json",
+                condition=check_spec_container_image(expected_image, error_message),
+            )
+
+            # 4. Check that the number of replicas has been changed on the API
+            replicas = app_details["spec"]["manifest"][0]["spec"].get("replicas")
+            expected_replicas = 2
+            assert replicas == expected_replicas
+
+            # 5. Check that the number of replicas has been changed on the cluster
+            error_message = (
+                f"The number of replicas of deployment {app.name}"
+                f"should have been updated to {expected_replicas}."
+            )
+            run(
+                f"kubectl --kubeconfig {kubeconfig_path}"
+                f" get deployment {app.name} -o json",
+                condition=check_spec_replicas(expected_replicas, error_message),
+            )
+    finally:
+        # Always remove temp dir that contains CSAR archives
+        shutil.rmtree(tmpdir)
+
+
+def test_update_manifest_application_by_tosca(minikube_clusters):
+    """In the test environment (where the application is created by manifest file),
+    update the Application with a new TOSCA template. The previous manifest file
+    has an echo server image with a version 1.10. The TOSCA template reverts
+    it to the version 1.9.
+
+    The test has the following workflow:
+
+    0. the Application is created with the manifest file
+       (within :func:`create_simple_environment`)
+    1. the Application is updated with TOSCA manifest, that changes its container
+       image;
+    2. the new state of the Application on the API is checked, to see if the image
+       changed;
+    3. the new state of the k8s resource is checked on the actual cluster to see if the
+       image changed;
+    4. the new state of the Application on the API is checked, to see if the number of
+       replicas changed;
+    5. the new state of the k8s resource is checked on the actual cluster to see if the
+       number of replicas changed.
+    Args:
+        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+
+    """
+    minikube_cluster = random.choice(minikube_clusters)
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+
+    manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
+    tosca_update_path = f"{MANIFEST_PATH}/echo-demo-update-tosca.yaml"
+    # 0. the Application is created with the manifest file
+    environment = create_simple_environment(
+        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
+    )
+
+    with Environment(environment) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
+
+        # 1. Update the Application with TOSCA template
+        error_message = f"The Application {app.name} could not be updated."
+        run(
+            f"rok kube app update {app.name} -f {tosca_update_path}",
+            condition=check_return_code(error_message),
+        )
+
+        # 2. Check that the image version has been changed on the API
+        app_details = app.get_resource()
+        manifest_spec = app_details["spec"]["manifest"][0]["spec"]["template"]["spec"]
+        container_image = manifest_spec["containers"][0]["image"]
+
+        assert container_image == "k8s.gcr.io/echoserver:1.9"
+
+        # 3. Check that the image version has been changed on the cluster
+        expected_image = "k8s.gcr.io/echoserver:1.9"
+        error_message = (
+            f"The image of the container of deployment {app.name}"
+            f" should have been updated to {expected_image}."
+        )
+        run(
+            f"kubectl --kubeconfig {kubeconfig_path} get deployment {app.name} -o json",
+            condition=check_spec_container_image(expected_image, error_message),
+        )
+
+        # 4. Check that the number of replicas has been changed on the API
+        replicas = app_details["spec"]["manifest"][0]["spec"].get("replicas")
+        expected_replicas = 2
+        assert replicas == expected_replicas
+
+        # 5. Check that the number of replicas has been changed on the cluster
+        error_message = (
+            f"The number of replicas of deployment {app.name}"
+            f"should have been updated to {expected_replicas}."
+        )
+        run(
+            f"kubectl --kubeconfig {kubeconfig_path} get deployment {app.name} -o json",
+            condition=check_spec_replicas(expected_replicas, error_message),
+        )
+
+
+def test_update_manifest_application_by_csar(minikube_clusters):
+    """In the test environment (where the application is created by manifest file),
+    update the Application with a new CSAR file. The previous manifest file
+    has an echo server image with a version 1.10. The CSAR file reverts
+    it to the version 1.9.
+
+    The test has the following workflow:
+
+    0. the Application is created with the manifest file
+       (within :func:`create_simple_environment`)
+    1. the Application is updated with CSAR, that changes its container
+       image;
+    2. the new state of the Application on the API is checked, to see if the image
+       changed;
+    3. the new state of the k8s resource is checked on the actual cluster to see if the
+       image changed;
+    4. the new state of the Application on the API is checked, to see if the number of
+       replicas changed;
+    5. the new state of the k8s resource is checked on the actual cluster to see if the
+       number of replicas changed.
+    Args:
+        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+
+    """
+    minikube_cluster = random.choice(minikube_clusters)
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+
+    tmpdir = Path(tempfile.mkdtemp())
+    csar_updated_path = tmpdir / "echo-demo-updated.csar"
+
+    manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
+    meta_path = Path(f"{MANIFEST_PATH}/TOSCA-Metadata/TOSCA.meta")
+    tosca_path = Path(f"{MANIFEST_PATH}/echo-demo-tosca.yaml")
+    tosca_update_path = f"{MANIFEST_PATH}/echo-demo-update-tosca.yaml"
+
+    try:
+        # Create CSAR from updated TOSCA template and related meta
+        with zipfile.ZipFile(csar_updated_path, "w") as csar_updated:
+            csar_updated.write(meta_path.parent, meta_path.parent.name)
+            csar_updated.write(meta_path, f"{meta_path.parent.name}/{meta_path.name}")
+            # Add updated TOSCA template to the archive and use the origin TOSCA name
+            # due to Entry-Definitions in TOSCA.meta file
+            csar_updated.write(tosca_update_path, tosca_path.name)
+
+        # 0. the Application is created with the manifest file
+        environment = create_simple_environment(
+            minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
+        )
+
+        with Environment(environment) as env:
+            app = env.resources[ResourceKind.APPLICATION][0]
+
+            # 1. Update the Application with CSAR file
+            error_message = f"The Application {app.name} could not be updated."
+            run(
+                f"rok kube app update {app.name} -f {csar_updated_path}",
+                condition=check_return_code(error_message),
+            )
+
+            # 2. Check that the image version has been changed on the API
+            app_details = app.get_resource()
+            manifest_spec = app_details["spec"]["manifest"][0]["spec"]["template"][
+                "spec"
+            ]
+            container_image = manifest_spec["containers"][0]["image"]
+
+            assert container_image == "k8s.gcr.io/echoserver:1.9"
+
+            # 3. Check that the image version has been changed on the cluster
+            expected_image = "k8s.gcr.io/echoserver:1.9"
+            error_message = (
+                f"The image of the container of deployment {app.name}"
+                f" should have been updated to {expected_image}."
+            )
+            run(
+                f"kubectl --kubeconfig {kubeconfig_path} "
+                f"get deployment {app.name} -o json",
+                condition=check_spec_container_image(expected_image, error_message),
+            )
+
+            # 4. Check that the number of replicas has been changed on the API
+            replicas = app_details["spec"]["manifest"][0]["spec"].get("replicas")
+            expected_replicas = 2
+            assert replicas == expected_replicas
+
+            # 5. Check that the number of replicas has been changed on the cluster
+            error_message = (
+                f"The number of replicas of deployment {app.name}"
+                f"should have been updated to {expected_replicas}."
+            )
+            run(
+                f"kubectl --kubeconfig {kubeconfig_path} "
+                f"get deployment {app.name} -o json",
+                condition=check_spec_replicas(expected_replicas, error_message),
+            )
+    finally:
+        # Always remove temp dir that contains CSAR archives
+        shutil.rmtree(tmpdir)

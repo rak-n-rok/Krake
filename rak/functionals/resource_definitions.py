@@ -49,8 +49,10 @@ class ResourceDefinition(ABC):
         if not name:
             raise ValueError("name must be provided")
         if bool(namespace) != kind.is_namespaced():
-            raise ValueError(f"kind {kind!r} does not support namespace, "
-                             f"but {namespace!r} was provided")
+            raise ValueError(
+                f"kind {kind!r} does not support namespace, "
+                f"but {namespace!r} was provided"
+            )
         self.name = name
         self.namespace = namespace
         self.kind = kind
@@ -421,7 +423,10 @@ class ApplicationDefinition(ResourceDefinition):
 
     Args:
         name (str): name of the application
-        manifest_path (str): path to the manifest file to use for the creation.
+        manifest_path (str, optional): path to the manifest file to use for the
+            creation.
+        tosca_path (str, optional): path to the TOSCA file to use for the creation.
+        csar_path (str, optional): path to the CSAR file to use for the creation.
         constraints (list[str], optional): list of cluster label constraints
             to use for the creation of the application.
         labels (dict[str, str]): dict of application labels and their values
@@ -435,7 +440,9 @@ class ApplicationDefinition(ResourceDefinition):
     def __init__(
         self,
         name,
-        manifest_path,
+        manifest_path=None,
+        tosca_path=None,
+        csar_path=None,
         constraints=None,
         labels=None,
         hooks=None,
@@ -444,8 +451,19 @@ class ApplicationDefinition(ResourceDefinition):
         namespace=DEFAULT_NAMESPACE,
     ):
         super().__init__(name=name, kind=ResourceKind.APPLICATION, namespace=namespace)
-        assert os.path.isfile(manifest_path), f"{manifest_path} is not a file."
+        assert (
+            manifest_path or tosca_path or csar_path
+        ), "Resource should be described by Kubernetes manifest or TOSCA or CSAR"
+        if manifest_path:
+            assert os.path.isfile(manifest_path), f"{manifest_path} is not a file."
+        if tosca_path:
+            assert os.path.isfile(tosca_path), f"{tosca_path} is not a file."
+        if csar_path:
+            assert os.path.isfile(csar_path), f"{csar_path} is not a file."
+
         self.manifest_path = manifest_path
+        self.tosca_path = tosca_path
+        self.csar_path = csar_path
         self.cluster_label_constraints = constraints or []
         self.labels = labels or {}
         self.hooks = hooks or []
@@ -473,14 +491,14 @@ class ApplicationDefinition(ResourceDefinition):
         }
 
     def creation_command(self, wait):
-
+        app_definition = self.manifest_path or self.tosca_path or self.csar_path
         if wait:
             cmd = (
-                f"rok kube app create -f {self.manifest_path} "
+                f"rok kube app create -f {app_definition} "
                 f"{self.name} --wait".split()
             )
         else:
-            cmd = f"rok kube app create -f {self.manifest_path} {self.name}".split()
+            cmd = f"rok kube app create -f {app_definition} {self.name}".split()
 
         cmd += self._get_cluster_label_constraint_options(
             self.cluster_label_constraints
