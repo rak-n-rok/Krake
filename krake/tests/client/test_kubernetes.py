@@ -1,3 +1,7 @@
+import copy
+import json
+from zipfile import ZipFile
+
 import yaml
 from operator import attrgetter
 
@@ -84,7 +88,9 @@ async def test_list_applications(aiohttp_server, config, db, loop):
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         kubernetes_api = KubernetesApi(client)
-        received = await kubernetes_api.list_applications(namespace="testing")
+        received = await kubernetes_api.list_applications(
+            namespace="testing",
+        )
 
     assert received.api == "kubernetes"
     assert received.kind == "ApplicationList"
@@ -110,7 +116,9 @@ async def test_watch_applications(aiohttp_server, config, db, loop):
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         kubernetes_api = KubernetesApi(client)
-        async with kubernetes_api.watch_applications(namespace="testing") as watcher:
+        async with kubernetes_api.watch_applications(
+            namespace="testing",
+        ) as watcher:
             modifying = loop.create_task(modify())
 
             async for i, event in aenumerate(watcher):
@@ -248,6 +256,159 @@ async def test_update_application(aiohttp_server, config, db, loop):
         kubernetes_api = KubernetesApi(client)
         received = await kubernetes_api.update_application(
             namespace=data.metadata.namespace, name=data.metadata.name, body=data
+        )
+
+    assert received.api == "kubernetes"
+    assert received.kind == "Application"
+    assert data.metadata.modified < received.metadata.modified
+    assert received.spec.manifest == updated_manifest
+    assert received.status.state == data.status.state
+
+    stored = await db.get(
+        Application, namespace=data.metadata.namespace, name=data.metadata.name
+    )
+    assert stored.spec.manifest == updated_manifest
+    assert stored.spec.observer_schema == updated_observer_schema
+    assert stored.status.state == data.status.state
+
+
+async def test_create_application_tosca(
+    aiohttp_server, config, db, loop, tosca, tosca_pod
+):
+    data = ApplicationFactory(
+        status=None,
+        spec__manifest=[],
+        spec__tosca=tosca,
+        status__state=ApplicationState.RUNNING,
+    )
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        kubernetes_api = KubernetesApi(client)
+        received = await kubernetes_api.create_application(
+            namespace=data.metadata.namespace, body=data
+        )
+
+    assert received.api == "kubernetes"
+    assert received.kind == "Application"
+    assert received.metadata.name == data.metadata.name
+    assert received.metadata.namespace == "testing"
+    assert received.metadata.created
+    assert received.metadata.modified
+    assert received.spec.manifest == [tosca_pod]
+
+    stored = await db.get(
+        Application, namespace=data.metadata.namespace, name=data.metadata.name
+    )
+    assert stored == received
+
+
+async def test_create_application_csar(
+    aiohttp_server, config, db, loop, csar, tosca_pod
+):
+    data = ApplicationFactory(
+        status=None,
+        spec__manifest=[],
+        spec__csar=csar,
+        status__state=ApplicationState.RUNNING,
+    )
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        kubernetes_api = KubernetesApi(client)
+        received = await kubernetes_api.create_application(
+            namespace=data.metadata.namespace, body=data, multipart=[open(csar, "rb")]
+        )
+
+    assert received.api == "kubernetes"
+    assert received.kind == "Application"
+    assert received.metadata.name == data.metadata.name
+    assert received.metadata.namespace == "testing"
+    assert received.metadata.created
+    assert received.metadata.modified
+    assert received.spec.manifest == [tosca_pod]
+
+    stored = await db.get(
+        Application, namespace=data.metadata.namespace, name=data.metadata.name
+    )
+    assert stored == received
+
+
+async def test_update_application_tosca(
+    aiohttp_server, config, db, loop, tosca, tosca_pod
+):
+    data = ApplicationFactory(
+        spec__manifest=[tosca_pod],
+        spec__tosca=tosca,
+        status__state=ApplicationState.RUNNING,
+    )
+    await db.put(data)
+    new_tosca_template = copy.deepcopy(tosca)
+    new_tosca_template["topology_template"]["node_templates"]["example-pod"][
+        "properties"
+    ]["spec"] = updated_manifest[0]
+    data.spec.manifest = []
+    data.spec.tosca = new_tosca_template
+    data.spec.observer_schema = updated_observer_schema
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        kubernetes_api = KubernetesApi(client)
+        received = await kubernetes_api.update_application(
+            namespace=data.metadata.namespace, name=data.metadata.name, body=data
+        )
+
+    assert received.api == "kubernetes"
+    assert received.kind == "Application"
+    assert data.metadata.modified < received.metadata.modified
+    assert received.spec.manifest == updated_manifest
+    assert received.status.state == data.status.state
+
+    stored = await db.get(
+        Application, namespace=data.metadata.namespace, name=data.metadata.name
+    )
+    assert stored.spec.manifest == updated_manifest
+    assert stored.spec.observer_schema == updated_observer_schema
+    assert stored.status.state == data.status.state
+
+
+async def test_update_application_csar(
+    aiohttp_server, config, db, loop, csar, tosca_pod, tosca, tmp_path
+):
+    data = ApplicationFactory(
+        spec__manifest=[tosca_pod],
+        spec__csar=csar,
+        status__state=ApplicationState.RUNNING,
+    )
+    await db.put(data)
+    data.spec.manifest = []
+    data.spec.observer_schema = updated_observer_schema
+    # Update CSAR
+    csar_updated = tmp_path / "updated.csar"
+    with ZipFile(csar) as csar_fd:
+        with ZipFile(csar_updated, "w") as csar_updated_fd:
+            for file in csar_fd.infolist():
+                if file.filename.endswith(".yaml"):  # update the TOSCA template
+                    new_tosca_template = copy.deepcopy(tosca)
+                    new_tosca_template["topology_template"]["node_templates"][
+                        "example-pod"
+                    ]["properties"]["spec"] = updated_manifest[0]
+                    csar_updated_fd.writestr(file, json.dumps(new_tosca_template))
+                else:
+                    csar_updated_fd.writestr(file, csar_fd.read(file.filename))
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        kubernetes_api = KubernetesApi(client)
+        received = await kubernetes_api.update_application(
+            namespace=data.metadata.namespace,
+            name=data.metadata.name,
+            body=data,
+            multipart=[open(csar_updated, "rb")],
         )
 
     assert received.api == "kubernetes"

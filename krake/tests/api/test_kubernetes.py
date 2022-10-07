@@ -1,5 +1,11 @@
 import asyncio
+import copy
 import json
+from zipfile import ZipFile
+
+import pytest
+
+import aiohttp
 import pytz
 import yaml
 from itertools import count
@@ -23,17 +29,31 @@ from krake.data.kubernetes import (
     ClusterState,
 )
 
-from tests.factories.kubernetes import ClusterFactory, ApplicationFactory, ReasonFactory
+from tests.factories.kubernetes import (
+    ClusterFactory,
+    ApplicationFactory,
+    ReasonFactory,
+)
 from tests.factories.fake import fake
 
 
-async def test_create_application(aiohttp_client, config, db):
+@pytest.mark.parametrize("multipart", [True, False])
+async def test_create_application(aiohttp_client, config, db, multipart):
     client = await aiohttp_client(create_app(config=config))
 
     data = ApplicationFactory(status=None)
 
+    # POST/PUT requests could be sent as a multipart media type
+    request_kwargs = {}
+    if multipart:
+        with aiohttp.MultipartWriter() as multipart_data:
+            multipart_data.append_json(data.serialize())
+        request_kwargs.update({"data": multipart_data})
+    else:
+        request_kwargs.update({"json": data.serialize()})
+
     resp = await client.post(
-        "/kubernetes/namespaces/testing/applications", json=data.serialize()
+        "/kubernetes/namespaces/testing/applications", **request_kwargs
     )
     assert resp.status == 200
     received = Application.deserialize(await resp.json())
@@ -111,8 +131,10 @@ async def test_add_finalizer_in_deleted_application(aiohttp_client, config, db):
     )
     assert resp.status == 409
     body = await resp.json()
-    assert body["detail"] == "Finalizers can only be removed" \
-                             " if a deletion is in progress."
+    assert (
+        body["detail"] == "Finalizers can only be removed"
+        " if a deletion is in progress."
+    )
 
 
 async def test_delete_application_rbac(rbac_allow, config, aiohttp_client):
@@ -357,7 +379,6 @@ async def test_read_application(aiohttp_client, config, db):
     resp = await client.get(
         f"/kubernetes/namespaces/testing/applications/{data.metadata.name}"
     )
-
     assert resp.status == 200
     received = Application.deserialize(await resp.json())
     assert received == data
@@ -428,7 +449,8 @@ metadata:
 )
 
 
-async def test_update_application(aiohttp_client, config, db):
+@pytest.mark.parametrize("multipart", [True, False])
+async def test_update_application(aiohttp_client, config, db, multipart):
     client = await aiohttp_client(create_app(config=config))
 
     data = ApplicationFactory(status__state=ApplicationState.PENDING)
@@ -436,9 +458,18 @@ async def test_update_application(aiohttp_client, config, db):
     data.spec.manifest = new_manifest
     data.spec.observer_schema = new_observer_schema
 
+    # POST/PUT requests could be sent as a multipart media type
+    request_kwargs = {}
+    if multipart:
+        with aiohttp.MultipartWriter() as multipart_data:
+            multipart_data.append_json(data.serialize())
+        request_kwargs.update({"data": multipart_data})
+    else:
+        request_kwargs.update({"json": data.serialize()})
+
     resp = await client.put(
         f"/kubernetes/namespaces/testing/applications/{data.metadata.name}",
-        json=data.serialize(),
+        **request_kwargs,
     )
     assert resp.status == 200
     received = Application.deserialize(await resp.json())
@@ -524,7 +555,174 @@ async def test_update_application_immutable_field(aiohttp_client, config, db):
     assert problem.detail == "Trying to update an immutable field: namespace"
 
 
-async def test_update_application_binding(aiohttp_client, config, db):
+@pytest.mark.parametrize("multipart", [True, False])
+async def test_create_application_tosca(
+    aiohttp_client, config, db, tosca, tosca_pod, multipart
+):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = ApplicationFactory(
+        status=None,
+        spec__manifest=[],
+        spec__tosca=tosca,
+    )
+
+    # POST/PUT requests could be sent as a multipart media type
+    request_kwargs = {}
+    if multipart:
+        with aiohttp.MultipartWriter() as multipart_data:
+            multipart_data.append_json(data.serialize())
+        request_kwargs.update({"data": multipart_data})
+    else:
+        request_kwargs.update({"json": data.serialize()})
+
+    resp = await client.post(
+        "/kubernetes/namespaces/testing/applications", **request_kwargs
+    )
+    assert resp.status == 200
+    received = Application.deserialize(await resp.json())
+
+    assert received.metadata.created
+    assert received.metadata.modified
+    assert received.metadata.namespace == "testing"
+    assert received.metadata.uid
+    assert received.spec.manifest == [tosca_pod]
+    assert received.status.state == ApplicationState.PENDING
+
+    stored = await db.get(Application, namespace="testing", name=data.metadata.name)
+    assert stored == received
+
+
+async def test_create_application_csar(aiohttp_client, config, db, csar, tosca_pod):
+    client = await aiohttp_client(create_app(config=config))
+
+    data = ApplicationFactory(
+        status=None,
+        spec__manifest=[],
+        spec__csar=csar,
+    )
+
+    with aiohttp.MultipartWriter() as multipart_data:
+        multipart_data.append_json(data.serialize())
+        multipart_data.append(open(csar, "rb"))
+
+    resp = await client.post(
+        "/kubernetes/namespaces/testing/applications", data=multipart_data
+    )
+    assert resp.status == 200
+    received = Application.deserialize(await resp.json())
+
+    assert received.metadata.created
+    assert received.metadata.modified
+    assert received.metadata.namespace == "testing"
+    assert received.metadata.uid
+    assert received.spec.manifest == [tosca_pod]
+    assert received.status.state == ApplicationState.PENDING
+
+    stored = await db.get(Application, namespace="testing", name=data.metadata.name)
+    assert stored == received
+
+
+@pytest.mark.parametrize("multipart", [True, False])
+async def test_update_application_tosca(
+    aiohttp_client, config, db, tosca, tosca_pod, multipart
+):
+    client = await aiohttp_client(create_app(config=config))
+
+    # MISSING Resource-specific elements can be set here
+    data = ApplicationFactory(
+        spec__manifest=[tosca_pod],
+        spec__tosca=tosca,
+        status__state=ApplicationState.PENDING,
+    )
+    await db.put(data)
+    new_tosca_template = copy.deepcopy(tosca)
+    new_tosca_template["topology_template"]["node_templates"]["example-pod"][
+        "properties"
+    ]["spec"] = new_manifest[0]
+    data.spec.manifest = []
+    data.spec.tosca = new_tosca_template
+    data.spec.observer_schema = [new_observer_schema[0]]
+
+    # POST/PUT requests could be sent as a multipart media type
+    request_kwargs = {}
+    if multipart:
+        with aiohttp.MultipartWriter() as multipart_data:
+            multipart_data.append_json(data.serialize())
+        request_kwargs.update({"data": multipart_data})
+    else:
+        request_kwargs.update({"json": data.serialize()})
+
+    resp = await client.put(
+        f"/kubernetes/namespaces/testing/applications/{data.metadata.name}",
+        **request_kwargs,
+    )
+    assert resp.status == 200
+    received = Application.deserialize(await resp.json())
+
+    assert received.api == "kubernetes"
+    assert received.kind == "Application"
+    assert data.metadata.modified < received.metadata.modified
+    assert received.status.state == data.status.state
+    assert received.spec.manifest == [new_manifest[0]]
+    assert received.spec.observer_schema == [new_observer_schema[0]]
+
+    stored = await db.get(Application, namespace="testing", name=data.metadata.name)
+    assert stored == received
+
+
+async def test_update_application_csar(
+    aiohttp_client, config, db, csar, tosca_pod, tosca, tmp_path
+):
+    client = await aiohttp_client(create_app(config=config))
+
+    # MISSING Resource-specific elements can be set here
+    data = ApplicationFactory(
+        spec__manifest=[tosca_pod],
+        spec__csar=csar,
+        status__state=ApplicationState.PENDING,
+    )
+    await db.put(data)
+    data.spec.manifest = []
+    data.spec.observer_schema = [new_observer_schema[0]]
+    # Update CSAR
+    csar_updated = tmp_path / "updated.csar"
+    with ZipFile(csar) as csar_fd:
+        with ZipFile(csar_updated, "w") as csar_updated_fd:
+            for file in csar_fd.infolist():
+                if file.filename.endswith(".yaml"):  # update the TOSCA template
+                    new_tosca_template = copy.deepcopy(tosca)
+                    new_tosca_template["topology_template"]["node_templates"][
+                        "example-pod"
+                    ]["properties"]["spec"] = new_manifest[0]
+                    csar_updated_fd.writestr(file, json.dumps(new_tosca_template))
+                else:
+                    csar_updated_fd.writestr(file, csar_fd.read(file.filename))
+
+    with aiohttp.MultipartWriter() as multipart_data:
+        multipart_data.append_json(data.serialize())
+        multipart_data.append(open(csar_updated, "rb"))
+
+    resp = await client.put(
+        f"/kubernetes/namespaces/testing/applications/{data.metadata.name}",
+        data=multipart_data,
+    )
+    assert resp.status == 200
+    received = Application.deserialize(await resp.json())
+
+    assert received.api == "kubernetes"
+    assert received.kind == "Application"
+    assert data.metadata.modified < received.metadata.modified
+    assert received.status.state == data.status.state
+    assert received.spec.manifest == [new_manifest[0]]
+    assert received.spec.observer_schema == [new_observer_schema[0]]
+
+    stored = await db.get(Application, namespace="testing", name=data.metadata.name)
+    assert stored == received
+
+
+@pytest.mark.parametrize("multipart", [True, False])
+async def test_update_application_binding(aiohttp_client, config, db, multipart):
     client = await aiohttp_client(create_app(config=config))
 
     data = ApplicationFactory(status__state=ApplicationState.PENDING)
@@ -540,9 +738,18 @@ async def test_update_application_binding(aiohttp_client, config, db):
     cluster_ref = resource_ref(cluster)
     binding = ClusterBinding(cluster=cluster_ref)
 
+    # POST/PUT requests could be sent as a multipart media type
+    request_kwargs = {}
+    if multipart:
+        with aiohttp.MultipartWriter() as multipart_data:
+            multipart_data.append_json(binding.serialize())
+        request_kwargs.update({"data": multipart_data})
+    else:
+        request_kwargs.update({"json": binding.serialize()})
+
     resp = await client.put(
         f"/kubernetes/namespaces/testing/applications/{data.metadata.name}/binding",
-        json=binding.serialize(),
+        **request_kwargs,
     )
     assert resp.status == 200
     received = Application.deserialize(await resp.json())
@@ -576,7 +783,8 @@ async def test_update_application_binding_rbac(rbac_allow, config, aiohttp_clien
         assert resp.status == 415
 
 
-async def test_update_application_complete(aiohttp_client, config, db):
+@pytest.mark.parametrize("multipart", [True, False])
+async def test_update_application_complete(aiohttp_client, config, db, multipart):
     client = await aiohttp_client(create_app(config=config))
 
     token = token_urlsafe()
@@ -585,9 +793,18 @@ async def test_update_application_complete(aiohttp_client, config, db):
 
     complete = ApplicationComplete(token=token)
 
+    # POST/PUT requests could be sent as a multipart media type
+    request_kwargs = {}
+    if multipart:
+        with aiohttp.MultipartWriter() as multipart_data:
+            multipart_data.append_json(complete.serialize())
+        request_kwargs.update({"data": multipart_data})
+    else:
+        request_kwargs.update({"json": complete.serialize()})
+
     resp = await client.put(
         f"/kubernetes/namespaces/testing/applications/{data.metadata.name}/complete",
-        json=complete.serialize(),
+        **request_kwargs,
     )
     assert resp.status == 200
     received = Application.deserialize(await resp.json())
@@ -649,22 +866,32 @@ async def test_update_application_complete_rbac(rbac_allow, config, aiohttp_clie
         assert resp.status == 415
 
 
-async def test_update_application_shutdown(aiohttp_client, config, db):
+@pytest.mark.parametrize("multipart", [True, False])
+async def test_update_application_shutdown(aiohttp_client, config, db, multipart):
     client = await aiohttp_client(create_app(config=config))
 
     token = token_urlsafe()
     data = ApplicationFactory(
         status__shutdown_token=token,
         status__state=ApplicationState.WAITING_FOR_CLEANING,
-        metadata__deleted=now()
+        metadata__deleted=now(),
     )
     await db.put(data)
 
     shutdown = ApplicationShutdown(token=token)
 
+    # POST/PUT requests could be sent as a multipart media type
+    request_kwargs = {}
+    if multipart:
+        with aiohttp.MultipartWriter() as multipart_data:
+            multipart_data.append_json(shutdown.serialize())
+        request_kwargs.update({"data": multipart_data})
+    else:
+        request_kwargs.update({"json": shutdown.serialize()})
+
     resp = await client.put(
         f"/kubernetes/namespaces/testing/applications/{data.metadata.name}/shutdown",
-        json=shutdown.serialize(),
+        **request_kwargs,
     )
     assert resp.status == 200
     received = Application.deserialize(await resp.json())
@@ -698,7 +925,7 @@ async def test_retry_application_shutdown(aiohttp_client, config, db):
     data = ApplicationFactory(
         status__shutdown_token=token,
         status__state=ApplicationState.DEGRADED,
-        metadata__deleted=now()
+        metadata__deleted=now(),
     )
     await db.put(data)
 
@@ -724,7 +951,7 @@ async def test_retry_application_shutdown_wrong_state(aiohttp_client, config, db
     app = ApplicationFactory(
         status__shutdown_token=token,
         status__state=ApplicationState.RUNNING,
-        metadata__deleted=now()
+        metadata__deleted=now(),
     )
     await db.put(app)
 
@@ -740,7 +967,8 @@ async def test_retry_application_shutdown_wrong_state(aiohttp_client, config, db
     assert stored.metadata.deleted is not None
 
 
-async def test_update_application_status(aiohttp_client, config, db):
+@pytest.mark.parametrize("multipart", [True, False])
+async def test_update_application_status(aiohttp_client, config, db, multipart):
     client = await aiohttp_client(create_app(config=config))
 
     data = ApplicationFactory(status__state=ApplicationState.PENDING)
@@ -753,9 +981,18 @@ async def test_update_application_status(aiohttp_client, config, db):
     )
     data.status.services = {"service1": "127.0.0.1:38531"}
 
+    # POST/PUT requests could be sent as a multipart media type
+    request_kwargs = {}
+    if multipart:
+        with aiohttp.MultipartWriter() as multipart_data:
+            multipart_data.append_json(data.serialize())
+        request_kwargs.update({"data": multipart_data})
+    else:
+        request_kwargs.update({"json": data.serialize()})
+
     resp = await client.put(
         f"/kubernetes/namespaces/testing/applications/{data.metadata.name}/status",
-        json=data.serialize(),
+        **request_kwargs,
     )
     assert resp.status == 200
     received = Application.deserialize(await resp.json())
@@ -788,13 +1025,23 @@ async def test_update_application_status_rbac(rbac_allow, config, aiohttp_client
         assert resp.status == 415
 
 
-async def test_create_cluster(aiohttp_client, config, db):
+@pytest.mark.parametrize("multipart", [True, False])
+async def test_create_cluster(aiohttp_client, config, db, multipart):
     client = await aiohttp_client(create_app(config=config))
 
     data = ClusterFactory()
 
+    # POST/PUT requests could be sent as a multipart media type
+    request_kwargs = {}
+    if multipart:
+        with aiohttp.MultipartWriter() as multipart_data:
+            multipart_data.append_json(data.serialize())
+        request_kwargs.update({"data": multipart_data})
+    else:
+        request_kwargs.update({"json": data.serialize()})
+
     resp = await client.post(
-        "/kubernetes/namespaces/testing/clusters", json=data.serialize()
+        "/kubernetes/namespaces/testing/clusters", **request_kwargs
     )
     assert resp.status == 200
     received = Cluster.deserialize(await resp.json())
@@ -881,8 +1128,10 @@ async def test_add_finalizer_in_deleted_cluster(aiohttp_client, config, db):
     )
     assert resp.status == 409
     body = await resp.json()
-    assert body["detail"] == "Finalizers can only be removed" \
-                             " if a deletion is in progress."
+    assert (
+        body["detail"] == "Finalizers can only be removed"
+        " if a deletion is in progress."
+    )
 
 
 async def test_delete_cluster_rbac(rbac_allow, config, aiohttp_client):
@@ -1134,7 +1383,8 @@ async def test_read_cluster_rbac(rbac_allow, config, aiohttp_client):
         assert resp.status == 404
 
 
-async def test_update_cluster(aiohttp_client, config, db):
+@pytest.mark.parametrize("multipart", [True, False])
+async def test_update_cluster(aiohttp_client, config, db, multipart):
     client = await aiohttp_client(create_app(config=config))
 
     data = ClusterFactory(spec__custom_resources=[])
@@ -1142,9 +1392,18 @@ async def test_update_cluster(aiohttp_client, config, db):
     new_custom_resources = ["crontabs.stable.example.com"]
     data.spec.custom_resources = new_custom_resources
 
+    # POST/PUT requests could be sent as a multipart media type
+    request_kwargs = {}
+    if multipart:
+        with aiohttp.MultipartWriter() as multipart_data:
+            multipart_data.append_json(data.serialize())
+        request_kwargs.update({"data": multipart_data})
+    else:
+        request_kwargs.update({"json": data.serialize()})
+
     resp = await client.put(
         f"/kubernetes/namespaces/testing/clusters/{data.metadata.name}",
-        json=data.serialize(),
+        **request_kwargs,
     )
     assert resp.status == 200
     received = Cluster.deserialize(await resp.json())
@@ -1227,7 +1486,8 @@ async def test_update_cluster_immutable_field(aiohttp_client, config, db):
     assert problem.detail == "Trying to update an immutable field: namespace"
 
 
-async def test_update_cluster_status(aiohttp_client, config, db):
+@pytest.mark.parametrize("multipart", [True, False])
+async def test_update_cluster_status(aiohttp_client, config, db, multipart):
     client = await aiohttp_client(create_app(config=config))
 
     # MISSING Subresource-specific attributes can be set here
@@ -1237,9 +1497,18 @@ async def test_update_cluster_status(aiohttp_client, config, db):
     data.status.state = ClusterState.FAILING_METRICS
     data.status.metrics_reasons = {"my-metric": ReasonFactory()}
 
+    # POST/PUT requests could be sent as a multipart media type
+    request_kwargs = {}
+    if multipart:
+        with aiohttp.MultipartWriter() as multipart_data:
+            multipart_data.append_json(data.serialize())
+        request_kwargs.update({"data": multipart_data})
+    else:
+        request_kwargs.update({"json": data.serialize()})
+
     resp = await client.put(
         f"/kubernetes/namespaces/testing/clusters/{data.metadata.name}/status",
-        json=data.serialize(),
+        **request_kwargs,
     )
     assert resp.status == 200
     received = Cluster.deserialize(await resp.json())

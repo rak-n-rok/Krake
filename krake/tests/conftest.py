@@ -20,6 +20,8 @@ import requests
 import pytest
 import aiohttp
 import shutil
+
+import yaml
 from aiohttp import web
 from krake.controller import create_ssl_context
 from prometheus_async import aio
@@ -974,10 +976,12 @@ def hooks_config(pki):
         HooksConfiguration: the generated configuration.
 
     """
-    client_complete_cert = pki.gencert("test-complete-hook-signing",
-                                       is_intermediate=True)
-    client_shutdown_cert = pki.gencert("test-shutdown-hook-signing",
-                                       is_intermediate=True)
+    client_complete_cert = pki.gencert(
+        "test-complete-hook-signing", is_intermediate=True
+    )
+    client_shutdown_cert = pki.gencert(
+        "test-shutdown-hook-signing", is_intermediate=True
+    )
     return deepcopy(
         HooksConfiguration.deserialize(
             {
@@ -996,7 +1000,7 @@ def hooks_config(pki):
                     "cert_dest": "/etc/krake_shutdown_certs",
                     "env_token": "KRAKE_SHUTDOWN_TOKEN",
                     "env_url": "KRAKE_SHUTDOWN_URL",
-                }
+                },
             }
         )
     )
@@ -1507,3 +1511,98 @@ async def ksql(kafka, tmp_path, loop):
             yield KsqlServer(host=ksql_host, port=ksql_port, kafka_table=kafka_table)
         finally:
             ksql.terminate()
+
+
+@pytest.fixture
+def tosca_pod():
+    return yaml.safe_load(
+        """
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: nginx
+    spec:
+      containers:
+      - image: nginx:1.14.2
+        name: nginx
+        ports:
+        - containerPort: 80
+    """
+    )
+
+
+@pytest.fixture
+def tosca():
+    return yaml.safe_load(
+        """
+    tosca_definitions_version: tosca_simple_yaml_1_0
+
+    description: TOSCA template for launching an example Pod by Krake
+
+    data_types:
+      tosca.nodes.indigo.KubernetesObject:
+        derived_from: tosca.nodes.Root
+        properties:
+          spec:
+            type: string
+            description: The YAML description of the K8s object
+            required: true
+
+    topology_template:
+      inputs:
+        container_port:
+          type: integer
+          description: Container port
+          default: 80
+
+      node_templates:
+        example-pod:
+          type: tosca.nodes.indigo.KubernetesObject
+          properties:
+            spec:
+              concat:
+                - |-
+                  apiVersion: v1
+                  kind: Pod
+                  metadata:
+                    name: nginx
+                  spec:
+                    containers:
+                    - name: nginx
+                      image: nginx:1.14.2
+                      ports:
+                      - containerPort:
+                - get_input: container_port
+
+    """
+    )
+
+
+@pytest.fixture
+def csar(tmp_path, tosca):
+    tosca_path = tmp_path / "test.yaml"
+    csar_path = tmp_path / "test.csar"
+    csar_meta_path = tmp_path / "TOSCA-Metadata" / "TOSCA.meta"
+    csar_meta_path.parent.mkdir()
+
+    meta = f"""
+    TOSCA-Meta-File-Version: 1.0
+    CSAR-Version: 1.1
+    Created-By: Krake
+    Entry-Definitions: {tosca_path.name}
+    """
+
+    with open(tosca_path, "w") as tosca_fd:
+        yaml.safe_dump(tosca, tosca_fd)
+
+    with open(csar_meta_path, "w") as csar_meta_fd:
+        csar_meta_fd.write(meta)
+
+    with ZipFile(csar_path, "w") as csar_fd:
+        csar_fd.write(csar_meta_path.parent, csar_meta_path.parent.name)
+        csar_fd.write(
+            csar_meta_path, f"{csar_meta_path.parent.name}/{csar_meta_path.name}"
+        )
+        csar_fd.write(tosca_path, tosca_path.name)
+
+    yield str(csar_path)
