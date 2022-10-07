@@ -1,7 +1,10 @@
 """Data model definitions for Kubernetes-related resources"""
+import functools
+import json
 from copy import deepcopy
 from enum import Enum, auto
 from dataclasses import field
+from functools import lru_cache
 from typing import List, Dict
 from datetime import datetime
 from marshmallow import ValidationError
@@ -13,6 +16,9 @@ from . import persistent
 from .serializable import Serializable, ApiObject
 from .core import Metadata, ListMetadata, Status, ResourceRef, MetricRef, Reason
 from .constraints import LabelConstraint, MetricConstraint
+from ..api.tosca import ToscaParser, ToscaParserException
+
+CACHE_MAXSIZE = 1024
 
 
 class ClusterConstraints(Serializable):
@@ -27,11 +33,13 @@ class Constraints(Serializable):
 
 
 def _validate_manifest(manifest):
-    """Validate the content of a manifest provided as dictionary. Empty manifests,
-    resources inside without API version, kind, metadata or name are considered invalid.
+    """Validate the content of a manifest provided as list.
+
+    Empty manifests, resources inside without API version, kind, metadata
+    or name are considered invalid.
 
     Args:
-        manifest (dict): manifest to validate.
+        manifest (list): manifest to validate.
 
     Raises:
         ValidationError: if any error occurred in any resource inside the manifest. The
@@ -66,6 +74,153 @@ def _validate_manifest(manifest):
 
     if any(errors):
         raise ValidationError(errors)
+
+    return True
+
+
+def hashable_lru(func):
+    """Decorator to wrap a function with a memoizing callable with potentially
+    non-hashable parameters.
+
+    This decorator extends build-in :func:`functools.lru_cache` that supports
+    only hashable parameters of decorated callable.
+
+    Default lru_cache maxsize (128) was extended to 1024.
+    Note:
+        !Be aware that the lru_cache maxsize could affect the Krake memory
+        footprint significantly!
+        !Count the memory footprint before you use this decorator!
+
+    Example:
+        .. code:: python
+
+            @hashable_lru
+            def foobar(foo):
+                return foo
+
+            assert foobar({"foo": ["bar", "baz"]}) == {"foo": ["bar", "baz"]}
+
+    Args:
+        func (callable): the function to be cached.
+
+    Returns:
+        callable: Decorator for hashable lru cache.
+
+    """
+    cache = lru_cache(maxsize=CACHE_MAXSIZE)
+
+    def deserialize(value):
+        """Deserialize JSON document to a Python object.
+
+        Args:
+            value (str): JSON document
+
+        Returns:
+            dict, if the JSON document is valid and could be
+        deserialized, the :args:`value` otherwise.
+
+        """
+        try:
+            return json.loads(value)
+        except json.decoder.JSONDecodeError:
+            return value
+
+    def func_with_serialized_params(*args, **kwargs):
+        """Deserialize decorated callable parameters.
+
+        This function deserializes back the decorated callable
+        parameters. Parameters were serialized before within
+        the :func:`lru_decorator`.
+
+        Args:
+            args: Variable length argument list.
+            kwargs: Arbitrary keyword arguments.
+
+        Returns:
+            callable: Decorated function with deserialized parameters.
+
+        """
+        _args = tuple([deserialize(arg) for arg in args])
+        _kwargs = {k: deserialize(v) for k, v in kwargs.items()}
+        return func(*_args, **_kwargs)
+
+    cached_function = cache(func_with_serialized_params)
+
+    @functools.wraps(func)
+    def lru_decorator(*args, **kwargs):
+        """Serialize and cache decorated callable.
+
+        Args:
+            args: Variable length argument list.
+            kwargs: Arbitrary keyword arguments.
+
+        Returns:
+            callable: LRU-cached function with serialized parameters.
+
+        """
+        _args = tuple(
+            [
+                json.dumps(arg, sort_keys=True) if type(arg) in (list, dict) else arg
+                for arg in args
+            ]
+        )
+        _kwargs = {
+            k: json.dumps(v, sort_keys=True) if type(v) in (list, dict) else v
+            for k, v in kwargs.items()
+        }
+        return cached_function(*_args, **_kwargs)
+
+    lru_decorator.cache_info = cached_function.cache_info
+    lru_decorator.cache_clear = cached_function.cache_clear
+
+    return lru_decorator
+
+
+@hashable_lru
+def _validate_tosca(tosca):
+    """Validate the content of a TOSCA provided as dict.
+
+     TOSCA template that do not pass the
+     :class:`toscaparser.tosca_template.ToscaTemplate` validation is considered invalid.
+
+     The :func:`_validate_tosca` is cached by :func:`hashable_lru` decorator.
+     It saves resources because the instance of :class:`Application` is created
+     multiple times during app. creation or update. Then the Tosca parser
+     has to parse and validates the same TOSCA template multiple times which
+     takes some time.
+
+    Note regarding memory complexity:
+         The current :func:`hashable_lru` maxsize is set to 1024. We consider this
+         number safe from the memory footprint point of view. The assumption was done
+         based on the following:
+         - The cache size of the TOSCA template which contains 10 jobs has a memory
+           footprint of approx. 3400B. So the total memory footprint may be
+           3400B*1024~=3.5MB, counted by https://code.activestate.com/recipes/577504/
+         - The above is acceptable even when the total memory footprint is
+           multiplied by 10 or more
+     Note regarding time complexity:
+         The parsing and validation of a simple TOSCA template that
+         contains only a single k8s job take approx. 0.56s (based on the basic
+         measurement of elapsed time from 1000 runs). The same test with caching
+         (which includes serialization of parameters) takes approx. 0.0008s.
+
+     Args:
+         tosca (dict): TOSCA to validate.
+
+     Raises:
+         ValidationError: if any error occurred in TOSCA parser validation.
+
+     Returns:
+         bool: True if no validation error occurred.
+
+    """
+    if not tosca:
+        return True
+
+    try:
+        ToscaParser.from_dict(tosca)
+    except ToscaParserException as err:
+        raise ValidationError(str(err))
 
     return True
 
@@ -225,6 +380,16 @@ class ApplicationSpec(Serializable):
     Attributes:
         manifest (list[dict]): List of Kubernetes resources to create. This attribute
             is managed by the user.
+        tosca (dict, optional): TOSCA template to create.
+            This attribute is managed by the user.
+            TOSCA template is translated to manifest when the Krake API receives the
+            request containing TOSCA. Then the :attrs:`manifest`
+            is used in the whole Krake ecosystem.
+        csar (str, optional): Cloud Service Archive to create.
+            This attribute is managed by the user.
+            CSAR is translated to manifest when the Krake API receives the
+            request containing CSAR archive. Then the :attrs:`manifest`
+            is used in the whole Krake ecosystem.
         observer_schema (list[dict], optional): List of dictionaries of fields that
             should be observed by the Kubernetes Observer. This attribute is managed by
             the user. Using this attribute as a basis, the Kubernetes Controller
@@ -235,6 +400,8 @@ class ApplicationSpec(Serializable):
     """
 
     manifest: List[dict] = field(metadata={"validate": _validate_manifest})
+    tosca: dict = field(metadata={"validate": _validate_tosca}, default_factory=dict)
+    csar: str = None
     observer_schema: List[dict] = field(default_factory=list)
     constraints: Constraints
     hooks: List[str] = field(default_factory=list)

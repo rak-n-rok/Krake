@@ -16,9 +16,10 @@ from krake.api.helpers import (
     use_schema,
     HttpProblem,
     HttpProblemTitle,
-    HttpProblemError,
     make_create_request_schema,
+    HttpProblemError,
     ListQuery,
+    mangle_app,
 )
 from krake.data.core import WatchEvent, WatchEventType, ListMetadata
 from krake.data.kubernetes import (
@@ -29,7 +30,7 @@ from krake.data.kubernetes import (
     ClusterBinding,
     ApplicationComplete,
     ApplicationShutdown,
-    ApplicationState
+    ApplicationState,
 )
 
 logger = logging.getLogger("krake.api.kubernetes")
@@ -44,7 +45,9 @@ class KubernetesApi(object):
 
     @routes.route("POST", "/kubernetes/namespaces/{namespace}/applications")
     @protected(api="kubernetes", resource="applications", verb="create")
-    @use_schema("body", schema=make_create_request_schema(Application))
+    @use_schema(
+        "body", schema=make_create_request_schema(Application), mangle=mangle_app
+    )
     @blocking()
     async def create_application(request, body):
         kwargs = {"name": body.metadata.name}
@@ -52,16 +55,17 @@ class KubernetesApi(object):
         namespace = request.match_info.get("namespace")
         kwargs["namespace"] = namespace
 
-        # Ensure that a resource with the same name does not already exist.
+        # Ensure that a resource with the same name does not already
+        # exists.
         existing = await session(request).get(body.__class__, **kwargs)
 
         if existing is not None:
-            message = (
-                f"Application {body.metadata.name!r} already "
-                f"exists in namespace {namespace!r}"
-            )
             problem = HttpProblem(
-                detail=message, title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
+                detail=(
+                    f"Application {body.metadata.name!r} already "
+                    f"exists in namespace {namespace!r}"
+                ),
+                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS,
             )
             raise HttpProblemError(web.HTTPConflict, problem)
 
@@ -175,7 +179,7 @@ class KubernetesApi(object):
 
     @routes.route("PUT", "/kubernetes/namespaces/{namespace}/applications/{name}")
     @protected(api="kubernetes", resource="applications", verb="update")
-    @use_schema("body", schema=Application.Schema)
+    @use_schema("body", schema=Application.Schema, mangle=mangle_app)
     @load("entity", Application)
     async def update_application(request, body, entity):
         # Once a resource is in the "deletion in progress" state, finalizers
@@ -184,15 +188,15 @@ class KubernetesApi(object):
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 problem = HttpProblem(
                     detail="Finalizers can only be removed"
-                           " if a deletion is in progress.",
-                    title=HttpProblemTitle.UPDATE_ERROR
+                    " if a deletion is in progress.",
+                    title=HttpProblemTitle.UPDATE_ERROR,
                 )
                 raise HttpProblemError(web.HTTPConflict, problem)
 
         if body == entity:
             problem = HttpProblem(
                 detail="The body contained no update.",
-                title=HttpProblemTitle.UPDATE_ERROR
+                title=HttpProblemTitle.UPDATE_ERROR,
             )
             raise HttpProblemError(web.HTTPBadRequest, problem)
 
@@ -258,7 +262,7 @@ class KubernetesApi(object):
             logger.debug(
                 "The given token %s doesn't equal the required token %s",
                 body.token,
-                app.status.complete_token
+                app.status.complete_token,
             )
             raise web.HTTPUnauthorized(
                 reason="No token has been provided or the provided one is invalid."
@@ -287,15 +291,17 @@ class KubernetesApi(object):
             logger.debug(
                 "The given token %s doesn't equal the required token %s",
                 body.token,
-                app.status.shutdown_token
+                app.status.shutdown_token,
             )
             raise web.HTTPUnauthorized(
-               reason="No token has been provided or the provided one is invalid."
+                reason="No token has been provided or the provided one is invalid."
             )
 
         # Resource state changed to a READY_FOR state depending on the deleted flag
-        if app.status.state in [ApplicationState.WAITING_FOR_CLEANING,
-                                ApplicationState.DEGRADED]:
+        if app.status.state in [
+            ApplicationState.WAITING_FOR_CLEANING,
+            ApplicationState.DEGRADED,
+        ]:
             if app.metadata.deleted:
                 app.status.state = ApplicationState.READY_FOR_ACTION
                 app.status.shutdown_grace_period = None
@@ -332,14 +338,12 @@ class KubernetesApi(object):
             "Status",
             "Application",
             entity.metadata.name,
-            entity.metadata.uid
+            entity.metadata.uid,
         )
 
         return web.json_response(entity.serialize())
 
-    @routes.route(
-        "PUT", "/kubernetes/namespaces/{namespace}/applications/{name}/retry"
-    )
+    @routes.route("PUT", "/kubernetes/namespaces/{namespace}/applications/{name}/retry")
     @protected(api="kubernetes", resource="applications/status", verb="update")
     @load("entity", Application)
     async def retry_application(request, entity):
@@ -364,7 +368,7 @@ class KubernetesApi(object):
             )
             problem = HttpProblem(
                 detail="No migration or deletion retry needed",
-                title=HttpProblemTitle.UPDATE_ERROR
+                title=HttpProblemTitle.UPDATE_ERROR,
             )
             raise HttpProblemError(web.HTTPBadRequest, problem)
 
@@ -380,16 +384,17 @@ class KubernetesApi(object):
         namespace = request.match_info.get("namespace")
         kwargs["namespace"] = namespace
 
-        # Ensure that a resource with the same name does not already exist.
+        # Ensure that a resource with the same name does not already
+        # exists.
         existing = await session(request).get(body.__class__, **kwargs)
 
         if existing is not None:
-            message = (
-                f"Cluster {body.metadata.name!r} already "
-                f"exists in namespace {namespace!r}"
-            )
             problem = HttpProblem(
-                detail=message, title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
+                detail=(
+                    f"Cluster {body.metadata.name!r} already "
+                    f"exists in namespace {namespace!r}"
+                ),
+                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS,
             )
             raise HttpProblemError(web.HTTPConflict, problem)
 
@@ -506,15 +511,15 @@ class KubernetesApi(object):
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 problem = HttpProblem(
                     detail="Finalizers can only be removed"
-                           " if a deletion is in progress.",
-                    title=HttpProblemTitle.UPDATE_ERROR
+                    " if a deletion is in progress.",
+                    title=HttpProblemTitle.UPDATE_ERROR,
                 )
                 raise HttpProblemError(web.HTTPConflict, problem)
 
         if body == entity:
             problem = HttpProblem(
                 detail="The body contained no update.",
-                title=HttpProblemTitle.UPDATE_ERROR
+                title=HttpProblemTitle.UPDATE_ERROR,
             )
             raise HttpProblemError(web.HTTPBadRequest, problem)
 

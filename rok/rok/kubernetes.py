@@ -5,13 +5,15 @@
     python -m rok kubernetes --help
 
 """
+import json
 import sys
 import warnings
-from argparse import FileType, Action
+from argparse import FileType, Action, ArgumentTypeError
 from base64 import b64encode
 from functools import partial
 
 import yaml
+from requests_toolbelt import MultipartEncoder
 
 from .parser import (
     ParserSpec,
@@ -106,6 +108,50 @@ class ShutdownAction(Action):
         setattr(namespace, self.dest, attr + [values])
 
 
+class ApplicationFileType(FileType):
+    def __call__(self, string):
+        if string.lower().endswith(("zip", "csar")):
+            self._mode = "rb"
+
+        elif string.lower().endswith(("yml", "yaml")):
+            self._mode = "r"
+
+        else:
+            raise ArgumentTypeError(
+                "Error: The application should be described by one of the following files:"  # noqa: E501
+                "\n- Kubernetes manifest file with suffixes .yaml, .yml"
+                "\n- TOSCA template file with suffixes .yaml, .yml"
+                "\n- Cloud Service Archive (CSAR) file with suffixes .zip, .csar"
+            )
+
+        return super().__call__(string)
+
+
+def is_tosca_definition(definitions):
+    """Evaluate if the application definition provided by end-user is a TOSCA.
+
+     TOSCA template should be single YAML file with
+     `tosca_definitions_version` key in it.
+
+    Args:
+        definitions (list): Given list of app definitions to analyze.
+
+    Returns:
+        bool: True is the app definition is a TOSCA template,
+            False otherwise.
+
+    """
+    try:
+        tosca, *_ = definitions
+    except ValueError:
+        return False
+
+    if "tosca_definitions_version" in tosca.keys():
+        return True
+
+    return False
+
+
 arg_hook_shutdown = argument(
     "--hook-shutdown",
     dest="hooks",
@@ -155,6 +201,9 @@ class ApplicationListTable(BaseTable):
 def handle_warning(app):
     """Handle warning message print out
 
+    Warning handler is skipped when the CSAR archive is used, because we do not
+    uncompress the archive on the client side.
+
     A warning message is printed out when an application
     contains resources that we considered as non-optimal for migration,
     the migration is enabled and the user did not set shutdown hook for
@@ -174,18 +223,36 @@ def handle_warning(app):
         app (dict): Application to evaluate
 
     """
+    if app["spec"]["csar"]:
+        return
+
     manifest = app["spec"]["manifest"]
+    tosca = app["spec"]["tosca"]
     hooks = app["spec"].get("hooks", [])
     migration = app["spec"]["constraints"]["migration"]
 
     if "shutdown" not in [hook[0] for hook in hooks if hook] and migration:
-        warn_resources = set(
-            [
-                resource["kind"]
-                for resource in manifest
-                if resource["kind"] in WARN_RESOURCES
-            ]
-        )
+        warn_resources = set()
+
+        if manifest:
+            warn_resources.union(
+                [
+                    resource["kind"]
+                    for resource in manifest
+                    if resource["kind"] in WARN_RESOURCES
+                ]
+            )
+        elif tosca:
+            for node in (
+                tosca.get("topology_template", {}).get("node_templates", {}).values()
+            ):
+                if node:
+                    for warn_resource in WARN_RESOURCES:
+                        if warn_resource in json.dumps(
+                            node.get("properties", {}).get("spec", {})
+                        ):
+                            warn_resources.add(warn_resource)
+
         if warn_resources:
             warnings.warn(
                 f"Migration of k8s resources like `{', '.join(warn_resources)}`"
@@ -239,7 +306,11 @@ class ApplicationTable(ApplicationListTable):
 
 @application.command("create", help="Create Kubernetes application")
 @argument(
-    "-f", "--file", type=FileType(), required=True, help="Kubernetes manifest file"
+    "-f",
+    "--file",
+    type=ApplicationFileType(),
+    required=True,
+    help="Kubernetes manifest file or TOSCA template file or Cloud Service Archive",
 )
 @argument(
     "-O",
@@ -285,13 +356,25 @@ def create_application(
     hooks,
     wait,
 ):
+    manifest = []
+    tosca = {}
+    csar = None
+    if file.mode == "rb":
+        csar = file
+    else:
+        definition = list(yaml.safe_load_all(file))
+        if is_tosca_definition(definition):
+            tosca, *_ = definition
+        else:
+            manifest = definition
+
     if namespace is None:
         namespace = config["user"]
 
     migration = True
     if enable_migration or disable_migration:  # If either one was specified by the user
         migration = enable_migration
-    manifest = list(yaml.safe_load_all(file))
+
     observer_schema = []
 
     if observer_schema_file:
@@ -301,6 +384,8 @@ def create_application(
         "metadata": {"name": name, "labels": labels},
         "spec": {
             "manifest": manifest,
+            "tosca": tosca,
+            "csar": csar.name if csar else None,
             "observer_schema": observer_schema,
             "constraints": {
                 "migration": migration,
@@ -326,9 +411,16 @@ def create_application(
     if wait is not None:
         blocking_state = wait
 
+    encoder = MultipartEncoder(
+        {
+            "0": ("app", json.dumps(app), "application/json"),
+            "1": (csar.name, csar, "application/zip") if csar else None,
+        }
+    )
     resp = session.post(
         f"/kubernetes/namespaces/{namespace}/applications",
-        json=app,
+        data=encoder,
+        headers={"Content-Type": encoder.content_type},
         params={"blocking": blocking_state},
     )
     return resp.json()
@@ -350,7 +442,12 @@ def get_application(config, session, namespace, name):
 
 @application.command("update", help="Update Kubernetes application")
 @argument("name", help="Kubernetes application name")
-@argument("-f", "--file", type=FileType(), help="Kubernetes manifest file")
+@argument(
+    "-f",
+    "--file",
+    type=ApplicationFileType(),
+    help="Kubernetes manifest file or TOSCA template file or Cloud Service Archive",
+)
 @argument("-O", "--observer_schema_file", type=FileType(), help="Observer Schema File")
 @argument(
     "--wait",
@@ -394,9 +491,23 @@ def update_application(
     resp = session.get(f"/kubernetes/namespaces/{namespace}/applications/{name}")
     app = resp.json()
 
+    manifest = []
+    tosca = {}
+    csar = None
+
     if file:
-        manifest = list(yaml.safe_load_all(file))
+        if file.mode == "rb":
+            csar = file
+        else:
+            definition = list(yaml.safe_load_all(file))
+            if is_tosca_definition(definition):
+                tosca, *_ = definition
+            else:
+                manifest = definition
+
         app["spec"]["manifest"] = manifest
+        app["spec"]["tosca"] = tosca
+        app["spec"]["csar"] = csar.name if csar else None
 
     if observer_schema_file:
         observer_schema = list(yaml.safe_load_all(observer_schema_file))
@@ -423,12 +534,18 @@ def update_application(
     if wait is not None:
         blocking_state = wait
 
+    encoder = MultipartEncoder(
+        {
+            "0": ("app", json.dumps(app), "application/json"),
+            "1": (csar.name, csar, "application/zip") if csar else None,
+        }
+    )
     resp = session.put(
         f"/kubernetes/namespaces/{namespace}/applications/{name}",
-        json=app,
+        data=encoder,
+        headers={"Content-Type": encoder.content_type},
         params={"blocking": blocking_state},
     )
-
     return resp.json()
 
 

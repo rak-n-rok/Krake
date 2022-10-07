@@ -1,3 +1,5 @@
+import aiohttp
+
 from krake.client import Watcher, ApiClient
 from krake.data.kubernetes import Cluster, ClusterList, ApplicationList, Application
 
@@ -18,25 +20,38 @@ class KubernetesApi(ApiClient):
 
     """
 
-    plurals = {"Application": "Applications", "Cluster": "Clusters"}
+    plurals = {
+        "Application": "Applications",
+        "Cluster": "Clusters",
+    }
 
-    async def create_application(self, body, namespace):
+    async def create_application(self, body, namespace, multipart=None):
         """Creates the specified Application.
 
         Args:
             body (Application): Body of the HTTP request.
             namespace (str): namespace in which the Application will be updated.
+            multipart (list, optional): body parts to the multipart request.
 
         Returns:
             Application: Body of the HTTP response.
 
         """
         path = "/kubernetes/namespaces/{namespace}/applications".format(
-            namespace=namespace
+            namespace=namespace,
         )
         url = self.client.url.with_path(path)
+        request_kwargs = {}
+        if multipart:
+            with aiohttp.MultipartWriter() as multipart_data:
+                multipart_data.append_json(body.serialize())
+                for item in multipart:
+                    multipart_data.append(item)
+            request_kwargs.update({"data": multipart_data})
+        else:
+            request_kwargs.update({"json": body.serialize()})
 
-        resp = await self.client.session.request("POST", url, json=body.serialize())
+        resp = await self.client.session.request("POST", url, **request_kwargs)
         data = await resp.json()
         return Application.deserialize(data)
 
@@ -73,7 +88,7 @@ class KubernetesApi(ApiClient):
 
         """
         path = "/kubernetes/namespaces/{namespace}/applications".format(
-            namespace=namespace
+            namespace=namespace,
         )
         url = self.client.url.with_path(path)
 
@@ -95,7 +110,7 @@ class KubernetesApi(ApiClient):
 
         """
         path = "/kubernetes/namespaces/{namespace}/applications".format(
-            namespace=namespace
+            namespace=namespace,
         )
 
         query = {"watch": ""}
@@ -161,13 +176,14 @@ class KubernetesApi(ApiClient):
         data = await resp.json()
         return Application.deserialize(data)
 
-    async def update_application(self, body, namespace, name):
+    async def update_application(self, body, namespace, name, multipart=None):
         """Updates the specified Application.
 
         Args:
             body (Application): Body of the HTTP request.
             namespace (str): namespace in which the Application will be updated.
             name (str): name of the Application.
+            multipart (list, optional): body parts to the multipart request.
 
         Returns:
             Application: Body of the HTTP response.
@@ -177,18 +193,28 @@ class KubernetesApi(ApiClient):
             namespace=namespace, name=name
         )
         url = self.client.url.with_path(path)
+        request_kwargs = {}
+        if multipart:
+            with aiohttp.MultipartWriter() as multipart_data:
+                multipart_data.append_json(body.serialize())
+                for item in multipart:
+                    multipart_data.append(item)
+            request_kwargs.update({"data": multipart_data})
+        else:
+            request_kwargs.update({"json": body.serialize()})
 
-        resp = await self.client.session.request("PUT", url, json=body.serialize())
+        resp = await self.client.session.request("PUT", url, **request_kwargs)
         data = await resp.json()
         return Application.deserialize(data)
 
-    async def update_application_binding(self, body, namespace, name):
+    async def update_application_binding(self, body, namespace, name, multipart=None):
         """Updates the specified Application.
 
         Args:
             body (ClusterBinding): Body of the HTTP request.
             namespace (str): namespace in which the Application will be updated.
             name (str): name of the Application.
+            multipart (list, optional): body parts to the multipart request.
 
         Returns:
             Application: Body of the HTTP response.
@@ -198,18 +224,28 @@ class KubernetesApi(ApiClient):
             namespace=namespace, name=name
         )
         url = self.client.url.with_path(path)
+        request_kwargs = {}
+        if multipart:
+            with aiohttp.MultipartWriter() as multipart_data:
+                multipart_data.append_json(body.serialize())
+                for item in multipart:
+                    multipart_data.append(item)
+            request_kwargs.update({"data": multipart_data})
+        else:
+            request_kwargs.update({"json": body.serialize()})
 
-        resp = await self.client.session.request("PUT", url, json=body.serialize())
+        resp = await self.client.session.request("PUT", url, **request_kwargs)
         data = await resp.json()
         return Application.deserialize(data)
 
-    async def update_application_complete(self, body, namespace, name):
+    async def update_application_complete(self, body, namespace, name, multipart=None):
         """Updates the specified Application.
 
         Args:
             body (ApplicationComplete): Body of the HTTP request.
             namespace (str): namespace in which the Application will be updated.
             name (str): name of the Application.
+            multipart (list, optional): body parts to the multipart request.
 
         Returns:
             Application: Body of the HTTP response.
@@ -219,18 +255,59 @@ class KubernetesApi(ApiClient):
             namespace=namespace, name=name
         )
         url = self.client.url.with_path(path)
+        request_kwargs = {}
+        if multipart:
+            with aiohttp.MultipartWriter() as multipart_data:
+                multipart_data.append_json(body.serialize())
+                for item in multipart:
+                    multipart_data.append(item)
+            request_kwargs.update({"data": multipart_data})
+        else:
+            request_kwargs.update({"json": body.serialize()})
 
-        resp = await self.client.session.request("PUT", url, json=body.serialize())
+        resp = await self.client.session.request("PUT", url, **request_kwargs)
         data = await resp.json()
         return Application.deserialize(data)
 
-    async def update_application_status(self, body, namespace, name):
+    async def update_application_shutdown(self, body, namespace, name, multipart=None):
+        """Updates the specified Application.
+
+        Args:
+            body (ApplicationShutdown): Body of the HTTP request.
+            namespace (str): namespace in which the Application will be updated.
+            name (str): name of the Application.
+            multipart (list, optional): body parts to the multipart request.
+
+        Returns:
+            Application: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/namespaces/{namespace}/applications/{name}/shutdown".format(
+            namespace=namespace, name=name
+        )
+        url = self.client.url.with_path(path)
+        request_kwargs = {}
+        if multipart:
+            with aiohttp.MultipartWriter() as multipart_data:
+                multipart_data.append_json(body.serialize())
+                for item in multipart:
+                    multipart_data.append(item)
+            request_kwargs.update({"data": multipart_data})
+        else:
+            request_kwargs.update({"json": body.serialize()})
+
+        resp = await self.client.session.request("PUT", url, **request_kwargs)
+        data = await resp.json()
+        return Application.deserialize(data)
+
+    async def update_application_status(self, body, namespace, name, multipart=None):
         """Updates the specified Application.
 
         Args:
             body (Application): Body of the HTTP request.
             namespace (str): namespace in which the Application will be updated.
             name (str): name of the Application.
+            multipart (list, optional): body parts to the multipart request.
 
         Returns:
             Application: Body of the HTTP response.
@@ -240,26 +317,47 @@ class KubernetesApi(ApiClient):
             namespace=namespace, name=name
         )
         url = self.client.url.with_path(path)
+        request_kwargs = {}
+        if multipart:
+            with aiohttp.MultipartWriter() as multipart_data:
+                multipart_data.append_json(body.serialize())
+                for item in multipart:
+                    multipart_data.append(item)
+            request_kwargs.update({"data": multipart_data})
+        else:
+            request_kwargs.update({"json": body.serialize()})
 
-        resp = await self.client.session.request("PUT", url, json=body.serialize())
+        resp = await self.client.session.request("PUT", url, **request_kwargs)
         data = await resp.json()
         return Application.deserialize(data)
 
-    async def create_cluster(self, body, namespace):
+    async def create_cluster(self, body, namespace, multipart=None):
         """Creates the specified Cluster.
 
         Args:
             body (Cluster): Body of the HTTP request.
             namespace (str): namespace in which the Cluster will be updated.
+            multipart (list, optional): body parts to the multipart request.
 
         Returns:
             Cluster: Body of the HTTP response.
 
         """
-        path = "/kubernetes/namespaces/{namespace}/clusters".format(namespace=namespace)
+        path = "/kubernetes/namespaces/{namespace}/clusters".format(
+            namespace=namespace,
+        )
         url = self.client.url.with_path(path)
+        request_kwargs = {}
+        if multipart:
+            with aiohttp.MultipartWriter() as multipart_data:
+                multipart_data.append_json(body.serialize())
+                for item in multipart:
+                    multipart_data.append(item)
+            request_kwargs.update({"data": multipart_data})
+        else:
+            request_kwargs.update({"json": body.serialize()})
 
-        resp = await self.client.session.request("POST", url, json=body.serialize())
+        resp = await self.client.session.request("POST", url, **request_kwargs)
         data = await resp.json()
         return Cluster.deserialize(data)
 
@@ -295,7 +393,9 @@ class KubernetesApi(ApiClient):
             ClusterList: Body of the HTTP response.
 
         """
-        path = "/kubernetes/namespaces/{namespace}/clusters".format(namespace=namespace)
+        path = "/kubernetes/namespaces/{namespace}/clusters".format(
+            namespace=namespace,
+        )
         url = self.client.url.with_path(path)
 
         resp = await self.client.session.request("GET", url)
@@ -315,7 +415,9 @@ class KubernetesApi(ApiClient):
             ClusterList: Body of the HTTP response.
 
         """
-        path = "/kubernetes/namespaces/{namespace}/clusters".format(namespace=namespace)
+        path = "/kubernetes/namespaces/{namespace}/clusters".format(
+            namespace=namespace,
+        )
 
         query = {"watch": ""}
         if heartbeat is not None:
@@ -380,13 +482,14 @@ class KubernetesApi(ApiClient):
         data = await resp.json()
         return Cluster.deserialize(data)
 
-    async def update_cluster(self, body, namespace, name):
+    async def update_cluster(self, body, namespace, name, multipart=None):
         """Updates the specified Cluster.
 
         Args:
             body (Cluster): Body of the HTTP request.
             namespace (str): namespace in which the Cluster will be updated.
             name (str): name of the Cluster.
+            multipart (list, optional): body parts to the multipart request.
 
         Returns:
             Cluster: Body of the HTTP response.
@@ -396,18 +499,28 @@ class KubernetesApi(ApiClient):
             namespace=namespace, name=name
         )
         url = self.client.url.with_path(path)
+        request_kwargs = {}
+        if multipart:
+            with aiohttp.MultipartWriter() as multipart_data:
+                multipart_data.append_json(body.serialize())
+                for item in multipart:
+                    multipart_data.append(item)
+            request_kwargs.update({"data": multipart_data})
+        else:
+            request_kwargs.update({"json": body.serialize()})
 
-        resp = await self.client.session.request("PUT", url, json=body.serialize())
+        resp = await self.client.session.request("PUT", url, **request_kwargs)
         data = await resp.json()
         return Cluster.deserialize(data)
 
-    async def update_cluster_status(self, body, namespace, name):
+    async def update_cluster_status(self, body, namespace, name, multipart=None):
         """Updates the specified Cluster.
 
         Args:
             body (Cluster): Body of the HTTP request.
             namespace (str): namespace in which the Cluster will be updated.
             name (str): name of the Cluster.
+            multipart (list, optional): body parts to the multipart request.
 
         Returns:
             Cluster: Body of the HTTP response.
@@ -417,7 +530,16 @@ class KubernetesApi(ApiClient):
             namespace=namespace, name=name
         )
         url = self.client.url.with_path(path)
+        request_kwargs = {}
+        if multipart:
+            with aiohttp.MultipartWriter() as multipart_data:
+                multipart_data.append_json(body.serialize())
+                for item in multipart:
+                    multipart_data.append(item)
+            request_kwargs.update({"data": multipart_data})
+        else:
+            request_kwargs.update({"json": body.serialize()})
 
-        resp = await self.client.session.request("PUT", url, json=body.serialize())
+        resp = await self.client.session.request("PUT", url, **request_kwargs)
         data = await resp.json()
         return Cluster.deserialize(data)

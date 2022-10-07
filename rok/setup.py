@@ -6,6 +6,7 @@ install_requires = [
     "python-dateutil==2.*",
     "requests==2.*",
     "texttable==1.*",
+    "requests-toolbelt==0.9.*",
 ]
 
 setup(

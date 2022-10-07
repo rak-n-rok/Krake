@@ -17,6 +17,8 @@ install_requires = [
     "python-magnumclient==3.*",
     "PyYAML==5.*",
     "requests==2.*",
+    "tosca-parser==2.6.*",
+    "aiofiles==22.1.*",
 ]
 
 # webargs
