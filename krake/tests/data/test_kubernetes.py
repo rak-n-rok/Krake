@@ -36,12 +36,12 @@ def test_application_cluster_constraints_null_error_handling():
 
 def test_application_manifest_empty_error_handling():
     """Ensure that empty manifests are seen as invalid."""
-    app = ApplicationFactory(spec__manifest=[])
-
-    serialized = app.serialize()
-
-    with pytest.raises(ValidationError, match="The manifest file must not be empty."):
-        Application.deserialize(serialized)
+    with pytest.raises(
+        ValidationError,
+        match="The application should be described by non empty manifest file"
+        " or by non empty TOSCA template.",
+    ):
+        ApplicationFactory(spec__manifest=[])
 
 
 def test_application_manifest_invalid_structure_error_handling():
@@ -482,9 +482,9 @@ def test_observer_schema_init_invalid_custom_not_in_manifest():
         yaml.safe_load_all(
             """---
             apiVersion: v1
-            kind: Service
+            kind: NotInManifestResource
             metadata:
-              name: nginx-demo
+              name: not-in-manifest-resource-name
               namespace: null
             """
         )
@@ -493,6 +493,4 @@ def test_observer_schema_init_invalid_custom_not_in_manifest():
     with pytest.raises(
         ObserverSchemaError, match="Observed resource must be in manifest"
     ):
-        ApplicationFactory(
-            spec__manifest=[], spec__observer_schema=invalid_custom_schema
-        )
+        ApplicationFactory(spec__observer_schema=invalid_custom_schema)

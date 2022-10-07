@@ -23,7 +23,7 @@ from aiohttp import ClientConnectorError
 
 from krake.controller import Observer
 from krake.controller.kubernetes.client import KubernetesClient, InvalidManifestError
-from krake.data.core import resource_ref
+from krake.controller.kubernetes.tosca import ToscaParser, ToscaParserException
 from krake.utils import camel_to_snake_case, get_kubernetes_resource_idx
 from kubernetes_asyncio.client.rest import ApiException
 from kubernetes_asyncio.client.api_client import ApiClient
@@ -35,6 +35,7 @@ from krake.data.kubernetes import (
     ClusterNodeCondition,
     ClusterNode,
     ClusterNodeStatus,
+    ApplicationState,
 )
 from yarl import URL
 from secrets import token_urlsafe
@@ -61,6 +62,7 @@ class HookType(Enum):
     ResourcePostUpdate = auto()
     ResourcePreDelete = auto()
     ResourcePostDelete = auto()
+    ApplicationToscaTranslation = auto()
     ApplicationMangling = auto()
     ApplicationPreMigrate = auto()
     ApplicationPostMigrate = auto()
@@ -776,12 +778,7 @@ class KubernetesApplicationObserver(Observer):
                         continue
                     # Otherwise, log the unexpected error and return the
                     # last known application status
-                    logger.debug(
-                        "Resource %s lives in unreachable cluster %s."
-                        " Hence, fetching the current status is skipped",
-                        resource_ref(self.resource),
-                        resource_ref(self.cluster),
-                    )
+                    logger.debug(err)
                     return app.status
 
             observed_manifest = update_last_observed_manifest_dict(
@@ -933,7 +930,6 @@ async def register_observer(controller, resource, start=True, **kwargs):
             namespace=resource.status.running_on.namespace,
             name=resource.status.running_on.name,
         )
-
         observer = KubernetesApplicationObserver(
             cluster,
             resource,
@@ -985,6 +981,52 @@ async def unregister_observer(controller, resource, **kwargs):
 
     with suppress(asyncio.CancelledError):
         await task
+
+
+@listen.on(HookType.ApplicationToscaTranslation)
+async def translate_tosca(controller, app, **kwargs):
+    """Translate TOSCA template or CSAR archive to the Kubernetes manifest.
+
+    Args:
+        controller (KubernetesController): the controller which handles the application
+            resource.
+        app (krake.data.kubernetes.Application): the Application which could be defined
+            by TOSCA template or by CSAR archive.
+
+    Raises:
+        ToscaParserException: If the given application does not contain
+         at least one from the following:
+         - Kubernetes manifest
+         - TOSCA template
+         - CSAR archive
+
+    """
+    if app.spec.manifest:
+        return
+
+    if not app.spec.tosca and not app.spec.csar:
+        raise ToscaParserException(
+            "Application should be defined by Kubernetes manifest"
+            " or by TOSCA template or by CSAR archive: %r",
+            app,
+        )
+    app.status.state = ApplicationState.TRANSLATING
+    await controller.kubernetes_api.update_application_status(
+        namespace=app.metadata.namespace, name=app.metadata.name, body=app
+    )
+
+    if app.spec.tosca and isinstance(app.spec.tosca, dict):
+
+        manifest = ToscaParser.from_dict(app.spec.tosca).translate_to_manifests()
+    else:
+        manifest = ToscaParser.from_url(
+            app.spec.tosca or app.spec.csar
+        ).translate_to_manifests()
+
+    app.spec.manifest = manifest
+    await controller.kubernetes_api.update_application(
+        namespace=app.metadata.namespace, name=app.metadata.name, body=app
+    )
 
 
 def utc_difference():

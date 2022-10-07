@@ -4,7 +4,7 @@ from contextlib import suppress
 from copy import deepcopy
 from functools import partial
 from datetime import timedelta
-
+from requests.exceptions import ConnectionError
 from aiohttp import ClientResponseError, ClientConnectorError
 from krake.controller.kubernetes.client import KubernetesClient
 
@@ -25,6 +25,7 @@ from krake.controller.kubernetes.hooks import (
 from krake.utils import now, get_kubernetes_resource_idx
 from krake.data.core import ReasonCode, resource_ref, Reason
 from krake.data.kubernetes import ApplicationState
+from ..tosca import ToscaParserException
 
 logger = logging.getLogger(__name__)
 
@@ -543,6 +544,18 @@ class KubernetesApplicationController(Controller):
                     name=app.metadata.name,
                     body=app,
                 )
+            # If TOSCA or CSAR is defined by URL the ConnectionError could be raised.
+            except (ToscaParserException, ConnectionError) as error:
+                app.status.reason = Reason(
+                    code=ReasonCode.INVALID_TOSCA_MANIFEST, message=str(error)
+                )
+                app.status.state = ApplicationState.FAILED
+
+                await self.kubernetes_api.update_application_status(
+                    namespace=app.metadata.namespace,
+                    name=app.metadata.name,
+                    body=app,
+                )
             finally:
                 await self.queue.done(key)
             if run_once:
@@ -782,6 +795,14 @@ class KubernetesApplicationController(Controller):
             namespace=app.status.scheduled_to.namespace,
             name=app.status.scheduled_to.name,
         )
+
+        # Translate TOSCA or CSAR to k8s manifest
+        await listen.hook(
+            HookType.ApplicationToscaTranslation,
+            controller=self,
+            app=app,
+        )
+
         generate_default_observer_schema(app)
         update_last_applied_manifest_from_spec(app)
         await listen.hook(
