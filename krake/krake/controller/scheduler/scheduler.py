@@ -595,9 +595,11 @@ class KubernetesHandler(Handler):
             Cluster: Cluster suitable for application binding
 
         """
-        # Reject clusters marked as deleted
+        # Reject clusters marked as deleted and clusters that are not online
         existing_clusters = \
-            (cluster for cluster in clusters if cluster.metadata.deleted is None)
+            (cluster for cluster in clusters if cluster.metadata.deleted is None
+            and cluster.status.state is ClusterState.ONLINE)
+
         fetched_metrics = dict()
         for cluster in clusters:
             if cluster.spec.metrics:
