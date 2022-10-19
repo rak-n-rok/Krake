@@ -49,6 +49,7 @@ from functionals.utils import (
     create_cluster_label_info,
     get_other_cluster,
     get_scheduling_score,
+    kubectl_cmd,
 )
 from functionals.environment import (
     Environment,
@@ -56,6 +57,7 @@ from functionals.environment import (
     create_default_environment,
     CLUSTERS_CONFIGS,
     MANIFEST_PATH,
+    get_default_kubeconfig_path,
 )
 from functionals.resource_definitions import ResourceKind
 from functionals.resource_provider import provider, WeightedMetric, NonExistentMetric
@@ -619,6 +621,9 @@ def test_one_unreachable_metrics_provider(minikube_clusters):
     # and the reachable metrics will be given to the last cluster.
     expected_cluster = clusters[-1]
 
+    kubeconfig_path1 = get_default_kubeconfig_path(expected_cluster)
+    kubeconfig_path2 = get_default_kubeconfig_path(clusters[0])
+
     # 1. Create one application, one cluster without metrics, and one with
     #     the metric `heat_demand_zone_unreachable`.
     metric_weights = {
@@ -648,7 +653,24 @@ def test_one_unreachable_metrics_provider(minikube_clusters):
             ResourceKind.CLUSTER, other_cluster_name
         )
 
-        assert other_cluster_res.get_state() == "FAILING_METRICS"
+        clusters = run(
+            (
+                f"rok kube cluster list"
+            )
+        )
+        cluster1 = run(
+            (
+                f"rok kube cluster get {expected_cluster}"
+            )
+        )
+        cluster2 = run(
+            (
+                f"rok kube cluster get {other_cluster_name}"
+            )
+        )
+
+        assert other_cluster_res.get_state() == "FAILING_METRICS", str("FAILED") + \
+            " | " + clusters.output + " | " + cluster1.output + " | " + cluster2.output
         metrics_reasons = other_cluster_res.get_metrics_reasons()
         assert "heat_demand_zone_unreachable" in metrics_reasons
         assert (
