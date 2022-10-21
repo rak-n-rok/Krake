@@ -20,7 +20,7 @@ from krake.controller.scheduler.constraints import (
     match_cluster_constraints,
     match_project_constraints,
 )
-from krake.controller.scheduler.scheduler import NoProjectFound
+from krake.controller.scheduler.scheduler import NoProjectFound, NoClusterFound
 from krake.data.constraints import LabelConstraint, MetricConstraint
 from krake.data.core import ResourceRef, MetricRef
 from krake.data.core import resource_ref, ReasonCode
@@ -275,7 +275,8 @@ async def test_openstack_reception(aiohttp_server, config, db, loop):
 
 
 def test_kubernetes_match_cluster_label_constraints():
-    cluster = ClusterFactory(metadata__labels={"location": "IT"})
+    cluster = ClusterFactory(metadata__labels={"location": "IT"},
+                             status__state=ClusterState.ONLINE)
     app = ApplicationFactory(
         spec__constraints__cluster__labels=[LabelConstraint.parse("location is IT")],
         spec__constraints__cluster__metrics=[],
@@ -285,7 +286,7 @@ def test_kubernetes_match_cluster_label_constraints():
 
 
 def test_kubernetes_not_match_cluster_label_constraints():
-    cluster = ClusterFactory()
+    cluster = ClusterFactory(status__state=ClusterState.ONLINE)
     app = ApplicationFactory(
         spec__constraints__cluster__labels=[LabelConstraint.parse("location is IT")],
         spec__constraints__cluster__metrics=[],
@@ -296,7 +297,8 @@ def test_kubernetes_not_match_cluster_label_constraints():
 
 
 def test_kubernetes_match_cluster_custom_resources_constraints():
-    cluster = ClusterFactory(spec__custom_resources=["crontabs.stable.example.com"])
+    cluster = ClusterFactory(spec__custom_resources=["crontabs.stable.example.com"],
+                             status__state=ClusterState.ONLINE)
     app = ApplicationFactory(
         spec__constraints__cluster__custom_resources=["crontabs.stable.example.com"],
         spec__constraints__cluster__labels=[],
@@ -307,7 +309,7 @@ def test_kubernetes_match_cluster_custom_resources_constraints():
 
 
 def test_kubernetes_not_match_cluster_custom_resources_constraints():
-    cluster = ClusterFactory()
+    cluster = ClusterFactory(status__state=ClusterState.ONLINE)
     app = ApplicationFactory(
         spec__constraints__cluster__custom_resources=["crontabs.stable.example.com"],
         spec__constraints__cluster__labels=[],
@@ -318,7 +320,8 @@ def test_kubernetes_not_match_cluster_custom_resources_constraints():
 
 
 def test_kubernetes_match_cluster_metric_constraints():
-    cluster = ClusterFactory(spec__metrics=[MetricRef(name="load", weight=6.0, namespaced=False)])
+    cluster = ClusterFactory(spec__metrics=[MetricRef(name="load", weight=6.0,
+                             namespaced=False)], status__state=ClusterState.ONLINE)
     app = ApplicationFactory(
         spec__constraints__cluster__metrics=[MetricConstraint.parse("load > 5")],
         spec__constraints__cluster__custom_resources=[],
@@ -341,7 +344,8 @@ def test_kubernetes_match_cluster_metric_constraints():
 
 
 def test_kubernetes_not_match_cluster_metrics_constraints():
-    cluster = ClusterFactory(spec__metrics=[MetricRef(name="load", weight=5.0, namespaced=False)])
+    cluster = ClusterFactory(spec__metrics=[MetricRef(name="load", weight=5.0,
+                             namespaced=False)], status__state=ClusterState.ONLINE)
     app = ApplicationFactory(
         spec__constraints__cluster__metrics=[MetricConstraint.parse("load > 5")],
         spec__constraints__cluster__custom_resources=[],
@@ -363,7 +367,7 @@ def test_kubernetes_not_match_cluster_metrics_constraints():
 
 
 def test_kubernetes_match_empty_cluster_constraints():
-    cluster = ClusterFactory()
+    cluster = ClusterFactory(status__state=ClusterState.ONLINE)
     app1 = ApplicationFactory(spec__constraints=None)
     app2 = ApplicationFactory(spec__constraints__cluster=None)
     app3 = ApplicationFactory(
@@ -389,18 +393,22 @@ async def test_kubernetes_score(aiohttp_server, config, db, loop):
         ClusterFactory(
             spec__metrics=[
                 MetricRef(name="test-metric-1", weight=1.0, namespaced=False)
-            ]
+            ],
+            status__state=ClusterState.ONLINE
         ),
         ClusterFactory(
             spec__metrics=[
                 MetricRef(name="test-metric-2", weight=1.0, namespaced=False)
-            ]
+            ],
+            status__state=ClusterState.ONLINE
         ),
         ClusterFactory(
-            spec__metrics=[MetricRef(name="test-metric-1", weight=1.0, namespaced=True)]
+            spec__metrics=[MetricRef(name="test-metric-1", weight=1.0, namespaced=True)],
+            status__state=ClusterState.ONLINE
         ),
         ClusterFactory(
-            spec__metrics=[MetricRef(name="test-metric-2", weight=1.0, namespaced=True)]
+            spec__metrics=[MetricRef(name="test-metric-2", weight=1.0, namespaced=True)],
+            status__state=ClusterState.ONLINE
         ),
     ]
     metrics = [
@@ -472,10 +480,12 @@ async def test_kubernetes_score_sticky(aiohttp_server, config, db, loop):
     cluster_a = ClusterFactory(
         metadata__name="a",
         spec__metrics=[MetricRef(name="metric-1", weight=1.0, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
     cluster_b = ClusterFactory(
         metadata__name="b",
         spec__metrics=[MetricRef(name="metric-1", weight=1.0, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
 
     scheduled_app = ApplicationFactory(
@@ -527,7 +537,8 @@ async def test_kubernetes_score_sticky(aiohttp_server, config, db, loop):
 
 async def test_kubernetes_score_with_metrics_only(aiohttp_server, config, loop):
     app = ApplicationFactory(status__is_scheduled=False)
-    clusters = [ClusterFactory(spec__metrics=[]), ClusterFactory(spec__metrics=[])]
+    clusters = [ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE),
+                ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)]
 
     with pytest.raises(AssertionError):
         scheduler = Scheduler("http://localhost:8080", worker_count=0)
@@ -548,12 +559,14 @@ async def test_kubernetes_score_missing_metric(aiohttp_server, db, config, loop)
         ClusterFactory(
             spec__metrics=[
                 MetricRef(name="non-existent-metric", weight=1, namespaced=False)
-            ]
+            ],
+            status__state=ClusterState.ONLINE
         ),
         ClusterFactory(
             spec__metrics=[
                 MetricRef(name="non-existent-metric", weight=1, namespaced=True)
-            ]
+            ],
+            status__state=ClusterState.ONLINE
         ),
     ]
     for cluster in clusters:
@@ -592,10 +605,12 @@ async def test_kubernetes_score_missing_metrics_provider(
     app = ApplicationFactory(status__is_scheduled=False)
     clusters = [
         ClusterFactory(
-            spec__metrics=[MetricRef(name="my-metric", weight=1, namespaced=False)]
+            spec__metrics=[MetricRef(name="my-metric", weight=1, namespaced=False)],
+            status__state=ClusterState.ONLINE
         ),
         ClusterFactory(
-            spec__metrics=[MetricRef(name="my-metric", weight=1, namespaced=True)]
+            spec__metrics=[MetricRef(name="my-metric", weight=1, namespaced=True)],
+            status__state=ClusterState.ONLINE
         ),
     ]
     for cluster in clusters:
@@ -672,13 +687,15 @@ async def test_kubernetes_score_multiple_failing_metric(
             spec__metrics=[
                 MetricRef(name="non-existent-metric", weight=1, namespaced=False),
                 MetricRef(name="existent-metric", weight=1, namespaced=False),
-            ]
+            ],
+            status__state=ClusterState.ONLINE
         ),
         ClusterFactory(
             spec__metrics=[
                 MetricRef(name="also-existent", weight=1, namespaced=False),
                 MetricRef(name="again-non-existent", weight=1, namespaced=False),
-            ]
+            ],
+            status__state=ClusterState.ONLINE
         ),
     ]
     for cluster in clusters:
@@ -779,7 +796,8 @@ async def test_kubernetes_score_failing_metrics_provider(
     app = ApplicationFactory(status__is_scheduled=False)
     clusters = [
         ClusterFactory(
-            spec__metrics=[MetricRef(name="my-metric", weight=1, namespaced=True)]
+            spec__metrics=[MetricRef(name="my-metric", weight=1, namespaced=True)],
+            status__state=ClusterState.ONLINE
         )
     ]
     await db.put(clusters[0])
@@ -842,7 +860,8 @@ async def test_kubernetes_score_failing_globalmetrics_provider(
     app = ApplicationFactory(status__is_scheduled=False)
     clusters = [
         ClusterFactory(
-            spec__metrics=[MetricRef(name="my-metric", weight=1, namespaced=False)]
+            spec__metrics=[MetricRef(name="my-metric", weight=1, namespaced=False)],
+            status__state=ClusterState.ONLINE
         )
     ]
     await db.put(clusters[0])
@@ -890,9 +909,10 @@ async def test_kubernetes_prefer_cluster_with_global_metrics(
 ):
     prometheus = await aiohttp_server(make_prometheus({"my_metric": 2 * ["0.4"]}))
 
-    cluster_miss = ClusterFactory(spec__metrics=[])
+    cluster_miss = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
     cluster = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)]
+        spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
     metric = GlobalMetricFactory(
         metadata__name="heat-demand",
@@ -932,9 +952,10 @@ async def test_kubernetes_prefer_cluster_with_namespaced_metrics(
 ):
     prometheus = await aiohttp_server(make_prometheus({"my_metric": ["0.4"]}))
 
-    cluster_miss = ClusterFactory(spec__metrics=[])
+    cluster_miss = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
     cluster = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=True)]
+        spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=True)],
+        status__state=ClusterState.ONLINE
     )
     metric = MetricFactory(
         metadata__name="heat-demand",
@@ -969,7 +990,8 @@ async def test_kubernetes_prefer_cluster_with_namespaced_metrics(
 
 
 async def test_kubernetes_select_cluster_without_metric(aiohttp_server, config, loop):
-    clusters = (ClusterFactory(spec__metrics=[]), ClusterFactory(spec__metrics=[]))
+    clusters = (ClusterFactory(spec__metrics=[]), ClusterFactory(spec__metrics=[],
+                status__state=ClusterState.ONLINE))
     app = ApplicationFactory(spec__constraints=None)
 
     scheduler = Scheduler("http://localhost:8080", worker_count=0)
@@ -988,11 +1010,41 @@ async def test_kubernetes_select_cluster_not_deleted(aiohttp_server, config, loo
         index = random.randint(0, 9)
         clusters = [
             ClusterFactory(
-                metadata__deleted=datetime.now(timezone.utc), spec__metrics=[]
+                metadata__deleted=datetime.now(timezone.utc), spec__metrics=[],
+                status__state=ClusterState.ONLINE
             )
             for _ in range(10)
         ]
         clusters[index].metadata.deleted = None
+
+        app = ApplicationFactory(spec__constraints=None)
+
+        scheduler = Scheduler("http://localhost:8080", worker_count=0)
+        server = await aiohttp_server(create_app(config))
+
+        async with Client(url=server_endpoint(server), loop=loop) as client:
+            await scheduler.prepare(client)
+            selected = await scheduler.kubernetes.select_kubernetes_cluster(
+                app, clusters
+            )
+
+            assert selected == clusters[index]
+
+
+async def test_kubernetes_select_cluster_online(aiohttp_server, config, loop):
+    # As the finally selected cluster is chosen randomly, perform the test several times
+    # to ensure that the cluster has really been chosen the right way, not by chance.
+    for _ in range(10):
+        index = random.randint(0, 9)
+        clusters = [
+            ClusterFactory(
+                spec__metrics=[],
+                status__state=ClusterState.OFFLINE
+            )
+            for _ in range(10)
+        ]
+
+        clusters[index].status.state = ClusterState.ONLINE
 
         app = ApplicationFactory(spec__constraints=None)
 
@@ -1018,7 +1070,8 @@ async def test_kubernetes_select_cluster_with_constraints_without_metric(
     # that the expected cluster is chosen, even in case of failures.
     countries = ["IT"] + fake.words(99)
     clusters = [
-        ClusterFactory(spec__metrics=[], metadata__labels={"location": country})
+        ClusterFactory(spec__metrics=[], metadata__labels={"location": country},
+                       status__state=ClusterState.ONLINE)
         for country in countries
     ]
 
@@ -1040,8 +1093,8 @@ async def test_kubernetes_select_cluster_with_constraints_without_metric(
 async def test_kubernetes_select_cluster_sticky_without_metric(
     aiohttp_server, config, loop
 ):
-    cluster_a = ClusterFactory(spec__metrics=[])
-    cluster_b = ClusterFactory(spec__metrics=[])
+    cluster_a = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
+    cluster_b = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
     app = ApplicationFactory(
         spec__constraints=None,
         status__scheduled_to=resource_ref(cluster_a),
@@ -1060,16 +1113,19 @@ async def test_kubernetes_select_cluster_sticky_without_metric(
         assert selected == cluster_a
 
 
-async def test_kubernetes_select_cluster_all_unreachable_metric(
+async def test_kubernetes_select_no_cluster_all_unreachable_metric(
     aiohttp_server, config, db, loop
 ):
-    """Test scheduler picks a cluster even if all metrics providers are unreachable"""
+    """Test scheduler picks no cluster if all metrics providers are unreachable
+    as this will set the clusters to ClusterState.FAILING_METRICS"""
     clusters = [
         ClusterFactory(
-            spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=False)]
+            spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=False)],
+            status__state=ClusterState.ONLINE
         ),
         ClusterFactory(
-            spec__metrics=[MetricRef(name="unreachable", weight=0.1, namespaced=True)]
+            spec__metrics=[MetricRef(name="unreachable", weight=0.1, namespaced=True)],
+            status__state=ClusterState.ONLINE
         ),
     ]
     for cluster in clusters:
@@ -1120,9 +1176,11 @@ async def test_kubernetes_select_cluster_all_unreachable_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes.select_kubernetes_cluster(app, clusters)
+        with pytest.raises(NoClusterFound):
+            selected = await scheduler.kubernetes.select_kubernetes_cluster(app, clusters)
 
-    assert selected in clusters
+    for cluster in clusters:
+        assert cluster.status.state == ClusterState.FAILING_METRICS
 
 
 async def test_kubernetes_select_cluster_some_unreachable_metric(
@@ -1131,12 +1189,14 @@ async def test_kubernetes_select_cluster_some_unreachable_metric(
     """Test scheduler picks cluster from those with metrics from reachable providers"""
     prometheus = await aiohttp_server(make_prometheus({"heat-demand": ["0.4"] * 2}))
 
-    cluster_wo_metric = ClusterFactory(spec__metrics=[])
+    cluster_wo_metric = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
     cluster_w_unreachable = ClusterFactory(
-        spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=False)]
+        spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
     cluster_w_metric = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)]
+        spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
     await db.put(cluster_w_metric)
     await db.put(cluster_wo_metric)
@@ -1179,13 +1239,15 @@ async def test_kubernetes_select_cluster_sticky_all_unreachable_metric(
 ):
     """Test which stickiness has the highest priority,
     if no metrics provider is reachable"""
-    cluster_wo_metric = ClusterFactory(spec__metrics=[])
-    current_wo_metric = ClusterFactory(spec__metrics=[])
+    cluster_wo_metric = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
+    current_wo_metric = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
     cluster1_w_metric = ClusterFactory(
-        spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=False)]
+        spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
     cluster2_w_metric = ClusterFactory(
-        spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=True)]
+        spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=True)],
+        status__state=ClusterState.ONLINE
     )
     clusters = [
         cluster_wo_metric,
@@ -1253,19 +1315,21 @@ async def test_kubernetes_select_cluster_sticky_others_with_metric(
         make_prometheus({"heat-demand": 4 * ["0.4"], "some-metric": 4 * ["1.0"]})
     )
 
-    current_wo_metric = ClusterFactory(spec__metrics=[])
-    cluster_wo_metric = ClusterFactory(spec__metrics=[])
+    current_wo_metric = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
+    cluster_wo_metric = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
     cluster_w_metric1 = ClusterFactory(
         spec__metrics=[
             MetricRef(name="heat-demand", weight=0.9, namespaced=False),
             MetricRef(name="some-metric", weight=1, namespaced=False),
-        ]
+        ],
+        status__state=ClusterState.ONLINE
     )
     cluster_w_metric2 = ClusterFactory(
         spec__metrics=[
             MetricRef(name="heat-demand", weight=0.5, namespaced=False),
             MetricRef(name="some-metric", weight=1, namespaced=False),
-        ]
+        ],
+        status__state=ClusterState.ONLINE
     )
     clusters = [
         current_wo_metric,
@@ -1320,12 +1384,14 @@ async def test_kubernetes_select_cluster_sticky_reachable_metric(
     """Test that stickiness is taken into account when metrics are used"""
     prometheus = await aiohttp_server(make_prometheus({"heat-demand": 4 * ["0.4"]}))
 
-    cluster_wo_metric = ClusterFactory(spec__metrics=[])
+    cluster_wo_metric = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
     current_w_metric = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand", weight=0.99, namespaced=False)]
+        spec__metrics=[MetricRef(name="heat-demand", weight=0.99, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
     cluster_w_metric = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)]
+        spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
 
     clusters = [cluster_wo_metric, current_w_metric, cluster_w_metric]
@@ -1362,16 +1428,18 @@ async def test_kubernetes_select_cluster_sticky_reachable_metric(
     assert selected == current_w_metric
 
 
-async def test_kubernetes_select_cluster_sticky_to_unreachable_all_unreachable_metric(
+async def test_kubernetes_select_no_cluster_sticky_to_unreachable_all_unreachable_metric(
     aiohttp_server, config, db, loop
 ):
     """Test that also clusters with unreachable metrics providers are considered"""
-    cluster_wo_metric = ClusterFactory(spec__metrics=[])
+    cluster_wo_metric = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
     current_w_unreachable = ClusterFactory(
-        spec__metrics=[MetricRef(name="unreachable", weight=0.99, namespaced=False)]
+        spec__metrics=[MetricRef(name="unreachable", weight=0.99, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
     cluster_w_unreachable = ClusterFactory(
-        spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=False)]
+        spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
     clusters = [cluster_wo_metric, current_w_unreachable, cluster_w_unreachable]
     for cluster in clusters:
@@ -1407,7 +1475,7 @@ async def test_kubernetes_select_cluster_sticky_to_unreachable_all_unreachable_m
         await scheduler.prepare(client)
         selected = await scheduler.kubernetes.select_kubernetes_cluster(app, clusters)
 
-    assert selected == current_w_unreachable
+    assert selected == cluster_wo_metric
 
 
 async def test_kubernetes_select_cluster_sticky_unreachable_metric(
@@ -1417,12 +1485,14 @@ async def test_kubernetes_select_cluster_sticky_unreachable_metric(
     has unreachable metrics."""
     prometheus = await aiohttp_server(make_prometheus({"heat-demand": 2 * ["0.4"]}))
 
-    cluster_wo_metric = ClusterFactory(spec__metrics=[])
+    cluster_wo_metric = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
     current_w_unreachable = ClusterFactory(
-        spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=False)]
+        spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
     cluster_w_metric = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)]
+        spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
     clusters = [cluster_wo_metric, current_w_unreachable, cluster_w_metric]
     random.shuffle(clusters)
@@ -1465,7 +1535,8 @@ async def test_kubernetes_scheduling(aiohttp_server, config, db, loop):
     prometheus = await aiohttp_server(make_prometheus({"heat_demand_zone_1": ["0.25"]}))
 
     cluster = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)]
+        spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
     app = ApplicationFactory(
         spec__constraints__cluster__labels=[],
@@ -1539,11 +1610,14 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
     )
 
     cluster1 = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)]
+        spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
     cluster2 = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand-2", weight=1, namespaced=False)]
+        spec__metrics=[MetricRef(name="heat-demand-2", weight=1, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
+
     app = ApplicationFactory(
         metadata__modified=datetime.now(timezone.utc),
         spec__constraints__cluster__labels=[],
@@ -1667,10 +1741,12 @@ async def test_kubernetes_migration_w_update(aiohttp_server, config, db, loop):
     )
 
     cluster1 = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)]
+        spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
     cluster2 = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand-2", weight=1, namespaced=False)]
+        spec__metrics=[MetricRef(name="heat-demand-2", weight=1, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
     app = ApplicationFactory(
         metadata__modified=datetime.now(timezone.utc),
@@ -1769,10 +1845,12 @@ async def test_kubernetes_no_migration(aiohttp_server, config, db, loop):
     )
 
     cluster1 = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)]
+        spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
     cluster2 = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand-2", weight=1, namespaced=False)]
+        spec__metrics=[MetricRef(name="heat-demand-2", weight=1, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
     app = ApplicationFactory(
         metadata__modified=datetime.now(timezone.utc),
@@ -1854,10 +1932,12 @@ async def test_kubernetes_application_update(aiohttp_server, config, db, loop):
     )
 
     cluster1 = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)]
+        spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
     cluster2 = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand-2", weight=1, namespaced=False)]
+        spec__metrics=[MetricRef(name="heat-demand-2", weight=1, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
     app = ApplicationFactory(
         metadata__modified=datetime.now(timezone.utc),
@@ -1955,10 +2035,12 @@ async def test_kubernetes_application_reschedule_no_update(
     )
 
     cluster1 = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)]
+        spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
     cluster2 = ClusterFactory(
-        spec__metrics=[MetricRef(name="heat-demand-2", weight=1, namespaced=False)]
+        spec__metrics=[MetricRef(name="heat-demand-2", weight=1, namespaced=False)],
+        status__state=ClusterState.ONLINE
     )
     app = ApplicationFactory(
         metadata__modified=datetime.now(timezone.utc),
