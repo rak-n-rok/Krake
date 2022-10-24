@@ -7,6 +7,7 @@ from enum import Enum
 from functionals.utils import (
     run,
     check_resource_exists,
+    check_cluster_created_and_up,
     check_app_running_on,
     check_app_created_and_up,
     check_return_code,
@@ -95,7 +96,7 @@ class ResourceDefinition(ABC):
         """
         pass
 
-    def create_resource(self, wait=False):
+    def create_resource(self, ignore_verification=False, wait=False):
         """Create the resource."""
         # Create the actual resource based on the initial values of this
         # ResourceDefinition, since these are the values which should be used
@@ -111,7 +112,8 @@ class ResourceDefinition(ABC):
 
         # Verify that the attributes of the actual resource and this ResourceDefinition
         # are equal.
-        self._verify_resource()
+        if not ignore_verification:
+            self._verify_resource()
 
     def _set_default_values(self):
         """Checks which attributes of this resource definition have not yet been set
@@ -143,22 +145,24 @@ class ResourceDefinition(ABC):
         """
         pass
 
-    def check_created(self, delay=10):
+    def check_created(self, delay=10, expected_state=None):
         """Run the command for checking if the resource has been created.
 
         Args:
             delay (int, optional): The number of seconds that should be allowed
                 before giving up.
+            expected_state (str, optional): The expected state of the to be checked
+                resource. Normally converts to an ONLINE or RUNNING state.
         """
         run(
             self.get_command(),
-            condition=self.creation_acceptance_criteria(),
+            condition=self.creation_acceptance_criteria(expected_state=expected_state),
             interval=1,
             retry=delay,
         )
 
     @abstractmethod
-    def creation_acceptance_criteria(self, error_message=None):
+    def creation_acceptance_criteria(self, error_message=None, expected_state=None):
         """Verify that the resource has been properly created.
 
         Args:
@@ -331,7 +335,7 @@ class ResourceDefinition(ABC):
             assert self.attribute_is_equal(attr, expected[attr], observed[attr]), msg
 
     def attribute_is_equal(self, attr_name, expected, observed):
-        """Check whether the expected is equal to observed.
+        """Check whether the expected is equal to the observed.
 
         Expected to be overridden by subclasses in case the comparison is not
         straightforward.
@@ -569,8 +573,11 @@ class ApplicationDefinition(ResourceDefinition):
 
         return hook_params
 
-    def creation_acceptance_criteria(self, error_message=None):
-        return check_app_created_and_up(error_message=error_message)
+    def creation_acceptance_criteria(self, error_message=None, expected_state="RUNNING"):
+        if expected_state is None:
+            expected_state = "RUNNING"
+        return check_app_created_and_up(error_message=error_message,
+                                        expected_state=expected_state)
 
     def delete_command(self, wait):
         if wait:
@@ -812,17 +819,13 @@ class ClusterDefinition(ResourceDefinition):
         infrastructure provider implementation.
         """
 
-    def creation_acceptance_criteria(self, error_message=None):
-        if not error_message:
-            error_message = f"The cluster {self.name} was not properly created."
-        return check_resource_exists(error_message=error_message)
-
-    def register_resource(self, wait=False):
+    def register_resource(self, wait=False, ignore_verification=False):
         """Register the resource."""
         error_message = f"The {self.kind} {self.name} could not be registered."
         run(self.register_command(wait), condition=check_return_code(error_message))
         self._set_default_values()
-        self._verify_resource()
+        if not ignore_verification:
+            self._verify_resource()
 
     def check_registered(self, delay=10):
         """Run the command for checking if the resource has been registered.
@@ -884,6 +887,14 @@ class ClusterDefinition(ResourceDefinition):
                 str(weighted_metric.weight),
             ]
         return metrics_options
+
+    def creation_acceptance_criteria(self, error_message=None, expected_state="ONLINE"):
+        if expected_state is None:
+            expected_state = "ONLINE"
+        if not error_message:
+            error_message = f"The cluster {self.name} was not properly created."
+        return check_cluster_created_and_up(error_message=error_message,
+                                            expected_state=expected_state)
 
     def delete_command(self, wait):
         return f"rok kube cluster delete {self.name}".split()

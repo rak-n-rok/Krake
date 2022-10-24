@@ -399,8 +399,6 @@ class ApplicationSpec(Serializable):
     constraints: Constraints
     hooks: List[str] = field(default_factory=list)
     shutdown_grace_time: int = 30
-    backoff_limit: int = 10
-
 
     def __post_init__(self):
         """Method automatically ran at the end of the :meth:`__init__` method, used to
@@ -516,7 +514,6 @@ class ApplicationStatus(Status):
     shutdown_cert: str = None
     shutdown_key: str = None
     shutdown_grace_period: datetime = None
-    retries: int = 10
 
 
 @persistent("/kubernetes/applications/{namespace}/{name}")

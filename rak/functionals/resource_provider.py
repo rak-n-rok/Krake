@@ -114,7 +114,7 @@ class BaseMetricsProviderDefinition(ResourceDefinition, ABC):
     def creation_command(self, wait):
         raise NotImplementedError("Not yet implemented")
 
-    def creation_acceptance_criteria(self, error_message=None):
+    def creation_acceptance_criteria(self, error_message=None, expected_state=None):
         if not error_message:
             error_message = (
                 f"The {self.kind.value} {self.name} was not properly created."
@@ -452,7 +452,7 @@ class BaseMetricDefinition(ResourceDefinition, ABC):
             cmd += ["--metric-name", self.mp_metric_name]
         return cmd
 
-    def creation_acceptance_criteria(self, error_message=None):
+    def creation_acceptance_criteria(self, error_message=None, expected_state=None):
         if not error_message:
             error_message = (
                 f"The {self.kind.value} {self.name} was not " f"properly created."
@@ -520,7 +520,7 @@ class NonExistentMetric(BaseMetricDefinition):
     def _get_actual_mutable_attribute_values(self):
         raise ValueError("This metric does not exist and has no mutable attributes.")
 
-    def create_resource(self):
+    def create_resource(self, ignore_verification=False):
         pass
 
     def check_created(self, delay=10):
@@ -529,7 +529,7 @@ class NonExistentMetric(BaseMetricDefinition):
     def creation_command(self, wait):
         raise ValueError("This metric does not exist and cannot be created.")
 
-    def creation_acceptance_criteria(self, error_message=None):
+    def creation_acceptance_criteria(self, error_message=None, expected_state=None):
         msg = (
             f"This metric does not exist and cannot be created. "
             f"error_message = {error_message}"

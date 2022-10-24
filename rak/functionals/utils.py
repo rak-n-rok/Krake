@@ -206,7 +206,31 @@ def check_app_state(state, error_message, reason=None):
     return validate
 
 
-def check_app_created_and_up(error_message=""):
+def check_cluster_created_and_up(error_message="", expected_state="ONLINE"):
+    if not error_message:
+        error_message = "Cluster was not up and running."
+
+    err_msg_fmt = error_message + " Error: {details}"
+
+    def validate(response):
+        try:
+            cluster_details = response.json
+            observed_state = cluster_details["status"]["state"]
+
+            details = (
+                f"Unable to observe cluster in an {expected_state} state. "
+                f"Observed: {observed_state}."
+            )
+            assert observed_state == expected_state, \
+                err_msg_fmt.format(details=details) + "| " + json.dumps(cluster_details)
+
+        except (KeyError, json.JSONDecodeError) as e:
+            raise AssertionError(err_msg_fmt % {"details": str(e)})
+
+    return validate
+
+
+def check_app_created_and_up(error_message="", expected_state="RUNNING"):
     if not error_message:
         error_message = "App was not up and running."
 
@@ -215,7 +239,6 @@ def check_app_created_and_up(error_message=""):
     def validate(response):
         try:
             app_details = response.json
-            expected_state = "RUNNING"
             observed_state = app_details["status"]["state"]
             observed_running_on = app_details["status"]["running_on"]
             observed_scheduled_to = app_details["status"]["scheduled_to"]
@@ -224,19 +247,21 @@ def check_app_created_and_up(error_message=""):
                 f"Unable to observe application in a {expected_state} state. "
                 f"Observed: {observed_state}."
             )
-            assert observed_state == expected_state, err_msg_fmt.format(details=details)
+            assert observed_state == expected_state, \
+                err_msg_fmt.format(details=details) + " | " + json.dumps(app_details)
 
-            details = (
-                f"App was in {expected_state} state but its running_on "
-                f"was {observed_running_on}."
-            )
-            assert observed_running_on, err_msg_fmt % {"details": details}
+            if expected_state == "RUNNING":
+                details = (
+                    f"App was in {expected_state} state but its running_on "
+                    f"was {observed_running_on}."
+                )
+                assert observed_running_on, err_msg_fmt % {"details": details}
 
-            details = (
-                f"App was in {expected_state} state but its scheduled_to "
-                f"was {observed_scheduled_to}."
-            )
-            assert observed_scheduled_to, err_msg_fmt % {"details": details}
+                details = (
+                    f"App was in {expected_state} state but its scheduled_to "
+                    f"was {observed_scheduled_to}."
+                )
+                assert observed_scheduled_to, err_msg_fmt % {"details": details}
 
         except (KeyError, json.JSONDecodeError) as e:
             raise AssertionError(err_msg_fmt % {"details": str(e)})
