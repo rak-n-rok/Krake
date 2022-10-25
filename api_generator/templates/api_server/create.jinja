@@ -15,24 +15,6 @@ async def create_{{ operation.signature_name }}(request, body):
     kwargs["namespace"] = namespace
     {%- endif %}
 
-    # Ensure that a resource with the same name does not already
-    # exists.
-    existing = await session(request).get(body.__class__, **kwargs)
-
-    if existing is not None:
-        problem = HttpProblem(
-            {% if operation.resource.namespaced -%}
-            detail=(
-                f"{{ operation.resource.singular }} {body.metadata.name!r} already "
-                f"exists in namespace {namespace!r}"
-            ),
-            {%- else -%}
-            detail=f"{{ operation.resource.singular }} {body.metadata.name!r} already exists",
-            {%- endif %}
-            title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
-        )
-        raise HttpProblemError(web.HTTPConflict, problem)
-
     now = utils.now()
 
     {% if operation.resource.namespaced -%}
@@ -50,9 +32,24 @@ async def create_{{ operation.signature_name }}(request, body):
             setattr(body, field.name, value)
     {%- endif %}
 
-    await session(request).put(body)
-    logger.info(
-        "Created %s %r (%s)", "{{ operation.resource.singular }}", body.metadata.name, body.metadata.uid
-    )
+    try:
+        await session(request).put(body)
+        logger.info(
+            "Created %s %r (%s)", "{{ operation.resource.singular }}",
+            body.metadata.name, body.metadata.uid
+        )
+    except TransactionError:
+        problem = HttpProblem(
+            {% if operation.resource.namespaced -%}
+            detail=(
+                f"{{ operation.resource.singular }} {body.metadata.name!r} already "
+                f"exists in namespace {namespace!r}"
+            ),
+            {%- else -%}
+            detail=f"{{ operation.resource.singular }} {body.metadata.name!r} already exists",
+            {%- endif %}
+            title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
+        )
+        raise HttpProblemError(web.HTTPConflict, problem)
 
     return web.json_response(body.serialize())
