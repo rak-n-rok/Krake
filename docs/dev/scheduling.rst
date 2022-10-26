@@ -177,6 +177,10 @@ rescheduling, just a re-deployment.
 Magnum cluster handler
 ======================
 
+.. note::
+
+    Due to stability and development issues on the side of Magnum, this feature isn't actively developed anymore.
+
 The Magnum cluster handler is responsible for scheduling Magnum clusters to the best
 OpenStack project. The Magnum cluster handler should process only Magnum clusters that
 are not bound to any OpenStack project and have non-deleted state.
@@ -235,7 +239,10 @@ Metrics and Metrics Providers
 =============================
 
 Overview
---------
+-------
+.. note::
+
+    Due to stability and development issues on the side of Magnum, this feature isn't actively developed anymore.
 
 This section describes the metrics and their providers used in the Krake scheduling
 algorithm.
