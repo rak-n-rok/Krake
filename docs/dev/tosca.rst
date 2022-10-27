@@ -12,21 +12,21 @@ TOSCA_ is an OASIS standard language to describe a topology of cloud-based web s
 their components, relationships, and the processes that manage them.
 
 TOSCA uses the concept of service templates to describe services.
-TOSCA further provides a type system of types to describe the possible building blocks for
+TOSCA further provides a system of types to describe the possible building blocks for
 constructing service templates and relationship types to describe possible kinds of relations.
 It is possible to create custom TOSCA types for building custom TOSCA templates.
 
-Krake allows end-users to orchestrate Kubernetes applications by TOSCA. It is required
+Krake allows end-users to orchestrate Kubernetes applications with TOSCA. It is required
 to use custom TOSCA templates for them. Krake supports Cloud Service
-Archive (CSAR_) as well. CSAR_ is a container file using the ZIP file format_,
+Archive (CSAR_) files as well. CSAR_ is a container file using the ZIP file format_,
 that includes all artifacts required to manage the lifecycle of the corresponding
-cloud application using TOSCA language.
+cloud application using the TOSCA language.
 
 .. note::
 
-  TOSCA technical committee has decided that any profile (template base)
-  development should best be left to the community. It means, that there are not any
-  "de facto standard" on how to describe e.g. Kubernetes applications by TOSCA.
+  The TOSCA technical committee has decided that any profile (template base)
+  development should be left to the community. It means, that there are not any
+  "de facto standard" on how to describe e.g. Kubernetes applications with TOSCA.
   Each orchestrator that supports TOSCA is its own product with its own design paradigms
   and may have different assumptions and requirements for modeling applications.
 
@@ -43,29 +43,29 @@ TOSCA-Simple-Profile-YAML_ ``v1.0`` or ``v1.2`` and should be in defined format_
 
 .. note::
 
-  Krake uses tosca-parser_ library as an underlying TOSCA parser and validator.
-  Currently, tosca-parser_ supports TOSCA-Simple-Profile-YAML_ ``v1.0`` or ``v1.2``,
+  Krake uses the tosca-parser_ library as its underlying TOSCA parser and validator.
+  Currently, tosca-parser_ supports the TOSCA-Simple-Profile-YAML_ ``v1.0`` or ``v1.2``,
   which reflects what is supported by Krake.
 
 .. note::
 
-  Krake API could process TOSCA templates in two formats. Krake API could receive
-  the TOSCA template as serialized JSON or Krake API could receive a **URL** that points
-  to some remote location of the TOSCA template.
-  In the case of URL definition, the underlying tosca-parser_ library is able
+  The Krake API could process TOSCA templates in two formats. It can receive
+  the TOSCA template as serialized JSON or the API could receive a **URL** that points
+  to some remote location, that provides a TOSCA template.
+  In the case of providing a URL, the underlying tosca-parser_ library is able
   to (synchronously) download the TOSCA template from the defined URL
   and then parse and validate it.
 
 Another prerequisite (besides the TOSCA version) is a TOSCA profile (custom type).
-Krake supports and can manage only Kubernetes application that is described by
+Krake supports and can manage only Kubernetes application that is described by the
 ``tosca.nodes.indigo.KubernetesObject`` custom type.
 
-``tosca.nodes.indigo.KubernetesObject`` custom type has been defined by
-Grycap_ research group. It could be imported as an external document using ``imports``
-directive in the template or could be directly declared as a custom
+The ``tosca.nodes.indigo.KubernetesObject`` custom type has been defined by the
+Grycap_ research group. It could be imported as an external document using the ``imports``
+directive in the template or it can be directly declared as a custom
 data type within the ``data_types`` template section.
 
-For import use the following reference to the Grycap's `custom types`_:
+For import use the following reference to Grycap's `custom types`_:
 
 .. code:: yaml
 
@@ -88,6 +88,10 @@ For direct definition use the following (minimal) data type:
 The ``spec`` of ``tosca.nodes.indigo.KubernetesObject`` custom type should contain
 Kubernetes manifest as a string. It is possible to applied subset of supported `TOSCA functions`_
 like:
+  - get_property
+  - get_input
+The ``spec`` of the ``tosca.nodes.indigo.KubernetesObject`` custom type should contain a Kubernetes 
+manifest as a string. It is possible to apply a subset of supported `TOSCA functions`_ like:
   - get_property
   - get_input
   - concat
@@ -130,11 +134,11 @@ Then, the example of TOSCA template for a single Kubernetes Pod could be designe
 
 Let's save the definition above to the ``tosca-example.yaml`` file.
 
-If you want to expose created TOSCA template in your localhost, you can use simple python HTTP server as follows:
+If you want to expose a created TOSCA template in your localhost, you can use a simple python HTTP server as follows:
 
 .. code:: bash
 
-    # TOSCA template will be then exposed on URL: `http://127.0.0.1:8000/tosca-example.yaml`
+    # TOSCA template will then be exposed on URL: `http://127.0.0.1:8000/tosca-example.yaml`
     python3 -m http.server 8000
 
 
@@ -142,19 +146,19 @@ Cloud Service Archive
 ---------------------
 
 CSAR_ should be in a defined format_. The specification allows to create CSAR with or without
-the ``TOSCA.meta`` file. So let's create an example with TOSCA meta.
+the ``TOSCA.meta`` file.
 The ``TOSCA.meta`` file structure follows the exact same syntax as defined in the TOSCA 1.0 specification.
 It is required to store this file in the ``TOSCA-Metadata`` directory. It is also required to
-include the ``Entry-Definitions`` keyword pointing to a valid TOSCA definitions YAML file
-that a TOSCA orchestrator should use as entry for parsing the contents of the overall CSAR file (let's use
-the above ``tosca-example.yaml`` file in this example).
+include the ``Entry-Definitions`` keyword pointing to a valid TOSCA definitions YAML file,
+which should be used by a TOSCA orchestrator as an entrypoint for parsing the contents of the overall CSAR file 
+(the previously created ``tosca-example.yaml`` file will be used in this example).
 
 .. note::
 
-  Krake API could process CSAR archive **only** defines as **URL**. It means that
-  the CSAR should be created and then exposed in some remote location.
+  The Krake API can process CSAR files **only**, if they're defined as **URL**s. 
+  It means, that CSAR should be created and then exposed in some remote location.
   Then, the underlying tosca-parser_ library is able to (synchronously)
-  download the CSAR archive from the defined URL and then parse and validate it.
+  download the CSAR archive from the defined URL and afterwards parse and validate it.
 
 .. code:: bash
 
@@ -170,6 +174,8 @@ the above ``tosca-example.yaml`` file in this example).
 
   # Expose the created CSAR by simple HTTP python server
   # CSAR will be then exposed on URL: `http://127.0.0.1:8000/example.csar`
+  # Expose the created CSAR file with a simple HTTP python server
+  # CSAR will then be exposed on URL: `http://127.0.0.1:8000/example.csar`
   python3 -m http.server 8000
 
 
@@ -177,15 +183,15 @@ TOSCA/CSAR Workflow
 ==============
 
 The TOSCA template or CSAR archive should be composed on the client side. Then the client sends the request
-for the creation or updating application together with the TOSCA template (YAML file or URL) or CSAR URL.
-Krake API validates the TOSCA template or CSAR file suffixes when the URL is used for the TOSCA template
-or CSAR archive definition. When the TOSCA template is defined by the YAML file the parsing and
-validation are performed by Krake API (using tosca-parser_).
-After validation, the live cycle of the application is the same as a regular one (defined by Kubernetes
-manifest) except for the point when the TOSCA template or CSAR archive is translated to the
-Kubernetes manifest in Kubernetes Application Controller. Kubernetes Application Controller
-is responsible for the translation of TOSCA/CSAR to Kubernetes manifests. If that is happening the
-application has a state **TRANSLATING**.
+for the creation or update of an application together with the TOSCA template (YAML file or URL) or CSAR URL.
+The Krake API validates the TOSCA template or CSAR file suffixes depending on the used URL.
+When the TOSCA template is defined with a YAML file, parsing and validation are performed by Krake API 
+(using the tosca-parser_).
+After validation, the life cycle of the application is the same as a regular one (defined by Kubernetes
+manifest) except for the translation of the TOSCA template or CSAR archive into a Kubernetes manifest 
+inside of the Kubernetes Application Controller.
+The controller is responsible for the translation of TOSCA/CSAR to Kubernetes manifests. 
+During this process, the application will in the **TRANSLATING** state.
 
 The workflow of this process can be seen in the following figure:
 
@@ -200,27 +206,27 @@ Examples
 Prerequisites
 -------------
 
-Krake repository contains a bunch of useful examples. Clone it first as follows:
+The Krake repository contains a bunch of useful examples. Clone it first with the following commands:
 
 .. code:: bash
 
     git clone https://gitlab.com/rak-n-rok/krake.git
     cd krake
 
-TOSCA template examples are located in ``rak/functionals`` directory. Visit the following TOSCA templates:
+TOSCA template examples are located in the ``rak/functionals`` directory. View these TOSCA templates for example:
 
 .. code:: bash
 
     $ cat rak/functionals/echo-demo-tosca.yaml
     $ cat rak/functionals/echo-demo-update-tosca.yaml
 
-If you want to expose created TOSCA template in some URL, you can use simple python HTTP server as follows:
+If you want to expose a created TOSCA template via some URL, you can use a simple python HTTP server as follows:
 
 .. code:: bash
 
     cd rak/functionals/
-    # Expose the TOSCA template examples by simple HTTP python server
-    # TOSCA template examples will be then exposed on URLs:
+    # Expose the TOSCA template examples with a simple HTTP python server
+    # TOSCA template examples will then be exposed on URLs:
     # - `http://127.0.0.1:8000/echo-demo-tosca.yaml`
     # - `http://127.0.0.1:8000/echo-demo-update-tosca.yaml`
     python3 -m http.server 8000
@@ -240,37 +246,37 @@ If you are interested in CSAR, use the pre-defined ``TOSCA.meta`` file and creat
 Rok
 ~~~~
 
-TOSCA template YAML file should be applied the same as Kubernetes manifest file
+A TOSCA template YAML file should be applied the same way as a Kubernetes manifest file
 using the rok CLI, see :ref:`user/rok-documentation:Rok documentation`.
 
-- Create an application described by the TOSCA template YAML file:
+- Create an application described by a TOSCA template YAML file:
 
 .. code:: bash
 
     rok kube app create --file rak/functionals/echo-demo-tosca.yaml echo-demo
 
-- Update an application described by the TOSCA template:
+- Update an application described by a TOSCA template:
 
 .. code:: bash
 
     rok kube app update --file rak/functionals/echo-demo-update-tosca.yaml echo-demo
 
-TOSCA template URL or CSAR archive URL should be defined after the `--url` optional argument
+A TOSCA template URL or CSAR archive URL should be defined after the optional `--url` argument
 using the rok CLI, see :ref:`user/rok-documentation:Rok documentation`.
 
-- Create an application described by the TOSCA template URL:
+- Create an application described by a TOSCA template URL:
 
 .. code:: bash
 
     rok kube app create --url http://127.0.0.1:8000/echo-demo-tosca.yaml echo-demo
 
-- Update an application described by the TOSCA template URL:
+- Update an application described by a TOSCA template URL:
 
 .. code:: bash
 
     rok kube app update --url http://127.0.0.1:8000/echo-demo-update-tosca.yaml echo-demo
 
-- Alternatively, create an application described by the CSAR URL:
+- Alternatively, create an application described by a CSAR URL:
 
 .. code:: bash
 
@@ -278,8 +284,8 @@ using the rok CLI, see :ref:`user/rok-documentation:Rok documentation`.
 
 .. tip::
 
-  Krake allows the creation of an application using e.g. plain Kubernetes manifest
-  and then updating it using TOSCA or even updating it using CSAR. The same works
+  Krake allows the creation of an application using e.g. a plain Kubernetes manifest
+  and then updating it with a TOSCA or even CSAR file. The same works
   vice-versa. It means, that the application could be created and then updated by
   any supported format (Kubernetes manifest, TOSCA, CSAR).
 

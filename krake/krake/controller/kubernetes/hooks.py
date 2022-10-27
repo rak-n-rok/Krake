@@ -985,13 +985,13 @@ async def unregister_observer(controller, resource, **kwargs):
 
 @listen.on(HookType.ApplicationToscaTranslation)
 async def translate_tosca(controller, app, **kwargs):
-    """Translate TOSCA template or CSAR archive to the Kubernetes manifest.
+    """Translate a TOSCA template or CSAR archive into a Kubernetes manifest.
 
     Args:
-        controller (KubernetesController): the controller which handles the application
+        controller (KubernetesController): the controller that handles the application
             resource.
-        app (krake.data.kubernetes.Application): the Application which could be defined
-            by TOSCA template or by CSAR archive.
+        app (krake.data.kubernetes.Application): the Application that could be defined
+            by a TOSCA template or a CSAR archive.
 
     Raises:
         ToscaParserException: If the given application does not contain
@@ -1006,8 +1006,8 @@ async def translate_tosca(controller, app, **kwargs):
 
     if not app.spec.tosca and not app.spec.csar:
         raise ToscaParserException(
-            "Application should be defined by Kubernetes manifest"
-            " or by TOSCA template or by CSAR archive: %r",
+            "Application should be defined by a Kubernetes manifest,"
+            " a TOSCA template or a CSAR archive: %r",
             app,
         )
     app.status.state = ApplicationState.TRANSLATING

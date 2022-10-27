@@ -68,11 +68,11 @@ class cached_property(object):
 
 
 def cache_non_hashable(maxsize=1024):
-    """Decorator to wrap a function with a memoizing callable with potentially
+    """Decorator to wrap a function with a memorizing callable with potentially
     non-hashable parameters.
 
-    This decorator extends build-in :func:`functools.lru_cache` that supports
-    only hashable parameters of decorated callable.
+    This decorator extends the build-in :func:`functools.lru_cache`, that supports
+    only hashable parameters of decorated callables.
 
     Note:
         !Be aware that the lru_cache maxsize could affect the Krake memory
@@ -118,7 +118,7 @@ def cache_non_hashable(maxsize=1024):
         def func_with_serialized_params(*args, **kwargs):
             """Deserialize decorated callable parameters.
 
-            This function deserializes back the decorated callable
+            This function deserializes the decorated callable
             parameters. Parameters were serialized before within
             the :func:`lru_decorator`.
 
@@ -138,7 +138,7 @@ def cache_non_hashable(maxsize=1024):
 
         @functools.wraps(func)
         def lru_decorator(*args, **kwargs):
-            """Serialize and cache decorated callable.
+            """Serialize and cache decorated callables.
 
             Args:
                 args: Variable length argument list.

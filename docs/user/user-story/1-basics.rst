@@ -60,7 +60,7 @@ Spawn the demo application
     $ rok kube app create -f git/krake/rak/functionals/echo-demo.yaml echo-demo
     $ rok kube app list  # One Application resource with name "echo-demo"
 
--- **Alternatively**, spawn a Kubernetes ``Application`` using its ``TOSCA`` template file (or URL) or ``CSAR`` archive URL, see :ref:`dev/tosca:Examples`.
+-- **Alternatively**, spawn a Kubernetes ``Application`` using a ``TOSCA`` template file (or URL) or ``CSAR`` archive URL, see :ref:`dev/tosca:Examples`.
 
   .. prompt:: bash $ auto
 

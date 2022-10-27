@@ -38,8 +38,8 @@ def test_application_manifest_empty_error_handling():
     """Ensure that empty manifests and tosca and csar are seen as invalid."""
     with pytest.raises(
         ValidationError,
-        match="The application should be defined by the manifest file"
-        " or by the TOSCA template or by the CSAR file.",
+        match="The application should be defined by"
+        " a manifest file, a TOSCA template or a CSAR file.",
     ):
         ApplicationFactory(
             spec__manifest=[],

@@ -69,7 +69,9 @@ class HttpProblem(Serializable):
         """HACK:
         :class:`marshmallow.Schema` allows registering hooks like ``post_dump``.
         This is not allowed in krake :class:`Serializable`, therefore within
-        the __post_init__ method the hook is registered directly.
+        :class:`marshmallow.Schema` allows registering hooks like ``post_dump``.
+        This is not allowed in krake :class:`Serializable`, therefore
+        the __post_init__ method is registered directly within the hook.
         """
         self.Schema._hooks.update({("post_dump", False): ["remove_none_values"]})
         setattr(self.Schema, "remove_none_values", self.remove_none_values)

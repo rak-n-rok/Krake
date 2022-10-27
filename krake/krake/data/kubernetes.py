@@ -35,9 +35,9 @@ class Constraints(Serializable):
 
 
 def _validate_manifest(manifest):
-    """Validate the content of a manifest provided as list.
+    """Validate the content of a manifest provided as a list.
 
-    Resources inside without API version, kind, metadata
+    Resources without API version, kind, metadata
     or name are considered invalid.
 
     Args:
@@ -82,16 +82,17 @@ def _validate_manifest(manifest):
 
 @cache_non_hashable(maxsize=1024)
 def _validate_tosca_dict(tosca):
-    """Validate the content of a TOSCA provided as dict.
+    """Validate the content of a TOSCA template provided as a dict.
 
-     TOSCA template that do not pass the
-     :class:`toscaparser.tosca_template.ToscaTemplate` validation is considered invalid.
+     If a TOSCA template does not pass the
+     :class:`toscaparser.tosca_template.ToscaTemplate` validation,
+     it is considered invalid.
 
-     The :func:`_validate_tosca` is cached by :func:`hashable_lru` decorator.
-     It saves resources because the instance of :class:`Application` is created
-     multiple times during app. creation or update. Then the Tosca parser
-     has to parse and validates the same TOSCA template multiple times which
-     takes some time.
+     The :func:`_validate_tosca` is cached by the :func:`hashable_lru` decorator.
+     It saves resources, because the instance of :class:`Application` is created
+     multiple times during app creation or update. Then the Tosca parser
+     has to parse and validate the same TOSCA template multiple times, which may
+     take some time.
 
     Note regarding memory complexity:
          The current :func:`cache_non_hashable` maxsize is set to 1024. We consider this
@@ -109,7 +110,7 @@ def _validate_tosca_dict(tosca):
          (which includes serialization of parameters) takes approx. 0.0008s.
 
      Args:
-         tosca (dict): TOSCA to validate.
+         tosca (dict): TOSCA template to validate.
 
      Raises:
          ValidationError: if any error occurred in TOSCA parser validation.
@@ -127,27 +128,27 @@ def _validate_tosca_dict(tosca):
 
 
 def _validate_tosca_url(tosca):
-    """Validate the suffix of a TOSCA template provided as URL.
+    """Validate the suffix of a TOSCA template provided as a URL.
 
-    TOSCA template URL should have `.yaml` or `.yml` suffix.
+    The TOSCA template URL should have a `.yaml` or `.yml` suffix.
 
     Note:
       It is possible to pass the provided URL to the
       :class:`toscaparser.tosca_template.ToscaTemplate` and
-      validates the content of the TOSCA template as well.
+      validate the content of the TOSCA template as well.
       Keep in mind, that the `toscaparser` has to download
-      and parse the TOSCA template from the given URL and then
-      validates it. This could be a time-consuming action,
+      and parse the TOSCA template from the given URL, and then
+      validate it. This could be a time-consuming action,
       not suitable for validation. Caching is also not an option
-      here because the TOSCA template could be updated on the
+      here, because the TOSCA template could be updated on the
       remote server, but the URL could be the same.
-      Therefore, only the suffix of provided URL is validated here.
+      Therefore, only the suffix of the provided URL is validated here.
 
     Args:
         tosca (str): TOSCA URL to validate.
 
      Raises:
-         ValidationError: if TOSCA URL does not have the requested suffix.
+         ValidationError: if the TOSCA URL does not have the requested suffix.
 
      Returns:
          bool: True if no validation error occurred.
@@ -163,10 +164,10 @@ def _validate_tosca(tosca):
     """Validate the TOSCA template provided as a dict or URL.
 
     Args:
-        tosca (Union[dict, str]): TOSCA template dict or URL to validate.
+        tosca (Union[dict, str]): the TOSCA template dict or URL to validate.
 
      Raises:
-         ValidationError: if TOSCA template is considered invalid.
+         ValidationError: if the TOSCA template is considered invalid.
 
      Returns:
          bool: True if no validation error occurred or :args:`tosca` is empty.
@@ -185,21 +186,21 @@ def _validate_tosca(tosca):
 
 
 def _validate_csar(csar):
-    """Validate the suffix of a CSAR archive provided as URL.
+    """Validate the suffix of a CSAR archive provided as a URL.
 
-    CSAR archive URL should have `.csar` or `.zip` suffix.
+    A CSAR archive URL should have a `.csar` or `.zip` suffix.
 
     Note:
       It is possible to pass the provided URL to the
       :class:`toscaparser.tosca_template.ToscaTemplate` and
-      validates the content of the CSAR archive as well.
+      validate the content of the CSAR archive as well.
       Keep in mind, that the `toscaparser` has to download
       and parse the CSAR archive from the given URL and then
-      validates it. This could be a time-consuming action,
+      validate it. This could be a time-consuming action,
       not suitable for validation. Caching is also not an option
-      here because the CSAR archive could be updated on the
+      here, because the CSAR archive could be updated on the
       remote server, but the URL could be the same.
-      Therefore, only the suffix of provided URL is validated here.
+      Therefore, only the suffix of a provided URL is validated here.
 
     Args:
         csar (str): CSAR URL to validate.
@@ -372,12 +373,12 @@ class ApplicationSpec(Serializable):
     Attributes:
         manifest (list[dict]): List of Kubernetes resources to create. This attribute
             is managed by the user.
-        tosca (Union[dict, str], optional): TOSCA template to create.
-            TOSCA template should be defined as a python dict. or by the
-            URL where the template is located.
+        tosca (Union[dict, str], optional): The to be created TOSCA template.
+            A TOSCA template should be defined as a python dict or with the
+            URL, where the template is located.
             This attribute is managed by the user.
-        csar (str, optional): Cloud Service Archive to create.
-            CSAR file should be defined by the URL where the
+        csar (str, optional): The to be created CSAR archive.
+            A CSAR file should be defined with the URL, where the
             archive is located.
             This attribute is managed by the user.
         observer_schema (list[dict], optional): List of dictionaries of fields that
@@ -404,28 +405,28 @@ class ApplicationSpec(Serializable):
         validate dependent attributes.
 
         Validations:
-        1. At least one attributes from the following should be defined:
+        1. At least one of the attributes from the following should be defined:
         - :attr:`manifest`
         - :attr:`tosca`
         - :attr:`csar`
-        If the user specified multiple attributes at once the :attr:`manifest`
-        has the highest priority then :attr:`tosca` and :attr:`csar`.
+        If the user specified multiple attributes at once, the :attr:`manifest`
+        has the highest priority, after that :attr:`tosca` and :attr:`csar`.
 
         2. If a custom :attr:`observer_schema` and :attr:`manifest` are specified
-        by the user, the :attr:`observer_schema` needs to be validated, i.e. verify
+        by the user, the :attr:`observer_schema` needs to be validated, i.e. verified
         that resources are correctly identified and refer to resources defined in
         :attr:`manifest`, that fields are correctly identified and that all special
-        control dictionary are correctly defined.
+        control dictionaries are correctly defined.
 
-        Note: These validations cannot be achieved directly using a ``validate``
-         metadata, as ``validate`` must be a zero-argument callable, with no access
-         to the other attributes of the dataclass.
+        Note: These validations cannot be achieved directly using the ``validate``
+         metadata, since ``validate`` must be a zero-argument callable, with
+         no access to the other attributes of the dataclass.
 
         """
         if not any([self.manifest, self.tosca, self.csar]):
             raise ValidationError(
-                "The application should be defined by the manifest file"
-                " or by the TOSCA template or by the CSAR file."
+                "The application should be defined by a manifest file,"
+                " a TOSCA template or a CSAR file."
             )
 
         if self.manifest:

@@ -544,7 +544,7 @@ class KubernetesApplicationController(Controller):
                     name=app.metadata.name,
                     body=app,
                 )
-            # If TOSCA or CSAR is defined by URL the ConnectionError could be raised.
+            # If TOSCA or CSAR is defined by a URL, the ConnectionError could be raised.
             except (ToscaParserException, ConnectionError) as error:
                 app.status.reason = Reason(
                     code=ReasonCode.INVALID_TOSCA_MANIFEST, message=str(error)

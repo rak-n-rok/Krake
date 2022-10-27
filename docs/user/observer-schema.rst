@@ -21,10 +21,10 @@ done in the Kubernetes infrastructure or by the Kubernetes plane itself.
 
 .. note::
 
-  The custom observer schema could be used even when the application is described by the TOSCA template or CSAR archive.
-  TOSCA template or CSAR is translated to the Kubernetes manifests in Krake's Kubernetes application controller,
-  hence the custom observer schema file will be applied to the Kubernetes resources as in the "regular" workflow when
-  the Kubernetes manifest is used, see :ref:`dev/tosca:TOSCA Workflow`.
+  The custom observer schema could be used even when the application is described by a TOSCA template or CSAR archive.
+  Both file types are translated to Kubernetes manifests in Krake's Kubernetes application controller,
+  hence the custom observer schema file will be applied to the Kubernetes resources just like it happens during a "regular" 
+  workflow, when a Kubernetes manifest is used, see :ref:`dev/tosca:TOSCA Workflow`.
 
 
 .. note::

@@ -101,10 +101,10 @@ def is_generic_subtype(cls, base):
 
     If the base is a qualified generic, e.g. ``List[int]``, it is checked if
     the types are equal.
-    If the base or cls does not have attribute `__origin__`, e.g. Union, Optional,
-    it is checked if the type of base or cls equal to the opponent. This is done
+    If the base or cls does not have the attribute `__origin__`, e.g. Union, Optional,
+    it is checked, if the type of base or cls is equal to the opponent. This is done
     for every possible case.
-    If the base and cls have attribute `__origin__`, e.g. :class:`list`
+    If the base and cls have the attribute `__origin__`, e.g. :class:`list`
     for :class:`typing.List`, it is checked if the class is equal to the
     original type of the generic base class.
 

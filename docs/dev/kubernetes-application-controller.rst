@@ -28,8 +28,8 @@ special case of mangled resources.
 Step 0 (Optional)
 ------
 
-If the resource is defined by the TOSCA template file or URL or by CSAR
-archive URL, the controller translates the given TOSCA or CSAR to the Kubernetes manifest
+If the resource is defined by the TOSCA template file, an URL or a CSAR
+archive URL, the controller translates the given TOSCA or CSAR file to the Kubernetes manifest
 file if possible, see :ref:`dev/tosca:TOSCA`.
 
 The result of translation is stored in ``spec.manifest``.

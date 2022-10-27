@@ -14,13 +14,13 @@ log.setLevel(logging.WARNING)
 
 
 def fmt_validation_error(message):
-    """Format the validation error message from tosca parser.
+    """Format the validation error message from the TOSCA parser.
 
     :mod:`toscaparser` concatenates exceptions with their
     tracebacks. Concatenated exceptions are then saved as
     an error message. As we do not want the tracebacks in
     errors that are send to the end-users, the tracebacks
-    have to be filtered from validation error messages.
+    have to be filtered from the validation error messages.
 
     Args:
         message (str): Message to format.
@@ -45,7 +45,9 @@ class ToscaException(Exception):
 
 
 class ToscaParserException(ToscaException):
-    """Exception raised when an error occurs during :class:`ToscaParser` translation."""
+    """Exception raised when an error occurs during
+    the :class:`ToscaParser` translation.
+    """
 
     def __init__(self, error, formatter=None):
         if formatter:
@@ -55,20 +57,20 @@ class ToscaParserException(ToscaException):
 
 
 class ToscaParser(object):
-    """Tosca parser comprises basic TOSCA related tools for TOSCA template processing.
+    """The Tosca parser is comprisesed of basic TOSCA related tools for TOSCA template processing.
 
-    It contains TOSCA parser and validator from  :mod:`toscaparser` and
-    custom translator that translate TOSCA template to
-    the Kubernetes manifests. Translation expects that the
+    It contains the TOSCA parser and validator from  :mod:`toscaparser` and
+    a custom translator, that can translate TOSCA templates to
+    the Kubernetes manifests. The translation expects, that the
     TOSCA custom type `tosca.nodes.indigo.KubernetesObject` is used.
 
     TOSCA could be loaded from the following sources:
     - Python dict
     - TOSCA template **file** with `yml` or `yaml` suffix
-      - Could be loaded from local filesystem or
-        downloaded from a remote location defined by URL
+      - this can be loaded from the local filesystem or
+        downloaded from a remote location defined by a URL
     - Cloud Service Archive (CSAR) **file** with `zip` or `csar` suffix
-      - Could be loaded from local filesystem or
+      - this can be loaded from the local filesystem or
         downloaded from a remote location defined by URL
 
     Example:
@@ -133,14 +135,14 @@ class ToscaParser(object):
     def __init__(self, yaml_dict_tpl=None, path=None, url=None):
         if not any([yaml_dict_tpl, path, url]):
             raise ToscaParserException(
-                "TOSCA should be defined by python dict or by filename or by URL"
+                "TOSCA should be defined by a python dict, filename or a URL"
             )
 
         self.tosca_template = self._get_tosca_template(yaml_dict_tpl, path, url)
 
     @classmethod
     def from_dict(cls, yaml_dict_tpl):
-        """Load TOSCA template from dictionary.
+        """Load a TOSCA template from a dictionary.
 
         Args:
             yaml_dict_tpl (dict): TOSCA template.
@@ -153,7 +155,7 @@ class ToscaParser(object):
 
     @classmethod
     def from_path(cls, path):
-        """Load TOSCA template file or CSAR file.
+        """Load a TOSCA template file or a CSAR file.
 
         Args:
             path (str): Path to the TOSCA or CSAR file.
@@ -166,7 +168,7 @@ class ToscaParser(object):
 
     @classmethod
     def from_url(cls, url):
-        """Load TOSCA template file or CSAR file from URL.
+        """Load a TOSCA template file or a CSAR file from a URL.
 
         Args:
             url (str): URL to the TOSCA or CSAR file.
@@ -179,7 +181,7 @@ class ToscaParser(object):
 
     @staticmethod
     def _get_tosca_template(yaml_dict_tpl=None, path=None, url=None):
-        """Get parsed tosca template.
+        """Returns a parsed TOSCA template.
 
         Args:
             yaml_dict_tpl (dict, optional): TOSCA template dict to be parsed.
@@ -206,10 +208,10 @@ class ToscaParser(object):
                 raise ToscaParserException(err, formatter=fmt_validation_error)
 
     def _get_manifest(self, tosca_tpl, node, property_value):
-        """Get manifest from tosca template recursively.
+        """Get manifests recursively from TOSCA templates.
 
         TOSCA node template is recursively translated to the k8s manifest.
-        The recursion here is required because of tosca functions that
+        The recursion here is required because of TOSCA functions that
         can be applied to the templates.
         Currently supported functions in :func:`_get_manifest` are:
         - get_property
@@ -225,7 +227,7 @@ class ToscaParser(object):
             str: Kubernetes manifest.
 
         Raises:
-            ToscaParserException: If the tosca function used in tosca template
+            ToscaParserException: If the TOSCA function used in the TOSCA template
                 is not supported yet.
 
         """
@@ -262,14 +264,14 @@ class ToscaParser(object):
         return manifest
 
     def translate_to_manifests(self):
-        """Translate TOSCA template to the Kubernetes manifests.
+        """Translate a TOSCA template to the Kubernetes manifests.
 
         Returns:
             list: List of Kubernetes manifests.
 
         Raises:
-            ToscaParserException: If the unsupported tosca node is used or
-                the tosca node has empty `spec` property.
+            ToscaParserException: If the unsupported TOSCA node is used or
+                the TOSCA node has an empty `spec` property.
 
         """
         manifests = []

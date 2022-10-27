@@ -108,9 +108,10 @@ class ShutdownAction(Action):
 
 
 def is_tosca_definition(definitions):
-    """Evaluate if the application definition provided by end-user is a TOSCA.
+    """Evaluate if the application definition provided by end-user
+    is a TOSCA template.
 
-     TOSCA template should be single YAML file with
+     TOSCA templates should be a single YAML file with a
      `tosca_definitions_version` key in it.
 
     Args:
@@ -352,15 +353,15 @@ def create_application(
             csar = url
         else:
             sys.exit(
-                "Error: Application should be defined by TOSCA template URL"
-                " with `.yaml` or `.yml` suffix or by CSAR archive URL with"
+                "Error: Application should be defined by a TOSCA template URL"
+                " with `.yaml` or `.yml` suffix or a CSAR archive URL with"
                 " `.csar` or `.zip` suffix."
             )
     else:
         sys.exit(
-            "Error: Application should be defined by TOSCA template file"
-            " or Kubernetes manifest file via `--file` optional argument or"
-            " by TOSCA template URL or CSAR URL via `--url` optional argument."
+            "Error: Application should be defined by a TOSCA template file"
+            " or a Kubernetes manifest file via the `--file` optional argument or"
+            " a TOSCA template URL or CSAR URL via the `--url` optional argument."
         )
 
     if namespace is None:
@@ -508,8 +509,8 @@ def update_application(
             app["spec"]["csar"] = url
         else:
             sys.exit(
-                "Error: Application should be defined by TOSCA template URL"
-                " with `.yaml` or `.yml` suffix or by CSAR archive URL with"
+                "Error: Application should be defined by a TOSCA template URL"
+                " with `.yaml` or `.yml` suffix or a CSAR archive URL with"
                 " `.csar` or `.zip` suffix."
             )
 
