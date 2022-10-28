@@ -426,7 +426,7 @@ class ApplicationDefinition(ResourceDefinition):
         manifest_path (str, optional): path to the manifest file to use for the
             creation.
         tosca (Union[PathLike, str], optional): path to the TOSCA file or URL that
-            should be used to create the Application.
+            should be used to create the application.
         csar (str, optional): URL to the CSAR file that should be used to
             create the Application.
         constraints (list[str], optional): list of cluster label constraints
@@ -455,7 +455,7 @@ class ApplicationDefinition(ResourceDefinition):
         super().__init__(name=name, kind=ResourceKind.APPLICATION, namespace=namespace)
         assert (
             manifest_path or tosca or csar
-        ), "Resource should be described by Kubernetes manifest or TOSCA or CSAR"
+        ), "Resource should be described by Kubernetes manifest, TOSCA or CSAR"
         if manifest_path:
             assert os.path.isfile(manifest_path), f"{manifest_path} is not a file."
 

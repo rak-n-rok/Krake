@@ -335,7 +335,7 @@ def test_tosca_translator_with_unsupported_function():
     parser = ToscaParser.from_dict(invalid_tosca)
     with pytest.raises(
         ToscaParserException,
-        match="Function token is not supported by Krake TOSCA engine yet.",
+        match="Function token is not supported by the Krake TOSCA engine yet.",
     ):
         parser.translate_to_manifests()
 

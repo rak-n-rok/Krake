@@ -294,7 +294,7 @@ def test_update_no_changes(minikube_clusters):
 
 @pytest.mark.parametrize("tosca_from", ["dict", "url"])
 def test_update_no_changes_tosca(minikube_clusters, tosca_from, file_server):
-    """Update the Application with the same TOSCA template file defined by dict or by URL.
+    """Update the Application with the same TOSCA template file defined by a dict or a URL.
 
     As the update does not change any field of the resources,
     the update should be rejected in both cases.
@@ -342,7 +342,7 @@ def test_update_no_changes_tosca(minikube_clusters, tosca_from, file_server):
 
 
 def test_update_no_changes_csar(minikube_clusters, archive_files, file_server):
-    """Update the Application with the same CSAR defined by URL.
+    """Update the Application with the same CSAR defined by a URL.
 
     As the update does not change any field of the resources,
     the update should be rejected.
@@ -352,9 +352,9 @@ def test_update_no_changes_csar(minikube_clusters, archive_files, file_server):
 
     Args:
         minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
-        archive_files (callable): Callable that archive given files to
+        archive_files (callable): Callable that archives given files to
           the ZIP archive.
-        file_server (callable): Callable that start http server with endpoint to
+        file_server (callable): Callable that starts a http server with an endpoint to
           get the given file.
 
     """
@@ -393,7 +393,7 @@ def test_update_no_changes_csar(minikube_clusters, archive_files, file_server):
 @pytest.mark.parametrize("tosca_from", ["dict", "url"])
 def test_update_application_tosca(minikube_clusters, tosca_from, file_server):
     """In the test environment, update the Application with a new TOSCA template
-       defined as URL and dict.
+       defined as a URL and dict.
 
     The previous TOSCA template has an echo server image with a version 1.10.
     The updated TOSCA reverts it to the version 1.9.
@@ -413,7 +413,7 @@ def test_update_application_tosca(minikube_clusters, tosca_from, file_server):
     Args:
         minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
         tosca_from (str): Parametrize the test with the `dict` and `url` values.
-        file_server (callable): Callable that start http server with endpoint
+        file_server (callable): Callable that start a http server with endpoint
           to get the given file.
 
     """
@@ -596,12 +596,12 @@ def test_update_application_csar(minikube_clusters, archive_files, file_server):
 def test_update_manifest_application_by_tosca(
     minikube_clusters, tosca_from, file_server
 ):
-    """In the test environment (where the application is created by manifest file),
+    """In the test environment (where the application is created by the manifest file),
     update the Application with a new TOSCA template. The previous manifest file
     has an echo server image with a version 1.10. The TOSCA template reverts
     it to the version 1.9.
 
-    TOSCA template is defined by dict and by URL.
+    TOSCA template is defined by a dict and a URL.
 
     The test has the following workflow:
 
@@ -620,7 +620,7 @@ def test_update_manifest_application_by_tosca(
     Args:
         minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
         tosca_from (str): Parametrize the test with the `dict` and `url` values.
-        file_server (callable): Callable that start http server with endpoint
+        file_server (callable): Callable that starts a http server with an endpoint
           to get the given file.
 
     """
@@ -696,7 +696,7 @@ def test_update_manifest_application_by_tosca(
 def test_update_manifest_application_by_csar(
     minikube_clusters, archive_files, file_server
 ):
-    """In the test environment (where the application is created by manifest file),
+    """In the test environment (where the application is created by the manifest file),
     update the Application with a new CSAR file. The previous manifest file
     has an echo server image with a version 1.10. The CSAR file reverts
     it to the version 1.9.
@@ -717,9 +717,9 @@ def test_update_manifest_application_by_csar(
        number of replicas changed.
     Args:
         minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
-        archive_files (callable): Callable that archive given files
+        archive_files (callable): Callable that archives given files
           to the ZIP archive.
-        file_server (callable): Callable that start http server with endpoint
+        file_server (callable): Callable that start a http server with an endpoint
           to get the given file.
 
     """

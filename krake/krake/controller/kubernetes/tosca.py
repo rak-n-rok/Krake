@@ -255,7 +255,8 @@ class ToscaParser(object):
 
             else:
                 raise ToscaParserException(
-                    f"Function {_func.name} is not supported by Krake TOSCA engine yet."
+                    f"Function {_func.name} is not supported by"
+                    " the Krake TOSCA engine yet."
                 )
 
         else:
@@ -264,7 +265,7 @@ class ToscaParser(object):
         return manifest
 
     def translate_to_manifests(self):
-        """Translate a TOSCA template to the Kubernetes manifests.
+        """Translate a TOSCA template to Kubernetes manifests.
 
         Returns:
             list: List of Kubernetes manifests.
@@ -287,8 +288,8 @@ class ToscaParser(object):
 
             if node.type != "tosca.nodes.indigo.KubernetesObject":
                 raise ToscaParserException(
-                    f"TOSCA node type {node.type} is not supported by"
-                    " Krake TOSCA engine yet."
+                    f"The TOSCA node type {node.type} is not supported by"
+                    " the Krake TOSCA engine yet."
                 )
 
             spec = node.get_property_value("spec")

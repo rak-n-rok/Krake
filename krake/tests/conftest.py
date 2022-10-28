@@ -1519,7 +1519,7 @@ async def ksql(kafka, tmp_path, loop):
 def file_server(httpserver):
     """Start http server with endpoint to get the given file.
 
-    Given file could be `dict` or a regular file.
+    Given file could be a `dict` or a regular file.
 
     Example:
         .. code:: python
@@ -1555,7 +1555,7 @@ def archive_files(tmp_path):
     Files should be given in format:
         [(<file_name>, <file_content>)]
 
-    File content could be given as `dict` or as a regular file.
+    File content could be given as a `dict` or as a regular file.
 
     Example:
         .. code:: python

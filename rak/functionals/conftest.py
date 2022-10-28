@@ -90,7 +90,7 @@ def session():
 
 @pytest.fixture
 def file_server(httpserver):
-    """Start http server with endpoint to get the given file.
+    """Start a http server with an endpoint to get the given file.
 
     Given file could be `dict` or a regular file.
 

@@ -107,7 +107,7 @@ def cache_non_hashable(maxsize=1024):
 
             Returns:
                 dict, if the JSON document is valid and could be
-            deserialized, the :args:`value` otherwise.
+                deserialized, the :args:`value` otherwise.
 
             """
             try:
