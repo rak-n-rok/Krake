@@ -28,6 +28,9 @@ Register an existing OpenStack project to Krake
 
 Create a ``MagnumCluster``
 ==========================
+.. note::
+
+    Due to stability and development issues on the side of Magnum, this feature isn't actively developed anymore.
 
 .. prompt:: bash $ auto
 

@@ -141,23 +141,52 @@ default). The files names have the following syntax: ``wg_<peer_name>.conf``.
 
 To use this file you have to:
 
-    0. install wireguard locally;
+    0. install wireguard locally. If you are using Ubuntu, you can use the following command:
 
-    1. open it and change the ``REPLACEME`` placeholder with the private key that
-       corresponds to the peer;
+        .. code::
 
-    2. bring the wireguard interface up by using:
+            $ sudo apt install wireguard
 
-        .. code:: bash
+    1. generate a wireguard key:
+
+        .. code::
+
+            $ umask 077
+            $ wg genkey > privatekey
+            $ wg pubkey < privatekey > publickey
+
+
+        2.1 open the ``wg_<peer_name>.conf`` and change the ``REPLACEME`` placeholder with the private key that corresponds to the peer.
+
+
+        2.2 Use SSH to connect to the ``krake-gateway-server``. Check the gateway server and if necessary adjust to accommodate the correct wireguard keys. Replace the ``REPLACEME`` placeholder with the public key. You can find the public key in the directory under ``/etc/wireguard`` :
+
+            .. code::
+
+                [Interface]
+                PrivateKey = <INSERT_PRIVATE_WIREGUARD_KEY>
+                Address = 10.9.0.1
+
+                [Peer]
+                PublicKey = <INSERT_PUBLIC_KEY_FROM_GATEWAY_SERVER>
+
+               Endpoint = 185.128.119.165:51820
+               AllowedIPs = 10.9.0.0/24, 192.168.0.0/24
+
+
+
+    3. bring the wireguard interface up by using:
+
+        .. code::
 
             $ wg-quick up <path_to_file>/wg_<peer_name>.conf
 
             # Example:
             $ wg-quick up ansible/.etc/wg_my-peer.conf
 
-    3. you can now SSH into the other machines on the private network:
+    4. you can now SSH into the other machines on the private network:
 
-        .. code:: bash
+        .. code::
 
             $ ssh ubuntu@<krake_VM_private_ip>
 
