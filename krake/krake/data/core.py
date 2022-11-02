@@ -263,6 +263,8 @@ class ReasonCode(IntEnum):
     UNSUPPORTED_RESOURCE = 11
     # The custom resource provided does not exist or is invalid
     INVALID_CUSTOM_RESOURCE = 12
+    # Invalid TOSCA manifest
+    INVALID_TOSCA_MANIFEST = 13
 
     CLUSTER_NOT_REACHABLE = 20  # Connectivity issue with the Kubernetes deployment
     NO_SUITABLE_RESOURCE = 50  # Scheduler issue

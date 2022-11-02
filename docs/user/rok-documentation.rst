@@ -127,6 +127,11 @@ The Application resource: ``app``
 
 This resource manages Krake **Applications** resources, which need to be registered on Krake to be managed. It corresponds to a Kubernetes resource.
 
+.. tip::
+
+  Krake is able to manage applications that are described by Kubernetes manifests files as well as by TOSCA templates or CSAR archives, see :ref:`dev/tosca:TOSCA`.
+
+
 Base command: ``rok kube app <...>``
 
 
@@ -135,17 +140,21 @@ create
 
     .. code:: bash
 
-        rok kube app create <application_name> -f <path_to_manifest>
+        rok kube app create <application_name> -f <path_to_manifest_or_path_to_tosca_template>
 
     ``name``:
         The name of the new Application, as stored by Krake (can be arbitrary). The same name cannot be used twice in the same namespace.
 
     ``-f | --file``:
-        The path to the manifest file that describes the new Application.
+        The path to the manifest file or the TOSCA template file that describes the new Application.
+
+    ``-u | --url``:
+        The URL of the TOSCA template file or the CSAR archive that describes the new Application.
 
     ``-O | --observer_schema`` (optional):
         The path to the custom observer schema file, specifying the fields of the
         Kubernetes resources defined in the manifest file which should be observed. If none is given, all fields defined in the manifest file are observed.
+        The custom observer schema could be used even when the application is described by the TOSCA template or CSAR archive.
 
     ``-n | --namespace`` (optional):
         The namespace to which the Application has to be added. If none is given, the user namespace is selected.
@@ -183,11 +192,15 @@ update
         The name of the Application to update.
 
     ``-f | --file``:
-        The path to the manifest file that describes the Application with the updated fields.
+        The path to the manifest file or TOSCA template file that describes the Application with the updated fields.
+
+    ``-u | --url``:
+        The URL of the TOSCA template file or the CSAR archive that describes the Application with the updated fields.
 
     ``-O | --observer_schema`` (optional):
         The path to the custom observer schema file, specifying the fields of the
         Kubernetes resources defined in the manifest file which should be observed. If none is given, the observer schema is not udpated.
+        The custom observer schema could be used even when the application is described by the TOSCA template or CSAR archive.
 
     ``-n | --namespace`` (optional):
         The namespace from which the Applications have to be taken. If none is given, the user namespace is selected.

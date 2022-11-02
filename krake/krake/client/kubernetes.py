@@ -18,7 +18,10 @@ class KubernetesApi(ApiClient):
 
     """
 
-    plurals = {"Application": "Applications", "Cluster": "Clusters"}
+    plurals = {
+        "Application": "Applications",
+        "Cluster": "Clusters",
+    }
 
     async def create_application(self, body, namespace):
         """Creates the specified Application.
@@ -32,7 +35,7 @@ class KubernetesApi(ApiClient):
 
         """
         path = "/kubernetes/namespaces/{namespace}/applications".format(
-            namespace=namespace
+            namespace=namespace,
         )
         url = self.client.url.with_path(path)
 
@@ -73,7 +76,7 @@ class KubernetesApi(ApiClient):
 
         """
         path = "/kubernetes/namespaces/{namespace}/applications".format(
-            namespace=namespace
+            namespace=namespace,
         )
         url = self.client.url.with_path(path)
 
@@ -95,7 +98,7 @@ class KubernetesApi(ApiClient):
 
         """
         path = "/kubernetes/namespaces/{namespace}/applications".format(
-            namespace=namespace
+            namespace=namespace,
         )
 
         query = {"watch": ""}
@@ -224,6 +227,27 @@ class KubernetesApi(ApiClient):
         data = await resp.json()
         return Application.deserialize(data)
 
+    async def update_application_shutdown(self, body, namespace, name):
+        """Updates the specified Application.
+
+        Args:
+            body (ApplicationShutdown): Body of the HTTP request.
+            namespace (str): namespace in which the Application will be updated.
+            name (str): name of the Application.
+
+        Returns:
+            Application: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/namespaces/{namespace}/applications/{name}/shutdown".format(
+            namespace=namespace, name=name
+        )
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("PUT", url, json=body.serialize())
+        data = await resp.json()
+        return Application.deserialize(data)
+
     async def update_application_status(self, body, namespace, name):
         """Updates the specified Application.
 
@@ -256,7 +280,9 @@ class KubernetesApi(ApiClient):
             Cluster: Body of the HTTP response.
 
         """
-        path = "/kubernetes/namespaces/{namespace}/clusters".format(namespace=namespace)
+        path = "/kubernetes/namespaces/{namespace}/clusters".format(
+            namespace=namespace,
+        )
         url = self.client.url.with_path(path)
 
         resp = await self.client.session.request("POST", url, json=body.serialize())
@@ -295,7 +321,9 @@ class KubernetesApi(ApiClient):
             ClusterList: Body of the HTTP response.
 
         """
-        path = "/kubernetes/namespaces/{namespace}/clusters".format(namespace=namespace)
+        path = "/kubernetes/namespaces/{namespace}/clusters".format(
+            namespace=namespace,
+        )
         url = self.client.url.with_path(path)
 
         resp = await self.client.session.request("GET", url)
@@ -315,7 +343,9 @@ class KubernetesApi(ApiClient):
             ClusterList: Body of the HTTP response.
 
         """
-        path = "/kubernetes/namespaces/{namespace}/clusters".format(namespace=namespace)
+        path = "/kubernetes/namespaces/{namespace}/clusters".format(
+            namespace=namespace,
+        )
 
         query = {"watch": ""}
         if heartbeat is not None:

@@ -17,6 +17,7 @@ from marshmallow import (
     validates,
     validates_schema,
 )
+from marshmallow_union import Union as UnionField
 from marshmallow.validate import Equal
 from marshmallow_enum import EnumField
 
@@ -99,8 +100,12 @@ def is_generic_subtype(cls, base):
     """Check if a given generic class is a subtype of another generic class
 
     If the base is a qualified generic, e.g. ``List[int]``, it is checked if
-    the types are equal. Otherwise, it is checked if the original type, e.g.
-    :class:`list` for :class:`typing.List`, of the class is a subclass of the
+    the types are equal.
+    If the base or cls does not have the attribute `__origin__`, e.g. Union, Optional,
+    it is checked, if the type of base or cls is equal to the opponent. This is done
+    for every possible case.
+    If the base and cls have the attribute `__origin__`, e.g. :class:`list`
+    for :class:`typing.List`, it is checked if the class is equal to the
     original type of the generic base class.
 
     Args:
@@ -115,7 +120,20 @@ def is_generic_subtype(cls, base):
     if is_qualified_generic(base):
         return cls == base
 
-    return issubclass(_get_origin(cls), _get_origin(base))
+    if not has_origin(cls) and not has_origin(base):
+        return cls == base
+
+    if not has_origin(cls):
+        return cls == _get_origin(base)
+
+    if not has_origin(base):
+        return _get_origin(cls) == base
+
+    return _get_origin(cls) == _get_origin(base)
+
+
+def has_origin(cls):
+    return hasattr(cls, "__origin__")
 
 
 if sys.version_info >= (3, 9):
@@ -253,6 +271,19 @@ def field_for_schema(type_, default=dataclasses.MISSING, **metadata):
         return _native_to_marshmallow[type_](**metadata)
 
     if is_qualified_generic(type_):
+        if is_generic_subtype(type_, typing.Union):
+            _fields_union = []
+            for inner_type in type_.__args__:
+                _fields_union.append(field_for_schema(inner_type))
+            # Warning: marshmallow-union library does not keep the track
+            # of the value type. This may lead to a surprising behavior.
+            # e.g.:
+            #   # the Integer field accepts string representations of integers
+            #   u = Union(fields=[fields.Integer(), fields.String()])
+            #   type(u.deserialize('0'))  # -> int
+            # See https://github.com/adamboche/python-marshmallow-union#warning
+            return UnionField(_fields_union, **metadata)
+
         if is_generic_subtype(type_, typing.List):
             inner_type = type_.__args__[0]
             inner_serializer = field_for_schema(inner_type)
@@ -567,7 +598,7 @@ class Serializable(metaclass=SerializableMeta):
             if any(
                 (
                     field.metadata.get("subresource", False),
-                    field.metadata.get("readonly", False)
+                    field.metadata.get("readonly", False),
                 )
             ):
                 continue
@@ -582,9 +613,7 @@ class Serializable(metaclass=SerializableMeta):
 
             value = getattr(overwrite, field.name)
 
-            if isinstance(field.type, type) and issubclass(
-                field.type, Serializable
-            ):
+            if isinstance(field.type, type) and issubclass(field.type, Serializable):
                 # Overwrite value is None, just set it directly
                 if value is None:
                     setattr(self, field.name, None)

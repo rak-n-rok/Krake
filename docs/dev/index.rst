@@ -28,5 +28,6 @@ API reference of all modules is provided.
     kubernetes-cluster-observer
     garbage-collection
     api-generation
+    tosca
     ref/krake
     ref/rok

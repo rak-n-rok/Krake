@@ -1,13 +1,14 @@
 {% import "macros.jinja" as macros %}
 import asyncio
 import json
+
 import pytz
 from itertools import count
 from operator import attrgetter
 
 from krake.api.app import create_app
 from krake.api.helpers import HttpProblem, HttpProblemTitle
-from krake.data.core import WatchEventType, WatchEvent, resource_ref
+from krake.data.core import WatchEventType, WatchEvent, resource_ref, ResourceRef
 {% for module_path, classes in api_def.import_classes.items() -%}
     from {{ module_path }} import {% for cls_name in classes -%}
         {{ cls_name.__name__ }}{{ ", " if not loop.last }}
@@ -23,11 +24,17 @@ from tests.factories.{{ api_def.name }} import {{ " " }}
 {%- endfor %}
 {% endif %}
 from tests.factories.fake import fake
+from tests.controller.kubernetes import deployment_manifest
+from tests.controller.kubernetes.test_tosca import create_tosca_from_resources, CSAR_META
 
 
 {% for resource in api_def.resources %}
 {% for operation in resource.operations %}
     {{ macros.include_operation(operation, "test_server") }}
+{% endfor %}
+
+{% for operation in resource.operations %}
+    {{ macros.include_tosca(operation, resource, "test_server") }}
 {% endfor %}
 
 {% for subresource in resource.subresources -%}

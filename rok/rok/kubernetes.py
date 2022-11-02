@@ -5,6 +5,7 @@
     python -m rok kubernetes --help
 
 """
+import json
 import sys
 import warnings
 from argparse import FileType, Action
@@ -106,6 +107,32 @@ class ShutdownAction(Action):
         setattr(namespace, self.dest, attr + [values])
 
 
+def is_tosca_definition(definitions):
+    """Evaluate if the application definition provided by end-user
+    is a TOSCA template.
+
+     TOSCA templates should be a single YAML file with a
+     `tosca_definitions_version` key in it.
+
+    Args:
+        definitions (list): Given list of app definitions to analyze.
+
+    Returns:
+        bool: True is the app definition is a TOSCA template,
+            False otherwise.
+
+    """
+    try:
+        tosca, *_ = definitions
+    except ValueError:
+        return False
+
+    if "tosca_definitions_version" in tosca.keys():
+        return True
+
+    return False
+
+
 arg_hook_shutdown = argument(
     "--hook-shutdown",
     dest="hooks",
@@ -175,17 +202,32 @@ def handle_warning(app):
 
     """
     manifest = app["spec"]["manifest"]
+    tosca = app["spec"]["tosca"]
     hooks = app["spec"].get("hooks", [])
     migration = app["spec"]["constraints"]["migration"]
 
     if "shutdown" not in [hook[0] for hook in hooks if hook] and migration:
-        warn_resources = set(
-            [
-                resource["kind"]
-                for resource in manifest
-                if resource["kind"] in WARN_RESOURCES
-            ]
-        )
+        warn_resources = set()
+
+        if manifest:
+            warn_resources.union(
+                [
+                    resource["kind"]
+                    for resource in manifest
+                    if resource["kind"] in WARN_RESOURCES
+                ]
+            )
+        elif tosca:
+            for node in (
+                tosca.get("topology_template", {}).get("node_templates", {}).values()
+            ):
+                if node:
+                    for warn_resource in WARN_RESOURCES:
+                        if warn_resource in json.dumps(
+                            node.get("properties", {}).get("spec", {})
+                        ):
+                            warn_resources.add(warn_resource)
+
         if warn_resources:
             warnings.warn(
                 f"Migration of k8s resources like `{', '.join(warn_resources)}`"
@@ -239,7 +281,16 @@ class ApplicationTable(ApplicationListTable):
 
 @application.command("create", help="Create Kubernetes application")
 @argument(
-    "-f", "--file", type=FileType(), required=True, help="Kubernetes manifest file"
+    "-f",
+    "--file",
+    type=FileType(),
+    help="Kubernetes manifest file or TOSCA template file",
+)
+@argument(
+    "-u",
+    "--url",
+    type=str,
+    help="TOSCA template URL or CSAR archive URL",
 )
 @argument(
     "-O",
@@ -273,6 +324,7 @@ def create_application(
     config,
     session,
     file,
+    url,
     observer_schema_file,
     name,
     namespace,
@@ -285,13 +337,40 @@ def create_application(
     hooks,
     wait,
 ):
+    manifest = []
+    tosca = {}
+    csar = None
+    if file:
+        definition = list(yaml.safe_load_all(file))
+        if is_tosca_definition(definition):
+            tosca, *_ = definition
+        else:
+            manifest = definition
+    elif url:
+        if url.endswith(("yaml", "yml")):
+            tosca = url
+        elif url.endswith(("zip", "csar")):
+            csar = url
+        else:
+            sys.exit(
+                "Error: Application should be defined by a TOSCA template URL"
+                " with `.yaml` or `.yml` suffix or a CSAR archive URL with"
+                " `.csar` or `.zip` suffix."
+            )
+    else:
+        sys.exit(
+            "Error: Application should be defined by a TOSCA template file"
+            " or a Kubernetes manifest file via the `--file` optional argument or"
+            " a TOSCA template URL or CSAR URL via the `--url` optional argument."
+        )
+
     if namespace is None:
         namespace = config["user"]
 
     migration = True
     if enable_migration or disable_migration:  # If either one was specified by the user
         migration = enable_migration
-    manifest = list(yaml.safe_load_all(file))
+
     observer_schema = []
 
     if observer_schema_file:
@@ -301,6 +380,8 @@ def create_application(
         "metadata": {"name": name, "labels": labels},
         "spec": {
             "manifest": manifest,
+            "tosca": tosca,
+            "csar": csar,
             "observer_schema": observer_schema,
             "constraints": {
                 "migration": migration,
@@ -320,7 +401,8 @@ def create_application(
             if isinstance(hook, list) and len(hook) > 1 and hook[0] == "shutdown":
                 app["spec"]["shutdown_grace_time"] = hook[1]
 
-    handle_warning(app)
+    if not url:  # skip warning handling when the app is defined by URL (TOSCA, CSAR)
+        handle_warning(app)
 
     blocking_state = False
     if wait is not None:
@@ -350,7 +432,18 @@ def get_application(config, session, namespace, name):
 
 @application.command("update", help="Update Kubernetes application")
 @argument("name", help="Kubernetes application name")
-@argument("-f", "--file", type=FileType(), help="Kubernetes manifest file")
+@argument(
+    "-f",
+    "--file",
+    type=FileType(),
+    help="Kubernetes manifest file or TOSCA template file",
+)
+@argument(
+    "-u",
+    "--url",
+    type=str,
+    help="TOSCA template URL or CSAR archive URL",
+)
 @argument("-O", "--observer_schema_file", type=FileType(), help="Observer Schema File")
 @argument(
     "--wait",
@@ -378,6 +471,7 @@ def update_application(
     namespace,
     name,
     file,
+    url,
     observer_schema_file,
     labels,
     disable_migration,
@@ -395,8 +489,30 @@ def update_application(
     app = resp.json()
 
     if file:
-        manifest = list(yaml.safe_load_all(file))
-        app["spec"]["manifest"] = manifest
+        definition = list(yaml.safe_load_all(file))
+        if is_tosca_definition(definition):
+            # The previously generated k8s manifest should be removed
+            app["spec"]["manifest"] = []
+            app["spec"]["tosca"], *_ = definition
+        else:
+            app["spec"]["manifest"] = definition
+    elif url:
+        if url.endswith(("yaml", "yml")):
+            # The previously generated k8s manifest should be removed
+            app["spec"]["manifest"] = []
+            app["spec"]["tosca"] = url
+        elif url.endswith(("zip", "csar")):
+            # The previously generated k8s manifest as well as TOSCA template
+            # (if there is one) should be removed
+            app["spec"]["manifest"] = []
+            app["spec"]["tosca"] = {}
+            app["spec"]["csar"] = url
+        else:
+            sys.exit(
+                "Error: Application should be defined by a TOSCA template URL"
+                " with `.yaml` or `.yml` suffix or a CSAR archive URL with"
+                " `.csar` or `.zip` suffix."
+            )
 
     if observer_schema_file:
         observer_schema = list(yaml.safe_load_all(observer_schema_file))
@@ -417,7 +533,8 @@ def update_application(
     if disable_migration or enable_migration:
         app_constraints["migration"] = enable_migration
 
-    handle_warning(app)
+    if not url:  # skip warning handling when the app is defined by URL (TOSCA, CSAR)
+        handle_warning(app)
 
     blocking_state = False
     if wait is not None:
@@ -428,7 +545,6 @@ def update_application(
         json=app,
         params={"blocking": blocking_state},
     )
-
     return resp.json()
 
 

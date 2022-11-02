@@ -1,6 +1,9 @@
 import asyncio
 import re
 import dataclasses
+import functools
+import json
+from functools import lru_cache
 from argparse import MetavarTypeHelpFormatter, ArgumentDefaultsHelpFormatter
 from datetime import datetime, timezone
 
@@ -64,6 +67,109 @@ class cached_property(object):
         return value
 
 
+def cache_non_hashable(maxsize=1024):
+    """Decorator to wrap a function with a memorizing callable with potentially
+    non-hashable parameters.
+
+    This decorator extends the build-in :func:`functools.lru_cache`, that supports
+    only hashable parameters of decorated callables.
+
+    Note:
+        !Be aware that the lru_cache maxsize could affect the Krake memory
+        footprint significantly!
+        !Count the memory footprint before you use this decorator!
+
+    Example:
+        .. code:: python
+
+            @hashable_lru
+            def foobar(foo):
+                return foo
+
+            assert foobar({"foo": ["bar", "baz"]}) == {"foo": ["bar", "baz"]}
+
+    Args:
+        maxsize (int, optional): lru_cache maxsize. Defaults to 1024.
+
+    Returns:
+        callable: Decorator for hashable lru cache.
+
+    """
+
+    def decorator(func):
+        cache = lru_cache(maxsize=maxsize)
+
+        def deserialize(value):
+            """Deserialize JSON document to a Python object.
+
+            Args:
+                value (str): JSON document
+
+            Returns:
+                dict, if the JSON document is valid and could be
+                deserialized, the :args:`value` otherwise.
+
+            """
+            try:
+                return json.loads(value)
+            except json.decoder.JSONDecodeError:
+                return value
+
+        def func_with_serialized_params(*args, **kwargs):
+            """Deserialize decorated callable parameters.
+
+            This function deserializes the decorated callable
+            parameters. Parameters were serialized before within
+            the :func:`lru_decorator`.
+
+            Args:
+                args: Variable length argument list.
+                kwargs: Arbitrary keyword arguments.
+
+            Returns:
+                callable: Decorated function with deserialized parameters.
+
+            """
+            _args = tuple([deserialize(arg) for arg in args])
+            _kwargs = {k: deserialize(v) for k, v in kwargs.items()}
+            return func(*_args, **_kwargs)
+
+        cached_function = cache(func_with_serialized_params)
+
+        @functools.wraps(func)
+        def lru_decorator(*args, **kwargs):
+            """Serialize and cache decorated callables.
+
+            Args:
+                args: Variable length argument list.
+                kwargs: Arbitrary keyword arguments.
+
+            Returns:
+                callable: LRU-cached function with serialized parameters.
+
+            """
+            _args = tuple(
+                [
+                    json.dumps(arg, sort_keys=True)
+                    if type(arg) in (list, dict)
+                    else arg
+                    for arg in args
+                ]
+            )
+            _kwargs = {
+                k: json.dumps(v, sort_keys=True) if type(v) in (list, dict) else v
+                for k, v in kwargs.items()
+            }
+            return cached_function(*_args, **_kwargs)
+
+        lru_decorator.cache_info = cached_function.cache_info
+        lru_decorator.cache_clear = cached_function.cache_clear
+
+        return lru_decorator
+
+    return decorator
+
+
 def now():
     """Returns the current time in the UTC timezone.
 
@@ -94,9 +200,7 @@ def get_namespace_as_kwargs(namespace):
     return kwargs
 
 
-def get_kubernetes_resource_idx(
-    manifest, resource, check_namespace=False
-):
+def get_kubernetes_resource_idx(manifest, resource, check_namespace=False):
     """Get a resource identified by its resource api, kind and name, from a manifest
     file
 

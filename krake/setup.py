@@ -13,10 +13,12 @@ install_requires = [
     "marshmallow==3.*",
     "marshmallow-enum",
     "marshmallow-oneofschema",
+    "marshmallow-union",
     "pyOpenSSL",
     "python-magnumclient==3.*",
     "PyYAML==5.*",
     "requests==2.*",
+    "tosca-parser==2.6.*",
 ]
 
 # webargs

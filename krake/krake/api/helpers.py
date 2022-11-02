@@ -23,6 +23,7 @@ class HttpProblemTitle(Enum):
     the problem type, see :func:`.middlewares.problem_response`
     for details.
     """
+
     # When a requested resource cannot be found in the database
     NOT_FOUND_ERROR = "not-found-error"
     # When a database transaction failed
@@ -57,6 +58,7 @@ class HttpProblem(Serializable):
             occurrence of the problem
 
     """
+
     type: str = "about:blank"
     title: HttpProblemTitle = None
     status: int = None
@@ -65,24 +67,24 @@ class HttpProblem(Serializable):
 
     def __post_init__(self):
         """HACK:
-            :class:`marshmallow.Schema` allows registering hooks like ``post_dump``.
-            This is not allowed in krake :class:`Serializable`, therefore within
-            the __post_init__ method the hook is registered directly.
+        :class:`marshmallow.Schema` allows registering hooks like ``post_dump``.
+        This is not allowed in krake :class:`Serializable`, therefore within
+        :class:`marshmallow.Schema` allows registering hooks like ``post_dump``.
+        This is not allowed in krake :class:`Serializable`, therefore
+        the __post_init__ method is registered directly within the hook.
         """
-        self.Schema._hooks.update({('post_dump', False): ['remove_none_values']})
+        self.Schema._hooks.update({("post_dump", False): ["remove_none_values"]})
         setattr(self.Schema, "remove_none_values", self.remove_none_values)
 
     @post_dump
     def remove_none_values(self, data, **kwargs):
         """Remove attributes if value equals None"""
-        return {
-            key: value for key, value in data.items()
-            if value is not None
-        }
+        return {key: value for key, value in data.items() if value is not None}
 
 
 class HttpProblemError(Exception):
     """Custom exception raised if failures on the HTTP layers occur"""
+
     def __init__(
         self, exc: HTTPException, problem: HttpProblem = HttpProblem(), **kwargs
     ):
@@ -229,7 +231,7 @@ def load(argname, cls):
                         f"{key_params['name']!r} does not "
                         f"exist in namespace {namespace!r}"
                     ),
-                    title=HttpProblemTitle.NOT_FOUND_ERROR
+                    title=HttpProblemTitle.NOT_FOUND_ERROR,
                 )
                 raise HttpProblemError(web.HTTPNotFound, problem)
 

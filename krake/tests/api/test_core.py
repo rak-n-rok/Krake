@@ -112,8 +112,10 @@ async def test_add_finalizer_in_deleted_global_metric(aiohttp_client, config, db
     )
     assert resp.status == 409
     body = await resp.json()
-    assert body["detail"] == "Finalizers can only be removed" \
-                             " if a deletion is in progress."
+    assert (
+        body["detail"] == "Finalizers can only be removed"
+        " if a deletion is in progress."
+    )
 
 
 async def test_delete_global_metric_rbac(rbac_allow, config, aiohttp_client):
@@ -418,8 +420,10 @@ async def test_add_finalizer_in_deleted_global_metrics_provider(
     )
     assert resp.status == 409
     body = await resp.json()
-    assert body["detail"] == "Finalizers can only be removed" \
-                             " if a deletion is in progress."
+    assert (
+        body["detail"] == "Finalizers can only be removed"
+        " if a deletion is in progress."
+    )
 
 
 async def test_delete_global_metrics_provider_rbac(rbac_allow, config, aiohttp_client):
@@ -688,19 +692,20 @@ async def test_create_metric(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
     data = MetricFactory()
 
-    resp = await client.post(f"/core/namespaces/{data.metadata.namespace}/metrics",
-                             json=data.serialize())
+    resp = await client.post(
+        f"/core/namespaces/{data.metadata.namespace}/metrics", json=data.serialize()
+    )
     assert resp.status == 200
     received = Metric.deserialize(await resp.json())
 
     assert received.metadata.created
     assert received.metadata.modified
-    assert received.metadata.namespace == 'testing'
+    assert received.metadata.namespace == "testing"
     assert received.metadata.uid
 
-    stored = await db.get(Metric,
-                          name=data.metadata.name,
-                          namespace=data.metadata.namespace)
+    stored = await db.get(
+        Metric, name=data.metadata.name, namespace=data.metadata.namespace
+    )
     assert stored == received
 
 
@@ -708,11 +713,11 @@ async def test_create_metric_rbac(rbac_allow, config, aiohttp_client):
     config.authorization = "RBAC"
     client = await aiohttp_client(create_app(config=config))
 
-    resp = await client.post(f"/core/namespaces/testing/metrics")
+    resp = await client.post("/core/namespaces/testing/metrics")
     assert resp.status == 403
 
     async with rbac_allow("core", "metrics", "create"):
-        resp = await client.post(f"/core/namespaces/testing/metrics")
+        resp = await client.post("/core/namespaces/testing/metrics")
         assert resp.status == 415
 
 
@@ -722,8 +727,10 @@ async def test_create_metric_with_existing_name(aiohttp_client, config, db):
 
     client = await aiohttp_client(create_app(config=config))
 
-    resp = await client.post(f"/core/namespaces/{existing.metadata.namespace}/metrics",
-                             json=existing.serialize())
+    resp = await client.post(
+        f"/core/namespaces/{existing.metadata.namespace}/metrics",
+        json=existing.serialize(),
+    )
     assert resp.status == 409
 
     received = await resp.json()
@@ -737,15 +744,17 @@ async def test_delete_metric(aiohttp_client, config, db):
     data = MetricFactory()
     await db.put(data)
 
-    resp = await client.delete(f"/core/namespaces/{data.metadata.namespace}/metrics/{data.metadata.name}")
+    resp = await client.delete(
+        f"/core/namespaces/{data.metadata.namespace}/metrics/{data.metadata.name}"
+    )
     assert resp.status == 200
     received = Metric.deserialize(await resp.json())
     assert resource_ref(received) == resource_ref(data)
     assert received.metadata.deleted is not None
 
-    deleted = await db.get(Metric,
-                           name=data.metadata.name,
-                           namespace=data.metadata.namespace)
+    deleted = await db.get(
+        Metric, name=data.metadata.name, namespace=data.metadata.namespace
+    )
     assert deleted.metadata.deleted is not None
     assert "cascade_deletion" in deleted.metadata.finalizers
 
@@ -761,23 +770,25 @@ async def test_add_finalizer_in_deleted_metric(aiohttp_client, config, db):
     data.metadata.finalizers = ["a-different-finalizer"]
     resp = await client.put(
         f"/core/namespaces/{data.metadata.namespace}/metrics/{data.metadata.name}",
-        json=data.serialize()
+        json=data.serialize(),
     )
     assert resp.status == 409
     body = await resp.json()
-    assert body["detail"] == "Finalizers can only be removed" \
-                             " if a deletion is in progress."
+    assert (
+        body["detail"] == "Finalizers can only be removed"
+        " if a deletion is in progress."
+    )
 
 
 async def test_delete_metric_rbac(rbac_allow, config, aiohttp_client):
     config.authorization = "RBAC"
     client = await aiohttp_client(create_app(config=config))
 
-    resp = await client.delete(f"/core/namespaces/testing/metrics/my-resource")
+    resp = await client.delete("/core/namespaces/testing/metrics/my-resource")
     assert resp.status == 403
 
     async with rbac_allow("core", "metrics", "delete"):
-        resp = await client.delete(f"/core/namespaces/testing/metrics/my-resource")
+        resp = await client.delete("/core/namespaces/testing/metrics/my-resource")
         assert resp.status == 404
 
 
@@ -787,7 +798,10 @@ async def test_delete_metric_already_in_deletion(aiohttp_client, config, db):
     in_deletion = MetricFactory(metadata__deleted=fake.date_time())
     await db.put(in_deletion)
 
-    resp = await client.delete(f"/core/namespaces/{in_deletion.metadata.namespace}/metrics/{in_deletion.metadata.name}")
+    resp = await client.delete(
+        f"/core/namespaces/{in_deletion.metadata.namespace}/metrics/"
+        f"{in_deletion.metadata.name}"
+    )
     assert resp.status == 200
 
 
@@ -804,7 +818,9 @@ async def test_list_metrics(aiohttp_client, config, db):
         await db.put(elt)
 
     client = await aiohttp_client(create_app(config=config))
-    resp = await client.get(f"/core/namespaces/{resources[0].metadata.namespace}/metrics")
+    resp = await client.get(
+        f"/core/namespaces/{resources[0].metadata.namespace}/metrics"
+    )
     assert resp.status == 200
 
     body = await resp.json()
@@ -818,11 +834,11 @@ async def test_list_metrics_rbac(rbac_allow, config, aiohttp_client):
     config.authorization = "RBAC"
     client = await aiohttp_client(create_app(config))
 
-    resp = await client.get(f"/core/namespaces/testing/metrics")
+    resp = await client.get("/core/namespaces/testing/metrics")
     assert resp.status == 403
 
     async with rbac_allow("core", "metrics", "list"):
-        resp = await client.get(f"/core/namespaces/testing/metrics")
+        resp = await client.get("/core/namespaces/testing/metrics")
         assert resp.status == 200
 
 
@@ -831,7 +847,7 @@ async def test_watch_metrics(aiohttp_client, config, db, loop):
     resources = [MetricFactory(), MetricFactory()]
 
     async def watch(created):
-        resp = await client.get(f"/core/namespaces/testing/metrics?watch&heartbeat=0")
+        resp = await client.get("/core/namespaces/testing/metrics?watch&heartbeat=0")
         assert resp.status == 200
         created.set_result(None)
 
@@ -864,11 +880,16 @@ async def test_watch_metrics(aiohttp_client, config, db, loop):
 
         # Create the Metrics
         for data in resources:
-            resp = await client.post(f"/core/namespaces/{resources[0].metadata.namespace}/metrics",
-                                     json=data.serialize())
+            resp = await client.post(
+                f"/core/namespaces/{resources[0].metadata.namespace}/metrics",
+                json=data.serialize(),
+            )
             assert resp.status == 200
 
-        resp = await client.delete(f"/core/namespaces/{resources[0].metadata.namespace}/metrics/{resources[0].metadata.name}")
+        resp = await client.delete(
+            f"/core/namespaces/{resources[0].metadata.namespace}/metrics/"
+            f"{resources[0].metadata.name}"
+        )
         assert resp.status == 200
 
         received = Metric.deserialize(await resp.json())
@@ -899,11 +920,11 @@ async def test_read_metric_rbac(rbac_allow, config, aiohttp_client, db):
     config.authorization = "RBAC"
     client = await aiohttp_client(create_app(config))
 
-    resp = await client.get(f"/core/namespaces/testing/metrics/my-resource")
+    resp = await client.get("/core/namespaces/testing/metrics/my-resource")
     assert resp.status == 403
 
     async with rbac_allow("core", "metrics", "get"):
-        resp = await client.get(f"/core/namespaces/testing/metrics/my-resource")
+        resp = await client.get("/core/namespaces/testing/metrics/my-resource")
         assert resp.status == 404
 
 
@@ -916,7 +937,7 @@ async def test_update_metric(aiohttp_client, config, db):
 
     resp = await client.put(
         f"/core/namespaces/{data.metadata.namespace}/metrics/{data.metadata.name}",
-        json=data.serialize()
+        json=data.serialize(),
     )
     assert resp.status == 200
     received = Metric.deserialize(await resp.json())
@@ -945,7 +966,7 @@ async def test_update_metric_to_delete(aiohttp_client, config, db):
     data.metadata.finalizers = []
     resp = await client.put(
         f"/core/namespaces/{data.metadata.namespace}/metrics/{data.metadata.name}",
-        json=data.serialize()
+        json=data.serialize(),
     )
     assert resp.status == 200
     received = Metric.deserialize(await resp.json())
@@ -962,11 +983,11 @@ async def test_update_metric_rbac(rbac_allow, config, aiohttp_client):
     config.authorization = "RBAC"
     client = await aiohttp_client(create_app(config=config))
 
-    resp = await client.put(f"/core/namespaces/testing/metrics/my-resource")
+    resp = await client.put("/core/namespaces/testing/metrics/my-resource")
     assert resp.status == 403
 
     async with rbac_allow("core", "metrics", "update"):
-        resp = await client.put(f"/core/namespaces/testing/metrics/my-resource")
+        resp = await client.put("/core/namespaces/testing/metrics/my-resource")
         assert resp.status == 415
 
 
@@ -978,7 +999,7 @@ async def test_update_metric_no_changes(aiohttp_client, config, db):
 
     resp = await client.put(
         f"/core/namespaces/{data.metadata.namespace}/metrics/{data.metadata.name}",
-        json=data.serialize()
+        json=data.serialize(),
     )
     assert resp.status == 400
 
@@ -991,8 +1012,7 @@ async def test_update_metric_immutable_field(aiohttp_client, config, db):
     data.metadata.namespace = "override"
 
     resp = await client.put(
-        f"/core/namespaces/testing/metrics/{data.metadata.name}",
-        json=data.serialize()
+        f"/core/namespaces/testing/metrics/{data.metadata.name}", json=data.serialize()
     )
     assert resp.status == 400
 
@@ -1009,7 +1029,7 @@ async def test_create_metrics_provider(aiohttp_client, config, db):
 
     resp = await client.post(
         f"/core/namespaces/{data.metadata.namespace}/metricsproviders",
-        json=data.serialize()
+        json=data.serialize(),
     )
     assert resp.status == 200
     received = MetricsProvider.deserialize(await resp.json())
@@ -1030,21 +1050,15 @@ async def test_create_metrics_provider_rbac(rbac_allow, config, aiohttp_client):
     config.authorization = "RBAC"
     client = await aiohttp_client(create_app(config=config))
 
-    resp = await client.post(
-        "/core/namespaces/testing/metricsproviders"
-    )
+    resp = await client.post("/core/namespaces/testing/metricsproviders")
     assert resp.status == 403
 
     async with rbac_allow("core", "metricsproviders", "create"):
-        resp = await client.post(
-            "/core/namespaces/testing/metricsproviders"
-        )
+        resp = await client.post("/core/namespaces/testing/metricsproviders")
         assert resp.status == 415
 
 
-async def test_create_metrics_provider_with_existing_name(
-    aiohttp_client, config, db
-):
+async def test_create_metrics_provider_with_existing_name(aiohttp_client, config, db):
     existing = MetricsProviderFactory(metadata__name="existing")
     await db.put(existing)
 
@@ -1052,7 +1066,7 @@ async def test_create_metrics_provider_with_existing_name(
 
     resp = await client.post(
         f"/core/namespaces/{existing.metadata.namespace}/metricsproviders",
-        json=existing.serialize()
+        json=existing.serialize(),
     )
     assert resp.status == 409
 
@@ -1068,7 +1082,8 @@ async def test_delete_metrics_provider(aiohttp_client, config, db):
     await db.put(data)
 
     resp = await client.delete(
-        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/{data.metadata.name}"
+        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/"
+        f"{data.metadata.name}"
     )
     assert resp.status == 200
     received = MetricsProvider.deserialize(await resp.json())
@@ -1082,9 +1097,7 @@ async def test_delete_metrics_provider(aiohttp_client, config, db):
     assert "cascade_deletion" in deleted.metadata.finalizers
 
 
-async def test_add_finalizer_in_deleted_metrics_provider(
-    aiohttp_client, config, db
-):
+async def test_add_finalizer_in_deleted_metrics_provider(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = MetricsProviderFactory(
@@ -1094,22 +1107,23 @@ async def test_add_finalizer_in_deleted_metrics_provider(
 
     data.metadata.finalizers = ["a-different-finalizer"]
     resp = await client.put(
-        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/{data.metadata.name}",
-        json=data.serialize()
+        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/"
+        f"{data.metadata.name}",
+        json=data.serialize(),
     )
     assert resp.status == 409
     body = await resp.json()
-    assert body["detail"] == "Finalizers can only be removed" \
-                             " if a deletion is in progress."
+    assert (
+        body["detail"] == "Finalizers can only be removed"
+        " if a deletion is in progress."
+    )
 
 
 async def test_delete_metrics_provider_rbac(rbac_allow, config, aiohttp_client):
     config.authorization = "RBAC"
     client = await aiohttp_client(create_app(config=config))
 
-    resp = await client.delete(
-        "/core/namespaces/testing/metricsproviders/my-resource"
-    )
+    resp = await client.delete("/core/namespaces/testing/metricsproviders/my-resource")
     assert resp.status == 403
 
     async with rbac_allow("core", "metricsproviders", "delete"):
@@ -1119,16 +1133,15 @@ async def test_delete_metrics_provider_rbac(rbac_allow, config, aiohttp_client):
         assert resp.status == 404
 
 
-async def test_delete_metrics_provider_already_in_deletion(
-    aiohttp_client, config, db
-):
+async def test_delete_metrics_provider_already_in_deletion(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     in_deletion = MetricsProviderFactory(metadata__deleted=fake.date_time())
     await db.put(in_deletion)
 
     resp = await client.delete(
-        f"/core/namespaces/{in_deletion.metadata.namespace}/metricsproviders/{in_deletion.metadata.name}"
+        f"/core/namespaces/{in_deletion.metadata.namespace}/metricsproviders/"
+        f"{in_deletion.metadata.name}"
     )
     assert resp.status == 200
 
@@ -1146,7 +1159,9 @@ async def test_list_metrics_providers(aiohttp_client, config, db):
         await db.put(elt)
 
     client = await aiohttp_client(create_app(config=config))
-    resp = await client.get(f"/core/namespaces/{resources[0].metadata.namespace}/metricsproviders")
+    resp = await client.get(
+        f"/core/namespaces/{resources[0].metadata.namespace}/metricsproviders"
+    )
     assert resp.status == 200
 
     body = await resp.json()
@@ -1210,12 +1225,13 @@ async def test_watch_metrics_providers(aiohttp_client, config, db, loop):
         for data in resources:
             resp = await client.post(
                 f"/core/namespaces/{data.metadata.namespace}/metricsproviders",
-                json=data.serialize()
+                json=data.serialize(),
             )
             assert resp.status == 200
 
         resp = await client.delete(
-            f"/core/namespaces/{resources[0].metadata.namespace}/metricsproviders/{resources[0].metadata.name}"
+            f"/core/namespaces/{resources[0].metadata.namespace}/metricsproviders/"
+            f"{resources[0].metadata.name}"
         )
         assert resp.status == 200
 
@@ -1236,7 +1252,8 @@ async def test_read_metrics_provider(aiohttp_client, config, db):
 
     client = await aiohttp_client(create_app(config=config))
     resp = await client.get(
-        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/{data.metadata.name}"
+        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/"
+        f"{data.metadata.name}"
     )
     assert resp.status == 200
     received = MetricsProvider.deserialize(await resp.json())
@@ -1247,9 +1264,7 @@ async def test_read_metrics_provider_rbac(rbac_allow, config, aiohttp_client):
     config.authorization = "RBAC"
     client = await aiohttp_client(create_app(config))
 
-    resp = await client.get(
-        "/core/namespaces/testing/metricsproviders/my-resource"
-    )
+    resp = await client.get("/core/namespaces/testing/metricsproviders/my-resource")
     assert resp.status == 403
 
     async with rbac_allow("core", "metricsproviders", "get"):
@@ -1265,8 +1280,9 @@ async def test_update_metrics_provider(aiohttp_client, config, db):
     data.spec = MetricsProviderSpecFactory(type="static")
 
     resp = await client.put(
-        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/{data.metadata.name}",
-        json=data.serialize()
+        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/"
+        f"{data.metadata.name}",
+        json=data.serialize(),
     )
     assert resp.status == 200
     received = MetricsProvider.deserialize(await resp.json())
@@ -1294,8 +1310,9 @@ async def test_update_metrics_provider_to_delete(aiohttp_client, config, db):
     # Delete the GlobalMetricsProvider
     data.metadata.finalizers = []
     resp = await client.put(
-        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/{data.metadata.name}",
-        json=data.serialize()
+        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/"
+        f"{data.metadata.name}",
+        json=data.serialize(),
     )
     assert resp.status == 200
     received = MetricsProvider.deserialize(await resp.json())
@@ -1327,15 +1344,14 @@ async def test_update_metrics_provider_no_changes(aiohttp_client, config, db):
     await db.put(data)
 
     resp = await client.put(
-        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/{data.metadata.name}",
-        json=data.serialize()
+        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/"
+        f"{data.metadata.name}",
+        json=data.serialize(),
     )
     assert resp.status == 400
 
 
-async def test_update_metrics_provider_immutable_field(
-    aiohttp_client, config, db
-):
+async def test_update_metrics_provider_immutable_field(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = MetricsProviderFactory()
@@ -1344,7 +1360,7 @@ async def test_update_metrics_provider_immutable_field(
 
     resp = await client.put(
         f"/core/namespaces/testing/metricsproviders/{data.metadata.name}",
-        json=data.serialize()
+        json=data.serialize(),
     )
     # assert resp.status == 400
 
@@ -1367,8 +1383,9 @@ async def test_update_metrics_provider_with_changes(aiohttp_client, config, db):
     data.spec.prometheus.url += "/other/path"
 
     resp = await client.put(
-        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/{data.metadata.name}",
-        json=data.serialize()
+        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/"
+        f"{data.metadata.name}",
+        json=data.serialize(),
     )
     assert resp.status == 200
     received = MetricsProvider.deserialize(await resp.json())
@@ -1378,8 +1395,9 @@ async def test_update_metrics_provider_with_changes(aiohttp_client, config, db):
     data.spec = MetricsProviderSpecFactory(type="kafka")
 
     resp = await client.put(
-        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/{data.metadata.name}",
-        json=data.serialize()
+        f"/core/namespaces/{data.metadata.namespace}/metricsproviders/"
+        f"{data.metadata.name}",
+        json=data.serialize(),
     )
     assert resp.status == 200
     received = MetricsProvider.deserialize(await resp.json())
@@ -1459,8 +1477,10 @@ async def test_add_finalizer_in_deleted_role(aiohttp_client, config, db):
     resp = await client.put(f"/core/roles/{data.metadata.name}", json=data.serialize())
     assert resp.status == 409
     body = await resp.json()
-    assert body["detail"] == "Finalizers can only be removed" \
-                             " if a deletion is in progress."
+    assert (
+        body["detail"] == "Finalizers can only be removed"
+        " if a deletion is in progress."
+    )
 
 
 async def test_delete_role_rbac(rbac_allow, config, aiohttp_client):
@@ -1756,8 +1776,10 @@ async def test_add_finalizer_in_deleted_role_binding(aiohttp_client, config, db)
     )
     assert resp.status == 409
     body = await resp.json()
-    assert body["detail"] == "Finalizers can only be removed" \
-                             " if a deletion is in progress."
+    assert (
+        body["detail"] == "Finalizers can only be removed"
+        " if a deletion is in progress."
+    )
 
 
 async def test_delete_role_binding_rbac(rbac_allow, config, aiohttp_client):
