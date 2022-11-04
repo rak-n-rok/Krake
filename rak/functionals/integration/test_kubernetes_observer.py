@@ -3,9 +3,9 @@ KubernetesController. It is responsible for updating the current state of a Kube
 Application, if the Application has been modified on the actual cluster.
 
 The tests are performed on a simple test environment, where only one Cluster and one
-Application are present. The general workflow is as follow:
+Application is present. The general workflow is as follow:
 
- * A request for the Cluster creation, then the Application creation are sent to the
+ * A request for the Cluster registration, then the Application creation is sent to the
    Krake API;
  * The Application will be scheduled on the only Cluster;
  * The resources described in the Application are created on the Kubernetes cluster that
