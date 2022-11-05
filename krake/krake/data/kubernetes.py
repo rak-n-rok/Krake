@@ -23,6 +23,23 @@ from .constraints import LabelConstraint, MetricConstraint
 log.setLevel(logging.WARNING)
 
 
+class CloudConstraints(Serializable):
+    """Constraints for the :class:`Cloud` to which this cluster is
+    scheduled.
+    """
+
+    labels: List[LabelConstraint] = None
+    metrics: List[MetricConstraint] = None
+
+
+class ClusterCloudConstraints(Serializable):
+    """Constraints restricting the scheduling decision for a
+    :class:`Cluster`.
+    """
+
+    cloud: CloudConstraints = None
+
+
 class ClusterConstraints(Serializable):
     labels: List[LabelConstraint] = None
     custom_resources: List[str] = field(default_factory=list)
@@ -604,7 +621,13 @@ class ClusterSpec(Serializable):
             default: -1 (infinite)
     """
     kubeconfig: dict = field(metadata={"validate": _validate_kubeconfig})
+    # TODO: Uncomment, once the Yaook provider is integrated
+    # manifest: List[dict] = field(
+    #   metadata={"validate": _validate_manifest}, default_factory=list
+    # )
+    tosca: dict = field(metadata={"validate": _validate_tosca}, default_factory=dict)
     custom_resources: List[str] = field(default_factory=list)
+    constraints: ClusterCloudConstraints = None
     # FIXME needs further discussion how to register stand-alone kubernetes cluster as
     #  a cluster which should be processed by krake.controller.scheduler
     metrics: List[MetricRef] = field(default_factory=list)
@@ -620,6 +643,10 @@ class ClusterState(Enum):
     UNHEALTHY = auto()
     NOTREADY = auto()
     FAILING_METRICS = auto()
+    CREATING = auto()
+    RECONCILING = auto()
+    DELETING = auto()
+    FAILED = auto()
     DEGRADED = auto()
 
 
@@ -680,12 +707,21 @@ class ClusterStatus(Serializable):
         retries (int): Count of remaining retries to access the cluster. Is set
             via the Attribute backoff in in ClusterSpec.
 
+        scheduled (datetime.datetime): Timestamp that represents the last time the
+            cluster was scheduled to a cloud.
+        scheduled_to (ResourceRef): Reference to the cloud where the
+            cluster should run.
+        running_on (ResourceRef): Reference to the cloud where the
+            cluster is running.
     """
 
     kube_controller_triggered: datetime = None
     state: ClusterState = ClusterState.CONNECTING
     metrics_reasons: Dict[str, Reason] = field(default_factory=dict)
     nodes: List[ClusterNode] = field(default_factory=list)
+    scheduled: datetime = None
+    scheduled_to: ResourceRef = None
+    running_on: ResourceRef = None
     retries: int = field(default_factory=int)
 
 

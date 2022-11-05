@@ -35,6 +35,7 @@ from .helpers import session
 from .core import CoreApi
 from .openstack import OpenStackApi
 from .kubernetes import KubernetesApi
+from .infrastructure import InfrastructureApi
 
 
 routes = web.RouteTableDef()
@@ -113,6 +114,7 @@ def create_app(config):
     app.add_routes(CoreApi.routes)
     app.add_routes(OpenStackApi.routes)
     app.add_routes(KubernetesApi.routes)
+    app.add_routes(InfrastructureApi.routes)
 
     cors_setup(app)
     return app
