@@ -37,6 +37,7 @@ from krake import (
     load_yaml_config,
     ConfigurationOptionMapper,
 )
+from krake.client.infrastructure import InfrastructureApi
 from krake.client.core import CoreApi
 from krake.client.openstack import OpenStackApi
 from krake.controller import Controller, run, Reflector, create_ssl_context
@@ -51,6 +52,12 @@ from krake.data.core import (
     Metric,
 )
 from krake.client.kubernetes import KubernetesApi
+from krake.data.infrastructure import (
+    Cloud,
+    GlobalCloud,
+    GlobalInfrastructureProvider,
+    InfrastructureProvider,
+)
 from krake.data.kubernetes import Application, Cluster
 from krake.data.openstack import Project, MagnumCluster
 from krake.utils import (
@@ -265,11 +272,22 @@ class GarbageCollector(Controller):
         self.worker_count = worker_count
 
         self.resources = {
-            CoreApi: [Role, RoleBinding,
-                      GlobalMetric, GlobalMetricsProvider,
-                      Metric, MetricsProvider],
+            CoreApi: [
+                Role,
+                RoleBinding,
+                GlobalMetric,
+                GlobalMetricsProvider,
+                Metric,
+                MetricsProvider,
+            ],
             KubernetesApi: [Application, Cluster],
             OpenStackApi: [Project, MagnumCluster],
+            InfrastructureApi: [
+                GlobalInfrastructureProvider,
+                InfrastructureProvider,
+                GlobalCloud,
+                Cloud,
+            ],
         }
         self.graph = DependencyGraph()
 
