@@ -1,10 +1,11 @@
-"""core subcommands
+"""infrastructure subcommands
 
 .. code:: bash
 
-    python -m rok core --help
+    python -m rok infrastructure --help
 
 """
+import sys
 from enum import Enum
 
 from .parser import (
@@ -12,1144 +13,979 @@ from .parser import (
     argument,
     arg_namespace,
     arg_formatting,
-    MetricAction,
+    arg_metric,
+    arg_global_metric,
+    arg_labels,
 )
 from .fixtures import depends
 from .formatters import (
     BaseTable,
     Cell,
     printer,
-    dict_formatter,
 )
 
 # Parsers
-core = ParserSpec("core", aliases=[], help="Manage core resources")
-
-metrics_provider = core.subparser(
-    "metricsprovider", aliases=["mp"], help="Manage metrics providers"
-)
-metric = core.subparser("metric", help="Manage metrics")
-
-global_metrics_provider = core.subparser(
-    "globalmetricsprovider", aliases=["gmp"], help="Manage global metrics providers"
-)
-global_metric = core.subparser(
-    "globalmetric", aliases=["gm"], help="Manage global metrics"
+infrastructure = ParserSpec(
+    "infrastructure", aliases=["infra"], help="Manage infrastructure resources"
 )
 
-
-# Base urls for namespaced metrics and metrics providers
-NAMESPACE_URL_FORMAT = "/namespaces/{namespace}"
-METRICS_PROVIDER_BASE_URL = f"/core{NAMESPACE_URL_FORMAT}/metricsproviders"
-METRIC_BASE_URL = f"/core{NAMESPACE_URL_FORMAT}/metrics"
-
-LIST_ALL_METRICS_PROVIDER_BASE_URL = "/core/metricsproviders"
-LIST_ALL_METRIC_BASE_URL = "/core/metrics"
-
-# Base urls for global metrics and metrics providers
-GLOBAL_METRICS_PROVIDER_BASE_URL = "/core/globalmetricsproviders"
-GLOBAL_METRIC_BASE_URL = "/core/globalmetrics"
-
-
-# CRUD REST API methods for general access
-
-
-def _create_base_resource(session, base_url, resource, config=None, namespace=None):
-    """
-    Creation function for a basic resource
-
-    Args:
-        session (requests.Session): the session used to connect to the krake API
-        base_url (str): the base url at which the krake API serves the request
-        resource (str): name of the resource kind
-        config (dict): the config
-        namespace (str, optional): the namespace within which the resource
-            should be created
-
-    Returns:
-        dict(str, object): The updated Metric resource in json representation
-    """
-    request_url = _get_request_url(base_url, config=config, namespace=namespace)
-    resp = session.post(request_url, json=resource)
-    return resp.json()
+global_infrastructure_provider = infrastructure.subparser(
+    "globalinfrastructureprovider",
+    aliases=["gprovider", "gip"],
+    help="Manage global infrastructure providers",
+)
+infrastructure_provider = infrastructure.subparser(
+    "infrastructureprovider",
+    aliases=["provider", "ip"],
+    help="Manage infrastructure providers",
+)
+global_cloud = infrastructure.subparser(
+    "globalcloud", aliases=["gcloud", "gc"], help="Manage global clouds"
+)
+cloud = infrastructure.subparser("cloud", help="Manage clouds")
 
 
-def _list_base_resource(session, base_url, config=None, namespace=None):
-    """
-    List function for a basic resource
+# ################ Managing global infrastructure providers
 
-    Args:
-        session (requests.Session): the session used to connect to the krake API
-        base_url (str): the base url at which the krake API serves the request
-        config (dict): the config
-        namespace (str, optional): the namespace within which the resource
-            should be created
 
-    Returns:
-        dict(str, object): The updated Metric resource in json representation
-    """
-    request_url = _get_request_url(base_url, config=config, namespace=namespace)
-    resp = session.get(request_url)
+class InfrastructureProviderType(str, Enum):
+    IM = "im"
+
+
+class InfrastructureProviderListTable(BaseTable):
+    # TODO: Infrastructure provider `spec` is instance of
+    #  :class:`PolymorphicContainer` that is defined by :attr:`type`.
+    #  Hence, the :class:`Cell` should be modified to accept e.g.
+    #  "wildcard attributes" ("spec.*.url") when some nested
+    #  attribute with polymorphic parent should be displayed
+    #  in the table.
+    #  YAGNI for now.
+    type = Cell("spec.type")
+    url = Cell("spec.im.url")
+
+
+class InfrastructureProviderTable(InfrastructureProviderListTable):
+    pass
+
+
+@global_infrastructure_provider.command(
+    "list", help="List global infrastructure providers"
+)
+@arg_formatting
+@depends("session")
+@printer(table=InfrastructureProviderListTable(many=True))
+def list_globalinfrastructureproviders(session):
+    resp = session.get("/infrastructure/globalinfrastructureproviders")
     body = resp.json()
     return body["items"]
 
 
-def _get_base_resource(session, base_url, kind, name, config=None, namespace=None):
-    """
-    Get function for a basic resource
-
-    Args:
-        session (requests.Session): the session used to connect to the krake API
-        base_url (str): the base url at which the krake API serves the request
-        kind (ResourceKind): the kind of resource which is sought
-        name (str): name of the resource
-        config (dict): the config
-        namespace (str, optional): the namespace within which the resource
-            should be created
-
-    Returns:
-        dict(str, object): The updated Metric resource in json representation
-    """
-    request_url = _get_request_url(
-        base_url, config=config, namespace=namespace, url_ext=name
-    )
-    resp = session.get(request_url)
-    return resp.json()
-
-
-def _update_base_resource(
-    session, base_url, resource, name, config=None, namespace=None
+@global_infrastructure_provider.command(
+    "register", help="Register global infrastructure provider"
+)
+@argument(
+    "--type",
+    dest="ip_type",
+    required=True,
+    help="Global infrastructure provider type. Valid types: "
+    f"{', '.join([t.value for t in InfrastructureProviderType])}",
+)
+@argument(
+    "--url",
+    required=True,
+    help="Global infrastructure provider API url. "
+    f"Valid together with --type {InfrastructureProviderType.IM.value}.",
+)
+@argument(
+    "--username",
+    help="Global infrastructure provider API username. "
+    f"Valid together with --type {InfrastructureProviderType.IM.value}.",
+)
+@argument(
+    "--password",
+    help="Global infrastructure provider API password. "
+    f"Valid together with --type {InfrastructureProviderType.IM.value}.",
+)
+@argument(
+    "--token",
+    help=f"Global infrastructure provider API token. "
+    f"Valid together with --type {InfrastructureProviderType.IM.value}.",
+)
+@argument("name", help="Name of the infrastructure provider")
+@arg_formatting
+@depends("session")
+@printer(table=InfrastructureProviderTable())
+def register_globalinfrastructureprovider(
+    session,
+    ip_type,
+    url,
+    username,
+    password,
+    token,
+    name,
 ):
-    """
-    Update function for a basic resource
+    if ip_type == InfrastructureProviderType.IM:
+        provider = {
+            "api": "infrastructure",
+            "kind": "GlobalInfrastructureProvider",
+            "metadata": {
+                "name": name,
+            },
+            "spec": {
+                "type": "im",
+                "im": {
+                    "url": url,
+                    "username": username,
+                    "password": password,
+                    "token": token,
+                },
+            },
+        }
+    else:
+        sys.exit(f"Error: Unsupported global infrastructure provider type: '{ip_type}'")
 
-    Args:
-        session (requests.Session): the session used to connect to the krake API
-        base_url (str): the base url at which the krake API serves the request
-        resource (str): name of the resource kind
-        name (str): name of the resource
-        config (dict): the config
-        namespace (str, optional): the namespace within which the resource
-            should be created
-
-    Returns:
-        dict(str, object): The updated Metric resource in json representation
-    """
-    request_url = _get_request_url(
-        base_url, config=config, namespace=namespace, url_ext=name
+    resp = session.post(
+        "/infrastructure/globalinfrastructureproviders",
+        json=provider,
     )
-    resp = session.put(request_url, json=resource, raise_for_status=False)
     return resp.json()
 
 
-def _delete_base_resource(session, base_url, kind, name, config=None, namespace=None):
-    """
-    Delete function for a basic resource
+@global_infrastructure_provider.command(
+    "get", help="Get global infrastructure provider"
+)
+@argument("name", help="Global infrastructure provider name")
+@arg_formatting
+@depends("session")
+@printer(table=InfrastructureProviderTable())
+def get_globalinfrastructureprovider(session, name):
+    resp = session.get(f"/infrastructure/globalinfrastructureproviders/{name}")
+    return resp.json()
 
-    Args:
-        session (requests.Session): the session used to connect to the krake API
-        base_url (str): the base url at which the krake API serves the request
-        kind (ResourceKind): the kind of resource which is sought
-        name (str): name of the resource
-        config (dict): the config
-        namespace (str, optional): the namespace within which the resource
-            should be created
 
-    Returns:
-        dict(str, object): The updated Metric resource in json representation
-    """
-    request_url = _get_request_url(
-        base_url, config=config, namespace=namespace, url_ext=name
+@global_infrastructure_provider.command(
+    "update", help="Update global infrastructure provider"
+)
+@argument("name", help="Global infrastructure provider name")
+@argument(
+    "--url",
+    help="Global infrastructure provider API url. "
+    f"Valid together with --type {InfrastructureProviderType.IM.value}.",
+)
+@argument(
+    "--username",
+    help="Global infrastructure provider API username. "
+    f"Valid together with --type {InfrastructureProviderType.IM.value}.",
+)
+@argument(
+    "--password",
+    help="Global infrastructure provider API password. "
+    f"Valid together with --type {InfrastructureProviderType.IM.value}.",
+)
+@argument(
+    "--token",
+    help=f"Global infrastructure provider API token. "
+    f"Valid together with --type {InfrastructureProviderType.IM.value}.",
+)
+@arg_formatting
+@depends("session")
+@printer(table=InfrastructureProviderTable())
+def update_globalinfrastructureprovider(
+    session,
+    name,
+    url,
+    username,
+    password,
+    token,
+):
+    resp = session.get(f"/infrastructure/globalinfrastructureproviders/{name}")
+    provider = resp.json()
+
+    if provider["spec"]["type"] == InfrastructureProviderType.IM:
+        if url:
+            provider["spec"]["im"]["url"] = url
+        if username:
+            provider["spec"]["im"]["username"] = username
+        if password:
+            provider["spec"]["im"]["password"] = password
+        if token:
+            provider["spec"]["im"]["token"] = token
+
+    resp = session.put(
+        f"/infrastructure/globalinfrastructureproviders/{name}",
+        json=provider,
     )
-    resp = session.delete(request_url, raise_for_status=False)
+    return resp.json()
+
+
+@global_infrastructure_provider.command(
+    "delete", help="Delete global infrastructure provider"
+)
+@argument("name", help="Global infrastructure provider name")
+@arg_formatting
+@depends("session")
+@printer(table=InfrastructureProviderTable())
+def delete_globalinfrastructureprovider(session, name):
+    resp = session.delete(
+        f"/infrastructure/globalinfrastructureproviders/{name}",
+    )
 
     if resp.status_code == 204:
         return None
+
     return resp.json()
 
 
-def _get_request_url(base_url, config=None, namespace="", url_ext=""):
-    """
-    Returns a GET request url (I don't know what this does exactly)
-    """
-    if namespace and not config:
-        raise ValueError(
-            f"Expected a config together with namespace '{namespace}'. "
-            f"base_url: '{base_url}'. url_ext: '{url_ext}'."
-        )
-    if config and not namespace:
+# ################ Managing infrastructure providers
+
+
+@infrastructure_provider.command("list", help="List infrastructure providers")
+@argument(
+    "-a",
+    "--all",
+    action="store_true",
+    help="Show infrastructure providers in all namespaces",
+)
+@arg_namespace
+@arg_formatting
+@depends("config", "session")
+@printer(table=InfrastructureProviderListTable(many=True))
+def list_infrastructureproviders(config, session, namespace, all):
+    if all:
+        url = "/infrastructure/infrastructureproviders"
+    else:
+        if namespace is None:
+            namespace = config["user"]
+        url = f"/infrastructure/namespaces/{namespace}/infrastructureproviders"
+    resp = session.get(url)
+    body = resp.json()
+    return body["items"]
+
+
+@infrastructure_provider.command("register", help="Register infrastructure provider")
+@argument(
+    "--type",
+    dest="ip_type",
+    required=True,
+    help="Infrastructure provider type. Valid types: "
+    f"{', '.join([t.value for t in InfrastructureProviderType])}",
+)
+@argument(
+    "--url",
+    required=True,
+    help="Infrastructure provider API url. "
+    f"Valid together with --type {InfrastructureProviderType.IM.value}.",
+)
+@argument(
+    "--username",
+    help="Infrastructure provider API username. "
+    f"Valid together with --type {InfrastructureProviderType.IM.value}.",
+)
+@argument(
+    "--password",
+    help="Infrastructure provider API password. "
+    f"Valid together with --type {InfrastructureProviderType.IM.value}.",
+)
+@argument(
+    "--token",
+    help=f"Infrastructure provider API token. "
+    f"Valid together with --type {InfrastructureProviderType.IM.value}.",
+)
+@argument("name", help="Name of the infrastructure provider")
+@arg_namespace
+@arg_formatting
+@depends("config", "session")
+@printer(table=InfrastructureProviderTable())
+def register_infrastructureprovider(
+    config,
+    session,
+    namespace,
+    ip_type,
+    url,
+    username,
+    password,
+    token,
+    name,
+):
+    if namespace is None:
         namespace = config["user"]
-    _validate_namespace(namespace, base_url)
-    base_url = base_url.format(namespace=namespace)
-    return "/".join([base_url, url_ext]) if url_ext else base_url
 
-
-def _validate_namespace(namespace, base_url):
-    """Validate the provided namespace and base_url against each other.
-
-    Args:
-        base_url (str): the base url at which the krake API serves the request
-        namespace (str, optional): the namespace within which the resource
-            should be created
-
-    Raises:
-         SystemExit: if the parameters are invalid
-    """
-    if NAMESPACE_URL_FORMAT in base_url:
-        if not namespace:
-            raise ValueError(f"No namespace was provided for the url '{base_url}'")
-    else:
-        if namespace:
-            if base_url not in [
-                LIST_ALL_METRICS_PROVIDER_BASE_URL,
-                LIST_ALL_METRIC_BASE_URL,
-            ]:
-                raise ValueError(
-                    f"Namespace '{namespace}' was provided for the url '{base_url}'"
-                )
-
-
-# ################ Managing metrics providers
-
-
-class _MetricsProviderType(Enum):
-    PROMETHEUS = "prometheus"
-    STATIC = "static"
-    KAFKA = "kafka"
-
-
-class BaseMetricsProviderListTable(BaseTable):
-    mp_type = Cell("spec.type", name="type")
-
-
-class BaseMetricsProviderTable(BaseMetricsProviderListTable):
-    def draw(self, table, data, file):
-        mp_type_str = _MetricsProviderType(data["spec"]["type"])
-
-        mp_attrs = {
-            _MetricsProviderType.PROMETHEUS: {"url": None},
-            _MetricsProviderType.STATIC: {"metrics": dict_formatter},
-            _MetricsProviderType.KAFKA: dict.fromkeys(
-                ["url", "comparison_column", "value_column", "table"]
-            ),
-        }
-
-        try:
-            mp_type = _MetricsProviderType(mp_type_str)
-        except ValueError:
-            mp_type = None
-
-        if mp_type in mp_attrs:
-            for attr, formatter in mp_attrs[mp_type].items():
-                if attr in self.cells:
-                    raise ValueError(
-                        f"Invalid state: '{attr}' attribute was already set."
-                    )
-                key = f"spec.{mp_type.value}.{attr}"
-                self.cells.update({attr: Cell(key, name=attr, formatter=formatter)})
-        else:
-            data["spec"][
-                "type"
-            ] = f"ERROR: invalid global metrics provider type: '{mp_type_str}'"
-
-        super().draw(table, data, file)
-
-
-def _list_base_metrics_providers(session, base_url, config=None, namespace=None):
-    return _list_base_resource(session, base_url, config=config, namespace=namespace)
-
-
-def _create_base_metrics_provider(
-    session,
-    base_url,
-    kind,
-    name,
-    url,
-    mp_type,
-    metrics,
-    comparison_column,
-    value_column,
-    table,
-    config=None,
-    namespace=None,
-):
-    _validate_for_create_base_mp(
-        mp_type, metrics, url, comparison_column, value_column, table
-    )
-
-    mp_type = _MetricsProviderType(mp_type)
-    if mp_type == _MetricsProviderType.PROMETHEUS:
-        type_dict = {"url": url}
-    elif mp_type == _MetricsProviderType.STATIC:
-        type_dict = {"metrics": {m["name"]: m["weight"] for m in metrics}}
-    elif mp_type == _MetricsProviderType.KAFKA:
-        type_dict = {
-            "url": url,
-            "comparison_column": comparison_column,
-            "value_column": value_column,
-            "table": table,
+    if ip_type == InfrastructureProviderType.IM:
+        provider = {
+            "api": "infrastructure",
+            "kind": "InfrastructureProvider",
+            "metadata": {
+                "name": name,
+            },
+            "spec": {
+                "type": "im",
+                "im": {
+                    "url": url,
+                    "username": username,
+                    "password": password,
+                    "token": token,
+                },
+            },
         }
     else:
-        raise SystemExit(f"Invalid metrics provider type: '{mp_type}'")
+        sys.exit(f"Error: Unsupported infrastructure provider type: '{ip_type}'")
 
-    mp = {
-        "api": "core",
-        "kind": kind,
-        "metadata": {
-            "name": name,
-        },
-        "spec": {
-            "type": mp_type.value,
-            mp_type.value: type_dict,
-        },
-    }
-
-    return _create_base_resource(
-        session, base_url, mp, config=config, namespace=namespace
+    resp = session.post(
+        f"/infrastructure/namespaces/{namespace}/infrastructureproviders",
+        json=provider,
     )
-    # resp = session.post(GLOBAL_METRICS_PROVIDER_BASE_URL, json=mp)
-    # return resp.json()
+    return resp.json()
 
 
-def _validate_for_create_base_mp(
-    mp_type_str, metrics, url, comparison_column, value_column, table
-):
-    """Validate the provided parameters as input parameters for the
-    _create_base_metrics_provider() method.
-
-    Args:
-        mp_type_str (str): the value provided with the --type argument
-        metrics (list[dict[str, float], optional): the value provided with the
-            --metric argument
-        url (str, optional): the value provided with the --url argument
-        comparison_column (str, optional): the value provided with the
-            --comparison-column argument
-        value_column (str, optional): the value provided with the
-            --value-column argument
-        table (str, optional): the value provided with the --table argument
-
-    Raises:
-         SystemExit: if the parameters are invalid
-    """
-
-    try:
-        mp_type = _MetricsProviderType(mp_type_str)
-    except ValueError:
-        raise SystemExit(f"Invalid metrics provider type: '{mp_type_str}'")
-
-    required_parameters = {
-        _MetricsProviderType.PROMETHEUS: {
-            "url": url,
-        },
-        _MetricsProviderType.STATIC: {
-            "metric": metrics,
-        },
-        _MetricsProviderType.KAFKA: {
-            "url": url,
-            "comparison-column": comparison_column,
-            "value-column": value_column,
-            "table": table,
-        },
-    }
-    err_msg_fmt = (
-        "Metrics provider type '{mp_type}' " "requires --{attr} to be specified"
-    )
-    for var_name, var in required_parameters[mp_type].items():
-        if not var:
-            raise SystemExit(err_msg_fmt.format(mp_type=mp_type_str, attr=var_name))
-
-
-def _get_base_metrics_provider(
-    session, base_url, kind, name, config=None, namespace=None
-):
-    return _get_base_resource(
-        session, base_url, kind, name, config=config, namespace=namespace
-    )
-
-
-def _validate_for_update_base_mp(
-    mp_type_str, metrics, url, comparison_column, value_column, table
-):
-    """Validate the provided parameters as input parameters for the
-    update_base_metrics_provider() method.
-
-    Args:
-        mp_type_str (str): the value provided with the --type argument
-        metrics (list[dict[str, float], optional): the value provided with the
-            --metric argument
-        url (str, optional): the value provided with the --url argument
-        comparison_column (str, optional): the value provided with the
-            --comparison-column argument
-        value_column (str, optional): the value provided with the
-            --value-column argument
-        table (str, optional): the value provided with the --table argument
-
-    Raises:
-         SystemExit: if the parameters are invalid
-    """
-    try:
-        mp_type = _MetricsProviderType(mp_type_str)
-    except ValueError:
-        raise SystemExit(f"Invalid metrics provider type: '{mp_type_str}'")
-
-    required_parameters = {
-        _MetricsProviderType.PROMETHEUS: {
-            "url": url,
-        },
-        _MetricsProviderType.STATIC: {
-            "metric": metrics,
-        },
-        _MetricsProviderType.KAFKA: {},
-    }
-    err_msg_fmt = "Metrics provider type '{mp_type}' requires --{attr} to be specified"
-    for var_name, var in required_parameters[mp_type].items():
-        if not var:
-            raise SystemExit(err_msg_fmt.format(mp_type=mp_type_str, attr=var_name))
-
-    disallowed_parameters = {
-        _MetricsProviderType.PROMETHEUS: {
-            "metric": metrics,
-            "comparison-column": comparison_column,
-            "value-column": value_column,
-            "table": table,
-        },
-        _MetricsProviderType.STATIC: {
-            "url": url,
-            "comparison-column": comparison_column,
-            "value-column": value_column,
-            "table": table,
-        },
-        _MetricsProviderType.KAFKA: {
-            "metric": metrics,
-        },
-    }
-    err_msg_fmt = (
-        "--{attr} is not a valid argument for " "metrics providers of type {mp_type}"
-    )
-    for var_name, var in disallowed_parameters[mp_type].items():
-        if var:
-            raise SystemExit(err_msg_fmt.format(mp_type=mp_type_str, attr=var_name))
-
-
-def _update_base_metrics_provider(
-    session,
-    base_url,
-    kind,
-    name,
-    mp_url,
-    metrics,
-    comparison_column,
-    value_column,
-    table,
-    config=None,
-    namespace=None,
-):
-    mp = _get_base_metrics_provider(
-        session, base_url, kind, name, config=config, namespace=namespace
-    )
-    mp_type = mp["spec"]["type"]
-
-    _validate_for_update_base_mp(
-        mp_type, metrics, mp_url, comparison_column, value_column, table
-    )
-
-    if metrics:
-        mp["spec"][mp_type]["metrics"] = {m["name"]: m["weight"] for m in metrics}
-    if mp_url:
-        mp["spec"][mp_type]["url"] = mp_url
-    if comparison_column:
-        mp["spec"][mp_type]["comparison_column"] = comparison_column
-    if value_column:
-        mp["spec"][mp_type]["value_column"] = value_column
-    if table:
-        mp["spec"][mp_type]["table"] = table
-    return _update_base_resource(
-        session, base_url, mp, name, config=config, namespace=namespace
-    )
-
-
-def _delete_base_metrics_provider(
-    session, base_url, kind, name, config=None, namespace=None
-):
-    return _delete_base_resource(
-        session, base_url, kind, name, config=config, namespace=namespace
-    )
-
-
-# ################ Managing namespaced metrics providers
-
-
-@metrics_provider.command("list", help="List metrics providers")
-@argument(
-    "-a", "--all", action="store_true", help="Show metrics providers in all namespaces"
-)
+@infrastructure_provider.command("get", help="Get infrastructure provider")
+@argument("name", help="Infrastructure provider name")
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
-@printer(table=BaseMetricsProviderListTable(many=True))
-def list_metricsproviders(config, session, namespace, all):
-    base_url = LIST_ALL_METRICS_PROVIDER_BASE_URL if all else METRICS_PROVIDER_BASE_URL
-    return _list_base_metrics_providers(
-        session, base_url, config=config, namespace=namespace
+@printer(table=InfrastructureProviderTable())
+def get_infrastructureprovider(config, session, namespace, name):
+    if namespace is None:
+        namespace = config["user"]
+
+    resp = session.get(
+        f"/infrastructure/namespaces/{namespace}/infrastructureproviders/{name}"
     )
+    return resp.json()
 
 
-@metrics_provider.command("create", help="Create a metrics provider")
+@infrastructure_provider.command("update", help="Update infrastructure provider")
+@argument("name", help="Infrastructure provider name")
 @argument(
     "--url",
-    help=f"Metrics provider url. "
-    f"Not valid together with --type {_MetricsProviderType.STATIC}.",
+    help="Metrics provider API url. "
+    f"Valid together with --type {InfrastructureProviderType.IM.value}.",
 )
 @argument(
-    "--type",
-    dest="mp_type",
-    required=True,
-    help=f"Metrics provider type. Valid types: "
-    f"{', '.join(t.value for t in _MetricsProviderType)}",
+    "--username",
+    help="Infrastructure provider API username. "
+    f"Valid together with --type {InfrastructureProviderType.IM.value}.",
 )
 @argument(
-    "-m",
-    "--metric",
-    action=MetricAction,
-    dest="metrics",
-    help=f"Name and value of a metric the provider provides. "
-    f"Can be specified multiple times. "
-    f"Only valid together with --type {_MetricsProviderType.STATIC}.",
+    "--password",
+    help="Infrastructure provider API password. "
+    f"Valid together with --type {InfrastructureProviderType.IM.value}.",
 )
 @argument(
-    "--table",
-    help=f"Name of the KSQL table. Only valid together with "
-    f"--type {_MetricsProviderType.KAFKA.value}.",
-)
-@argument(
-    "--comparison-column",
-    help=f"Name of the column whose value will be compared to the metric name "
-    f"when selecting a metric. Only valid together with --type "
-    f"{_MetricsProviderType.KAFKA.value}.",
-)
-@argument(
-    "--value-column",
-    help=f"Name of the column where the value of a metric is stored. "
-    f"Only valid together with --type {_MetricsProviderType.KAFKA.value}.",
-)
-@argument("name", help="Name of the metrics provider")
-@arg_namespace
-@arg_formatting
-@depends("config", "session")
-@printer(table=BaseMetricsProviderTable())
-def create_metricsprovider(
-    config,
-    session,
-    namespace,
-    url,
-    mp_type,
-    metrics,
-    comparison_column,
-    value_column,
-    table,
-    name,
-):
-    return _create_base_metrics_provider(
-        session,
-        METRICS_PROVIDER_BASE_URL,
-        "MetricsProvider",
-        name,
-        url,
-        mp_type,
-        metrics,
-        comparison_column,
-        value_column,
-        table,
-        config=config,
-        namespace=namespace,
-    )
-
-
-@metrics_provider.command("get", help="Get a metrics provider")
-@argument("name", help="Metrics provider name")
-@arg_namespace
-@arg_formatting
-@depends("config", "session")
-@printer(table=BaseMetricsProviderTable())
-def get_metricsprovider(config, session, namespace, name):
-    return _get_base_metrics_provider(
-        session,
-        METRICS_PROVIDER_BASE_URL,
-        "MetricsProvider",
-        name,
-        config=config,
-        namespace=namespace,
-    )
-
-
-@metrics_provider.command("update", help="Update metrics provider")
-@argument("name", help="Metrics provider name")
-@argument(
-    "--url",
-    dest="mp_url",
-    help=f"Metrics provider url. "
-    f"Not valid for metrics providers of type "
-    f"{_MetricsProviderType.STATIC}",
-)
-@argument(
-    "--metric",
-    "-m",
-    dest="metrics",
-    action=MetricAction,
-    help=(
-        f"Name and value of a metric to be updated. "
-        f"Can be specified multiple times. "
-        f"Only valid for metrics providers of type "
-        f"{_MetricsProviderType.STATIC}."
-    ),
-)
-@argument(
-    "--table",
-    help=f"Name of the KSQL table. Only valid for metrics providers of type "
-    f"{_MetricsProviderType.KAFKA.value}.",
-)
-@argument(
-    "--comparison-column",
-    help=f"Name of the column whose value will be compared to the metric name "
-    f"when selecting a metric. Only valid for metrics providers of type "
-    f"{_MetricsProviderType.KAFKA.value}.",
-)
-@argument(
-    "--value-column",
-    help=f"Name of the column where the value of a metric is stored. "
-    f"Only valid for metrics providers of type "
-    f"{_MetricsProviderType.KAFKA.value}.",
+    "--token",
+    help=f"Infrastructure provider API token. "
+    f"Valid together with --type {InfrastructureProviderType.IM.value}.",
 )
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
-@printer(table=BaseMetricsProviderTable())
-def update_metricsprovider(
+@printer(table=InfrastructureProviderTable())
+def update_infrastructureprovider(
     config,
     session,
     namespace,
     name,
-    mp_url,
-    metrics,
-    comparison_column,
-    value_column,
-    table,
+    url,
+    username,
+    password,
+    token,
 ):
-    return _update_base_metrics_provider(
-        session,
-        METRICS_PROVIDER_BASE_URL,
-        "MetricsProvider",
-        name,
-        mp_url,
-        metrics,
-        comparison_column,
-        value_column,
-        table,
-        config=config,
-        namespace=namespace,
+    if namespace is None:
+        namespace = config["user"]
+
+    resp = session.get(
+        f"/infrastructure/namespaces/{namespace}/infrastructureproviders/{name}"
     )
+    provider = resp.json()
+
+    if provider["spec"]["type"] == InfrastructureProviderType.IM:
+        if url:
+            provider["spec"]["im"]["url"] = url
+        if username:
+            provider["spec"]["im"]["username"] = username
+        if password:
+            provider["spec"]["im"]["password"] = password
+        if token:
+            provider["spec"]["im"]["token"] = token
+
+    resp = session.put(
+        f"/infrastructure/namespaces/{namespace}/infrastructureproviders/{name}",
+        json=provider,
+    )
+    return resp.json()
 
 
-@metrics_provider.command("delete", help="Delete metrics provider")
-@argument("name", help="Metrics provider name")
+@infrastructure_provider.command("delete", help="Delete infrastructure provider")
+@argument("name", help="Infrastructure provider name")
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
-@printer(table=BaseMetricsProviderTable())
-def delete_metricsprovider(config, session, namespace, name):
-    return _delete_base_metrics_provider(
-        session,
-        METRICS_PROVIDER_BASE_URL,
-        "MetricsProvider",
-        name,
-        config=config,
-        namespace=namespace,
+@printer(table=InfrastructureProviderTable())
+def delete_infrastructureprovider(config, session, namespace, name):
+    if namespace is None:
+        namespace = config["user"]
+
+    resp = session.delete(
+        f"/infrastructure/namespaces/{namespace}/infrastructureproviders/{name}",
     )
 
+    if resp.status_code == 204:
+        return None
 
-# ################ Managing global metrics providers
-
-
-@global_metrics_provider.command("list", help="List global metrics providers")
-@arg_formatting
-@depends("session")
-@printer(table=BaseMetricsProviderListTable(many=True))
-def list_globalmetricsproviders(session):
-    return _list_base_metrics_providers(session, GLOBAL_METRICS_PROVIDER_BASE_URL)
+    return resp.json()
 
 
-@global_metrics_provider.command("create", help="Create a global metrics provider")
-@argument(
-    "--url",
-    help=f"Global metrics provider url. "
-    f"Not valid together with --type {_MetricsProviderType.STATIC}.",
-)
-@argument(
-    "--type",
-    dest="mp_type",
-    required=True,
-    help=f"Global metrics provider type. Valid types: "
-    f"{', '.join(t.value for t in _MetricsProviderType)}",
-)
-@argument(
-    "-m",
-    "--metric",
-    action=MetricAction,
-    dest="metrics",
-    help=f"Name and value of a global metric the provider provides. "
-    f"Can be specified multiple times. "
-    f"Only valid together with --type {_MetricsProviderType.STATIC}.",
-)
-@argument(
-    "--table",
-    help=f"Name of the KSQL table. Only valid together with "
-    f"--type {_MetricsProviderType.KAFKA.value}.",
-)
-@argument(
-    "--comparison-column",
-    help=f"Name of the column whose value will be compared to the metric name "
-    f"when selecting a metric. Only valid together with --type "
-    f"{_MetricsProviderType.KAFKA.value}.",
-)
-@argument(
-    "--value-column",
-    help=f"Name of the column where the value of a metric is stored. "
-    f"Only valid together with --type {_MetricsProviderType.KAFKA.value}.",
-)
-@argument("name", help="Name of the global metrics provider")
-@arg_formatting
-@depends("session")
-@printer(table=BaseMetricsProviderTable())
-def create_globalmetricsprovider(
-    session, url, mp_type, metrics, comparison_column, value_column, table, name
-):
-    return _create_base_metrics_provider(
-        session,
-        GLOBAL_METRICS_PROVIDER_BASE_URL,
-        "GlobalMetricsProvider",
-        name,
-        url,
-        mp_type,
-        metrics,
-        comparison_column,
-        value_column,
-        table,
-    )
+# ################ Managing global clouds
 
 
-@global_metrics_provider.command("get", help="Get a global metrics provider")
-@argument("name", help="Global metrics provider name")
-@arg_formatting
-@depends("session")
-@printer(table=BaseMetricsProviderTable())
-def get_globalmetricsprovider(session, name):
-    return _get_base_metrics_provider(
-        session, GLOBAL_METRICS_PROVIDER_BASE_URL, "GlobalMetricsProvider", name
-    )
+class CloudType(str, Enum):
+    OPENSTACK = "openstack"
 
 
-@global_metrics_provider.command("update", help="Update global metrics provider")
-@argument("name", help="Global metrics provider name")
-@argument(
-    "--url",
-    dest="mp_url",
-    help=f"Global metrics provider url. "
-    f"Not valid for global metrics providers of type "
-    f"{_MetricsProviderType.STATIC}",
-)
-@argument(
-    "--metric",
-    "-m",
-    dest="metrics",
-    action=MetricAction,
-    help=(
-        f"Name and value of a global metric to be updated. "
-        f"Can be specified multiple times. "
-        f"Only valid for global metrics providers of type "
-        f"{_MetricsProviderType.STATIC}."
-    ),
-)
-@argument(
-    "--table",
-    help=f"Name of the KSQL table. Only valid for global metrics providers of type "
-    f"{_MetricsProviderType.KAFKA.value}.",
-)
-@argument(
-    "--comparison-column",
-    help=f"Name of the column whose value will be compared to the metric name "
-    f"when selecting a metric. Only valid for global metrics providers of type "
-    f"{_MetricsProviderType.KAFKA.value}.",
-)
-@argument(
-    "--value-column",
-    help=f"Name of the column where the value of a metric is stored. "
-    f"Only valid for global metrics providers of type "
-    f"{_MetricsProviderType.KAFKA.value}.",
-)
-@arg_formatting
-@depends("session")
-@printer(table=BaseMetricsProviderTable())
-def update_globalmetricsprovider(
-    session,
-    name,
-    mp_url,
-    metrics,
-    comparison_column,
-    value_column,
-    table,
-):
-    return _update_base_metrics_provider(
-        session,
-        GLOBAL_METRICS_PROVIDER_BASE_URL,
-        "GlobalMetricsProvider",
-        name,
-        mp_url,
-        metrics,
-        comparison_column,
-        value_column,
-        table,
-    )
+class CloudListTable(BaseTable):
+    # TODO: Cloud `spec` is instance of
+    #  :class:`PolymorphicContainer` that is defined by :attr:`type`.
+    #  Hence, the :class:`Cell` should be modified to accept e.g.
+    #  "wildcard attributes" ("spec.*.metrics") when some nested
+    #  attribute with polymorphic parent should be displayed
+    #  in the table.
+    #  YAGNI for now.
+    type = Cell("spec.type")
+    metrics = Cell("spec.openstack.metrics")
+    infra_provider = Cell("spec.openstack.infrastructure_provider.name")
+    state = Cell("status.state")
 
 
-@global_metrics_provider.command("delete", help="Delete global metrics provider")
-@argument("name", help="Global metrics provider name")
-@arg_formatting
-@depends("session")
-@printer(table=BaseMetricsProviderTable())
-def delete_globalmetricsprovider(session, name):
-    return _delete_base_metrics_provider(
-        session, GLOBAL_METRICS_PROVIDER_BASE_URL, "GlobalMetricsProvider", name
-    )
-
-
-# ################ Managing metrics
-
-
-class BaseMetricListTable(BaseTable):
-    provider = Cell("spec.provider.name")
-    min = Cell("spec.min")
-    max = Cell("spec.max")
-
-
-class BaseMetricTable(BaseMetricListTable):
+class CloudTable(CloudListTable):
     pass
 
 
-def _list_base_metrics(session, base_url, config=None, namespace=None):
-    return _list_base_resource(session, base_url, config=config, namespace=namespace)
+@global_cloud.command("list", help="List global clouds")
+@arg_formatting
+@depends("session")
+@printer(table=CloudListTable(many=True))
+def list_globalclouds(session):
+    resp = session.get("/infrastructure/globalclouds")
+    body = resp.json()
+    return body["items"]
 
 
-def _create_base_metric(
+@global_cloud.command("register", help="Register global cloud")
+@argument(
+    "--type",
+    dest="cloud_type",
+    required=True,
+    help="Global cloud type. Valid types: "
+    f"{', '.join([t.value for t in CloudType])}",
+)
+@argument(
+    "--url",
+    required=True,
+    help="URL to OpenStack identity service (Keystone). "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--username",
+    required=True,
+    help="Username or UUID of OpenStack user. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--password",
+    required=True,
+    help="Password of OpenStack user. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--project",
+    required=True,
+    help="Name or UUID of the OpenStack project. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--infra-provider",
+    required=True,
+    help="Infrastructure provider name for cloud management. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--domain-name",
+    help="Domain name of the OpenStack user. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+    default="Default",
+)
+@argument(
+    "--domain-id",
+    help="Domain ID of the OpenStack project. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+    default="default",
+)
+@argument("name", help="Global cloud name")
+@arg_metric
+@arg_global_metric
+@arg_labels
+@arg_formatting
+@depends("session")
+@printer(table=CloudTable())
+def register_globalcloud(
     session,
-    base_url,
-    kind,
+    cloud_type,
+    url,
+    username,
+    password,
+    domain_name,
+    project,
+    domain_id,
+    infra_provider,
+    metrics,
+    global_metrics,
+    labels,
     name,
-    mp_name,
-    min,
-    max,
-    metric_name,
-    config=None,
-    namespace=None,
 ):
-    if not metric_name:
-        metric_name = name
-    metric = {
-        "api": "core",
-        "kind": kind,
-        "metadata": {
-            "name": name,
-        },
-        "spec": {
-            "max": max,
-            "min": min,
-            "provider": {
-                "metric": metric_name,
-                "name": mp_name,
+    if cloud_type == CloudType.OPENSTACK:
+        cloud_resource = {
+            "api": "infrastructure",
+            "kind": "GlobalCloud",
+            "metadata": {
+                "name": name,
+                "labels": labels,
             },
-        },
-    }
+            "spec": {
+                "type": "openstack",
+                "openstack": {
+                    "url": url,
+                    "metrics": metrics + global_metrics,
+                    "infrastructure_provider": {
+                        "name": infra_provider,
+                    },
+                    "auth": {
+                        "type": "password",
+                        "password": {
+                            "version": "3",
+                            "user": {
+                                "username": username,
+                                "password": password,
+                                "domain_name": domain_name,
+                            },
+                            "project": {
+                                "name": project,
+                                "domain_id": domain_id,
+                            },
+                        },
+                    },
+                },
+            },
+        }
+    else:
+        sys.exit(f"Error: Unsupported global cloud type: '{cloud_type}'")
 
-    return _create_base_resource(
-        session, base_url, metric, config=config, namespace=namespace
+    resp = session.post(
+        "/infrastructure/globalclouds",
+        json=cloud_resource,
     )
+    return resp.json()
 
 
-def _get_base_metric(session, base_url, kind, name, config=None, namespace=None):
-    return _get_base_resource(
-        session, base_url, kind, name, config=config, namespace=namespace
-    )
+@global_cloud.command("get", help="Get global cloud")
+@argument("name", help="Global cloud name")
+@arg_formatting
+@depends("session")
+@printer(table=CloudTable())
+def get_globalcloud(session, name):
+    resp = session.get(f"/infrastructure/globalclouds/{name}")
+    return resp.json()
 
 
-def _update_base_metric(
+@global_cloud.command("update", help="Update global cloud")
+@argument("name", help="Global cloud name")
+@argument(
+    "--url",
+    help="URL to OpenStack identity service (Keystone). "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--username",
+    help="Username or UUID of OpenStack user. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--password",
+    help="Password of OpenStack user. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--domain-name",
+    help="Domain name of the OpenStack user. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--project",
+    help="Name or UUID of the OpenStack project. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--domain-id",
+    help="Domain ID of the OpenStack project. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--infra-provider",
+    help="Infrastructure provider name for cloud management. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@arg_metric
+@arg_global_metric
+@arg_labels
+@arg_formatting
+@depends("session")
+@printer(table=CloudTable())
+def update_globalcloud(
     session,
-    base_url,
-    kind,
     name,
-    max,
-    min,
-    mp_name,
-    metric_name,
-    config=None,
-    namespace=None,
+    url,
+    username,
+    password,
+    domain_name,
+    project,
+    domain_id,
+    infra_provider,
+    metrics,
+    global_metrics,
+    labels,
 ):
-    if not (max or min or mp_name or metric_name):
-        raise SystemExit("At least one argument must be specified.")
+    resp = session.get(f"/infrastructure/globalclouds/{name}")
+    cloud_resource = resp.json()
 
-    metric = _get_base_metric(
-        session, base_url, kind, name, config=config, namespace=namespace
+    if cloud_resource["spec"]["type"] == CloudType.OPENSTACK:
+        if labels:
+            cloud_resource["metadata"]["labels"] = labels
+        if url:
+            cloud_resource["spec"]["openstack"]["url"] = url
+        if metrics or global_metrics:
+            cloud_resource["spec"]["openstack"]["metrics"] = metrics + global_metrics
+        if username:
+            cloud_resource["spec"]["openstack"]["auth"]["password"]["user"][
+                "username"
+            ] = username
+        if password:
+            cloud_resource["spec"]["openstack"]["auth"]["password"]["user"][
+                "password"
+            ] = password
+        if domain_name:
+            cloud_resource["spec"]["openstack"]["auth"]["password"]["user"][
+                "domain_name"
+            ] = domain_name
+        if project:
+            cloud_resource["spec"]["openstack"]["auth"]["password"]["project"][
+                "name"
+            ] = project
+        if domain_id:
+            cloud_resource["spec"]["openstack"]["auth"]["password"]["project"][
+                "domain_id"
+            ] = domain_id
+        if infra_provider:
+            cloud_resource["spec"]["openstack"]["infrastructure_provider"][
+                "name"
+            ] = infra_provider
+
+    resp = session.put(
+        f"/infrastructure/globalclouds/{name}",
+        json=cloud_resource,
     )
-    if max:
-        metric["spec"]["max"] = max
-    if min:
-        metric["spec"]["min"] = min
-    if mp_name:
-        metric["spec"]["provider"]["name"] = mp_name
-    if metric_name:
-        metric["spec"]["provider"]["metric"] = metric_name
+    return resp.json()
 
-    return _update_base_resource(
-        session, base_url, metric, name, config=config, namespace=namespace
+
+@global_cloud.command("delete", help="Delete global cloud")
+@argument("name", help="Global cloud name")
+@arg_formatting
+@depends("session")
+@printer(table=CloudTable())
+def delete_globalcloud(session, name):
+    resp = session.delete(
+        f"/infrastructure/globalclouds/{name}",
     )
 
+    if resp.status_code == 204:
+        return None
 
-def _delete_base_metric(session, base_url, kind, name, config=None, namespace=None):
-    return _delete_base_resource(
-        session, base_url, kind, name, config=config, namespace=namespace
-    )
-
-
-# ################ Managing namespaced metrics
+    return resp.json()
 
 
-@metric.command("list", help="List metrics")
-@argument("-a", "--all", action="store_true", help="Show metrics in all namespaces")
+# ################ Managing clouds
+
+
+@cloud.command("list", help="List clouds")
+@argument("-a", "--all", action="store_true", help="Show clouds in all namespaces")
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
-@printer(table=BaseMetricListTable(many=True))
-def list_metrics(config, session, namespace, all):
-    base_url = LIST_ALL_METRIC_BASE_URL if all else METRIC_BASE_URL
-    return _list_base_metrics(session, base_url, config=config, namespace=namespace)
+@printer(table=CloudListTable(many=True))
+def list_clouds(config, session, namespace, all):
+    if all:
+        url = "/infrastructure/clouds"
+    else:
+        if namespace is None:
+            namespace = config["user"]
+        url = f"/infrastructure/namespaces/{namespace}/clouds"
+    resp = session.get(url)
+    body = resp.json()
+    return body["items"]
 
 
-@metric.command("create", help="Create a metric")
-@argument("--mp-name", required=True, help="Metrics provider name")
-@argument("--min", required=True, help="Minimum value of the metric")
-@argument("--max", required=True, help="Maximum value of the metric")
+@cloud.command("register", help="Register cloud")
 @argument(
-    "--metric-name",
-    help="Name of the metric which the metrics provider provides. "
-    "As default the name of the created metric resource is used.",
+    "--type",
+    dest="cloud_type",
+    required=True,
+    help="Cloud type. Valid types: " f"{', '.join([t.value for t in CloudType])}",
 )
-@argument("name", help="Name of the metric")
+@argument(
+    "--url",
+    required=True,
+    help="URL to OpenStack identity service (Keystone). "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--username",
+    required=True,
+    help="Username or UUID of OpenStack user. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--password",
+    required=True,
+    help="Password of OpenStack user. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--project",
+    required=True,
+    help="Name or UUID of the OpenStack project. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--infra-provider",
+    required=True,
+    help="Infrastructure provider name for cloud management. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--domain-name",
+    help="Domain name of the OpenStack user. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+    default="Default",
+)
+@argument(
+    "--domain-id",
+    help="Domain ID of the OpenStack project. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+    default="default",
+)
+@argument("name", help="Cloud name")
+@arg_metric
+@arg_global_metric
+@arg_labels
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
-@printer(table=BaseMetricTable())
-def create_metric(
-    config, session, namespace, name, mp_name, min, max, metric_name=None
+@printer(table=CloudTable())
+def register_cloud(
+    config,
+    session,
+    namespace,
+    cloud_type,
+    url,
+    username,
+    password,
+    domain_name,
+    project,
+    domain_id,
+    infra_provider,
+    metrics,
+    global_metrics,
+    labels,
+    name,
 ):
-    """Create a Metric resource.
+    if namespace is None:
+        namespace = config["user"]
 
-    Args:
-        config (dict): the config
-        session (requests.Session): the session used to connect to the krake API
-        namespace (str): the namespace in which the resource should be created
-        name (str): Name of the metric
-        mp_name (str): Name of the metrics provider
-        min (str): The minimum value of the metric
-        max (str): The maximum value of the metric
-        metric_name (str): The name used to identify the metric at the endpoint
-            of the metrics provider
+    if cloud_type == CloudType.OPENSTACK:
+        cloud_resource = {
+            "api": "infrastructure",
+            "kind": "Cloud",
+            "metadata": {
+                "name": name,
+                "labels": labels,
+            },
+            "spec": {
+                "type": "openstack",
+                "openstack": {
+                    "url": url,
+                    "metrics": metrics + global_metrics,
+                    "infrastructure_provider": {
+                        "name": infra_provider,
+                    },
+                    "auth": {
+                        "type": "password",
+                        "password": {
+                            "version": "3",
+                            "user": {
+                                "username": username,
+                                "password": password,
+                                "domain_name": domain_name,
+                            },
+                            "project": {
+                                "name": project,
+                                "domain_id": domain_id,
+                            },
+                        },
+                    },
+                },
+            },
+        }
+    else:
+        sys.exit(f"Error: Unsupported cloud type: '{cloud_type}'")
 
-    Returns:
-        dict(str, object): The created Metric resource in json representation
-    """
-    return _create_base_metric(
-        session,
-        METRIC_BASE_URL,
-        "Metric",
-        name,
-        mp_name,
-        min,
-        max,
-        metric_name,
-        config=config,
-        namespace=namespace,
+    resp = session.post(
+        f"/infrastructure/namespaces/{namespace}/clouds",
+        json=cloud_resource,
     )
+    return resp.json()
 
 
-@metric.command("get", help="Get a metric")
-@argument("name", help="Metric name")
+@cloud.command("get", help="Get cloud")
+@argument("name", help="Cloud name")
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
-@printer(table=BaseMetricTable())
-def get_metric(config, session, namespace, name):
-    return _get_base_metric(
-        session, METRIC_BASE_URL, "Metric", name, config=config, namespace=namespace
-    )
+@printer(table=CloudTable())
+def get_cloud(config, session, namespace, name):
+    if namespace is None:
+        namespace = config["user"]
+
+    resp = session.get(f"/infrastructure/namespaces/{namespace}/clouds/{name}")
+    return resp.json()
 
 
-@metric.command("update", help="Update metric")
-@argument("name", help="Metric name")
-@argument("--min", help="Minimum value of the metric")
-@argument("--max", help="Maximum value of the metric")
-@argument("--mp-name", help="Metrics provider name'")
+@cloud.command("update", help="Update cloud")
+@argument("name", help="Cloud name")
 @argument(
-    "--metric-name",
-    help="Name of the metric which the metrics provider provides.",
+    "--url",
+    help="URL to OpenStack identity service (Keystone). "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
 )
+@argument(
+    "--username",
+    help="Username or UUID of OpenStack user. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--password",
+    help="Password of OpenStack user. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--domain-name",
+    help="Domain name of the OpenStack user. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--project",
+    help="Name or UUID of the OpenStack project. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--domain-id",
+    help="Domain ID of the OpenStack project. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@argument(
+    "--infra-provider",
+    help="Infrastructure provider name for cloud management. "
+    f"Valid together with --type {CloudType.OPENSTACK.value}.",
+)
+@arg_metric
+@arg_global_metric
+@arg_labels
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
-@printer(table=BaseMetricTable())
-def update_metric(config, session, namespace, name, max, min, mp_name, metric_name):
-    """Update a Metric resource.
+@printer(table=CloudTable())
+def update_cloud(
+    config,
+    session,
+    namespace,
+    name,
+    url,
+    username,
+    password,
+    domain_name,
+    project,
+    domain_id,
+    infra_provider,
+    metrics,
+    global_metrics,
+    labels,
+):
+    if namespace is None:
+        namespace = config["user"]
 
-    Args:
-        config (dict): the config fixture
-        session (requests.Session): the session used to connect to the krake API
-        namespace (str): the namespace to which the metric belongs
-        name (str): Name of the metric
-        max (str): The maximum value of the metric
-        min (str): The minimum value of the metric
-        mp_name (str): Name of the metrics provider
-        metric_name (str): The name used to identify the metric at the endpoint
-            of the metrics provider
+    resp = session.get(f"/infrastructure/namespaces/{namespace}/clouds/{name}")
+    cloud_resource = resp.json()
 
-    Returns:
-        dict(str, object): The updated Metric resource in json representation
-    """
-    return _update_base_metric(
-        session,
-        METRIC_BASE_URL,
-        "Metric",
-        name,
-        max,
-        min,
-        mp_name,
-        metric_name,
-        config=config,
-        namespace=namespace,
+    if cloud_resource["spec"]["type"] == CloudType.OPENSTACK:
+        if labels:
+            cloud_resource["metadata"]["labels"] = labels
+        if url:
+            cloud_resource["spec"]["openstack"]["url"] = url
+        if metrics or global_metrics:
+            cloud_resource["spec"]["openstack"]["metrics"] = metrics + global_metrics
+        if username:
+            cloud_resource["spec"]["openstack"]["auth"]["password"]["user"][
+                "username"
+            ] = username
+        if password:
+            cloud_resource["spec"]["openstack"]["auth"]["password"]["user"][
+                "password"
+            ] = password
+        if domain_name:
+            cloud_resource["spec"]["openstack"]["auth"]["password"]["user"][
+                "domain_name"
+            ] = domain_name
+        if project:
+            cloud_resource["spec"]["openstack"]["auth"]["password"]["project"][
+                "name"
+            ] = project
+        if domain_id:
+            cloud_resource["spec"]["openstack"]["auth"]["password"]["project"][
+                "domain_id"
+            ] = domain_id
+        if infra_provider:
+            cloud_resource["spec"]["openstack"]["infrastructure_provider"][
+                "name"
+            ] = infra_provider
+
+    resp = session.put(
+        f"/infrastructure/namespaces/{namespace}/clouds/{name}",
+        json=cloud_resource,
     )
+    return resp.json()
 
 
-@metric.command("delete", help="Delete metric")
-@argument("name", help="Metric name")
+@cloud.command("delete", help="Delete cloud")
+@argument("name", help="Cloud name")
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
-@printer(table=BaseMetricTable())
-def delete_metric(config, session, namespace, name):
-    return _delete_base_metric(
-        session, METRIC_BASE_URL, "Metric", name, config=config, namespace=namespace
+@printer(table=CloudTable())
+def delete_cloud(config, session, namespace, name):
+    if namespace is None:
+        namespace = config["user"]
+
+    resp = session.delete(
+        f"/infrastructure/namespaces/{namespace}/clouds/{name}",
     )
 
+    if resp.status_code == 204:
+        return None
 
-# ################ Managing global metrics
-
-
-@global_metric.command("list", help="List global metrics")
-@arg_formatting
-@depends("session")
-@printer(table=BaseMetricListTable(many=True))
-def list_globalmetrics(session):
-    return _list_base_metrics(session, GLOBAL_METRIC_BASE_URL)
-
-
-@global_metric.command("create", help="Create a global metric")
-@argument("--gmp-name", required=True, help="Global metrics provider name")
-@argument("--min", required=True, help="Minimum value of the global metric")
-@argument("--max", required=True, help="Maximum value of the global metric")
-@argument(
-    "--metric-name",
-    help="Name of the global metric which the global metrics provider provides. "
-    "As default the name of the created global metric resource is used.",
-)
-@argument("name", help="Name of the global metric")
-@arg_formatting
-@depends("session")
-@printer(table=BaseMetricTable())
-def create_globalmetric(session, name, gmp_name, min, max, metric_name=None):
-    """Create a GlobalMetric resource.
-
-    Args:
-        session (requests.Session): the session used to connect to the krake API
-        name (str): Name of the global metric
-        gmp_name (str): Name of the global metrics provider
-        min (str): The minimum value of the global metric
-        max (str): The maximum value of the global metric
-        metric_name (str): The name used to identify the global metric at the endpoint
-            of the global metrics provider
-
-    Returns:
-        dict(str, object): The created GlobalMetric resource in json representation
-    """
-    return _create_base_metric(
-        session,
-        GLOBAL_METRIC_BASE_URL,
-        "GlobalMetric",
-        name,
-        gmp_name,
-        min,
-        max,
-        metric_name,
-    )
-
-
-@global_metric.command("get", help="Get a global metric")
-@argument("name", help="Global metric name")
-@arg_formatting
-@depends("session")
-@printer(table=BaseMetricTable())
-def get_globalmetric(session, name):
-    return _get_base_metric(session, GLOBAL_METRIC_BASE_URL, "GlobalMetric", name)
-
-
-@global_metric.command("update", help="Update global metric")
-@argument("name", help="Global metric name")
-@argument("--min", help="Minimum value of the global metric")
-@argument("--max", help="Maximum value of the global metric")
-@argument("--gmp-name", help="Global metrics provider name'")
-@argument(
-    "--metric-name",
-    help="Name of the global metric which the global metrics provider provides.",
-)
-@arg_formatting
-@depends("session")
-@printer(table=BaseMetricTable())
-def update_globalmetric(session, name, max, min, gmp_name, metric_name):
-    """Update a GlobalMetric resource.
-
-    Args:
-        session (requests.Session): the session used to connect to the krake API
-        name (str): Name of the global metric
-        max (str): The maximum value of the global metric
-        min (str): The minimum value of the global metric
-        gmp_name (str): Name of the global metrics provider
-        metric_name (str): The name used to identify the global metric at the endpoint
-            of the global metrics provider
-
-    Returns:
-        dict(str, object): The updated GlobalMetric resource in json representation
-    """
-    return _update_base_metric(
-        session,
-        GLOBAL_METRIC_BASE_URL,
-        "GlobalMetric",
-        name,
-        max,
-        min,
-        gmp_name,
-        metric_name,
-    )
-
-
-@global_metric.command("delete", help="Delete global metric")
-@argument("name", help="Global metric name")
-@arg_formatting
-@depends("session")
-@printer(table=BaseMetricTable())
-def delete_globalmetric(session, name):
-    return _delete_base_metric(session, GLOBAL_METRIC_BASE_URL, "GlobalMetric", name)
+    return resp.json()
