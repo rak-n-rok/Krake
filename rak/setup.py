@@ -20,6 +20,7 @@ setup(
             # `soft_unicode` was removed in markupsafe==2.1.0.
             "markupsafe==2.0.1",
             "pytest-httpserver==1.*",
+            "deepdiff==6.2.*",
         }
     },
 )
