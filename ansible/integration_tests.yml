@@ -92,6 +92,11 @@
           tags:
             - test_core
 
+        - name: Run integration tests for the infrastructure resources
+          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_infrastructure.py"
+          tags:
+            - test_infrastructure
+
         # We need two Minikube clusters in order to run the integration tests
         - name: Check if two Minikube clusters have been spawned
           assert:
