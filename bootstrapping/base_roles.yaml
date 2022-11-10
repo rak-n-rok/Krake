@@ -61,6 +61,10 @@ rules:
   - "globalmetricsproviders"
   - "metrics"
   - "metricsproviders"
+  - "globalinfrastructureproviders"
+  - "infrastructureproviders"
+  - "globalclouds"
+  - "clouds"
   verbs:
   - list
   - get
