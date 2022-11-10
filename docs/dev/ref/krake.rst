@@ -134,6 +134,10 @@ Client APIs
     :members:
     :show-inheritance:
 
+.. automodule:: krake.client.infrastructure
+    :members:
+    :show-inheritance:
+
 .. automodule:: krake.client.kubernetes
     :members:
     :show-inheritance:
@@ -196,6 +200,10 @@ Data Abstraction
     :show-inheritance:
 
 .. automodule:: krake.data.core
+    :members:
+    :show-inheritance:
+
+.. automodule:: krake.data.infrastructure
     :members:
     :show-inheritance:
 
