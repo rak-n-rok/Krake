@@ -6,6 +6,7 @@ from krake.api.app import create_app
 from krake.client import Client
 from krake.client.kubernetes import KubernetesApi
 from krake.data.core import resource_ref, ResourceRef, WatchEventType
+from krake.data.infrastructure import CloudBinding
 from krake.data.kubernetes import (
     Application,
     Cluster,
@@ -16,6 +17,7 @@ from krake.data.kubernetes import (
 )
 from krake.test_utils import with_timeout, aenumerate
 from tests.factories import fake
+from tests.factories.infrastructure import CloudFactory
 
 from tests.factories.kubernetes import ApplicationFactory, ClusterFactory, ReasonFactory
 from tests.controller.kubernetes import deployment_manifest
@@ -797,6 +799,39 @@ async def test_update_cluster(aiohttp_server, config, db, loop):
         Cluster, namespace=data.metadata.namespace, name=data.metadata.name
     )
     assert stored == received
+
+
+async def test_update_cluster_binding(aiohttp_server, config, db, loop):
+    data = ClusterFactory()
+    await db.put(data)
+    cloud = CloudFactory()
+    await db.put(cloud)
+
+    cloud_ref = resource_ref(cloud)
+    binding = CloudBinding(cloud=cloud_ref)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        kubernetes_api = KubernetesApi(client)
+        received = await kubernetes_api.update_cluster_binding(
+            namespace=data.metadata.namespace, name=data.metadata.name, body=binding
+        )
+
+    assert received.api == "kubernetes"
+    assert received.kind == "Cluster"
+    assert received.status.scheduled_to == cloud_ref
+    assert received.status.running_on is None
+    assert received.status.state == ClusterState.PENDING
+    assert cloud_ref in received.metadata.owners
+
+    stored = await db.get(
+        Cluster, namespace=data.metadata.namespace, name=data.metadata.name
+    )
+    assert stored.status.scheduled_to == cloud_ref
+    assert stored.status.running_on is None
+    assert stored.status.state == ClusterState.PENDING
+    assert cloud_ref in stored.metadata.owners
 
 
 async def test_update_cluster_status(aiohttp_server, config, db, loop):
