@@ -92,6 +92,30 @@ class KubernetesClusterController(Controller):
         self.observer_time_step = time_step
         self.observers = {}
 
+    @staticmethod
+    def accept_accessible(cluster):
+        """Check if a resource should be accepted or not by the Controller.
+
+        Args:
+            cluster (krake.data.kubernetes.Cluster): the Cluster to check.
+
+        Returns:
+            bool: True if the Cluster should be handled, False otherwise.
+
+        """
+        # Ignore all failed clusters
+        if cluster.status.state == ClusterState.FAILED:
+            logger.debug("Reject failed %r", cluster)
+            return False
+
+        # Accept accessible (registered, created or deleted) clusters
+        if cluster.spec.kubeconfig:
+            logger.debug("Accept accessible %r", cluster)
+            return True
+
+        logger.debug("Reject %r", cluster)
+        return False
+
     async def list_cluster(self, cluster):
         """Accept the Clusters that need to be managed by the Controller on listing
         them at startup. Starts the observer for the Cluster.
@@ -107,7 +131,7 @@ class KubernetesClusterController(Controller):
             # Start an observer only if an actual resource exists on a cluster
             await register_observer(self, cluster)
 
-        await self.simple_on_receive(cluster)
+        await self.simple_on_receive(cluster, self.accept_accessible)
 
     async def prepare(self, client):
         assert client is not None
@@ -117,7 +141,9 @@ class KubernetesClusterController(Controller):
         for i in range(self.worker_count):
             self.register_task(self.handle_resource, name=f"worker_{i}")
 
-        receive_cluster = partial(self.simple_on_receive)
+        receive_cluster = partial(
+            self.simple_on_receive, condition=self.accept_accessible
+        )
         self.cluster_reflector = Reflector(
             listing=self.kubernetes_api.list_all_clusters,
             watching=self.kubernetes_api.watch_all_clusters,
@@ -215,16 +241,14 @@ class KubernetesClusterController(Controller):
         logger.debug("Handle %r", cluster)
 
         copy = deepcopy(cluster)
-        if (
-            copy.status.state is ClusterState.CONNECTING
-            and copy.metadata.uid not in self.observers
-            and copy.metadata.deleted is None
-        ):
+
+        # Remove a cluster observer, if the cluster is going to be
+        # deleted
+        if isinstance(copy.metadata.deleted, datetime.datetime):
             await listen.hook(
-                HookType.ClusterCreation,
+                HookType.ClusterDeletion,
                 controller=self,
                 resource=copy,
-                start=True,
             )
         # Remove a cluster observer, if the cluster creation or
         # reconciliation is in progress. The cluster will be
@@ -237,8 +261,8 @@ class KubernetesClusterController(Controller):
         #  cluster healthy state during some short time periods.
         #  This could cause the cluster observer
         #  transmits the cluster state from `CREATING` or
-        #  `RECONCILING` to `ONLINE` which could
-        #  be unsafe from the application deployment point of view.
+        #  `RECONCILING` to `ONLINE` which could be unsafe
+        #  from the application deployment point of view.
         elif copy.status.state in (
             ClusterState.CREATING,
             ClusterState.RECONCILING,
@@ -248,9 +272,19 @@ class KubernetesClusterController(Controller):
                 controller=self,
                 resource=copy,
             )
-        elif copy != self.observers[copy.metadata.uid][0].resource and not isinstance(
-            copy.metadata.deleted, datetime.datetime
-        ):
+        # Create a cluster observer, if the cluster is not observed yet
+        elif copy.metadata.uid not in self.observers:
+            await listen.hook(
+                HookType.ClusterCreation,
+                controller=self,
+                resource=copy,
+                start=True,
+            )
+        # If copy of the received cluster is not equal to
+        # the cluster saved in the corresponding cluster observer,
+        # then the cluster observer will be deleted and created again
+        # to sync the observer again to the saved cluster in Krake
+        elif copy != self.observers[copy.metadata.uid][0].resource:
             await listen.hook(
                 HookType.ClusterDeletion,
                 controller=self,
