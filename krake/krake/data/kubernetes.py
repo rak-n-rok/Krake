@@ -37,7 +37,7 @@ class ClusterCloudConstraints(Serializable):
     :class:`Cluster`.
     """
 
-    cloud: CloudConstraints = None
+    cloud: CloudConstraints
 
 
 class ClusterConstraints(Serializable):
@@ -175,6 +175,43 @@ def _validate_tosca_url(tosca):
         raise ValidationError("Invalid TOSCA template URL.")
 
     return True
+
+
+def _validate_tosca_cluster(tosca):
+    """Validate the TOSCA template provided as a dict.
+
+    The Cluster admin  kubeconfig is retrieved from the
+    TOSCA template outputs. Hence, outputs should be correctly
+    defined in the TOSCA template to allow kubeconfig retrieval.
+    The key `kubeconfig` is required.
+
+    Example:
+        .. code:: yaml
+
+           topology_template:
+             outputs:
+               kubeconfig:
+                 value: { get_attribute: [... ] }
+
+    Args:
+        tosca (dict): the TOSCA template to validate.
+
+     Raises:
+         ValidationError: if the TOSCA template is considered invalid.
+
+     Returns:
+         bool: True if no validation error occurred or :args:`tosca` is empty.
+
+    """
+    if not tosca:
+        return True
+
+    if not tosca.get("topology_template", {}).get("outputs", {}).get("kubeconfig"):
+        raise ValidationError(
+            "Invalid TOSCA template content. The output `kubeconfig` is missing."
+        )
+
+    return _validate_tosca_dict(tosca)
 
 
 def _validate_tosca(tosca):
@@ -568,6 +605,9 @@ class ClusterBinding(ApiObject):
 
 
 def _validate_kubeconfig(kubeconfig):
+    if not kubeconfig:
+        return True
+
     try:
         KubeConfigLoader(kubeconfig)
     except ConfigException as err:
@@ -586,29 +626,54 @@ def _validate_kubeconfig(kubeconfig):
 
 
 class ClusterSpec(Serializable):
-    kubeconfig: dict = field(metadata={"validate": _validate_kubeconfig})
-    # TODO: Uncomment, once the Yaook provider is integrated
-    # manifest: List[dict] = field(
-    #   metadata={"validate": _validate_manifest}, default_factory=list
-    # )
-    tosca: dict = field(metadata={"validate": _validate_tosca}, default_factory=dict)
+    kubeconfig: dict = field(
+        metadata={"validate": _validate_kubeconfig}, default_factory=dict
+    )
+    tosca: dict = field(
+        metadata={"validate": _validate_tosca_cluster}, default_factory=dict
+    )
     custom_resources: List[str] = field(default_factory=list)
-    constraints: ClusterCloudConstraints = None
+    constraints: ClusterCloudConstraints
     # FIXME needs further discussion how to register stand-alone kubernetes cluster as
     #  a cluster which should be processed by krake.controller.scheduler
     metrics: List[MetricRef] = field(default_factory=list)
 
+    def __post_init__(self):
+        """Method automatically ran at the end of the :meth:`__init__` method, used to
+        validate dependent attributes.
+
+        Validations:
+        - At least one of the attributes from the following should be defined:
+          - :attr:`kubeconfig`
+          - :attr:`tosca`
+
+        Note: This validation cannot be achieved directly using the ``validate``
+         metadata, since ``validate`` must be a zero-argument callable, with
+         no access to the other attributes of the dataclass.
+
+        """
+        if not any([self.kubeconfig, self.tosca]):
+            raise ValidationError(
+                "The cluster should be defined by a kubeconfig file or"
+                " a TOSCA template."
+            )
+
 
 class ClusterState(Enum):
+    # Initial state
+    PENDING = auto()
+    # Cluster states
     ONLINE = auto()
     CONNECTING = auto()
     OFFLINE = auto()
     UNHEALTHY = auto()
     NOTREADY = auto()
     FAILING_METRICS = auto()
+    # Cluster infrastructure states
     CREATING = auto()
     RECONCILING = auto()
     DELETING = auto()
+    FAILING_RECONCILIATION = auto()
     FAILED = auto()
 
 
@@ -656,7 +721,7 @@ class ClusterNode(Serializable):
     status: ClusterNodeStatus = None
 
 
-class ClusterStatus(Serializable):
+class ClusterStatus(Status):
     """Status subresource of :class:`Cluster`.
 
     Attributes:
@@ -665,8 +730,12 @@ class ClusterStatus(Serializable):
         state (ClusterState): Current state of the cluster.
         metrics_reasons (dict[str, Reason]): mapping of the name of the metrics for
             which an error occurred to the reason for which it occurred.
+        last_applied_tosca (dict): TOSCA template applied via
+            Krake.
         nodes (list[ClusterNode]): list of cluster nodes.
-        scheduled (datetime.datetime): Timestamp that represents the last time the
+        cluster_id (str): UUID or name of the cluster (infrastructure) given by the
+            infrastructure provider
+        scheduled (datetime.datetime): Timestamp that represents the time the
             cluster was scheduled to a cloud.
         scheduled_to (ResourceRef): Reference to the cloud where the
             cluster should run.
@@ -675,9 +744,11 @@ class ClusterStatus(Serializable):
     """
 
     kube_controller_triggered: datetime = None
-    state: ClusterState = ClusterState.CONNECTING
+    state: ClusterState = ClusterState.PENDING
     metrics_reasons: Dict[str, Reason] = field(default_factory=dict)
+    last_applied_tosca: dict = field(default_factory=dict)
     nodes: List[ClusterNode] = field(default_factory=list)
+    cluster_id: str = None
     scheduled: datetime = None
     scheduled_to: ResourceRef = None
     running_on: ResourceRef = None

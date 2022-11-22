@@ -16,7 +16,7 @@ class InfrastructureProviderSpec(PolymorphicContainer):
 
 @InfrastructureProviderSpec.register("im")
 class ImSpec(Serializable):
-    """IMSpec should contain access data to the IM provider instance
+    """IMSpec should contain access data to the IM provider instance.
 
     Attributes:
         url (str): endpoint of the IM provider instance.
@@ -78,12 +78,13 @@ class InfrastructureProviderList(ApiObject):
 
 class InfrastructureProviderRef(Serializable):
     name: str
+    namespaced: bool = False
 
 
 class CloudBinding(ApiObject):
     api: str = "infrastructure"
     kind: str = "CloudBinding"
-    cluster: ResourceRef
+    cloud: ResourceRef
 
 
 class OpenstackAuthMethod(PolymorphicContainer):
@@ -185,6 +186,33 @@ class GlobalCloud(ApiObject):
     metadata: Metadata
     spec: CloudSpec
     status: CloudStatus = field(metadata={"subresource": True})
+
+    def __post_init__(self):
+        """Method automatically ran at the end of the :meth:`__init__` method, used to
+        validate dependent attributes.
+
+        Validations:
+         1. A non-namespaced `GlobalCloud` resource cannot reference the namespaced
+           `InfrastructureProvider` resource, see #499 for details
+         2. A non-namespaced `GlobalCloud` resource cannot reference the namespaced
+           `Metric` resource, see #499 for details
+
+        Note: This validation cannot be achieved directly using the ``validate``
+         metadata, since ``validate`` must be a zero-argument callable, with
+         no access to the other attributes of the dataclass.
+
+        """
+        if self.spec.openstack.infrastructure_provider.namespaced:
+            raise ValidationError(
+                "A non-namespaced global cloud resource cannot reference the namespaced"
+                " infrastructure provider resource."
+            )
+
+        if any([metric for metric in self.spec.openstack.metrics if metric.namespaced]):
+            raise ValidationError(
+                "A non-namespaced global cloud resource cannot reference the namespaced"
+                " metric resource."
+            )
 
 
 class GlobalCloudList(ApiObject):
