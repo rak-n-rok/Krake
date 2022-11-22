@@ -103,6 +103,15 @@ rules:
   verbs:
   - get
 
+- api: 'infrastructure'
+  namespaces:
+    - ''
+  resources:
+    - "globalclouds"
+    - "clouds"
+  verbs:
+    - list
+
 - api: 'kubernetes'
   namespaces:
     - ''
@@ -133,6 +142,14 @@ rules:
   - ''
   resources:
   - "clusters/status"
+  verbs:
+  - update
+
+- api: 'kubernetes'
+  namespaces:
+  - ''
+  resources:
+  - "clusters/binding"
   verbs:
   - update
 
@@ -399,3 +416,65 @@ roles:
 - role:system:magnum
 users:
   - system:magnum
+---
+
+#################################
+### Infrastructure Controller ###
+#################################
+
+api: core
+kind: Role
+metadata:
+  name: role:system:infrastructure
+rules:
+- api: 'kubernetes'
+  namespaces:
+    - ''
+  resources:
+    - "cluster"
+  verbs:
+    - get
+    - list
+    - update
+
+- api: 'kubernetes'
+  namespaces:
+    - ''
+  resources:
+    - "clusters"
+  verbs:
+    - get
+    - list
+    - update
+
+- api: 'kubernetes'
+  namespaces:
+    - ''
+  resources:
+    - "clusters/status"
+  verbs:
+    - get
+    - list
+    - update
+
+- api: 'infrastructure'
+  namespaces:
+  - ''
+  resources:
+  - "globalinfrastructureproviders"
+  - "infrastructureproviders"
+  - "globalclouds"
+  - "clouds"
+  verbs:
+  - get
+  - list
+---
+
+api: core
+kind: RoleBinding
+metadata:
+  name: rolebinding:system:infrastructure
+roles:
+- role:system:infrastructure
+users:
+  - system:infrastructure

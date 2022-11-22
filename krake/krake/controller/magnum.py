@@ -64,6 +64,8 @@ from krake.data.kubernetes import (
     Cluster as KubernetesCluster,
     ClusterSpec as KubernetesClusterSpec,
     ClusterStatus as KubernetesClusterStatus,
+    ClusterCloudConstraints as KubernetesClusterCloudConstraints,
+    CloudConstraints as KubernetesCloudConstraints,
 )
 from . import Controller, ControllerError, create_ssl_context, run, Reflector
 
@@ -685,7 +687,11 @@ class MagnumClusterController(Controller):
                     labels=cluster.metadata.labels.copy(),
                 ),
                 spec=KubernetesClusterSpec(
-                    kubeconfig=kubeconfig, metrics=cluster.spec.metrics.copy()
+                    kubeconfig=kubeconfig,
+                    metrics=cluster.spec.metrics.copy(),
+                    constraints=KubernetesClusterCloudConstraints(
+                        cloud=KubernetesCloudConstraints()
+                    ),
                 ),
                 status=KubernetesClusterStatus(),
             )

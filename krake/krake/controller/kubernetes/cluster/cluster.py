@@ -270,7 +270,23 @@ class KubernetesClusterController(Controller):
                 resource=copy,
                 start=True,
             )
-        elif isinstance(copy.metadata.deleted, datetime.datetime):
+        # Remove a cluster observer, if the cluster creation or
+        # reconciliation is in progress. The cluster will be
+        # observed again after the creation or reconciliation
+        # is finished and the Infrastructure controller transmits
+        # cluster state to the `CONNECTING`.
+        # Note:
+        #  The Kubernetes cluster API could be reachable during
+        #  the creation or reconciliation process and could report
+        #  cluster healthy state during some short time periods.
+        #  This could cause the cluster observer
+        #  transmits the cluster state from `CREATING` or
+        #  `RECONCILING` to `ONLINE` which could
+        #  be unsafe from the application deployment point of view.
+        elif copy.status.state in (
+            ClusterState.CREATING,
+            ClusterState.RECONCILING,
+        ):
             await listen.hook(
                 HookType.ClusterDeletion,
                 controller=self,
