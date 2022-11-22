@@ -431,6 +431,27 @@ class KubernetesApi(ApiClient):
         data = await resp.json()
         return Cluster.deserialize(data)
 
+    async def update_cluster_binding(self, body, namespace, name):
+        """Update the specified Cluster.
+
+        Args:
+            body (CloudBinding): Body of the HTTP request.
+            namespace (str): namespace in which the Cluster will be updated.
+            name (str): name of the Cluster.
+
+        Returns:
+            Cluster: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/namespaces/{namespace}/clusters/{name}/binding".format(
+            namespace=namespace, name=name
+        )
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("PUT", url, json=body.serialize())
+        data = await resp.json()
+        return Cluster.deserialize(data)
+
     async def update_cluster_status(self, body, namespace, name):
         """Updates the specified Cluster.
 

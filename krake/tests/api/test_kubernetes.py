@@ -7,6 +7,8 @@ from itertools import count
 from operator import attrgetter
 from secrets import token_urlsafe
 from copy import deepcopy
+
+from krake.data.infrastructure import CloudBinding
 from krake.utils import now
 
 from krake.api.app import create_app
@@ -23,6 +25,7 @@ from krake.data.kubernetes import (
     ClusterBinding,
     ClusterState,
 )
+from tests.factories.infrastructure import CloudFactory
 
 from tests.factories.kubernetes import (
     ClusterFactory,
@@ -1492,6 +1495,56 @@ async def test_update_cluster_immutable_field(aiohttp_client, config, db):
     problem = HttpProblem.deserialize(received)
     assert problem.title == HttpProblemTitle.UPDATE_ERROR
     assert problem.detail == "Trying to update an immutable field: namespace"
+
+
+async def test_update_cluster_binding(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+    data = ClusterFactory()
+    cloud = CloudFactory()
+
+    await db.put(data)
+    await db.put(cloud)
+
+    assert not data.metadata.owners, "There are no owners"
+    assert data.status.scheduled_to is None, "Cluster is scheduled"
+    assert data.status.running_on is None, "Cluster is running on a cloud"
+
+    cloud_ref = resource_ref(cloud)
+    binding = CloudBinding(cloud=cloud_ref)
+
+    resp = await client.put(
+        f"/kubernetes/namespaces/testing/clusters/{data.metadata.name}/binding",
+        json=binding.serialize(),
+    )
+    assert resp.status == 200
+    received = Cluster.deserialize(await resp.json())
+    assert received.api == "kubernetes"
+    assert received.kind == "Cluster"
+
+    assert received.status.scheduled_to == cloud_ref
+    assert received.status.scheduled
+    assert received.status.running_on is None
+    assert received.status.state == ClusterState.PENDING
+    assert cloud_ref in received.metadata.owners
+
+    stored = await db.get(Cluster, namespace="testing", name=data.metadata.name)
+    assert stored == received
+
+
+async def test_update_cluster_binding_rbac(rbac_allow, config, aiohttp_client):
+    config.authorization = "RBAC"
+    client = await aiohttp_client(create_app(config=config))
+
+    resp = await client.put(
+        "/kubernetes/namespaces/testing/clusters/my-resource/binding"
+    )
+    assert resp.status == 403
+
+    async with rbac_allow("kubernetes", "clusters/binding", "update"):
+        resp = await client.put(
+            "/kubernetes/namespaces/testing/clusters/my-resource/binding"
+        )
+        assert resp.status == 415
 
 
 async def test_update_cluster_status(aiohttp_client, config, db):

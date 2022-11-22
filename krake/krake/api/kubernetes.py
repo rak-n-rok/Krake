@@ -21,6 +21,7 @@ from krake.api.helpers import (
     ListQuery,
 )
 from krake.data.core import WatchEvent, WatchEventType, ListMetadata
+from krake.data.infrastructure import CloudBinding
 from krake.data.kubernetes import (
     ApplicationList,
     Application,
@@ -571,6 +572,29 @@ class KubernetesApi(object):
                 entity.metadata.name,
                 entity.metadata.uid,
             )
+
+        return web.json_response(entity.serialize())
+
+    @routes.route("PUT", "/kubernetes/namespaces/{namespace}/clusters/{name}/binding")
+    @protected(api="kubernetes", resource="clusters/binding", verb="update")
+    @use_schema("body", CloudBinding.Schema)
+    @load("entity", Cluster)
+    async def update_cluster_binding(request, body, entity):
+        now = utils.now()
+        entity.status.scheduled = now
+        entity.status.scheduled_to = body.cloud
+
+        if body.cloud not in entity.metadata.owners:
+            entity.metadata.owners.append(body.cloud)
+
+        await session(request).put(entity)
+        logger.info(
+            "Update %s of %s %r (%s)",
+            "Binding",
+            "Cluster",
+            entity.metadata.name,
+            entity.metadata.uid,
+        )
 
         return web.json_response(entity.serialize())
 
