@@ -175,6 +175,25 @@ arg_cluster_metric_constraints = argument(
 )
 
 
+arg_cloud_label_constraints = argument(
+    "-L",
+    "--cloud-label-constraint",
+    dest="cloud_label_constraints",
+    default=[],
+    action="append",
+    help="Constraint for labels of the cloud. Can be specified multiple times",
+)
+
+arg_cloud_metric_constraints = argument(
+    "-M",
+    "--cloud-metric-constraint",
+    dest="cloud_metric_constraints",
+    default=[],
+    action="append",
+    help="Constraint for metrics of the cloud. Can be specified multiple times",
+)
+
+
 class ApplicationListTable(BaseTable):
     state = Cell("status.state")
 
@@ -605,16 +624,26 @@ cluster = kubernetes.subparser("cluster", help="Manage Kubernetes clusters")
 
 class ClusterTableList(BaseTable):
     state = Cell("status.state")
-    nodes = Cell("status.nodes", formatter=nodes_formatter)
 
 
 class ClusterTable(ClusterTableList):
+    reason = Cell("status.reason", formatter=dict_formatter)
+
     custom_resources = Cell("spec.custom_resources")
     metrics = Cell("spec.metrics")
     failing_metrics = Cell("status.metrics_reasons", formatter=dict_formatter)
 
+    label_constraints = Cell("spec.constraints.cloud.labels", name="label constraints")
+    metric_constraints = Cell(
+        "spec.constraints.cloud.metrics", name="metric constraints"
+    )
+    scheduled_to = Cell("status.scheduled_to")
+    scheduled = Cell("status.scheduled", formatter=format_datetime)
+    running_on = Cell("status.running_on")
 
-class ClusterTableDetail(ClusterTableList):
+
+class ClusterTableDetail(ClusterTable):
+    nodes = Cell("status.nodes", formatter=nodes_formatter)
     nodes_pid_pressure = Cell(
         "status.nodes", formatter=partial(nodes_formatter, pid_pressure=True)
     )
@@ -624,9 +653,6 @@ class ClusterTableDetail(ClusterTableList):
     nodes_disk_pressure = Cell(
         "status.nodes", formatter=partial(nodes_formatter, disk_pressure=True)
     )
-    custom_resources = Cell("spec.custom_resources")
-    metrics = Cell("spec.metrics")
-    failing_metrics = Cell("status.metrics_reasons", formatter=dict_formatter)
 
 
 def replace_file_attr(spec, attr):
@@ -738,12 +764,73 @@ def register_cluster(
             "kubeconfig": cluster_config,
             "metrics": metrics + global_metrics,
             "custom_resources": custom_resources,
+            "constraints": {
+                "cloud": {
+                    "labels": [],
+                    "metrics": [],
+                },
+            },
         },
     }
 
     resp = session.post(
         f"/kubernetes/namespaces/{namespace}/clusters", json=to_register
     )
+
+    return resp.json()
+
+
+@cluster.command("create", help="Create Kubernetes cluster")
+@argument("name", help="Kubernetes cluster name")
+@argument(
+    "-f",
+    "--file",
+    type=FileType(),
+    required=True,
+    help="TOSCA template file that describes desired Kubernetes cluster",
+)
+@arg_custom_resources
+@arg_metric
+@arg_global_metric
+@arg_namespace
+@arg_labels
+@arg_cloud_label_constraints
+@arg_cloud_metric_constraints
+@arg_formatting
+@depends("config", "session")
+@printer(table=ClusterTable(many=False))
+def create_cluster(
+    name,
+    file,
+    config,
+    session,
+    namespace,
+    metrics,
+    global_metrics,
+    labels,
+    cloud_label_constraints,
+    cloud_metric_constraints,
+    custom_resources,
+):
+    if namespace is None:
+        namespace = config["user"]
+
+    to_create = {
+        "metadata": {"name": name, "labels": labels},
+        "spec": {
+            "tosca": yaml.safe_load(file),
+            "metrics": metrics + global_metrics,
+            "custom_resources": custom_resources,
+            "constraints": {
+                "cloud": {
+                    "labels": cloud_label_constraints,
+                    "metrics": cloud_metric_constraints,
+                },
+            },
+        },
+    }
+
+    resp = session.post(f"/kubernetes/namespaces/{namespace}/clusters", json=to_create)
 
     return resp.json()
 
@@ -788,12 +875,20 @@ def get_cluster(config, session, namespace, name):
 @argument(
     "--context", "-c", help="Name of the context inside the kubeconfig file to use."
 )
+@argument(
+    "-f",
+    "--file",
+    type=FileType(),
+    help="TOSCA template file that describes desired Kubernetes cluster",
+)
 @arg_custom_resources
 @arg_metric
 @arg_global_metric
 @arg_namespace
 @arg_formatting
 @arg_labels
+@arg_cloud_label_constraints
+@arg_cloud_metric_constraints
 @depends("config", "session")
 @printer(table=ClusterTable())
 def update_cluster(
@@ -803,29 +898,37 @@ def update_cluster(
     namespace,
     kubeconfig,
     context,
+    file,
     metrics,
     global_metrics,
     labels,
+    cloud_label_constraints,
+    cloud_metric_constraints,
     custom_resources,
 ):
     if namespace is None:
         namespace = config["user"]
 
     resp = session.get(f"/kubernetes/namespaces/{namespace}/clusters/{name}")
-    cluster = resp.json()
+    to_update = resp.json()
 
+    if file:
+        to_update["spec"]["tosca"] = yaml.safe_load(file)
     if kubeconfig:
-        cluster["spec"]["kubeconfig"], _ = create_cluster_config(kubeconfig, context)
-
+        to_update["spec"]["kubeconfig"], _ = create_cluster_config(kubeconfig, context)
     if labels:
-        cluster["metadata"]["labels"] = labels
+        to_update["metadata"]["labels"] = labels
     if metrics or global_metrics:
-        cluster["spec"]["metrics"] = metrics + global_metrics
+        to_update["spec"]["metrics"] = metrics + global_metrics
     if custom_resources:
-        cluster["spec"]["custom_resources"] = custom_resources
+        to_update["spec"]["custom_resources"] = custom_resources
+    if cloud_label_constraints:
+        to_update["spec"]["constraints"]["cloud"]["labels"] = cloud_label_constraints
+    if cloud_metric_constraints:
+        to_update["spec"]["constraints"]["cloud"]["metrics"] = cloud_metric_constraints
 
     resp = session.put(
-        f"/kubernetes/namespaces/{namespace}/clusters/{name}", json=cluster
+        f"/kubernetes/namespaces/{namespace}/clusters/{name}", json=to_update
     )
 
     return resp.json()

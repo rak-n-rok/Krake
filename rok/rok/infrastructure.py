@@ -478,6 +478,11 @@ def list_globalclouds(session):
     f"{', '.join([t.value for t in CloudType])}",
 )
 @argument(
+    "--global-infra-provider",
+    required=True,
+    help="Global infrastructure provider name for cloud management.",
+)
+@argument(
     "--url",
     required=True,
     help="URL to OpenStack identity service (Keystone). "
@@ -502,12 +507,6 @@ def list_globalclouds(session):
     f"Valid together with --type {CloudType.OPENSTACK.value}.",
 )
 @argument(
-    "--infra-provider",
-    required=True,
-    help="Infrastructure provider name for cloud management. "
-    f"Valid together with --type {CloudType.OPENSTACK.value}.",
-)
-@argument(
     "--domain-name",
     help="Domain name of the OpenStack user. "
     f"Valid together with --type {CloudType.OPENSTACK.value}.",
@@ -520,7 +519,6 @@ def list_globalclouds(session):
     default="default",
 )
 @argument("name", help="Global cloud name")
-@arg_metric
 @arg_global_metric
 @arg_labels
 @arg_formatting
@@ -535,8 +533,7 @@ def register_globalcloud(
     domain_name,
     project,
     domain_id,
-    infra_provider,
-    metrics,
+    global_infra_provider,
     global_metrics,
     labels,
     name,
@@ -553,9 +550,10 @@ def register_globalcloud(
                 "type": "openstack",
                 "openstack": {
                     "url": url,
-                    "metrics": metrics + global_metrics,
+                    "metrics": global_metrics,
                     "infrastructure_provider": {
-                        "name": infra_provider,
+                        "name": global_infra_provider,
+                        "namespaced": False,
                     },
                     "auth": {
                         "type": "password",
@@ -598,6 +596,10 @@ def get_globalcloud(session, name):
 @global_cloud.command("update", help="Update global cloud")
 @argument("name", help="Global cloud name")
 @argument(
+    "--global-infra-provider",
+    help="Global infrastructure provider name for cloud management.",
+)
+@argument(
     "--url",
     help="URL to OpenStack identity service (Keystone). "
     f"Valid together with --type {CloudType.OPENSTACK.value}.",
@@ -627,12 +629,6 @@ def get_globalcloud(session, name):
     help="Domain ID of the OpenStack project. "
     f"Valid together with --type {CloudType.OPENSTACK.value}.",
 )
-@argument(
-    "--infra-provider",
-    help="Infrastructure provider name for cloud management. "
-    f"Valid together with --type {CloudType.OPENSTACK.value}.",
-)
-@arg_metric
 @arg_global_metric
 @arg_labels
 @arg_formatting
@@ -647,8 +643,7 @@ def update_globalcloud(
     domain_name,
     project,
     domain_id,
-    infra_provider,
-    metrics,
+    global_infra_provider,
     global_metrics,
     labels,
 ):
@@ -660,8 +655,8 @@ def update_globalcloud(
             cloud_resource["metadata"]["labels"] = labels
         if url:
             cloud_resource["spec"]["openstack"]["url"] = url
-        if metrics or global_metrics:
-            cloud_resource["spec"]["openstack"]["metrics"] = metrics + global_metrics
+        if global_metrics:
+            cloud_resource["spec"]["openstack"]["metrics"] = global_metrics
         if username:
             cloud_resource["spec"]["openstack"]["auth"]["password"]["user"][
                 "username"
@@ -682,10 +677,13 @@ def update_globalcloud(
             cloud_resource["spec"]["openstack"]["auth"]["password"]["project"][
                 "domain_id"
             ] = domain_id
-        if infra_provider:
+        if global_infra_provider:
             cloud_resource["spec"]["openstack"]["infrastructure_provider"][
                 "name"
-            ] = infra_provider
+            ] = global_infra_provider
+            cloud_resource["spec"]["openstack"]["infrastructure_provider"][
+                "namespaced"
+            ] = False
 
     resp = session.put(
         f"/infrastructure/globalclouds/{name}",
@@ -738,6 +736,11 @@ def list_clouds(config, session, namespace, all):
     required=True,
     help="Cloud type. Valid types: " f"{', '.join([t.value for t in CloudType])}",
 )
+@argument("--infra-provider", help="Infrastructure provider name for cloud management.")
+@argument(
+    "--global-infra-provider",
+    help="Global infrastructure provider name for cloud management.",
+)
 @argument(
     "--url",
     required=True,
@@ -760,12 +763,6 @@ def list_clouds(config, session, namespace, all):
     "--project",
     required=True,
     help="Name or UUID of the OpenStack project. "
-    f"Valid together with --type {CloudType.OPENSTACK.value}.",
-)
-@argument(
-    "--infra-provider",
-    required=True,
-    help="Infrastructure provider name for cloud management. "
     f"Valid together with --type {CloudType.OPENSTACK.value}.",
 )
 @argument(
@@ -800,11 +797,25 @@ def register_cloud(
     project,
     domain_id,
     infra_provider,
+    global_infra_provider,
     metrics,
     global_metrics,
     labels,
     name,
 ):
+    if infra_provider and global_infra_provider:
+        sys.exit(
+            "Error: Cloud should be associated only with one infrastructure provider."
+            " Use one from infrastructure provider or global infrastructure provider "
+            " options."
+        )
+
+    if not infra_provider and not global_infra_provider:
+        sys.exit(
+            "Error: Cloud should be associated with an infrastructure provider."
+            " Use infrastructure provider or global infrastructure provider options."
+        )
+
     if namespace is None:
         namespace = config["user"]
 
@@ -822,7 +833,8 @@ def register_cloud(
                     "url": url,
                     "metrics": metrics + global_metrics,
                     "infrastructure_provider": {
-                        "name": infra_provider,
+                        "name": infra_provider or global_infra_provider,
+                        "namespaced": True if infra_provider else False,
                     },
                     "auth": {
                         "type": "password",
@@ -868,6 +880,11 @@ def get_cloud(config, session, namespace, name):
 
 @cloud.command("update", help="Update cloud")
 @argument("name", help="Cloud name")
+@argument("--infra-provider", help="Infrastructure provider name for cloud management.")
+@argument(
+    "--global-infra-provider",
+    help="Global infrastructure provider name for cloud management.",
+)
 @argument(
     "--url",
     help="URL to OpenStack identity service (Keystone). "
@@ -898,11 +915,6 @@ def get_cloud(config, session, namespace, name):
     help="Domain ID of the OpenStack project. "
     f"Valid together with --type {CloudType.OPENSTACK.value}.",
 )
-@argument(
-    "--infra-provider",
-    help="Infrastructure provider name for cloud management. "
-    f"Valid together with --type {CloudType.OPENSTACK.value}.",
-)
 @arg_metric
 @arg_global_metric
 @arg_labels
@@ -922,10 +934,18 @@ def update_cloud(
     project,
     domain_id,
     infra_provider,
+    global_infra_provider,
     metrics,
     global_metrics,
     labels,
 ):
+    if infra_provider and global_infra_provider:
+        sys.exit(
+            "Error: Cloud should be associated only with one infrastructure provider."
+            " Use one from infrastructure provider or global infrastructure provider"
+            " options."
+        )
+
     if namespace is None:
         namespace = config["user"]
 
@@ -963,6 +983,20 @@ def update_cloud(
             cloud_resource["spec"]["openstack"]["infrastructure_provider"][
                 "name"
             ] = infra_provider
+        if infra_provider:
+            cloud_resource["spec"]["openstack"]["infrastructure_provider"][
+                "name"
+            ] = infra_provider
+            cloud_resource["spec"]["openstack"]["infrastructure_provider"][
+                "namespaced"
+            ] = True
+        if global_infra_provider:
+            cloud_resource["spec"]["openstack"]["infrastructure_provider"][
+                "name"
+            ] = global_infra_provider
+            cloud_resource["spec"]["openstack"]["infrastructure_provider"][
+                "namespaced"
+            ] = False
 
     resp = session.put(
         f"/infrastructure/namespaces/{namespace}/clouds/{name}",
