@@ -18,69 +18,80 @@ class AppClusterConstraint(NamedTuple):
     condition: Callable
 
 
-def _evaluate(app, cluster, constraints, fetched_metrics):
-    """Evaluate if all given application constraints defined in :args:`constraints`
-    match given cluster definition.
+class ClusterCloudConstraint(NamedTuple):
+    name: str
+    values: list
+    condition: Callable
+
+
+def _evaluate(resource, resource_to_match, constraints, fetched_metrics):
+    """Evaluate if all :args:`resource` constraints defined in :args:`constraints`
+    match definitions of :args:`resource_to_match`.
 
     Args:
-        app (krake.data.kubernetes.Application): Application that should be
+        resource (krake.data.serializable.ApiObject): Resource that should be
             bound.
-        cluster (krake.data.kubernetes.Cluster): Cluster to which the
-            application should be bound.
-        constraints (List[AppClusterConstraint]): List of AppClusterConstraint objects
-            for evaluation
+        resource_to_match (krake.data.serializable.ApiObject): Resource that acts as
+            destination.
+        constraints (List[Union[AppClusterConstraint, ClusterCloudConstraint]): List of
+            resource constraints for evaluation
 
     Returns:
-        bool: True if the cluster fulfills all given application constraints
+        bool: True if the :args:`resource_to_match` fulfills all
+            given :args:`resource` constraints
 
     """
     for constraint in constraints:
         if constraint.values:
             for value in constraint.values:
                 if constraint.name == "label" or constraint.name == "custom resource":
-                    callable = constraint.condition(value, cluster)
+                    callable = constraint.condition(value, resource_to_match)
                 else:
-                    callable = constraint.condition(value, cluster, fetched_metrics)
+                    callable = constraint.condition(
+                        value, resource_to_match, fetched_metrics
+                    )
                 if callable:
                     logger.debug(
-                        f"Cluster %s matches {constraint.name} constraint %r",
-                        resource_ref(cluster),
+                        f"Resource %s matches {constraint.name} constraint %r",
+                        resource_ref(resource_to_match),
                         constraint,
                     )
                 else:
                     logger.debug(
-                        f"Cluster %s does not match {constraint.name} constraint %r",
-                        resource_ref(cluster),
+                        f"Resource %s does not match {constraint.name} constraint %r",
+                        resource_ref(resource_to_match),
                         constraint,
                     )
                     return False
 
     logger.debug(
-        "Cluster %s fulfills all constraints of application %r",
-        resource_ref(cluster),
-        resource_ref(app),
+        "Resource %s fulfills all constraints of resource %r",
+        resource_ref(resource_to_match),
+        resource_ref(resource),
     )
     return True
 
 
-def _condition_custom_resources(constraint, cluster):
-    return constraint in cluster.spec.custom_resources
+def _condition_custom_resources(constraint, resource):
+    return constraint in resource.spec.custom_resources
 
 
-def _condition_label(constraint, cluster):
-    return constraint.match(cluster.metadata.labels or {})
+def _condition_label(constraint, resource):
+    return constraint.match(resource.metadata.labels or {})
 
 
-def _condition_metric(constraint, cluster, fetched_metrics):
-    metrics = fetched_metrics[cluster.metadata.name]
+def _condition_metric(constraint, resource, fetched_metrics):
+    metrics = fetched_metrics[resource.metadata.name]
     refs = dict()
     for m in metrics:
         namespaced = False
         if m.metric.metadata.namespace:
             namespaced = True
-        refs[m.metric.metadata.name] = MetricRef(name=m.metric.metadata.name,
-                                                 weight=(m.weight * m.value),
-                                                 namespaced=namespaced)
+        refs[m.metric.metadata.name] = MetricRef(
+            name=m.metric.metadata.name,
+            weight=(m.weight * m.value),
+            namespaced=namespaced,
+        )
     return constraint.match(refs or {})
 
 
@@ -111,13 +122,40 @@ def match_cluster_constraints(app, cluster, fetched_metrics=None):
             _condition_custom_resources,
         ),
         AppClusterConstraint(
-            "metric",
-            app.spec.constraints.cluster.metrics,
-            _condition_metric
-        )
+            "metric", app.spec.constraints.cluster.metrics, _condition_metric
+        ),
     ]
 
     return _evaluate(app, cluster, constraints, fetched_metrics)
+
+
+def match_cloud_constraints(cluster, cloud, fetched_metrics=None):
+    """Evaluate if all cluster cloud constraints match a cloud.
+
+    Args:
+        cluster (krake.data.kubernetes.Cluster): Cluster that should be
+            bound.
+        cloud (Union[Cloud, GlobalCloud]): Cloud to which the
+            Cluster should be bound.
+        fetched_metrics(dict): A dict containing the metrics for each cloud.
+
+    Returns:
+        bool: True if the cloud fulfills all cluster cloud constraints.
+
+    """
+    if not cluster.spec.constraints or not cluster.spec.constraints.cloud:
+        return True
+
+    constraints = [
+        ClusterCloudConstraint(
+            "label", cluster.spec.constraints.cloud.labels, _condition_label
+        ),
+        ClusterCloudConstraint(
+            "metric", cluster.spec.constraints.cloud.metrics, _condition_metric
+        ),
+    ]
+
+    return _evaluate(cluster, cloud, constraints, fetched_metrics)
 
 
 def match_project_constraints(cluster, project):

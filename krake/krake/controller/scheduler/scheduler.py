@@ -2,7 +2,7 @@ import asyncio
 from datetime import timedelta
 import logging
 import random
-from typing import NamedTuple
+from typing import NamedTuple, Union
 
 from functools import total_ordering
 from aiohttp import ClientError
@@ -16,6 +16,7 @@ from krake.data.openstack import (
 )
 from krake.client.openstack import OpenStackApi
 from krake.client.core import CoreApi
+from krake.client.infrastructure import InfrastructureApi
 from krake.client.kubernetes import KubernetesApi
 from krake.data.core import ReasonCode, resource_ref, Reason
 from krake.data.kubernetes import (
@@ -25,9 +26,14 @@ from krake.data.kubernetes import (
     ClusterState,
 )
 
-from .constraints import match_cluster_constraints, match_project_constraints
+from .constraints import (
+    match_cluster_constraints,
+    match_project_constraints,
+    match_cloud_constraints,
+)
 from .metrics import MetricError, fetch_query, MetricsProviderError
 from .. import Controller, ControllerError, Reflector, WorkQueue
+from ...data.infrastructure import Cloud, GlobalCloud, CloudBinding, CloudState
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +47,10 @@ class NoClusterFound(ControllerError):
 
 
 class NoProjectFound(ControllerError):
+    code = ReasonCode.NO_SUITABLE_RESOURCE
+
+
+class NoCloudFound(ControllerError):
     code = ReasonCode.NO_SUITABLE_RESOURCE
 
 
@@ -101,6 +111,14 @@ class ProjectScore(NamedTuple):
     project: Project
 
 
+@orderable_by_score
+class CloudScore(NamedTuple):
+    """Named tuple for ordering clouds based on a score"""
+
+    score: float
+    cloud: Union[Cloud, GlobalCloud]
+
+
 class Stickiness(NamedTuple):
     """Additional metric added clusters."""
 
@@ -140,19 +158,23 @@ class Scheduler(Controller):
             api_endpoint, loop=loop, ssl_context=ssl_context, debounce=debounce
         )
         self.magnum_queue = WorkQueue(loop=self.loop, debounce=debounce)
+        self.cluster_queue = WorkQueue(loop=self.loop, debounce=debounce)
 
         self.kubernetes_api = None
         self.openstack_api = None
         self.core_api = None
+        self.infrastructure_api = None
 
-        self.kubernetes_reflector = None
+        self.kubernetes_application_reflector = None
+        self.kubernetes_cluster_reflector = None
         self.openstack_reflector = None
 
         self.worker_count = worker_count
         self.reschedule_after = reschedule_after
         self.stickiness = stickiness
 
-        self.kubernetes = None
+        self.kubernetes_application = None
+        self.kubernetes_cluster = None
         self.openstack = None
 
     async def prepare(self, client):
@@ -161,11 +183,12 @@ class Scheduler(Controller):
         self.kubernetes_api = KubernetesApi(self.client)
         self.openstack_api = OpenStackApi(self.client)
         self.core_api = CoreApi(self.client)
+        self.infrastructure_api = InfrastructureApi(self.client)
 
         self.openstack = OpenstackHandler(
             self.client, self.magnum_queue, self.openstack_api, self.core_api
         )
-        self.kubernetes = KubernetesHandler(
+        self.kubernetes_application = KubernetesApplicationHandler(
             self.client,
             self.queue,
             self.kubernetes_api,
@@ -173,11 +196,23 @@ class Scheduler(Controller):
             self.stickiness,
             self.reschedule_after,
         )
+        self.kubernetes_cluster = KubernetesClusterHandler(
+            self.client,
+            self.cluster_queue,
+            self.infrastructure_api,
+            self.kubernetes_api,
+            self.core_api,
+        )
+        for i in range(self.worker_count):
+            self.register_task(
+                self.kubernetes_application.handle_kubernetes_applications,
+                name=f"kubernetes_application_worker_{i}",
+            )
 
         for i in range(self.worker_count):
             self.register_task(
-                self.kubernetes.handle_kubernetes_applications,
-                name=f"kubernetes_worker_{i}",
+                self.kubernetes_cluster.handle_kubernetes_clusters,
+                name=f"kubernetes_cluster_worker_{i}",
             )
 
         for i in range(self.worker_count):
@@ -185,14 +220,23 @@ class Scheduler(Controller):
                 self.openstack.handle_magnum_clusters, name=f"magnum_worker_{i}"
             )
 
-        self.kubernetes_reflector = Reflector(
+        self.kubernetes_application_reflector = Reflector(
             listing=self.kubernetes_api.list_all_applications,
             watching=self.kubernetes_api.watch_all_applications,
-            on_list=self.kubernetes.received_kubernetes_app,
-            on_add=self.kubernetes.received_kubernetes_app,
-            on_update=self.kubernetes.received_kubernetes_app,
-            on_delete=self.kubernetes.received_kubernetes_app,
+            on_list=self.kubernetes_application.received_kubernetes_app,
+            on_add=self.kubernetes_application.received_kubernetes_app,
+            on_update=self.kubernetes_application.received_kubernetes_app,
+            on_delete=self.kubernetes_application.received_kubernetes_app,
             resource_plural="Kubernetes Applications",
+        )
+        self.kubernetes_cluster_reflector = Reflector(
+            listing=self.kubernetes_api.list_all_clusters,
+            watching=self.kubernetes_api.watch_all_clusters,
+            on_list=self.kubernetes_cluster.received_kubernetes_cluster,
+            on_add=self.kubernetes_cluster.received_kubernetes_cluster,
+            on_update=self.kubernetes_cluster.received_kubernetes_cluster,
+            on_delete=self.kubernetes_cluster.received_kubernetes_cluster,
+            resource_plural="Kubernetes Clusters",
         )
         self.openstack_reflector = Reflector(
             listing=self.openstack_api.list_all_magnum_clusters,
@@ -203,16 +247,25 @@ class Scheduler(Controller):
             on_delete=self.openstack.received_magnum_cluster,
             resource_plural="Magnum Clusters",
         )
-        self.register_task(self.kubernetes_reflector, name="Kubernetes reflector")
+        self.register_task(
+            self.kubernetes_application_reflector,
+            name="Kubernetes application reflector",
+        )
+        self.register_task(
+            self.kubernetes_cluster_reflector, name="Kubernetes cluster reflector"
+        )
         self.register_task(self.openstack_reflector, name="OpenStack reflector")
 
     async def cleanup(self):
-        self.kubernetes_reflector = None
+        self.kubernetes_application_reflector = None
+        self.kubernetes_cluster_reflector = None
         self.openstack_reflector = None
         self.openstack_api = None
         self.kubernetes_api = None
         self.core_api = None
-        self.kubernetes = None
+        self.infrastructure_api = None
+        self.kubernetes_application = None
+        self.kubernetes_cluster = None
         self.openstack = None
 
 
@@ -296,14 +349,22 @@ class Handler(object):
             AssertionError: if length of metrics and reasons don't match up
             ValueError: if the resource kind is not supported
         """
+        global_resource = False
         assert len(metrics) == len(reasons)
 
-        if resource.kind == "Cluster":
+        if resource.kind == Cluster.kind:
             resource.status.state = ClusterState.FAILING_METRICS
             update_status_client = self.api.update_cluster_status
-        elif resource.kind == "Project":
+        elif resource.kind == Project.kind:
             resource.status.state = ProjectState.FAILING_METRICS
             update_status_client = self.api.update_project_status
+        elif resource.kind == Cloud.kind:
+            resource.status.state = CloudState.FAILING_METRICS
+            update_status_client = self.api.update_cloud_status
+        elif resource.kind == GlobalCloud.kind:
+            resource.status.state = CloudState.FAILING_METRICS
+            update_status_client = self.api.update_global_cloud_status
+            global_resource = True
         else:
             raise ValueError(f"Unsupported kind: {resource.kind}.")
 
@@ -313,11 +374,17 @@ class Handler(object):
             if reason:
                 resource.status.metrics_reasons[metrics[i].name] = reason
 
-        await update_status_client(
-            namespace=resource.metadata.namespace,
-            name=resource.metadata.name,
-            body=resource,
-        )
+        if global_resource:
+            await update_status_client(
+                name=resource.metadata.name,
+                body=resource,
+            )
+        else:
+            await update_status_client(
+                namespace=resource.metadata.namespace,
+                name=resource.metadata.name,
+                body=resource,
+            )
 
     async def fetch_metrics(self, resource, metrics):
         """Async generator for fetching metrics by the given list of metric
@@ -356,12 +423,29 @@ class Handler(object):
         for metric_spec in metrics:
             try:
                 if metric_spec.namespaced:
+
+                    if not resource.metadata.namespace:
+                        # Note: A non-namespaced resource (e.g. `GlobalCloud`)
+                        #   cannot reference the namespaced `Metric` resource,
+                        #   see #499 for details
+                        reasons.append(
+                            Reason(
+                                code=ReasonCode.INVALID_METRIC,
+                                message=(
+                                    "Attempt to reference a namespaced"
+                                    f" metric {metric_spec.name} on a non-namespaced"
+                                    f" resource {resource.metadata.name}"
+                                ),
+                            )
+                        )
+                        continue
+
                     metric = await self.core_api.read_metric(
                         name=metric_spec.name, namespace=resource.metadata.namespace
                     )
                     metrics_provider = await self.core_api.read_metrics_provider(
                         name=metric.spec.provider.name,
-                        namespace=resource.metadata.namespace
+                        namespace=resource.metadata.namespace,
                     )
                 else:
                     metric = await self.core_api.read_global_metric(
@@ -422,10 +506,10 @@ class Handler(object):
         yield fetched
 
 
-class KubernetesHandler(Handler):
+class KubernetesApplicationHandler(Handler):
     def __init__(self, client, queue, api, core_api, stickiness, reschedule_after):
 
-        super(KubernetesHandler, self).__init__(client, queue, api, core_api)
+        super(KubernetesApplicationHandler, self).__init__(client, queue, api, core_api)
 
         self.stickiness = stickiness
         self.reschedule_after = reschedule_after
@@ -481,7 +565,7 @@ class KubernetesHandler(Handler):
 
         Args:
             run_once (bool, optional): if True, the function only handles one resource,
-                then stops. Otherwise, continue to handle each new resource on the
+                    then stops. Otherwise, continue to handle each new resource on the
                 queue indefinitely.
 
         """
@@ -624,9 +708,12 @@ class KubernetesHandler(Handler):
 
         """
         # Reject clusters marked as deleted and clusters that are not online
-        existing_clusters = \
-            (cluster for cluster in clusters if cluster.metadata.deleted is None
-                and cluster.status.state is ClusterState.ONLINE)
+        existing_clusters = (
+            cluster
+            for cluster in clusters
+            if cluster.metadata.deleted is None
+            and cluster.status.state is ClusterState.ONLINE
+        )
 
         possible_clusters = []
 
@@ -641,7 +728,8 @@ class KubernetesHandler(Handler):
         logger.info(fetched_metrics)
 
         matching = [
-            cluster for cluster in existing_clusters
+            cluster
+            for cluster in existing_clusters
             if match_cluster_constraints(app, cluster, fetched_metrics)
         ]
 
@@ -777,6 +865,208 @@ class KubernetesHandler(Handler):
             return Stickiness(weight=0, value=0)
 
         return Stickiness(weight=self.stickiness, value=1.0)
+
+
+class KubernetesClusterHandler(Handler):
+    def __init__(self, client, queue, infrastructure_api, kubernetes_api, core_api):
+
+        super(KubernetesClusterHandler, self).__init__(
+            client, queue, infrastructure_api, core_api
+        )
+
+        self.infrastructure_api = infrastructure_api
+        self.kubernetes_api = kubernetes_api
+
+    async def received_kubernetes_cluster(self, cluster):
+        """Handler for Kubernetes cluster reflector.
+
+        Args:
+            cluster (krake.data.kubernetes.Cluster): Cluster received from the API.
+
+        """
+        # For now, we do not reschedule clusters. Hence, not enqueuing
+        # for rescheduling.
+        if cluster.metadata.deleted:
+            logger.debug("Ignore deleted %r", cluster)
+
+        elif cluster.spec.kubeconfig:
+            logger.debug("Ignore registered %r", cluster)
+
+        elif cluster.status.state == ClusterState.FAILED:
+            logger.debug("Reject failed %r", cluster)
+
+        elif cluster.status.scheduled_to is None:
+            logger.debug("Accept unbound %r", cluster)
+            await self.queue.put(cluster.metadata.uid, cluster)
+
+        else:
+            logger.debug("Ignore bound %r", cluster)
+
+    async def handle_kubernetes_clusters(self, run_once=False):
+        """Infinite loop which fetches and hands over the Kubernetes Cluster
+        resources to the right coroutine. The specific exceptions and error handling
+        have to be added here.
+
+        Args:
+            run_once (bool, optional): if True, the function only handles one resource,
+                then stops. Otherwise, it continues to handle each new resource on the
+                queue indefinitely.
+
+        """
+        while True:
+            key, cluster = await self.queue.get()
+            try:
+                logger.debug("Handling %r", cluster)
+                await self.schedule_kubernetes_cluster(cluster)
+            except ControllerError as error:
+                cluster.status.reason = Reason(code=error.code, message=error.message)
+                cluster.status.state = ClusterState.FAILED
+
+                await self.kubernetes_api.update_cluster_status(
+                    namespace=cluster.metadata.namespace,
+                    name=cluster.metadata.name,
+                    body=cluster,
+                )
+            finally:
+                await self.queue.done(key)
+            if run_once:
+                break  # Only used for tests
+
+    async def schedule_kubernetes_cluster(self, cluster):
+        """Choose a suitable Cloud for the given Cluster and bound them
+        together.
+
+        Args:
+            cluster (krake.data.kubernetes.Cluster): the Cluster that needs to be
+                scheduled to a Cloud.
+
+        """
+        assert cluster.status.scheduled_to is None, "Cluster is already bound"
+
+        logger.info("Schedule %r", cluster)
+
+        # Clouds from the same namespace as cluster are preferred over global clouds.
+        clouds_namespaced = await self.infrastructure_api.list_clouds(
+            namespace=cluster.metadata.namespace
+        )
+        try:
+            cloud = await self.select_cloud(cluster, clouds_namespaced.items)
+        except NoCloudFound:
+            # Try to find global clouds if there is no namespaced one.
+            clouds_global = await self.infrastructure_api.list_global_clouds()
+            cloud = await self.select_cloud(cluster, clouds_global.items)
+
+        scheduled_to = resource_ref(cloud)
+
+        logger.info("Scheduled %r to %r", cluster, cloud)
+
+        await self.kubernetes_api.update_cluster_binding(
+            namespace=cluster.metadata.namespace,
+            name=cluster.metadata.name,
+            body=CloudBinding(cloud=scheduled_to),
+        )
+
+    @staticmethod
+    def get_cloud_metrics(cloud):
+        if cloud.spec.type == "openstack":
+            return cloud.spec.openstack.metrics
+
+        raise NotImplementedError(f"Unsupported cloud spec type: {cloud.spec.type}.")
+
+    async def select_cloud(self, cluster, clouds):
+        """Select suitable Cloud or GlobalCloud for Cluster binding.
+
+        Args:
+            cluster (krake.data.kubernetes.Cluster): Cluster object for binding
+            clouds (list[Union[Cloud, GlobalCloud]]): List of clouds between which
+                the "best" one should be chosen.
+
+        Returns:
+            Union[Cloud, GlobalCloud]: cloud suitable for Cluster binding
+
+        """
+        # Reject clouds marked as deleted
+        existing_clouds = (cloud for cloud in clouds if cloud.metadata.deleted is None)
+        fetched_metrics = dict()
+
+        for cloud in clouds:
+            cloud_metrics = self.get_cloud_metrics(cloud)
+            if cloud_metrics:
+                async for metrics in self.fetch_metrics(cloud, cloud_metrics):
+                    fetched_metrics[cloud.metadata.name] = metrics
+
+        matching = [
+            cloud
+            for cloud in existing_clouds
+            if match_cloud_constraints(cluster, cloud, fetched_metrics)
+        ]
+
+        if not matching:
+            logger.info("No matching cloud for %r found", cluster)
+            raise NoCloudFound("No matching cloud found")
+
+        # Clouds with metrics are preferred over clouds without metrics.
+        with_metrics = []
+        for cloud in matching:
+            if self.get_cloud_metrics(cloud):
+                with_metrics.append(cloud)
+
+        # Only use clouds without metrics when there are no clouds with
+        # metrics.
+        scores = []
+        if with_metrics:
+            # Compute the score of all clouds based on their metric
+            scores = await self.rank_clouds(cluster, with_metrics)
+
+        if not scores:
+            # If no score of cloud with metrics could be computed (e.g. due to
+            # unreachable metrics providers), compute the score of the matching clouds
+            # that do not have metrics.
+            scores = [self.calculate_cloud_score((), cloud) for cloud in matching]
+
+        return self.select_maximum(scores).cloud
+
+    async def rank_clouds(self, cluster, clouds):
+        """Compute the score of the clouds based on metrics values and
+        weights.
+
+        Args:
+            cluster (krake.data.kubernetes.Cluster): Cluster object for binding
+            clouds (list[Union[Cloud, GlobalCloud]]): List of clouds for which
+                the score has to be computed.
+
+        Returns:
+            list[CloudScore]: list of all cloud's score
+
+        """
+        score = []
+        for cloud in clouds:
+            cloud_metrics = self.get_cloud_metrics(cloud)
+            async for metrics in self.fetch_metrics(cloud, cloud_metrics):
+                score.append(self.calculate_cloud_score(metrics, cloud))
+
+        return score
+
+    @staticmethod
+    def calculate_cloud_score(metrics, cloud):
+        """Calculate the weighted sum of metrics values.
+
+        Args:
+            metrics (list[.metrics.QueryResult]): List of metric query results
+            cloud (Union[Cloud, GlobalCloud]): cloud for which the score has
+                to be computed.
+
+        Returns:
+            CloudScore: score of the passed cloud based on metrics.
+
+        """
+        if not metrics:
+            return CloudScore(score=0, cloud=cloud)
+
+        norm = sum(metric.weight for metric in metrics)
+        score = sum(metric.value * metric.weight for metric in metrics) / norm
+
+        return CloudScore(score=score, cloud=cloud)
 
 
 class OpenstackHandler(Handler):
