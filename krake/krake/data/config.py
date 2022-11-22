@@ -44,7 +44,7 @@ class DocsConfiguration(Serializable):
         default=(
             "https://rak-n-rok.readthedocs.io/projects/krake/en/latest/user/problem.html"  # noqa: E501
         ),
-        metadata={"help": "URL of the problem documentation."}
+        metadata={"help": "URL of the problem documentation."},
     )
 
 
@@ -323,6 +323,17 @@ class MagnumConfiguration(ControllerConfiguration):
         metadata={
             "help": "Time in seconds to wait between two requests to the Magnum "
             "client, to get a Magnum cluster new state after modification."
+        },
+    )
+
+
+class InfrastructureConfiguration(ControllerConfiguration):
+    poll_interval: float = field(
+        default=30,
+        metadata={
+            "help": "Time in seconds to wait between two requests to the"
+            " infrastructure provider client, to get an infrastructure"
+            " new state after modification."
         },
     )
 

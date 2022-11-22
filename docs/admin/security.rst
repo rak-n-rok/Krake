@@ -489,6 +489,7 @@ What you need:
      * ``system:scheduler``
      * ``system:kubernetes``
      * ``system:magnum``
+     * ``system:infrastructure``
      * ``system:admin``
      * ``system:complete-signing``
      * ``system:shutdown-signing``

@@ -49,6 +49,7 @@ __pycache__/
 /kubernetes_cluster.yaml
 /magnum.yaml
 /scheduler.yaml
+/infrastructure.yaml
 
 # Krake dot env configuration variables file
 .env
