@@ -744,6 +744,17 @@ class ClusterNodeStatus(Serializable):
     conditions: List[ClusterNodeCondition]
 
 
+class ClusterNodeMetadata(Serializable):
+    """Cluster node metadata subresource of :class:`ClusterNode`.
+
+    Attributes:
+        name (str): Name of the cluster node.
+
+    """
+
+    name: str
+
+
 class ClusterNode(Serializable):
     """Cluster node subresource of :class:`ClusterStatus`.
 
@@ -756,6 +767,7 @@ class ClusterNode(Serializable):
 
     api: str = "kubernetes"
     kind: str = "ClusterNode"
+    metadata: ClusterNodeMetadata
     status: ClusterNodeStatus = None
 
 
