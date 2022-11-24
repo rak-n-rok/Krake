@@ -251,7 +251,7 @@ $ rok kube cluster list
 +------+-----------+--------+---------+----------+---------+-------+
 
 # Register your minikube instance
-$ rok kube cluster create cluster_certs/config/minikube_conf.yaml
+$ rok kube cluster register -k cluster_certs/config/minikube_conf.yaml
 +------------------+---------------------+
 | name             | minikube2           |
 | namespace        | system:admin        |

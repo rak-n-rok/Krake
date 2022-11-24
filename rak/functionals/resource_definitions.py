@@ -720,28 +720,34 @@ class ClusterDefinition(ResourceDefinition):
 
     Attributes:
         name (str): name of the cluster
-        kubeconfig_path (str): path to the kubeconfig file to use for the creation.
+        kubeconfig_path (str, optional): path to the kubeconfig file to use
+            for the registration.
         labels (dict[str, str], optional): dict of cluster labels and their values
             to use for the creation.
         metrics (list[WeightedMetrics], optional): list of weighted metrics.
         namespace (str): namespace of the cluster
+        register (bool, optional): True if the custer should be registered.
+            Defaults to False.
     """
 
     def __init__(
         self,
         name,
-        kubeconfig_path,
+        kubeconfig_path=None,
         labels=None,
         metrics=None,
         namespace=DEFAULT_NAMESPACE,
+        register=False,
     ):
         super().__init__(name=name, kind=ResourceKind.CLUSTER, namespace=namespace)
-        assert os.path.isfile(kubeconfig_path), f"{kubeconfig_path} is not a file."
+        if register:
+            assert os.path.isfile(kubeconfig_path), f"{kubeconfig_path} is not a file."
         self.kubeconfig_path = kubeconfig_path
         self.labels = labels or {}
         if not metrics:
             metrics = []
         self._set_metrics(metrics)
+        self.register = register
 
     def _set_metrics(self, metrics):
         """Change the metric weights this cluster resource definition has
@@ -802,11 +808,45 @@ class ClusterDefinition(ResourceDefinition):
         }
 
     def creation_command(self, wait):
-        cmd = "rok kube cluster create".split()
+        """TODO: Should be implemented together with
+        infrastructure provider implementation.
+        """
+
+    def creation_acceptance_criteria(self, error_message=None):
+        if not error_message:
+            error_message = f"The cluster {self.name} was not properly created."
+        return check_resource_exists(error_message=error_message)
+
+    def register_resource(self, wait=False):
+        """Register the resource."""
+        error_message = f"The {self.kind} {self.name} could not be registered."
+        run(self.register_command(wait), condition=check_return_code(error_message))
+        self._set_default_values()
+        self._verify_resource()
+
+    def check_registered(self, delay=10):
+        """Run the command for checking if the resource has been registered.
+
+        Args:
+            delay (int, optional): The number of seconds that should be allowed
+                before giving up.
+        """
+        run(
+            self.get_command(),
+            condition=self.register_acceptance_criteria(),
+            interval=1,
+            retry=delay,
+        )
+
+    def register_command(self, wait):
+        cmd = "rok kube cluster register".split()
         cmd += self._get_label_options(self.labels)
         cmd += self._get_metrics_options(self.metrics)
-        cmd += [self.kubeconfig_path]
+        cmd += ["-k", self.kubeconfig_path]
         return cmd
+
+    def register_acceptance_criteria(self, error_message=None):
+        return self.creation_acceptance_criteria(error_message)
 
     @staticmethod
     def _get_metrics_options(metrics):
@@ -819,7 +859,7 @@ class ClusterDefinition(ResourceDefinition):
             this method will return the list
             ["-m", "metric_name1", "1.0", "-gm", "metric_name2", "2.0"],
             which can be used when constructing a cli command like
-            rok kube cluster create -m metric_name1 1.0 -gm metric_name2 2.0 ...
+            rok kube cluster register -m metric_name1 1.0 -gm metric_name2 2.0 ...
 
         Args:
             metrics (list[WeightedMetric], optional): list of metrics with values.
@@ -844,11 +884,6 @@ class ClusterDefinition(ResourceDefinition):
                 str(weighted_metric.weight),
             ]
         return metrics_options
-
-    def creation_acceptance_criteria(self, error_message=None):
-        if not error_message:
-            error_message = f"The cluster {self.name} was not properly created."
-        return check_resource_exists(error_message=error_message)
 
     def delete_command(self, wait):
         return f"rok kube cluster delete {self.name}".split()

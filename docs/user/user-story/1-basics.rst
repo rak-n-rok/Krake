@@ -25,18 +25,17 @@ Register a cluster
 .. prompt:: bash $ auto
 
     $ rok kube cluster list  # No Cluster resource is present
-    $ rok kube cluster create clusters/config/minikube-cluster-1
+    $ rok kube cluster register -k clusters/config/minikube-cluster-1
     $ rok kube cluster list  # One Cluster resource with name "minikube-cluster-1"
 
 .. note::
 
-    The command uses the word ``create`` but no actual Kubernetes cluster is created
-    here. Instead, Krake is made aware that the Kubernetes cluster exists, through its
-    kubeconfig file. However, a Krake resource called a ``Cluster`` (handled by the
-    ``kubernetes`` API of Krake) is created by the command. It contains multiple pieces
-    of information, in particular the content of the kubeconfig file itself. The
-    resource helps to store the information needed to connect to the actual Kubernetes
-    cluster.
+    The command ``register`` registers an existing Kubernetes cluster through its
+    kubeconfig file. Resource called a ``Cluster`` (handled by the
+    ``kubernetes`` API of Krake) is created by the ``register`` command.
+    It contains multiple pieces of information, in particular the content
+    of the kubeconfig file itself. The resource helps to store the information
+    needed to connect to the actual Kubernetes cluster.
 
 
 .. important::

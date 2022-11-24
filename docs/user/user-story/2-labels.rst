@@ -36,7 +36,7 @@ Introduction to Scheduling mechanisms
 Preparation
 ===========
 
-- Create the two clusters with a ``location`` ``Label``.
+- Register the two clusters with a ``location`` ``Label``.
 
 .. note::
     Each label always have a key and a value. We follow the same specifications as
@@ -44,8 +44,8 @@ Preparation
 
 .. prompt:: bash $ auto
 
-    $ rok kube cluster create clusters/config/minikube-cluster-1 -l location=DE
-    $ rok kube cluster create clusters/config/minikube-cluster-2 -l location=SK
+    $ rok kube cluster register -k clusters/config/minikube-cluster-1 -l location=DE
+    $ rok kube cluster register -k clusters/config/minikube-cluster-2 -l location=SK
 
 Spawn the demo application
 ==========================

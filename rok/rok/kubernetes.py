@@ -697,13 +697,15 @@ def create_cluster_config(kubeconfig, context_name=None):
     return cluster_config, cluster["name"]
 
 
-@cluster.command("create", help="Register an existing Kubernetes cluster")
+@cluster.command("register", help="Register an existing Kubernetes cluster")
 @argument(
     "--context", "-c", help="Name of the context inside the kubeconfig file to use."
 )
 @argument(
-    "kubeconfig",
+    "-k",
+    "--kubeconfig",
     type=FileType(),
+    required=True,
     help="Kubeconfig file that should be used to control this cluster",
 )
 @arg_custom_resources
@@ -714,7 +716,7 @@ def create_cluster_config(kubeconfig, context_name=None):
 @arg_formatting
 @depends("config", "session")
 @printer(table=ClusterTable(many=False))
-def create_cluster(
+def register_cluster(
     config,
     session,
     namespace,
@@ -730,7 +732,7 @@ def create_cluster(
 
     cluster_config, cluster_name = create_cluster_config(kubeconfig, context)
 
-    to_create = {
+    to_register = {
         "metadata": {"name": cluster_name, "labels": labels},
         "spec": {
             "kubeconfig": cluster_config,
@@ -739,7 +741,9 @@ def create_cluster(
         },
     }
 
-    resp = session.post(f"/kubernetes/namespaces/{namespace}/clusters", json=to_create)
+    resp = session.post(
+        f"/kubernetes/namespaces/{namespace}/clusters", json=to_register
+    )
 
     return resp.json()
 
@@ -780,7 +784,7 @@ def get_cluster(config, session, namespace, name):
 
 @cluster.command("update", help="Update Kubernetes cluster")
 @argument("name", help="Kubernetes cluster name")
-@argument("-f", "--file", type=FileType(), help="Kubernetes kubeconfig file")
+@argument("-k", "--kubeconfig", type=FileType(), help="Kubernetes kubeconfig file")
 @argument(
     "--context", "-c", help="Name of the context inside the kubeconfig file to use."
 )
@@ -797,7 +801,7 @@ def update_cluster(
     session,
     name,
     namespace,
-    file,
+    kubeconfig,
     context,
     metrics,
     global_metrics,
@@ -810,8 +814,8 @@ def update_cluster(
     resp = session.get(f"/kubernetes/namespaces/{namespace}/clusters/{name}")
     cluster = resp.json()
 
-    if file:
-        cluster["spec"]["kubeconfig"], _ = create_cluster_config(file, context)
+    if kubeconfig:
+        cluster["spec"]["kubeconfig"], _ = create_cluster_config(kubeconfig, context)
 
     if labels:
         cluster["metadata"]["labels"] = labels

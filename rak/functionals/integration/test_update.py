@@ -2,9 +2,9 @@
 the Krake API.
 
 The tests are performed on a simple test environment, where only one Cluster and one
-Application are present. The general workflow is as follow:
+Application is present. The general workflow is as follow:
 
- * A request for the Cluster creation, then the Application creation are sent to the
+ * A request for the Cluster registration, then the Application creation is sent to the
    Krake API;
  * The Application will be scheduled on the only Cluster;
  * The resources described in the Application are created on the Kubernetes cluster that
@@ -167,7 +167,11 @@ def test_update_cluster_kubeconfig(minikube_clusters):
 
     kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
     environment = {
-        0: [ClusterDefinition(name=minikube_cluster, kubeconfig_path=kubeconfig_path)]
+        0: [
+            ClusterDefinition(
+                name=minikube_cluster, kubeconfig_path=kubeconfig_path, register=True
+            )
+        ]
     }
 
     # Get the content of the kubeconfig file to compare with the updated value on the
@@ -180,7 +184,7 @@ def test_update_cluster_kubeconfig(minikube_clusters):
         cluster = env.resources[ResourceKind.CLUSTER][0]
 
         # 1. Update the Cluster
-        run(f"rok kube cluster update {cluster.name} -f {other_kubeconfig_path}")
+        run(f"rok kube cluster update {cluster.name} -k {other_kubeconfig_path}")
 
         # 2. Check that the kubeconfig has been changed on the API
         cluster_details = cluster.get_resource()
@@ -281,7 +285,7 @@ def test_update_no_changes(minikube_clusters):
 
         # 1. "Update" the Cluster (no change is sent)
         run(
-            f"rok kube cluster update {cluster.name} -f {kubeconfig_path}",
+            f"rok kube cluster update {cluster.name} -k {kubeconfig_path}",
             condition=check_http_code_in_output(400),
         )
 
