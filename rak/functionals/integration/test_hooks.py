@@ -30,7 +30,11 @@ def test_complete_hook(minikube_clusters):
     kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
 
     environment = {
-        10: [ClusterDefinition(name=minikube_cluster, kubeconfig_path=kubeconfig_path)]
+        10: [
+            ClusterDefinition(
+                name=minikube_cluster, kubeconfig_path=kubeconfig_path, register=True
+            )
+        ]
     }
 
     application_name = "test-hook-complete"
@@ -61,37 +65,24 @@ def test_complete_hook(minikube_clusters):
         try:
             app_def.check_deleted(delay=60)
         except AssertionError as e:
-            pods = run(
-                (
-                    f"{kubectl_cmd(kubeconfig_path)} get pods -o wide"
-                )
+            pods = run((f"{kubectl_cmd(kubeconfig_path)} get pods -o wide"))
+            pdsc = run((f"{kubectl_cmd(kubeconfig_path)} describe pods"))
+            rkag = run(("rok kube app get test-hook-shutdown -oyaml"))
+            pdev = run((f"{kubectl_cmd(kubeconfig_path)} get events"))
+            pdlgs = run((f"{kubectl_cmd(kubeconfig_path)} logs -lapp=script-deploy"))
+            assert 1 == 0, (
+                str(e)
+                + "\n----------------------------\n"
+                + pods.output
+                + "\n----------------------------\n"
+                + pdsc.output
+                + "\n----------------------------\n"
+                + rkag.output
+                + "\n----------------------------\n"
+                + pdev.output
+                + "\n----------------------------\n"
+                + pdlgs.output
             )
-            pdsc = run(
-                (
-                    f"{kubectl_cmd(kubeconfig_path)} describe pods"
-                )
-            )
-            rkag = run(
-                (
-                    "rok kube app get test-hook-shutdown -oyaml"
-                )
-            )
-            pdev = run(
-                (
-                    f"{kubectl_cmd(kubeconfig_path)} get events"
-                )
-            )
-            pdlgs = run(
-                (
-                    f"{kubectl_cmd(kubeconfig_path)} logs -lapp=script-deploy"
-                )
-            )
-            assert 1 == 0, str(e) + "\n----------------------------\n" + \
-                           pods.output + "\n----------------------------\n" + \
-                           pdsc.output + "\n----------------------------\n" + \
-                           rkag.output + "\n----------------------------\n" + \
-                           pdev.output + "\n----------------------------\n" + \
-                           pdlgs.output
 
         # 4. Delete the added configmap
         error_message = f"The configmap {configmap_name} could not be deleted."
@@ -121,7 +112,11 @@ def test_shutdown_hook(minikube_clusters):
     kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
 
     environment = {
-        10: [ClusterDefinition(name=minikube_cluster, kubeconfig_path=kubeconfig_path)]
+        10: [
+            ClusterDefinition(
+                name=minikube_cluster, kubeconfig_path=kubeconfig_path, register=True
+            )
+        ]
     }
 
     application_name = "test-hook-shutdown"
@@ -159,25 +154,18 @@ def test_shutdown_hook(minikube_clusters):
         try:
             app_def.check_deleted(delay=60)
         except AssertionError as e:
-            pods = run(
-                (
-                    f"{kubectl_cmd(kubeconfig_path)} get pods -o wide"
-                )
+            pods = run((f"{kubectl_cmd(kubeconfig_path)} get pods -o wide"))
+            pdsc = run((f"{kubectl_cmd(kubeconfig_path)} describe pods"))
+            rkag = run(("rok kube app get test-hook-shutdown -oyaml"))
+            assert 1 == 0, (
+                str(e)
+                + "\n----------------------------\n"
+                + pods.output
+                + "\n----------------------------\n"
+                + pdsc.output
+                + "\n----------------------------\n"
+                + rkag.output
             )
-            pdsc = run(
-                (
-                    f"{kubectl_cmd(kubeconfig_path)} describe pods"
-                )
-            )
-            rkag = run(
-                (
-                    "rok kube app get test-hook-shutdown -oyaml"
-                )
-            )
-            assert 1 == 0, str(e) + "\n----------------------------\n" + \
-                           pods.output + "\n----------------------------\n" + \
-                           pdsc.output + "\n----------------------------\n" + \
-                           rkag.output
 
         # 4. Delete the added configmap
         error_message = f"The configmap {configmap_name} could not be deleted."

@@ -129,8 +129,8 @@ Preparation
 
 .. prompt:: bash $ auto
 
-    $ rok kube cluster create clusters/config/minikube-cluster-1 --global-metric electricity_cost_1 10 --global-metric green_energy_ratio_1 1
-    $ rok kube cluster create clusters/config/minikube-cluster-2 --global-metric electricity_cost_1 1 --global-metric green_energy_ratio_1 10
+    $ rok kube cluster register -k clusters/config/minikube-cluster-1 --global-metric electricity_cost_1 10 --global-metric green_energy_ratio_1 1
+    $ rok kube cluster register -k clusters/config/minikube-cluster-2 --global-metric electricity_cost_1 1 --global-metric green_energy_ratio_1 10
 
 - The clusters ``minikube-cluster-1``/``-2`` have been defined with the following
   weights for the two static metrics:

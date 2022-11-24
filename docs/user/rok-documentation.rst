@@ -53,10 +53,10 @@ This resource manages Krake **Cluster** resources, which needs to be registered 
 
 Base command: ``rok kube cluster <...>``
 
-create
+register
     Add a new cluster to the Kubernetes clusters registered on Krake on a specified namespace.
 
-    ``kubeconfig``: the path to the kubeconfig file that refers to the cluster to add.
+    ``-k | --kubeconfig``: the path to the kubeconfig file that refers to the cluster to register.
 
     ``-n | --namespace`` (optional):
         The namespace to which the Cluster has to be added. If none is given, the user namespace is selected.
@@ -93,8 +93,8 @@ update
     ``name``:
         The name of the Cluster to update.
 
-    ``-f | --file``:
-        The path to the manifest file that describes the Cluster with the updated
+    ``-k | --kubeconfig``:
+        The path to the kubeconfig file that describes the Cluster with the updated
         fields.
 
     ``-n | --namespace`` (optional):

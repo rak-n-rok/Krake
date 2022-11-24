@@ -339,7 +339,7 @@ class BaseStaticMetricsProviderDefinition(BaseMetricsProviderDefinition):
             this method will return the list
             ["-m", "metric_name1", "1.0", "-m", "metric_name2", "2.0"],
             which can be used when constructing a cli command like
-            rok kube cluster create -m metric_name1 1.0 -m metric_name2 2.0 ...
+            rok kube cluster register -m metric_name1 1.0 -m metric_name2 2.0 ...
 
         Args:
             metrics (list[StaticMetric], optional): list of metrics with values.
