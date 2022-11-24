@@ -33,7 +33,7 @@ def shutdown_pod():
 
     try:
         pgrep = subprocess.Popen(
-            ("pgrep", "-fx", "python /mnist/mnist_training_ci.py"),
+            ("pgrep", "-fx", "python /mnist/mnist_training.py"),
             stdout=subprocess.PIPE)
         result = subprocess.run(
             ["head", "-n", "1"],
