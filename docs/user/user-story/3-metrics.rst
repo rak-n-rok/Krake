@@ -174,9 +174,9 @@ Observe a migration
 - The Scheduler regularly performs a check, to ensure the current cluster on which an
   Application is running is the best, depending on its score. This check is done by
   default every minute (see the configuration of the
-  :ref:`user/configuration:Scheduler`). If a cluster with a better score than the one of
-  the current cluster is found, the Application is migrated from the current to the
-  better cluster.
+  :ref:`user/configuration:Scheduler`). If an available cluster with a better score than
+  the one of the current cluster is found, the Application is migrated from the current
+  to the better cluster.
 
   As the score is computed using the metrics, we can trigger the migration by updating
   the exported value of the metrics in the ``static_provider`` ``GlobalMetricsProvider``

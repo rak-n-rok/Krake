@@ -27,6 +27,10 @@ Currently, the application handler considers every Kubernetes cluster.
 Scheduling of Applications
 --------------------------
 
+- At first, the scheduler checks, if the clusters that will be considered and filtered
+  to host the application, are even ONLINE. If a cluster isn't reachable, it is not
+  considered in the scheduling process.
+
 - The application handler evaluates if all constraints of an application match the
   available Kubernetes cluster resources. The application constraints define
   restrictions for the scheduling algorithm. Currently, the custom resources constraint,

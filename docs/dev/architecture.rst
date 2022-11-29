@@ -65,8 +65,9 @@ Scheduler
 
     The scheduler makes its decision based on a set of metrics provided by
     external metrics providers (see :ref:`dev/scheduling:Scheduling` for more
-    details). The decisions are periodically reevaluated, which could
-    potentially lead to *migration* of applications.
+    details) as well as the availability of the clusters.
+    The decisions are periodically reevaluated, which could potentially lead to
+    *migration* of applications.
 
 
 ------------
