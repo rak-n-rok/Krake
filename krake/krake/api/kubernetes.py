@@ -90,7 +90,20 @@ class KubernetesApi(object):
     @protected(api="kubernetes", resource="applications", verb="delete")
     @load("entity", Application)
     @blocking()
-    async def delete_application(request, entity):
+    async def delete_application(request, entity, **query):
+
+        # Application is marked as force delete and will be removed from the Database
+        if 'force' in request.query and request.query["force"] == "True":
+            await session(request).delete(entity)
+            logger.info(
+                "Force deleting %s %r (%s)",
+                "Application",
+                entity.metadata.name,
+                entity.metadata.uid
+            )
+            entity.metadata.deleted = utils.now()
+            return web.json_response(entity.serialize())
+
         # Resource is already deleting
         if entity.metadata.deleted:
             return web.json_response(entity.serialize())
@@ -109,7 +122,7 @@ class KubernetesApi(object):
             "Application",
             entity.metadata.name,
             entity.metadata.uid,
-        )
+            )
 
         return web.json_response(entity.serialize())
 
@@ -419,7 +432,20 @@ class KubernetesApi(object):
     @protected(api="kubernetes", resource="clusters", verb="delete")
     @load("entity", Cluster)
     @blocking()
-    async def delete_cluster(request, entity):
+    async def delete_cluster(request, entity, **query):
+
+        # Resource is marked as force delete and will be removed from the Database
+        if 'force' in request.query and request.query["force"] == "True":
+            await session(request).delete(entity)
+            logger.info(
+                "Force deleting %s %r (%s)",
+                "Cluster",
+                entity.metadata.name,
+                entity.metadata.uid
+            )
+            entity.metadata.deleted = utils.now()
+            return web.json_response(entity.serialize())
+
         # Resource is already deleting
         if entity.metadata.deleted:
             return web.json_response(entity.serialize())
@@ -431,7 +457,7 @@ class KubernetesApi(object):
 
         await session(request).put(entity)
         logger.info(
-            "Deleting %s %r (%s)", "Cluster", entity.metadata.name, entity.metadata.uid
+          "Deleting %s %r (%s)", "Cluster", entity.metadata.name, entity.metadata.uid
         )
 
         return web.json_response(entity.serialize())
