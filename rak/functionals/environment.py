@@ -1,8 +1,9 @@
 import os
-from collections import defaultdict
 
-from functionals.utils import KRAKE_HOMEDIR
+from collections import defaultdict
+from functionals.utils import KRAKE_HOMEDIR, run
 from functionals.resource_definitions import (
+    ResourceKind,
     ClusterDefinition,
     ApplicationDefinition,
 )
@@ -59,7 +60,7 @@ class Environment(object):
         Note that the resources in these list do not need to have the same kind.
 
     To ensure that a resource is actually created, registered or deleted, methods
-    can be added to the resources definition, respectively ``check_created``,
+    can be added to the resources' definition, respectively ``check_created``,
     ``check_registered`` and ``check_deleted``.
     These methods are not meant to test the behavior of Krake, but simply to block the
     environment. When entering the context created by the :class:`Environment`, these
@@ -94,10 +95,14 @@ class Environment(object):
             in the given order after all Krake resources have been deleted. Their
             signature should be "handler(dict) -> void". The given dict contains the
             definition of all resources managed by the Environment.
-        creation_delay (int, optional): The number of seconds that should
-            be allowed before concluding that a resource could not be created.
+        creation_delay (int, optional): The number of seconds that should be waited,
+            before creating the next resource.
         registration_delay (int, optional): The number of seconds that should
             be allowed before concluding that a resource could not be registered.
+        cluster_expected_state (str, optional): The expected state of one or more of the
+            to be checked clusters.
+        app_expected_state (str, optional): The expected state of one or more of the to
+            be checked apps.
     """
 
     def __init__(
@@ -107,7 +112,10 @@ class Environment(object):
         after_handlers=None,
         creation_delay=10,
         registration_delay=10,
+        cluster_expected_state=None,
+        app_expected_state=None,
         ignore_check=False,
+        ignore_verification=False
     ):
         # Dictionary: "priority: list of resources to create or register"
         self.res_to_apply = resources
@@ -115,10 +123,14 @@ class Environment(object):
         self.creation_delay = creation_delay
         self.registration_delay = registration_delay
 
+        self.cluster_expected_state = cluster_expected_state
+        self.app_expected_state = app_expected_state
+
         self.before_handlers = before_handlers if before_handlers else []
         self.after_handlers = after_handlers if after_handlers else []
 
         self.ignore_check = ignore_check
+        self.ignore_verification = ignore_verification
 
     def __enter__(self):
         """Create or register all given resources and check that they have been
@@ -137,18 +149,35 @@ class Environment(object):
             for resource in resource_list:
                 self.resources[resource.kind] += [resource]
                 if hasattr(resource, "register") and resource.register:
-                    resource.register_resource()
+                    resource.register_resource(
+                        ignore_verification=self.ignore_verification
+                    )
                 else:
-                    resource.create_resource()
-
-        # Check for each resource if it has been created or registered
-        if not self.ignore_check:
-            for _, resource_list in sorted(self.res_to_apply.items(), reverse=True):
-                for resource in resource_list:
-                    if hasattr(resource, "register") and resource.register:
-                        resource.check_registered(delay=self.registration_delay)
+                    resource.create_resource(
+                        ignore_verification=self.ignore_verification
+                    )
+                if not self.ignore_check:
+                    if resource.kind == ResourceKind.CLUSTER:
+                        if hasattr(resource, "register") and resource.register:
+                            resource.check_registered(delay=self.registration_delay)
+                        else:
+                            resource.check_created(
+                                delay=self.creation_delay,
+                                expected_state=self.cluster_expected_state
+                            )
+                    elif resource.kind == ResourceKind.APPLICATION:
+                        if hasattr(resource, "register") and resource.register:
+                            resource.check_registered(delay=self.registration_delay)
+                        else:
+                            resource.check_created(
+                                delay=self.creation_delay,
+                                expected_state=self.app_expected_state
+                            )
                     else:
-                        resource.check_created(delay=self.creation_delay)
+                        if hasattr(resource, "register") and resource.register:
+                            resource.check_registered(delay=self.registration_delay)
+                        else:
+                            resource.check_created(delay=self.creation_delay)
 
         return self
 

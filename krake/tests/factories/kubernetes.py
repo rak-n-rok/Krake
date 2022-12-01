@@ -24,6 +24,7 @@ from krake.data.kubernetes import (
     Cluster,
     Constraints,
     ClusterConstraints,
+    ClusterState,
     ClusterStatus,
     ClusterNode,
     ClusterNodeStatus,

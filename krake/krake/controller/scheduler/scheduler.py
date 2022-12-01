@@ -595,19 +595,29 @@ class KubernetesHandler(Handler):
             Cluster: Cluster suitable for application binding
 
         """
-        # Reject clusters marked as deleted
+        # Reject clusters marked as deleted and clusters that are not online
         existing_clusters = \
-            (cluster for cluster in clusters if cluster.metadata.deleted is None)
+            (cluster for cluster in clusters if cluster.metadata.deleted is None
+                and cluster.status.state is ClusterState.ONLINE)
+
+        possible_clusters = []
+
         fetched_metrics = dict()
         for cluster in clusters:
+            possible_clusters.append(cluster)
             if cluster.spec.metrics:
                 async for metrics in self.fetch_metrics(cluster, cluster.spec.metrics):
                     fetched_metrics[cluster.metadata.name] = metrics
+
+        logger.info(possible_clusters)
+        logger.info(fetched_metrics)
 
         matching = [
             cluster for cluster in existing_clusters
             if match_cluster_constraints(app, cluster, fetched_metrics)
         ]
+
+        logger.info(matching)
 
         if not matching:
             logger.info("No matching Kubernetes cluster for %r found", app)

@@ -41,6 +41,7 @@ Test constraints, metrics and metrics providers are globally defined as follows:
 import pytest
 import random
 import time
+import re
 import json
 from functionals.utils import (
     run,
@@ -101,11 +102,12 @@ def test_create_cluster_and_app(minikube_clusters):
     """
     cluster = random.choice(minikube_clusters)
     environment = create_default_environment([cluster])
+
     # 1. Create cluster and application
     # 2. Check that the application is in RUNNING state
     # (Checks 1-2 are performed automatically when entering the environment);
 
-    with Environment(environment, creation_delay=30) as env:
+    with Environment(environment, creation_delay=60) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
         # 3. Ensure that the application was scheduled to the cluster;
@@ -243,7 +245,7 @@ def test_scheduler_cluster_label_constraints(minikube_clusters):
                 cluster_labels=cluster_labels,
                 app_cluster_constraints=[app_cluster_constraint],
             )
-            with Environment(environment) as env:
+            with Environment(environment, creation_delay=60) as env:
                 app = env.resources[ResourceKind.APPLICATION][0]
 
                 # 3. Ensure that the application was scheduled to the requested cluster;
@@ -328,7 +330,7 @@ def test_scheduler_clusters_with_metrics(minikube_clusters):
         # different metric weights, which results in them having different scores.
 
         environment = create_default_environment(clusters, metrics=metric_weights)
-        with Environment(environment) as env:
+        with Environment(environment, creation_delay=60) as env:
             app = env.resources[ResourceKind.APPLICATION][0]
 
             # 3. Ensure that the application was scheduled to the cluster with the
@@ -336,7 +338,6 @@ def test_scheduler_clusters_with_metrics(minikube_clusters):
             app.check_running_on(max_score_cluster, within=0)
 
         prev_max_score_cluster = max_score_cluster
-
 
 def test_scheduler_clusters_with_global_metrics(minikube_clusters):
     """Basic end-to-end testing of clusters metrics
@@ -393,7 +394,7 @@ def test_scheduler_clusters_with_global_metrics(minikube_clusters):
             for i in range(num_clusters)
         }
         environment = create_default_environment(clusters, metrics=metric_weights)
-        with Environment(environment) as env:
+        with Environment(environment, creation_delay=30) as env:
             app = env.resources[ResourceKind.APPLICATION][0]
 
             # 2. Ensure that the application was scheduled to the expected cluster;
@@ -468,7 +469,7 @@ def test_scheduler_clusters_with_one_metric(minikube_clusters):
                 WeightedMetric(static_metric.metric, 1)
             ]
             environment = create_default_environment(clusters, metrics=metric_weights)
-            with Environment(environment) as env:
+            with Environment(environment, creation_delay=60) as env:
                 app = env.resources[ResourceKind.APPLICATION][0]
 
                 # 2. Ensure that the app was scheduled to the cluster with the metric;
@@ -523,7 +524,7 @@ def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
                 cluster_labels=cluster_labels,
                 app_cluster_constraints=[app_cluster_constraint],
             )
-            with Environment(environment) as env:
+            with Environment(environment, creation_delay=60) as env:
                 app = env.resources[ResourceKind.APPLICATION][0]
 
                 # 2. Ensure that the application was scheduled to the requested cluster;
@@ -578,7 +579,7 @@ def test_scheduler_cluster_metric_constraints(minikube_clusters):
                 cluster_labels=cluster_labels,
                 app_cluster_constraints=[app_cluster_constraint],
             )
-            with Environment(environment) as env:
+            with Environment(environment, creation_delay=60) as env:
                 app = env.resources[ResourceKind.APPLICATION][0]
 
                 # 2. Ensure that the application was scheduled to the requested cluster;
@@ -703,7 +704,7 @@ def test_all_unreachable_metrics_provider(minikube_clusters):
         clusters[1]: [],
     }
     environment = create_default_environment(clusters, metrics=metric_weights)
-    with Environment(environment, creation_delay=20) as env:
+    with Environment(environment, creation_delay=60) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
         # 2. Ensure that although all metrics providers are unreachable, the scheduler
@@ -740,8 +741,7 @@ def test_metric_not_in_database(minikube_clusters):
 
         1. Create one application and one cluster with a reference to metric which is
             not present in the database.
-        2. Ensure that even if the metrics fetching failed, the Application is still
-            deployed.
+        2. Ensure that the application didn't start, since the metrics couldn't be fetched.
         3. Ensure that the status of the cluster with metrics was updated to notify
             the user of the failing metrics (state changed and list of reasons added).
 
@@ -761,14 +761,13 @@ def test_metric_not_in_database(minikube_clusters):
     # 1. Create one application and one cluster with a reference to metric which is
     # not present in the database.
     environment = create_default_environment([chosen_cluster], metrics=metric_weights)
-    with Environment(environment, creation_delay=20) as env:
+    with Environment(
+        environment, creation_delay=60, app_expected_state="FAILED"
+    ) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
-        # 2. Ensure that even if the metrics fetching failed, the Application is still
-        # deployed.
-        assert app.get_state() == "RUNNING"
-        running_on = app.get_running_on()
-        assert running_on in chosen_cluster
+        # 2. Ensure that the application failed, since the metric couldn't be fetched
+        assert app.get_state() == "FAILED"
 
         # 3. Ensure that the status of the cluster with metrics was updated to notify
         # the user of the failing metrics (state changed and list of reasons added).
@@ -777,3 +776,47 @@ def test_metric_not_in_database(minikube_clusters):
         metrics_reasons = cluster.get_metrics_reasons()
         assert non_existent_metric.name in metrics_reasons
         assert metrics_reasons[non_existent_metric.name]["code"] == "UNKNOWN_METRIC"
+
+
+def test_cluster_not_online(minikube_clusters):
+    """Basic end-to-end testing of none online cluster
+
+    Test applies workflow as follows:
+
+        1. Create one application, and one offline cluster.
+        2. Ensure that the application was not scheduled to the cluster.
+
+    Args:
+        minikube_clusters (list): Names of the Minikube backend.
+
+    """
+    num_clusters = 2
+    file_successful_cluster = random.sample(minikube_clusters, num_clusters)[0]
+    file_failing_cluster = f"{CLUSTERS_CONFIGS}/failing_cluster"
+
+    with open(f"{CLUSTERS_CONFIGS}/{file_successful_cluster}", "r") as f_success, \
+         open(file_failing_cluster, "w") as f_failing:
+        new_content = re.sub(":\d+\n", ":1234\n", f_success.read())
+        new_content = re.sub("name:\sminikube-cluster-(\d+)-(\d+)",
+                             "name: minikube-cluster-failing", new_content)
+        new_content = re.sub("cluster:\sminikube-cluster-(\d+)-(\d+)",
+                             "cluster: minikube-cluster-failing", new_content)
+        f_failing.write(new_content)
+        f_failing.close()
+
+    environment = create_default_environment([file_failing_cluster])
+    with Environment(environment, ignore_check=True, ignore_verification=True) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
+
+        # 1. Sleep a short period of time
+        time.sleep(60)
+
+        # 2. Ensure that the application was not scheduled to the cluster
+        assert app.get_state() == "FAILED"
+
+        # 3. Ensure that the cluster is offline
+        cluster_json = run(
+            (f"rok kube cluster list -ojson")
+        )
+        cluster_list = json.loads(cluster_json.output)
+        assert cluster_list[0]["status"]["state"] == "OFFLINE"
