@@ -20,7 +20,7 @@ from krake.data.infrastructure import (
 )
 
 from . import fake
-from .core import MetadataFactory, BaseNonNamespaced, MetricRefFactory
+from .core import MetadataFactory, BaseNonNamespaced, MetricRefFactory, ReasonFactory
 
 
 class ImSpecFactory(Factory):
@@ -81,6 +81,7 @@ class InfrastructureProviderRefFactory(Factory):
         model = InfrastructureProviderRef
 
     name = fuzzy.FuzzyAttribute(fake.word)
+    namespaced = False
 
 
 class ProjectReferenceFactory(Factory):
@@ -185,7 +186,7 @@ class CloudStatusFactory(Factory):
 
     @lazy_attribute
     def metrics_reasons(self):
-        return dict()
+        return {fake.word(): ReasonFactory()}
 
 
 class GlobalCloudFactory(BaseNonNamespaced, Factory):

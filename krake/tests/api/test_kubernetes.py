@@ -1461,7 +1461,7 @@ async def test_update_cluster_immutable_field(aiohttp_client, config, db):
 
 async def test_update_cluster_binding(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
-    data = ClusterFactory()
+    data = ClusterFactory(status__state=ClusterState.PENDING)
     cloud = CloudFactory()
 
     await db.put(data)

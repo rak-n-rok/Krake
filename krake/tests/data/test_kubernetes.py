@@ -34,8 +34,8 @@ def test_application_cluster_constraints_null_error_handling():
         Application.deserialize(serialized)
 
 
-def test_application_manifest_empty_error_handling():
-    """Ensure that empty manifests and tosca and csar are seen as invalid."""
+def test_application_spec_empty_error_handling():
+    """Ensure that empty manifests, tosca and csar are seen as invalid."""
     with pytest.raises(
         ValidationError,
         match="The application should be defined by"
@@ -119,6 +119,44 @@ def test_application_manifest_multiple_errors_handling():
     )
     # 1 error on the last resource
     assert manifest_errs[2] == "Field 'metadata.name' not found in resource at index 2"
+
+
+def test_cluster_constraints_null_error_handling():
+    """Ensure that empty cluster constraints for Applications are seen as invalid."""
+    cluster = ClusterFactory(spec__constraints=None)
+
+    serialized = cluster.serialize()
+
+    with pytest.raises(
+        ValidationError, match="'constraints': \\['Field may not be null.'\\]"
+    ):
+        Cluster.deserialize(serialized)
+
+
+def test_cluster_cloud_constraints_null_error_handling():
+    """Ensure that empty constraints for Applications are seen as invalid."""
+    cluster = ClusterFactory(spec__constraints__cloud=None)
+
+    serialized = cluster.serialize()
+
+    with pytest.raises(
+        ValidationError,
+        match="'constraints': {'cloud': \\['Field may not be null.'\\]}",
+    ):
+        Cluster.deserialize(serialized)
+
+
+def test_cluster_spec_empty_error_handling():
+    """Ensure that empty kubeconfig and TOSCA are seen as invalid."""
+    with pytest.raises(
+        ValidationError,
+        match="The cluster should be defined by"
+        " a kubeconfig file or a TOSCA template.",
+    ):
+        ClusterFactory(
+            spec__kubeconfig={},
+            spec__tosca={},
+        )
 
 
 async def test_kubeconfig_validation_context_error_handling():

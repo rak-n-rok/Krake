@@ -39,6 +39,7 @@ from krake.data.config import (
     ControllerConfiguration,
     SchedulerConfiguration,
     KubernetesConfiguration,
+    InfrastructureConfiguration,
 )
 
 package_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -405,6 +406,19 @@ def magnum_config(tls_client_config):
 
     config = {"tls": tls_client_config.serialize(), "log": {}}
     return MagnumConfiguration.deserialize(config, creation_ignored=True)
+
+
+@pytest.fixture
+def infrastructure_config(tls_client_config):
+    """Create a configuration for the Infrastructure Controller.
+
+    Returns:
+        InfrastructureConfiguration: the created configuration.
+
+    """
+
+    config = {"tls": tls_client_config.serialize(), "log": {}}
+    return InfrastructureConfiguration.deserialize(config, creation_ignored=True)
 
 
 @pytest.fixture

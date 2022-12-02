@@ -802,7 +802,7 @@ async def test_update_cluster(aiohttp_server, config, db, loop):
 
 
 async def test_update_cluster_binding(aiohttp_server, config, db, loop):
-    data = ClusterFactory()
+    data = ClusterFactory(status__state=ClusterState.PENDING)
     await db.put(data)
     cloud = CloudFactory()
     await db.put(cloud)
