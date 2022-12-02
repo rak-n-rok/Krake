@@ -5,13 +5,21 @@ import pytest
 import yaml
 from marshmallow import ValidationError
 
-from krake.data.kubernetes import Application
+from krake.data.kubernetes import Application, Cluster
 from krake.controller.kubernetes.tosca import ToscaParser, ToscaParserException
 from tests.controller.kubernetes import deployment_manifest
 from tests.factories import fake
 from tests.factories.kubernetes import (
     ApplicationFactory,
+    ClusterFactory,
 )
+
+
+TOSCA_CLUSTER_MINIMAL = {
+    "tosca_definitions_version": "tosca_simple_yaml_1_0",
+    "topology_template": {"outputs": {"kubeconfig": {"value": "test"}}},
+}
+
 
 CSAR_META = """
 TOSCA-Meta-File-Version: 1.0
@@ -182,6 +190,50 @@ def test_csar_url_deserialize_error_handling():
         match="Invalid CSAR archive URL.",
     ):
         Application.deserialize(serialized)
+
+
+# Test cluster serialize/deserialize using TOSCA
+
+
+def test_cluster_tosca_template_dict_serialize_deserialize():
+    """Ensure that a valid TOSCA template dict could be serialized and
+    then deserialized.
+    """
+    cluster = ClusterFactory(
+        spec__tosca=TOSCA_CLUSTER_MINIMAL,
+    )
+    serialized = cluster.serialize()
+    assert Cluster.deserialize(serialized)
+
+
+def test_cluster_tosca_template_dict_deserialize_error_handling():
+    """Ensure that an invalid TOSCA template dict is seen as invalid."""
+    cluster = ClusterFactory(
+        spec__tosca=TOSCA_CLUSTER_MINIMAL,
+    )
+    serialized = cluster.serialize()
+    serialized["spec"]["tosca"]["tosca_definitions_version"] = "unsupported"
+
+    with pytest.raises(
+        ValidationError,
+        match="Invalid TOSCA template content.",
+    ):
+        Cluster.deserialize(serialized)
+
+
+def test_cluster_tosca_template_dict_deserialize_missing_output():
+    """Ensure that an invalid TOSCA template dict is seen as invalid."""
+    cluster = ClusterFactory(
+        spec__tosca=TOSCA_CLUSTER_MINIMAL,
+    )
+    serialized = cluster.serialize()
+    del serialized["spec"]["tosca"]["topology_template"]["outputs"]["kubeconfig"]
+
+    with pytest.raises(
+        ValidationError,
+        match="Invalid TOSCA template content." " The output `kubeconfig` is missing.",
+    ):
+        Cluster.deserialize(serialized)
 
 
 # Test TOSCA/CSAR parser, validator and translator

@@ -31,7 +31,7 @@ async def test_list_cluster(aiohttp_server, config):
     server = await aiohttp_server(create_app(config))
     controller = KubernetesClusterController(server_endpoint(server), worker_count=0)
 
-    cluster = ClusterFactory()
+    cluster = ClusterFactory(status__state=ClusterState.CONNECTING)
     observer = KubernetesClusterObserver(cluster, controller.handle_resource)
 
     # initializing the observer
