@@ -1,5 +1,5 @@
 async def create_{{ operation.signature_name }}(self, body{{ namespace_signature(operation) }}):
-    """Creates the specified {{ operation.resource.singular }}.
+    """Create the specified {{ operation.resource.singular }}.
     {{ docstring(operation)|indent }}
     """
     path = "{{ operation.path }}".format({{ namespace_format(operation) }})

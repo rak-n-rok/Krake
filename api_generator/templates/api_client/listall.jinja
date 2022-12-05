@@ -1,5 +1,5 @@
 async def list_all_{{ operation.signature_name }}(self):
-    """Lists all {{ operation.resource.plural }}.
+    """List all {{ operation.resource.plural }}.
     {{ docstring(operation)|indent }}
     """
     path = "{{ operation.path }}"
@@ -10,7 +10,7 @@ async def list_all_{{ operation.signature_name }}(self):
     return {{ operation.response.__name__ }}.deserialize(data)
 
 def watch_all_{{ operation.signature_name }}(self, heartbeat=None):
-    """Generates a watcher for all {{ operation.resource.plural }}.
+    """Generate a watcher for all {{ operation.resource.plural }}.
     {{ docstring(operation)|indent }}
     """
     path = "{{ operation.path }}"
