@@ -261,7 +261,7 @@ def test_cloud_crudl(resource, cloud_type):
         " --project project"
         " --user user"
         " --password pass"
-        " --infra-provider im-provider"
+        " --global-infra-provider im-provider"
         " -o json",
         condition=check_response_content(
             error_message,
@@ -315,7 +315,7 @@ def test_cloud_crudl(resource, cloud_type):
         " --project project"
         " --user user"
         " --password pass"
-        " --infra-provider im-provider"
+        " --global-infra-provider im-provider"
         " -o json",
         condition=check_http_code_in_output(409),
         retry=0,
