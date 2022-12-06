@@ -310,6 +310,7 @@
             - system:gc
             - system:kubernetes-application
             - system:kubernetes-cluster
+            - system:infrastructure
             - system:magnum
             - system:admin
           when: enable_tls is defined and enable_tls
