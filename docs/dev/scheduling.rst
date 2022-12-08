@@ -333,7 +333,7 @@ Examples:
 .. code:: bash
 
   # Kubernetes clusters:
-  rok kube cluster create <kubeconfig> --metric heat_demand_zone_1 0.45
+  rok kube cluster create <kubeconfig> --global-metric heat_demand_zone_1 0.45
 
   # Magnum clusters:
   rok os cluster create <cluster_name> --metric heat_demand_zone_1 54
