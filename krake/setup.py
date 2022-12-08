@@ -36,6 +36,10 @@ if sys.version_info < (3, 8):
 setup(
     name="krake",
     version="1.0.0",
+    description="",
+    url="https://gitlab.com/rak-n-rok/krake",
+    maintainer="Krake Development Team",
+    maintainer_email="krake@cloudandheat.com",
     python_requires=">=3.7",
     packages=find_packages(),
     install_requires=install_requires,
@@ -57,5 +61,8 @@ setup(
         },
         "api_generator": {"black==21.11b1", "jinja2==3.*"},
     },
-    scripts=["scripts/krake_bootstrap_db", "scripts/krake_generate_config"],
+    scripts=[
+        "scripts/krake_bootstrap_db",
+        "scripts/krake_generate_config"
+    ],
 )

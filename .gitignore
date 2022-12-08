@@ -8,7 +8,10 @@
 *.log
 
 # Dynamic Ansible inventory
-/ansible/.etc/
+/ansible/.etc
+
+# Ansible Logs
+/ansible/E2E_logs
 
 # Ansible retry files
 *.retry
@@ -26,6 +29,12 @@
 /ansible/cluster_certs/**
 !/ansible/cluster_certs/.gitkeep
 cluster_certs
+
+# Config YAML files (only templates should be pushed)
+/config/*.yaml
+
+# etc directory
+/etc
 
 # Temporary Python files and caches
 *.pyc
@@ -54,3 +63,7 @@ __pycache__/
 .env
 .idea
 .vscode
+
+# PyPi directories
+krake/build/*
+krake/dist/*
