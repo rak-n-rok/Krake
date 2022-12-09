@@ -266,7 +266,8 @@ def create_simple_environment(
     return {
         10: [
             ClusterDefinition(
-                name=cluster_name, kubeconfig_path=kubeconfig_path, register=True
+                name=cluster_name, kubeconfig_path=kubeconfig_path, register=True,
+                backoff_limit=1,
             )
         ],
         0: [
@@ -291,6 +292,9 @@ def create_multiple_cluster_environment(
     csar=None,
     app_cluster_constraints=None,
     app_migration=None,
+    app_backoff=None,
+    app_backoff_delay=None,
+    app_backoff_limit=None,
 ):
     """Create the resource definitions for a test environment with
     one Application and multiple Clusters.
@@ -316,6 +320,10 @@ def create_multiple_cluster_environment(
             for the Application to create.
         app_migration (bool, optional): migration flag indicating whether the
             application should be able to migrate.
+        app_backoff (int, optional): multiplier applied to backoff_delay between attempts.
+            default: 1 (no backoff)
+        app_backoff_delay (int, optional): delay [s] between attempts. default: 1
+        app_backoff_limit (int, optional): a maximal number of attempts, default: -1 (infinite)
 
     Returns:
         dict[int, list[ResourceDefinition]]: an environment definition to use to create
@@ -367,6 +375,9 @@ def create_multiple_cluster_environment(
                 csar=csar,
                 constraints=app_cluster_constraints,
                 migration=app_migration,
+                backoff=app_backoff,
+                backoff_delay=app_backoff_delay,
+                backoff_limit=app_backoff_limit,
             )
         ]
     return env
@@ -378,6 +389,9 @@ def create_default_environment(
     cluster_labels=None,
     app_cluster_constraints=None,
     app_migration=None,
+    app_backoff=None,
+    app_backoff_delay=None,
+    app_backoff_limit=None,
 ):
     """Create and return a test environment definition with one application and
     len(cluster_names) clusters using default kubeconfig and manifest files.
@@ -406,6 +420,10 @@ def create_default_environment(
         app_migration (bool, optional): migration flag indicating whether the
             application should be able to migrate. If not provided, none is
             provided when creating the application.
+        app_backoff (int, optional): multiplier applied to backoff_delay between attempts.
+            default: 1 (no backoff)
+        app_backoff_delay (int, optional): delay [s] between attempts. default: 1
+        app_backoff_limit (int, optional): a maximal number of attempts, default: -1 (infinite)
 
     Returns:
         dict: an environment definition to use to create a test environment.
@@ -421,4 +439,7 @@ def create_default_environment(
         manifest_path=manifest_path,
         app_cluster_constraints=app_cluster_constraints,
         app_migration=app_migration,
+        app_backoff=app_backoff,
+        app_backoff_delay=app_backoff_delay,
+        app_backoff_limit=app_backoff_limit,
     )

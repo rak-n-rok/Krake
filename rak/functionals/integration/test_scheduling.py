@@ -338,6 +338,7 @@ def test_scheduler_clusters_with_metrics(minikube_clusters):
 
         prev_max_score_cluster = max_score_cluster
 
+
 def test_scheduler_clusters_with_global_metrics(minikube_clusters):
     """Basic end-to-end testing of clusters metrics
 
@@ -392,7 +393,9 @@ def test_scheduler_clusters_with_global_metrics(minikube_clusters):
             clusters[i]: [WeightedMetric(prometheus_metrics[i].metric, 1)]
             for i in range(num_clusters)
         }
-        environment = create_default_environment(clusters, metrics=metric_weights)
+        environment = create_default_environment(
+            clusters, metrics=metric_weights, app_backoff_limit=1
+        )
         with Environment(environment, creation_delay=30) as env:
             app = env.resources[ResourceKind.APPLICATION][0]
 
@@ -759,7 +762,9 @@ def test_metric_not_in_database(minikube_clusters):
 
     # 1. Create one application and one cluster with a reference to metric which is
     # not present in the database.
-    environment = create_default_environment([chosen_cluster], metrics=metric_weights)
+    environment = create_default_environment(
+        [chosen_cluster], metrics=metric_weights, app_backoff_limit=1
+    )
     with Environment(
         environment, creation_delay=60, app_expected_state="FAILED"
     ) as env:
@@ -803,7 +808,9 @@ def test_cluster_not_online(minikube_clusters):
         f_failing.write(new_content)
         f_failing.close()
 
-    environment = create_default_environment([file_failing_cluster])
+    environment = create_default_environment(
+        [file_failing_cluster], app_backoff_limit=1,
+        )
     with Environment(environment, ignore_check=True, ignore_verification=True) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 

@@ -252,6 +252,29 @@ arg_namespace = argument(
     "-n", "--namespace", help="Namespace of the resource. Defaults to user"
 )
 
+arg_backoff = argument(
+    "--backoff",
+    default=1,
+    dest="backoff",
+    help="multiplier applied to backoff_delay between attempts. \
+            default: 1 (no backoff)",
+)
+
+arg_backoff_delay = argument(
+    "--backoff_delay",
+    default=1,
+    dest="backoff_delay",
+    help="delay [s] between attempts. default: 1",
+)
+
+arg_backoff_limit = argument(
+    "--backoff_limit",
+    default=-1,
+    dest="backoff_limit",
+    help="a maximal number of attempts, \
+            default: -1 (infinite)",
+)
+
 
 class MetricAction(Action):
     """argparse action for metric values

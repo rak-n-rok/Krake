@@ -23,6 +23,9 @@ from .parser import (
     arg_namespace,
     arg_metric,
     arg_global_metric,
+    arg_backoff,
+    arg_backoff_delay,
+    arg_backoff_limit,
 )
 from .fixtures import depends
 from .formatters import (
@@ -281,6 +284,9 @@ class ApplicationTable(ApplicationTableList):
     scheduled_to = Cell("status.scheduled_to")
     scheduled = Cell("status.scheduled", formatter=format_datetime)
     running_on = Cell("status.running_on")
+    backoff_ = Cell("spec.backoff")
+    backoff_delay = Cell("spec.backoff_delay")
+    backoff_limit = Cell("spec.backoff_limit")
 
 
 @application.command("create", help="Create Kubernetes application")
@@ -322,6 +328,9 @@ class ApplicationTable(ApplicationTableList):
 @arg_hook_complete
 @arg_hook_shutdown
 @arg_formatting
+@arg_backoff
+@arg_backoff_delay
+@arg_backoff_limit
 @depends("config", "session")
 @printer(table=ApplicationTable())
 def create_application(
@@ -340,6 +349,9 @@ def create_application(
     cluster_metric_constraints,
     hooks,
     wait,
+    backoff,
+    backoff_delay,
+    backoff_limit,
 ):
     manifest = []
     tosca = {}
@@ -395,6 +407,9 @@ def create_application(
                     "metrics": cluster_metric_constraints,
                 },
             },
+            "backoff": backoff,
+            "backoff_delay": backoff_delay,
+            "backoff_limit": backoff_limit,
         },
     }
 
@@ -467,6 +482,9 @@ def get_application(config, session, namespace, name):
 @arg_hook_complete
 @arg_hook_shutdown
 @arg_formatting
+@arg_backoff
+@arg_backoff_delay
+@arg_backoff_limit
 @depends("config", "session")
 @printer(table=ApplicationTable())
 def update_application(
@@ -485,6 +503,9 @@ def update_application(
     cluster_metric_constraints,
     hooks,
     wait,
+    backoff,
+    backoff_delay,
+    backoff_limit,
 ):
     if namespace is None:
         namespace = config["user"]
@@ -536,6 +557,12 @@ def update_application(
         app_constraints["cluster"]["metrics"] = cluster_metric_constraints
     if disable_migration or enable_migration:
         app_constraints["migration"] = enable_migration
+    if backoff:
+        app["spec"]["backoff"] = backoff
+    if backoff_delay:
+        app["spec"]["backoff_delay"] = backoff_delay
+    if backoff_limit:
+        app["spec"]["backoff_limit"] = backoff_limit
 
     if not url:  # skip warning handling when the app is defined by URL (TOSCA, CSAR)
         handle_warning(app)
@@ -636,6 +663,9 @@ class ClusterTableDetail(ClusterTableList):
     custom_resources = Cell("spec.custom_resources")
     metrics = Cell("spec.metrics")
     failing_metrics = Cell("status.metrics_reasons", formatter=dict_formatter)
+    backoff_ = Cell("spec.backoff")
+    backoff_delay = Cell("spec.backoff_delay")
+    backoff_limit = Cell("spec.backoff_limit")
 
 
 def replace_file_attr(spec, attr):
@@ -723,6 +753,9 @@ def create_cluster_config(kubeconfig, context_name=None):
 @arg_namespace
 @arg_labels
 @arg_formatting
+@arg_backoff
+@arg_backoff_delay
+@arg_backoff_limit
 @depends("config", "session")
 @printer(table=ClusterTable(many=False))
 def register_cluster(
@@ -735,6 +768,9 @@ def register_cluster(
     global_metrics,
     labels,
     custom_resources,
+    backoff,
+    backoff_delay,
+    backoff_limit
 ):
     if namespace is None:
         namespace = config["user"]
@@ -747,6 +783,9 @@ def register_cluster(
             "kubeconfig": cluster_config,
             "metrics": metrics + global_metrics,
             "custom_resources": custom_resources,
+            "backoff": backoff,
+            "backoff_delay": backoff_delay,
+            "backoff_limit": backoff_limit,
         },
     }
 
@@ -803,6 +842,9 @@ def get_cluster(config, session, namespace, name):
 @arg_namespace
 @arg_formatting
 @arg_labels
+@arg_backoff
+@arg_backoff_delay
+@arg_backoff_limit
 @depends("config", "session")
 @printer(table=ClusterTable())
 def update_cluster(
@@ -816,6 +858,9 @@ def update_cluster(
     global_metrics,
     labels,
     custom_resources,
+    backoff,
+    backoff_delay,
+    backoff_limit,
 ):
     if namespace is None:
         namespace = config["user"]
@@ -832,6 +877,12 @@ def update_cluster(
         cluster["spec"]["metrics"] = metrics + global_metrics
     if custom_resources:
         cluster["spec"]["custom_resources"] = custom_resources
+    if backoff:
+        cluster["spec"]["backoff"] = backoff
+    if backoff_delay:
+        cluster["spec"]["backoff_delay"] = backoff_delay
+    if backoff_limit:
+        cluster["spec"]["backoff_limit"] = backoff_limit
 
     resp = session.put(
         f"/kubernetes/namespaces/{namespace}/clusters/{name}", json=cluster
