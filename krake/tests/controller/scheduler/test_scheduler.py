@@ -2559,10 +2559,6 @@ async def test_select_no_matching_project(aiohttp_server, config, db, loop):
     prometheus_app = web.Application()
     prometheus_app.add_routes(routes)
 
-    async with Client(url=server_endpoint(server), loop=loop) as client:
-        await scheduler.prepare(client)
-        selected = await scheduler.openstack.select_openstack_project(cluster, projects)
-        assert selected in projects
     prometheus = await aiohttp_server(prometheus_app)
 
     cluster = MagnumClusterFactory(status__is_scheduled=False, spec__constraints=None)
@@ -2687,29 +2683,57 @@ async def test_openstack_scheduling_error(aiohttp_server, config, db, loop):
 
 
 async def test_application_degraded_state(aiohttp_server, config, db, loop):
-    # Test that the Application goes in ApplicationState.DEGRADED if no cluster was found
-    # and to ApplicationState.FAILED after backoff_limit is exceeded and
-    # to ApplicationState.SUCCESS if a cluster was found later on
-    degraded_and_failed = ApplicationFactory(spec__backoff_limit=1,
-                                            status__state=ApplicationState.PENDING,
-                                            status__is_scheduled=False,
-                                            spec__constraints__cluster__labels=[],
-                                            spec__constraints__cluster__metrics=[],
-                                            spec__constraints__cluster__custom_resources=[],
-                                             )
+    # Test that the Application goes in ApplicationState.DEGRADED if no cluster was
+    # found, and to ApplicationState.FAILED after backoff_limit is exceeded and
+    # to ApplicationState.SUCCESS if a cluster was found instead. Uses two
+    # Applications with backoff_limit=1
+    prometheus = await aiohttp_server(
+        make_prometheus(
+            {"heat_demand_1": ("0.5", "0.25")}
+        )
+    )
 
-    degraded_and_success = ApplicationFactory(spec__backoff_limit=1,
-                                            status__state=ApplicationState.PENDING,
-                                            status__is_scheduled=False,
-                                            spec__constraints__cluster__labels=[],
-                                            spec__constraints__cluster__metrics=[],
-                                            spec__constraints__cluster__custom_resources=[],
-                                             )
+    degraded_and_failed = ApplicationFactory(
+        spec__constraints__cluster__labels=[],
+        spec__constraints__cluster__metrics=[],
+        spec__constraints__cluster__custom_resources=[],
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=False,
+        spec__backoff_limit=1
+    )
 
-    cluster = ClusterFactory(spec__metrics=None, status__state=ClusterState.ONLINE)
+    degraded_and_success = ApplicationFactory(
+        spec__constraints__cluster__labels=[],
+        spec__constraints__cluster__metrics=[],
+        spec__constraints__cluster__custom_resources=[],
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=False,
+        spec__backoff_limit=1
+    )
+
+    metric = GlobalMetricFactory(
+        metadata__name="heat-demand-1",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus",
+        spec__provider__metric="heat_demand_1",
+    )
+
+    metrics_provider = GlobalMetricsProviderFactory(
+        metadata__name="prometheus",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+
+    cluster = ClusterFactory(
+        status__state=ClusterState.ONLINE,
+        spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)]
+    )
 
     await db.put(degraded_and_failed)
     await db.put(degraded_and_success)
+    await db.put(metrics_provider)
+    await db.put(metric)
 
     server = await aiohttp_server(create_app(config))
 
@@ -2718,62 +2742,39 @@ async def test_application_degraded_state(aiohttp_server, config, db, loop):
         await scheduler.prepare(client)
         await scheduler.queue.put(degraded_and_failed.metadata.uid, degraded_and_failed)
         await scheduler.kubernetes.handle_kubernetes_applications(run_once=True)
-        await scheduler.queue.put(degraded_and_success.metadata.uid, degraded_and_success)
-        await scheduler.kubernetes.handle_kubernetes_applications(run_once=True)
-        degraded_and_failed_stored1 = await db.get(
+        degraded_and_failed = await db.get(
             Application, namespace=degraded_and_failed.metadata.namespace,
             name=degraded_and_failed.metadata.name
         )
-        degraded_and_success_stored1 = await db.get(
+
+        await scheduler.queue.put(
+            degraded_and_success.metadata.uid, degraded_and_success
+        )
+        await scheduler.kubernetes.handle_kubernetes_applications(run_once=True)
+
+        degraded_and_success = await db.get(
             Application, namespace=degraded_and_success.metadata.namespace,
             name=degraded_and_success.metadata.name
         )
-        assert degraded_and_failed_stored1.status.state == ApplicationState.DEGRADED
-        assert degraded_and_success_stored1.status.state == ApplicationState.DEGRADED
 
-        await scheduler.queue.put(degraded_and_failed_stored1.metadata.uid, degraded_and_failed_stored1)
+        assert degraded_and_success.status.state == ApplicationState.DEGRADED
 
+        await scheduler.queue.put(degraded_and_failed.metadata.uid, degraded_and_failed)
+        time.sleep(2)
         await scheduler.kubernetes.handle_kubernetes_applications(run_once=True)
-        #await scheduler.queue.put(degraded_and_success_stored1.metadata.uid, degraded_and_success_stored1)
-        #await db.put(cluster)
-
-        #await scheduler.kubernetes.handle_kubernetes_applications(run_once=True)
-
-        degraded_and_failed_stored2 = await db.get(
-            Application, namespace=degraded_and_failed_stored1.metadata.namespace,
-            name=degraded_and_failed_stored1.metadata.name
+        await db.put(cluster)
+        await scheduler.queue.put(
+            degraded_and_success.metadata.uid, degraded_and_success
         )
-        degraded_and_success_stored2 = await db.get(
-            Application, namespace=degraded_and_success_stored1.metadata.namespace,
-            name=degraded_and_success_stored1.metadata.name
+        await scheduler.kubernetes.handle_kubernetes_applications(run_once=True)
+
+        degraded_and_failed = await db.get(
+            Application, namespace=degraded_and_failed.metadata.namespace,
+            name=degraded_and_failed.metadata.name
         )
-        assert degraded_and_failed_stored2.status.state == ApplicationState.FAILED
-        assert degraded_and_success_stored2.status.state == ApplicationState.SUCCESS
-
-
-async def test_cluster_degraded_state(aiohttp_server, config, db, loop):
-    # Controller Error - metric provider unreachable?
-    # API Exception - e.g. metric provider name wrong?
-    cluster = ClusterFactory(spec__backoff_limit=1, spec__metrics=[], status__state=ClusterState.ONLINE)
-    await db.put(cluster)
-    app = ApplicationFactory(
-        status__state=ApplicationState.PENDING,
-        status__is_scheduled=False,
-        spec__constraints__cluster__labels=None,
-        spec__constraints__cluster__custom_resources=None,
-        spec__constraints__cluster__metrics=None,
-    )
-
-    server = await aiohttp_server(create_app(config))
-
-    async with Client(url=server_endpoint(server), loop=loop) as client:
-        scheduler = Scheduler(server_endpoint(server), worker_count=0)
-        await scheduler.prepare(client)
-        with pytest.raises(NoClusterFound):
-            await scheduler.kubernetes.select_kubernetes_cluster(
-                app, [cluster])
-
-    stored_cluster = await db.get(
-            Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        degraded_and_success = await db.get(
+            Application, namespace=degraded_and_success.metadata.namespace,
+            name=degraded_and_success.metadata.name
         )
-    assert stored_cluster.status.state == ClusterState.DEGRADED
+        assert degraded_and_failed.status.state == ApplicationState.FAILED
+        assert degraded_and_success.status.scheduled_to == resource_ref(cluster)
