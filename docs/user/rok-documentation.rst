@@ -32,9 +32,11 @@ A few examples:
 
     $ rok kube app <...>  # handle the Application resources of the Kubernetes API
 
-    # Create a Cluster resource with the Kubernetes API using the minikube.yaml manifest
-    $ rok kube cluster create ../minikube.yaml
+    # Register a cluster with the Kubernetes API using the minikube.yaml kubeconfig
+    $ rok kube cluster register --kubeconfig ../minikube.yaml
 
+    # Create a cluster with the Kubernetes API using the tosca.yaml manifest
+    $ rok kube cluster create --file ../tosca.yaml test-cluster
 
 
 The ``kube`` API
@@ -49,12 +51,18 @@ Base command: ``rok kube <...>``
 The Cluster resource: ``cluster``
 ---------------------------------
 
-This resource manages Krake **Cluster** resources, which needs to be registered on Krake to be used. It corresponds to a cluster on Kubernetes.
+This resource manages Krake **Cluster** resources, which needs to be registered or created on Krake to be used.
+It corresponds to a cluster on Kubernetes.
 
 Base command: ``rok kube cluster <...>``
 
 register
-    Add a new cluster to the Kubernetes clusters registered on Krake on a specified namespace.
+    Add an existing cluster to the Kubernetes clusters registered in Krake on a specified namespace. Example:
+
+    .. code:: bash
+
+        rok kube cluster register -k <path_to_kubeconfig_file>
+
 
     ``-k | --kubeconfig``: the path to the kubeconfig file that refers to the cluster to register.
 
@@ -66,11 +74,59 @@ register
         chosen at a time. If not context is specified, the current context of the
         kubeconfig file is chosen.
 
-    ``-R | --custom-resource`` (optional):
-        The name of custom resources definition in form: ``<plural>.<group>`` which is supported by the cluster. Can be specified multiple times.
+    ``--global-metric`` (optional):
+        The name and weight of of a global cluster metric in the form: ``<name> <weight>``.
+        Can be specified multiple times.
 
     ``-m | --metric`` (optional):
-        The name and weight of cluster metric in form: ``<name> <weight>``. Can be specified multiple times.
+        The name and weight of a cluster metric in the form: ``<name> <weight>``.
+        Can be specified multiple times.
+
+    ``-l | --label`` (optional):
+        The key and the value of a cluster label in the form: ``<key>=<value>``.
+        Can be specified multiple times.
+
+    ``-R | --custom-resource`` (optional):
+        The name of custom resources definition in the form: ``<plural>.<group>`` which is supported by the cluster.
+        Can be specified multiple times.
+
+create
+    Add a new cluster to the Kubernetes clusters registered in Krake on a specified namespace. Example:
+
+    .. code:: bash
+
+        rok kube cluster create <cluster_name> -f <path_to_tosca_template>
+
+    ``name``:
+        The name of the new Cluster, as stored by Krake (can be arbitrary). The same name cannot be used twice in the same namespace.
+
+    ``-f | --file``:
+        The path to the TOSCA template file that describes the desired Cluster.
+
+    ``-n | --namespace`` (optional):
+        The namespace to which the Cluster has to be added. If none is given, the user namespace is selected.
+
+    ``--global-metric`` (optional):
+        The name and weight of a global cluster metric in the form: ``<name> <weight>``.
+        Can be specified multiple times.
+
+    ``-m | --metric`` (optional):
+        The name and weight of a cluster metric in the form: ``<name> <weight>``.
+        Can be specified multiple times.
+
+    ``-l | --label`` (optional):
+        The key and the value of a cluster label in the form: ``<key>=<value>``.
+        Can be specified multiple times.
+
+    ``-R | --custom-resource`` (optional):
+        The name of custom resources definition in the form: ``<plural>.<group>`` which is supported by the cluster. Can be specified multiple times.
+
+    ``-L | --cloud-label-constraint`` (optional):
+        The name and value of a constraint for labels of the cloud in the form: ``<label> expression <value>``. The cluster will be deployed only on the cloud that matches the given label constraint. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`.
+
+    ``-M | --cloud-metric-constraint`` (optional):
+        The name and value of a constraint for metrics of the cloud in the form: ``<label> expression <value>``. The cluster will be deployed only on the cloud that matches the given metric constraint. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`.
+
 
 list
     List all Cluster of a namespace.
@@ -93,8 +149,12 @@ update
     ``name``:
         The name of the Cluster to update.
 
-    ``-k | --kubeconfig``:
+    ``-k | --kubeconfig`` (optional):
         The path to the kubeconfig file that describes the Cluster with the updated
+        fields.
+
+    ``-f | --file`` (optional):
+        The path to the TOSCA template file that describes the desired Cluster with the updated
         fields.
 
     ``-n | --namespace`` (optional):
@@ -106,13 +166,26 @@ update
         chosen at a time. If not context is specified, the current context of the
         kubeconfig file is chosen.
 
-    ``-R | --custom-resource`` (optional):
-        The name of custom resources definition in form: ``<plural>.<group>`` which is
-        supported by the cluster. Can be specified multiple times.
+    ``--global-metric`` (optional):
+        The name and weight of a global cluster metric in the form: ``<name> <weight>``.
+        Can be specified multiple times.
 
     ``-m | --metric`` (optional):
-        The name and weight of cluster metric in form: ``<name> <weight>``. Can be
-        specified multiple times.
+        The name and weight of a cluster metric in the form: ``<name> <weight>``.
+        Can be specified multiple times.
+
+    ``-l | --label`` (optional):
+        The key and the value of a cluster label in the form: ``<key>=<value>``.
+        Can be specified multiple times.
+
+    ``-R | --custom-resource`` (optional):
+        The name of custom resources definition in the form: ``<plural>.<group>`` which is supported by the cluster. Can be specified multiple times.
+
+    ``-L | --cloud-label-constraint`` (optional):
+        The name and value of a constraint for labels of the cloud in the form: ``<label> expression <value>``. The cluster will be deployed only on the cloud that matches the given label constraint. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`.
+
+    ``-M | --cloud-metric-constraint`` (optional):
+        The name and value of a constraint for metrics of the cloud in the form: ``<label> expression <value>``. The cluster will be deployed only on the cloud that matches the given metric constraint. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`.
 
 
 delete
@@ -169,7 +242,10 @@ create
         The name of custom resources definition constraint in form: ``<plural>.<group>``. The application will be deployed only on the clusters with given custom definition support. Can be specified multiple times.
 
     ``-L | --cluster-label-constraint`` (optional):
-        The name and value of constraint for labels of the cluster in form: ``<label> expression <value>``. The application will be deployed only on the clusters with given label. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`.
+        The name and value of a constraint for labels of the cluster in the form: ``<label> expression <value>``. The application will be deployed only on the cluster that matches the given label constraint. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`.
+
+    ``-M | --cluster-metric-constraint`` (optional):
+        The name and value of a constraint for metrics of the cluster in the form: ``<label> expression <value>``. The application will be deployed only on the cluster that matches the given metric constraint. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`.
 
 list
     List all Applications of a namespace.
@@ -215,7 +291,10 @@ update
         The name of custom resources definition constraint in form: ``<plural>.<group>``. The application will be deployed only on the clusters with given custom definition support. Can be specified multiple times.
 
     ``-L | --cluster-label-constraint`` (optional):
-        The name and value of constraint for labels of the cluster in form: ``<label> expression <value>``. The application will be deployed only on the clusters with given label. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`.
+        The name and value of a constraint for labels of the cluster in the form: ``<label> expression <value>``. The application will be deployed only on the cluster that matches the given label constraint. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`.
+
+    ``-M | --cluster-metric-constraint`` (optional):
+        The name and value of a constraint for metrics of the cluster in the form: ``<label> expression <value>``. The application will be deployed only on the cluster that matches the given metric constraint. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`.
 
 delete
     Request the deletion of a specific Application from a namespace.
@@ -335,7 +414,7 @@ The InfrastructureProvider resource: ``infrastructureprovider``
 This resource manages Krake **InfrastructureProvider** namespaced resources, which needs
 to be registered on Krake to be used. It corresponds to an infrastructure provider software,
 that is able to deploy infrastructures (e.g. Virtual machines, Kubernetes clusters)
-on IaaS Cloud deployments (e.g. OpenStack, AWS, etc.).
+on IaaS Cloud deployments.
 
 Krake currently supports the following InfrastructureProvider software (types):
 
@@ -476,7 +555,7 @@ register
           --username <cloud_username> \
           --password <cloud_password> \
           --project <cloud_project_name> \
-          --infra-provider <infra_provider_name>
+          --global-infra-provider <global_infra_provider_name>
 
     ``name``:
         The name of the new GlobalCloud, as stored by Krake (can be arbitrary).
@@ -498,8 +577,8 @@ register
     ``--project``:
         Name or UUID of the OpenStack project. Valid together with --type openstack.
 
-    ``--infra-provider``:
-        Infrastructure provider name for cloud management. Valid together with --type openstack.
+    ``--global-infra-provider``:
+        Global infrastructure provider name for cloud management. Valid together with --type openstack.
 
     ``--domain-name`` (optional):
         Domain name of the OpenStack user. Valid together with --type openstack.
@@ -508,11 +587,7 @@ register
         Domain ID of the OpenStack project. Valid together with --type openstack.
 
     ``--global-metric`` (optional):
-        The name and weight of cloud global metric in form: ``<name> <weight>``. Can be
-        specified multiple times.
-
-    ``-m | --metric`` (optional):
-        The name and weight of cloud metric in form: ``<name> <weight>``. Can be
+        The name and weight of a global cloud metric in form: ``<name> <weight>``. Can be
         specified multiple times.
 
     ``-l | --label`` (optional):
@@ -546,8 +621,8 @@ update
     ``--project`` (optional):
         Name or UUID of the OpenStack project to update. Valid together with --type openstack.
 
-    ``--infra-provider`` (optional):
-        Infrastructure provider name for cloud management to update. Valid together with --type openstack.
+    ``--global-infra-provider`` (optional):
+        Global infrastructure provider name for cloud management to update. Valid together with --type openstack.
 
     ``--domain-name`` (optional):
         Domain name of the OpenStack user to update. Valid together with --type openstack.
@@ -557,10 +632,6 @@ update
 
     ``--global-metric`` (optional):
         The name and weight of cloud global metric in form: ``<name> <weight>``. Can be
-        specified multiple times.
-
-    ``-m | --metric`` (optional):
-        The name and weight of cloud metric in form: ``<name> <weight>``. Can be
         specified multiple times.
 
     ``-l | --label`` (optional):
@@ -633,8 +704,11 @@ register
     ``--project``:
         Name or UUID of the OpenStack project. Valid together with --type openstack.
 
-    ``--infra-provider``:
+    ``--infra-provider`` (optional):
         Infrastructure provider name for cloud management. Valid together with --type openstack.
+
+    ``--global-infra-provider`` (optional):
+        Global infrastructure provider name for cloud management to update. Valid together with --type openstack.
 
     ``--domain-name`` (optional):
         Domain name of the OpenStack user. Valid together with --type openstack.
@@ -695,6 +769,9 @@ update
 
     ``--infra-provider`` (optional):
         Infrastructure provider name for cloud management to update. Valid together with --type openstack.
+
+    ``--global-infra-provider`` (optional):
+        Global infrastructure provider name for cloud management to update. Valid together with --type openstack.
 
     ``--domain-name`` (optional):
         Domain name of the OpenStack user to update. Valid together with --type openstack.

@@ -9,7 +9,8 @@ The Krake scheduler is a standalone controller that processes the following Krak
 resources:
 
 - Application
-- Magnum cluster
+- Cluster
+- Magnum cluster (Warning: Due to stability and development issues on the side of Magnum, this feature isn't actively developed anymore.)
 
 The scheduler algorithm selects the "best" backend for each resource based on metrics
 of the backends and the resource's constraints and specifications. The following sections
@@ -178,10 +179,69 @@ This timestamp is however not updated if an update of its Application did not le
 rescheduling, just a re-deployment.
 
 
+Cluster handler
+===============
+
+The Cluster handler is responsible for scheduling Kubernetes Clusters to the best
+cloud backend (currently Krake supports OpenStack_ as a cloud backend).
+The Cluster handler should process only Clusters that are not bound to
+any Cloud, have non-deleted/non-failed state and
+also the Clusters should not contain the kubeconfig file in their `spec`.
+If the Cluster contains the kubeconfig file in its `spec` it is considered as an existing
+cluster which was registered or created by Krake and therefore should be ignored by
+the Cluster handler.
+
+Scheduling of Clusters
+-----------------------------
+
+- The Cluster handler evaluates if all the constraints of a Cluster
+  match the available cloud resources. The Cluster constraints define restrictions
+  for the scheduling algorithm. Currently, Cloud label and metrics
+  constraints are supported, see :ref:`dev/scheduling:Constraints`.
+
+- If the selected Cloud resources contain metric definitions, the Cluster handler fetches
+  metric values from the corresponding metrics providers which should be defined in the
+  metric resource specifications,
+  see :ref:`dev/scheduling:Metrics and Metrics Providers`.
+
+- Then, the score for each Cloud resource is computed. The Cloud
+  score is represented by a decimal number and is computed from metric values and
+  weights. If a given Cloud does not contain any metric definition, its score is
+  set to `0`. Therefore, the Clouds with defined metrics are preferred:
+
+  - If there are no Clouds with metrics: the score is 0 for all Clouds.
+
+  - If there are Clouds with metrics: the Clouds without metrics are filtered out
+    and the scores of the ones with metrics are computed and compared.
+
+  This step is a **ranking** step.
+
+  - The score formula for a Cloud without metrics is defined as follows:
+
+    .. math::
+
+        score = 0
+
+  - The score formula for a Cloud with `n` metrics is defined as follows:
+
+    .. math::
+
+        score = \frac{\sum\limits_{i=1}^n metric_{value_i} \cdot metric_{weight_i}}
+               {\sum\limits_{i=1}^n metric_{weight_i}}
+
+- The Cluster is scheduled to the Cloud with the highest score. If
+  several Clouds have the same score, one of them is chosen randomly.
+
+The following figure gives an overview about the Cluster handler of the Krake
+scheduler.
+
+.. figure:: /img/scheduler_cluster_handler.png
+
+
 Magnum cluster handler
 ======================
 
-.. note::
+.. warning::
 
     Due to stability and development issues on the side of Magnum, this feature isn't actively developed anymore.
 
@@ -243,8 +303,9 @@ Metrics and Metrics Providers
 =============================
 
 Overview
--------
-.. note::
+--------
+
+.. warning::
 
     Due to stability and development issues on the side of Magnum, this feature isn't actively developed anymore.
 
@@ -414,8 +475,9 @@ Krake allows the user to define a label constraint and to restrict the deploymen
 resources only to backends that matches **all** defined labels. Based on the resource,
 Krake supports the following label constraints:
 
-- The cluster label constraints for the application resource
-- The OpenStack project label constraints for the Magnum cluster resource
+- The Cluster label constraints for the Application resource
+- The Cloud label constraints for the Cluster resource
+- The OpenStack project label constraints for the Magnum Cluster resource (Warning: Due to stability and development issues on the side of Magnum, this feature isn't actively developed anymore.)
 
 A simple language for expressing label constraints is used. The following operations
 can be expressed:
@@ -444,8 +506,8 @@ can be expressed:
             <label> not in (<value>, <value>, ...)
 
 
-The cluster label constraints for the Kubernetes application and Magnum
-cluster resources are defined by ``-L`` or ``--cluster-label-constraint`` option in the
+The Cluster label constraints for the Application and Cluster resources
+are defined by ``-L`` (or ``--cluster-label-constraint``, ``--cloud-label-constraint``) option in the
 rok CLI, see :ref:`user/rok-documentation:Rok documentation`. The constraints can be
 specified multiple times with the syntax: `<label> expression <value>`.
 
@@ -453,11 +515,11 @@ Examples:
 
 .. code:: bash
 
-  # Kubernetes Application
+  # Application
   rok kube app create <application_name> -f <path_to_manifest> -L 'location is DE'
 
-  # Magnum clusters:
-  rok os cluster create <cluster_name> -L 'location is DE'
+  # Cluster:
+  rok kube cluster create <cluster_name> -f <path_to_tosca> -L 'location is DE' ...
 
 
 Metric constraints
@@ -467,7 +529,8 @@ Krake allows the user to define a metric constraint and to restrict the deployme
 resources only to backends that matches the metric constraint. Based on the resource,
 Krake supports the following metric constraints:
 
-- The cluster metric constraints for the application resource
+- The Cluster metric constraints for the Application resource
+- The Cloud metric constraints for the Cluster resource
 
 A simple language for expressing metric constraints is used. The following operations
 can be expressed:
@@ -515,8 +578,8 @@ can be expressed:
             <metric> <= <value>
             <metric> =< <value>
 
-The metric label constraints for the Kubernetes application resources are defined
-by ``-M`` or ``--cluster-metric-constraint`` option in the rok CLI,
+The metric label constraints for the Application and Cluster resources are defined
+by ``-M`` (or ``--cluster-metric-constraint``, ``--cloud-metric-constraint``) option in the rok CLI,
 see :ref:`user/rok-documentation:Rok documentation`. The constraints can be
 specified multiple times with the syntax: `<metric> expression <value>`.
 
@@ -524,9 +587,11 @@ Examples:
 
 .. code:: bash
 
-  # Kubernetes Application
+  # Application
   rok kube app create <application_name> -f <path_to_manifest> -M 'load = 5'
 
+  # Cluster
+  rok kube cluster create <cluster_name> -f <path_to_tosca> -M 'load = 5' ...
 
 Custom resources:
 -----------------
@@ -566,3 +631,4 @@ Example:
 
 .. _Prometheus: https://prometheus.io/
 .. _KSQL: https://github.com/confluentinc/ksql
+.. _OpenStack: https://www.openstack.org/

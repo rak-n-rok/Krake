@@ -1,8 +1,8 @@
-====================================================
-Scheduling using ``Labels`` and ``LabelConstraints``
-====================================================
+===================================================================
+Scheduling an Application using ``Labels`` and ``LabelConstraints``
+===================================================================
 
-Goal: Explore the labels mechanisms.
+Goal: Explore the labels mechanisms and schedule an application based on labels and label constraints
 
 Introduction to Scheduling mechanisms
 =====================================

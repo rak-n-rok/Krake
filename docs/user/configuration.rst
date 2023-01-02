@@ -22,13 +22,14 @@ There are two different ways to configure Krake components:
 Configuration files
 -------------------
 
-There are 5 different configuration files:
+There are 7 different configuration files:
 
 *  ``api.yaml`` for the Krake API;
 *  ``scheduler.yaml`` for the Scheduler as controller;
 *  ``kubernetes_application.yaml`` for the Kubernetes Application controller;
 *  ``kubernetes_cluster.yaml`` for the Kubernetes Cluster controller;
 *  ``garbage_collection.yaml`` for the Garbage Collector as controller;
+*  ``infrastructure.yaml`` for the Infrastructure controller;
 *  ``rok.yaml`` for the Rok utility.
 
 For each one of them except ``rok.yaml``, a template is present in the
@@ -147,8 +148,9 @@ command-line options. The arguments and available options are:
     computation. See :ref:`dev/scheduling:Scheduling`. Default: ``0.1``.
 
 ``--poll-interval``
-    Time in seconds for the Magnum Controller to ask the Magnum client again after a
-    modification of a cluster. Default: ``30``.
+    Time in seconds for the Infrastructure Controller
+    to ask the infrastructure provider client again after a modification of
+    a cluster. Default: ``30``.
 
 ``--complete-hook-user``
     For the complete hook, set the name of the user that will be defined as CN of the
@@ -428,6 +430,14 @@ stickiness (float):
     actually running. It prevents migration from happening too frequently, and thus,
     represents the cost of migration. As the computation is done with normalized
     weights, the stickiness is advised to be between 0 and 1. Example: ``0.1``.
+
+Infrastructure controller
+-------------------------
+Additional parameters, specific for the Infrastructure controller:
+
+poll_interval (float):
+    Time in seconds for the Infrastructure Controller to ask the infrastructure
+    provider client again after a modification of a cluster. Example: ``30``.
 
 
 Common configuration:
