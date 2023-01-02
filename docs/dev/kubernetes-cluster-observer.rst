@@ -2,7 +2,7 @@
 Kubernetes Cluster Observer
 ===========================
 
-Krake constantly observes the status of its registered clusters while running. For each
+Krake constantly observes the status of its registered or created clusters while running. For each
 cluster a separate Kubernetes cluster observer is created. This cluster specific observer
 calls the Kubernetes API of the real world Kubernetes Cluster periodically. The current
 status of each cluster is saved in the database of Krake. If a status change of the real
@@ -38,8 +38,7 @@ This workflow in Krake for a specific resource is presented on the following fig
 
 The workflow is as follows:
 
-#. The actual real-world cluster is registered by the Kubernetes cluster controller and
-   added to Krake;
+#. The actual real-world cluster is registered or created by Krake;
 #. The Kubernetes cluster controller watches, or **observes** the clusters current
    ``status`` in the real-world. This is the role of the **KubernetesClusterObserver**.
    This is done by polling the ``status`` with a call on the Kubernetes cluster API.
@@ -58,8 +57,9 @@ States
 ======
 
 A Kubernetes cluster watched by it's corresponding KubernetesClusterObserver can have
-the following states:
+the following observer related states:
 
+- PENDING
 - CONNECTING
 - ONLINE
 - DEGRADED
@@ -68,9 +68,16 @@ the following states:
 - NOTREADY
 - FAILING_METRICS
 
+.. note::
+
+    Refer to the :ref:`dev/infrastructure-controller:States` for the infrastructure related cluster states.
+
+
+``PENDING``
+    This state is initially set when a Kubernetes cluster is registered in Krake.
+
 ``CONNECTING``
-    This state is initially set when a Kubernetes cluster is registered in Krake. It is
-    also set when the previous state of a cluster was OFFLINE, but the real cluster is
+    It is set by the Kubernetes Cluster Observer if the previous state of a cluster was OFFLINE, but the real cluster is
     available again. In this case, a reconnection is attempted with a temporary
     CONNECTING state.
 
@@ -144,13 +151,13 @@ Summary
 Creation
 ~~~~~~~~
 
-After a cluster resource was **registered**, a KubernetesClusterObserver is also
+After a Cluster resource was **registered** or successfully **created**, a KubernetesClusterObserver is also
 created for this specific cluster.
 
 Update
 ~~~~~~
 
-Before the Kubernetes cluster registered in Krake is **updated**, its
+Before the Kubernetes cluster in Krake is **updated**, its
 corresponding KubernetesClusterObserver is stopped. After the update has been performed,
 a new observer is started, which observes the newest ``status`` of the cluster (the
 actual Kubernetes cluster).
@@ -189,5 +196,5 @@ Then the Kubernetes Cluster Controller starts processing the update normally.
 
 .. warning::
 
-    Currently only ``Kubernetes`` clusters which have been registered in Krake can be
-    observed.
+    Currently only ``Kubernetes`` clusters which have been registered in Krake or
+    created by Krake can be observed.

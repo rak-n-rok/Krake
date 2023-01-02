@@ -1,12 +1,12 @@
-============================
-Scheduling Using Metrics
-============================
+=======================================
+Scheduling an Application Using Metrics
+=======================================
 
-Goal: Explore the metrics mechanisms.
+Goal: Explore the metrics mechanisms and schedule an application based on cluster metrics.
 
 .. note::
 
-    Refer to the :ref:`user/user-story/2-labels:Introduction to Scheduling mechanisms` for useful commands to observe the migration mechanism.
+    Refer to the :ref:`user/user-story/2-labels-cluster:Introduction to Scheduling mechanisms` for useful commands to observe the migration mechanism.
 
 
 Introduction
@@ -25,7 +25,8 @@ The Krake scheduler can use these metrics to compute the score of a Krake Kubern
 weights for this cluster. This list is defined by the user who added the ``Cluster``
 resource into Krake. A higher weight means that the metric has a higher influence in the
 score: a metrics with a low value, but a high weight may have more impact on the score
-than a metric with medium value but low weight.
+than a metric with medium value but low weight. The ``Cluster`` metrics and
+the computed score is then used in the ``Application`` scheduling process.
 
 For Krake to fetch the current value of a metric, a user needs to define where and how
 it can be requested. ``GlobalMetricsProvider`` resources can be created for this

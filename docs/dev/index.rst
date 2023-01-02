@@ -26,6 +26,7 @@ API reference of all modules is provided.
     kubernetes-application-observer
     kubernetes-cluster-controller
     kubernetes-cluster-observer
+    infrastructure-controller
     garbage-collection
     api-generation
     tosca

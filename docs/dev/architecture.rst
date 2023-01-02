@@ -16,7 +16,7 @@ API
 
 The API is the central component of Krake. It holds the global state of the
 system. Krake uses an abstraction for real world objects -- e.g. Kubernetes_
-clusters or OpenStack_ deployments -- managed or used by it. The objects are
+clusters or clouds (e.g. OpenStack_) -- managed or used by it. The objects are
 represented as RESTful HTTP resources called *API resources*. These resources
 are stored in an associated etcd_ database. Each resource is a nested JSON
 object following some conventions that can be found in section
@@ -52,6 +52,11 @@ Garbage Collector
     for executing the cascading deletion (see
     :ref:`dev/garbage-collection:Garbage Collection` for more details).
 
+Infrastructure Controller
+    The infrastructure controller performs life-cycle management of the real-world
+    Kubernetes clusters. (see
+    :ref:`dev/infrastructure-controller:Infrastructure Controller` for more details).
+
 Scheduler
     The scheduler is a very important controller responsible for binding
     applications -- high-level API resources for executing workloads -- to a
@@ -60,7 +65,7 @@ Scheduler
     .. tip::
 
         For example, the scheduler binds Kubernetes applications to Kubernetes
-        clusters or selects OpenStack deployments for creating new Kubernetes
+        clusters or selects clouds (e.g. OpenStack) for creating new Kubernetes
         clusters.
 
     The scheduler makes its decision based on a set of metrics provided by
