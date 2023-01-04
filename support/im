@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+"""Simple helper script for starting an IM (infrastructure manager)
+instance for development purpose.
+
+The recommended way to launch an IM instance is Docker.
+Read the IM docs for details: https://imdocs.readthedocs.io/en/latest/
+
+.. code:: bash
+
+    $ support/im
+    $ curl -s localhost:8800/version
+    1.13.0
+
+"""
+from argparse import ArgumentParser
+import os
+
+
+def main(name, port):
+    os.execvp(
+        "docker",
+        ["docker", "run", "-d", "-p", f"{port}:8800", "--name", name, "grycap/im"],
+    )
+
+
+parser = ArgumentParser(description=("IM instance for development purposes"))
+parser.add_argument(
+    "--name",
+    default="im",
+    help="human-readable name for this IM docker container. Default: im",
+)
+parser.add_argument(
+    "--port",
+    type=int,
+    default=8800,
+    help="IM instance port to listen on. Default: 8800",
+)
+
+
+if __name__ == "__main__":
+    args = vars(parser.parse_args())
+    main(**args)
