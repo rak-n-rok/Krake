@@ -2,7 +2,7 @@ stages:
   - test
   - coverage
   - e2e
-  - release
+  - release-creation
 
 variables:
   ETCD_VER: v3.3.13
