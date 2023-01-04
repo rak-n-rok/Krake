@@ -264,8 +264,8 @@ docker:
     - docker push registry.gitlab.com/rak-n-rok/krake/krake:latest
   only:
     - tags
-  except:
-    - branches
+#  except:
+#    - branches
 
 #pypi:
 #  stage: release-creation
