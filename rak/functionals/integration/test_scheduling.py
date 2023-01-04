@@ -38,7 +38,6 @@ Test constraints, metrics and metrics providers are globally defined as follows:
     `heat_demand_zone_unreachable`.
 """
 
-import pytest
 import random
 import time
 import re
@@ -376,7 +375,7 @@ def test_scheduler_clusters_with_global_metrics(minikube_clusters):
 
         # Determine to which cluster we expect the application to be scheduled.
         # (Since the weights of the metrics will be the same
-        # for all clusters), the cluster with the highest metric value
+        # for all clusters, the cluster with the highest metric value
         # is expected to be chosen by the scheduler.)
         max_metric_value = max(
             prometheus_metric.value for prometheus_metric in prometheus_metrics

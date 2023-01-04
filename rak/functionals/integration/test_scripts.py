@@ -71,7 +71,7 @@ def exec_container(container, cmd, suppress=False):
 
 
 def test_generate(krake_container):
-    """Basic end to end testing for ``krake_generate_config`` script
+    """Basic end-to-end testing for ``krake_generate_config`` script
 
     E2e testing of ``krake_generate_config`` script is executed against
     Krake docker test infrastructure.
@@ -165,7 +165,7 @@ TEST_BOOTSTRAP = {
 
 
 def test_bootstrap(krake_container, etcd_container, etcd_container_port):
-    """Basic end to end testing for ``krake_bootstrap_db`` script
+    """Basic end-to-end testing for ``krake_bootstrap_db`` script
 
     E2e testing of ``krake_bootstrap_db`` script is executed against
     Krake docker test infrastructure.
@@ -235,7 +235,7 @@ def test_bootstrap(krake_container, etcd_container, etcd_container_port):
 
 
 def test_bootstrap_from_stdin(krake_container, etcd_container, etcd_container_port):
-    """End to end testing for ``krake_bootstrap_db`` script, reading from stdin
+    """End-to-end testing for ``krake_bootstrap_db`` script, reading from stdin
 
     E2e testing of ``krake_bootstrap_db`` script is executed against
     Krake docker test infrastructure.
@@ -320,7 +320,7 @@ TEST_BOOTSTRAP_INVALID = {
 def test_bootstrap_rollback_invalid(
     krake_container, etcd_container, etcd_container_port
 ):
-    """Basic rollback end to end testing of the ``krake_bootstrap_db`` script.
+    """Basic rollback end-to-end testing of the ``krake_bootstrap_db`` script.
 
     Rollback scenario with the invalid resource.
 
@@ -420,7 +420,7 @@ TEST_BOOTSTRAP_PRESENT = {
 def test_bootstrap_rollback_present(
     krake_container, etcd_container, etcd_container_port
 ):
-    """Basic rollback end to end testing of the ``krake_bootstrap_db`` script.
+    """Basic rollback end-to-end testing of the ``krake_bootstrap_db`` script.
 
     Rollback scenario with the already present resource.
 

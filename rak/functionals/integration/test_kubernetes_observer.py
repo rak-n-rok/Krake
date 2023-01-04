@@ -3,7 +3,7 @@ KubernetesController. It is responsible for updating the current state of a Kube
 Application, if the Application has been modified on the actual cluster.
 
 The tests are performed on a simple test environment, where only one Cluster and one
-Application is present. The general workflow is as follow:
+Application is present. The general workflow is as follows:
 
  * A request for the Cluster registration, then the Application creation is sent to the
    Krake API;
@@ -26,6 +26,7 @@ from functionals.utils import (
     check_return_code,
     check_spec_container_image,
     check_spec_replicas,
+    check_resource_container_health,
     kubectl_cmd,
 )
 from functionals.environment import (
@@ -128,11 +129,11 @@ def test_kubernetes_observer_update_on_cluster(minikube_clusters):
 
 
 def test_kubernetes_observer_update_on_cluster_nonobserved(minikube_clusters):
-    """Check that if an non-observed field of a resource is updated on its cluster, the
+    """Check that if a non-observed field of a resource is updated on its cluster, the
     Observer doesn't notify the API. The resource is not reverted to its original state.
 
     In the test environment:
-    1. Update an non-observed field of a resource directly on the actual given
+    1. Update a non-observed field of a resource directly on the actual given
     kubernetes cluster.
     2. Verify the specifications of this resource after it has been updated. Compare it
     to its original specifications.
@@ -326,6 +327,7 @@ def test_kubernetes_observer_additional_resource(minikube_clusters):
             app_before["status"]["kube_controller_triggered"] = app_after["status"][
                 "kube_controller_triggered"
             ]
+            app_before["status"]["container_health"] = app_after["status"]["container_health"]
             assert app_before == app_after
 
             # Compare the Application deployment data before and after having added the
@@ -511,4 +513,58 @@ def test_kubernetes_observer_recreated(minikube_clusters):
         run(
             f"{kubectl_cmd(kubeconfig_path)} get deployment echo-demo -o json",
             condition=check_spec_container_image(expected_image, error_message),
+        )
+
+
+class ContainerHealth(object):
+    desired_pods: int = 0
+    running_pods: int = 0
+    completed_pods: int = 0
+    failed_pods: int = 0
+
+
+def test_kubernetes_observe_container_health(minikube_clusters):
+    """Check that an applications information are changed according to their current
+    pod (health) information.
+
+    In the test environment:
+    1. Check if the pod health information are correct
+    2. Update the application, so that the pod information change
+    3. Check if the pod health information changed according to the updated manifest
+
+    Args:
+        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+
+    """
+    minikube_cluster = random.choice(minikube_clusters)
+    kubeconfig_path = get_default_kubeconfig_path(minikube_cluster)
+
+    environment = create_default_environment([minikube_cluster])
+    with Environment(environment) as env:
+
+        # 1. Check if the pod health information are correct
+        pd = ContainerHealth()
+        pd.desired_pods = 1
+        pd.running_pods = 1
+        error_message = (
+            "The observed pod healths don't match the required pod healths."
+        )
+        run(
+            f"{kubectl_cmd(kubeconfig_path)} get deployment echo-demo -o json",
+            condition=check_resource_container_health(pd, error_message),
+        )
+
+        # 2. Update a resource with the API
+        run(f"rok kube app update echo-demo -f {MANIFEST_PATH}/echo-demo-update.yaml")
+
+        # 3. Check if the pod health information changed according to
+        # the updated manifest
+        pd.desired_pods = 2
+        pd.running_pods = 2
+        error_message = (
+            "The observed pod healths don't match the required pod healths."
+        )
+        run(
+            f"{kubectl_cmd(kubeconfig_path)} get deployment echo-demo -o json",
+            condition=check_resource_container_health(pd, error_message),
         )

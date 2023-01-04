@@ -2,7 +2,7 @@
 the Krake API.
 
 The tests are performed on a simple test environment, where only one Cluster and one
-Application is present. The general workflow is as follow:
+Application is present. The general workflow is as follows:
 
  * A request for the Cluster registration, then the Application creation is sent to the
    Krake API;
@@ -298,7 +298,8 @@ def test_update_no_changes(minikube_clusters):
 
 @pytest.mark.parametrize("tosca_from", ["dict", "url"])
 def test_update_no_changes_tosca(minikube_clusters, tosca_from, file_server):
-    """Update the Application with the same TOSCA template file defined by a dict or a URL.
+    """Update the Application with the same TOSCA template file
+    defined by a dict or a URL.
 
     As the update does not change any field of the resources,
     the update should be rejected in both cases.
@@ -494,7 +495,8 @@ def test_update_application_tosca(minikube_clusters, tosca_from, file_server):
 
 
 def test_update_application_csar(minikube_clusters, archive_files, file_server):
-    """In the test environment, update the Application with a new CSAR file defined as URL.
+    """In the test environment, update the Application
+    with a new CSAR file defined as URL.
 
     The previous CSAR file has an echo server image with a version 1.10.
     The updated CSAR file reverts it to the version 1.9.

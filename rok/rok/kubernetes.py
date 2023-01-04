@@ -33,6 +33,7 @@ from .formatters import (
     bool_formatter,
     format_datetime,
     nodes_formatter,
+    pods_formatter,
 )
 
 warnings.formatwarning = lambda message, *args, **kwargs: f"WARNING: {message}\n"
@@ -175,7 +176,7 @@ arg_cluster_metric_constraints = argument(
 )
 
 
-class ApplicationListTable(BaseTable):
+class ApplicationTableList(BaseTable):
     state = Cell("status.state")
 
 
@@ -245,7 +246,7 @@ def handle_warning(app):
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
-@printer(table=ApplicationListTable(many=True))
+@printer(table=ApplicationTableList(many=True))
 def list_applications(config, session, namespace, all):
     if all:
         url = "/kubernetes/applications"
@@ -258,8 +259,11 @@ def list_applications(config, session, namespace, all):
     return body["items"]
 
 
-class ApplicationTable(ApplicationListTable):
+class ApplicationTable(ApplicationTableList):
     reason = Cell("status.reason", formatter=dict_formatter)
+    container_health = Cell(
+        "status.container_health", formatter=partial(pods_formatter)
+    )
     services = Cell("status.services", formatter=dict_formatter)
     migration = Cell(
         "spec.constraints.migration", name="allow migration", formatter=bool_formatter

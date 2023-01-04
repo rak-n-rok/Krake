@@ -440,6 +440,7 @@ class ApplicationState(Enum):
     RECONCILING = auto()
     TRANSLATING = auto()
     RETRYING = auto()
+    RESTARTING = auto()
     WAITING_FOR_CLEANING = auto()
     READY_FOR_ACTION = auto()
     MIGRATING = auto()
@@ -452,11 +453,19 @@ class ApplicationState(Enum):
         return self.name == string.upper()
 
 
+class ContainerHealth(Serializable):
+    desired_pods: int = 0
+    running_pods: int = 0
+    completed_pods: int = 0
+    failed_pods: int = 0
+
+
 class ApplicationStatus(Status):
     """Status subresource of :class:`Application`.
 
     Attributes:
         state (ApplicationState): Current state of the application
+        container_health (ContainerHealth): Specific details of the application
         kube_controller_triggered (datetime.datetime): Timestamp that represents the
             last time the current version of the Application was scheduled (version here
             meaning the Application after an update). It is only updated after the
@@ -499,6 +508,7 @@ class ApplicationStatus(Status):
     """
 
     state: ApplicationState = ApplicationState.PENDING
+    container_health: ContainerHealth = ContainerHealth()
     kube_controller_triggered: datetime = None
     scheduled: datetime = None
     scheduled_to: ResourceRef = None

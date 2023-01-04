@@ -62,27 +62,7 @@ def test_complete_hook(minikube_clusters):
 
         # 3. Check that after some time, the Application has been deleted on the Krake
         # API.
-        try:
-            app_def.check_deleted(delay=60)
-        except AssertionError as e:
-            pods = run((f"{kubectl_cmd(kubeconfig_path)} get pods -o wide"))
-            pdsc = run((f"{kubectl_cmd(kubeconfig_path)} describe pods"))
-            rkag = run(("rok kube app get test-hook-shutdown -oyaml"))
-            pdev = run((f"{kubectl_cmd(kubeconfig_path)} get events"))
-            pdlgs = run((f"{kubectl_cmd(kubeconfig_path)} logs -lapp=script-deploy"))
-            assert 1 == 0, (
-                str(e)
-                + "\n----------------------------\n"
-                + pods.output
-                + "\n----------------------------\n"
-                + pdsc.output
-                + "\n----------------------------\n"
-                + rkag.output
-                + "\n----------------------------\n"
-                + pdev.output
-                + "\n----------------------------\n"
-                + pdlgs.output
-            )
+        app_def.check_deleted(delay=60)
 
         # 4. Delete the added configmap
         error_message = f"The configmap {configmap_name} could not be deleted."
@@ -151,21 +131,7 @@ def test_shutdown_hook(minikube_clusters):
 
         # 4. Wait for the script to send the request to the API, that the shutdown
         # is finished
-        try:
-            app_def.check_deleted(delay=60)
-        except AssertionError as e:
-            pods = run((f"{kubectl_cmd(kubeconfig_path)} get pods -o wide"))
-            pdsc = run((f"{kubectl_cmd(kubeconfig_path)} describe pods"))
-            rkag = run(("rok kube app get test-hook-shutdown -oyaml"))
-            assert 1 == 0, (
-                str(e)
-                + "\n----------------------------\n"
-                + pods.output
-                + "\n----------------------------\n"
-                + pdsc.output
-                + "\n----------------------------\n"
-                + rkag.output
-            )
+        app_def.check_deleted(delay=60)
 
         # 4. Delete the added configmap
         error_message = f"The configmap {configmap_name} could not be deleted."
