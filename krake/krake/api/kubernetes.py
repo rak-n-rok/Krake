@@ -52,8 +52,7 @@ class KubernetesApi(object):
         namespace = request.match_info.get("namespace")
         kwargs["namespace"] = namespace
 
-        # Ensure that a resource with the same name does not already
-        # exists.
+        # Ensure that a resource with the same name does not already exist.
         existing = await session(request).get(body.__class__, **kwargs)
 
         if existing is not None:

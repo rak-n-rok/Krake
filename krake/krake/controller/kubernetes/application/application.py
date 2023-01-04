@@ -332,7 +332,6 @@ class KubernetesApplicationController(Controller):
             run as background tasks.
         time_step (float, optional): for the Observers: the number of seconds between
             two observations of the actual resource.
-
     """
 
     def __init__(
