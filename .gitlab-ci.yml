@@ -2,6 +2,7 @@ stages:
   - test
   - coverage
   - e2e
+  - release
 
 variables:
   ETCD_VER: v3.3.13
@@ -32,7 +33,7 @@ cache:
 # pipeline (night runs). Unfortunately, this configuration create duplicates
 # pipelines on merge requests. Unit tests and Flake are run twice.
 
-# It is not possible to workaround this issue. See
+# It is not possible to work around this issue. See
 # https://gitlab.com/gitlab-org/gitlab-foss/issues/56632. Until workflow rules
 # are added to the gitlab CI (See MR
 # https://gitlab.com/gitlab-org/gitlab/merge_requests/18130), we have to work
@@ -187,8 +188,8 @@ coverage-krake:
     paths:
       - coverage.tar.gz
 
-# Following job is for end to end testing. We provisioning the staging
-# infrastructure, run the smoke tests and the end to end tests, and cleanup
+# Following job is for end-to-end testing. We're provisioning the staging
+# infrastructure, run the smoke tests and the end-to-end tests, and cleanup
 # the staging infrastructure. They are run only on the master branch, on merge
 # requests, and on scheduled pipeline (night runs)
 
@@ -249,6 +250,29 @@ e2e-tests:
     ### Cleanup the staging infra ###
     #################################
     - ansible-playbook ansible/unprovision.yml
+
+docker:
+  stage: release-creation
+  image: python:3.8
+  before_script:
+    - docker info
+    - pip3 install Jinja2
+  script:
+    - docker/generate --config docker.yaml docker/krake
+    - docker build -t krake:latest -t krake:$CI_COMMIT_TAG -f ./docker/krake/Dockerfile .
+    - docker push registry.gitlab.com/rak-n-rok/krake/krake:$CI_COMMIT_TAG
+    - docker push registry.gitlab.com/rak-n-rok/krake/krake:latest
+  only:
+    - tags
+  except:
+    - branches
+
+#pypi:
+#  stage: release-creation
+#  only:
+#    - tags
+#  except:
+#    - branches
 
 # Following code is for security testing in GitLab
 
