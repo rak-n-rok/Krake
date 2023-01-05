@@ -255,6 +255,8 @@ e2e-tests:
 docker:
   stage: release-creation
   image: python:3.8
+  tags:
+    - docker
   before_script:
     - docker info
     - pip3 install Jinja2
