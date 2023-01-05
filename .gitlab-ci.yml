@@ -256,10 +256,9 @@ docker:
   stage: release-creation
   tags:
     - docker
-  before_script:
+  script:
     - docker info
     - pip3 install Jinja2
-  script:
     - docker/generate --config docker.yaml docker/krake
     - docker build -t krake:latest -t krake:$CI_COMMIT_TAG -f ./docker/krake/Dockerfile .
     - docker push registry.gitlab.com/rak-n-rok/krake/krake:$CI_COMMIT_TAG
