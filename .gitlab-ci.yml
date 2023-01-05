@@ -254,16 +254,14 @@ e2e-tests:
 
 docker:
   stage: release-creation
-  tags:
-    - dockertest
-  before_script:
-    - docker info
-    - pip3 install Jinja2
+  image:
+    name: gcr.io/kaniko-project/executor:v1.9.0-debug
+    entrypoint: [""]
   script:
-    - docker/generate --config docker.yaml docker/krake
-    - docker build -t krake:latest -t krake:$CI_COMMIT_TAG -f ./docker/krake/Dockerfile .
-    - docker push registry.gitlab.com/rak-n-rok/krake/krake:$CI_COMMIT_TAG
-    - docker push registry.gitlab.com/rak-n-rok/krake/krake:latest
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}
+      --dockerfile "${CI_PROJECT_DIR}/docker/krake/Dockerfile
+      --destination "krake:${CI_COMMIT_TAG}"
   only:
     - tags
 #  except:
