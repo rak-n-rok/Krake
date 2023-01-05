@@ -27,7 +27,7 @@ tls:
 
 log:
   version: 1
-  level: INFO
+  level: $logging_level
   disable_existing_loggers: false
   formatters:
     krake:
@@ -42,8 +42,8 @@ log:
       formatter: krake
       filename: krake.log
   root: # Configuring the default (root) logger is highly recommended
-    handlers: [console]
+    handlers: [$logging_handler]
   loggers:
     krake:
-      handlers: [console]
+      handlers: [$logging_handler]
       propagate: no

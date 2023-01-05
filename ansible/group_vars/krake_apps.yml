@@ -47,9 +47,13 @@ controllers:
   # Default parameters for the controllers
   debounce: 1.0
   worker_count: 5
+  logging_level: "INFO"
+  logging_handler: "console"
   # The parameters can also be set specifically for each controller, example:
   # kubernetes:
   #   worker_count: 10
+  #   logging_level: "DEBUG"
+  #   logging_handler: "file"
   # scheduler:
   #   debounce: 2.0
 

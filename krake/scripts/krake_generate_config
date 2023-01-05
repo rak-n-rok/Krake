@@ -476,6 +476,25 @@ if __name__ == "__main__":
         ),
         default="KRAKE_SHUTDOWN_URL",
     )
+    add_option(
+        parser,
+        "--logging-level",
+        (
+            "To set the logging level of all controllers"
+            " The default level is 'INFO'"
+        ),
+        default="INFO",
+    )
+    add_option(
+        parser,
+        "--logging-handler",
+        (
+            "To set the handler to use for logging."
+            " Options are 'console' and 'file' "
+
+        ),
+        default="console",       
+    )
 
     args = vars(parser.parse_args())
     sys.exit(main(**args))

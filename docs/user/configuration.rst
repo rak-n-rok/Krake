@@ -176,6 +176,16 @@ command-line options. The arguments and available options are:
     If set, replaces the value of the URL host and port of the endpoint given to the
     Applications which have the 'complete' hook enabled. See :ref:`dev/hooks:Complete`.
 
+``--logging-level`` (str)
+    To set the logging level of a controller.
+    Default: ``INFO``.
+
+``--logging-handler`` (str)
+    To set the handler to use for logging. This lets one choose whether the
+    logging messages should be printed to stdout or saved to a file.
+    Options are 'console' and 'file'.
+    Default: ``console``.
+
 ``-h, --help``
     Display the help message and exit the script.
 
