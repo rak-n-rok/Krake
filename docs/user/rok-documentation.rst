@@ -72,6 +72,13 @@ register
     ``-m | --metric`` (optional):
         The name and weight of cluster metric in form: ``<name> <weight>``. Can be specified multiple times.
 
+    ``--backoff`` (optional): multiplier applied to backoff_delay between attempts.
+            default: 1 (no backoff)
+
+    ``backoff_delay`` (optional): delay [s] between attempts. default: 1
+
+    ``backoff_limit`` (optional):  a maximal number of attempts. If the attempt to handle the cluster failed, it will transfer to the Cluster State DEGRADED, instead of directly going into the State OFFLINE. Default: -1 (infinite) default: -1 (infinite)
+
 list
     List all Cluster of a namespace.
 
@@ -113,6 +120,13 @@ update
     ``-m | --metric`` (optional):
         The name and weight of cluster metric in form: ``<name> <weight>``. Can be
         specified multiple times.
+
+    ``--backoff`` (optional): multiplier applied to backoff_delay between attempts.
+            default: 1 (no backoff)
+
+    ``backoff_delay`` (optional): delay [s] between attempts. default: 1
+
+    ``backoff_limit`` (optional):  a maximal number of attempts, default: -1 (infinite)
 
 
 delete
@@ -176,6 +190,13 @@ create
     ``-L | --cluster-label-constraint`` (optional):
         The name and value of constraint for labels of the cluster in form: ``<label> expression <value>``. The application will be deployed only on the clusters with given label. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`.
 
+    ``--backoff`` (optional): multiplier applied to backoff_delay between attempts to handle the application.
+            default: 1 (no backoff)
+
+    ``backoff_delay`` (optional): delay [s] between attempts to handle the application. default: 1
+
+    ``backoff_limit`` (optional):  a maximal number of attempts to handle the application. If the attempt to handle the application failed, it will transfer to the Application State DEGRADED, instead of directly going into the State FAILED. Default: -1 (infinite)
+
 list
     List all Applications of a namespace.
 
@@ -222,6 +243,12 @@ update
     ``-L | --cluster-label-constraint`` (optional):
         The name and value of constraint for labels of the cluster in form: ``<label> expression <value>``. The application will be deployed only on the clusters with given label. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`.
 
+    ``--backoff`` (optional): multiplier applied to backoff_delay between attempts.
+            default: 1 (no backoff)
+
+    ``backoff_delay`` (optional): delay [s] between attempts. default: 1
+
+    ``backoff_limit`` (optional):  a maximal number of attempts, default: -1 (infinite)
 delete
     Request the deletion of a specific Application from a namespace.
 
