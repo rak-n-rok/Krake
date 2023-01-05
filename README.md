@@ -30,6 +30,9 @@ This section describes a quickstart for developers to get started with a Krake
 development setup. Advanced topics are covered in the
 [Developer Documentation][dev-docs] and the [Admin Documentation][admin-docs].
 
+Krake can also be found as a [PyPi package][pypi], if an integration in another
+project is desired or required.
+
 ### Requirements
 
 #### Krake deployment
@@ -436,3 +439,4 @@ transformed to an open source project in September 2019.
 [cfssl]: https://github.com/cloudflare/cfssl
 [kind]: https://kind.sigs.k8s.io/
 [docker]: https://www.docker.com/
+[pypi]: https://pypi.org/project/krake/
