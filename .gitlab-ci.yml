@@ -262,8 +262,8 @@ docker:
     - ls ${CI_PROJECT_DIR}
     - ls ${CI_PROJECT_DIR}/docker/krake
     - /kaniko/executor
-      --context "${CI_PROJECT_DIR}
-      --dockerfile "${CI_PROJECT_DIR}/docker/krake/Dockerfile
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "./docker/krake/Dockerfile"
       --destination "registry.gitlab.com/rak-n-rok/krake:${CI_COMMIT_TAG}"
   only:
     - tags
