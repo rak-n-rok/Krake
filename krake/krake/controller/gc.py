@@ -327,6 +327,13 @@ class GarbageCollector(Controller):
             bool: True if the given resource is in deletion state, False otherwise.
 
         """
+
+        logger.debug(
+            f"Check resource:{resource} for deletion: {resource.metadata.deleted}"
+        )
+        logger.debug(
+            f"Resource:{resource} finalizers:{resource.metadata.finalizers}"
+        )
         if (
             resource.metadata.deleted
             and resource.metadata.finalizers
@@ -379,6 +386,9 @@ class GarbageCollector(Controller):
             resource (krake.data.serializable.ApiObject): the deleted resource.
 
         """
+
+        logger.debug(f"Resource:{resource} received deletion request")
+
         for dependency_ref in resource.metadata.owners:
             get_resource = self.get_api_method(dependency_ref, "read")
 
