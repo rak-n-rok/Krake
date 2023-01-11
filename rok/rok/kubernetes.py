@@ -563,11 +563,16 @@ def update_application(
     help="Wait with the response until the application reaches a specific state."
     "If no state is specified, deleted is used as a default.",
 )
+@argument("--force",
+          dest="force",
+          action="store_true",
+          help="Force delete Kubernetes application"
+          )
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
 @printer(table=ApplicationTable())
-def delete_application(config, session, namespace, name, wait):
+def delete_application(config, session, namespace, name, wait, force):
     if namespace is None:
         namespace = config["user"]
 
@@ -577,7 +582,7 @@ def delete_application(config, session, namespace, name, wait):
 
     resp = session.delete(
         f"/kubernetes/namespaces/{namespace}/applications/{name}",
-        params={"blocking": blocking_state},
+        params={"blocking": blocking_state, "force": force},
     )
 
     if resp.status_code == 204:
@@ -837,15 +842,20 @@ def update_cluster(
 
 @cluster.command("delete", help="Delete Kubernetes cluster")
 @argument("name", help="Kubernetes cluster name")
+@argument("--force",
+          dest="force",
+          action="store_true",
+          help="Force delete Kubernetes cluster from Krake")
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
 @printer(table=ClusterTable())
-def delete_cluster(config, session, namespace, name):
+def delete_cluster(config, session, namespace, name, force):
     if namespace is None:
         namespace = config["user"]
-
-    resp = session.delete(f"/kubernetes/namespaces/{namespace}/clusters/{name}")
+    resp = session.delete(
+        f"/kubernetes/namespaces/{namespace}/clusters/{name}", params={"force": force}
+    )
 
     if resp.status_code == 204:
         return None

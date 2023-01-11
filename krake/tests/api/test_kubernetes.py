@@ -155,6 +155,25 @@ async def test_delete_application_already_in_deletion(aiohttp_client, config, db
     assert resp.status == 200
 
 
+async def test_force_delete_application(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+    data = ApplicationFactory(status__state=ApplicationState.FAILED)
+    await db.put(data)
+
+    resp = await client.delete(
+        f"/kubernetes/namespaces/testing/applications/{data.metadata.name}?force=True"
+    )
+
+    assert resp.status == 200
+
+    received = Application.deserialize(await resp.json())
+    assert resource_ref(received) == resource_ref(data)
+    assert received.metadata.deleted is not None
+
+    deleted = await db.get(Application, namespace="testing", name=data.metadata.name)
+    assert deleted is None
+
+
 async def test_list_applications(aiohttp_client, config, db):
     resources = [
         ApplicationFactory(status__state=ApplicationState.PENDING),
@@ -1138,6 +1157,25 @@ async def test_delete_cluster_already_in_deletion(aiohttp_client, config, db):
         f"/kubernetes/namespaces/testing/clusters/{in_deletion.metadata.name}"
     )
     assert resp.status == 200
+
+
+async def test_force_delete_cluster(aiohttp_client, config, db):
+    client = await aiohttp_client(create_app(config=config))
+    data = ClusterFactory(status__state=ClusterState.OFFLINE)
+    await db.put(data)
+
+    resp = await client.delete(
+        f"/kubernetes/namespaces/testing/clusters/{data.metadata.name}?force=True"
+    )
+
+    assert resp.status == 200
+
+    received = Cluster.deserialize(await resp.json())
+    assert resource_ref(received) == resource_ref(data)
+    assert received.metadata.deleted is not None
+
+    deleted = await db.get(Cluster, namespace="testing", name=data.metadata.name)
+    assert deleted is None
 
 
 async def test_list_clusters(aiohttp_client, config, db):

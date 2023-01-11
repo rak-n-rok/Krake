@@ -121,6 +121,11 @@ delete
     ``-n | --namespace`` (optional):
         The namespace from which the Cluster have to be deleted. If none is given, the user namespace is selected.
 
+    ``--force`` (optional):
+        Force the deletion of resources directly from the Krake Database.
+
+
+
 
 The Application resource: ``app``
 ---------------------------------
@@ -226,6 +231,8 @@ delete
     ``-n | --namespace`` (optional):
         The namespace from which the Application have to be deleted. If none is given, the user namespace is selected.
 
+    ``--force`` (optional):
+        Force the deletion an Application directly from the Krake Database.
 
 
 Common options
