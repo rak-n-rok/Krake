@@ -257,8 +257,8 @@ pypi:
   image:
     name: python:3.10
   variables:
-    TWINE_USERNAME: $TWINE_USERNAME
-    TWINE_PASSWORD: $TWINE_PASSWORD
+    TWINE_USERNAME: __token__
+    TWINE_PASSWORD: ${PYPI_API_TOKEN}
   before_script:
     - pip install --upgrade twine
     - pip install --upgrade build
