@@ -35,3 +35,8 @@ prometheus:
 exporter:
   host: exporter
   port: 9095
+
+# Infrastructure Manager
+im:
+  host: im
+  port: 8800
