@@ -1,0 +1,30 @@
+# Compose jinja2 template defines and runs docker container for provisioning
+# of the Infrastructure Manager server (https://imdocs.readthedocs.io).
+# This compose jinja2 template can be configured by the corresponding Ansible playbook
+# or by the script `docker/generate` in case of standalone installation.
+#
+# .. code:: bash
+#
+#     $ docker/generate --config docker/docker.yaml docker/im
+#     $ docker-compose --file docker/im/docker-compose.yaml up --detach
+
+version: "3.8"
+
+services:
+
+  im:
+    image: grycap/im:latest
+    container_name: {{ im.host }}
+    tty: true
+    restart: always
+    ports:
+      - {{ im.port }}:8800
+
+
+{% if docker_daemon_mtu is defined %}
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: {{ docker_daemon_mtu }}
+{% endif %}

@@ -6,9 +6,8 @@
 #
 # .. code:: bash
 #
-#     $ cd docker
-#     $ docker/generate --config docker.yaml docker/krake
-#     $ docker-compose --file krake/docker-compose.yaml up --detach
+#     $ docker/generate --config docker/docker.yaml docker/krake
+#     $ docker-compose --file docker/krake/docker-compose.yaml up --detach
 
 version: "3.8"
 
@@ -140,6 +139,25 @@ services:
         target: "{{ krake.cert_dir }}/system:scheduler-key.pem"
       {%- endif %}
 
+  krake-ctrl-infrastructure:
+    image: krake:latest
+    restart: always
+    tty: true
+    depends_on:
+      - krake-api
+    command: python3 -m krake.controller.infrastructure
+    secrets:
+      - source: infrastructure-config
+        target: "{{ krake.config.path }}/infrastructure.yaml"
+      {% if krake.enable_tls -%}
+      - source: ca-cert
+        target: "{{ krake.cert_dir }}/ca.pem"
+      - source: infrastructure-cert
+        target: "{{ krake.cert_dir }}/system:infrastructure.pem"
+      - source: infrastructure-key
+        target: "{{ krake.cert_dir }}/system:infrastructure-key.pem"
+      {%- endif %}
+
   krake-ctrl-magnum:
     image: krake:latest
     restart: always
@@ -177,6 +195,9 @@ secrets:
 
   scheduler-config:
     file: "{{ krake.config.path }}/scheduler.yaml"
+
+  infrastructure-config:
+    file: "{{ krake.config.path }}/infrastructure.yaml"
 
   magnum-config:
     file: "{{ krake.config.path }}/magnum.yaml"
@@ -217,6 +238,11 @@ secrets:
     file: "{{ krake.cert_dir }}/system:scheduler.pem"
   scheduler-key:
     file: "{{ krake.cert_dir }}/system:scheduler-key.pem"
+
+  infrastructure-cert:
+    file: "{{ krake.cert_dir }}/system:infrastructure.pem"
+  infrastructure-key:
+    file: "{{ krake.cert_dir }}/system:infrastructure-key.pem"
 
   magnum-cert:
     file: "{{ krake.cert_dir }}/system:magnum.pem"
