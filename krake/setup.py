@@ -5,6 +5,7 @@ from setuptools import setup, find_packages
 install_requires = [
     "aiohttp==3.*",
     "aiohttp-cors==0.7.*",
+    "dnspython==2.2.1",
     "etcd3-py==0.1.*",
     "keystoneauth1==4.*",
     "kubernetes-asyncio==22.*",
