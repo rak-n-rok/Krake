@@ -100,7 +100,7 @@ topology_template:
       type: tosca.nodes.indigo.network.Network
       properties:
         ip_version: 4
-        cidr: 172.30.154.0/24
+        cidr: 172.30.100.0/24
         network_type: private
 
     front_port_private:

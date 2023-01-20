@@ -61,6 +61,36 @@ def pytest_addoption(parser):
         action="store",
         help="etcd container port to use for scripts integration tests",
     )
+    parser.addoption(
+        "--im_container",
+        action="store",
+        help="IM container name to use for scripts integration tests",
+    )
+    parser.addoption(
+        "--im_container_port",
+        action="store",
+        help="IM container port to use for scripts integration tests",
+    )
+    parser.addoption(
+        "--os_auth_url",
+        action="store",
+        help="OpenStack auth URL to use for scripts integration tests",
+    )
+    parser.addoption(
+        "--os_project_name",
+        action="store",
+        help="OpenStack project to use for scripts integration tests",
+    )
+    parser.addoption(
+        "--os_username",
+        action="store",
+        help="OpenStack username to use for scripts integration tests",
+    )
+    parser.addoption(
+        "--os_password",
+        action="store",
+        help="OpenStack password to use for scripts integration tests",
+    )
 
 
 @pytest.fixture
@@ -81,6 +111,36 @@ def etcd_container(request):
 @pytest.fixture
 def etcd_container_port(request):
     return request.config.getoption("--etcd_container_port", skip=True)
+
+
+@pytest.fixture
+def im_container(request):
+    return request.config.getoption("--im_container", skip=True)
+
+
+@pytest.fixture
+def im_container_port(request):
+    return request.config.getoption("--im_container_port", skip=True)
+
+
+@pytest.fixture
+def os_auth_url(request):
+    return request.config.getoption("--os_auth_url", skip=True)
+
+
+@pytest.fixture
+def os_project_name(request):
+    return request.config.getoption("--os_project_name", skip=True)
+
+
+@pytest.fixture
+def os_username(request):
+    return request.config.getoption("--os_username", skip=True)
+
+
+@pytest.fixture
+def os_password(request):
+    return request.config.getoption("--os_password", skip=True)
 
 
 @pytest.fixture

@@ -21,6 +21,7 @@ setup(
             "markupsafe==2.0.1",
             "pytest-httpserver==1.*",
             "deepdiff==6.2.*",
+            "yarl==1.8.*",
         }
     },
 )
