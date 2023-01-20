@@ -335,6 +335,18 @@ if __name__ == "__main__":
     )
     add_option(
         parser,
+        "--im-host",
+        "Host for the Infrastructure Manager endpoint.",
+        default="127.0.0.1",
+    )
+    add_option(
+        parser,
+        "--im-port",
+        "Port for the Infrastructure Manager endpoint.",
+        default=8800,
+    )
+    add_option(
+        parser,
         "--docs-problem-base-url",
         "URL of the problem documentation.",
         default="https://rak-n-rok.readthedocs.io/projects/krake/en/latest/user/problem.html",  # noqa: E501

@@ -18,6 +18,11 @@ etcd_host: krake-db
 etcd_port: 2379
 etcd_peer_port: 2380
 
+## Infrastructure Manager (IM) provider parameters
+# address and port for the IM container
+im_host: im-provider
+im_port: 8800
+
 # Authentication-related parameters
 enable_tls: true
 cert_dir: '/etc/krake/certs'

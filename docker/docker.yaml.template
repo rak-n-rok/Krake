@@ -38,5 +38,5 @@ exporter:
 
 # Infrastructure Manager
 im:
-  host: im
-  port: 8800
+  host: $im_host
+  port: $im_port
