@@ -19,6 +19,7 @@ install_requires = [
     "python-magnumclient==3.*",
     "PyYAML==5.*",
     "requests==2.*",
+    "SQLAlchemy==1.4.46",
     "tosca-parser==2.6.*",
 ]
 
