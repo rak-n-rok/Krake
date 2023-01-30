@@ -208,8 +208,12 @@ e2e-tests:
   variables:
     ANSIBLE_CONFIG: ansible/ansible.cfg
     ANSIBLE_INVENTORY: ansible/hosts-CI
+    ANSIBLE_STRATEGY_PLUGINS: /usr/local/lib/python3.8/site-packages/ansible_mitogen/plugins/strategy
+    ANSIBLE_STRATEGY: mitogen_linear
 
   script:
+    # Install the latest version of mitogen from source [0.3.4.dev0]
+    - pip install git+https://github.com/mitogen-hq/mitogen
     # Pre-requisites: openstack, ansible and pytest
     - pip install python-openstackclient "openstacksdk<=0.66" "ansible>=2.9" pytest
     - apt-get update -y && apt-get install openssh-client rsync -y
