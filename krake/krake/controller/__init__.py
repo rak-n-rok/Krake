@@ -1,4 +1,4 @@
-"""This module comprises Krake controllers responsible of watching API
+"""This module comprises Krake controllers responsible for watching API
 resources and transferring the state of related real-world resources to the
 desired state specified in the API. Controllers can be written in any language
 and with every technique. This module provides basic functionality and
@@ -88,7 +88,7 @@ class WorkQueue(object):
         """Put a new key-value pair into the queue.
 
         Args:
-            key: Key that used to identity the value
+            key: Key that used to identify the value
             value: New value that is associated with the key
             delay (float, optional): Number of seconds the put should be
                 delayed. If :data:`None` is given, :attr:`debounce` will be
@@ -143,7 +143,7 @@ class WorkQueue(object):
             timer = self.loop.create_task(debounce())
 
             # We attach a waiter (future) to the timer task that will be used
-            # to await the removal of the key from the timers dictionary. This
+            # to await the removal of the key from the timers' dictionary. This
             # is required because it is not ensured that "done" callbacks of
             # futures are executed before other coroutines blocking in the
             # future are continued.
@@ -244,7 +244,7 @@ class Reflector(object):
     Args:
         listing (coroutine): the coroutine used to get the list of resources currently
             stored by the API. Its signature is: ``() -> <Resource>List``.
-        watching (coroutine): the coroutine used to watch updates on the resources, as
+        watching (coroutine): the coroutine used to watch updates on the resources,
             as sent by the API. Its signature is: ``() -> watching object``. This
             watching object should be able to be used as context manager, and as
             generator.
@@ -400,7 +400,7 @@ async def joint(*aws, loop=None):
      @see https://stackoverflow.com/questions/59073556/how-to-cancel-all-remaining-tasks-in-gather-if-one-fails # noqa
 
     Args:
-        aws (Awaitable): a list of awaitables to start concurrently.
+        aws (Awaitable): a list of await-ables to start concurrently.
         loop (asyncio.AbstractEventLoop, optional): Event loop that should be
             used.
 
@@ -539,12 +539,10 @@ class Controller(object):
 
     Args:
         api_endpoint (str): URL to the API
-        loop (asyncio.AbstractEventLoop, optional): Event loop that should be
-            used.
+        loop (asyncio.AbstractEventLoop, optional): Event loop that should be used.
         ssl_context (ssl.SSLContext, optional): if given, this context will be
             used to communicate with the API endpoint.
-        debounce (float, optional): value of the debounce for the
-            :class:`WorkQueue`.
+        debounce (float, optional): value of the debounce for the :class:`WorkQueue`.
 
     """
 
@@ -690,7 +688,7 @@ class BurstWindow(object):
     run. This arbitrary code should be something that needs to run indefinitely. If
     this code fails too quickly, it is not restarted.
 
-    The criteria is as follow: every :attr:`max_retry` times, if the average
+    The criteria are as follows: every :attr:`max_retry` times, if the average
     running time of the task is more than the :attr:`burst_time`, the task
     is considered savable and the context manager is exited. If not, an
     exception will be raised.
@@ -891,7 +889,7 @@ def _extract_ssl_config(tls_config):
     Returns:
         tuple: a three-element tuple containing: the path of the certificate, its key
          as stored in the config and if the client authority certificate is present,
-         its path is also given. Otherwise the last element is None.
+         its path is also given. Otherwise, the last element is None.
 
     """
     cert_tuple = tls_config.client_cert, tls_config.client_key, tls_config.client_ca
