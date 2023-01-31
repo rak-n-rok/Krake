@@ -1,5 +1,5 @@
 async def list_{{ operation.signature_name }}(self{{ namespace_signature(operation) }}):
-    """Lists the {{ operation.resource.plural }} in the namespace.
+    """List the {{ operation.resource.plural }} in the namespace.
     {{ docstring(operation)|indent }}
     """
     path = "{{ operation.path }}".format({{ namespace_format(operation) }})
@@ -10,7 +10,7 @@ async def list_{{ operation.signature_name }}(self{{ namespace_signature(operati
     return {{ operation.response.__name__ }}.deserialize(data)
 
 def watch_{{ operation.resource.snake_case_plural }}(self{{ namespace_signature(operation) }}, heartbeat=None):
-    """Generates a watcher for the {{ operation.resource.plural }} in the namespace.
+    """Generate a watcher for the {{ operation.resource.plural }} in the namespace.
     {{ docstring(operation)|indent }}
     """
     path = "{{ operation.path }}".format({{ namespace_format(operation) }})

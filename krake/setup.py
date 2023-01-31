@@ -21,6 +21,15 @@ install_requires = [
     "requests==2.*",
     "SQLAlchemy==1.4.46",
     "tosca-parser==2.6.*",
+    "deepdiff==6.2.*",
+    # FIXME: The AttributeError (module 'dns.rdtypes' has no attribute 'ANY')
+    #  is raised when the ``dnspython`` package is installed in version 2.3.0.
+    #  The package is installed as a dependency of the keystone package.
+    #  As a workaround, the `dnspython`` package should be pinned to the latest
+    #  working version 2.2.1.
+    #  This could be removed once the ``dnspython`` is fixed.
+    "dnspython==2.2.1",
+    "SQLAlchemy==1.4.46",
 ]
 
 # webargs

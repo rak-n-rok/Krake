@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
 """This script can be used to generate compose and configuration files from jinja2
-templates for Krake and Prometheus docker infrastructure bundles.
+templates for Krake, Prometheus, and IM docker infrastructure bundles.
 
 The mandatory variables source file for templating is defined by `--config` argument.
 You can find the template file `docker/docker.yaml.template` which defines all
-needed variables for the Krake and Prometheus docker infrastructure bundles.
+needed variables for the Krake, Prometheus, and IM docker infrastructure bundles.
 
 Source directories of jinja2 templates are defined by positional arguments of script.
 Script looks for jinja2 templates with the `.j2` suffix recursively and generates
@@ -25,7 +25,7 @@ from jinja2 import Environment, FileSystemLoader
 
 parser = ArgumentParser(
     description="Generate compose and configuration files from jinja2"
-    " templates for Krake and Prometheus docker infrastructure bundles."
+    " templates for Krake, Prometheus, and IM docker infrastructure bundles."
 )
 parser.add_argument("--config", "-c", required=True, help="The variables source file.")
 parser.add_argument(
@@ -51,6 +51,8 @@ def main(config, src_dirs):
 
             with file.with_suffix("").open("w") as fd:
                 fd.write(template.render(variables))
+
+            print(f"Generated file: {file.with_suffix('')}")
 
 
 if __name__ == "__main__":

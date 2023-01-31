@@ -30,6 +30,10 @@ from krake.data.kubernetes import (
     ClusterNode,
     ClusterNodeStatus,
     ClusterNodeCondition,
+    ClusterNodeMetadata,
+    ClusterState,
+    ClusterCloudConstraints,
+    CloudConstraints,
 )
 from krake.data.constraints import (
     EqualConstraint,
@@ -86,11 +90,26 @@ class ClusterConstraintsFactory(Factory):
         return [fuzzy_name() for _ in range(fake.pyint(1, 3))]
 
 
+class CloudConstraintsFactory(Factory):
+    class Meta:
+        model = CloudConstraints
+
+    labels = Iterator(map(lambda constraint: [constraint], label_constraints))
+    metrics = Iterator(map(lambda constraint: [constraint], metric_constraints))
+
+
 class ConstraintsFactory(Factory):
     class Meta:
         model = Constraints
 
     cluster = SubFactory(ClusterConstraintsFactory)
+
+
+class ClusterCloudConstraintsFactory(Factory):
+    class Meta:
+        model = ClusterCloudConstraints
+
+    cloud = SubFactory(CloudConstraintsFactory)
 
 
 class ApplicationStatusFactory(Factory):
@@ -380,12 +399,25 @@ class ClusterSpecFactory(Factory):
         return deepcopy(local_kubeconfig)
 
     @lazy_attribute
+    def tosca(self):
+        return dict()
+
+    @lazy_attribute
     def metrics(self):
         return [MetricRefFactory() for _ in range(self.metric_count)]
 
     @lazy_attribute
     def custom_resources(self):
         return [fuzzy_name() for _ in range(fake.pyint(1, 3))]
+
+    constraints = SubFactory(ClusterCloudConstraintsFactory)
+
+
+class ClusterNodeMetadataFactory(Factory):
+    class Meta:
+        model = ClusterNodeMetadata
+
+    name = fuzzy.FuzzyAttribute(fuzzy_name)
 
 
 class ClusterNodeStatusFactory(Factory):
@@ -426,6 +458,7 @@ class ClusterNodeFactory(Factory):
     class Meta:
         model = ClusterNode
 
+    metadata = SubFactory(ClusterNodeMetadataFactory)
     status = SubFactory(ClusterNodeStatusFactory)
 
 
@@ -434,15 +467,103 @@ class ClusterStatusFactory(Factory):
         model = ClusterStatus
 
     class Params:
+        """
+        Attributes:
+            nodes_count (int): Cluster nodes count.
+            is_scheduled (bool): Is used to control whether the
+                ``.status.scheduled`` timestamp of before or after the
+                ``.metadata.modified`` timestamp. If the cluster is in
+                *PENDING* state, ``.status.scheduled`` is set to :data:`None`.
+
+        """
+
         nodes_count = 3
+        is_scheduled = fuzzy.FuzzyChoice([True, False])
+
+    state = fuzzy.FuzzyChoice(list(ClusterState.__members__.values()))
 
     @lazy_attribute
     def metrics_reasons(self):
-        return dict()
+        return {fake.word(): ReasonFactory()}
 
     @lazy_attribute
     def nodes(self):
         return [ClusterNodeFactory() for _ in range(self.nodes_count)]
+
+    @lazy_attribute
+    def scheduled(self):
+        if not self.factory_parent:
+            return fake.date_time(tzinfo=pytz.utc)
+
+        created = self.factory_parent.metadata.created
+        modified = self.factory_parent.metadata.modified
+
+        assert created <= modified
+
+        if self.is_scheduled:
+            return fake.date_time_between(start_date=modified, tzinfo=pytz.utc)
+        elif self.state == ClusterState.PENDING:
+            return None  # Cluster was never scheduled
+        else:
+            return fake.date_time_between(
+                start_date=created,
+                end_date=self.kube_controller_triggered,
+                tzinfo=pytz.utc,
+            )
+
+    @lazy_attribute
+    def kube_controller_triggered(self):
+        if not self.factory_parent:
+            return fake.date_time()
+
+        created = self.factory_parent.metadata.created
+        modified = self.factory_parent.metadata.modified
+
+        assert created <= modified
+
+        if self.is_scheduled:
+            return fake.date_time_between(start_date=self.scheduled, tzinfo=pytz.utc)
+        elif self.state == ClusterState.PENDING:
+            return None  # Cluster was never scheduled
+        else:
+            return fake.date_time_between(
+                start_date=created, end_date=modified, tzinfo=pytz.utc
+            )
+
+    @lazy_attribute
+    def scheduled_to(self):
+        if self.state == ClusterState.PENDING:
+            return None
+
+        if self.factory_parent:
+            namespace = self.factory_parent.metadata.namespace
+        else:
+            namespace = fuzzy_name()
+        name = fuzzy_name()
+        return ResourceRef(
+            api="infrastructure", kind="Cloud", name=name, namespace=namespace
+        )
+
+    @lazy_attribute
+    def running_on(self):
+        if self.state == ClusterState.PENDING:
+            return None
+
+        if self.factory_parent:
+            namespace = self.factory_parent.metadata.namespace
+        else:
+            namespace = fuzzy_name()
+        name = fuzzy_name()
+        return ResourceRef(
+            api="infrastructure", kind="Cloud", name=name, namespace=namespace
+        )
+
+    @lazy_attribute
+    def cluster_id(self):
+        if self.state == ClusterState.PENDING:
+            return None
+
+        return fake.uuid4()
 
 
 class ClusterFactory(Factory):

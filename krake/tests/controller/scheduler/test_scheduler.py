@@ -19,11 +19,13 @@ from krake.controller.scheduler.__main__ import main
 from krake.controller.scheduler.constraints import (
     match_cluster_constraints,
     match_project_constraints,
+    match_cloud_constraints,
 )
 from krake.controller.scheduler.scheduler import NoProjectFound, NoClusterFound
 from krake.data.constraints import LabelConstraint, MetricConstraint
 from krake.data.core import ResourceRef, MetricRef
 from krake.data.core import resource_ref, ReasonCode
+from krake.data.infrastructure import CloudState
 from krake.data.kubernetes import Application, ApplicationState, Cluster, ClusterState
 from krake.data.openstack import (
     MagnumCluster,
@@ -40,8 +42,15 @@ from tests.factories.core import (
     GlobalMetricFactory,
     MetricFactory,
 )
+from tests.factories.infrastructure import CloudFactory, GlobalCloudFactory
 from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
 from tests.factories.openstack import MagnumClusterFactory, ProjectFactory
+
+
+TOSCA_CLUSTER_MINIMAL = {
+    "tosca_definitions_version": "tosca_simple_yaml_1_0",
+    "topology_template": {"outputs": {"kubeconfig": {"value": "test"}}},
+}
 
 
 @with_timeout(3)
@@ -163,7 +172,7 @@ async def test_kubernetes_reception(aiohttp_server, config, db, loop):
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         # Update the client, to be used by the background tasks
         await scheduler.prepare(client)  # need to be called explicitly
-        await scheduler.kubernetes_reflector.list_resource()
+        await scheduler.kubernetes_application_reflector.list_resource()
 
     assert scheduled.metadata.uid not in scheduler.queue.dirty
     assert updated.metadata.uid in scheduler.queue.dirty
@@ -221,7 +230,7 @@ async def test_kubernetes_reception_no_migration(aiohttp_server, config, db, loo
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         # Update the client, to be used by the background tasks
         await scheduler.prepare(client)  # need to be called explicitly
-        await scheduler.kubernetes_reflector.list_resource()
+        await scheduler.kubernetes_application_reflector.list_resource()
 
     assert scheduled.metadata.uid not in scheduler.queue.dirty
     assert updated.metadata.uid in scheduler.queue.dirty
@@ -234,6 +243,77 @@ async def test_kubernetes_reception_no_migration(aiohttp_server, config, db, loo
     assert pending.metadata.uid not in scheduler.queue.timers
     assert failed.metadata.uid not in scheduler.queue.timers
     assert deleted.metadata.uid not in scheduler.queue.timers
+
+
+async def test_kubernetes_cluster_reception(aiohttp_server, config, db, loop):
+    # Test that the Reflector present on the Scheduler actually put the
+    # right received Cluster on the WorkQueue.
+    # The following should not be put to the WorkQueue
+    scheduled = ClusterFactory(
+        status__state=ClusterState.PENDING,
+        status__scheduled_to=ResourceRef(
+            api="infrastructure",
+            kind="Cloud",
+            name=fake.word(),
+            namespace="testing",
+        ),
+        spec__kubeconfig={},
+        spec__tosca=TOSCA_CLUSTER_MINIMAL,
+    )
+    registered = ClusterFactory(
+        status__state=ClusterState.PENDING,
+        status__scheduled_to=None,
+        # cluster factory adds spec.kubeconfig
+        spec__tosca=TOSCA_CLUSTER_MINIMAL,
+    )
+    failed = ClusterFactory(
+        status__state=ClusterState.FAILED,
+        status__scheduled_to=None,
+        spec__kubeconfig={},
+        spec__tosca=TOSCA_CLUSTER_MINIMAL,
+    )
+    deleted = ClusterFactory(
+        status__state=ClusterState.PENDING,
+        metadata__deleted=datetime.now(timezone.utc),
+        status__scheduled_to=None,
+        spec__kubeconfig={},
+        spec__tosca=TOSCA_CLUSTER_MINIMAL,
+    )
+    # The following should be put to the WorkQueue
+    pending = ClusterFactory(
+        status__state=ClusterState.PENDING,
+        status__scheduled_to=None,
+        spec__kubeconfig={},
+        spec__tosca=TOSCA_CLUSTER_MINIMAL,
+    )
+    updated = ClusterFactory(
+        status__state=ClusterState.ONLINE,
+        status__scheduled_to=None,
+        spec__kubeconfig={},
+        spec__tosca=TOSCA_CLUSTER_MINIMAL,
+    )
+
+    server = await aiohttp_server(create_app(config))
+
+    await db.put(scheduled)
+    await db.put(registered)
+    await db.put(failed)
+    await db.put(deleted)
+    await db.put(pending)
+    await db.put(updated)
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        # Update the client, to be used by the background tasks
+        await scheduler.prepare(client)  # need to be called explicitly
+        await scheduler.kubernetes_cluster_reflector.list_resource()
+
+    assert scheduled.metadata.uid not in scheduler.cluster_queue.dirty
+    assert registered.metadata.uid not in scheduler.cluster_queue.dirty
+    assert failed.metadata.uid not in scheduler.cluster_queue.dirty
+    assert deleted.metadata.uid not in scheduler.cluster_queue.dirty
+    assert pending.metadata.uid in scheduler.cluster_queue.dirty
+    assert updated.metadata.uid in scheduler.cluster_queue.dirty
 
 
 async def test_openstack_reception(aiohttp_server, config, db, loop):
@@ -275,8 +355,9 @@ async def test_openstack_reception(aiohttp_server, config, db, loop):
 
 
 def test_kubernetes_match_cluster_label_constraints():
-    cluster = ClusterFactory(metadata__labels={"location": "IT"},
-                             status__state=ClusterState.ONLINE)
+    cluster = ClusterFactory(
+        metadata__labels={"location": "IT"}, status__state=ClusterState.ONLINE
+    )
     app = ApplicationFactory(
         spec__constraints__cluster__labels=[LabelConstraint.parse("location is IT")],
         spec__constraints__cluster__metrics=[],
@@ -297,8 +378,10 @@ def test_kubernetes_not_match_cluster_label_constraints():
 
 
 def test_kubernetes_match_cluster_custom_resources_constraints():
-    cluster = ClusterFactory(spec__custom_resources=["crontabs.stable.example.com"],
-                             status__state=ClusterState.ONLINE)
+    cluster = ClusterFactory(
+        spec__custom_resources=["crontabs.stable.example.com"],
+        status__state=ClusterState.ONLINE,
+    )
     app = ApplicationFactory(
         spec__constraints__cluster__custom_resources=["crontabs.stable.example.com"],
         spec__constraints__cluster__labels=[],
@@ -320,12 +403,14 @@ def test_kubernetes_not_match_cluster_custom_resources_constraints():
 
 
 def test_kubernetes_match_cluster_metric_constraints():
-    cluster = ClusterFactory(spec__metrics=[MetricRef(name="load", weight=6.0,
-                             namespaced=False)], status__state=ClusterState.ONLINE)
+    cluster = ClusterFactory(
+        spec__metrics=[MetricRef(name="load", weight=6.0, namespaced=False)],
+        status__state=ClusterState.ONLINE,
+    )
     app = ApplicationFactory(
         spec__constraints__cluster__metrics=[MetricConstraint.parse("load > 5")],
         spec__constraints__cluster__custom_resources=[],
-        spec__constraints__cluster__labels=[]
+        spec__constraints__cluster__labels=[],
     )
     fetched_metrics = {
         cluster.metadata.name: [
@@ -335,7 +420,7 @@ def test_kubernetes_match_cluster_metric_constraints():
                     metadata__namespace="system:admin",
                 ),
                 weight=1.0,
-                value=6.0
+                value=6.0,
             )
         ]
     }
@@ -344,12 +429,14 @@ def test_kubernetes_match_cluster_metric_constraints():
 
 
 def test_kubernetes_not_match_cluster_metrics_constraints():
-    cluster = ClusterFactory(spec__metrics=[MetricRef(name="load", weight=5.0,
-                             namespaced=False)], status__state=ClusterState.ONLINE)
+    cluster = ClusterFactory(
+        spec__metrics=[MetricRef(name="load", weight=5.0, namespaced=False)],
+        status__state=ClusterState.ONLINE,
+    )
     app = ApplicationFactory(
         spec__constraints__cluster__metrics=[MetricConstraint.parse("load > 5")],
         spec__constraints__cluster__custom_resources=[],
-        spec__constraints__cluster__labels=[]
+        spec__constraints__cluster__labels=[],
     )
     fetched_metrics = {
         cluster.metadata.name: [
@@ -359,11 +446,11 @@ def test_kubernetes_not_match_cluster_metrics_constraints():
                     metadata__namespace="system:admin",
                 ),
                 weight=1.0,
-                value=5.0
+                value=5.0,
             )
         ]
     }
-    assert match_cluster_constraints(app, cluster, fetched_metrics) == False
+    assert not match_cluster_constraints(app, cluster, fetched_metrics)
 
 
 def test_kubernetes_match_empty_cluster_constraints():
@@ -381,7 +468,6 @@ def test_kubernetes_match_empty_cluster_constraints():
     assert match_cluster_constraints(app3, cluster)
 
 
-@pytest.mark.skip(reason="The test wants to create/use a real K8s resource.")
 async def test_kubernetes_score(aiohttp_server, config, db, loop):
     prometheus = await aiohttp_server(make_prometheus({"test_metric_1": ["0.42"]}))
     global_prometheus = await aiohttp_server(
@@ -394,21 +480,25 @@ async def test_kubernetes_score(aiohttp_server, config, db, loop):
             spec__metrics=[
                 MetricRef(name="test-metric-1", weight=1.0, namespaced=False)
             ],
-            status__state=ClusterState.ONLINE
+            status__state=ClusterState.ONLINE,
         ),
         ClusterFactory(
             spec__metrics=[
                 MetricRef(name="test-metric-2", weight=1.0, namespaced=False)
             ],
-            status__state=ClusterState.ONLINE
+            status__state=ClusterState.ONLINE,
         ),
         ClusterFactory(
-            spec__metrics=[MetricRef(name="test-metric-1", weight=1.0, namespaced=True)],
-            status__state=ClusterState.ONLINE
+            spec__metrics=[
+                MetricRef(name="test-metric-1", weight=1.0, namespaced=True)
+            ],
+            status__state=ClusterState.ONLINE,
         ),
         ClusterFactory(
-            spec__metrics=[MetricRef(name="test-metric-2", weight=1.0, namespaced=True)],
-            status__state=ClusterState.ONLINE
+            spec__metrics=[
+                MetricRef(name="test-metric-2", weight=1.0, namespaced=True)
+            ],
+            status__state=ClusterState.ONLINE,
         ),
     ]
     metrics = [
@@ -467,8 +557,10 @@ async def test_kubernetes_score(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        clusters_scores = await scheduler.kubernetes.rank_kubernetes_clusters(
-            app, clusters
+        clusters_scores = (
+            await scheduler.kubernetes_application.rank_kubernetes_clusters(
+                app, clusters
+            )
         )
 
     for ranked, cluster in zip(clusters_scores, clusters):
@@ -480,12 +572,12 @@ async def test_kubernetes_score_sticky(aiohttp_server, config, db, loop):
     cluster_a = ClusterFactory(
         metadata__name="a",
         spec__metrics=[MetricRef(name="metric-1", weight=1.0, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     cluster_b = ClusterFactory(
         metadata__name="b",
         spec__metrics=[MetricRef(name="metric-1", weight=1.0, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
 
     scheduled_app = ApplicationFactory(
@@ -514,7 +606,7 @@ async def test_kubernetes_score_sticky(aiohttp_server, config, db, loop):
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
 
-        ranked = await scheduler.kubernetes.rank_kubernetes_clusters(
+        ranked = await scheduler.kubernetes_application.rank_kubernetes_clusters(
             pending_app, [cluster_a, cluster_b]
         )
         assert ranked[0].score == 0.75
@@ -523,7 +615,7 @@ async def test_kubernetes_score_sticky(aiohttp_server, config, db, loop):
         # Compute the score of the clusters where application is already scheduled to
         # one of the clusters, hence a stickiness metric should be added to the score of
         # cluster "A".
-        ranked = await scheduler.kubernetes.rank_kubernetes_clusters(
+        ranked = await scheduler.kubernetes_application.rank_kubernetes_clusters(
             scheduled_app, [cluster_a, cluster_b]
         )
 
@@ -537,8 +629,10 @@ async def test_kubernetes_score_sticky(aiohttp_server, config, db, loop):
 
 async def test_kubernetes_score_with_metrics_only(aiohttp_server, config, loop):
     app = ApplicationFactory(status__is_scheduled=False)
-    clusters = [ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE),
-                ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)]
+    clusters = [
+        ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE),
+        ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE),
+    ]
 
     with pytest.raises(AssertionError):
         scheduler = Scheduler("http://localhost:8080", worker_count=0)
@@ -546,10 +640,11 @@ async def test_kubernetes_score_with_metrics_only(aiohttp_server, config, loop):
 
         async with Client(url=server_endpoint(server), loop=loop) as client:
             await scheduler.prepare(client)
-            await scheduler.kubernetes.rank_kubernetes_clusters(app, clusters)
+            await scheduler.kubernetes_application.rank_kubernetes_clusters(
+                app, clusters
+            )
 
 
-@pytest.mark.skip(reason="Some metric problem.")
 async def test_kubernetes_score_missing_metric(aiohttp_server, db, config, loop):
     """Test the error handling of the Scheduler in the case of fetching a metric
     referenced in a Cluster but not present in the database.
@@ -560,13 +655,13 @@ async def test_kubernetes_score_missing_metric(aiohttp_server, db, config, loop)
             spec__metrics=[
                 MetricRef(name="non-existent-metric", weight=1, namespaced=False)
             ],
-            status__state=ClusterState.ONLINE
+            status__state=ClusterState.ONLINE,
         ),
         ClusterFactory(
             spec__metrics=[
                 MetricRef(name="non-existent-metric", weight=1, namespaced=True)
             ],
-            status__state=ClusterState.ONLINE
+            status__state=ClusterState.ONLINE,
         ),
     ]
     for cluster in clusters:
@@ -577,7 +672,9 @@ async def test_kubernetes_score_missing_metric(aiohttp_server, db, config, loop)
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        scored = await scheduler.kubernetes.rank_kubernetes_clusters(app, [cluster])
+        scored = await scheduler.kubernetes_application.rank_kubernetes_clusters(
+            app, clusters
+        )
 
     assert len(scored) == 0
 
@@ -586,7 +683,6 @@ async def test_kubernetes_score_missing_metric(aiohttp_server, db, config, loop)
             Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
         )
         assert stored_cluster.status.state == ClusterState.FAILING_METRICS
-        assert stored_cluster.status.state == ClusterState.ONLINE
         assert len(stored_cluster.status.metrics_reasons) == 1
 
         single_metric_reason = stored_cluster.status.metrics_reasons[
@@ -606,11 +702,11 @@ async def test_kubernetes_score_missing_metrics_provider(
     clusters = [
         ClusterFactory(
             spec__metrics=[MetricRef(name="my-metric", weight=1, namespaced=False)],
-            status__state=ClusterState.ONLINE
+            status__state=ClusterState.ONLINE,
         ),
         ClusterFactory(
             spec__metrics=[MetricRef(name="my-metric", weight=1, namespaced=True)],
-            status__state=ClusterState.ONLINE
+            status__state=ClusterState.ONLINE,
         ),
     ]
     for cluster in clusters:
@@ -640,7 +736,9 @@ async def test_kubernetes_score_missing_metrics_provider(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        scored = await scheduler.kubernetes.rank_kubernetes_clusters(app, clusters)
+        scored = await scheduler.kubernetes_application.rank_kubernetes_clusters(
+            app, clusters
+        )
 
     assert len(scored) == 0
 
@@ -688,14 +786,14 @@ async def test_kubernetes_score_multiple_failing_metric(
                 MetricRef(name="non-existent-metric", weight=1, namespaced=False),
                 MetricRef(name="existent-metric", weight=1, namespaced=False),
             ],
-            status__state=ClusterState.ONLINE
+            status__state=ClusterState.ONLINE,
         ),
         ClusterFactory(
             spec__metrics=[
                 MetricRef(name="also-existent", weight=1, namespaced=False),
                 MetricRef(name="again-non-existent", weight=1, namespaced=False),
             ],
-            status__state=ClusterState.ONLINE
+            status__state=ClusterState.ONLINE,
         ),
     ]
     for cluster in clusters:
@@ -731,7 +829,9 @@ async def test_kubernetes_score_multiple_failing_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        scored = await scheduler.kubernetes.rank_kubernetes_clusters(app, clusters)
+        scored = await scheduler.kubernetes_application.rank_kubernetes_clusters(
+            app, clusters
+        )
 
     assert len(scored) == 0
 
@@ -797,7 +897,7 @@ async def test_kubernetes_score_failing_metrics_provider(
     clusters = [
         ClusterFactory(
             spec__metrics=[MetricRef(name="my-metric", weight=1, namespaced=True)],
-            status__state=ClusterState.ONLINE
+            status__state=ClusterState.ONLINE,
         )
     ]
     await db.put(clusters[0])
@@ -824,7 +924,9 @@ async def test_kubernetes_score_failing_metrics_provider(
     async with Client(url=server_endpoint(api), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(api), worker_count=0)
         await scheduler.prepare(client)
-        scored = await scheduler.kubernetes.rank_kubernetes_clusters(app, clusters)
+        scored = await scheduler.kubernetes_application.rank_kubernetes_clusters(
+            app, clusters
+        )
 
     assert len(scored) == 0
 
@@ -861,7 +963,7 @@ async def test_kubernetes_score_failing_globalmetrics_provider(
     clusters = [
         ClusterFactory(
             spec__metrics=[MetricRef(name="my-metric", weight=1, namespaced=False)],
-            status__state=ClusterState.ONLINE
+            status__state=ClusterState.ONLINE,
         )
     ]
     await db.put(clusters[0])
@@ -888,7 +990,9 @@ async def test_kubernetes_score_failing_globalmetrics_provider(
     async with Client(url=server_endpoint(api), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(api), worker_count=0)
         await scheduler.prepare(client)
-        scored = await scheduler.kubernetes.rank_kubernetes_clusters(app, clusters)
+        scored = await scheduler.kubernetes_application.rank_kubernetes_clusters(
+            app, clusters
+        )
 
     assert len(scored) == 0
 
@@ -912,7 +1016,7 @@ async def test_kubernetes_prefer_cluster_with_global_metrics(
     cluster_miss = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
     cluster = ClusterFactory(
         spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     metric = GlobalMetricFactory(
         metadata__name="heat-demand",
@@ -939,7 +1043,7 @@ async def test_kubernetes_prefer_cluster_with_global_metrics(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes.select_kubernetes_cluster(
+        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
             app, (cluster_miss, cluster)
         )
 
@@ -955,7 +1059,7 @@ async def test_kubernetes_prefer_cluster_with_namespaced_metrics(
     cluster_miss = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
     cluster = ClusterFactory(
         spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=True)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     metric = MetricFactory(
         metadata__name="heat-demand",
@@ -982,7 +1086,7 @@ async def test_kubernetes_prefer_cluster_with_namespaced_metrics(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes.select_kubernetes_cluster(
+        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
             app, (cluster_miss, cluster)
         )
 
@@ -990,8 +1094,10 @@ async def test_kubernetes_prefer_cluster_with_namespaced_metrics(
 
 
 async def test_kubernetes_select_cluster_without_metric(aiohttp_server, config, loop):
-    clusters = (ClusterFactory(spec__metrics=[]), ClusterFactory(spec__metrics=[],
-                status__state=ClusterState.ONLINE))
+    clusters = (
+        ClusterFactory(spec__metrics=[]),
+        ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE),
+    )
     app = ApplicationFactory(spec__constraints=None)
 
     scheduler = Scheduler("http://localhost:8080", worker_count=0)
@@ -999,7 +1105,9 @@ async def test_kubernetes_select_cluster_without_metric(aiohttp_server, config, 
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes.select_kubernetes_cluster(app, clusters)
+        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
+            app, clusters
+        )
         assert selected in clusters
 
 
@@ -1010,8 +1118,9 @@ async def test_kubernetes_select_cluster_not_deleted(aiohttp_server, config, loo
         index = random.randint(0, 9)
         clusters = [
             ClusterFactory(
-                metadata__deleted=datetime.now(timezone.utc), spec__metrics=[],
-                status__state=ClusterState.ONLINE
+                metadata__deleted=datetime.now(timezone.utc),
+                spec__metrics=[],
+                status__state=ClusterState.ONLINE,
             )
             for _ in range(10)
         ]
@@ -1024,7 +1133,7 @@ async def test_kubernetes_select_cluster_not_deleted(aiohttp_server, config, loo
 
         async with Client(url=server_endpoint(server), loop=loop) as client:
             await scheduler.prepare(client)
-            selected = await scheduler.kubernetes.select_kubernetes_cluster(
+            selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
                 app, clusters
             )
 
@@ -1037,10 +1146,7 @@ async def test_kubernetes_select_cluster_online(aiohttp_server, config, loop):
     for _ in range(10):
         index = random.randint(0, 9)
         clusters = [
-            ClusterFactory(
-                spec__metrics=[],
-                status__state=ClusterState.OFFLINE
-            )
+            ClusterFactory(spec__metrics=[], status__state=ClusterState.OFFLINE)
             for _ in range(10)
         ]
 
@@ -1053,7 +1159,7 @@ async def test_kubernetes_select_cluster_online(aiohttp_server, config, loop):
 
         async with Client(url=server_endpoint(server), loop=loop) as client:
             await scheduler.prepare(client)
-            selected = await scheduler.kubernetes.select_kubernetes_cluster(
+            selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
                 app, clusters
             )
 
@@ -1070,8 +1176,11 @@ async def test_kubernetes_select_cluster_with_constraints_without_metric(
     # that the expected cluster is chosen, even in case of failures.
     countries = ["IT"] + fake.words(99)
     clusters = [
-        ClusterFactory(spec__metrics=[], metadata__labels={"location": country},
-                       status__state=ClusterState.ONLINE)
+        ClusterFactory(
+            spec__metrics=[],
+            metadata__labels={"location": country},
+            status__state=ClusterState.ONLINE,
+        )
         for country in countries
     ]
 
@@ -1086,7 +1195,9 @@ async def test_kubernetes_select_cluster_with_constraints_without_metric(
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes.select_kubernetes_cluster(app, clusters)
+        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
+            app, clusters
+        )
         assert selected == clusters[0]
 
 
@@ -1107,7 +1218,7 @@ async def test_kubernetes_select_cluster_sticky_without_metric(
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes.select_kubernetes_cluster(
+        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
             app, (cluster_a, cluster_b)
         )
         assert selected == cluster_a
@@ -1116,16 +1227,16 @@ async def test_kubernetes_select_cluster_sticky_without_metric(
 async def test_kubernetes_select_no_cluster_all_unreachable_metric(
     aiohttp_server, config, db, loop
 ):
-    """Test scheduler picks no cluster if all metrics providers are unreachable
+    """Test: the scheduler picks no cluster if all metrics providers are unreachable
     as this will set the clusters to ClusterState.FAILING_METRICS"""
     clusters = [
         ClusterFactory(
             spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=False)],
-            status__state=ClusterState.ONLINE
+            status__state=ClusterState.ONLINE,
         ),
         ClusterFactory(
             spec__metrics=[MetricRef(name="unreachable", weight=0.1, namespaced=True)],
-            status__state=ClusterState.ONLINE
+            status__state=ClusterState.ONLINE,
         ),
     ]
     for cluster in clusters:
@@ -1177,7 +1288,9 @@ async def test_kubernetes_select_no_cluster_all_unreachable_metric(
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
         with pytest.raises(NoClusterFound):
-            selected = await scheduler.kubernetes.select_kubernetes_cluster(app, clusters)
+            await scheduler.kubernetes_application.select_kubernetes_cluster(
+                app, clusters
+            )
 
     for cluster in clusters:
         assert cluster.status.state == ClusterState.FAILING_METRICS
@@ -1186,17 +1299,20 @@ async def test_kubernetes_select_no_cluster_all_unreachable_metric(
 async def test_kubernetes_select_cluster_some_unreachable_metric(
     aiohttp_server, config, db, loop
 ):
-    """Test scheduler picks cluster from those with metrics from reachable providers"""
+    """Test: the scheduler picks cluster from those with metrics from
+    reachable providers"""
     prometheus = await aiohttp_server(make_prometheus({"heat-demand": ["0.4"] * 2}))
 
-    cluster_wo_metric = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
+    cluster_wo_metric = ClusterFactory(
+        spec__metrics=[], status__state=ClusterState.ONLINE
+    )
     cluster_w_unreachable = ClusterFactory(
         spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     cluster_w_metric = ClusterFactory(
         spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     await db.put(cluster_w_metric)
     await db.put(cluster_wo_metric)
@@ -1227,7 +1343,7 @@ async def test_kubernetes_select_cluster_some_unreachable_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes.select_kubernetes_cluster(
+        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
             app, [cluster_wo_metric, cluster_w_unreachable, cluster_w_metric]
         )
 
@@ -1239,15 +1355,19 @@ async def test_kubernetes_select_cluster_sticky_all_unreachable_metric(
 ):
     """Test which stickiness has the highest priority,
     if no metrics provider is reachable"""
-    cluster_wo_metric = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
-    current_wo_metric = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
+    cluster_wo_metric = ClusterFactory(
+        spec__metrics=[], status__state=ClusterState.ONLINE
+    )
+    current_wo_metric = ClusterFactory(
+        spec__metrics=[], status__state=ClusterState.ONLINE
+    )
     cluster1_w_metric = ClusterFactory(
         spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     cluster2_w_metric = ClusterFactory(
         spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=True)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     clusters = [
         cluster_wo_metric,
@@ -1302,7 +1422,9 @@ async def test_kubernetes_select_cluster_sticky_all_unreachable_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes.select_kubernetes_cluster(app, clusters)
+        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
+            app, clusters
+        )
 
     assert selected == current_wo_metric
 
@@ -1315,21 +1437,25 @@ async def test_kubernetes_select_cluster_sticky_others_with_metric(
         make_prometheus({"heat-demand": 4 * ["0.4"], "some-metric": 4 * ["1.0"]})
     )
 
-    current_wo_metric = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
-    cluster_wo_metric = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
+    current_wo_metric = ClusterFactory(
+        spec__metrics=[], status__state=ClusterState.ONLINE
+    )
+    cluster_wo_metric = ClusterFactory(
+        spec__metrics=[], status__state=ClusterState.ONLINE
+    )
     cluster_w_metric1 = ClusterFactory(
         spec__metrics=[
             MetricRef(name="heat-demand", weight=0.9, namespaced=False),
             MetricRef(name="some-metric", weight=1, namespaced=False),
         ],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     cluster_w_metric2 = ClusterFactory(
         spec__metrics=[
             MetricRef(name="heat-demand", weight=0.5, namespaced=False),
             MetricRef(name="some-metric", weight=1, namespaced=False),
         ],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     clusters = [
         current_wo_metric,
@@ -1373,7 +1499,9 @@ async def test_kubernetes_select_cluster_sticky_others_with_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes.select_kubernetes_cluster(app, clusters)
+        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
+            app, clusters
+        )
 
     assert selected == cluster_w_metric2
 
@@ -1384,14 +1512,16 @@ async def test_kubernetes_select_cluster_sticky_reachable_metric(
     """Test that stickiness is taken into account when metrics are used"""
     prometheus = await aiohttp_server(make_prometheus({"heat-demand": 4 * ["0.4"]}))
 
-    cluster_wo_metric = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
+    cluster_wo_metric = ClusterFactory(
+        spec__metrics=[], status__state=ClusterState.ONLINE
+    )
     current_w_metric = ClusterFactory(
         spec__metrics=[MetricRef(name="heat-demand", weight=0.99, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     cluster_w_metric = ClusterFactory(
         spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
 
     clusters = [cluster_wo_metric, current_w_metric, cluster_w_metric]
@@ -1423,23 +1553,27 @@ async def test_kubernetes_select_cluster_sticky_reachable_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes.select_kubernetes_cluster(app, clusters)
+        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
+            app, clusters
+        )
 
     assert selected == current_w_metric
 
 
-async def test_kubernetes_select_no_cluster_sticky_to_unreachable_all_unreachable_metric(
+async def test_kubernetes_select_no_cluster_sticky_to_all_unreachable_metric(
     aiohttp_server, config, db, loop
 ):
     """Test that also clusters with unreachable metrics providers are considered"""
-    cluster_wo_metric = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
+    cluster_wo_metric = ClusterFactory(
+        spec__metrics=[], status__state=ClusterState.ONLINE
+    )
     current_w_unreachable = ClusterFactory(
         spec__metrics=[MetricRef(name="unreachable", weight=0.99, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     cluster_w_unreachable = ClusterFactory(
         spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     clusters = [cluster_wo_metric, current_w_unreachable, cluster_w_unreachable]
     for cluster in clusters:
@@ -1473,7 +1607,9 @@ async def test_kubernetes_select_no_cluster_sticky_to_unreachable_all_unreachabl
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes.select_kubernetes_cluster(app, clusters)
+        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
+            app, clusters
+        )
 
     assert selected == cluster_wo_metric
 
@@ -1485,14 +1621,16 @@ async def test_kubernetes_select_cluster_sticky_unreachable_metric(
     has unreachable metrics."""
     prometheus = await aiohttp_server(make_prometheus({"heat-demand": 2 * ["0.4"]}))
 
-    cluster_wo_metric = ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE)
+    cluster_wo_metric = ClusterFactory(
+        spec__metrics=[], status__state=ClusterState.ONLINE
+    )
     current_w_unreachable = ClusterFactory(
         spec__metrics=[MetricRef(name="unreachable", weight=1, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     cluster_w_metric = ClusterFactory(
         spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     clusters = [cluster_wo_metric, current_w_unreachable, cluster_w_metric]
     random.shuffle(clusters)
@@ -1526,7 +1664,9 @@ async def test_kubernetes_select_cluster_sticky_unreachable_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes.select_kubernetes_cluster(app, clusters)
+        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
+            app, clusters
+        )
 
     assert selected == cluster_w_metric
 
@@ -1536,7 +1676,7 @@ async def test_kubernetes_scheduling(aiohttp_server, config, db, loop):
 
     cluster = ClusterFactory(
         spec__metrics=[MetricRef(name="heat-demand", weight=1, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     app = ApplicationFactory(
         spec__constraints__cluster__labels=[],
@@ -1567,7 +1707,7 @@ async def test_kubernetes_scheduling(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        await scheduler.kubernetes.kubernetes_application_received(app)
+        await scheduler.kubernetes_application.kubernetes_application_received(app)
 
         stored = await db.get(Application, namespace="testing", name=app.metadata.name)
 
@@ -1591,7 +1731,9 @@ async def test_kubernetes_scheduling_error(aiohttp_server, config, db, loop):
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
         await scheduler.queue.put(app.metadata.uid, app)
-        await scheduler.kubernetes.handle_kubernetes_applications(run_once=True)
+        await scheduler.kubernetes_application.handle_kubernetes_applications(
+            run_once=True
+        )
 
     stored = await db.get(Application, namespace="testing", name=app.metadata.name)
     assert stored.status.reason.code == ReasonCode.NO_SUITABLE_RESOURCE
@@ -1604,18 +1746,18 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
         make_prometheus(
             {
                 "heat_demand_1": ("0.5", "0.5", "0.25", "0.25", "0.25", "0.25"),
-                "heat_demand_2": ("0.25", "0.25", "0.5", "0.5",  "0.5", "0.5")
+                "heat_demand_2": ("0.25", "0.25", "0.5", "0.5", "0.5", "0.5"),
             }
         )
     )
 
     cluster1 = ClusterFactory(
         spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     cluster2 = ClusterFactory(
         spec__metrics=[MetricRef(name="heat-demand-2", weight=1, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
 
     app = ApplicationFactory(
@@ -1665,7 +1807,7 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
             reschedule_after=reschedule_after.seconds,
         )
         await scheduler.prepare(client)
-        await scheduler.kubernetes.kubernetes_application_received(app)
+        await scheduler.kubernetes_application.kubernetes_application_received(app)
 
         stored1 = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -1676,7 +1818,7 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
         assert stored1.metadata.modified <= stored1.status.scheduled
 
         # Schedule a second time the scheduled resource
-        await scheduler.kubernetes.kubernetes_application_received(stored1)
+        await scheduler.kubernetes_application.kubernetes_application_received(stored1)
         second_try_time = datetime.now().astimezone()
 
         # Since not much time has passed the application should not have migrated
@@ -1702,7 +1844,9 @@ async def test_kubernetes_migration(aiohttp_server, config, db, loop):
         time.sleep(pause.total_seconds())
 
         # Schedule the application a third time
-        await scheduler.kubernetes.kubernetes_application_received(stored_second_try)
+        await scheduler.kubernetes_application.kubernetes_application_received(
+            stored_second_try
+        )
 
         stored2 = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -1742,11 +1886,11 @@ async def test_kubernetes_migration_w_update(aiohttp_server, config, db, loop):
 
     cluster1 = ClusterFactory(
         spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     cluster2 = ClusterFactory(
         spec__metrics=[MetricRef(name="heat-demand-2", weight=1, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     app = ApplicationFactory(
         metadata__modified=datetime.now(timezone.utc),
@@ -1794,7 +1938,7 @@ async def test_kubernetes_migration_w_update(aiohttp_server, config, db, loop):
             reschedule_after=reschedule_after.seconds,
         )
         await scheduler.prepare(client)
-        await scheduler.kubernetes_application_received(app)
+        await scheduler.kubernetes_application.kubernetes_application_received(app)
 
         stored1 = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -1814,7 +1958,9 @@ async def test_kubernetes_migration_w_update(aiohttp_server, config, db, loop):
         assert stored1.metadata.modified < received.metadata.modified
 
         update_app = deepcopy(received)
-        await scheduler.kubernetes_application_received(update_app)
+        await scheduler.kubernetes_application.kubernetes_application_received(
+            update_app
+        )
         second_try_time = datetime.now().astimezone()
 
         # Although not much time has passed since the last scheduling,
@@ -1840,17 +1986,20 @@ async def test_kubernetes_no_migration(aiohttp_server, config, db, loop):
     """
     prometheus = await aiohttp_server(
         make_prometheus(
-            {"heat_demand_1": ("0.5", "0.5", "0.25"), "heat_demand_2": ("0.25", "0.25", "0.5")}
+            {
+                "heat_demand_1": ("0.5", "0.5", "0.25"),
+                "heat_demand_2": ("0.25", "0.25", "0.5"),
+            }
         )
     )
 
     cluster1 = ClusterFactory(
         spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     cluster2 = ClusterFactory(
         spec__metrics=[MetricRef(name="heat-demand-2", weight=1, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     app = ApplicationFactory(
         metadata__modified=datetime.now(timezone.utc),
@@ -1892,7 +2041,7 @@ async def test_kubernetes_no_migration(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        await scheduler.kubernetes.kubernetes_application_received(app)
+        await scheduler.kubernetes_application.kubernetes_application_received(app)
 
         stored1 = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -1903,7 +2052,7 @@ async def test_kubernetes_no_migration(aiohttp_server, config, db, loop):
         assert stored1.metadata.modified <= stored1.status.scheduled
 
         # Schedule the scheduled resource a second time
-        await scheduler.kubernetes.kubernetes_application_received(stored1)
+        await scheduler.kubernetes_application.kubernetes_application_received(stored1)
 
         stored2 = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -1917,6 +2066,7 @@ async def test_kubernetes_no_migration(aiohttp_server, config, db, loop):
         assert stored2.metadata.modified <= stored2.status.kube_controller_triggered
         assert stored2.status.scheduled == stored1.status.scheduled
         assert stored2.metadata.modified <= stored2.status.scheduled
+
 
 @pytest.mark.skip(reason="The metrics are failing.")
 async def test_kubernetes_application_update(aiohttp_server, config, db, loop):
@@ -1933,11 +2083,11 @@ async def test_kubernetes_application_update(aiohttp_server, config, db, loop):
 
     cluster1 = ClusterFactory(
         spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     cluster2 = ClusterFactory(
         spec__metrics=[MetricRef(name="heat-demand-2", weight=1, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     app = ApplicationFactory(
         metadata__modified=datetime.now(timezone.utc),
@@ -1978,7 +2128,7 @@ async def test_kubernetes_application_update(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        await scheduler.kubernetes.kubernetes_application_received(app)
+        await scheduler.kubernetes_application.kubernetes_application_received(app)
 
         stored1 = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -2000,7 +2150,9 @@ async def test_kubernetes_application_update(aiohttp_server, config, db, loop):
 
         # Schedule a second time the scheduled resource
         updated_app = deepcopy(received)
-        await scheduler.kubernetes.kubernetes_application_received(updated_app)
+        await scheduler.kubernetes_application.kubernetes_application_received(
+            updated_app
+        )
 
         stored2 = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -2019,6 +2171,7 @@ async def test_kubernetes_application_update(aiohttp_server, config, db, loop):
         )
         assert stored2.metadata.modified <= stored2.status.kube_controller_triggered
 
+
 @pytest.mark.skip(reason="The metrics are failing.")
 async def test_kubernetes_application_reschedule_no_update(
     aiohttp_server, config, db, loop
@@ -2036,11 +2189,11 @@ async def test_kubernetes_application_reschedule_no_update(
 
     cluster1 = ClusterFactory(
         spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     cluster2 = ClusterFactory(
         spec__metrics=[MetricRef(name="heat-demand-2", weight=1, namespaced=False)],
-        status__state=ClusterState.ONLINE
+        status__state=ClusterState.ONLINE,
     )
     app = ApplicationFactory(
         metadata__modified=datetime.now(timezone.utc),
@@ -2081,7 +2234,7 @@ async def test_kubernetes_application_reschedule_no_update(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        await scheduler.kubernetes.kubernetes_application_received(app)
+        await scheduler.kubernetes_application.kubernetes_application_received(app)
 
         stored1 = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -2093,7 +2246,9 @@ async def test_kubernetes_application_reschedule_no_update(
 
         # Schedule a second time the scheduled resource
         updated_app = deepcopy(stored1)
-        await scheduler.kubernetes.kubernetes_application_received(updated_app)
+        await scheduler.kubernetes_application.kubernetes_application_received(
+            updated_app
+        )
 
         stored2 = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
@@ -2682,15 +2837,1523 @@ async def test_openstack_scheduling_error(aiohttp_server, config, db, loop):
     assert stored.status.reason.code == ReasonCode.NO_SUITABLE_RESOURCE
 
 
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", CloudFactory),
+        ("openstack", GlobalCloudFactory),
+    ],
+)
+def test_cluster_match_cloud_label_constraints(cloud_type, cloud_resource):
+    cloud = cloud_resource(
+        spec__type=cloud_type,
+        metadata__labels={"location": "IT"},
+    )
+    cluster = ClusterFactory(
+        spec__constraints__cloud__labels=[LabelConstraint.parse("location is IT")],
+        spec__constraints__cloud__metrics=[],
+    )
+    assert match_cloud_constraints(cluster, cloud)
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", CloudFactory),
+        ("openstack", GlobalCloudFactory),
+    ],
+)
+def test_cluster_not_match_cloud_label_constraints(cloud_type, cloud_resource):
+    cloud = cloud_resource(spec__type=cloud_type)
+    cluster = ClusterFactory(
+        spec__constraints__cloud__labels=[LabelConstraint.parse("location is IT")],
+        spec__constraints__cloud__metrics=[],
+    )
+    assert not match_cloud_constraints(cluster, cloud)
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", CloudFactory),
+        ("openstack", GlobalCloudFactory),
+    ],
+)
+def test_cluster_match_cloud_metric_constraints(cloud_type, cloud_resource):
+    cloud = cloud_resource(
+        **{
+            "spec__type": cloud_type,
+            f"spec__{cloud_type}__metrics": [
+                MetricRef(name="load", weight=6.0, namespaced=False)
+            ],
+        }
+    )
+
+    cluster = ClusterFactory(
+        spec__constraints__cloud__metrics=[MetricConstraint.parse("load > 5")],
+        spec__constraints__cloud__labels=[],
+    )
+    fetched_metrics = {
+        cloud.metadata.name: [
+            QueryResult(
+                metric=MetricFactory(
+                    metadata__name="load",
+                    metadata__namespace="system:admin",
+                ),
+                weight=1.0,
+                value=6.0,
+            )
+        ]
+    }
+    assert match_cloud_constraints(cluster, cloud, fetched_metrics)
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", CloudFactory),
+        ("openstack", GlobalCloudFactory),
+    ],
+)
+def test_cluster_not_match_cloud_metrics_constraints(cloud_type, cloud_resource):
+    cloud = cloud_resource(
+        **{
+            "spec__type": cloud_type,
+            f"spec__{cloud_type}__metrics": [
+                MetricRef(name="load", weight=5.0, namespaced=False)
+            ],
+        }
+    )
+
+    cluster = ClusterFactory(
+        spec__constraints__cloud__metrics=[MetricConstraint.parse("load > 5")],
+        spec__constraints__cloud__labels=[],
+    )
+    fetched_metrics = {
+        cloud.metadata.name: [
+            QueryResult(
+                metric=MetricFactory(
+                    metadata__name="load",
+                    metadata__namespace="system:admin",
+                ),
+                weight=1.0,
+                value=5.0,
+            )
+        ]
+    }
+    assert not match_cloud_constraints(cluster, cloud, fetched_metrics)
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", CloudFactory),
+        ("openstack", GlobalCloudFactory),
+    ],
+)
+def test_cluster_match_empty_cloud_constraints(cloud_type, cloud_resource):
+    cloud = cloud_resource(
+        spec__type=cloud_type,
+    )
+    cluster1 = ClusterFactory(spec__constraints=None)
+    cluster2 = ClusterFactory(spec__constraints__cloud=None)
+    cluster3 = ClusterFactory(
+        spec__constraints__cloud__labels=None,
+        spec__constraints__cloud__metrics=None,
+    )
+
+    assert match_cloud_constraints(cluster1, cloud)
+    assert match_cloud_constraints(cluster2, cloud)
+    assert match_cloud_constraints(cluster3, cloud)
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", CloudFactory),
+    ],
+)
+async def test_cloud_score(
+    aiohttp_server, config, db, loop, cloud_type, cloud_resource
+):
+    prometheus = await aiohttp_server(make_prometheus({"test_metric_1": ["0.42"]}))
+    global_prometheus = await aiohttp_server(
+        make_prometheus({"test_metric_1": ["0.42"]})
+    )
+
+    cluster = ClusterFactory(
+        status__state=ClusterState.PENDING,
+    )
+    clouds = [
+        cloud_resource(
+            **{
+                "spec__type": cloud_type,
+                f"spec__{cloud_type}__metrics": [
+                    MetricRef(name="test-metric-1", weight=1.0, namespaced=False),
+                ],
+            }
+        ),
+        cloud_resource(
+            **{
+                "spec__type": cloud_type,
+                f"spec__{cloud_type}__metrics": [
+                    MetricRef(name="test-metric-2", weight=1.0, namespaced=False),
+                ],
+            }
+        ),
+        cloud_resource(
+            **{
+                "spec__type": cloud_type,
+                f"spec__{cloud_type}__metrics": [
+                    MetricRef(name="test-metric-1", weight=1.0, namespaced=True),
+                ],
+            }
+        ),
+        cloud_resource(
+            **{
+                "spec__type": cloud_type,
+                f"spec__{cloud_type}__metrics": [
+                    MetricRef(name="test-metric-2", weight=1.0, namespaced=True),
+                ],
+            }
+        ),
+    ]
+
+    metrics = [
+        GlobalMetricFactory(
+            metadata__name="test-metric-1",
+            spec__provider__name="test-prometheus",
+            spec__provider__metric="test_metric_1",
+        ),
+        GlobalMetricFactory(
+            metadata__name="test-metric-2",
+            spec__provider__name="test-static",
+            spec__provider__metric="test_metric_2",
+        ),
+        MetricFactory(
+            metadata__name="test-metric-1",
+            spec__provider__name="test-prometheus",
+            spec__provider__metric="test_metric_1",
+        ),
+        MetricFactory(
+            metadata__name="test-metric-2",
+            spec__provider__name="test-static",
+            spec__provider__metric="test_metric_2",
+        ),
+    ]
+    providers = [
+        MetricsProviderFactory(
+            metadata__name="test-prometheus",
+            spec__type="prometheus",
+            spec__prometheus__url=server_endpoint(prometheus),
+        ),
+        MetricsProviderFactory(
+            metadata__name="test-static",
+            spec__type="static",
+            spec__static__metrics={"test_metric_2": 0.5},
+        ),
+        GlobalMetricsProviderFactory(
+            metadata__name="test-prometheus",
+            spec__type="prometheus",
+            spec__prometheus__url=server_endpoint(global_prometheus),
+        ),
+        GlobalMetricsProviderFactory(
+            metadata__name="test-static",
+            spec__type="static",
+            spec__static__metrics={"test_metric_2": 0.5},
+        ),
+    ]
+
+    for metric in metrics:
+        await db.put(metric)
+
+    for provider in providers:
+        await db.put(provider)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        clouds_scores = await scheduler.kubernetes_cluster.rank_clouds(cluster, clouds)
+
+    for ranked, cloud in zip(clouds_scores, clouds):
+        assert ranked.score is not None
+        assert ranked.cloud == cloud
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", GlobalCloudFactory),
+    ],
+)
+async def test_global_cloud_score(
+    aiohttp_server, config, db, loop, cloud_type, cloud_resource
+):
+    """Test global cloud score.
+
+    A non-namespaced `GlobalCloud` resource cannot reference the namespaced
+    `Metric` resource, see #499 for details
+    """
+    prometheus = await aiohttp_server(make_prometheus({"test_metric_1": ["0.42"]}))
+    global_prometheus = await aiohttp_server(
+        make_prometheus({"test_metric_1": ["0.42"]})
+    )
+
+    cluster = ClusterFactory(
+        status__state=ClusterState.PENDING,
+    )
+    clouds = [
+        cloud_resource(
+            **{
+                "spec__type": cloud_type,
+                f"spec__{cloud_type}__metrics": [
+                    MetricRef(name="test-metric-1", weight=1.0, namespaced=False),
+                ],
+            }
+        ),
+        cloud_resource(
+            **{
+                "spec__type": cloud_type,
+                f"spec__{cloud_type}__metrics": [
+                    MetricRef(name="test-metric-2", weight=1.0, namespaced=False),
+                ],
+            }
+        ),
+    ]
+
+    metrics = [
+        GlobalMetricFactory(
+            metadata__name="test-metric-1",
+            spec__provider__name="test-prometheus",
+            spec__provider__metric="test_metric_1",
+        ),
+        GlobalMetricFactory(
+            metadata__name="test-metric-2",
+            spec__provider__name="test-static",
+            spec__provider__metric="test_metric_2",
+        ),
+        MetricFactory(
+            metadata__name="test-metric-1",
+            spec__provider__name="test-prometheus",
+            spec__provider__metric="test_metric_1",
+        ),
+        MetricFactory(
+            metadata__name="test-metric-2",
+            spec__provider__name="test-static",
+            spec__provider__metric="test_metric_2",
+        ),
+    ]
+    providers = [
+        MetricsProviderFactory(
+            metadata__name="test-prometheus",
+            spec__type="prometheus",
+            spec__prometheus__url=server_endpoint(prometheus),
+        ),
+        MetricsProviderFactory(
+            metadata__name="test-static",
+            spec__type="static",
+            spec__static__metrics={"test_metric_2": 0.5},
+        ),
+        GlobalMetricsProviderFactory(
+            metadata__name="test-prometheus",
+            spec__type="prometheus",
+            spec__prometheus__url=server_endpoint(global_prometheus),
+        ),
+        GlobalMetricsProviderFactory(
+            metadata__name="test-static",
+            spec__type="static",
+            spec__static__metrics={"test_metric_2": 0.5},
+        ),
+    ]
+
+    for metric in metrics:
+        await db.put(metric)
+
+    for provider in providers:
+        await db.put(provider)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        clouds_scores = await scheduler.kubernetes_cluster.rank_clouds(cluster, clouds)
+
+    for ranked, cloud in zip(clouds_scores, clouds):
+        assert ranked.score is not None
+        assert ranked.cloud == cloud
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", CloudFactory),
+        ("openstack", GlobalCloudFactory),
+    ],
+)
+async def test_cloud_score_empty_metrics(
+    aiohttp_server, config, loop, cloud_type, cloud_resource
+):
+    cluster = ClusterFactory(
+        status__state=ClusterState.PENDING,
+    )
+    clouds = [
+        cloud_resource(
+            **{"spec__type": cloud_type, f"spec__{cloud_type}__metrics": []}
+        ),
+        cloud_resource(
+            **{"spec__type": cloud_type, f"spec__{cloud_type}__metrics": []}
+        ),
+    ]
+    scheduler = Scheduler("http://localhost:8080", worker_count=0)
+    server = await aiohttp_server(create_app(config))
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        await scheduler.prepare(client)
+        with pytest.raises(AssertionError, match="Got empty list of metric references"):
+            await scheduler.kubernetes_cluster.rank_clouds(cluster, clouds)
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", CloudFactory),
+    ],
+)
+async def test_cloud_score_missing_metric(
+    aiohttp_server, db, config, loop, cloud_type, cloud_resource
+):
+    """Test the error handling of the Scheduler in the case of fetching a metric
+    referenced in a Cloud but not present in the database.
+    """
+    cluster = ClusterFactory(
+        status__state=ClusterState.PENDING,
+    )
+    clouds = [
+        cloud_resource(
+            **{
+                "spec__type": cloud_type,
+                f"spec__{cloud_type}__metrics": [
+                    MetricRef(name="non-existent-metric", weight=1, namespaced=False)
+                ],
+            }
+        ),
+        cloud_resource(
+            **{
+                "spec__type": cloud_type,
+                f"spec__{cloud_type}__metrics": [
+                    MetricRef(name="non-existent-metric", weight=1, namespaced=True)
+                ],
+            }
+        ),
+    ]
+    for cloud in clouds:
+        await db.put(cloud)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        scored = await scheduler.kubernetes_cluster.rank_clouds(cluster, clouds)
+
+    assert len(scored) == 0
+
+    for cloud in clouds:
+        if cloud_resource == GlobalCloudFactory:
+            stored_cloud = await db.get(cloud_resource(), name=cloud.metadata.name)
+        else:
+            stored_cloud = await db.get(
+                cloud_resource(),
+                namespace=cloud.metadata.namespace,
+                name=cloud.metadata.name,
+            )
+        assert stored_cloud.status.state == CloudState.FAILING_METRICS
+        assert len(stored_cloud.status.metrics_reasons) == 1
+
+        single_metric_reason = stored_cloud.status.metrics_reasons[
+            "non-existent-metric"
+        ]
+        assert single_metric_reason.code == ReasonCode.UNKNOWN_METRIC
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", GlobalCloudFactory),
+    ],
+)
+async def test_global_cloud_score_missing_metric(
+    aiohttp_server, db, config, loop, cloud_type, cloud_resource
+):
+    """Test the error handling of the Scheduler in the case of fetching a metric
+    referenced in a GlobalCloud but not present in the database.
+
+    A non-namespaced `GlobalCloud` resource cannot reference the namespaced
+    `Metric` resource, see #499 for details
+    """
+    cluster = ClusterFactory(
+        status__state=ClusterState.PENDING,
+    )
+    clouds = [
+        cloud_resource(
+            **{
+                "spec__type": cloud_type,
+                f"spec__{cloud_type}__metrics": [
+                    MetricRef(name="non-existent-metric", weight=1, namespaced=False)
+                ],
+            }
+        )
+    ]
+    for cloud in clouds:
+        await db.put(cloud)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        scored = await scheduler.kubernetes_cluster.rank_clouds(cluster, clouds)
+
+    assert len(scored) == 0
+
+    for cloud in clouds:
+        if cloud_resource == GlobalCloudFactory:
+            stored_cloud = await db.get(cloud_resource(), name=cloud.metadata.name)
+        else:
+            stored_cloud = await db.get(
+                cloud_resource(),
+                namespace=cloud.metadata.namespace,
+                name=cloud.metadata.name,
+            )
+        assert stored_cloud.status.state == CloudState.FAILING_METRICS
+        assert len(stored_cloud.status.metrics_reasons) == 1
+
+        single_metric_reason = stored_cloud.status.metrics_reasons[
+            "non-existent-metric"
+        ]
+        assert single_metric_reason.code == ReasonCode.UNKNOWN_METRIC
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", CloudFactory),
+    ],
+)
+async def test_cloud_score_missing_metrics_provider(
+    aiohttp_server, config, db, loop, cloud_type, cloud_resource
+):
+    """Test the error handling of the Scheduler in the case of fetching a metric
+    provider referenced in a metric referenced by a Cloud but the provider is not
+    present in the database.
+    """
+    cluster = ClusterFactory(
+        status__state=ClusterState.PENDING,
+    )
+    clouds = [
+        cloud_resource(
+            **{
+                "spec__type": cloud_type,
+                f"spec__{cloud_type}__metrics": [
+                    MetricRef(name="my-metric", weight=1, namespaced=False)
+                ],
+            }
+        ),
+        cloud_resource(
+            **{
+                "spec__type": cloud_type,
+                f"spec__{cloud_type}__metrics": [
+                    MetricRef(name="my-metric", weight=1, namespaced=True)
+                ],
+            }
+        ),
+    ]
+    for cloud in clouds:
+        await db.put(cloud)
+
+    metrics = [
+        GlobalMetricFactory(
+            metadata__name="my-metric",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="non-existent-provider",
+            spec__provider__metric="non-existent-metric",
+        ),
+        MetricFactory(
+            metadata__name="my-metric",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="non-existent-provider",
+            spec__provider__metric="non-existent-metric",
+        ),
+    ]
+    for metric in metrics:
+        await db.put(metric)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        scored = await scheduler.kubernetes_cluster.rank_clouds(cluster, clouds)
+
+    assert len(scored) == 0
+
+    for cloud in clouds:
+        if cloud_resource == GlobalCloudFactory:
+            stored_cloud = await db.get(cloud_resource(), name=cloud.metadata.name)
+        else:
+            stored_cloud = await db.get(
+                cloud_resource(),
+                namespace=cloud.metadata.namespace,
+                name=cloud.metadata.name,
+            )
+        assert stored_cloud.status.state == CloudState.FAILING_METRICS
+        assert len(stored_cloud.status.metrics_reasons) == 1
+        assert (
+            stored_cloud.status.metrics_reasons["my-metric"].code
+            == ReasonCode.UNKNOWN_METRICS_PROVIDER
+        )
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", GlobalCloudFactory),
+    ],
+)
+async def test_global_cloud_score_missing_metrics_provider(
+    aiohttp_server, config, db, loop, cloud_type, cloud_resource
+):
+    """Test the error handling of the Scheduler in the case of fetching a metric
+    provider referenced in a metric referenced by a GlobalCloud but the provider
+    is not present in the database.
+
+    A non-namespaced `GlobalCloud` resource cannot reference the namespaced
+    `Metric` resource, see #499 for details
+    """
+    cluster = ClusterFactory(
+        status__state=ClusterState.PENDING,
+    )
+    clouds = [
+        cloud_resource(
+            **{
+                "spec__type": cloud_type,
+                f"spec__{cloud_type}__metrics": [
+                    MetricRef(name="my-metric", weight=1, namespaced=False)
+                ],
+            }
+        ),
+    ]
+    for cloud in clouds:
+        await db.put(cloud)
+
+    metrics = [
+        GlobalMetricFactory(
+            metadata__name="my-metric",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="non-existent-provider",
+            spec__provider__metric="non-existent-metric",
+        ),
+    ]
+    for metric in metrics:
+        await db.put(metric)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        scored = await scheduler.kubernetes_cluster.rank_clouds(cluster, clouds)
+
+    assert len(scored) == 0
+
+    for cloud in clouds:
+        if cloud_resource == GlobalCloudFactory:
+            stored_cloud = await db.get(cloud_resource(), name=cloud.metadata.name)
+        else:
+            stored_cloud = await db.get(
+                cloud_resource(),
+                namespace=cloud.metadata.namespace,
+                name=cloud.metadata.name,
+            )
+        assert stored_cloud.status.state == CloudState.FAILING_METRICS
+        assert len(stored_cloud.status.metrics_reasons) == 1
+        assert (
+            stored_cloud.status.metrics_reasons["my-metric"].code
+            == ReasonCode.UNKNOWN_METRICS_PROVIDER
+        )
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", CloudFactory),
+        ("openstack", GlobalCloudFactory),
+    ],
+)
+async def test_cloud_score_multiple_failing_metric(
+    aiohttp_server, db, config, loop, cloud_type, cloud_resource
+):
+    """Test the error handling of the Scheduler in the case of several errors related to
+    metrics referenced in two different clouds. The issues are the following:
+
+    1st cloud:
+    - 1st metric: defined metric provider not present in the database
+    - 2nd metric: not present in the database
+
+    2nd cloud:
+    - 1st metric: defined metric provider returns errors.
+    - 2nd metric: not present in the database.
+    """
+    routes = web.RouteTableDef()
+
+    @routes.get("/api/v1/query")
+    async def _(request):
+        raise web.HTTPServiceUnavailable()
+
+    prometheus_app = web.Application()
+    prometheus_app.add_routes(routes)
+
+    prometheus = await aiohttp_server(prometheus_app)
+
+    cluster = ClusterFactory(
+        status__state=ClusterState.PENDING,
+    )
+    clouds = [
+        cloud_resource(
+            **{
+                "spec__type": cloud_type,
+                f"spec__{cloud_type}__metrics": [
+                    MetricRef(name="non-existent-metric", weight=1, namespaced=False),
+                    MetricRef(name="existent-metric", weight=1, namespaced=False),
+                ],
+            }
+        ),
+        cloud_resource(
+            **{
+                "spec__type": cloud_type,
+                f"spec__{cloud_type}__metrics": [
+                    MetricRef(name="also-existent", weight=1, namespaced=False),
+                    MetricRef(name="again-non-existent", weight=1, namespaced=False),
+                ],
+            }
+        ),
+    ]
+    for cloud in clouds:
+        await db.put(cloud)
+
+    metrics = [
+        GlobalMetricFactory(
+            metadata__name="existent-metric",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="my-provider",
+            spec__provider__metric="my-metric",
+        ),
+        GlobalMetricFactory(
+            metadata__name="also-existent",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="non-existent-provider",
+            spec__provider__metric="my-other-metric",
+        ),
+    ]
+    provider = GlobalMetricsProviderFactory(
+        metadata__name="my-provider",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+    for metric in metrics:
+        await db.put(metric)
+    await db.put(provider)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        scored = await scheduler.kubernetes_cluster.rank_clouds(cluster, clouds)
+
+    assert len(scored) == 0
+
+    # 1st cloud:
+    # - 1st metric: defined metric provider not present in the database
+    # - 2nd metric: not present in the database
+    first_cloud = (
+        await db.get(
+            cloud_resource(),
+            name=clouds[0].metadata.name,
+        )
+        if cloud_resource == GlobalCloudFactory
+        else await db.get(
+            cloud_resource(),
+            namespace=clouds[0].metadata.namespace,
+            name=clouds[0].metadata.name,
+        )
+    )
+
+    assert first_cloud.status.state == CloudState.FAILING_METRICS
+    assert len(first_cloud.status.metrics_reasons) == 2
+
+    assert (
+        first_cloud.status.metrics_reasons["existent-metric"].code
+        == ReasonCode.UNREACHABLE_METRICS_PROVIDER
+    )
+    assert (
+        first_cloud.status.metrics_reasons["non-existent-metric"].code
+        == ReasonCode.UNKNOWN_METRIC
+    )
+
+    # 2nd cloud:
+    # - 1st metric: defined metric provider returns errors.
+    # - 2nd metric: not present in the database
+    second_cloud = (
+        await db.get(
+            cloud_resource(),
+            name=clouds[1].metadata.name,
+        )
+        if cloud_resource == GlobalCloudFactory
+        else await db.get(
+            cloud_resource(),
+            namespace=clouds[1].metadata.namespace,
+            name=clouds[1].metadata.name,
+        )
+    )
+    assert second_cloud.status.state == CloudState.FAILING_METRICS
+    assert len(second_cloud.status.metrics_reasons) == 2
+
+    assert (
+        second_cloud.status.metrics_reasons["also-existent"].code
+        == ReasonCode.UNKNOWN_METRICS_PROVIDER
+    )
+    assert (
+        second_cloud.status.metrics_reasons["again-non-existent"].code
+        == ReasonCode.UNKNOWN_METRIC
+    )
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", CloudFactory),
+        ("openstack", GlobalCloudFactory),
+    ],
+)
+async def test_cloud_score_failing_metrics_provider(
+    aiohttp_server, config, db, loop, cloud_type, cloud_resource
+):
+    """Test the error handling of the Scheduler in the case of fetching the value of a
+    metric (referenced by a cloud) from its provider, but the connection has an issue.
+    """
+    routes = web.RouteTableDef()
+
+    @routes.get("/api/v1/query")
+    async def _(request):
+        raise web.HTTPServiceUnavailable()
+
+    prometheus_app = web.Application()
+    prometheus_app.add_routes(routes)
+
+    prometheus = await aiohttp_server(prometheus_app)
+
+    cluster = ClusterFactory(
+        status__state=ClusterState.PENDING,
+    )
+    cloud = cloud_resource(
+        **{
+            "spec__type": cloud_type,
+            f"spec__{cloud_type}__metrics": [
+                MetricRef(name="my-metric", weight=1, namespaced=False),
+            ],
+        }
+    )
+    await db.put(cloud)
+    metrics = [
+        GlobalMetricFactory(
+            metadata__name="my-metric",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="my-provider",
+            spec__provider__metric="my-metric",
+        )
+    ]
+    provider = GlobalMetricsProviderFactory(
+        metadata__name="my-provider",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+    for metric in metrics:
+        await db.put(metric)
+    await db.put(provider)
+
+    api = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(api), worker_count=0)
+        await scheduler.prepare(client)
+        scored = await scheduler.kubernetes_cluster.rank_clouds(cluster, [cloud])
+
+    assert len(scored) == 0
+
+    stored_cloud = (
+        await db.get(
+            cloud_resource(),
+            name=cloud.metadata.name,
+        )
+        if cloud_resource == GlobalCloudFactory
+        else await db.get(
+            cloud_resource(),
+            namespace=cloud.metadata.namespace,
+            name=cloud.metadata.name,
+        )
+    )
+
+    assert stored_cloud.status.state == CloudState.FAILING_METRICS
+    assert len(stored_cloud.status.metrics_reasons) == 1
+    assert (
+        stored_cloud.status.metrics_reasons["my-metric"].code
+        == ReasonCode.UNREACHABLE_METRICS_PROVIDER
+    )
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", CloudFactory),
+        ("openstack", GlobalCloudFactory),
+    ],
+)
+async def test_cloud_score_failing_globalmetrics_provider(
+    aiohttp_server, config, db, loop, cloud_type, cloud_resource
+):
+    """Test the error handling of the Scheduler in the case of fetching the value of a
+    metric (referenced by a cloud) from its provider, but the connection has an issue.
+    """
+    routes = web.RouteTableDef()
+
+    @routes.get("/api/v1/query")
+    async def _(request):
+        raise web.HTTPServiceUnavailable()
+
+    prometheus_app = web.Application()
+    prometheus_app.add_routes(routes)
+
+    prometheus = await aiohttp_server(prometheus_app)
+
+    cluster = ClusterFactory(
+        status__state=ClusterState.PENDING,
+    )
+    cloud = cloud_resource(
+        **{
+            "spec__type": cloud_type,
+            f"spec__{cloud_type}__metrics": [
+                MetricRef(name="my-metric", weight=1, namespaced=False),
+            ],
+        }
+    )
+    await db.put(cloud)
+    metrics = [
+        GlobalMetricFactory(
+            metadata__name="my-metric",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="my-provider",
+            spec__provider__metric="my-metric",
+        )
+    ]
+    provider = GlobalMetricsProviderFactory(
+        metadata__name="my-provider",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+    for metric in metrics:
+        await db.put(metric)
+    await db.put(provider)
+
+    api = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(api), worker_count=0)
+        await scheduler.prepare(client)
+        scored = await scheduler.kubernetes_cluster.rank_clouds(cluster, [cloud])
+
+    assert len(scored) == 0
+
+    stored_cloud = (
+        await db.get(
+            cloud_resource(),
+            name=cloud.metadata.name,
+        )
+        if cloud_resource == GlobalCloudFactory
+        else await db.get(
+            cloud_resource(),
+            namespace=cloud.metadata.namespace,
+            name=cloud.metadata.name,
+        )
+    )
+    assert stored_cloud.status.state == CloudState.FAILING_METRICS
+    assert len(stored_cloud.status.metrics_reasons) == 1
+    assert (
+        stored_cloud.status.metrics_reasons["my-metric"].code
+        == ReasonCode.UNREACHABLE_METRICS_PROVIDER
+    )
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", CloudFactory),
+        ("openstack", GlobalCloudFactory),
+    ],
+)
+async def test_cluster_prefer_cloud_with_global_metrics(
+    aiohttp_server, config, db, loop, cloud_type, cloud_resource
+):
+    prometheus = await aiohttp_server(make_prometheus({"my_metric": 2 * ["0.4"]}))
+
+    cluster = ClusterFactory(
+        status__state=ClusterState.PENDING,
+        spec__constraints=None,
+    )
+    cloud_miss = cloud_resource(
+        **{"spec__type": cloud_type, f"spec__{cloud_type}__metrics": []}
+    )
+    cloud = cloud_resource(
+        **{
+            "spec__type": cloud_type,
+            f"spec__{cloud_type}__metrics": [
+                MetricRef(name="my_metric", weight=1, namespaced=False),
+            ],
+        }
+    )
+
+    metric = GlobalMetricFactory(
+        metadata__name="my_metric",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus-zone-1",
+        spec__provider__metric="my_metric",
+    )
+    metrics_provider = GlobalMetricsProviderFactory(
+        metadata__name="prometheus-zone-1",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+
+    await db.put(metric)
+    await db.put(metrics_provider)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        selected = await scheduler.kubernetes_cluster.select_cloud(
+            cluster, [cloud_miss, cloud]
+        )
+
+    assert selected == cloud
+
+
+@pytest.mark.skip(reason="FIXME: The test wants further investigation.")
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", CloudFactory),
+        ("openstack", GlobalCloudFactory),
+    ],
+)
+async def test_cluster_prefer_cloud_with_namespaced_metrics(
+    aiohttp_server, config, db, loop, cloud_type, cloud_resource
+):
+    prometheus = await aiohttp_server(make_prometheus({"my_metric": ["0.4"]}))
+
+    cluster = ClusterFactory(
+        status__state=ClusterState.PENDING,
+        spec__constraints=None,
+    )
+    cloud_miss = cloud_resource(
+        **{"spec__type": cloud_type, f"spec__{cloud_type}__metrics": []}
+    )
+    cloud = cloud_resource(
+        **{
+            "spec__type": cloud_type,
+            f"spec__{cloud_type}__metrics": [
+                MetricRef(name="my_metric", weight=1, namespaced=True),
+            ],
+        }
+    )
+
+    metric = MetricFactory(
+        metadata__name="my_metric",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus-zone-1",
+        spec__provider__metric="my_metric",
+    )
+    metrics_provider = MetricsProviderFactory(
+        metadata__name="prometheus-zone-1",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+
+    await db.put(metric)
+    await db.put(metrics_provider)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        selected = await scheduler.kubernetes_cluster.select_cloud(
+            cluster, [cloud_miss, cloud]
+        )
+
+    assert selected == cloud
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", CloudFactory),
+        ("openstack", GlobalCloudFactory),
+    ],
+)
+async def test_cluster_select_cloud_without_metric(
+    aiohttp_server, config, loop, cloud_type, cloud_resource
+):
+    cluster = ClusterFactory(
+        status__state=ClusterState.PENDING,
+        spec__constraints=None,
+    )
+    clouds = [
+        cloud_resource(
+            **{"spec__type": cloud_type, f"spec__{cloud_type}__metrics": []}
+        ),
+        cloud_resource(
+            **{"spec__type": cloud_type, f"spec__{cloud_type}__metrics": []}
+        ),
+    ]
+
+    scheduler = Scheduler("http://localhost:8080", worker_count=0)
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        await scheduler.prepare(client)
+        selected = await scheduler.kubernetes_cluster.select_cloud(cluster, clouds)
+        assert selected in clouds
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", CloudFactory),
+        ("openstack", GlobalCloudFactory),
+    ],
+)
+async def test_cluster_select_cloud_not_deleted(
+    aiohttp_server, config, loop, cloud_type, cloud_resource
+):
+    # As the finally selected cloud is chosen randomly, perform the test several times
+    # to ensure that the cloud has really been chosen the right way, not by chance.
+    for _ in range(10):
+        index = random.randint(0, 9)
+        clouds = [
+            cloud_resource(
+                **{
+                    "spec__type": cloud_type,
+                    "metadata__deleted": datetime.now(timezone.utc),
+                    f"spec__{cloud_type}__metrics": [],
+                }
+            )
+            for _ in range(10)
+        ]
+        clouds[index].metadata.deleted = None
+
+        cluster = ClusterFactory(
+            status__state=ClusterState.PENDING,
+            spec__constraints=None,
+        )
+
+        scheduler = Scheduler("http://localhost:8080", worker_count=0)
+        server = await aiohttp_server(create_app(config))
+
+        async with Client(url=server_endpoint(server), loop=loop) as client:
+            await scheduler.prepare(client)
+            selected = await scheduler.kubernetes_cluster.select_cloud(cluster, clouds)
+
+            assert selected == clouds[index]
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", CloudFactory),
+        ("openstack", GlobalCloudFactory),
+    ],
+)
+async def test_cluster_select_cloud_with_constraints_without_metric(
+    aiohttp_server, config, loop, cloud_type, cloud_resource
+):
+    # Because the selection of cloud is done randomly between the matching clouds,
+    # if an error was present, the right cloud could have been randomly picked,
+    # and the test would pass even if it should not.
+    # Thus, many cloud that should not match are created, which reduces the chances
+    # that the expected cloud is chosen, even in case of failures.
+    countries = ["IT"] + fake.words(99)
+    clouds = [
+        cloud_resource(
+            **{
+                "spec__type": cloud_type,
+                f"spec__{cloud_type}__metrics": [],
+                "metadata__labels": {"location": country},
+            }
+        )
+        for country in countries
+    ]
+    cluster = ClusterFactory(
+        status__state=ClusterState.PENDING,
+        spec__constraints__cloud__labels=[LabelConstraint.parse("location is IT")],
+        spec__constraints__cloud__metrics=[],
+    )
+
+    scheduler = Scheduler("http://localhost:8080", worker_count=0)
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        await scheduler.prepare(client)
+        selected = await scheduler.kubernetes_cluster.select_cloud(cluster, clouds)
+        assert selected == clouds[0]
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", CloudFactory),
+    ],
+)
+async def test_cluster_select_cloud_all_unreachable_metric(
+    aiohttp_server, config, db, loop, cloud_type, cloud_resource
+):
+    """Test: the scheduler picks a cloud even if all metrics providers
+    are unreachable"""
+    clouds = [
+        cloud_resource(
+            **{
+                "spec__type": cloud_type,
+                f"spec__{cloud_type}__metrics": [
+                    MetricRef(name="unreachable", weight=1, namespaced=False)
+                ],
+            }
+        ),
+        cloud_resource(
+            **{
+                "spec__type": cloud_type,
+                f"spec__{cloud_type}__metrics": [
+                    MetricRef(name="unreachable", weight=0.1, namespaced=True)
+                ],
+            }
+        ),
+    ]
+    for cloud in clouds:
+        await db.put(cloud)
+
+    metrics = [
+        GlobalMetricFactory(
+            metadata__name="unreachable",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="my-provider",
+            spec__provider__metric="my-metric",
+        ),
+        MetricFactory(
+            metadata__name="unreachable",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="my-provider",
+            spec__provider__metric="my-metric",
+        ),
+    ]
+    providers = [
+        GlobalMetricsProviderFactory(
+            metadata__name="my-provider",
+            spec__type="prometheus",
+            spec__prometheus__url="http://dummyurl",
+        ),
+        MetricsProviderFactory(
+            metadata__name="my-provider",
+            spec__type="prometheus",
+            spec__prometheus__url="http://dummyurl",
+        ),
+    ]
+
+    for metric in metrics:
+        await db.put(metric)
+    for provider in providers:
+        await db.put(provider)
+
+    random.shuffle(clouds)
+
+    cluster = ClusterFactory(
+        status__state=ClusterState.PENDING,
+        spec__constraints=None,
+    )
+    server = await aiohttp_server(create_app(config))
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        selected = await scheduler.kubernetes_cluster.select_cloud(cluster, clouds)
+
+    assert selected in clouds
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", GlobalCloudFactory),
+    ],
+)
+async def test_cluster_select_global_cloud_all_unreachable_metric(
+    aiohttp_server, config, db, loop, cloud_type, cloud_resource
+):
+    """Test: the scheduler picks a cloud even if all metrics providers are unreachable.
+
+    A non-namespaced `GlobalCloud` resource cannot reference the namespaced
+    `Metric` resource, see #499 for details
+    """
+    clouds = [
+        cloud_resource(
+            **{
+                "spec__type": cloud_type,
+                f"spec__{cloud_type}__metrics": [
+                    MetricRef(name="unreachable", weight=1, namespaced=False)
+                ],
+            }
+        ),
+        cloud_resource(
+            **{
+                "spec__type": cloud_type,
+                f"spec__{cloud_type}__metrics": [
+                    MetricRef(name="unreachable-1", weight=0.1, namespaced=False)
+                ],
+            }
+        ),
+    ]
+    for cloud in clouds:
+        await db.put(cloud)
+
+    metrics = [
+        GlobalMetricFactory(
+            metadata__name="unreachable",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="my-provider",
+            spec__provider__metric="my-metric",
+        ),
+        MetricFactory(
+            metadata__name="unreachable",
+            spec__min=0,
+            spec__max=1,
+            spec__provider__name="my-provider",
+            spec__provider__metric="my-metric",
+        ),
+    ]
+    providers = [
+        GlobalMetricsProviderFactory(
+            metadata__name="my-provider",
+            spec__type="prometheus",
+            spec__prometheus__url="http://dummyurl",
+        ),
+        MetricsProviderFactory(
+            metadata__name="my-provider",
+            spec__type="prometheus",
+            spec__prometheus__url="http://dummyurl",
+        ),
+    ]
+
+    for metric in metrics:
+        await db.put(metric)
+    for provider in providers:
+        await db.put(provider)
+
+    random.shuffle(clouds)
+
+    cluster = ClusterFactory(
+        status__state=ClusterState.PENDING,
+        spec__constraints=None,
+    )
+    server = await aiohttp_server(create_app(config))
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        selected = await scheduler.kubernetes_cluster.select_cloud(cluster, clouds)
+
+    assert selected in clouds
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", CloudFactory),
+        ("openstack", GlobalCloudFactory),
+    ],
+)
+async def test_cluster_select_cloud_some_unreachable_metric(
+    aiohttp_server, config, db, loop, cloud_type, cloud_resource
+):
+    """Test: the scheduler picks cloud from those with metrics from
+    reachable providers"""
+    prometheus = await aiohttp_server(make_prometheus({"heat-demand": ["0.4"] * 2}))
+    cloud_metric = cloud_resource(
+        **{
+            "spec__type": cloud_type,
+            f"spec__{cloud_type}__metrics": [
+                MetricRef(name="heat-demand", weight=1, namespaced=False),
+            ],
+        }
+    )
+    cloud_unreachable = cloud_resource(
+        **{
+            "spec__type": cloud_type,
+            f"spec__{cloud_type}__metrics": [
+                MetricRef(name="unreachable", weight=1, namespaced=False),
+            ],
+        }
+    )
+    cloud_no_metric = cloud_resource(
+        **{
+            "spec__type": cloud_type,
+            f"spec__{cloud_type}__metrics": [],
+        }
+    )
+
+    await db.put(cloud_metric)
+    await db.put(cloud_unreachable)
+    await db.put(cloud_no_metric)
+
+    metric = GlobalMetricFactory(
+        metadata__name="heat-demand",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus-zone-1",
+        spec__provider__metric="heat-demand",
+    )
+    metrics_provider = GlobalMetricsProviderFactory(
+        metadata__name="prometheus-zone-1",
+        spec__type="prometheus",
+        spec__prometheus__url=server_endpoint(prometheus),
+    )
+    cluster = ClusterFactory(
+        status__state=ClusterState.PENDING,
+        spec__constraints=None,
+    )
+    await db.put(metric)
+    await db.put(metrics_provider)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        selected = await scheduler.kubernetes_cluster.select_cloud(
+            cluster, [cloud_unreachable, cloud_no_metric, cloud_metric]
+        )
+
+    assert selected == cloud_metric
+
+
+@pytest.mark.parametrize(
+    "cloud_type,cloud_resource",
+    [
+        ("openstack", CloudFactory),
+        ("openstack", GlobalCloudFactory),
+    ],
+)
+async def test_cluster_scheduling(
+    aiohttp_server, config, db, loop, cloud_type, cloud_resource
+):
+    prometheus = await aiohttp_server(make_prometheus({"heat_demand_zone_1": ["0.25"]}))
+
+    cloud = cloud_resource(
+        **{
+            "spec__type": cloud_type,
+            f"spec__{cloud_type}__metrics": [
+                MetricRef(name="heat-demand", weight=1, namespaced=False),
+            ],
+        }
+    )
+    cluster = ClusterFactory(
+        status__state=ClusterState.PENDING,
+        spec__constraints__cloud__labels=[],
+        spec__constraints__cloud__metrics=[],
+    )
+
+    metric = GlobalMetricFactory(
+        metadata__name="heat-demand",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus-zone-1",
+        spec__provider__metric="heat_demand_zone_1",
+    )
+    metrics_provider = GlobalMetricsProviderFactory(
+        metadata__name="prometheus-zone-1",
+        spec__type="prometheus",
+        spec__prometheus__url=f"http://{prometheus.host}:{prometheus.port}",
+    )
+    await db.put(metric)
+    await db.put(metrics_provider)
+    await db.put(cluster)
+    await db.put(cloud)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        await scheduler.kubernetes_cluster.schedule_kubernetes_cluster(cluster)
+
+        stored = await db.get(
+            Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+        )
+
+        assert stored.status.scheduled_to == resource_ref(cloud)
+        assert stored.status.scheduled
+
+
+async def test_cluster_scheduling_error(aiohttp_server, config, db, loop):
+    cluster = ClusterFactory(
+        status__state=ClusterState.PENDING,
+        status__scheduled_to=None,
+        spec__tosca=TOSCA_CLUSTER_MINIMAL,
+    )
+
+    await db.put(cluster)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        await scheduler.cluster_queue.put(cluster.metadata.uid, cluster)
+        await scheduler.kubernetes_cluster.handle_kubernetes_clusters(run_once=True)
+
+    stored = await db.get(
+        Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+    )
+    assert stored.status.reason.code == ReasonCode.NO_SUITABLE_RESOURCE
+
+
 async def test_application_degraded_state(aiohttp_server, config, db, loop):
     # Test that the Application goes in ApplicationState.DEGRADED if no cluster was
     # found, and to ApplicationState.FAILED after backoff_limit is exceeded and
     # to ApplicationState.SUCCESS if a cluster was found instead. Uses two
     # Applications with backoff_limit=1
     prometheus = await aiohttp_server(
-        make_prometheus(
-            {"heat_demand_1": ("0.5", "0.25")}
-        )
+        make_prometheus({"heat_demand_1": ("0.5", "0.25")})
     )
 
     degraded_and_failed = ApplicationFactory(
@@ -2699,7 +4362,7 @@ async def test_application_degraded_state(aiohttp_server, config, db, loop):
         spec__constraints__cluster__custom_resources=[],
         status__state=ApplicationState.PENDING,
         status__is_scheduled=False,
-        spec__backoff_limit=1
+        spec__backoff_limit=1,
     )
 
     degraded_and_success = ApplicationFactory(
@@ -2708,7 +4371,7 @@ async def test_application_degraded_state(aiohttp_server, config, db, loop):
         spec__constraints__cluster__custom_resources=[],
         status__state=ApplicationState.PENDING,
         status__is_scheduled=False,
-        spec__backoff_limit=1
+        spec__backoff_limit=1,
     )
 
     metric = GlobalMetricFactory(
@@ -2727,7 +4390,7 @@ async def test_application_degraded_state(aiohttp_server, config, db, loop):
 
     cluster = ClusterFactory(
         status__state=ClusterState.ONLINE,
-        spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)]
+        spec__metrics=[MetricRef(name="heat-demand-1", weight=1, namespaced=False)],
     )
 
     await db.put(degraded_and_failed)
@@ -2741,40 +4404,52 @@ async def test_application_degraded_state(aiohttp_server, config, db, loop):
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
         await scheduler.queue.put(degraded_and_failed.metadata.uid, degraded_and_failed)
-        await scheduler.kubernetes.handle_kubernetes_applications(run_once=True)
+        await scheduler.kubernetes_application.handle_kubernetes_applications(
+            run_once=True
+        )
         degraded_and_failed = await db.get(
-            Application, namespace=degraded_and_failed.metadata.namespace,
-            name=degraded_and_failed.metadata.name
+            Application,
+            namespace=degraded_and_failed.metadata.namespace,
+            name=degraded_and_failed.metadata.name,
         )
 
         await scheduler.queue.put(
             degraded_and_success.metadata.uid, degraded_and_success
         )
-        await scheduler.kubernetes.handle_kubernetes_applications(run_once=True)
+        await scheduler.kubernetes_application.handle_kubernetes_applications(
+            run_once=True
+        )
 
         degraded_and_success = await db.get(
-            Application, namespace=degraded_and_success.metadata.namespace,
-            name=degraded_and_success.metadata.name
+            Application,
+            namespace=degraded_and_success.metadata.namespace,
+            name=degraded_and_success.metadata.name,
         )
 
         assert degraded_and_success.status.state == ApplicationState.DEGRADED
 
         await scheduler.queue.put(degraded_and_failed.metadata.uid, degraded_and_failed)
         time.sleep(2)
-        await scheduler.kubernetes.handle_kubernetes_applications(run_once=True)
+        await scheduler.kubernetes_application.handle_kubernetes_applications(
+            run_once=True
+        )
         await db.put(cluster)
         await scheduler.queue.put(
             degraded_and_success.metadata.uid, degraded_and_success
         )
-        await scheduler.kubernetes.handle_kubernetes_applications(run_once=True)
+        await scheduler.kubernetes_application.handle_kubernetes_applications(
+            run_once=True
+        )
 
         degraded_and_failed = await db.get(
-            Application, namespace=degraded_and_failed.metadata.namespace,
-            name=degraded_and_failed.metadata.name
+            Application,
+            namespace=degraded_and_failed.metadata.namespace,
+            name=degraded_and_failed.metadata.name,
         )
         degraded_and_success = await db.get(
-            Application, namespace=degraded_and_success.metadata.namespace,
-            name=degraded_and_success.metadata.name
+            Application,
+            namespace=degraded_and_success.metadata.namespace,
+            name=degraded_and_success.metadata.name,
         )
         assert degraded_and_failed.status.state == ApplicationState.FAILED
         assert degraded_and_success.status.scheduled_to == resource_ref(cluster)

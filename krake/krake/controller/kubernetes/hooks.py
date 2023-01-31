@@ -37,6 +37,7 @@ from krake.data.kubernetes import (
     ClusterNodeCondition,
     ClusterNode,
     ClusterNodeStatus,
+    ClusterNodeMetadata,
 )
 from yarl import URL
 from secrets import token_urlsafe
@@ -949,7 +950,10 @@ class KubernetesClusterObserver(Observer):
                     )
 
                 nodes.append(
-                    ClusterNode(status=ClusterNodeStatus(conditions=conditions))
+                    ClusterNode(
+                        metadata=ClusterNodeMetadata(name=node.metadata.name),
+                        status=ClusterNodeStatus(conditions=conditions),
+                    )
                 )
             status.nodes = nodes
 

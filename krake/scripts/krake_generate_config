@@ -335,9 +335,21 @@ if __name__ == "__main__":
     )
     add_option(
         parser,
+        "--im-host",
+        "Host for the Infrastructure Manager endpoint.",
+        default="127.0.0.1",
+    )
+    add_option(
+        parser,
+        "--im-port",
+        "Port for the Infrastructure Manager endpoint.",
+        default=8800,
+    )
+    add_option(
+        parser,
         "--docs-problem-base-url",
         "URL of the problem documentation.",
-        default="https://rak-n-rok.readthedocs.io/projects/krake/en/latest/user/problem.html",
+        default="https://rak-n-rok.readthedocs.io/projects/krake/en/latest/user/problem.html",  # noqa: E501
     )
     add_option(parser, "--docker-daemon-mtu", "The Docker daemon MTU.", default=1450)
     add_option(
@@ -371,8 +383,9 @@ if __name__ == "__main__":
         parser,
         "--poll-interval",
         (
-            "Time in seconds for the Magnum Controller to ask the Magnum client again"
-            "after a modification of a cluster."
+            "Time in seconds for the Infrastructure Controller"
+            " to ask the infrastructure provider client again after a modification of"
+            " a cluster."
         ),
         default=30,
     )

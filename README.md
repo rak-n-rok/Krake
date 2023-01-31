@@ -238,6 +238,9 @@ python -m krake.controller.kubernetes.cluster
 
 # Run the Kubernetes application controller
 python -m krake.controller.kubernetes.application
+
+# Run the Infrastructure controller
+python -m krake.controller.infrastructure
 ```
 
 There is also a [script](https://gitlab.com/rak-n-rok/krake/-/snippets/2042674) (see snippets section on git) provided in the git repository to start all parts of Krake using „tmux“.

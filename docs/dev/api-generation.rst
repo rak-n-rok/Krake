@@ -20,11 +20,12 @@ The API generator was developed to automatically create the code for:
     Other cases will be added, as the generator was built to be modular.
 
 The Krake API is separated into the different APIs that are managed: ``core``,
-``kubernetes`` and ``openstack``. Each one of them handles the classic CRUD operations
-on the different resources managed by the APIs. Having all their code written by hand
-would not really follow the DRY principle. Previously, the handlers and the client
-methods were generated dynamically when starting the API. This lead to the code of the
-API and the client being not very flexible, but mostly, being harder to debug.
+``kubernetes``, ``openstack``, and ``infrastructure``. Each one of them handles
+the classic CRUD operations on the different resources managed by the APIs.
+Having all their code written by hand would not really follow the DRY principle.
+Previously, the handlers and the client methods were generated dynamically when
+starting the API. This lead to the code of the API and the client being not very
+flexible, but mostly, being harder to debug.
 
 As a compromise, the API generator was introduced. It generates the code for any
 resource of any API in a deterministic way. The code for the API, the client and their

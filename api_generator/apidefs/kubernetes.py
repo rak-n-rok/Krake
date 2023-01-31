@@ -1,4 +1,5 @@
 from krake.api.helpers import ListQuery
+from krake.data.infrastructure import CloudBinding
 from krake.data.kubernetes import (
     Application,
     ApplicationList,
@@ -6,7 +7,7 @@ from krake.data.kubernetes import (
     ClusterList,
     ClusterBinding,
     ApplicationComplete,
-    ApplicationShutdown
+    ApplicationShutdown,
 )
 from .definitions import ApiDef, Scope, operation, subresource
 
@@ -150,4 +151,13 @@ class ClusterResource:
             method = "PUT"
             path = "/kubernetes/namespaces/{namespace}/clusters/{name}/status"
             body = Cluster
+            response = Cluster
+
+    @subresource
+    class Binding:
+        @operation
+        class Update:
+            method = "PUT"
+            path = "/kubernetes/namespaces/{namespace}/clusters/{name}/binding"
+            body = CloudBinding
             response = Cluster

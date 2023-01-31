@@ -8,24 +8,55 @@
     - authorized-keys
   vars:
     git_dir: /home/krake/git/krake
+    repo_dir: "{{ playbook_dir }}/.."
   tasks:
+
+    # The files generated overwrite the ones created
+    - name: Generate the docker configuration file
+      script: |
+        {{ repo_dir }}/krake/scripts/krake_generate_config --dst {{ git_dir }}/docker \
+        {% if enable_tls is defined and enable_tls %} --tls-enabled {% endif %} \
+        {% if api_host is defined %} --api-host {{ api_host }} {% endif %} \
+        {% if api_port is defined %} --api-port {{ api_port }} {% endif %} \
+        {% if etcd_host is defined %} --etcd-host {{ etcd_host }} {% endif %} \
+        {% if etcd_port is defined %} --etcd-port {{ etcd_port }} {% endif %} \
+        {% if etcd_peer_port is defined %} --etcd-peer-port {{ etcd_peer_port }} {% endif %} \
+        {% if cert_dir is defined %} --cert-dir {{ cert_dir }} {% endif %} \
+        {% if im_host is defined %} --im-host {{ im_host }} {% endif %} \
+        {% if im_port is defined %} --im-port {{ im_port }} {% endif %} \
+        {{ git_dir }}/docker/docker.yaml.template
+
+    - name: Add IM hostname to /etc/hosts
+      become_user: root
+      lineinfile:
+        path: /etc/hosts
+        line: "127.0.0.1 {{ im_host }}"
+
+    - name: Configure the docker infrastructure for krake
+      command: "{{ git_dir }}/docker/generate --config {{ git_dir }}/docker/docker.yaml {{ git_dir }}/docker/krake"
 
     - name: Configure the docker infrastructure for prometheus
       command: "{{ git_dir }}/docker/generate --config {{ git_dir }}/docker/docker.yaml {{ git_dir }}/docker/prometheus"
 
-    - name: Remove Krake infrastructure
-      docker_compose:
-        project_src: "{{ git_dir }}/docker"
-        files:
-          - "{{ git_dir }}/docker/krake/docker-compose.yaml"
-        state: absent
+    - name: Configure the docker infrastructure for the Infrastructure Manager
+      command: "{{ git_dir }}/docker/generate --config {{ git_dir }}/docker/docker.yaml {{ git_dir }}/docker/im"
 
-    - name: Start Krake infrastructure with prometheus
+    - name: Remove Krake infrastructure with prometheus and IM
       docker_compose:
         project_src: "{{ git_dir }}/docker"
         files:
           - "{{ git_dir }}/docker/krake/docker-compose.yaml"
           - "{{ git_dir }}/docker/prometheus/docker-compose.yaml"
+          - "{{ git_dir }}/docker/im/docker-compose.yaml"
+        state: absent
+
+    - name: Start Krake infrastructure with prometheus and IM
+      docker_compose:
+        project_src: "{{ git_dir }}/docker"
+        files:
+          - "{{ git_dir }}/docker/krake/docker-compose.yaml"
+          - "{{ git_dir }}/docker/prometheus/docker-compose.yaml"
+          - "{{ git_dir }}/docker/im/docker-compose.yaml"
         state: present
         build: no
 
@@ -74,6 +105,10 @@
   vars:
     git_dir: /home/krake/git/krake
     test_dir: rak/functionals
+    os_auth_url: "{{ lookup('env', 'OS_AUTH_URL') }}"
+    os_project_name: "{{ lookup('env', 'OS_PROJECT_NAME') }}"
+    os_username: "{{ lookup('env', 'OS_USERNAME') }}"
+    os_password: "{{ lookup('env', 'OS_PASSWORD') }}"
   tasks:
     - name: Run Krake Integration tests
       block:
@@ -91,6 +126,16 @@
           command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_core.py"
           tags:
             - test_core
+
+        - name: Run integration tests for the infrastructure resources
+          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_infrastructure_resources.py"
+          tags:
+            - test_infrastructure_resources
+
+        - name: Run integration tests for the CRUD operations of actual k8s cluster
+          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_kubernetes_cluster.py --im_container {{ im_host }} --im_container_port {{ im_port }} --os_auth_url {{ os_auth_url }} --os_project_name {{ os_project_name }} --os_username {{ os_username }} --os_password {{ os_password }}"
+          tags:
+            - test_kubernetes_cluster
 
         # We need two Minikube clusters in order to run the integration tests
         - name: Check if two Minikube clusters have been spawned
@@ -149,7 +194,17 @@
             - krake_krake-ctrl-kubernetes-cluster_1
             - krake_krake-ctrl-kubernetes-application_1
             - krake_krake-ctrl-garbage-collector_1
+            - krake_krake-ctrl-infrastructure_1
             - krake_krake-ctrl-magnum_1
+          tags:
+            - always
+
+        - name: Save prometheus, exporter and IM  containers logs
+          shell: "docker logs {{ item }} > /tmp/krake_{{ item }}.log"
+          with_items:
+            - prometheus
+            - exporter
+            - "{{ im_host }}"
           tags:
             - always
 

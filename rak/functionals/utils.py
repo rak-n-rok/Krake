@@ -5,6 +5,8 @@ import subprocess
 import time
 from dataclasses import MISSING
 
+from deepdiff import DeepDiff
+
 logger = logging.getLogger("krake.test_utils.run")
 
 KRAKE_HOMEDIR = "/home/krake"
@@ -19,6 +21,7 @@ class Singleton(object):
     Returns:
         object: class instance
     """
+
     _instance = None
 
     def __new__(cls, *args, **kwargs):
@@ -379,6 +382,39 @@ def check_metric_content(error_message, name, mp_name, min, max, mp_metric_name=
     return validate
 
 
+def check_response_content(error_message, content):
+    """Create a callable to verify the content of a response from the
+    krake API.
+
+    To be used with the :func:`run`. The callable will raise an
+    :class:`AssertionError` if the content of the response
+    is not a **superset** of the given one.
+
+    Args:
+        error_message (str): message that will be displayed if the check fails.
+        content (dict): expected content (subset) of the response.
+
+    Returns:
+        callable: a condition that will check the given content against the
+            content from the response.
+
+    Raises:
+        AssertionError: if the content of the response is not a
+            superset of the given one.
+    """
+
+    def validate(response):
+        observed_content = response.json
+        diff = DeepDiff(observed_content, content, ignore_order=True)
+        # pop the diff items that are in the `observed_content` but not
+        # in the `content` as the `content` could be a subset of `observed_content`
+        diff.pop("dictionary_item_removed", None)
+
+        assert not diff, error_message + "\n" + str(diff)
+
+    return validate
+
+
 def check_return_code(error_message, expected_code=0):
     """Create a callable to verify the return code of a response.
 
@@ -404,8 +440,9 @@ def check_return_code(error_message, expected_code=0):
             f" Expected return code: {expected_code}."
             f" Observed return code: {response.returncode}."
         )
-        assert response.returncode == expected_code, str(response.output) + \
-            error_message + details
+        assert response.returncode == expected_code, (
+            str(response.output) + error_message + details
+        )
 
     return validate
 
@@ -447,7 +484,9 @@ def check_empty_list(error_message):
 
     def validate(response):
         try:
-            assert response.json == [], error_message
+            assert (
+                response.json == []
+            ), f"{error_message}\nList items: {str(response.json)}"
         except json.JSONDecodeError:
             raise AssertionError(error_message)
 
@@ -513,7 +552,7 @@ def check_resource_deleted(error_message):
     """
 
     def validate(response):
-        #assert response.returncode == 1
+        # assert response.returncode == 1
         assert any(
             [msg in response.output for msg in ("NOT_FOUND_ERROR", "NotFound")]
         ), error_message + str(response.output)
@@ -616,8 +655,8 @@ def check_app_running_on(expected_cluster, error_message):
             scheduled_to = scheduled_to_dict.get("name", None)
             msg = (
                 error_message + f" App state: {app_details['status']['state']}, "
-                                f"App scheduled_to: {scheduled_to}, "
-                                f"App running_on: {running_on}"
+                f"App scheduled_to: {scheduled_to}, "
+                f"App running_on: {running_on}"
             )
             assert running_on == expected_cluster, msg
         except (KeyError, json.JSONDecodeError):

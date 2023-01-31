@@ -15,7 +15,7 @@ Introduction to the ``rok`` CLI
     $ rok kubernetes --help  # Similar to "rok kube --help"
     $ rok kube application --help  # Similar to "rok app --help"
     $ rok kube cluster --help
-    $ rok openstack --help  # Similar to "rok os --help"
+    $ rok infrastructure --help  # Similar to "rok infra --help"
 
 Register a cluster
 ==================
@@ -44,9 +44,15 @@ Register a cluster
     been already installed and prepared. This can be the Minikube clusters deployed by
     the Krake test environment.
 
-    A **Krake Kubernetes Cluster** is a resource in the Krake database, which contains
-    the kubeconfig file of the corresponding Kubernetes cluster.
+    A **Krake Kubernetes Cluster** is a resource in the Krake database, which was created
+    by Krake or registered into Krake and contains the kubeconfig file of the
+    corresponding Kubernetes cluster.
 
+.. tip::
+
+    Krake is able to actually **create** a Kubernetes cluster by supported infrastructure providers.
+    If you are interested in the topic of Kubernetes cluster life-cycle management by Krake
+    please refer to the :ref:`user/user-story/6-infrastructure-provider:Infrastructure providers` section.
 
 Spawn the demo application
 ==========================

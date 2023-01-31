@@ -1827,12 +1827,12 @@ async def test_reception_for_cluster_observers(aiohttp_server, config, loop):
             server_endpoint(server), worker_count=0
         )
         for i in range(cluster_count):
-            cluster = ClusterFactory()
+            cluster = ClusterFactory(status__state=ClusterState.CONNECTING)
             # Just before an observer is created, the iterator should be equal to the
             # current iteration number.
             assert len(controller.observers) == i
             # The method resource_received handles the cluster and calls corountines.
-            # If the cluster is in CONNECTING state an observer will be created.
+            # If the cluster is in e.g. CONNECTING state an observer will be created.
             assert cluster.status.state == ClusterState.CONNECTING
             await controller.resource_received(cluster)  # needs to be called explicitly
             # The length of the observer list in the controller should now match i+1.
@@ -1851,7 +1851,7 @@ async def test_create_kubernetes_cluster_observer(aiohttp_server, config, loop, 
     When an observer is created, it should be updated with the cluster's status.
 
     """
-    cluster = ClusterFactory()
+    cluster = ClusterFactory(status__state=ClusterState.CONNECTING)
     await db.put(cluster)
 
     server = await aiohttp_server(create_app(config))
@@ -1864,7 +1864,7 @@ async def test_create_kubernetes_cluster_observer(aiohttp_server, config, loop, 
         await register_observer(controller, cluster)
         observer, _ = controller.observers[cluster.metadata.uid]
 
-        # the initial state of the observer should be CONNECTING
+        # the initial state of the observer could be CONNECTING
         assert observer.resource.status.state == ClusterState.CONNECTING
         # After the observe_resource method is called, the observer
         # should set the cluster's polled status.
@@ -1911,6 +1911,7 @@ async def test_create_kubernetes_cluster_observer_ready(
         response = {
             "items": [
                 {
+                    "metadata": {"name": fake.word()},
                     "status": {
                         "conditions": [
                             {
@@ -1938,7 +1939,7 @@ async def test_create_kubernetes_cluster_observer_ready(
                                 "reason": "",
                             },
                         ]
-                    }
+                    },
                 },
             ]
         }
@@ -1952,7 +1953,10 @@ async def test_create_kubernetes_cluster_observer_ready(
     kubernetes_app.add_routes(routes)
     kubernetes_server = await aiohttp_server(kubernetes_app)
     # Create cluster to register
-    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    cluster = ClusterFactory(
+        status__state=ClusterState.CONNECTING,
+        spec__kubeconfig=make_kubeconfig(kubernetes_server),
+    )
     await db.put(cluster)
 
     # Create Krake API
@@ -2018,6 +2022,7 @@ async def test_create_kubernetes_cluster_observer_ready_with_internally_offline_
         response = {
             "items": [
                 {
+                    "metadata": {"name": fake.word()},
                     "status": {
                         "conditions": [
                             {
@@ -2045,7 +2050,7 @@ async def test_create_kubernetes_cluster_observer_ready_with_internally_offline_
                                 "reason": "",
                             },
                         ]
-                    }
+                    },
                 },
             ]
         }
@@ -2132,6 +2137,7 @@ async def test_create_kubernetes_cluster_observer_failing_metrics(
         response = {
             "items": [
                 {
+                    "metadata": {"name": fake.word()},
                     "status": {
                         "conditions": [
                             {
@@ -2159,7 +2165,7 @@ async def test_create_kubernetes_cluster_observer_failing_metrics(
                                 "reason": "",
                             },
                         ]
-                    }
+                    },
                 },
             ]
         }
@@ -2240,6 +2246,7 @@ async def test_create_kubernetes_cluster_observer_pressure(
         response = {
             "items": [
                 {
+                    "metadata": {"name": fake.word()},
                     "status": {
                         "conditions": [
                             {
@@ -2267,7 +2274,7 @@ async def test_create_kubernetes_cluster_observer_pressure(
                                 "reason": "",
                             },
                         ]
-                    }
+                    },
                 },
             ]
         }
@@ -2281,7 +2288,11 @@ async def test_create_kubernetes_cluster_observer_pressure(
     kubernetes_app.add_routes(routes)
     kubernetes_server = await aiohttp_server(kubernetes_app)
     # Create cluster to register
-    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    cluster = ClusterFactory(
+        status__state=ClusterState.CONNECTING,
+        spec__kubeconfig=make_kubeconfig(kubernetes_server),
+    )
+
     await db.put(cluster)
 
     # Create Krake API
@@ -2344,6 +2355,7 @@ async def test_create_kubernetes_cluster_observer_ready_two_nodes(
         response = {
             "items": [
                 {
+                    "metadata": {"name": fake.word()},
                     "status": {
                         "conditions": [
                             {
@@ -2371,9 +2383,10 @@ async def test_create_kubernetes_cluster_observer_ready_two_nodes(
                                 "reason": "",
                             },
                         ]
-                    }
+                    },
                 },
                 {
+                    "metadata": {"name": fake.word()},
                     "status": {
                         "conditions": [
                             {
@@ -2401,7 +2414,7 @@ async def test_create_kubernetes_cluster_observer_ready_two_nodes(
                                 "reason": "",
                             },
                         ]
-                    }
+                    },
                 },
             ]
         }
@@ -2415,7 +2428,10 @@ async def test_create_kubernetes_cluster_observer_ready_two_nodes(
     kubernetes_app.add_routes(routes)
     kubernetes_server = await aiohttp_server(kubernetes_app)
     # Create cluster to register
-    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    cluster = ClusterFactory(
+        status__state=ClusterState.CONNECTING,
+        spec__kubeconfig=make_kubeconfig(kubernetes_server),
+    )
     await db.put(cluster)
 
     # Create Krake API
@@ -2486,6 +2502,7 @@ async def test_create_kubernetes_cluster_observer_pressure_two_nodes(
         response = {
             "items": [
                 {
+                    "metadata": {"name": fake.word()},
                     "status": {
                         "conditions": [
                             {
@@ -2513,9 +2530,10 @@ async def test_create_kubernetes_cluster_observer_pressure_two_nodes(
                                 "reason": "",
                             },
                         ]
-                    }
+                    },
                 },
                 {
+                    "metadata": {"name": fake.word()},
                     "status": {
                         "conditions": [
                             {
@@ -2543,7 +2561,7 @@ async def test_create_kubernetes_cluster_observer_pressure_two_nodes(
                                 "reason": "",
                             },
                         ]
-                    }
+                    },
                 },
             ]
         }
@@ -2557,7 +2575,10 @@ async def test_create_kubernetes_cluster_observer_pressure_two_nodes(
     kubernetes_app.add_routes(routes)
     kubernetes_server = await aiohttp_server(kubernetes_app)
     # Create cluster to register
-    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    cluster = ClusterFactory(
+        status__state=ClusterState.CONNECTING,
+        spec__kubeconfig=make_kubeconfig(kubernetes_server),
+    )
     await db.put(cluster)
 
     # Create Krake API
@@ -2605,7 +2626,10 @@ async def test_create_kubernetes_cluster_observer_offline(
     kubernetes_app = web.Application()
     kubernetes_server = await aiohttp_server(kubernetes_app)
     # Create cluster to register
-    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    cluster = ClusterFactory(
+        status__state=ClusterState.CONNECTING,
+        spec__kubeconfig=make_kubeconfig(kubernetes_server),
+    )
     await db.put(cluster)
 
     # Create Krake API
@@ -2684,7 +2708,10 @@ async def test_create_kubernetes_cluster_observer_offline_non2xx_response(
     kubernetes_app.add_routes(routes)
     kubernetes_server = await aiohttp_server(kubernetes_app)
     # Create cluster to register
-    cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
+    cluster = ClusterFactory(
+        status__state=ClusterState.CONNECTING,
+        spec__kubeconfig=make_kubeconfig(kubernetes_server),
+    )
     await db.put(cluster)
 
     # Create Krake API
@@ -2727,7 +2754,7 @@ async def test_kubernetes_cluster_observer_on_cluster_update(
         controller = KubernetesClusterController(
             server_endpoint(server), worker_count=0
         )
-        cluster = ClusterFactory()
+        cluster = ClusterFactory(status__state=ClusterState.CONNECTING)
         await db.put(cluster)
         await controller.prepare(client)
         await controller.resource_received(cluster)
@@ -2757,7 +2784,7 @@ async def test_kubernetes_cluster_observer_on_cluster_delete(aiohttp_server, con
     """
     server = await aiohttp_server(create_app(config))
     controller = KubernetesClusterController(server_endpoint(server), worker_count=0)
-    cluster = ClusterFactory()
+    cluster = ClusterFactory(status__state=ClusterState.CONNECTING)
 
     await controller.resource_received(cluster)
     # when a datetime is set in cluster.medata.deleted the cluster should be deleted
@@ -2772,7 +2799,7 @@ async def test_register_kubernetes_cluster_observer(aiohttp_server, config):
     server = await aiohttp_server(create_app(config))
     controller = KubernetesClusterController(server_endpoint(server), worker_count=0)
 
-    cluster = ClusterFactory()
+    cluster = ClusterFactory(status__state=ClusterState.CONNECTING)
 
     await controller.resource_received(cluster)
     # the observer dict should not be empty
@@ -2784,7 +2811,7 @@ async def test_unregister_kubernetes_cluster_observer(aiohttp_server, config):
     server = await aiohttp_server(create_app(config))
     controller = KubernetesClusterController(server_endpoint(server), worker_count=0)
 
-    cluster = ClusterFactory()
+    cluster = ClusterFactory(status__state=ClusterState.CONNECTING)
 
     await controller.resource_received(cluster)
     await unregister_observer(controller, cluster)
