@@ -62,6 +62,7 @@ the following states:
 
 - CONNECTING
 - ONLINE
+- DEGRADED
 - OFFLINE
 - UNHEALTHY
 - NOTREADY
@@ -76,6 +77,16 @@ the following states:
 ``ONLINE``
     If the cluster is reachable in the real world, is in a healthy state and is ready,
     the status of the cluster in Krake will be ONLINE.
+
+``DEGRADED``
+    A cluster will be DEGRADED if the handling of the cluster was not successful, but
+    the number of retries is not yet exhausted. This is the intermediate state before
+    being OFFLINE (or back ONLINE). The behaviour is specified with the parameters ``backoff``
+    (multiplier added to retry attempts, defaults to 1),
+    ``backoff_delay`` (number of seconds between retry attempts) and ``backoff_limit``
+    (number of retries, defaults to -1(infinite)). So if not changed, the cluster will
+    remain in DEGRADED state until the handling was successful. Otherwise, if the
+    number of retries is exhausted, the cluster will transfer to OFFLINE.
 
 ``OFFLINE``
     If the real world cluster cannot be reached by polling the Kubernetes cluster API,

@@ -4,6 +4,7 @@ import logging
 from contextlib import suppress
 from copy import deepcopy
 from functools import partial
+from datetime import timedelta
 
 from kubernetes_asyncio.client.rest import ApiException
 
@@ -169,6 +170,21 @@ class KubernetesClusterController(Controller):
         )
         return cluster
 
+    async def _update_retry_fields(self, cluster):
+        logger.info(
+            f"{cluster.metadata.name} transition to DEGRADED"
+            f"remaining retries: {cluster.status.retries}"
+        )
+        cluster.status.retries -= 1
+        delay = timedelta(
+            seconds=cluster.spec.backoff_delay * cluster.spec.backoff
+        )
+        cluster.status.scheduled_retry = now() + delay
+        logger.debug(
+            f"{cluster.metadata.name} scheduled retry to "
+            f"{cluster.status.scheduled_retry}"
+        )
+
     async def handle_resource(self, run_once=False):
         """Infinite loop which fetches and hand over the resources to the right
         coroutine. The specific exceptions and error handling have to be added here.
@@ -185,12 +201,32 @@ class KubernetesClusterController(Controller):
         while True:
             key, cluster = await self.queue.get()
             try:
-                await self.resource_received(cluster)
+                if cluster.status.retries is None:
+                    cluster.status.retries = cluster.spec.backoff_limit
+                    logger.debug(
+                        f"{cluster.metadata.name} retry counter set to "
+                        f"{cluster.status.retries}"
+                    )
+                if cluster.status.state is not ClusterState.DEGRADED or \
+                        now() >= cluster.status.scheduled_retry:
+                    await self.resource_received(cluster)
+                    cluster.status.retries = cluster.spec.backoff_limit
+                    logger.debug(
+                        f"{cluster.metadata.name} retry counter reset to "
+                        f"{cluster.status.retries}"
+                    )
             except ApiException as error:
                 cluster.status.reason = Reason(
-                    code=ReasonCode.KUBERNETES_ERROR, message=str(error)
-                )
-                cluster.status.state = ClusterState.OFFLINE
+                    code=ReasonCode.KUBERNETES_ERROR, message=str(error))
+
+                if cluster.status.retries > 0:
+                    cluster.status.state = ClusterState.DEGRADED
+                    await self._update_retry_fields(cluster)
+                elif cluster.spec.backoff_limit == -1:
+                    cluster.status.state = ClusterState.DEGRADED
+                else:
+                    cluster.status.state = ClusterState.OFFLINE
+                    logger.info(f"{cluster.metadata.name} transition to OFFLINE")
 
                 await self.kubernetes_api.update_cluster_status(
                     namespace=cluster.metadata.namespace,
@@ -199,7 +235,15 @@ class KubernetesClusterController(Controller):
                 )
             except ControllerError as error:
                 cluster.status.reason = Reason(code=error.code, message=error.message)
-                cluster.status.state = ClusterState.OFFLINE
+
+                if cluster.status.retries > 0:
+                    cluster.status.state = ClusterState.DEGRADED
+                    await self._update_retry_fields(cluster)
+                elif cluster.spec.backoff_limit == -1:
+                    cluster.status.state = ClusterState.DEGRADED
+                else:
+                    cluster.status.state = ClusterState.OFFLINE
+                    logger.info(f"{cluster.metadata.name} transition to OFFLINE")
 
                 await self.kubernetes_api.update_cluster_status(
                     namespace=cluster.metadata.namespace,

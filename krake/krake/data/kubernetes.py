@@ -388,6 +388,11 @@ class ApplicationSpec(Serializable):
         constraints (Constraints, optional): Scheduling constraints
         hooks (list[str], optional): List of enabled hooks
         shutdown_grace_time (int): timeout in seconds for the shutdown hook
+        backoff (field, optional): multiplier applied to backoff_delay between attempts.
+            default: 1 (no backoff)
+        backoff_delay (field, optional): delay [s] between attempts. default: 1
+        backoff_limit (field, optional):  a maximal number of attempts,
+            default: -1 (infinite)
     """
 
     manifest: List[dict] = field(metadata={"validate": _validate_manifest})
@@ -399,6 +404,9 @@ class ApplicationSpec(Serializable):
     constraints: Constraints
     hooks: List[str] = field(default_factory=list)
     shutdown_grace_time: int = 30
+    backoff: int = field(default=1)
+    backoff_delay: int = field(default=1)
+    backoff_limit: int = field(default=-1)
 
     def __post_init__(self):
         """Method automatically ran at the end of the :meth:`__init__` method, used to
@@ -513,6 +521,8 @@ class ApplicationStatus(Status):
     scheduled: datetime = None
     scheduled_to: ResourceRef = None
     running_on: ResourceRef = None
+    retries: int = None
+    scheduled_retry: datetime = None
     services: dict = field(default_factory=dict)
     mangled_observer_schema: List[dict] = field(default_factory=list)
     last_observed_manifest: List[dict] = field(default_factory=list)
@@ -579,11 +589,28 @@ def _validate_kubeconfig(kubeconfig):
 
 
 class ClusterSpec(Serializable):
+    """Spec subresource of :class:`Cluster`
+
+    Attributes:
+        kubeconfig (dict): path to the kubeconfig file for the cluster to
+            register.
+        custom_resources (list): name of all custom resources that are available on
+            the current cluster.
+        metrics (list): metrics used on the cluster.
+        backoff (field, optional): multiplier applied to backoff_delay between attempts.
+            default: 1 (no backoff)
+        backoff_delay (field, optional): delay [s] between attempts. default: 1
+        backoff_limit (field, optional):  a maximal number of attempts,
+            default: -1 (infinite)
+    """
     kubeconfig: dict = field(metadata={"validate": _validate_kubeconfig})
     custom_resources: List[str] = field(default_factory=list)
     # FIXME needs further discussion how to register stand-alone kubernetes cluster as
     #  a cluster which should be processed by krake.controller.scheduler
     metrics: List[MetricRef] = field(default_factory=list)
+    backoff: int = field(default=1)
+    backoff_delay: int = field(default=1)
+    backoff_limit: int = field(default=-1)
 
 
 class ClusterState(Enum):
@@ -593,6 +620,7 @@ class ClusterState(Enum):
     UNHEALTHY = auto()
     NOTREADY = auto()
     FAILING_METRICS = auto()
+    DEGRADED = auto()
 
 
 class ClusterNodeCondition(Serializable):
@@ -649,6 +677,8 @@ class ClusterStatus(Serializable):
         metrics_reasons (dict[str, Reason]): mapping of the name of the metrics for
             which an error occurred to the reason for which it occurred.
         nodes (list[ClusterNode]): list of cluster nodes.
+        retries (int): Count of remaining retries to access the cluster. Is set
+            via the Attribute backoff in in ClusterSpec.
 
     """
 
@@ -656,6 +686,7 @@ class ClusterStatus(Serializable):
     state: ClusterState = ClusterState.CONNECTING
     metrics_reasons: Dict[str, Reason] = field(default_factory=dict)
     nodes: List[ClusterNode] = field(default_factory=list)
+    retries: int = field(default_factory=int)
 
 
 @persistent("/kubernetes/clusters/{namespace}/{name}")

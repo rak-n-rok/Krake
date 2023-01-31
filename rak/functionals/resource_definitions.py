@@ -388,6 +388,31 @@ class ResourceDefinition(ABC):
         return ResourceDefinition._get_flag_str_options("-l", labels)
 
     @staticmethod
+    def _get_backoff_options(backoff):
+        if backoff is not None:
+            return ResourceDefinition._get_flag_str_options("--backoff", str(backoff))
+        else:
+            return ""
+
+    @staticmethod
+    def _get_backoff_delay_options(backoff_delay):
+        if backoff_delay is not None:
+            return ResourceDefinition._get_flag_str_options(
+                "--backoff_delay", str(backoff_delay)
+        )
+        else:
+            return ""
+
+    @staticmethod
+    def _get_backoff_limit_options(backoff_limit):
+        if backoff_limit is not None:
+            return ResourceDefinition._get_flag_str_options(
+                "--backoff_limit", str(backoff_limit)
+            )
+        else:
+            return ""
+
+    @staticmethod
     def _get_flag_str_options(flag, values):
         """
         Convenience method for generating option lists for cli commands.
@@ -455,6 +480,9 @@ class ApplicationDefinition(ResourceDefinition):
         migration=None,
         observer_schema_path=None,
         namespace=DEFAULT_NAMESPACE,
+        backoff=None,
+        backoff_delay=None,
+        backoff_limit=None,
     ):
         super().__init__(name=name, kind=ResourceKind.APPLICATION, namespace=namespace)
         assert (
@@ -471,15 +499,24 @@ class ApplicationDefinition(ResourceDefinition):
         self.hooks = hooks or []
         self.migration = migration
         self.observer_schema_path = observer_schema_path
+        self.backoff = backoff
+        self.backoff_delay = backoff_delay
+        self.backoff_limit = backoff_limit
 
     def _get_mutable_attributes(self):
-        return ["cluster_label_constraints", "labels", "migration"]
+        return [
+            "cluster_label_constraints", "labels", "migration",
+            "backoff", "backoff_delay", "backoff_limit"
+        ]
 
     def _get_default_values(self):
         defaults = dict.fromkeys(self._mutable_attributes)
         defaults.update({"cluster_label_constraints": []})
         defaults.update({"labels": {}})
         defaults.update({"migration": True})
+        defaults.update({"backoff": 1})
+        defaults.update({"backoff_delay": 1})
+        defaults.update({"backoff_limit": -1})
         return defaults
 
     def _get_actual_mutable_attribute_values(self):
@@ -490,6 +527,9 @@ class ApplicationDefinition(ResourceDefinition):
             ],
             "labels": app["metadata"]["labels"],
             "migration": app["spec"]["constraints"]["migration"],
+            "backoff": app["spec"]["backoff"],
+            "backoff_delay": app["spec"]["backoff_delay"],
+            "backoff_limit": app["spec"]["backoff_limit"],
         }
 
     def creation_command(self, wait):
@@ -520,6 +560,11 @@ class ApplicationDefinition(ResourceDefinition):
             cmd += [self._get_migration_flag(self.migration)]
         if self.observer_schema_path:
             cmd += f" -O {self.observer_schema_path}".split()
+
+        cmd += self._get_backoff_options(self.backoff)
+        cmd += self._get_backoff_delay_options(self.backoff_delay)
+        cmd += self._get_backoff_limit_options(self.backoff_limit)
+
         return cmd
 
     @staticmethod
@@ -744,6 +789,9 @@ class ClusterDefinition(ResourceDefinition):
         labels=None,
         metrics=None,
         namespace=DEFAULT_NAMESPACE,
+        backoff=None,
+        backoff_delay=None,
+        backoff_limit=None,
         register=False,
     ):
         super().__init__(name=name, kind=ResourceKind.CLUSTER, namespace=namespace)
@@ -754,6 +802,9 @@ class ClusterDefinition(ResourceDefinition):
         if not metrics:
             metrics = []
         self._set_metrics(metrics)
+        self.backoff = backoff
+        self.backoff_delay = backoff_delay
+        self.backoff_limit = backoff_limit
         self.register = register
 
     def _set_metrics(self, metrics):
@@ -805,6 +856,9 @@ class ClusterDefinition(ResourceDefinition):
         defaults = dict.fromkeys(self._mutable_attributes)
         defaults.update({"labels": {}})
         defaults.update({"metrics": []})
+        defaults.update({"backoff": 1})
+        defaults.update({"backoff_delay": 1})
+        defaults.update({"backoff_limit": -1})
         return defaults
 
     def _get_actual_mutable_attribute_values(self):
@@ -845,6 +899,9 @@ class ClusterDefinition(ResourceDefinition):
         cmd = "rok kube cluster register".split()
         cmd += self._get_label_options(self.labels)
         cmd += self._get_metrics_options(self.metrics)
+        cmd += self._get_backoff_options(self.backoff)
+        cmd += self._get_backoff_delay_options(self.backoff_delay)
+        cmd += self._get_backoff_limit_options(self.backoff_limit)
         cmd += ["-k", self.kubeconfig_path]
         return cmd
 
