@@ -458,6 +458,19 @@ class KubernetesHandler(Handler):
             logger.debug("Accept %r", app)
             await self.queue.put(app.metadata.uid, app)
 
+    async def _update_retry_fields(self, app):
+        logger.info(f"{app.metadata.name} transition to "
+                    f"DEGRADED, remaining retries: {app.status.retries}"
+                    )
+        app.status.retries -= 1
+        delay = timedelta(
+            seconds=app.spec.backoff_delay * app.spec.backoff
+        )
+        app.status.scheduled_retry = utils.now() + delay
+        logger.debug(f"{app.metadata.name} scheduled retry to "
+                     f"{app.status.scheduled_retry}"
+                     )
+
     async def handle_kubernetes_applications(self, run_once=False):
         """Infinite loop which fetches and hands over the Kubernetes Application
         resources to the right coroutine. The specific exceptions and error handling
@@ -477,10 +490,23 @@ class KubernetesHandler(Handler):
             try:
                 # TODO: API for supporting different application types
                 logger.debug("Handling %r", app)
+                if app.status.retries is None:
+                    app.status.retries = app.spec.backoff_limit
+                    logger.debug(
+                        f"{app.metadata.name} retry counter set to {app.status.retries}"
+                    )
                 await self.kubernetes_application_received(app)
+                app.status.retries = app.spec.backoff_limit
             except ControllerError as error:
                 app.status.reason = Reason(code=error.code, message=error.message)
-                app.status.state = ApplicationState.FAILED
+                if app.status.retries > 0:
+                    app.status.state = ApplicationState.DEGRADED
+                    await self._update_retry_fields(app)
+                elif app.spec.backoff_limit == -1:
+                    app.status.state = ApplicationState.DEGRADED
+                else:
+                    app.status.state = ApplicationState.FAILED
+                    logger.info(f"{app.metadata.name} transition to FAILED")
 
                 await self.api.update_application_status(
                     namespace=app.metadata.namespace, name=app.metadata.name, body=app
@@ -499,8 +525,10 @@ class KubernetesHandler(Handler):
 
         """
         # TODO: Evaluate spawning a new cluster
-        await self.schedule_kubernetes_application(app)
-        await self.reschedule_kubernetes_application(app)
+        if app.status.state is not ApplicationState.DEGRADED or \
+           utils.now() >= app.status.scheduled_retry:
+            await self.schedule_kubernetes_application(app)
+            await self.reschedule_kubernetes_application(app)
 
     async def schedule_kubernetes_application(self, app):
         """Choose a suitable Kubernetes cluster for the given Application and bound them
