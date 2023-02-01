@@ -327,8 +327,9 @@ def test_kubernetes_observer_additional_resource(minikube_clusters):
             app_before["status"]["kube_controller_triggered"] = app_after["status"][
                 "kube_controller_triggered"
             ]
-            app_before["status"]["container_health"] = app_after["status"]["container_health"]
-            assert app_before == app_after
+            app_before["status"]["container_health"] = \
+                app_after["status"]["container_health"]
+            assert app_before == app_after, '{0} != {1}'.format(app_before, app_after)
 
             # Compare the Application deployment data before and after having added the
             # resource
