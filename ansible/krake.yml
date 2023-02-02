@@ -365,6 +365,8 @@
             {% if shutdown_hook_cert_dest is defined %} --shutdown-hook-cert-dest {{ shutdown_hook_cert_dest }} {% endif %} \
             {% if shutdown_hook_env_token is defined %} --shutdown-hook-env-token {{ shutdown_hook_env_token }} {% endif %} \
             {% if shutdown_hook_env_url is defined %} --shutdown-hook-env-url {{ shutdown_hook_env_url }} {% endif %} \
+            {% if logging_level is defined %} --logging-level {{ logging_level }} {% endif %} \
+            {% if logging_handler is defined %} --logging-handler {{ logging_handler }} {% endif %} \
             {{ template_path }}
           vars:
             template_path: "{{ item.path }}"
@@ -372,6 +374,8 @@
             prefix: "{{ final_file | splitext | first }}"
             worker_count: "{{ controllers[prefix]['worker_count'] | default(controllers['worker_count']) }}"
             debounce: "{{ controllers[prefix]['debounce'] | default(controllers['debounce']) }}"
+            logging_level: "{{ controllers[prefix]['logging_level'] | default(controllers['logging_level']) }}"
+            logging_handler: "{{ controllers[prefix]['logging_handler'] | default(controllers['logging_handler']) }}"
             external_endpoint_with_scheme: "{{ scheme }}://{{ external_host }}:{{ api_port }}"
             final_external_endpoint: "{% if external_endpoint is defined %}{{ external_endpoint }}{% elif use_private_ip %}{{ external_endpoint_with_scheme }}{% endif %}"
           with_items:
