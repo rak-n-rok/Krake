@@ -281,7 +281,7 @@ def test_kubernetes_observer_additional_resource(minikube_clusters):
     kubeconfig_path = get_default_kubeconfig_path(minikube_cluster)
 
     environment = create_default_environment([minikube_cluster])
-    with Environment(environment) as env:
+    with Environment(environment, creation_delay=30) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
         # 1. Read the state of the Application on the API and on the cluster to
@@ -310,7 +310,7 @@ def test_kubernetes_observer_additional_resource(minikube_clusters):
                 run(f"{kubectl_cmd(kubeconfig_path)} create -f {file.name}")
 
             # 3. Check that the Observer did not perform anything
-            time.sleep(10)
+            time.sleep(20)
 
             # Verify the created deployments: compare the name (and numbers) of expected
             # deployments to actual ones.

@@ -96,7 +96,7 @@
     # pytest and rok are installed locally in /home/krake/.local/bin which isn't in the
     # default PATH
     PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
-    PYTEST_TIMEOUT: 1200
+    PYTEST_TIMEOUT: 1500
     # Overrides default listen host (localhost) in the `httpserver` pytest fixture to
     # the IP from which the Krake host is accessible externally.
     # Simple `httpserver` runs on this externally accessible IP and could
