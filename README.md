@@ -394,6 +394,23 @@ $ rok kube cluster list
 +------+-----------+--------+---------+----------+---------+-------+
 ```
 
+### Advanced setups
+
+Krake can use metrics and/or labels to schedule applications to specific clusters or
+clusters to specific clouds based on the calculated metric values from the scheduling
+algorithm and the label constraints of the resources.
+
+Possible usable Metrics Providers can be found in the corresponding
+[section][https://rak-n-rok.readthedocs.io/projects/krake/en/latest/dev/scheduling.html#metrics-and-metrics-providers]
+.
+
+To work with these more complex examples, see the respective User Stories about
+[Metrics][https://rak-n-rok.readthedocs.io/projects/krake/en/latest/user/user-story/3-metrics-cluster.html]
+and
+[Labels][https://rak-n-rok.readthedocs.io/projects/krake/en/latest/user/user-story/2-labels-cluster.html]
+.
+
+
 ### Testing
 
 Tests are placed in the `tests/` directory inside the Python packages and can
