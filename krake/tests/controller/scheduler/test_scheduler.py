@@ -4453,3 +4453,51 @@ async def test_application_degraded_state(aiohttp_server, config, db, loop):
         )
         assert degraded_and_failed.status.state == ApplicationState.FAILED
         assert degraded_and_success.status.scheduled_to == resource_ref(cluster)
+
+
+async def test_tenant_separation(aiohttp_server, config, db, loop):
+
+    cluster_other_namespace = ClusterFactory(
+        spec__metrics=[],
+        metadata__namespace="other_namespace",
+        status__state=ClusterState.ONLINE,
+    )
+
+    cluster_same_namespace = ClusterFactory(
+        spec__metrics=[],
+        status__state=ClusterState.ONLINE,
+    )
+
+    app = ApplicationFactory(
+        spec__constraints__cluster__labels=[],
+        spec__constraints__cluster__metrics=[],
+        spec__constraints__cluster__custom_resources=[],
+        status__state=ApplicationState.PENDING,
+        status__is_scheduled=False,
+    )
+
+    await db.put(cluster_other_namespace)
+    await db.put(app)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        scheduler = Scheduler(server_endpoint(server), worker_count=0)
+        await scheduler.prepare(client)
+        with pytest.raises(NoClusterFound):
+            await scheduler.kubernetes_application.kubernetes_application_received(app)
+
+        stored = await db.get(Application, namespace="testing", name=app.metadata.name)
+
+        assert not stored.status.scheduled
+        assert stored.status.state == ApplicationState.PENDING
+
+        await db.put(cluster_same_namespace)
+
+        await scheduler.kubernetes_application.kubernetes_application_received(app)
+
+        stored = await db.get(Application, namespace="testing", name=app.metadata.name)
+
+        assert stored.status.scheduled_to == resource_ref(cluster_same_namespace)
+        assert stored.status.kube_controller_triggered
+        assert stored.status.scheduled
