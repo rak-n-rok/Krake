@@ -6,6 +6,7 @@ from functionals.resource_definitions import (
     ResourceKind,
     ClusterDefinition,
     ApplicationDefinition,
+    DEFAULT_NAMESPACE,
 )
 
 GIT_DIR = "git/krake"
@@ -231,6 +232,7 @@ def create_simple_environment(
     cluster_name,
     kubeconfig_path,
     app_name,
+    app_namespace=DEFAULT_NAMESPACE,
     manifest_path=None,
     tosca=None,
     csar=None,
@@ -273,6 +275,7 @@ def create_simple_environment(
         0: [
             ApplicationDefinition(
                 name=app_name,
+                namespace=app_namespace,
                 manifest_path=manifest_path,
                 tosca=tosca,
                 csar=csar,

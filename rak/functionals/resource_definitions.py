@@ -399,7 +399,7 @@ class ResourceDefinition(ABC):
         if backoff_delay is not None:
             return ResourceDefinition._get_flag_str_options(
                 "--backoff_delay", str(backoff_delay)
-        )
+            )
         else:
             return ""
 
@@ -411,6 +411,11 @@ class ResourceDefinition(ABC):
             )
         else:
             return ""
+
+    @staticmethod
+    def _get_namespace_options(namespace):
+        return ResourceDefinition._get_flag_str_options("--namespace", namespace)
+
 
     @staticmethod
     def _get_flag_str_options(flag, values):
@@ -542,12 +547,14 @@ class ApplicationDefinition(ResourceDefinition):
         if wait:
             cmd = (
                 f"rok kube app create {'--url' if is_url else '--file'}"
-                f" {app_definition} {self.name} --wait".split()
+                f" {app_definition} {self.name} --wait"
+                f" --namespace {self.namespace}".split()
             )
         else:
             cmd = (
                 f"rok kube app create {'--url' if is_url else '--file'}"
-                f" {app_definition} {self.name}".split()
+                f" {app_definition} {self.name}"
+                f" --namespace {self.namespace}".split()
             )
 
         cmd += self._get_cluster_label_constraint_options(
@@ -626,12 +633,21 @@ class ApplicationDefinition(ResourceDefinition):
 
     def delete_command(self, wait):
         if wait:
-            return f"rok kube app delete {self.name} --wait".split()
+            return (
+                f"rok kube app delete {self.name}"
+                f" --namespace {self.namespace} --wait".split()
+            )
         else:
-            return f"rok kube app delete {self.name}".split()
+            return (
+                f"rok kube app delete {self.name}"
+                f" --namespace {self.namespace} ".split()
+            )
 
     def delete_command_wait(self):
-        return f"rok kube app delete {self.name} --wait".split()
+        return (
+            f"rok kube app delete {self.name}"
+            f" --namespace {self.namespace}  --wait".split()
+        )
 
     def update_command(
         self,
@@ -724,7 +740,7 @@ class ApplicationDefinition(ResourceDefinition):
         )
 
     def get_command(self):
-        return f"rok kube app get {self.name} -o json".split()
+        return f"rok kube app get {self.name} -o json -n {self.namespace}".split()
 
     def get_running_on(self, strict=False):
         """Run the command for getting the application and return the name of

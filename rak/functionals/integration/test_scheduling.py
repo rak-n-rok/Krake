@@ -136,7 +136,7 @@ def test_create_on_other_namespace(minikube_clusters):
 
     manifest_path = f"{MANIFEST_PATH}/echo-demo-namespaced.yaml"
     environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
+        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
     )
 
     def create_namespace(resources):

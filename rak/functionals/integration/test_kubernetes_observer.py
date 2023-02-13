@@ -153,7 +153,7 @@ def test_kubernetes_observer_update_on_cluster_nonobserved(minikube_clusters):
         minikube_cluster,
         kubeconfig_path,
         "echo-demo",
-        manifest_path,
+        manifest_path=manifest_path,
         observer_schema_path=observer_schema_path,
     )
 
@@ -214,7 +214,7 @@ def test_kubernetes_observer_update_on_cluster_noninitialized(minikube_clusters)
         minikube_cluster,
         kubeconfig_path,
         "echo-demo",
-        manifest_path,
+        manifest_path=manifest_path,
         observer_schema_path=observer_schema_path,
     )
 
