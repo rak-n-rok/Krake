@@ -546,7 +546,9 @@ class KubernetesApplicationHandler(Handler):
         logger.info(f"{app.metadata.name} transition to "
                     f"DEGRADED, remaining retries: {app.status.retries}"
                     )
-        app.status.retries -= 1
+        if app.spec.backoff_limit > 0:
+            app.status.retries -= 1
+
         delay = timedelta(
             seconds=app.spec.backoff_delay * app.spec.backoff
         )
@@ -588,6 +590,7 @@ class KubernetesApplicationHandler(Handler):
                     await self._update_retry_fields(app)
                 elif app.spec.backoff_limit == -1:
                     app.status.state = ApplicationState.DEGRADED
+                    await self._update_retry_fields(app)
                 else:
                     app.status.state = ApplicationState.FAILED
                     logger.info(f"{app.metadata.name} transition to FAILED")

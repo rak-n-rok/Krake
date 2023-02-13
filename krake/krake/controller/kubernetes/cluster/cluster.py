@@ -201,7 +201,9 @@ class KubernetesClusterController(Controller):
             f"{cluster.metadata.name} transition to DEGRADED"
             f"remaining retries: {cluster.status.retries}"
         )
-        cluster.status.retries -= 1
+        if cluster.state.backoff_limit > 0:
+            cluster.status.retries -= 1
+
         delay = timedelta(
             seconds=cluster.spec.backoff_delay * cluster.spec.backoff
         )
@@ -267,6 +269,7 @@ class KubernetesClusterController(Controller):
                     await self._update_retry_fields(cluster)
                 elif cluster.spec.backoff_limit == -1:
                     cluster.status.state = ClusterState.DEGRADED
+                    await self._update_retry_fields(cluster)
                 else:
                     cluster.status.state = ClusterState.OFFLINE
                     logger.info(f"{cluster.metadata.name} transition to OFFLINE")
