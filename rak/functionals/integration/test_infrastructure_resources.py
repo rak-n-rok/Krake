@@ -119,7 +119,7 @@ def test_infrastructure_provider_crudl(resource, ip_type):
     error_message = f"The {resource} {resource_name} could not be updated."
     run(
         f"rok infra {resource.lower()} update {resource_name} "
-        "--url http://updated.example -o json",
+        "--url http://updated.example -o json --password pass",
         condition=check_response_content(
             error_message,
             expected_content_updated,
@@ -139,7 +139,7 @@ def test_infrastructure_provider_crudl(resource, ip_type):
     # 8. Perform an empty update of the infrastructure provider and 400 response
     run(
         f"rok infra {resource.lower()} update {resource_name} "
-        "--url http://updated.example -o json",
+        "--url http://updated.example -o json --password pass",
         condition=check_http_code_in_output(400),
         retry=0,
     )
@@ -283,7 +283,7 @@ def test_cloud_crudl(resource, cloud_type):
     error_message = f"The {resource} {resource_name} could not be updated."
     run(
         f"rok infra {resource.lower()} update {resource_name} "
-        "--url http://updated.example -o json",
+        "--url http://updated.example -o json --password pass",
         condition=check_response_content(
             error_message,
             expected_content_updated,
@@ -303,7 +303,7 @@ def test_cloud_crudl(resource, cloud_type):
     # 8. Perform an empty update of the cloud and 400 response
     run(
         f"rok infra {resource.lower()} update {resource_name} "
-        "--url http://updated.example -o json",
+        "--url http://updated.example -o json --password pass",
         condition=check_http_code_in_output(400),
         retry=0,
     )

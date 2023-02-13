@@ -6,6 +6,8 @@
 
 """
 import sys
+import getpass
+
 from enum import Enum
 
 from .parser import (
@@ -103,6 +105,7 @@ def list_globalinfrastructureproviders(session):
 )
 @argument(
     "--password",
+    required=False,
     help="Global infrastructure provider API password. "
     f"Valid together with --type {InfrastructureProviderType.IM.value}.",
 )
@@ -124,6 +127,11 @@ def register_globalinfrastructureprovider(
     token,
     name,
 ):
+    if password:
+        pass
+    else:
+        password = getpass.getpass(prompt='Please set your Infrastructure Provider '
+                                          'password: ')
     if ip_type == InfrastructureProviderType.IM:
         provider = {
             "api": "infrastructure",
@@ -179,6 +187,7 @@ def get_globalinfrastructureprovider(session, name):
 )
 @argument(
     "--password",
+    required=False,
     help="Global infrastructure provider API password. "
     f"Valid together with --type {InfrastructureProviderType.IM.value}.",
 )
@@ -201,13 +210,18 @@ def update_globalinfrastructureprovider(
     resp = session.get(f"/infrastructure/globalinfrastructureproviders/{name}")
     provider = resp.json()
 
+    if password:
+        pass
+    else:
+        password = getpass.getpass(prompt='Please enter your Infrastructure Provider '
+                                          'password: ')
+    provider["spec"]["im"]["password"] = password
+
     if provider["spec"]["type"] == InfrastructureProviderType.IM:
         if url:
             provider["spec"]["im"]["url"] = url
         if username:
             provider["spec"]["im"]["username"] = username
-        if password:
-            provider["spec"]["im"]["password"] = password
         if token:
             provider["spec"]["im"]["token"] = token
 
@@ -283,6 +297,7 @@ def list_infrastructureproviders(config, session, namespace, all):
 )
 @argument(
     "--password",
+    required=False,
     help="Infrastructure provider API password. "
     f"Valid together with --type {InfrastructureProviderType.IM.value}.",
 )
@@ -310,6 +325,11 @@ def register_infrastructureprovider(
     if namespace is None:
         namespace = config["user"]
 
+    if password:
+        pass
+    else:
+        password = getpass.getpass(prompt='Please set your Infrastructure Provider '
+                                          'password: ')
     if ip_type == InfrastructureProviderType.IM:
         provider = {
             "api": "infrastructure",
@@ -367,6 +387,7 @@ def get_infrastructureprovider(config, session, namespace, name):
 )
 @argument(
     "--password",
+    required=False,
     help="Infrastructure provider API password. "
     f"Valid together with --type {InfrastructureProviderType.IM.value}.",
 )
@@ -397,13 +418,18 @@ def update_infrastructureprovider(
     )
     provider = resp.json()
 
+    if password:
+        pass
+    else:
+        password = getpass.getpass(prompt='Please enter your Infrastructure Provider '
+                                          'password: ')
+    provider["spec"]["im"]["password"] = password
+
     if provider["spec"]["type"] == InfrastructureProviderType.IM:
         if url:
             provider["spec"]["im"]["url"] = url
         if username:
             provider["spec"]["im"]["username"] = username
-        if password:
-            provider["spec"]["im"]["password"] = password
         if token:
             provider["spec"]["im"]["token"] = token
 
@@ -496,8 +522,8 @@ def list_globalclouds(session):
 )
 @argument(
     "--password",
-    required=True,
-    help="Password of OpenStack user. "
+    required=False,
+    help="Password of the OpenStack user. "
     f"Valid together with --type {CloudType.OPENSTACK.value}.",
 )
 @argument(
@@ -529,15 +555,20 @@ def register_globalcloud(
     cloud_type,
     url,
     username,
-    password,
     domain_name,
     project,
     domain_id,
+    password,
     global_infra_provider,
     global_metrics,
     labels,
     name,
 ):
+    if password:
+        pass
+    else:
+        password = getpass.getpass(prompt='Please enter your Cloud password: ')
+
     if cloud_type == CloudType.OPENSTACK:
         cloud_resource = {
             "api": "infrastructure",
@@ -611,7 +642,8 @@ def get_globalcloud(session, name):
 )
 @argument(
     "--password",
-    help="Password of OpenStack user. "
+    required=False,
+    help="Password of the OpenStack user. "
     f"Valid together with --type {CloudType.OPENSTACK.value}.",
 )
 @argument(
@@ -650,6 +682,12 @@ def update_globalcloud(
     resp = session.get(f"/infrastructure/globalclouds/{name}")
     cloud_resource = resp.json()
 
+    if password:
+        pass
+    else:
+        password = getpass.getpass(prompt='Please enter your Cloud password: ')
+    cloud_resource["metadata"]["password"] = password
+
     if cloud_resource["spec"]["type"] == CloudType.OPENSTACK:
         if labels:
             cloud_resource["metadata"]["labels"] = labels
@@ -661,10 +699,6 @@ def update_globalcloud(
             cloud_resource["spec"]["openstack"]["auth"]["password"]["user"][
                 "username"
             ] = username
-        if password:
-            cloud_resource["spec"]["openstack"]["auth"]["password"]["user"][
-                "password"
-            ] = password
         if domain_name:
             cloud_resource["spec"]["openstack"]["auth"]["password"]["user"][
                 "domain_name"
@@ -755,8 +789,8 @@ def list_clouds(config, session, namespace, all):
 )
 @argument(
     "--password",
-    required=True,
-    help="Password of OpenStack user. "
+    required=False,
+    help="Password of the OpenStack user. "
     f"Valid together with --type {CloudType.OPENSTACK.value}.",
 )
 @argument(
@@ -803,6 +837,11 @@ def register_cloud(
     labels,
     name,
 ):
+    if password:
+        pass
+    else:
+        password = getpass.getpass(prompt='Please enter your OpenStack password: ')
+
     if infra_provider and global_infra_provider:
         sys.exit(
             "Error: Cloud should be associated only with one infrastructure provider."
@@ -897,7 +936,8 @@ def get_cloud(config, session, namespace, name):
 )
 @argument(
     "--password",
-    help="Password of OpenStack user. "
+    required=False,
+    help="Password of the OpenStack user. "
     f"Valid together with --type {CloudType.OPENSTACK.value}.",
 )
 @argument(
@@ -927,9 +967,9 @@ def update_cloud(
     session,
     namespace,
     name,
+    password,
     url,
     username,
-    password,
     domain_name,
     project,
     domain_id,
@@ -952,6 +992,12 @@ def update_cloud(
     resp = session.get(f"/infrastructure/namespaces/{namespace}/clouds/{name}")
     cloud_resource = resp.json()
 
+    if password:
+        pass
+    else:
+        password = getpass.getpass(prompt='Please enter your Cloud password: ')
+    cloud_resource["metadata"]["password"] = password
+
     if cloud_resource["spec"]["type"] == CloudType.OPENSTACK:
         if labels:
             cloud_resource["metadata"]["labels"] = labels
@@ -963,10 +1009,6 @@ def update_cloud(
             cloud_resource["spec"]["openstack"]["auth"]["password"]["user"][
                 "username"
             ] = username
-        if password:
-            cloud_resource["spec"]["openstack"]["auth"]["password"]["user"][
-                "password"
-            ] = password
         if domain_name:
             cloud_resource["spec"]["openstack"]["auth"]["password"]["user"][
                 "domain_name"
