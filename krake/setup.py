@@ -5,7 +5,6 @@ from setuptools import setup, find_packages
 install_requires = [
     "aiohttp==3.*",
     "aiohttp-cors==0.7.*",
-    "dnspython==2.2.1",
     "etcd3-py==0.1.*",
     "keystoneauth1==4.*",
     "kubernetes-asyncio==22.*",
@@ -22,13 +21,6 @@ install_requires = [
     "SQLAlchemy==1.4.46",
     "tosca-parser==2.6.*",
     "deepdiff==6.2.*",
-    # FIXME: The AttributeError (module 'dns.rdtypes' has no attribute 'ANY')
-    #  is raised when the ``dnspython`` package is installed in version 2.3.0.
-    #  The package is installed as a dependency of the keystone package.
-    #  As a workaround, the `dnspython`` package should be pinned to the latest
-    #  working version 2.2.1.
-    #  This could be removed once the ``dnspython`` is fixed.
-    "dnspython==2.2.1",
     "SQLAlchemy==1.4.46",
 ]
 
@@ -70,7 +62,15 @@ setup(
             "keystone==20.*",
             "pytest-httpserver==1.*",
         },
-        "api_generator": {"black==21.11b1", "jinja2==3.*"},
+        "ansible": {
+            "ansible>=2.9",
+            "python-openstackclient",
+            "openstacksdk"
+        },
+        "api_generator": {
+            "black==21.11b1",
+            "jinja2==3.*"
+        },
     },
     scripts=[
         "scripts/krake_bootstrap_db",

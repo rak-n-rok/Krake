@@ -266,14 +266,14 @@
           command: "{{ git_dir }}/docker/generate --config {{ git_dir }}/docker/docker.yaml {{ git_dir }}/docker/krake"
 
         - name: Remove Krake infrastructure
-          docker_compose:
+          community.docker.docker_compose:
             project_src: "{{ git_dir }}/docker"
             files:
               - "{{ git_dir }}/docker/krake/docker-compose.yaml"
             state: absent
 
         - name: Remove Krake image
-          docker_image:
+          community.docker.docker_image:
             name: krake:latest
             state: absent
           tags:

@@ -1,5 +1,5 @@
 import json
-from collections import MutableMapping
+from collections.abc import MutableMapping
 from pathlib import Path
 
 from ansible.errors import AnsibleParserError

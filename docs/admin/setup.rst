@@ -18,7 +18,7 @@ It is suggested that Ansible is installed inside the virtualenv of Krake.
 
 .. code::
 
-    pip install "ansible>=2.9" docker openstackclient
+    pip install --editable "krake/[ansible]"
 
 Check the version and Python executable of the Ansible installation:
 
@@ -34,6 +34,14 @@ Check the version and Python executable of the Ansible installation:
     ansible python module location = /path/to/virtualenv/lib/python3.6/site-packages/ansible
     executable location = /path/to/virtualenv/bin/ansible
     python version = 3.6.8 (default, Oct  7 2019, 12:59:55) [GCC 8.3.0]
+
+Before any infrastructure can be deployed, the necessary Ansible collections need to be
+installed first:
+
+.. code::
+
+    ansible-galaxy install -r ansible/requirements.yml
+
 
 
 Krake infrastructure deployment

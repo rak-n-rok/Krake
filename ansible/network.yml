@@ -6,7 +6,7 @@
   tasks:
     - name: Create Heat stack for network
       delegate_to: localhost
-      os_stack:
+      openstack.cloud.stack:
         name: "{{ inventory_hostname }}"
         state: present
         template:  "{{ playbook_dir }}/files/network/stack.yml"

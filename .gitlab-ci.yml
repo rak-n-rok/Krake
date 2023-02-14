@@ -211,7 +211,8 @@ e2e-tests:
 
   script:
     # Pre-requisites: openstack, ansible and pytest
-    - pip install python-openstackclient "openstacksdk<=0.66" "ansible>=2.9" pytest
+    - pip install python-openstackclient openstacksdk "ansible>=2.9" pytest
+
     - apt-get update -y && apt-get install openssh-client rsync -y
 
     # Create SSH keys for to use during the whole pipeline
@@ -225,6 +226,8 @@ e2e-tests:
 
     # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
     - chmod -v 700 ansible/
+
+    - ansible-galaxy install -r ansible/requirements.yml
 
     ###################################
     ### Provision the staging infra ###
