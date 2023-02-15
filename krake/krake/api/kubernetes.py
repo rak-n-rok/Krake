@@ -7,7 +7,10 @@ from webargs.aiohttpparser import use_kwargs
 
 from krake import utils
 from krake.api.auth import protected
-from krake.api.database import EventType
+from krake.api.database import (
+    EventType,
+    TransactionError
+)
 from krake.api.helpers import (
     load,
     blocking,
@@ -33,6 +36,7 @@ from krake.data.kubernetes import (
     ApplicationState,
 )
 
+
 logger = logging.getLogger("krake.api.kubernetes")
 
 
@@ -53,19 +57,6 @@ class KubernetesApi(object):
         namespace = request.match_info.get("namespace")
         kwargs["namespace"] = namespace
 
-        # Ensure that a resource with the same name does not already exist.
-        existing = await session(request).get(body.__class__, **kwargs)
-
-        if existing is not None:
-            problem = HttpProblem(
-                detail=(
-                    f"Application {body.metadata.name!r} already "
-                    f"exists in namespace {namespace!r}"
-                ),
-                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS,
-            )
-            raise HttpProblemError(web.HTTPConflict, problem)
-
         now = utils.now()
 
         body.metadata.namespace = namespace
@@ -79,10 +70,23 @@ class KubernetesApi(object):
                 value = field.type()
                 setattr(body, field.name, value)
 
-        await session(request).put(body)
-        logger.info(
-            "Created %s %r (%s)", "Application", body.metadata.name, body.metadata.uid
-        )
+        try:
+            await session(request).put(body)
+            logger.info(
+                "Created %s %r (%s)",
+                "Application",
+                body.metadata.name,
+                body.metadata.uid,
+            )
+        except TransactionError:
+            problem = HttpProblem(
+                detail=(
+                    f"Application {body.metadata.name!r} already "
+                    f"exists in namespace {namespace!r}"
+                ),
+                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS,
+            )
+            raise HttpProblemError(web.HTTPConflict, problem)
 
         return web.json_response(body.serialize())
 
@@ -394,20 +398,6 @@ class KubernetesApi(object):
         namespace = request.match_info.get("namespace")
         kwargs["namespace"] = namespace
 
-        # Ensure that a resource with the same name does not already
-        # exists.
-        existing = await session(request).get(body.__class__, **kwargs)
-
-        if existing is not None:
-            problem = HttpProblem(
-                detail=(
-                    f"Cluster {body.metadata.name!r} already "
-                    f"exists in namespace {namespace!r}"
-                ),
-                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS,
-            )
-            raise HttpProblemError(web.HTTPConflict, problem)
-
         now = utils.now()
 
         body.metadata.namespace = namespace
@@ -421,10 +411,20 @@ class KubernetesApi(object):
                 value = field.type()
                 setattr(body, field.name, value)
 
-        await session(request).put(body)
-        logger.info(
-            "Created %s %r (%s)", "Cluster", body.metadata.name, body.metadata.uid
-        )
+        try:
+            await session(request).put(body)
+            logger.info(
+                "Created %s %r (%s)", "Cluster", body.metadata.name, body.metadata.uid
+            )
+        except TransactionError:
+            problem = HttpProblem(
+                detail=(
+                    f"Cluster {body.metadata.name!r} already "
+                    f"exists in namespace {namespace!r}"
+                ),
+                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS,
+            )
+            raise HttpProblemError(web.HTTPConflict, problem)
 
         return web.json_response(body.serialize())
 

@@ -6,7 +6,7 @@ from webargs.aiohttpparser import use_kwargs
 
 from krake import utils
 from krake.api.auth import protected
-from krake.api.database import EventType
+from krake.api.database import EventType, TransactionError
 from krake.api.helpers import (
     load,
     session,
@@ -54,18 +54,6 @@ class CoreApi(object):
         "body", schema=make_create_request_schema(GlobalMetric)
     )
     async def create_global_metric(request, body):
-        kwargs = {"name": body.metadata.name}
-
-        # Ensure that a resource with the same name does not already
-        # exists.
-        existing = await session(request).get(body.__class__, **kwargs)
-
-        if existing is not None:
-            problem = HttpProblem(
-                detail=f"GlobalMetric {body.metadata.name!r} already exists",
-                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
-            )
-            raise HttpProblemError(web.HTTPConflict, problem)
 
         now = utils.now()
 
@@ -73,10 +61,19 @@ class CoreApi(object):
         body.metadata.created = now
         body.metadata.modified = now
 
-        await session(request).put(body)
-        logger.info(
-            "Created %s %r (%s)", "GlobalMetric", body.metadata.name, body.metadata.uid
-        )
+        try:
+            await session(request).put(body)
+            logger.info(
+                "Created %s %r (%s)", "GlobalMetric",
+                body.metadata.name,
+                body.metadata.uid
+            )
+        except TransactionError:
+            problem = HttpProblem(
+                detail=f"GlobalMetric {body.metadata.name!r} already exists",
+                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
+            )
+            raise HttpProblemError(web.HTTPConflict, problem)
 
         return web.json_response(body.serialize())
 
@@ -226,18 +223,6 @@ class CoreApi(object):
         "body", schema=make_create_request_schema(GlobalMetricsProvider)
     )
     async def create_global_metrics_provider(request, body):
-        kwargs = {"name": body.metadata.name}
-
-        # Ensure that a resource with the same name does not already
-        # exists.
-        existing = await session(request).get(body.__class__, **kwargs)
-
-        if existing is not None:
-            problem = HttpProblem(
-                detail=f"GlobalMetricsProvider {body.metadata.name!r} already exists",
-                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
-            )
-            raise HttpProblemError(web.HTTPConflict, problem)
 
         now = utils.now()
 
@@ -245,11 +230,18 @@ class CoreApi(object):
         body.metadata.created = now
         body.metadata.modified = now
 
-        await session(request).put(body)
-        logger.info(
-            "Created %s %r (%s)", "GlobalMetricsProvider", body.metadata.name,
-            body.metadata.uid
-        )
+        try:
+            await session(request).put(body)
+            logger.info(
+                "Created %s %r (%s)", "GlobalMetricsProvider", body.metadata.name,
+                body.metadata.uid
+            )
+        except TransactionError:
+            problem = HttpProblem(
+                detail=f"GlobalMetricsProvider {body.metadata.name!r} already exists",
+                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
+            )
+            raise HttpProblemError(web.HTTPConflict, problem)
 
         return web.json_response(body.serialize())
 
@@ -400,18 +392,6 @@ class CoreApi(object):
         "body", schema=make_create_request_schema(Role)
     )
     async def create_role(request, body):
-        kwargs = {"name": body.metadata.name}
-
-        # Ensure that a resource with the same name does not already
-        # exists.
-        existing = await session(request).get(body.__class__, **kwargs)
-
-        if existing is not None:
-            problem = HttpProblem(
-                detail=f"Role {body.metadata.name!r} already exists",
-                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
-            )
-            raise HttpProblemError(web.HTTPConflict, problem)
 
         now = utils.now()
 
@@ -419,10 +399,17 @@ class CoreApi(object):
         body.metadata.created = now
         body.metadata.modified = now
 
-        await session(request).put(body)
-        logger.info(
-            "Created %s %r (%s)", "Role", body.metadata.name, body.metadata.uid
-        )
+        try:
+            await session(request).put(body)
+            logger.info(
+                "Created %s %r (%s)", "Role", body.metadata.name, body.metadata.uid
+            )
+        except TransactionError:
+            problem = HttpProblem(
+                detail=f"Role {body.metadata.name!r} already exists",
+                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
+            )
+            raise HttpProblemError(web.HTTPConflict, problem)
 
         return web.json_response(body.serialize())
 
@@ -569,18 +556,6 @@ class CoreApi(object):
         "body", schema=make_create_request_schema(RoleBinding)
     )
     async def create_role_binding(request, body):
-        kwargs = {"name": body.metadata.name}
-
-        # Ensure that a resource with the same name does not already
-        # exists.
-        existing = await session(request).get(body.__class__, **kwargs)
-
-        if existing is not None:
-            problem = HttpProblem(
-                detail=f"RoleBinding {body.metadata.name!r} already exists",
-                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
-            )
-            raise HttpProblemError(web.HTTPConflict, problem)
 
         now = utils.now()
 
@@ -588,10 +563,19 @@ class CoreApi(object):
         body.metadata.created = now
         body.metadata.modified = now
 
-        await session(request).put(body)
-        logger.info(
-            "Created %s %r (%s)", "RoleBinding", body.metadata.name, body.metadata.uid
-        )
+        try:
+            await session(request).put(body)
+            logger.info(
+                "Created %s %r (%s)", "RoleBinding",
+                body.metadata.name,
+                body.metadata.uid
+            )
+        except TransactionError:
+            problem = HttpProblem(
+                detail=f"RoleBinding {body.metadata.name!r} already exists",
+                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
+            )
+            raise HttpProblemError(web.HTTPConflict, problem)
 
         return web.json_response(body.serialize())
 
@@ -746,11 +730,19 @@ class CoreApi(object):
         namespace = request.match_info.get("namespace")
         kwargs["namespace"] = namespace
 
-        # Ensure that a resource with the same name does not already
-        # exists.
-        existing = await session(request).get(body.__class__, **kwargs)
+        now = utils.now()
 
-        if existing is not None:
+        body.metadata.namespace = namespace
+        body.metadata.uid = str(uuid4())
+        body.metadata.created = now
+        body.metadata.modified = now
+
+        try:
+            await session(request).put(body)
+            logger.info(
+                "Created %s %r (%s)", "Metric", body.metadata.name, body.metadata.uid
+            )
+        except TransactionError:
             message = (
                 f"Metric {body.metadata.name!r} already "
                 f"exists in namespace {namespace!r}"
@@ -759,18 +751,6 @@ class CoreApi(object):
                 detail=message, title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
             )
             raise HttpProblemError(web.HTTPConflict, problem)
-
-        now = utils.now()
-
-        body.metadata.namespace = namespace
-        body.metadata.uid = str(uuid4())
-        body.metadata.created = now
-        body.metadata.modified = now
-
-        await session(request).put(body)
-        logger.info(
-            "Created %s %r (%s)", "Metric", body.metadata.name, body.metadata.uid
-        )
 
         return web.json_response(body.serialize())
 
@@ -940,11 +920,20 @@ class CoreApi(object):
         namespace = request.match_info.get("namespace")
         kwargs["namespace"] = namespace
 
-        # Ensure that a resource with the same name does not already
-        # exists.
-        existing = await session(request).get(body.__class__, **kwargs)
+        now = utils.now()
 
-        if existing is not None:
+        body.metadata.namespace = namespace
+        body.metadata.uid = str(uuid4())
+        body.metadata.created = now
+        body.metadata.modified = now
+
+        try:
+            await session(request).put(body)
+            logger.info(
+                "Created %s %r (%s)", "MetricsProvider", body.metadata.name,
+                body.metadata.uid
+            )
+        except TransactionError:
             message = (
                 f"MetricsProvider {body.metadata.name!r} already "
                 f"exists in namespace {namespace!r}"
@@ -953,19 +942,6 @@ class CoreApi(object):
                 detail=message, title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
             )
             raise HttpProblemError(web.HTTPConflict, problem)
-
-        now = utils.now()
-
-        body.metadata.namespace = namespace
-        body.metadata.uid = str(uuid4())
-        body.metadata.created = now
-        body.metadata.modified = now
-
-        await session(request).put(body)
-        logger.info(
-            "Created %s %r (%s)", "MetricsProvider", body.metadata.name,
-            body.metadata.uid
-        )
 
         return web.json_response(body.serialize())
 
