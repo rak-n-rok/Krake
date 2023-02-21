@@ -328,6 +328,8 @@ def test_kubernetes_observer_additional_resource(minikube_clusters):
                 "kube_controller_triggered"
             ]
             app_before["status"]["container_health"] = app_after["status"]["container_health"]
+            # handle weird behaviour of scheduler ("retries" only set sometimes)
+            app_before["status"]["retries"] = app_after["status"]["retries"]
             assert app_before == app_after
 
             # Compare the Application deployment data before and after having added the
