@@ -51,3 +51,5 @@ RUN useradd --create-home --uid $krake_uid --shell /bin/bash krake
 
 USER krake
 WORKDIR /home/krake
+# in order to prevent logging file handlers from crashing
+RUN mkdir logs

@@ -5,7 +5,7 @@
 /tmp
 
 # Log files
-*.log
+/logs*/.log
 
 # Dynamic Ansible inventory
 /ansible/.etc
