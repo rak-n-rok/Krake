@@ -6,6 +6,7 @@ install_requires = [
     "python-dateutil==2.*",
     "requests==2.*",
     "texttable==1.*",
+    "getpass4",
 ]
 
 setup(
