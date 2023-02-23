@@ -848,6 +848,7 @@ class KubernetesApplicationController(Controller):
 
         # Transition into "RUNNING" state
         app.status.state = ApplicationState.RUNNING
+        app.status.reason = None
         await self.kubernetes_api.update_application_status(
             namespace=app.metadata.namespace, name=app.metadata.name, body=app
         )
@@ -974,6 +975,7 @@ class KubernetesApplicationController(Controller):
         # Transition into "RUNNING" state
         app.status.shutdown_grace_period = None
         app.status.state = ApplicationState.RUNNING
+        app.status.reason = None
         await self.kubernetes_api.update_application_status(
             namespace=app.metadata.namespace, name=app.metadata.name, body=app
         )
