@@ -1,0 +1,15 @@
+# OpenStack Heat template parameters
+api_port: 6443
+floating_ip: false
+flavor: M.mem+
+
+# Minikube and kubectl configuration parameters
+k3s_install_dir: /home/ubuntu
+k3s_version: v1.18.1 #TODO:!!! not yet implemented
+#kubectl_version: v1.20.4
+
+# Keystone configuration parameters
+kube_api_config: /etc/kubernetes/manifests/kube-apiserver.yaml
+user_role: _member_
+user_project: demo
+

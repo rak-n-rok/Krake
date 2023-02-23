@@ -58,6 +58,12 @@ all:
           name: minikube1
           network: krake-network
 
+    k3s_clusters:
+      hosts:
+        k3s-cluster-1:
+          name: k3s1
+          network: krake-network
+
     krake_apps:
       hosts:
         krake:
