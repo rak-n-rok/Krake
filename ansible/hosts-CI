@@ -45,12 +45,12 @@ all:
           vpn_cidr: 10.9.0.0/24
           wireguard_peers: []
 
-    minikube_clusters:
+    k3s_clusters:
       hosts:
-        minikube-cluster-$CI_PIPELINE_ID-1:
+        k3s-cluster-$CI_PIPELINE_ID-1:
           name: minikube-cluster-$CI_PIPELINE_ID-1
           network: krake-$CI_PIPELINE_ID-network
-        minikube-cluster-$CI_PIPELINE_ID-2:
+        k3s-cluster-$CI_PIPELINE_ID-2:
           name: minikube-cluster-$CI_PIPELINE_ID-2
           network: krake-$CI_PIPELINE_ID-network
 
