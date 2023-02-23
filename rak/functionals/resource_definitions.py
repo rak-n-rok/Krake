@@ -980,6 +980,8 @@ class ClusterDefinition(ResourceDefinition):
                 give the cluster, e.g. {'location': 'DE'}
             metrics (list[dict[str, object]], optional): list of dicts with metrics
                 and their weights to update the cluster with.
+            update_behavior (list[str], optional): list that specifies how the resource
+                shall be updated
 
         Returns:
              list[str]: the command to update the application, as a list of its parts.
