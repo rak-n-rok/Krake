@@ -233,7 +233,8 @@ def test_kubernetes_no_migration_cluster_constraints(minikube_clusters):
 
         # 3. Update the cluster constraints to match the first cluster;
         app.update_resource(
-            cluster_label_constraints=[f"location={expected_countries[0]}"]
+            cluster_label_constraints=[f"location={expected_countries[0]}"],
+            update_behavior = ["--remove-existing-label-constraints"],
         )
 
         # 4. Wait and
