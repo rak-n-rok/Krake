@@ -157,6 +157,7 @@ TEST_BOOTSTRAP = {
     "kind": "GlobalMetric",
     "metadata": {"name": "test"},
     "spec": {
+        "allowed_values": [],
         "max": "5.0",
         "min": "4.0",
         "provider": {"metric": "test", "name": "test"},
@@ -310,6 +311,7 @@ TEST_BOOTSTRAP_INVALID = {
     "kind": "INVALID",
     "metadata": {"name": "test_invalid"},
     "spec": {
+        "allowed_values": [],
         "max": "5.0",
         "min": "4.0",
         "provider": {"metric": "test_invalid", "name": "test_invalid"},
@@ -410,6 +412,7 @@ TEST_BOOTSTRAP_PRESENT = {
     "kind": "GlobalMetric",
     "metadata": {"name": "test_present"},
     "spec": {
+        "allowed_values": [],
         "max": "5.0",
         "min": "4.0",
         "provider": {"metric": "test_present", "name": "test_present"},

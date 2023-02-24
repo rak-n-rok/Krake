@@ -186,6 +186,7 @@ class MetricSpecFactory(Factory):
     class Meta:
         model = MetricSpec
 
+    allowed_values = []
     min = 0
     max = 1
     provider = SubFactory(MetricSpecProviderFactory)

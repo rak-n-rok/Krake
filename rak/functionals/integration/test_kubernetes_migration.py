@@ -18,11 +18,13 @@ Test constraints, metrics and metrics providers are globally defined as follows:
     This defines three valid metrics and two valid metrics providers as follows:
         global metrics:
             electricity_cost_1:
+                allowed_values = []
                 max: 1.0
                 min: 0.0
                 provider:
                     static_provider
             green_energy_ratio_1:
+                allowed_values = []
                 max: 1.0
                 min: 0.0
                 provider:
@@ -30,6 +32,7 @@ Test constraints, metrics and metrics providers are globally defined as follows:
 
         namespaced metrics:
             existing_namespaced_metric:
+                allowed_values = []
                 max: 1.0
                 min: 0.0
                 provider:

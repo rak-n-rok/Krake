@@ -829,6 +829,7 @@ class BaseMetricListTable(BaseTable):
     provider = Cell("spec.provider.name")
     min = Cell("spec.min")
     max = Cell("spec.max")
+    allowed_values = Cell("spec.allowed_values")
 
 
 class BaseMetricTable(BaseMetricListTable):
@@ -848,26 +849,56 @@ def _create_base_metric(
     min,
     max,
     metric_name,
+    allowed_values=None,
     config=None,
     namespace=None,
 ):
     if not metric_name:
         metric_name = name
-    metric = {
-        "api": "core",
-        "kind": kind,
-        "metadata": {
-            "name": name,
-        },
-        "spec": {
-            "max": max,
-            "min": min,
-            "provider": {
-                "metric": metric_name,
-                "name": mp_name,
+        if None in (min, max):
+            # TODO is this the correct Error Code?
+            raise ValueError(
+                f"Expected min and max values for the metric type RANGE."
+                f"min: '{min}'. max: '{max}'."
+            )
+
+    if allowed_values:
+        allowed_values.sort()
+
+        metric = {
+            "api": "core",
+            "kind": kind,
+            "metadata": {
+                "name": name,
             },
-        },
-    }
+            "spec": {
+                "allowed_values": allowed_values,
+                "max": max,
+                "min": min,
+                "provider": {
+                    "metric": metric_name,
+                    "name": mp_name,
+                },
+            },
+        }
+
+    else:
+        metric = {
+            "api": "core",
+            "kind": kind,
+            "metadata": {
+                "name": name,
+            },
+            "spec": {
+                "max": max,
+                "min": min,
+                "allowed_values": [],
+                "provider": {
+                    "metric": metric_name,
+                    "name": mp_name,
+                },
+            },
+        }
 
     return _create_base_resource(
         session, base_url, metric, config=config, namespace=namespace
@@ -887,6 +918,7 @@ def _update_base_metric(
     name,
     max,
     min,
+    allowed_values,
     mp_name,
     metric_name,
     config=None,
@@ -902,6 +934,8 @@ def _update_base_metric(
         metric["spec"]["max"] = max
     if min:
         metric["spec"]["min"] = min
+    if allowed_values:
+        metric["spec"]["allowed_values"] = allowed_values
     if mp_name:
         metric["spec"]["provider"]["name"] = mp_name
     if metric_name:
@@ -937,6 +971,12 @@ def list_metrics(config, session, namespace, all):
 @argument("--min", required=True, help="Minimum value of the metric")
 @argument("--max", required=True, help="Maximum value of the metric")
 @argument(
+    "--allowed-values",
+    type=int,
+    nargs='*',
+    help="Restrict the allowed values to the specified list",
+    )
+@argument(
     "--metric-name",
     help="Name of the metric which the metrics provider provides. "
     "As default the name of the created metric resource is used.",
@@ -947,7 +987,8 @@ def list_metrics(config, session, namespace, all):
 @depends("config", "session")
 @printer(table=BaseMetricTable())
 def create_metric(
-    config, session, namespace, name, mp_name, min, max, metric_name=None
+    config, session, namespace, name, mp_name, min, max, allowed_values=None,
+    metric_name=None,
 ):
     """Create a Metric resource.
 
@@ -959,6 +1000,7 @@ def create_metric(
         mp_name (str): Name of the metrics provider
         min (str): The minimum value of the metric
         max (str): The maximum value of the metric
+        allowed-values (List[int]): List of valid integers for this metric
         metric_name (str): The name used to identify the metric at the endpoint
             of the metrics provider
 
@@ -974,6 +1016,7 @@ def create_metric(
         min,
         max,
         metric_name,
+        allowed_values=allowed_values,
         config=config,
         namespace=namespace,
     )
@@ -995,6 +1038,12 @@ def get_metric(config, session, namespace, name):
 @argument("name", help="Metric name")
 @argument("--min", help="Minimum value of the metric")
 @argument("--max", help="Maximum value of the metric")
+@argument(
+    "--allowed-values",
+    type=int,
+    nargs='*',
+    help="Restrict the allowed values to the specified list",
+    )
 @argument("--mp-name", help="Metrics provider name'")
 @argument(
     "--metric-name",
@@ -1004,7 +1053,9 @@ def get_metric(config, session, namespace, name):
 @arg_formatting
 @depends("config", "session")
 @printer(table=BaseMetricTable())
-def update_metric(config, session, namespace, name, max, min, mp_name, metric_name):
+def update_metric(
+    config, session, namespace, name, max, min, allowed_values, mp_name, metric_name,
+):
     """Update a Metric resource.
 
     Args:
@@ -1028,6 +1079,7 @@ def update_metric(config, session, namespace, name, max, min, mp_name, metric_na
         name,
         max,
         min,
+        allowed_values,
         mp_name,
         metric_name,
         config=config,
@@ -1063,6 +1115,12 @@ def list_globalmetrics(session):
 @argument("--min", required=True, help="Minimum value of the global metric")
 @argument("--max", required=True, help="Maximum value of the global metric")
 @argument(
+    "--allowed-values",
+    type=int,
+    nargs='*',
+    help="Restrict the allowed values to the specified list",
+    )
+@argument(
     "--metric-name",
     help="Name of the global metric which the global metrics provider provides. "
     "As default the name of the created global metric resource is used.",
@@ -1071,7 +1129,9 @@ def list_globalmetrics(session):
 @arg_formatting
 @depends("session")
 @printer(table=BaseMetricTable())
-def create_globalmetric(session, name, gmp_name, min, max, metric_name=None):
+def create_globalmetric(
+    session, name, gmp_name, min, max, allowed_values=None, metric_name=None
+):
     """Create a GlobalMetric resource.
 
     Args:
@@ -1094,8 +1154,9 @@ def create_globalmetric(session, name, gmp_name, min, max, metric_name=None):
         gmp_name,
         min,
         max,
-        metric_name,
-    )
+        allowed_values=allowed_values,
+        metric_name=metric_name,
+        )
 
 
 @global_metric.command("get", help="Get a global metric")
@@ -1111,6 +1172,12 @@ def get_globalmetric(session, name):
 @argument("name", help="Global metric name")
 @argument("--min", help="Minimum value of the global metric")
 @argument("--max", help="Maximum value of the global metric")
+@argument(
+    "--allowed-values",
+    type=int,
+    nargs='*',
+    help="Restrict the allowed values to the specified list",
+    )
 @argument("--gmp-name", help="Global metrics provider name'")
 @argument(
     "--metric-name",
@@ -1119,7 +1186,7 @@ def get_globalmetric(session, name):
 @arg_formatting
 @depends("session")
 @printer(table=BaseMetricTable())
-def update_globalmetric(session, name, max, min, gmp_name, metric_name):
+def update_globalmetric(session, name, max, min, allowed_values, gmp_name, metric_name):
     """Update a GlobalMetric resource.
 
     Args:
@@ -1141,6 +1208,7 @@ def update_globalmetric(session, name, max, min, gmp_name, metric_name):
         name,
         max,
         min,
+        allowed_values,
         gmp_name,
         metric_name,
     )

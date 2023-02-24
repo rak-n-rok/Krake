@@ -31,6 +31,7 @@ kind: GlobalMetric
 metadata:
   name: electricity_cost_1
 spec:
+  allowed_values: []
   max: 1.0
   min: 0.0
   provider:
@@ -44,6 +45,7 @@ kind: GlobalMetric
 metadata:
   name: green_energy_ratio_1
 spec:
+  allowed_values: []
   max: 1.0
   min: 0.0
   provider:

@@ -23,6 +23,7 @@ Test constraints, metrics and metrics providers are globally defined as follows:
     Basic template defines 5 valid metrics and one valid metrics provider as follows:
         metrics:
             heat_demand_zone_[1, 2, 3, 4, 5]:
+                allowed_values = []
                 max: 5.0
                 min: 0.0
                 provider:
