@@ -46,7 +46,7 @@ if sys.version_info < (3, 8):
 
 setup(
     name="krake",
-    version="1.0.0",
+    version="1.0.1",
     description="",
     url="https://gitlab.com/rak-n-rok/krake",
     maintainer="Krake Development Team",

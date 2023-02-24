@@ -1,0 +1,46 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+
+- Clusters are set to ONLINE after a metrics provider can be reached again
+
+### Fixed
+
+- Tenants are now separated in the scheduling algorithm, so that applications don't get scheduled to non-owned clusters anymore
+
+## [1.0.1] - 2023-02-24
+
+### Added
+
+- Added the infrastructure controller, which can use an Infrastructure Manager backend to spawn K8s clusters
+- Added an intermediary DEGRADED state, where the application will be retried before going into a FAILED state
+- Allow force deletion of Krake resources
+- Added file logging options to the config generation
+
+### Fixed
+
+- Registering a Cloud instance now uses getpass to ask for the users password instead of writing it into the console as plaintext
+- Fixed the task profiling times for Ansible
+- Fixed some failing library dependencies (SQLAlchemy, dnspython)
+
+### Changed
+
+- The API now catches Transaction errors from the database in order to check for resources' existence, which saves a database call
+- Updated the readme to include a section about metrics and labels scheduling
+
+## [1.0.0] - 2022-12-08
+
+### Added
+
+- PyPi packages and Docker images are now build automatically on every version release
+
+## [0.0.0]
+
+- Versions before 1.0.0. are not documented, because no changelog was kept
