@@ -59,7 +59,7 @@ def test_update_application_manifest(minikube_clusters):
 
     manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
     environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
+        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
     )
 
     with Environment(environment) as env:
@@ -128,7 +128,7 @@ def test_update_application_labels(minikube_clusters):
     kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
     manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
     environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
+        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
     )
 
     with Environment(environment) as env:
@@ -235,7 +235,7 @@ def test_update_cluster_labels(minikube_clusters):
     manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
 
     environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
+        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
     )
 
     with Environment(environment) as env:
@@ -276,7 +276,7 @@ def test_update_no_changes(minikube_clusters):
     manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
 
     environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
+        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
     )
 
     with Environment(environment) as env:
@@ -649,7 +649,7 @@ def test_update_manifest_application_by_tosca(
 
     # 0. the Application is created with the manifest file
     environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
+        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
     )
 
     with Environment(environment) as env:
@@ -747,7 +747,7 @@ def test_update_manifest_application_by_csar(
 
     # 0. the Application is created with the manifest file
     environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
+        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
     )
 
     with Environment(environment) as env:

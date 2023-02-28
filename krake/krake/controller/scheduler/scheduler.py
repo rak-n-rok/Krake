@@ -633,8 +633,9 @@ class KubernetesApplicationHandler(Handler):
                 "Not migrating %r, since migration of the application is disabled.", app
             )
             return
+        namespace = app.metadata.namespace
+        clusters = await self.api.list_clusters(namespace)
 
-        clusters = await self.api.list_all_clusters()
         cluster = await self.select_kubernetes_cluster(app, clusters.items)
 
         scheduled_to = resource_ref(cluster)

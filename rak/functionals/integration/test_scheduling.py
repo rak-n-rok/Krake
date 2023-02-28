@@ -136,7 +136,7 @@ def test_create_on_other_namespace(minikube_clusters):
 
     manifest_path = f"{MANIFEST_PATH}/echo-demo-namespaced.yaml"
     environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path
+        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
     )
 
     def create_namespace(resources):
@@ -826,3 +826,78 @@ def test_cluster_not_online(minikube_clusters):
         )
         cluster_list = json.loads(cluster_json.output)
         assert cluster_list[0]["status"]["state"] == "OFFLINE"
+
+
+def test_tenant_separation(minikube_clusters):
+    """Basic e2e testing of tenant separation.
+
+    Test applies workflow as follows:
+
+        1. Create one application and one cluster in different namespaces.
+        2. Ensure that the application wasn't scheduled to the cluster, as it lies in another namespace.
+
+
+    Args:
+        minikube_clusters (list): Names of the Minikube backend.
+
+    """
+    minikube_cluster = random.choice(minikube_clusters)
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+
+    # create app in namespace "secondary" and cluster in default namespace
+    manifest_path = f"{MANIFEST_PATH}/echo-demo-namespaced.yaml"
+    environment = create_simple_environment(
+        minikube_cluster,
+        kubeconfig_path,
+        "echo-demo-namespaced",
+        manifest_path=manifest_path,
+        app_namespace="secondary"
+    )
+
+    def create_namespace(resources):
+        error_message = "The namespace 'secondary' could not be created"
+        run(
+            f"kubectl --kubeconfig {kubeconfig_path} create namespace secondary",
+            condition=check_return_code(error_message),
+        )
+
+    def delete_namespace(resources):
+        error_message = "The namespace 'secondary' could not be deleted"
+        run(
+            f"kubectl --kubeconfig {kubeconfig_path} delete namespace secondary",
+            condition=check_return_code(error_message),
+        )
+
+    # 1. Create the application
+    with Environment(
+        environment,
+        before_handlers=[create_namespace],
+        after_handlers=[delete_namespace],
+        creation_delay=60,
+        app_expected_state="DEGRADED"
+    ) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
+
+        assert app.get_state() == "DEGRADED"
+
+        # 2. Delete the Application
+        app.delete_resource()
+        run(
+            "rok kube app list -n secondary -o json",
+            condition=check_empty_list(
+                "Unable to observe the empty list of applications"
+            ),
+        )
+
+        # 3. Ensure no resource is left on the namespace
+        time.sleep(30)  # Wait for the namespace to leave the "Terminating" state
+
+        error_message = (
+            "The deployment 'echo-demo-namespaced' is still present in \
+            the 'secondary' namespace"
+        )
+        run(
+            f"kubectl --kubeconfig {kubeconfig_path} -n secondary"
+            " get deployment echo-demo-namespaced",
+            condition=check_return_code(error_message, expected_code=1),
+        )
