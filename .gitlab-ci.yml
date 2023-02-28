@@ -202,6 +202,8 @@ e2e-tests:
     paths:
       - ansible/E2E_logs/krake_logs.tar.gz
   only:
+#TODO:!!! rm this on final
+    - branches
     - master
     - merge_requests
     - schedules
@@ -237,7 +239,8 @@ e2e-tests:
     #########################
     ### Integration tests ###
     #########################
-    - ansible-playbook ansible/integration_tests.yml
+#TODO:!!! integrate in script on final
+    - ansible-playbook ansible/integration_tests_k3s.yml
 
   after_script:
     # Pre-requisites: openstack, ansible and pytest

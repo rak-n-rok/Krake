@@ -1,0 +1,246 @@
+- name: Prepare Krake infrastructure for integration tests
+  become: yes
+  become_user: krake
+  hosts: krake_apps
+  tags:
+    - prepare-tests
+  roles:
+    - authorized-keys
+  vars:
+    git_dir: /home/krake/git/krake
+    repo_dir: "{{ playbook_dir }}/.."
+  tasks:
+
+    # The files generated overwrite the ones created
+    - name: Generate the docker configuration file
+      script: |
+        {{ repo_dir }}/krake/scripts/krake_generate_config --dst {{ git_dir }}/docker \
+        {% if enable_tls is defined and enable_tls %} --tls-enabled {% endif %} \
+        {% if api_host is defined %} --api-host {{ api_host }} {% endif %} \
+        {% if api_port is defined %} --api-port {{ api_port }} {% endif %} \
+        {% if etcd_host is defined %} --etcd-host {{ etcd_host }} {% endif %} \
+        {% if etcd_port is defined %} --etcd-port {{ etcd_port }} {% endif %} \
+        {% if etcd_peer_port is defined %} --etcd-peer-port {{ etcd_peer_port }} {% endif %} \
+        {% if cert_dir is defined %} --cert-dir {{ cert_dir }} {% endif %} \
+        {% if im_host is defined %} --im-host {{ im_host }} {% endif %} \
+        {% if im_port is defined %} --im-port {{ im_port }} {% endif %} \
+        {{ git_dir }}/docker/docker.yaml.template
+
+    - name: Add IM hostname to /etc/hosts
+      become_user: root
+      lineinfile:
+        path: /etc/hosts
+        line: "127.0.0.1 {{ im_host }}"
+
+    - name: Configure the docker infrastructure for krake
+      command: "{{ git_dir }}/docker/generate --config {{ git_dir }}/docker/docker.yaml {{ git_dir }}/docker/krake"
+
+    - name: Configure the docker infrastructure for prometheus
+      command: "{{ git_dir }}/docker/generate --config {{ git_dir }}/docker/docker.yaml {{ git_dir }}/docker/prometheus"
+
+    - name: Configure the docker infrastructure for the Infrastructure Manager
+      command: "{{ git_dir }}/docker/generate --config {{ git_dir }}/docker/docker.yaml {{ git_dir }}/docker/im"
+
+    - name: Remove Krake infrastructure with prometheus and IM
+      docker_compose:
+        project_src: "{{ git_dir }}/docker"
+        files:
+          - "{{ git_dir }}/docker/krake/docker-compose.yaml"
+          - "{{ git_dir }}/docker/prometheus/docker-compose.yaml"
+          - "{{ git_dir }}/docker/im/docker-compose.yaml"
+        state: absent
+
+    - name: Start Krake infrastructure with prometheus and IM
+      docker_compose:
+        project_src: "{{ git_dir }}/docker"
+        files:
+          - "{{ git_dir }}/docker/krake/docker-compose.yaml"
+          - "{{ git_dir }}/docker/prometheus/docker-compose.yaml"
+          - "{{ git_dir }}/docker/im/docker-compose.yaml"
+        state: present
+        build: no
+
+    - name: Setup Minio docker container
+      docker_container:
+        name: minio
+        image: quay.io/minio/minio
+        command: server /data
+        state: started
+        pull: yes
+        container_default_behavior: compatibility
+        ports:
+        - "9000:9000"
+        - "9001:9001"
+        volumes:
+        - /data
+        env:
+          MINIO_ROOT_USER: "minio-user"
+          MINIO_ROOT_PASSWORD: "minio-user-super-secret"
+
+    - name: Bootstrap etcd database with the test-specific resources
+      shell : >
+        docker exec -i {{ api_host }} krake_bootstrap_db --force -
+        {% if etcd_host is defined %} --db-host {{ etcd_host }} {% endif %}
+        {% if etcd_port is defined %} --db-port {{ etcd_port }} {% endif %}
+        < {{ git_dir }}/{{ item }}
+      loop:
+        - "docker/prometheus/bootstrap.yaml"
+        - "support/static_metrics.yaml"
+
+
+- name: Running Krake integration tests
+  become: yes
+  become_user: krake
+  hosts: krake_apps
+  tags:
+    - run-tests
+  environment:
+    # pytest and rok are installed locally in /home/krake/.local/bin which isn't in the
+    # default PATH
+    PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
+    PYTEST_TIMEOUT: 1500
+    # Overrides default listen host (localhost) in the `httpserver` pytest fixture to
+    # the IP from which the Krake host is accessible externally.
+    # Simple `httpserver` runs on this externally accessible IP and could
+    # serve files that are accessible from Krake components running in containers.
+    PYTEST_HTTPSERVER_HOST: "{{ private_ip }}"
+  vars:
+    git_dir: /home/krake/git/krake
+    test_dir: rak/functionals
+    os_auth_url: "{{ lookup('env', 'OS_AUTH_URL') }}"
+    os_project_name: "{{ lookup('env', 'OS_PROJECT_NAME') }}"
+    os_username: "{{ lookup('env', 'OS_USERNAME') }}"
+    os_password: "{{ lookup('env', 'OS_PASSWORD') }}"
+  tasks:
+    - name: Run Krake Integration tests
+      block:
+
+        - name: Install Tests dependencies
+          pip:
+            name: "{{ git_dir }}/rak/[test]"
+            state: present
+            executable: pip3
+            extra_args: --user
+          tags:
+            - always
+
+        - name: Run integration tests for the core resources
+          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_core.py"
+          tags:
+            - test_core
+
+#TODO:!!! enable aggain on final only skipped for dev
+#        - name: Run integration tests for the infrastructure resources
+#          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_infrastructure_resources.py"
+#          tags:
+#            - test_infrastructure_resources
+#
+#        - name: Run integration tests for the CRUD operations of actual k8s cluster
+#          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_kubernetes_cluster.py --im_container {{ im_host }} --im_container_port {{ im_port }} --os_auth_url {{ os_auth_url }} --os_project_name {{ os_project_name }} --os_username {{ os_username }} --os_password {{ os_password }}"
+#          tags:
+#            - test_kubernetes_cluster
+
+        # We need two k3s clusters in order to run the integration tests
+        - name: Check if two k3s clusters have been spawned
+          assert:
+            that:
+              - "groups['k3s_clusters'][0] is defined"
+              - "groups['k3s_clusters'][1] is defined"
+          tags:
+            - always
+
+#TODO:!!! change 'minikubeclusters' to 'kubeclusters'
+
+        - name: Run integration tests for the scheduling algorithm
+          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_scheduling.py --minikubeclusters {{ groups['k3s_clusters'][0] }} {{ groups['k3s_clusters'][1] }}"
+          tags:
+            - test_scheduling
+
+        - name: Run integration tests for the migration of kubernetes applications
+          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_kubernetes_migration.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
+          tags:
+            - test_kubernetes_migration
+
+        - name: Run integration tests for the Krake k8s resources update
+          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_update.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
+          tags:
+            - test_update
+
+        - name: Run integration tests for the Kubernetes Observer
+          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_kubernetes_observer.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
+          tags:
+            - test_kubernetes_observer
+
+        - name: Run integration tests for the hooks
+          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_hooks.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
+          tags:
+            - test_hooks
+
+        - name: Run integration tests for krake scripts
+          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_scripts.py --krake_container {{ api_host }} --etcd_container {{ etcd_host }} --etcd_container_port {{ etcd_port }}"
+          tags:
+            - test_scripts
+
+        - name: Run application example tests for krake
+          command: "pytest -s {{ git_dir }}/{{test_dir}}/integration/test_example_applications.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
+          tags:
+            - test_example_applications
+          register: app_out
+        - debug: msg="{{ app_out.stdout }}"
+
+      rescue:
+
+#TODO:!!! rm this on final
+        - name: Debug ansible_failed_task 
+          debug: 
+            var: ansible_failed_task 
+
+        - name: Debug failed task '{{ ansible_failed_task.args._raw_params }}' 
+          debug: 
+            msg: "{{ ansible_failed_result.stdout_lines}}" 
+    
+        #In order to trigger a fail in the gitlab CI/CD pipeline 
+        - name: Trigger fail for '{{ ansible_failed_task.args._raw_params }}' 
+          fail:
+            msg: "Task '{{ ansible_failed_task.args._raw_params }}' failed"
+
+      always:
+        
+        - name: Save Krake containers logs
+          shell: "docker logs {{ item }} > /tmp/{{ item }}.log"
+          with_items:
+            - krake-db
+            - krake-api
+            - krake_krake-ctrl-scheduler_1
+            - krake_krake-ctrl-kubernetes-cluster_1
+            - krake_krake-ctrl-kubernetes-application_1
+            - krake_krake-ctrl-garbage-collector_1
+            - krake_krake-ctrl-infrastructure_1
+            - krake_krake-ctrl-magnum_1
+          tags:
+            - always
+
+        - name: Save prometheus, exporter and IM  containers logs
+          shell: "docker logs {{ item }} > /tmp/krake_{{ item }}.log"
+          with_items:
+            - prometheus
+            - exporter
+            - "{{ im_host }}"
+          tags:
+            - always
+
+        - name: Create a tar.gz archive from the log files
+          archive:
+            path: /tmp/krake*.log
+            dest: /tmp/krake_logs.tar.gz
+            format: gz
+          tags:
+            - always
+
+        - name: Download the Krake logs
+          fetch:
+            src: /tmp/krake_logs.tar.gz
+            dest: E2E_logs/
+            flat: true
+          tags:
+            - always
