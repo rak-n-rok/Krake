@@ -497,6 +497,16 @@ class Handler(object):
                 if error:
                     logger.error(error)
             return
+        else:
+            if resource.status.state == ClusterState.FAILING_METRICS and \
+               resource.kind == Cluster.kind:
+                resource.status.state = ClusterState.ONLINE
+                resource.status.reason = None
+                await self.api.update_cluster_status(
+                    namespace=resource.metadata.namespace,
+                    name=resource.metadata.name,
+                    body=resource,
+                )
 
         for metric, weight, value in fetched:
             logger.debug(
