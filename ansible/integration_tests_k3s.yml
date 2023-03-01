@@ -157,22 +157,22 @@
             - test_scheduling
 
         - name: Run integration tests for the migration of kubernetes applications
-          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_kubernetes_migration.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
+          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_kubernetes_migration.py --minikubeclusters {{ groups['k3s_clusters'][0] }} {{ groups['k3s_clusters'][1] }}"
           tags:
             - test_kubernetes_migration
 
         - name: Run integration tests for the Krake k8s resources update
-          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_update.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
+          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_update.py --minikubeclusters {{ groups['k3s_clusters'][0] }} {{ groups['k3s_clusters'][1] }}"
           tags:
             - test_update
 
         - name: Run integration tests for the Kubernetes Observer
-          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_kubernetes_observer.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
+          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_kubernetes_observer.py --minikubeclusters {{ groups['k3s_clusters'][0] }} {{ groups['k3s_clusters'][1] }}"
           tags:
             - test_kubernetes_observer
 
         - name: Run integration tests for the hooks
-          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_hooks.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
+          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_hooks.py --minikubeclusters {{ groups['k3s_clusters'][0] }} {{ groups['k3s_clusters'][1] }}"
           tags:
             - test_hooks
 
@@ -182,7 +182,7 @@
             - test_scripts
 
         - name: Run application example tests for krake
-          command: "pytest -s {{ git_dir }}/{{test_dir}}/integration/test_example_applications.py --minikubeclusters {{ groups['minikube_clusters'][0] }} {{ groups['minikube_clusters'][1] }}"
+          command: "pytest -s {{ git_dir }}/{{test_dir}}/integration/test_example_applications.py --minikubeclusters {{ groups['k3s_clusters'][0] }} {{ groups['k3s_clusters'][1] }}"
           tags:
             - test_example_applications
           register: app_out
