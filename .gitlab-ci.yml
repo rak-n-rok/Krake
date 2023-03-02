@@ -248,7 +248,7 @@ e2e-tests:
     ### Integration tests ###
     #########################
 #TODO:!!! integrate in script on final
-    - ansible-playbook ansible/integration_tests.yml #minikube version CHANGE NAME TO MINIKUBE
+    #- ansible-playbook ansible/integration_tests_minikube.yml #minikube version CHANGE NAME TO MINIKUBE
     - ansible-playbook ansible/integration_tests_k3s.yml
 
   after_script:
