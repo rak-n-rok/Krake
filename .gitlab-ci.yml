@@ -229,8 +229,6 @@ e2e-tests:
     - chmod 600 .ssh/id_rsa
 
     # Configure host-CI template with the CI Pipeline ID
-#TODO:!!! switch to hosts-CI-k3s to make minikube still an option
-    #- sed -i "s/\$CI_PIPELINE_ID/$CI_PIPELINE_ID/g" ansible/hosts-CI-minikube
     - sed -i "s/\$CI_PIPELINE_ID/$CI_PIPELINE_ID/g" $ANSIBLE_INVENTORY
 
     # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633

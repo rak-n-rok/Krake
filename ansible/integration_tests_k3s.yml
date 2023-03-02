@@ -190,22 +190,27 @@
 
       rescue:
 
-#TODO:!!! rm this on final
-        - name: Debug ansible_failed_task 
-          debug: 
-            var: ansible_failed_task 
+        - name: Debug ansible_failed_task
+          debug:
+            var: ansible_failed_task
+          tags:
+            - always
 
-        - name: Debug failed task '{{ ansible_failed_task.args._raw_params }}' 
-          debug: 
-            msg: "{{ ansible_failed_result.stdout_lines}}" 
-    
-        #In order to trigger a fail in the gitlab CI/CD pipeline 
-        - name: Trigger fail for '{{ ansible_failed_task.args._raw_params }}' 
+        - name: Debug failed task '{{ ansible_failed_task.args._raw_params }}'
+          debug:
+            msg: "{{ ansible_failed_result.stdout_lines}}"
+          tags:
+            - always
+
+        #In order to trigger a fail in the gitlab CI/CD pipeline
+        - name: Trigger fail for '{{ ansible_failed_task.args._raw_params }}'
           fail:
             msg: "Task '{{ ansible_failed_task.args._raw_params }}' failed"
+          tags:
+            - always
 
       always:
-        
+
         - name: Save Krake containers logs
           shell: "docker logs {{ item }} > /tmp/{{ item }}.log"
           with_items:
