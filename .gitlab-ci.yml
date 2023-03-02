@@ -47,7 +47,8 @@ cache:
       - krake/.coverage.*
   only:
     - tags
-    - branches
+#TODO:!!! uncomment 'branches' on final
+    #- branches SKIPPED FOR DEV PURPOSE UNSKIP ON FINAL
     - merge_requests
     - schedules
   script:
@@ -158,7 +159,8 @@ flake8-rok:
   image: python:3.7
   only:
     - tags
-    - branches
+#TODO:!!! uncomment 'branches' on final
+    #- branches SKIPPED FOR DEV PURPOSE UNSKIP ON FINAL
     - merge_requests
     - schedules
   script:
@@ -182,7 +184,8 @@ coverage-krake:
     - tar -czvf coverage.tar.gz htmlcov
   only:
     - tags
-    - branches
+#TODO:!!! uncomment 'branches' on final
+    #- branches SKIPPED FOR DEV PURPOSE UNSKIP ON FINAL
     - merge_requests
     - schedules
   artifacts:
@@ -202,14 +205,16 @@ e2e-tests:
     paths:
       - ansible/E2E_logs/krake_logs.tar.gz
   only:
-#TODO:!!! rm this on final
+#TODO:!!! rm 'branches' on final
     - branches
     - master
     - merge_requests
     - schedules
   variables:
     ANSIBLE_CONFIG: ansible/ansible.cfg
-    ANSIBLE_INVENTORY: ansible/hosts-CI
+#TODO:!!! switch to hosts-CI-k3s to make minikube still an option
+    #ANSIBLE_INVENTORY: ansible/hosts-CI-minikube
+    ANSIBLE_INVENTORY: ansible/hosts-CI-k3s
 
   script:
     # Pre-requisites: openstack, ansible and pytest
@@ -240,6 +245,7 @@ e2e-tests:
     ### Integration tests ###
     #########################
 #TODO:!!! integrate in script on final
+    - ansible-playbook ansible/integration_tests.yml #minikube version CHANGE NAME TO MINIKUBE
     - ansible-playbook ansible/integration_tests_k3s.yml
 
   after_script:
