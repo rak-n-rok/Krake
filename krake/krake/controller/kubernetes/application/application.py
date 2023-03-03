@@ -404,15 +404,16 @@ class KubernetesApplicationController(Controller):
                 app.metadata.finalizers
                 and app.metadata.finalizers[-1] == "kubernetes_resources_deletion"
             ):
-                logger.debug("Accept deleted %r", app)
+                logger.debug(f"{app.metadata.name}: Accept deletion")
                 return True
 
-            logger.debug("Reject deleted %r without finalizer", app)
+            logger.debug(f"{app.metadata.name} Reject deletion due to "
+                         f"missing finalizer")
             return False
 
         # Ignore all other failed application
         if app.status.state == ApplicationState.FAILED:
-            logger.debug("Reject failed %r", app)
+            logger.debug(f"{app.metadata.name}: Reject failed app")
             return False
 
         # Accept only scheduled applications. Forces the Applications to be first
@@ -422,10 +423,10 @@ class KubernetesApplicationController(Controller):
             app.status.kube_controller_triggered
             and app.status.kube_controller_triggered >= app.metadata.modified
         ):
-            logger.debug("Accept scheduled %r", app)
+            logger.debug(f"{app.metadata.name}: Accept scheduled app")
             return True
 
-        logger.debug("Reject %r", app)
+        logger.debug(f"{app.metadata.name}: Reject app")
         return False
 
     async def list_app(self, app):
@@ -492,7 +493,8 @@ class KubernetesApplicationController(Controller):
             krake.data.kubernetes.Application: the updated Application sent by the API.
 
         """
-        logger.debug("resource %s is different", resource_ref(app))
+        logger.debug("resource %s is different, request update of status \
+            on the API", resource_ref(app))
 
         # The Application needs to be processed (thus accepted) by the Kubernetes
         # Controller
@@ -561,7 +563,7 @@ class KubernetesApplicationController(Controller):
                 break  # TODO: should we keep this? Only useful for tests
 
     async def resource_received(self, app, start_observer=True):
-        logger.debug("Handle %r", app)
+        logger.debug(f"received {app}")
 
         copy = deepcopy(app)
         if copy.metadata.deleted:
@@ -571,7 +573,7 @@ class KubernetesApplicationController(Controller):
                     "shutdown" in copy.spec.hooks
                     and copy.status.state is ApplicationState.WAITING_FOR_CLEANING
                 ):
-
+                    logging.debug(f"{app.metadata.name} shut down")
                     await self._shutdown_application(copy)
 
                 elif (
@@ -586,6 +588,7 @@ class KubernetesApplicationController(Controller):
                         resource=copy,
                         start=start_observer,
                     )
+                    logging.debug(f"{app.metadata.name} delete")
                     await self._delete_application(copy)
                     await listen.hook(
                         HookType.ApplicationPostDelete,
@@ -606,6 +609,8 @@ class KubernetesApplicationController(Controller):
                 "shutdown" in copy.spec.hooks
                 and copy.status.state is not ApplicationState.READY_FOR_ACTION
             ):
+                logger.debug(f"{app.metadata.name} shutdown due to "
+                             f"running_on != scheduled_to")
                 if copy.status.state in [
                     ApplicationState.RUNNING,
                     ApplicationState.RECONCILING,
@@ -629,6 +634,7 @@ class KubernetesApplicationController(Controller):
                 copy.status.state is ApplicationState.READY_FOR_ACTION
                 or "shutdown" not in copy.spec.hooks
             ):
+                logger.info(f"{app.metadata.name} migrate")
                 # Migrate the Application
                 await listen.hook(
                     HookType.ApplicationPreMigrate,
@@ -644,6 +650,7 @@ class KubernetesApplicationController(Controller):
                     start=start_observer,
                 )
         else:
+            logger.info(f"{app.metadata.name} reconcile")
             # Reconcile the Application
             await listen.hook(
                 HookType.ApplicationPreReconcile,
@@ -679,7 +686,7 @@ class KubernetesApplicationController(Controller):
                 return
             raise
 
-        logger.info("Delete %r (%s)", app.metadata.name, app.metadata.namespace)
+        logger.info(f"{app.metadata.name} delete")
 
         await self._delete_manifest(app)
 
@@ -776,6 +783,9 @@ class KubernetesApplicationController(Controller):
         )
         if app_update.status.state is ApplicationState.WAITING_FOR_CLEANING:
             app.status.state = ApplicationState.DEGRADED
+            logger.debug(f"{app.metadata.name} to ApplicationState.DEGRADED "
+                         f"because of previous state "
+                         f"ApplicationState.WAITING_FOR_CLEANING")
             await self.kubernetes_api.update_application_status(
                 namespace=app.metadata.namespace,
                 name=app.metadata.name,
@@ -821,12 +831,8 @@ class KubernetesApplicationController(Controller):
             delta = ResourceDelta.calculate(app)
 
         if not delta:
-            logger.info(
-                "%r (%s) is up-to-date", app.metadata.name, app.metadata.namespace
-            )
+            logger.info(f"{app.metadata.name} is up-to-date")
             return
-
-        logger.info("Reconcile %r", app)
 
         # Ensure finalizer exists before changing Kubernetes objects
         await self._ensure_finalizer(app)
@@ -834,10 +840,15 @@ class KubernetesApplicationController(Controller):
         if not app.status.running_on:
             # Transition into "CREATING" state if the application is currently
             # not running on any cluster.
+            logger.debug(f"{app.metadata.name} transition to ApplicationState.CREATING "
+                         f"as it is currently not running on any cluster")
             app.status.state = ApplicationState.CREATING
         else:
             # Transition into "RECONCILING" state if application is already
             # running.
+            logger.debug(f"{app.metadata.name} transition to "
+                         f"ApplicationState.RECONCILING as application is "
+                         f"already running")
             app.status.state = ApplicationState.RECONCILING
 
         await self.kubernetes_api.update_application_status(
@@ -847,14 +858,11 @@ class KubernetesApplicationController(Controller):
         await self._apply_manifest(app, delta)
 
         # Transition into "RUNNING" state
+        logger.debug(f"{app.metadata.name} transition to ApplicationState.RUNNING")
         app.status.state = ApplicationState.RUNNING
         app.status.reason = None
         await self.kubernetes_api.update_application_status(
             namespace=app.metadata.namespace, name=app.metadata.name, body=app
-        )
-
-        logger.info(
-            "Reconciliation finished %r (%s)", app.metadata.name, app.metadata.namespace
         )
 
     async def _apply_manifest(self, app, delta):
@@ -933,11 +941,9 @@ class KubernetesApplicationController(Controller):
 
     async def _migrate_application(self, app):
         logger.info(
-            "Migrate %r from %r to %r",
-            app,
-            app.status.running_on,
-            app.status.scheduled_to,
-        )
+            f"{app.metadata.name}: Migrate from {app.status.running_on} to "
+            f"{app.status.scheduled_to}"
+            )
 
         # Ensure finalizer exists before changing Kubernetes objects
         await self._ensure_finalizer(app)

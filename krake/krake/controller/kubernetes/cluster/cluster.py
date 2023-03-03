@@ -285,7 +285,7 @@ class KubernetesClusterController(Controller):
                 break  # TODO: should we keep this? Only useful for tests
 
     async def resource_received(self, cluster, start_observer=True):
-        logger.debug("Handle %r", cluster)
+        logger.debug(f"{cluster.metadata.name}: handle cluster")
 
         copy = deepcopy(cluster)
 

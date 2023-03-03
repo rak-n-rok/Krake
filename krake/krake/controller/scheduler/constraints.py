@@ -110,6 +110,7 @@ def match_cluster_constraints(app, cluster, fetched_metrics=None):
 
     """
     if not app.spec.constraints or not app.spec.constraints.cluster:
+        logger.debug(f"{app.metadata.name}: no constraints existing")
         return True
 
     constraints = [
@@ -171,6 +172,7 @@ def match_project_constraints(cluster, project):
 
     """
     if not cluster.spec.constraints:
+        logger.debug(f"{cluster.metadata.name}: no project constraints existing")
         return True
 
     # project constraints
