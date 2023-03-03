@@ -1056,7 +1056,7 @@ async def unregister_observer(controller, resource, **kwargs):
     if resource.metadata.uid not in controller.observers:
         return
 
-    logger.debug(f"Stop observer for {resource.kind} %r", resource.metadata.name)
+    logger.debug(f"Stop observer for {resource.kind} {resource.metadata.name}")
     _, task = controller.observers.pop(resource.metadata.uid)
     task.cancel()
 

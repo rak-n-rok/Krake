@@ -553,7 +553,7 @@ class KubernetesApplicationHandler(Handler):
             await self.queue.put(app.metadata.uid, app)
 
     async def _update_retry_fields(self, app):
-        logger.info(f"{app.metadata.name} transition to "
+        logger.info(f"{app.metadata.name}: transition to "
                     f"DEGRADED, remaining retries: {app.status.retries}"
                     )
         if app.spec.backoff_limit > 0:
@@ -563,7 +563,7 @@ class KubernetesApplicationHandler(Handler):
             seconds=app.spec.backoff_delay * app.spec.backoff
         )
         app.status.scheduled_retry = utils.now() + delay
-        logger.debug(f"{app.metadata.name} scheduled retry to "
+        logger.debug(f"{app.metadata.name}: scheduled retry to "
                      f"{app.status.scheduled_retry}"
                      )
 
@@ -589,7 +589,8 @@ class KubernetesApplicationHandler(Handler):
                 if app.status.retries is None:
                     app.status.retries = app.spec.backoff_limit
                     logger.debug(
-                        f"{app.metadata.name} retry counter set to {app.status.retries}"
+                        f"{app.metadata.name}: retry counter set to "
+                        f"{app.status.retries}"
                     )
                 await self.kubernetes_application_received(app)
                 app.status.retries = app.spec.backoff_limit
@@ -603,7 +604,7 @@ class KubernetesApplicationHandler(Handler):
                     await self._update_retry_fields(app)
                 else:
                     app.status.state = ApplicationState.FAILED
-                    logger.info(f"{app.metadata.name} transition to FAILED")
+                    logger.info(f"{app.metadata.name}: transition to FAILED")
 
                 await self.api.update_application_status(
                     namespace=app.metadata.namespace, name=app.metadata.name, body=app
@@ -636,11 +637,12 @@ class KubernetesApplicationHandler(Handler):
                 scheduled to a Cluster.
 
         """
-        logger.info("Schedule %r", app)
+        logger.info("schedule application %r", app)
 
         if app.status.scheduled_to and not app.spec.constraints.migration:
             logger.debug(
-                "Not migrating %r, since migration of the application is disabled.", app
+                f"App {app.metadata.name}: not migrating, since migration of "
+                f"the application is disabled."
             )
             return
         namespace = app.metadata.namespace
@@ -652,7 +654,7 @@ class KubernetesApplicationHandler(Handler):
 
         # Check if the scheduling decision changed
         if app.status.scheduled_to == scheduled_to:
-            logger.debug("No change for %r", app)
+            logger.debug(f"App {app.metadata.name}: no change in scheduling decision")
 
             # The timestamp is updated anyway because the KubernetesController is
             # waiting for the Scheduler to take a decision before handling the update on
@@ -673,10 +675,14 @@ class KubernetesApplicationHandler(Handler):
 
         if app.status.scheduled_to:
             logger.info(
-                "Migrate %r from %s to %s", app, app.status.scheduled_to, scheduled_to
+                f"App {app.metadata.name}: migrate from {app.status.scheduled_to} "
+                f"to {scheduled_to}"
             )
         else:
-            logger.info("Scheduled %r to %r", app, cluster)
+            logger.info(
+                f"App {app.metadata.name}: scheduled to "
+                f"{cluster.metadata.name}"
+            )
 
         await self.api.update_application_binding(
             namespace=app.metadata.namespace,
@@ -694,10 +700,8 @@ class KubernetesApplicationHandler(Handler):
 
         """
         if not app.spec.constraints.migration:
-            logger.debug(
-                "Not rescheduling %r, since migration of the application is disabled.",
-                app,
-            )
+            logger.debug(f"App {app.metadata.name}: not rescheduling, since migration "
+                         f"of the application is disabled.")
             return
 
         # Put the application into the work queue with a certain delay. This
@@ -706,7 +710,8 @@ class KubernetesApplicationHandler(Handler):
         # is needed to ensure that we do not overwrite state changes with the
         # current one which might be outdated.
         if app.metadata.uid not in self.queue.dirty:
-            logger.debug("Reschedule %r in %s secs", app, self.reschedule_after)
+            logger.debug(f"App {app.metadata.name}: reschedule in "
+                         f"{self.reschedule_after} secs")
             await self.queue.put(app.metadata.uid, app, delay=self.reschedule_after)
 
     async def select_kubernetes_cluster(self, app, clusters):
@@ -738,19 +743,17 @@ class KubernetesApplicationHandler(Handler):
                 async for metrics in self.fetch_metrics(cluster, cluster.spec.metrics):
                     fetched_metrics[cluster.metadata.name] = metrics
 
-        logger.info(possible_clusters)
-        logger.info(fetched_metrics)
+        logger.debug(f"App {app.metadata.name}: possible clusters: {possible_clusters}")
+        logger.debug(f"App {app.metadata.name}: fetched metrics: {fetched_metrics}")
 
-        matching = [
-            cluster
-            for cluster in existing_clusters
+        matching_clusters = [
+            cluster for cluster in existing_clusters
             if match_cluster_constraints(app, cluster, fetched_metrics)
         ]
 
-        logger.info(matching)
+        logger.debug(f"App {app.metadata.name}: matching cluster: {matching_clusters}")
 
-        if not matching:
-            logger.info("No matching Kubernetes cluster for %r found", app)
+        if not matching_clusters:
             raise NoClusterFound("No matching Kubernetes cluster found")
 
         # If the application already has been scheduled it might be that it
@@ -772,7 +775,8 @@ class KubernetesApplicationHandler(Handler):
         if app.status.scheduled_to:
             # get current cluster as first cluster in matching to which app is scheduled
             current = next(
-                (c for c in matching if resource_ref(c) == app.status.scheduled_to),
+                (c for c in matching_clusters
+                    if resource_ref(c) == app.status.scheduled_to),
                 None,
             )
             # if current cluster is still matching
@@ -792,7 +796,8 @@ class KubernetesApplicationHandler(Handler):
         # Partition list if matching clusters into a list if clusters with
         # metrics and without metrics. Clusters with metrics are preferred
         # over clusters without metrics.
-        with_metrics = [cluster for cluster in matching if cluster.spec.metrics]
+        with_metrics = [cluster for cluster in matching_clusters
+                        if cluster.spec.metrics]
 
         # Only use clusters without metrics when there are no clusters with
         # metrics.
@@ -807,7 +812,7 @@ class KubernetesApplicationHandler(Handler):
             # that do not have metrics.
             scores = [
                 self.calculate_kubernetes_cluster_score((), cluster, app)
-                for cluster in matching
+                for cluster in matching_clusters
             ]
 
         return self.select_maximum(scores).cluster
@@ -847,15 +852,20 @@ class KubernetesApplicationHandler(Handler):
         sticky = self.calculate_kubernetes_cluster_stickiness(cluster, app)
 
         if not metrics:
-            return ClusterScore(score=sticky.weight * sticky.value, cluster=cluster)
+            cluster_score = ClusterScore(score=sticky.weight * sticky.value,
+                                         cluster=cluster)
+            logger.debug(f"{app.metadata.name}: cluster score: {cluster_score}")
+            return cluster_score
 
         norm = sum(metric.weight for metric in metrics) + sticky.weight
         score = (
             sum(metric.value * metric.weight for metric in metrics)
             + (sticky.value * sticky.weight)
-        ) / norm
+            ) / norm
 
-        return ClusterScore(score=score, cluster=cluster)
+        cluster_score = ClusterScore(score=score, cluster=cluster)
+        logger.debug(f"{app.metadata.name}: cluster score: {cluster_score}")
+        return cluster_score
 
     def calculate_kubernetes_cluster_stickiness(self, cluster, app):
         """Return extra metric for clusters to make the application "stick" to
