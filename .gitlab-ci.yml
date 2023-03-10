@@ -237,7 +237,7 @@ e2e-tests:
     ###################################
     ### Provision the staging infra ###
     ###################################
-#    - ansible-playbook ansible/site.yml                                       ##########################################
+    - ansible-playbook ansible/site.yml
     ###################
     ### Smoke tests ###
     ###################

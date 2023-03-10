@@ -5,18 +5,7 @@
   vars:
     git_dir: /home/krake/git/krake
     test_dir: rak/functionals    
-    os_password: "{{ lookup('env', 'OS_PASSWORD') }}"
   tasks:
-
-    - name: Test hiding credentials
-      command: "curl {{ os_password }}"
-      tags:
-        - test_hide_in_logs
-
-    - name: Breakpoint
-      fail:
-        msg: "testing gitlab hiding credentials in logs"
-
     - name: Install Tests dependencies
       pip:
         name: "{{ git_dir }}/rak/[test]"
