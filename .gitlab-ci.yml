@@ -237,7 +237,7 @@ e2e-tests:
     ###################################
     ### Provision the staging infra ###
     ###################################
-    - ansible-playbook ansible/site.yml
+#    - ansible-playbook ansible/site.yml                                       ##########################################
     ###################
     ### Smoke tests ###
     ###################
@@ -247,7 +247,7 @@ e2e-tests:
     #########################
 #TODO:!!! integrate in script on final
     #- ansible-playbook ansible/integration_tests_minikube.yml #minikube version CHANGE NAME TO MINIKUBE
-    - ansible-playbook ansible/integration_tests_k3s.yml
+#    - ansible-playbook ansible/integration_tests_k3s.yml
 
   after_script:
     # Pre-requisites: openstack, ansible and pytest

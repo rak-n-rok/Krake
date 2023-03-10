@@ -4,8 +4,19 @@
   hosts: krake_apps
   vars:
     git_dir: /home/krake/git/krake
-    test_dir: rak/functionals
+    test_dir: rak/functionals    
+    os_password: "{{ lookup('env', 'OS_PASSWORD') }}"
   tasks:
+
+    - name: Test hiding credentials
+      command: "curl {{ os_password }}"
+      tags:
+        - test_hide_in_logs
+
+    - name: Breakpoint
+      fail:
+        msg: "testing gitlab hiding credentials in logs"
+
     - name: Install Tests dependencies
       pip:
         name: "{{ git_dir }}/rak/[test]"
@@ -64,6 +75,26 @@
     test_dir: rak/functionals
   tasks:
 
+
+#    - name: Provision k3s clusters for smoke testing
+#      block:
+#
+        #- name: Install system packages
+        #  apt:
+        #    update_cache: yes
+        #    state: present
+        #    name: "{{ packages }}"
+        #  vars:
+        #    packages:
+        #      - acl
+        #      - jq
+        #      - haveged
+        #      - python3-pip
+        #      - docker.io
+        #      - golang-cfssl
+        #      - etcd-client
+
+
     - name: smoke k3s clusters
       block:
 
@@ -71,6 +102,20 @@
           copy:
             src: "{{ playbook_dir }}/../rak/"
             dest: "{{ home_dir }}/rak/"
+
+        - name: Create cert directory
+          file:
+            path: "{{ home_dir }}/{{ test_dir }}/krake_certs"
+            state: directory
+
+        - name: Copy krake certs
+          copy:
+            src: "{{ playbook_dir }}/rok_configurations/krake/certs/{{ item.file }}"
+            dest: "{{ home_dir }}/{{ test_dir }}/krake_certs/{{ item.name }}.pem"
+          with_items:
+            - { file: "system:admin-key.pem", name: "admin-key" }
+            - { file: "system:admin.pem", name: "admin-cert" }
+            - { file: "ca.pem", name: "ca" }
 
         - name: Install Tests dependencies
           pip:
@@ -84,8 +129,31 @@
         # pytest and rok are installed locally in /home/ubuntu/.local/bin which
         # isn't in the default PATH
         - name: Run smoke test for k3s
-          command: "pytest {{ home_dir }}/{{ test_dir }}/test_kubectl_cli.py"
+          command:
+            cmd: "pytest -s {{ home_dir }}/{{ test_dir }}/test_kubectl_cli.py"
+            chdir: "{{ home_dir }}/{{ test_dir }}"
           environment:
             PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
+
+      rescue:
+
+        - name: Debug ansible_failed_task
+          debug:
+            var: ansible_failed_task
+          tags:
+            - always
+
+        - name: Debug failed task '{{ ansible_failed_task.args._raw_params }}'
+          debug:
+            msg: "{{ ansible_failed_result.stdout_lines}}"
+          tags:
+            - always
+
+        #In order to trigger a fail in the gitlab CI/CD pipeline
+        - name: Trigger fail for '{{ ansible_failed_task.args._raw_params }}'
+          fail:
+            msg: "Task '{{ ansible_failed_task.args._raw_params }}' failed"
+          tags:
+            - always
 
       when: groups['k3s_clusters'] is defined
