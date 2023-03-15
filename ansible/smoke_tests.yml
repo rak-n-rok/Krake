@@ -23,29 +23,94 @@
         PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
 
 
-- name: Running Minikube smoke tests
+- name: Running smoke tests on minikube
   hosts: minikube_clusters
   vars:
     home_dir: /home/ubuntu
     test_dir: rak/functionals
   tasks:
-    - name: Ensure rak directory is present
-      copy:
-        src: "{{ playbook_dir }}/../rak/"
-        dest: "{{ home_dir }}/rak/"
 
-    - name: Install Tests dependencies
-      pip:
-        name: "{{ home_dir }}/rak/[test]"
-        state: present
-        executable: pip3
-        extra_args: --user
-      environment:
-        PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
+    - name: Smoke minikube clusters
+      block:
 
-    # pytest and rok are installed locally in /home/ubuntu/.local/bin which
-    # isn't in the default PATH
-    - name: Run smoke test for Minikube
-      command: "pytest {{ home_dir }}/{{ test_dir }}/test_minikube_cli.py"
-      environment:
-        PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
+        - name: Ensure rak directory is present
+          copy:
+            src: "{{ playbook_dir }}/../rak/"
+            dest: "{{ home_dir }}/rak/"
+
+        - name: Install Tests dependencies
+          pip:
+            name: "{{ home_dir }}/rak/[test]"
+            state: present
+            executable: pip3
+            extra_args: --user
+          environment:
+            PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
+
+        # pytest and rok are installed locally in /home/ubuntu/.local/bin which
+        # isn't in the default PATH
+        - name: Run smoke test for Minikube
+          command: "pytest {{ home_dir }}/{{ test_dir }}/test_kubectl_cli.py"
+          environment:
+            PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
+
+      when: groups['minikube_clusters'] is defined
+
+
+- name: Running smoke tests on k3s cluster
+  hosts: k3s_clusters
+  vars:
+    home_dir: /home/ubuntu
+    test_dir: rak/functionals
+  tasks:
+
+    - name: Smoke k3s clusters
+      block:
+
+        - name: Ensure rak directory is present
+          copy:
+            src: "{{ playbook_dir }}/../rak/"
+            dest: "{{ home_dir }}/rak/"
+          tags:
+            - upload_rak
+
+        - name: Install Tests dependencies
+          pip:
+            name: "{{ home_dir }}/rak/[test]"
+            state: present
+            executable: pip3
+            extra_args: --user
+          environment:
+            PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
+
+        # pytest and rok are installed locally in /home/ubuntu/.local/bin which
+        # isn't in the default PATH
+        - name: Run smoke test for k3s
+          command:
+            cmd: "pytest -s {{ home_dir }}/{{ test_dir }}/test_kubectl_cli.py"
+            chdir: "{{ home_dir }}/{{ test_dir }}"
+          environment:
+            PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
+
+      rescue:
+
+        - name: Debug ansible_failed_task
+          debug:
+            var: ansible_failed_task
+          tags:
+            - always
+
+        - name: Debug failed task '{{ ansible_failed_task.args._raw_params }}'
+          debug:
+            msg: "{{ ansible_failed_result.stdout_lines}}"
+          tags:
+            - always
+
+        #In order to trigger a fail in the gitlab CI/CD pipeline
+        - name: Trigger fail for '{{ ansible_failed_task.args._raw_params }}'
+          fail:
+            msg: "Task '{{ ansible_failed_task.args._raw_params }}' failed"
+          tags:
+            - always
+
+      when: groups['k3s_clusters'] is defined

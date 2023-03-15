@@ -78,7 +78,7 @@ RESCHEDULING_INTERVAL = 60
     reason="This test fails now and then. Probably due to the bug described in "
     "issue 405. We decided to skip this test until 405 has been addressed."
 )
-def test_kubernetes_migration_cluster_constraints(minikube_clusters):
+def test_kubernetes_migration_cluster_constraints(k8s_clusters):
     """Check that an application scheduled on a cluster gets migrated
     (if neither --enable-migration nor --disable-migration has been used)
     when the cluster constraints of the application changes.
@@ -90,11 +90,11 @@ def test_kubernetes_migration_cluster_constraints(minikube_clusters):
     4. Ensure that the application was rescheduled to the requested cluster;
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
     # The two clusters and countries used for scheduling in this test
-    clusters = random.sample(minikube_clusters, 2)
+    clusters = random.sample(k8s_clusters, 2)
     countries = random.sample(COUNTRY_CODES, len(clusters))
 
     # 1. Create the application, without cluster constraints and migration flag;
@@ -122,7 +122,7 @@ def test_kubernetes_migration_cluster_constraints(minikube_clusters):
     reason="This test fails now and then. Probably due to the bug described in "
     "issue 405. We decided to skip this test until 405 has been addressed."
 )
-def test_kubernetes_migration_at_cluster_constraint_update(minikube_clusters):
+def test_kubernetes_migration_at_cluster_constraint_update(k8s_clusters):
     """Check that an application scheduled on a cluster migrates at the time
     of an update of the application's cluster constraints.
 
@@ -143,12 +143,12 @@ def test_kubernetes_migration_at_cluster_constraint_update(minikube_clusters):
         3d. Assert that the application was migrated
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
 
     # The two clusters and countries used for scheduling in this test
-    clusters = random.sample(minikube_clusters, 2)
+    clusters = random.sample(k8s_clusters, 2)
     countries = random.sample(COUNTRY_CODES, len(clusters))
 
     # 1. Create the application, without cluster constraints and migration flag;
@@ -189,7 +189,7 @@ def test_kubernetes_migration_at_cluster_constraint_update(minikube_clusters):
             old_running_on = running_on
 
 
-def test_kubernetes_no_migration_cluster_constraints(minikube_clusters):
+def test_kubernetes_no_migration_cluster_constraints(k8s_clusters):
     """Check that an application scheduled on a cluster does not get migrated
     if its migration has been disabled.
     If the migration gets enabled it should be migrated according to its
@@ -205,10 +205,10 @@ def test_kubernetes_no_migration_cluster_constraints(minikube_clusters):
     6. Ensure that the application was rescheduled to the requested cluster;
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
-    all_clusters = random.sample(minikube_clusters, len(minikube_clusters))
+    all_clusters = random.sample(k8s_clusters, len(k8s_clusters))
     all_countries = random.sample(COUNTRY_CODES, len(all_clusters))
 
     # The two clusters and countries used for scheduling in this test
@@ -248,7 +248,7 @@ def test_kubernetes_no_migration_cluster_constraints(minikube_clusters):
         app.check_running_on(expected_clusters[0], within=10)
 
 
-def test_kubernetes_no_migration_metrics(minikube_clusters):
+def test_kubernetes_no_migration_metrics(k8s_clusters):
     """Check that an application scheduled on a cluster does not
     migrate due to changing metrics if migration has been disabled.
 
@@ -266,14 +266,14 @@ def test_kubernetes_no_migration_metrics(minikube_clusters):
     8. Ensure that the application was rescheduled to cluster 2;
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
     num_clusters = 2
-    assert len(minikube_clusters) == num_clusters
+    assert len(k8s_clusters) == num_clusters
 
     # The two clusters and metrics used in this test
-    clusters = random.sample(minikube_clusters, num_clusters)
+    clusters = random.sample(k8s_clusters, num_clusters)
     mp = provider.get_global_static_metrics_provider()
     static_metrics = random.sample(mp.get_valued_metrics(), num_clusters)
 
@@ -336,7 +336,7 @@ def test_kubernetes_no_migration_metrics(minikube_clusters):
         app.check_running_on(clusters[1], within=10)
 
 
-def test_kubernetes_auto_metrics_migration(minikube_clusters):
+def test_kubernetes_auto_metrics_migration(k8s_clusters):
     """Check that an application scheduled on a cluster automatically
     migrates due to changing metrics.
 
@@ -351,14 +351,14 @@ def test_kubernetes_auto_metrics_migration(minikube_clusters):
     6. Wait and ensure that the application was migrated to cluster 2;
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
     num_clusters = 2
-    assert len(minikube_clusters) == num_clusters
+    assert len(k8s_clusters) == num_clusters
 
     # The two clusters and metrics used in this test
-    clusters = random.sample(minikube_clusters, num_clusters)
+    clusters = random.sample(k8s_clusters, num_clusters)
     mp = provider.get_global_static_metrics_provider()
     static_metrics = random.sample(mp.get_valued_metrics(), num_clusters)
 
@@ -476,7 +476,7 @@ def _get_metrics_triggering_migration(
     return metrics_option_2
 
 
-def test_kubernetes_metrics_migration(minikube_clusters):
+def test_kubernetes_metrics_migration(k8s_clusters):
     """Check that an application scheduled on a cluster does not migrate
     as soon as the metrics change but rather only every RESCHEDULING_INTERVAL
     seconds.
@@ -507,14 +507,14 @@ def test_kubernetes_metrics_migration(minikube_clusters):
     which this test should disprove.
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
     num_clusters = 2
-    assert len(minikube_clusters) == num_clusters
+    assert len(k8s_clusters) == num_clusters
 
     # The two clusters and metrics used in this test
-    clusters = random.sample(minikube_clusters, num_clusters)
+    clusters = random.sample(k8s_clusters, num_clusters)
     mp = provider.get_global_static_metrics_provider()
     static_metrics = random.sample(mp.get_valued_metrics(), num_clusters)
 
@@ -545,7 +545,7 @@ def test_kubernetes_metrics_migration(minikube_clusters):
         second_cluster, static_metrics, metric_weights
     )
     debug_info = {
-        "minikubeclusters": minikube_clusters,
+        "k8s_clusters": k8s_clusters,
         "metric_weights": metric_weights,
         "initial_metrics": static_metrics,
         "score_cluster_1_init": score_cluster_1_init,
@@ -672,7 +672,7 @@ def test_kubernetes_metrics_migration(minikube_clusters):
         )
 
 
-def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
+def test_kubernetes_migration_fluctuating_metrics(k8s_clusters):
     """Check that an application scheduled on a cluster does not migrate
     as soon as the metrics change but rather only every RESCHEDULING_INTERVAL
     seconds.
@@ -691,14 +691,14 @@ def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
     6. Ensure that the number of migrations == 3.
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
     num_clusters = 2
-    assert len(minikube_clusters) == num_clusters
+    assert len(k8s_clusters) == num_clusters
 
     # The two clusters and metrics used in this test
-    clusters = random.sample(minikube_clusters, num_clusters)
+    clusters = random.sample(k8s_clusters, num_clusters)
     mp = provider.get_global_static_metrics_provider()
     static_metrics = random.sample(mp.get_valued_metrics(), num_clusters)
 
@@ -801,7 +801,7 @@ def test_kubernetes_migration_fluctuating_metrics(minikube_clusters):
     "cause reevaluation of scheduling decision) and update by kube controller "
     "after scheduling decision was made (krake#405)."
 )
-def test_kubernetes_metrics_migration_at_update(minikube_clusters):
+def test_kubernetes_metrics_migration_at_update(k8s_clusters):
     """Check that an application scheduled on a cluster migrates at the time
     of a user's update of the application if the metrics have changed.
 
@@ -825,14 +825,14 @@ def test_kubernetes_metrics_migration_at_update(minikube_clusters):
     RESCHEDULING_INTERVAL seconds.
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
     num_clusters = 2
-    assert len(minikube_clusters) == num_clusters
+    assert len(k8s_clusters) == num_clusters
 
     # The two clusters and metrics used in this test
-    clusters = random.sample(minikube_clusters, num_clusters)
+    clusters = random.sample(k8s_clusters, num_clusters)
     mp = provider.get_global_static_metrics_provider()
     static_metrics = random.sample(mp.get_valued_metrics(), num_clusters)
 
@@ -926,7 +926,7 @@ def test_kubernetes_metrics_migration_at_update(minikube_clusters):
         )
 
 
-def test_kubernetes_stickiness_migration(minikube_clusters):
+def test_kubernetes_stickiness_migration(k8s_clusters):
     """Check that an application scheduled to a cluster does not
     migrate due to changing metrics if the stickiness prevents it.
 
@@ -941,14 +941,14 @@ def test_kubernetes_stickiness_migration(minikube_clusters):
     6. Wait and ensure that the application was not migrated to cluster 2;
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
     num_clusters = 2
-    assert len(minikube_clusters) == num_clusters
+    assert len(k8s_clusters) == num_clusters
 
     # The two clusters and metrics used in this test
-    clusters = random.sample(minikube_clusters, num_clusters)
+    clusters = random.sample(k8s_clusters, num_clusters)
     mp = provider.get_global_static_metrics_provider()
     static_metrics = random.sample(mp.get_valued_metrics(), num_clusters)
 

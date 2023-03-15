@@ -41,10 +41,10 @@ def pytest_addoption(parser):
     """
 
     parser.addoption(
-        "--minikubeclusters",
+        "--k8sclusters",
         action="store",
         nargs="+",
-        help="minikube clusters to use for integration tests",
+        help="kubernetes clusters to use for integration tests",
     )
     parser.addoption(
         "--krake_container",
@@ -94,8 +94,8 @@ def pytest_addoption(parser):
 
 
 @pytest.fixture
-def minikube_clusters(request):
-    return request.config.getoption("--minikubeclusters", skip=True)
+def k8s_clusters(request):
+    return request.config.getoption("--k8sclusters", skip=True)
 
 
 @pytest.fixture

@@ -11,7 +11,7 @@ CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
 MANIFEST_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals"
 
 
-def test_complete_hook(minikube_clusters):
+def test_complete_hook(k8s_clusters):
     """Test the functionality of the "complete" hook.
 
     The test has the following workflow:
@@ -23,16 +23,16 @@ def test_complete_hook(minikube_clusters):
     4. Delete the ConfigMap that contains the script on the Kubernetes cluster.
 
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    k8s_cluster = random.choice(k8s_clusters)
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
 
     environment = {
         10: [
             ClusterDefinition(
-                name=minikube_cluster, kubeconfig_path=kubeconfig_path, register=True
+                name=k8s_cluster, kubeconfig_path=kubeconfig_path, register=True
             )
         ]
     }
@@ -72,7 +72,7 @@ def test_complete_hook(minikube_clusters):
         )
 
 
-def test_shutdown_hook(minikube_clusters):
+def test_shutdown_hook(k8s_clusters):
     """Test the functionality of the "shutdown" hook.
 
     The test has the following workflow:
@@ -85,16 +85,16 @@ def test_shutdown_hook(minikube_clusters):
     5. Delete the ConfigMap that contains the script on the Kubernetes cluster.
 
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    k8s_cluster = random.choice(k8s_clusters)
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
 
     environment = {
         10: [
             ClusterDefinition(
-                name=minikube_cluster, kubeconfig_path=kubeconfig_path, register=True
+                name=k8s_cluster, kubeconfig_path=kubeconfig_path, register=True
             )
         ]
     }
