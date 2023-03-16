@@ -492,6 +492,26 @@ def get_application(config, session, namespace, name):
     help="Wait with the response until the application reaches a specific state."
     "If no state is specified, running is used as a default.",
 )
+@argument(
+    "--remove-existing-labels",
+    action='store_true',
+    help="remove currently existing labels"
+)
+@argument(
+    "--remove-existing-label-constraints",
+    action='store_true',
+    help="remove currently existing label constraints"
+)
+@argument(
+    "--remove-existing-resource-constraints",
+    action='store_true',
+    help="remove currently existing resource constraints"
+)
+@argument(
+    "--remove-existing-metric-constraints",
+    action='store_true',
+    help="remove currently existing metric constraints"
+)
 @arg_migration_constraints()
 @arg_cluster_label_constraints
 @arg_cluster_resource_constraints
@@ -515,11 +535,15 @@ def update_application(
     url,
     observer_schema_file,
     labels,
+    remove_existing_labels,
     disable_migration,
     enable_migration,
     cluster_label_constraints,
+    remove_existing_label_constraints,
     cluster_resource_constraints,
+    remove_existing_resource_constraints,
     cluster_metric_constraints,
+    remove_existing_metric_constraints,
     hooks,
     wait,
     backoff,
@@ -561,19 +585,26 @@ def update_application(
     if observer_schema_file:
         observer_schema = list(yaml.safe_load_all(observer_schema_file))
         app["spec"]["observer_schema"] = observer_schema
-
+    if remove_existing_labels:
+        app["metadata"]["labels"] = {}
     if labels:
-        app["metadata"]["labels"] = labels
+        app["metadata"]["labels"].update(labels)
     if hooks:
         app["spec"]["hooks"] = hooks
 
     app_constraints = app["spec"]["constraints"]
+    if remove_existing_label_constraints:
+        app_constraints["cluster"]["labels"] = []
     if cluster_label_constraints:
         app_constraints["cluster"]["labels"] = cluster_label_constraints
+    if remove_existing_resource_constraints:
+        app_constraints["cluster"]["custom_resources"] = []
     if cluster_resource_constraints:
         app_constraints["cluster"]["custom_resources"] = cluster_resource_constraints
+    if remove_existing_metric_constraints:
+        app_constraints["cluster"]["metrics"] = []
     if cluster_metric_constraints:
-        app_constraints["cluster"]["metrics"] = cluster_metric_constraints
+        app_constraints["cluster"]["metrics"] += cluster_metric_constraints
     if disable_migration or enable_migration:
         app_constraints["migration"] = enable_migration
     if backoff:
@@ -927,7 +958,11 @@ def get_cluster(config, session, namespace, name):
     return resp.json()
 
 
-@cluster.command("update", help="Update Kubernetes cluster")
+@cluster.command(
+    "update", help="Update a Kubernetes cluster. By default, new metrics, labels, \
+    cloud label constraints and cloud metric constraints                        \
+    will be appended. To remove previous values, use with                       \
+    --remove-existing-{FIELD_NAME}")
 @argument("name", help="Kubernetes cluster name")
 @argument("-k", "--kubeconfig", type=FileType(), help="Kubernetes kubeconfig file")
 @argument(
@@ -938,6 +973,26 @@ def get_cluster(config, session, namespace, name):
     "--file",
     type=FileType(),
     help="TOSCA template file that describes desired Kubernetes cluster",
+)
+@argument(
+    "--remove-existing-labels",
+    action='store_true',
+    help="remove currently existing labels"
+)
+@argument(
+    "--remove-existing-metrics",
+    action='store_true',
+    help="remove currently existing metrics"
+)
+@argument(
+    "--remove-existing-cloud-label-constraints",
+    action='store_true',
+    help="remove currently existing label constraints"
+)
+@argument(
+    "--remove-existing-cloud-metric-constraints",
+    action='store_true',
+    help="remove currently existing metric constraints"
 )
 @arg_custom_resources
 @arg_metric
@@ -962,9 +1017,13 @@ def update_cluster(
     file,
     metrics,
     global_metrics,
+    remove_existing_metrics,
     labels,
+    remove_existing_labels,
     cloud_label_constraints,
+    remove_existing_cloud_label_constraints,
     cloud_metric_constraints,
+    remove_existing_cloud_metric_constraints,
     custom_resources,
     backoff,
     backoff_delay,
@@ -980,16 +1039,26 @@ def update_cluster(
         to_update["spec"]["tosca"] = yaml.safe_load(file)
     if kubeconfig:
         to_update["spec"]["kubeconfig"], _ = create_cluster_config(kubeconfig, context)
+    if remove_existing_labels:
+        to_update["metadata"]["labels"] = {}
     if labels:
-        to_update["metadata"]["labels"] = labels
+        to_update["metadata"]["labels"].update(labels)
+    if remove_existing_metrics:
+        to_update["spec"]["metrics"] = []
     if metrics or global_metrics:
-        to_update["spec"]["metrics"] = metrics + global_metrics
+        for metric in metrics+global_metrics:
+            if metric not in to_update["spec"]["metrics"]:
+                to_update["spec"]["metrics"] += [metric]
     if custom_resources:
         to_update["spec"]["custom_resources"] = custom_resources
+    if remove_existing_cloud_label_constraints:
+        to_update["spec"]["constraints"]["cloud"]["labels"] = []
     if cloud_label_constraints:
-        to_update["spec"]["constraints"]["cloud"]["labels"] = cloud_label_constraints
+        to_update["spec"]["constraints"]["cloud"]["labels"] += cloud_label_constraints
+    if remove_existing_cloud_metric_constraints:
+        to_update["spec"]["constraints"]["cloud"]["metrics"] = []
     if cloud_metric_constraints:
-        to_update["spec"]["constraints"]["cloud"]["metrics"] = cloud_metric_constraints
+        to_update["spec"]["constraints"]["cloud"]["metrics"] += cloud_metric_constraints
     if backoff:
         to_update["spec"]["backoff"] = backoff
     if backoff_delay:

@@ -115,9 +115,10 @@ def test_update_application_labels(minikube_clusters):
     1. the Application is updated with two new labels;
     2. the new state of the Application on the API is checked, to see if the labels
        have been added;
-    3. one of the current label is updated, the other is removed and a new one is added.
+    3. one of the current label is updated and a new one is added.
     4. the new state of the Application on the API is checked, to see if the labels
-       have been added/updated/removed;
+       have been added/updated.
+    5. the labels are replaced by new ones
 
     Args:
         minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
@@ -136,17 +137,29 @@ def test_update_application_labels(minikube_clusters):
 
         # 1. Update the Application
         first_labels = {"location": "DE", "lbl": "first"}
-        app.update_resource(labels=first_labels)
+        app.update_resource(labels=first_labels, update_behavior = ["--remove-existing-labels"])
 
         # 2. Check that the label has been changed on the API
+        expected_labels = app.get_labels()
         assert app.get_labels() == first_labels
 
         # 3. Update the Application
-        second_labels = {"lbl": "second", "other": "value"}
+        second_labels = {"lbl": "second", "location": "GB"}
+
         app.update_resource(labels=second_labels)
 
+        expected_labels.update(second_labels)
+
         # 4. Check that the label has been changed on the API
-        assert app.get_labels() == second_labels
+        assert app.get_labels() == expected_labels
+
+        third_labels = {"foo": "bar"}
+        update_behavior = ["--remove-existing-labels"]
+        app.update_resource(labels=third_labels, update_behavior=update_behavior)
+
+        expected_labels = third_labels
+
+        assert app.get_labels() == expected_labels
 
 
 def test_update_cluster_kubeconfig(minikube_clusters):
@@ -246,14 +259,25 @@ def test_update_cluster_labels(minikube_clusters):
         cluster.update_resource(labels=first_labels)
 
         # 2. Check that the label has been changed on the API
-        assert cluster.get_labels() == first_labels
+        expected_labels = first_labels
+        assert cluster.get_labels() == expected_labels
 
         # 3. Update the Cluster
         second_labels = {"lbl": "second", "other": "value"}
         cluster.update_resource(labels=second_labels)
 
         # 4. Check that the label has been changed on the API
-        assert cluster.get_labels() == second_labels
+        expected_labels.update(second_labels)
+        assert cluster.get_labels() == expected_labels
+
+        # 5. Update the Cluster
+        update_behavior = ["--remove-existing-labels"]
+        third_labels = {"location": "GB"}
+        cluster.update_resource(labels=third_labels, update_behavior=update_behavior)
+
+        # 6. Check that the label has been changed on the API
+        expected_labels = third_labels
+        assert cluster.get_labels() == expected_labels
 
 
 def test_update_no_changes(minikube_clusters):

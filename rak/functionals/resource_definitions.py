@@ -58,6 +58,7 @@ class ResourceDefinition(ABC):
         self.namespace = namespace
         self.kind = kind
         self._mutable_attributes = self._get_mutable_attributes()
+        self._update_behavior = {}
 
     @abstractmethod
     def _get_mutable_attributes(self):
@@ -246,39 +247,52 @@ class ResourceDefinition(ABC):
         Raises:
             AssertionError: if some attributes don't match
         """
-        for attr in kwargs:
+        attributes = {}
+        update_behavior = []
+
+        for attr, attr_val in kwargs.items():
             # we do not allow updating name and kind attributes
             msg = f"Attribute '{attr}' is immutable"
             assert attr != "kind" and attr != "name", msg
-            # we only allow updating existing attributes
-            msg = f"'{attr}' is not an attribute of {self.__class__.__name__}"
-            assert hasattr(self, attr), msg
-
+            if attr == "update_behavior":
+                # check if the update_behavior is allowed for this resource
+                if all(val in self._update_behavior for val in attr_val):
+                    update_behavior = attr_val
+            else:
+                # we only allow updating existing attributes
+                msg = f"'{attr}' is not an attribute of {self.__class__.__name__}"
+                assert hasattr(self, attr), msg
+                attributes.update({attr: attr_val})
         msg = (
             f"The mutable attributes of {self.__class__.__name__} "
             f"({self._mutable_attributes.sort()}) "
-            f"are not equal to the update parameters ({list(kwargs.keys()).sort()})"
+            f"are not equal to the update parameters ({list(attributes.keys()).sort()})"
         )
-        assert self._mutable_attributes.sort() == list(kwargs.keys()).sort(), msg
-
+        assert self._mutable_attributes.sort() == list(attributes.keys()).sort(), msg
         # update this ResourceDefinition object
-        self._update_resource_definition(kwargs)
+        self._update_resource_definition(attributes, update_behavior)
 
         # update the actual resource
         msg = f"The {self.kind} {self.name} could not be updated."
-        run(self.update_command(**kwargs), condition=check_return_code(msg))
+        run(
+            self.update_command(**kwargs),
+                                condition=check_return_code(msg)
+            )
 
         # After updating the values of the actual resource we want to verify
         # that its values match this ResourceDefinition.
         self._verify_resource()
 
-    def _update_resource_definition(self, attributes):
+    def _update_resource_definition(self, attributes, update_behavior):
         """Update this ResourceDefinition object with the given attribute values
 
         Args:
             attributes (dict[str, object]): dict with the mutable attributes of this
                 ResourceDefinition as keys and their new values as values.
                 A value of None signalizes that no update should be performed.
+            update_behavior (list[str]): list which specifies the update behavior,
+                so that the new values are either appended to the previous values
+                or all previous values are removed
 
         Raises:
             AssertionError: if the update is empty
@@ -290,10 +304,27 @@ class ResourceDefinition(ABC):
             if attr_val is None:
                 continue
             empty_update = False
-            # FIXME: krake#413: Note that the attributes that are dicts or lists might
-            #  contain information needing to be kept. However, the following call to
-            #  setattr() overwrites this information, which is unwanted behaviour
-            #  (see krake#413).
+
+        # if values shall be appended the current value needs to be fetched
+        if (attr == "labels" in attributes and not                                  \
+                "--remove-existing-labels" in update_behavior) or                   \
+           (attr == "cluster_label_constraints" in attributes and not               \
+                "--remove-existing-label-constraints" in update_behavior) or        \
+           (attr == "cluster_resource_constraints" in attributes and not            \
+                "--remove-existing-resource-constraints" in update_behavior) or     \
+           (attr == "cluster_metric_constraints" in attributes and not              \
+                "--remove-existing-metric-constraints" in update_behavior) or       \
+            (attr == "metric" in attributes and not                                 \
+                "--remove-existing-metrics" in update_behavior) or                  \
+            (attr == "cloud_label_constraints" in attributes and not                \
+                "--remove-existing-cloud-label-constraints" in update_behavior) or  \
+            (attr == "cloud_metric_constraints" in attributes and not               \
+                "--remove-existing-cloud-metric-constraints" in update_behavior):
+            attr_update = getattr(self, attr)
+            attr_update.update(attr_val)
+            setattr(self, attr, attr_update)
+
+        else:
             setattr(self, attr, attr_val)
 
         msg = (
@@ -507,6 +538,12 @@ class ApplicationDefinition(ResourceDefinition):
         self.backoff = backoff
         self.backoff_delay = backoff_delay
         self.backoff_limit = backoff_limit
+        self._update_behavior = {
+            "--remove-existing-labels",
+            "--remove-existing-label-constraints",
+            "--remove-existing-resource-constraints",
+            "--remove-existing-metric-constraints",
+            }
 
     def _get_mutable_attributes(self):
         return [
@@ -655,6 +692,7 @@ class ApplicationDefinition(ResourceDefinition):
         migration=None,
         labels=None,
         observer_schema_path=None,
+        update_behavior=None
     ):
         """Get a command for updating the application.
 
@@ -679,6 +717,8 @@ class ApplicationDefinition(ResourceDefinition):
             cmd += [self._get_migration_flag(migration)]
         if observer_schema_path:
             cmd += f" -O {observer_schema_path}".split()
+        if update_behavior:
+            cmd += (' '.join(update_behavior)).split()
         return cmd
 
     def _get_cluster_label_constraint_options(self, cluster_label_constraints):
@@ -822,6 +862,12 @@ class ClusterDefinition(ResourceDefinition):
         self.backoff_delay = backoff_delay
         self.backoff_limit = backoff_limit
         self.register = register
+        self._update_behavior = {
+            "--remove-existing-labels",
+            "--remove-existing-metrics",
+            "--remove-existing-cloud-label-constraints",
+            "--remove-existing-cloud-metric-constraints",
+            }
 
     def _set_metrics(self, metrics):
         """Change the metric weights this cluster resource definition has
@@ -972,7 +1018,7 @@ class ClusterDefinition(ResourceDefinition):
     def delete_command(self, wait):
         return f"rok kube cluster delete {self.name}".split()
 
-    def update_command(self, labels=None, metrics=None):
+    def update_command(self, labels=None, metrics=None, update_behavior=None):
         """Get a command for updating the cluster.
 
         Args:
@@ -980,6 +1026,8 @@ class ClusterDefinition(ResourceDefinition):
                 give the cluster, e.g. {'location': 'DE'}
             metrics (list[dict[str, object]], optional): list of dicts with metrics
                 and their weights to update the cluster with.
+            update_behavior (list[str], optional): list that specifies how the resource
+                shall be updated
 
         Returns:
              list[str]: the command to update the application, as a list of its parts.
@@ -993,10 +1041,11 @@ class ClusterDefinition(ResourceDefinition):
                 "cluster update command."
             )
             raise AssertionError(msg)
-
         cmd = f"rok kube cluster update {self.name}".split()
         cmd += self._get_label_options(labels)
         cmd += self._get_metrics_options(metrics)
+        if update_behavior:
+            cmd += (' '.join(update_behavior)).split()
         return cmd
 
     def get_command(self):

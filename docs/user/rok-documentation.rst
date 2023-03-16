@@ -179,27 +179,43 @@ update
 
     ``-m | --metric`` (optional):
         The name and weight of a cluster metric in the form: ``<name> <weight>``.
-        Can be specified multiple times.
+        Can be specified multiple times. Previous metrics will be kept by default.
+
+    ``--remove-existing-metrics``(optional):
+        Remove all existing metrics on update. If new metrics are specified with the
+        ``--metric`` argument, they will be used instead.
 
     ``-l | --label`` (optional):
         The key and the value of a cluster label in the form: ``<key>=<value>``.
-        Can be specified multiple times.
+        Can be specified multiple times. Previous labels will be kept by default.
+
+    ``--remove-existing-labels``(optional):
+        Remove all existing labels on update. If new labels are specified with the
+        ``--label`` argument, they will be used instead.
 
     ``-R | --custom-resource`` (optional):
         The name of custom resources definition in the form: ``<plural>.<group>`` which is supported by the cluster. Can be specified multiple times.
 
     ``-L | --cloud-label-constraint`` (optional):
-        The name and value of a constraint for labels of the cloud in the form: ``<label> expression <value>``. The cluster will be deployed only on the cloud that matches the given label constraint. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`.
+        The name and value of a constraint for labels of the cloud in the form: ``<label> expression <value>``. The cluster will be deployed only on the cloud that matches the given label constraint. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`. Previous constraints will be kept by default.
+
+    ``--remove-existing-cloud-label-constraints``(optional):
+        Remove all existing cloud label constraints on update. If new labels are specified with the
+        ``--label`` argument, they will be used instead.
 
     ``-M | --cloud-metric-constraint`` (optional):
-        The name and value of a constraint for metrics of the cloud in the form: ``<label> expression <value>``. The cluster will be deployed only on the cloud that matches the given metric constraint. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`.
+        The name and value of a constraint for metrics of the cloud in the form: ``<label> expression <value>``. The cluster will be deployed only on the cloud that matches the given metric constraint. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`. Previous constraints will be kept by default.
+
+    ``--remove-existing-cloud-metric-constraints``(optional):
+        Remove all existing cloud metric constraints on update. If new metrics are specified with the
+        ``--cloud-metric-constraint`` argument, they will be used instead.
 
     ``--backoff`` (optional): multiplier applied to backoff_delay between attempts.
             default: 1 (no backoff)
 
-    ``backoff_delay`` (optional): delay [s] between attempts. default: 1
+    ``--backoff_delay`` (optional): delay [s] between attempts. default: 1
 
-    ``backoff_limit`` (optional):  a maximal number of attempts, default: -1 (infinite)
+    ``--backoff_limit`` (optional):  a maximal number of attempts, default: -1 (infinite)
 
 
 delete
@@ -257,21 +273,41 @@ create
     ``--hook-shutdown`` (optional):
         The shutdown hook, which allows the graceful shutdown of the Application. Can have an additional timeout value after the argument.
 
+    ``-l | --label`` (optional):
+        The key and the value of a cluster label in the form: ``<key>=<value>``.
+        Can be specified multiple times. Previous labels will be kept by default.
+
+    ``--remove-existing-labels``(optional):
+        Remove all existing labels on update. If new labels are specified with the
+        ``--label`` argument, they will be used instead.
+
     ``-R | --cluster-resource-constraint`` (optional):
-        The name of custom resources definition constraint in form: ``<plural>.<group>``. The application will be deployed only on the clusters with given custom definition support. Can be specified multiple times.
+        The name of custom resources definition constraint in form: ``<plural>.<group>``. The application will be deployed only on the clusters with given custom definition support. Can be specified multiple times. Previous resource constraints will be kept by default.
+
+    ``--remove-existing-resource-constraints``(optional):
+        Remove all existing resource constraints on update. If new metrics are specified with
+        ``--cluster-resource-constraint``, they will be used instead.
 
     ``-L | --cluster-label-constraint`` (optional):
-        The name and value of a constraint for labels of the cluster in the form: ``<label> expression <value>``. The application will be deployed only on the cluster that matches the given label constraint. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`.
+        The name and value of a constraint for labels of the cluster in the form: ``<label> expression <value>``. The application will be deployed only on the cluster that matches the given label constraint. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`. Previous label constraints will be kept by default.
+
+    ``--remove-existing-label-constraints``(optional):
+        Remove all existing label constraints on update. If new label constraints are specified with
+        ``--cluster-label-constraint``, they will be used instead.
 
     ``-M | --cluster-metric-constraint`` (optional):
-        The name and value of a constraint for metrics of the cluster in the form: ``<label> expression <value>``. The application will be deployed only on the cluster that matches the given metric constraint. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`.
+        The name and value of a constraint for metrics of the cluster in the form: ``<label> expression <value>``. The application will be deployed only on the cluster that matches the given metric constraint. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`. Previous metric constraints will be kept by default.
+
+    ``--remove-existing-metric-constraints``(optional):
+        Remove all existing metric constraints on update. If new metric constraints are specified with
+        ``--cluster-metric-constraint``, they will be used instead.
 
     ``--backoff`` (optional): multiplier applied to backoff_delay between attempts to handle the application.
             default: 1 (no backoff)
 
-    ``backoff_delay`` (optional): delay [s] between attempts to handle the application. default: 1
+    ``--backoff_delay`` (optional): delay [s] between attempts to handle the application. default: 1
 
-    ``backoff_limit`` (optional):  a maximal number of attempts to handle the application. If the attempt to handle the application failed, it will transfer to the Application State DEGRADED, instead of directly going into the State FAILED. Default: -1 (infinite)
+    ``--backoff_limit`` (optional):  a maximal number of attempts to handle the application. If the attempt to handle the application failed, it will transfer to the Application State DEGRADED, instead of directly going into the State FAILED. Default: -1 (infinite)
 
 list
     List all Applications of a namespace.
