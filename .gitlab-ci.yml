@@ -1,6 +1,6 @@
 stages:
   - test
-  - coverage
+  #- coverage
   - e2e
   - release
 
@@ -50,6 +50,11 @@ cache:
     - branches
     - merge_requests
     - schedules
+
+  needs:
+    - flake8-krake
+    - flake8-rok
+
   script:
 
     - apt-get update
@@ -180,7 +185,7 @@ flake8-rok:
 # Python environments. Report code coverage for Krake Python package and exit
 # with non-zero if the code coverage ratio is under 85%.
 coverage-krake:
-  stage: coverage
+  stage: e2e
   image: python:3.7
   script:
     - pip install coverage
@@ -201,6 +206,52 @@ coverage-krake:
 # infrastructure, run the smoke tests and the end-to-end tests, and cleanup
 # the staging infrastructure. They are run only on the master branch, on merge
 # requests, and on scheduled pipeline (night runs)
+
+
+e2e-provisioning:
+  stage: test
+  image: python:3.8
+  only:
+    - branches #TODO:!!! remove on final
+    - master
+    - merge_requests
+    - schedules
+  needs:
+    - flake8-krake
+    - flake8-rok
+  variables:
+    ANSIBLE_CONFIG: ansible/ansible.cfg
+    ANSIBLE_INVENTORY: ansible/hosts-CI
+
+  script:
+    # Pre-requisites: openstack, ansible and pytest
+    - pip install python-openstackclient openstacksdk "ansible>=2.9" pytest
+
+    - apt-get update -y && apt-get install openssh-client rsync -y
+
+    # Create SSH keys for to use during the whole pipeline
+    - mkdir .ssh/
+    - openstack keypair delete my_runner_key_$CI_PIPELINE_ID || true
+    - openstack keypair create my_runner_key_$CI_PIPELINE_ID > .ssh/id_rsa
+    - chmod 600 .ssh/id_rsa
+
+    # Configure host-CI template with the CI Pipeline ID
+    - sed -i "s/\$CI_PIPELINE_ID/$CI_PIPELINE_ID/g" ansible/hosts-CI
+
+    # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
+    - chmod -v 700 ansible/
+
+    - ansible-galaxy install -r ansible/requirements.yml
+
+    ###################################
+    ### Provision the staging infra ###
+    ###################################
+    - ansible-playbook ansible/site.yml
+    ###################
+    ### Smoke tests ###
+    ###################
+    - ansible-playbook ansible/smoke_tests.yml
+
 
 e2e-tests:
   stage: e2e
@@ -250,18 +301,49 @@ e2e-tests:
     #########################
     - ansible-playbook ansible/integration_tests.yml
 
-  after_script:
+#  after_script:
+#    # Pre-requisites: openstack, ansible and pytest
+#    - pip install python-openstackclient openstacksdk "ansible>=2.9" pytest
+#    - apt-get update -y && apt-get install openssh-client rsync -y
+#    - chmod -v 700 ansible/
+#
+#    # Delete the runner SSH keys
+#    - openstack keypair delete my_runner_key_$CI_PIPELINE_ID || true
+#    #################################
+#    ### Cleanup the staging infra ###
+#    #################################
+#    - ansible-playbook ansible/unprovision.yml
+
+
+e2e-cleanup:
+  stage: release
+  image: python:3.8
+  only:
+    - branches #TODO:!!! remove on final
+    - master
+    - merge_requests
+    - schedules
+  variables:
+    ANSIBLE_CONFIG: ansible/ansible.cfg
+    ANSIBLE_INVENTORY: ansible/hosts-CI
+
+  script:
+    - echo "Run after script to clean up OpenStack infrastructure"
+#  after_script:
     # Pre-requisites: openstack, ansible and pytest
     - pip install python-openstackclient openstacksdk "ansible>=2.9" pytest
     - apt-get update -y && apt-get install openssh-client rsync -y
     - chmod -v 700 ansible/
-
+    - ansible-galaxy install -r ansible/requirements.yml
     # Delete the runner SSH keys
     - openstack keypair delete my_runner_key_$CI_PIPELINE_ID || true
+    # Configure host-CI template with the CI Pipeline ID
+    - sed -i "s/\$CI_PIPELINE_ID/$CI_PIPELINE_ID/g" krake/ansible/hosts-CI
     #################################
     ### Cleanup the staging infra ###
     #################################
     - ansible-playbook ansible/unprovision.yml
+  when: always
 
 pypi:
   stage: release
