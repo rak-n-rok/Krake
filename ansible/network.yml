@@ -1,5 +1,8 @@
 - name: Launch Krake networks
   hosts: networks
+  module_defaults:
+    ansible.builtin.setup:
+      gather_timeout: 60
   # Disable gathering of facts because the network hosts are "virtual" which
   # means there is no physical host.
   gather_facts: false

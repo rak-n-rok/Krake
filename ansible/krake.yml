@@ -1,5 +1,8 @@
 - name: Launch Krake VMs
   hosts: krake_apps
+  module_defaults:
+    ansible.builtin.setup:
+      gather_timeout: 60
   gather_facts: false
   tasks:
 
@@ -49,6 +52,9 @@
   # not booted yet
   gather_facts: no
   hosts: krake_apps
+  module_defaults:
+    ansible.builtin.setup:
+      gather_timeout: 60
   tasks:
 
     - name: Wait for Krake VM to show up
@@ -167,6 +173,9 @@
   become: yes
   become_user: krake
   hosts: krake_apps
+  module_defaults:
+    ansible.builtin.setup:
+      gather_timeout: 60
   tags:
     - manage
   roles:
@@ -535,6 +544,9 @@
   become: yes
   become_user: krake
   hosts: krake_apps
+  module_defaults:
+    ansible.builtin.setup:
+      gather_timeout: 60
   vars:
     - krake_homedir: /home/krake
     - cert_dir: "{{ krake_homedir }}/clusters/certs/"

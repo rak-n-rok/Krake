@@ -1,5 +1,8 @@
 - name: Launch Minikube VMs
   hosts: minikube_clusters
+  module_defaults:
+    ansible.builtin.setup:
+      gather_timeout: 60
   gather_facts: false
   tasks:
 
@@ -46,6 +49,9 @@
 
 - name: Setup Minikube VMs
   hosts: minikube_clusters
+  module_defaults:
+    ansible.builtin.setup:
+      gather_timeout: 60
   # Run gather_facts (setup) manually to avoid a timing problem if the VM is
   # not booted yet
   gather_facts: false
@@ -164,6 +170,9 @@
 # https://github.com/kubernetes/minikube/blob/master/docs/vmdriver-none.md
 - name: Start Minikube clusters
   hosts: minikube_clusters
+  module_defaults:
+    ansible.builtin.setup:
+      gather_timeout: 60
   tags:
     - start
   vars:
@@ -241,12 +250,18 @@
 
 - name: Setup Minikube clusters
   hosts: minikube_clusters
+  module_defaults:
+    ansible.builtin.setup:
+      gather_timeout: 60
   tags:
     - setup-cluster
   tasks:
 
 - name: Download cluster certificates
   hosts: minikube_clusters
+  module_defaults:
+    ansible.builtin.setup:
+      gather_timeout: 60
   tags:
     - cluster_certs
   tasks:
