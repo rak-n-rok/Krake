@@ -1,5 +1,8 @@
 - name: Launch network gateway instances
   hosts: gateways
+  module_defaults:
+    ansible.builtin.setup:
+      gather_timeout: 60
   gather_facts: false
   tasks:
 
@@ -39,6 +42,9 @@
 
 - name: Setup network gateway instances
   hosts: gateways
+  module_defaults:
+    ansible.builtin.setup:
+      gather_timeout: 60
   # Run gather_facts (setup) manually to avoid a timing problem if the VM is
   # not booted yet
   gather_facts: false
