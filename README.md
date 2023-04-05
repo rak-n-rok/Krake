@@ -56,9 +56,7 @@ Optional requirement:
 
 ### Installation
 
-As Krake is not yet on the Python Package Index (PyPI), the repository first
-has to be cloned.
-
+Clone the repository into a location of your choice.
 ```bash
 git clone https://gitlab.com/rak-n-rok/krake.git
 cd krake
