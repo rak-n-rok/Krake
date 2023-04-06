@@ -38,8 +38,14 @@ parser.add_argument(
 
 def main(config, src_dirs):
 
-    with open(config, "r") as fd:
-        variables = yaml.safe_load(fd)
+    try:
+        with open(config, "r") as fd:
+            variables = yaml.safe_load(fd)
+    except IOError:
+        print("No file with that name could be found in the given path!")
+        return
+    except yaml.YAMLError as exc:
+        print(f"Error in the YAML file: {exc}")
 
     for src_dir in src_dirs:
 

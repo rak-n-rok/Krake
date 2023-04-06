@@ -1,15 +1,16 @@
-# Dockerfile for assembling krake image from krake source directory.
-# It is defined as a multi-stage builds where the first stage builds krake project
-# and all its dependencies into the virtualenv and the second stage copies krake
-# build into the final docker image.
+# Dockerfile for assembling the Krake image from krake source directory
+# It is defined as a multi-stage build, where the first stage builds the Krake project
+# and all its dependencies into the virtualenv. After that, the second stage copies the Krake build
+# into the final docker image.
 #
 # .. code:: bash
 #
 #     docker build --tag krake:latest --file docker/krake/Dockerfile .
 #
-# Dockerfile doesn't set the default command and parameters,
-# for krake component runs. This should be set in command line
-# when docker container runs or via docker-compose ``command`` directive.
+# The Dockerfile doesn't set the default command and parameters, that Krake components need to run.
+# These parameters should be set in command line during the start of the Docker container,
+# or via the docker-compose ``command`` directive.
+# An example for the Krake API can be found below
 #
 # .. code:: bash
 #
@@ -17,7 +18,7 @@
 #                --publish 8080:8080 --name krake-api \
 #                krake:latest python3 -m krake.api
 #
-# The UID of the "krake" user inside the image can be set with the argument "krake_uid".
+# Note: The UID of the "krake" user inside the image can be set with the argument "krake_uid".
 
 FROM python:3.8-slim AS base
 
