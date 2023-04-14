@@ -15,10 +15,10 @@ API reference of all modules is provided.
     :caption: Table of Contents
     :maxdepth: 2
 
-
     architecture
     concepts
     packages
+    versioning
     principles
     scheduling
     hooks
