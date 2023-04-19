@@ -16,6 +16,17 @@ Currently, the following infrastructure bundles are supported besides Krake:
 - Prometheus_
 - IM_ (IM)
 
+Use an online Docker image
+==========================
+
+Krake already provides prebuilt docker images, which can be downloaded in order to run 
+a Krake instance or if it is not necessary to built a local image.
+These docker images can be found in the following registries:
+
+* registry.gitlab.com
+
+Images are named `krake:<TAG>`, whereas `<TAG>` can be either `latest` or some version number, which should correspond to a version tag inside the Gitlab repository. 
+
 Create a local Docker image
 ===========================
 
