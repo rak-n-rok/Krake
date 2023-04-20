@@ -36,9 +36,9 @@ install_requires = [
     "PyYAML==5.*",
     "requests==2.*",
     "SQLAlchemy==1.4.46",
+    "oslo.db==11.3.0",
     "tosca-parser==2.6.*",
     "deepdiff==6.2.*",
-    "SQLAlchemy==1.4.46",
 ]
 
 # webargs
