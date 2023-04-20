@@ -3,10 +3,10 @@ Docker
 ======
 
 It is possible to use Docker containers for the development of Krake. Docker provides
-a seperation layer for Krake, which helps locate problems and separate components during development.
+a separation layer for Krake, which helps locate problems and separate components during development.
 It also enables the usage of `docker-compose`, which enable rapid deployment and teardown
 of a complete Krake infrastructure on the spot.
-This directory is used to host a bundle to create various docker infrastructures.
+The `docker` directory is used to host a bundle to create various docker infrastructures.
 The Docker infrastructure bundle can be found inside the Krake project directory, and is organized in separate 
 subdirectories containing several templates, which have to be configured before use.
 
@@ -211,7 +211,7 @@ The Infrastructure Manager can be launched as follows:
 
     docker-compose --file docker/im/docker-compose.yaml up --detach
 
-To test it, it should be enought to retrieve the IM API version.
+To test it, it should be enough to retrieve the IM API version.
 
 .. code:: bash
 
