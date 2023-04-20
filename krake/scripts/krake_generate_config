@@ -490,10 +490,10 @@ if __name__ == "__main__":
         "--logging-handler",
         (
             "To set the handler to use for logging."
-            " Options are 'console' and 'file' "
+            " Options are 'console', 'file' and 'timed_rotating'"
 
         ),
-        default="console",       
+        default="console",
     )
 
     args = vars(parser.parse_args())

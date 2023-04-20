@@ -73,7 +73,14 @@ log:
     file:
       class: logging.handlers.WatchedFileHandler
       formatter: krake
-      filename: krake.log
+      filename: ./logs/krake-app.log
+    rotating:
+      class: logging.handlers.RotatingFileHandler
+      formatter: krake
+      filename: ./logs/krake-app.rotating.log
+      mode: 'a'
+      maxBytes: 2000000
+      backupCount: 3
   root: # Configuring the default (root) logger is highly recommended
     handlers: [$logging_handler]
   loggers:
