@@ -36,6 +36,18 @@ For each one of them except ``rok.yaml``, a template is present in the
 ``config`` directory. They end with the ``.template`` extension. For Rok, the
 template configuration file is in the main directory of Krake.
 
+By default, the configurations for Krake modules are searched in the following directories:
+
+* current working directory
+* location `/etc/krake/`
+
+`rok` searches these locations:
+* current working directory
+* the current home directory defined by `XDG_CONFIG_HOME`
+* location `/etc/rok/`
+
+If the necessary configuration file is not found in these locations, an error is thrown and the module doesn't start. In order to use a different location, the `--config` option in the module start command can be used.
+
 
 Generate configuration
 ~~~~~~~~~~~~~~~~~~~~~~

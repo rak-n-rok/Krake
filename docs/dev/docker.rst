@@ -3,10 +3,10 @@ Docker
 ======
 
 It is possible to use Docker containers for the development of Krake. Docker provides
-a seperation layer for Krake, which helps locate problems and separate components during development.
+a separation layer for Krake, which helps locate problems and separate components during development.
 It also enables the usage of `docker-compose`, which enable rapid deployment and teardown
 of a complete Krake infrastructure on the spot.
-This directory is used to host a bundle to create various docker infrastructures.
+The `docker` directory is used to host a bundle to create various docker infrastructures.
 The Docker infrastructure bundle can be found inside the Krake project directory, and is organized in separate 
 subdirectories containing several templates, which have to be configured before use.
 
@@ -15,6 +15,17 @@ Currently, the following infrastructure bundles are supported besides Krake:
 - Krake
 - Prometheus_
 - IM_ (IM)
+
+Use an online Docker image
+==========================
+
+Krake already provides prebuilt docker images, which can be downloaded in order to run 
+a Krake instance or if it is not necessary to built a local image.
+These docker images can be found in the following registries:
+
+* registry.gitlab.com
+
+Images are named `krake:<TAG>`, whereas `<TAG>` can be either `latest` or some version number, which should correspond to a version tag inside the Gitlab repository. 
 
 Create a local Docker image
 ===========================
@@ -200,7 +211,7 @@ The Infrastructure Manager can be launched as follows:
 
     docker-compose --file docker/im/docker-compose.yaml up --detach
 
-To test it, it should be enought to retrieve the IM API version.
+To test it, it should be enough to retrieve the IM API version.
 
 .. code:: bash
 
