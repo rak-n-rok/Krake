@@ -39,6 +39,7 @@ install_requires = [
     "oslo.db==11.3.0",
     "tosca-parser==2.6.*",
     "deepdiff==6.2.*",
+    "yarl==1.8.*"
 ]
 
 # webargs
