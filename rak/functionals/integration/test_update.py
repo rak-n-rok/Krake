@@ -33,7 +33,7 @@ CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
 MANIFEST_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals"
 
 
-def test_update_application_manifest(minikube_clusters):
+def test_update_application_manifest(k8s_clusters):
     """In the test environment, update the Application with a new manifest. The previous
     manifest has an echo server image with a version 1.10. The updated manifest reverts
     it to the version 1.9.
@@ -51,15 +51,15 @@ def test_update_application_manifest(minikube_clusters):
     5. the new state of the k8s resource is checked on the actual cluster to see if the
        number of replicas changed.
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    k8s_cluster = random.choice(k8s_clusters)
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
 
     manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
     environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
+        k8s_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
     )
 
     with Environment(environment) as env:
@@ -106,7 +106,7 @@ def test_update_application_manifest(minikube_clusters):
         )
 
 
-def test_update_application_labels(minikube_clusters):
+def test_update_application_labels(k8s_clusters):
     """In the test environment, update the Application with a new label. The original
     Application has no label at all.
 
@@ -121,15 +121,15 @@ def test_update_application_labels(minikube_clusters):
     5. the labels are replaced by new ones
 
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
+    k8s_cluster = random.choice(k8s_clusters)
 
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
     manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
     environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
+        k8s_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
     )
 
     with Environment(environment) as env:
@@ -162,7 +162,7 @@ def test_update_application_labels(minikube_clusters):
         assert app.get_labels() == expected_labels
 
 
-def test_update_cluster_kubeconfig(minikube_clusters):
+def test_update_cluster_kubeconfig(k8s_clusters):
     """In the test environment, update the Cluster with a new kubeconfig. The kubeconfig
      as stored on the API is then compared to the given one.
 
@@ -171,18 +171,18 @@ def test_update_cluster_kubeconfig(minikube_clusters):
     changed.
 
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
 
     """
-    minikube_cluster, other_cluster = random.sample(
-        minikube_clusters, len(minikube_clusters)
+    k8s_cluster, other_cluster = random.sample(
+        k8s_clusters, len(k8s_clusters)
     )
 
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
     environment = {
         0: [
             ClusterDefinition(
-                name=minikube_cluster, kubeconfig_path=kubeconfig_path, register=True
+                name=k8s_cluster, kubeconfig_path=kubeconfig_path, register=True
             )
         ]
     }
@@ -225,7 +225,7 @@ def test_update_cluster_kubeconfig(minikube_clusters):
         )
 
 
-def test_update_cluster_labels(minikube_clusters):
+def test_update_cluster_labels(k8s_clusters):
     """In the test environment, update the Cluster with a new label. The original
     Cluster has no label at all.
 
@@ -239,16 +239,16 @@ def test_update_cluster_labels(minikube_clusters):
        have been added/updated/removed;
 
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
+    k8s_cluster = random.choice(k8s_clusters)
 
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
     manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
 
     environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
+        k8s_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
     )
 
     with Environment(environment) as env:
@@ -280,7 +280,7 @@ def test_update_cluster_labels(minikube_clusters):
         assert cluster.get_labels() == expected_labels
 
 
-def test_update_no_changes(minikube_clusters):
+def test_update_no_changes(k8s_clusters):
     """In the test environment, attempt to update the Cluster with the same kubeconfig,
     and the Application with the same manifest file. As the update does not change any
     field of the resources, the update should be rejected in both cases.
@@ -291,16 +291,16 @@ def test_update_no_changes(minikube_clusters):
     400 error code.
 
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
+    k8s_cluster = random.choice(k8s_clusters)
 
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
     manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
 
     environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
+        k8s_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
     )
 
     with Environment(environment) as env:
@@ -321,7 +321,7 @@ def test_update_no_changes(minikube_clusters):
 
 
 @pytest.mark.parametrize("tosca_from", ["dict", "url"])
-def test_update_no_changes_tosca(minikube_clusters, tosca_from, file_server):
+def test_update_no_changes_tosca(k8s_clusters, tosca_from, file_server):
     """Update the Application with the same TOSCA template file
     defined by a dict or a URL.
 
@@ -332,15 +332,15 @@ def test_update_no_changes_tosca(minikube_clusters, tosca_from, file_server):
     same application definition. It should return an HTTP 400 error code.
 
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
         tosca_from (str): Parametrize the test with the `dict` and `url` values.
         file_server (callable): Callable that start http server with endpoint
            to get the given file.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
+    k8s_cluster = random.choice(k8s_clusters)
 
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
     is_url = False
     if tosca_from == "dict":
         tosca = f"{MANIFEST_PATH}/echo-demo-tosca.yaml"
@@ -354,7 +354,7 @@ def test_update_no_changes_tosca(minikube_clusters, tosca_from, file_server):
         raise ValueError(f"{tosca_from} source not supported.")
 
     environment = create_simple_environment(
-        minikube_cluster,
+        k8s_cluster,
         kubeconfig_path,
         "echo-demo",
         tosca=tosca,
@@ -370,7 +370,7 @@ def test_update_no_changes_tosca(minikube_clusters, tosca_from, file_server):
         )
 
 
-def test_update_no_changes_csar(minikube_clusters, archive_files, file_server):
+def test_update_no_changes_csar(k8s_clusters, archive_files, file_server):
     """Update the Application with the same CSAR defined by a URL.
 
     As the update does not change any field of the resources,
@@ -380,16 +380,16 @@ def test_update_no_changes_csar(minikube_clusters, archive_files, file_server):
     same application definition. It should return an HTTP 400 error code.
 
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
         archive_files (callable): Callable that archives given files to
           the ZIP archive.
         file_server (callable): Callable that starts a http server with an endpoint to
           get the given file.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
+    k8s_cluster = random.choice(k8s_clusters)
 
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
     tosca = f"{MANIFEST_PATH}/echo-demo-tosca.yaml"
     tosca_meta = f"{MANIFEST_PATH}/TOSCA-Metadata/TOSCA.meta"
 
@@ -403,7 +403,7 @@ def test_update_no_changes_csar(minikube_clusters, archive_files, file_server):
     csar_url = file_server(csar_path, file_name="archive.csar")
 
     environment = create_simple_environment(
-        minikube_cluster,
+        k8s_cluster,
         kubeconfig_path,
         "echo-demo",
         csar=csar_url,
@@ -420,7 +420,7 @@ def test_update_no_changes_csar(minikube_clusters, archive_files, file_server):
 
 
 @pytest.mark.parametrize("tosca_from", ["dict", "url"])
-def test_update_application_tosca(minikube_clusters, tosca_from, file_server):
+def test_update_application_tosca(k8s_clusters, tosca_from, file_server):
     """In the test environment, update the Application with a new TOSCA template
        defined as a URL and dict.
 
@@ -440,14 +440,14 @@ def test_update_application_tosca(minikube_clusters, tosca_from, file_server):
     5. the new state of the k8s resource is checked on the actual cluster to see if the
        number of replicas changed.
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
         tosca_from (str): Parametrize the test with the `dict` and `url` values.
         file_server (callable): Callable that start a http server with endpoint
           to get the given file.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    k8s_cluster = random.choice(k8s_clusters)
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
 
     is_url = False
     if tosca_from == "dict":
@@ -467,7 +467,7 @@ def test_update_application_tosca(minikube_clusters, tosca_from, file_server):
         raise ValueError(f"{tosca_from} source not supported.")
 
     environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", tosca=tosca
+        k8s_cluster, kubeconfig_path, "echo-demo", tosca=tosca
     )
 
     with Environment(environment) as env:
@@ -518,7 +518,7 @@ def test_update_application_tosca(minikube_clusters, tosca_from, file_server):
         )
 
 
-def test_update_application_csar(minikube_clusters, archive_files, file_server):
+def test_update_application_csar(k8s_clusters, archive_files, file_server):
     """In the test environment, update the Application
     with a new CSAR file defined as URL.
 
@@ -538,15 +538,15 @@ def test_update_application_csar(minikube_clusters, archive_files, file_server):
     5. the new state of the k8s resource is checked on the actual cluster to see if the
        number of replicas changed.
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
         archive_files (callable): Callable that archive given files
           to the ZIP archive.
         file_server (callable): Callable that start http server with endpoint
           to get the given file.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    k8s_cluster = random.choice(k8s_clusters)
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
 
     tosca = f"{MANIFEST_PATH}/echo-demo-tosca.yaml"
     tosca_updated = f"{MANIFEST_PATH}/echo-demo-update-tosca.yaml"
@@ -570,7 +570,7 @@ def test_update_application_csar(minikube_clusters, archive_files, file_server):
     csar_updated_url = file_server(csar_updated_path, file_name="archive_updated.csar")
 
     environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", csar=csar_url
+        k8s_cluster, kubeconfig_path, "echo-demo", csar=csar_url
     )
 
     with Environment(environment) as env:
@@ -624,7 +624,7 @@ def test_update_application_csar(minikube_clusters, archive_files, file_server):
 
 @pytest.mark.parametrize("tosca_from", ["dict", "url"])
 def test_update_manifest_application_by_tosca(
-    minikube_clusters, tosca_from, file_server
+    k8s_clusters, tosca_from, file_server
 ):
     """In the test environment (where the application is created by the manifest file),
     update the Application with a new TOSCA template. The previous manifest file
@@ -648,14 +648,14 @@ def test_update_manifest_application_by_tosca(
     5. the new state of the k8s resource is checked on the actual cluster to see if the
        number of replicas changed.
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
         tosca_from (str): Parametrize the test with the `dict` and `url` values.
         file_server (callable): Callable that starts a http server with an endpoint
           to get the given file.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    k8s_cluster = random.choice(k8s_clusters)
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
 
     manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
 
@@ -673,7 +673,7 @@ def test_update_manifest_application_by_tosca(
 
     # 0. the Application is created with the manifest file
     environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
+        k8s_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
     )
 
     with Environment(environment) as env:
@@ -724,7 +724,7 @@ def test_update_manifest_application_by_tosca(
 
 
 def test_update_manifest_application_by_csar(
-    minikube_clusters, archive_files, file_server
+    k8s_clusters, archive_files, file_server
 ):
     """In the test environment (where the application is created by the manifest file),
     update the Application with a new CSAR file. The previous manifest file
@@ -746,15 +746,15 @@ def test_update_manifest_application_by_csar(
     5. the new state of the k8s resource is checked on the actual cluster to see if the
        number of replicas changed.
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
         archive_files (callable): Callable that archives given files
           to the ZIP archive.
         file_server (callable): Callable that start a http server with an endpoint
           to get the given file.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    k8s_cluster = random.choice(k8s_clusters)
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
 
     manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
     tosca_updated = f"{MANIFEST_PATH}/echo-demo-update-tosca.yaml"
@@ -771,7 +771,7 @@ def test_update_manifest_application_by_csar(
 
     # 0. the Application is created with the manifest file
     environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
+        k8s_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
     )
 
     with Environment(environment) as env:

@@ -268,7 +268,9 @@ def create_simple_environment(
     return {
         10: [
             ClusterDefinition(
-                name=cluster_name, kubeconfig_path=kubeconfig_path, register=True,
+                name=cluster_name,
+                kubeconfig_path=kubeconfig_path,
+                register=True,
                 backoff_limit=1,
             )
         ],

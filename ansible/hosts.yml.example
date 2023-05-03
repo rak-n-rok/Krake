@@ -52,10 +52,20 @@ all:
             # IP of this peer in the wireguard network. Unique for each peer.
             IP: <peer_IP_in_wireguard_network>
 
+
+    # Kubernetes cluster
+    # 
+    # Configure the type and number of kubernetes clusters to use with krake here.
+    # Currently you can chose betwenn 'k3s' and 'minikube'
     minikube_clusters:
       hosts:
         minikube-cluster-1:
           name: minikube1
+          network: krake-network
+    k3s_clusters:
+      hosts:
+        k3s-cluster-1:
+          name: k3s1
           network: krake-network
 
     krake_apps:

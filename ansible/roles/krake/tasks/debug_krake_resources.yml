@@ -1,0 +1,39 @@
+- name: Debug krake resources
+  debug:
+    msg: "Reads out clusters, global metric providers, and metrics registered in krake"
+
+- name: Show resources currently present in krake
+  block:
+    
+   - name: Get cluster
+     command: "rok kube cluster list -o json"
+     register: rok_response        
+   - name: Exctract cluster infos from rok response
+     ansible.builtin.set_fact:
+       cluster_list: "{{ (rok_response.stdout | from_json ) }}"
+   - name: Debug cluster
+     debug:
+       msg: "{{ item.metadata.name }}"
+     with_items: "{{ cluster_list }}"
+
+   - name: Get gmp
+     command: "rok core gmp list -o json"
+     register: rok_response        
+   - name: Exctract gmp infos from rok response
+     ansible.builtin.set_fact:
+       gmp_list: "{{ (rok_response.stdout | from_json ) }}"
+   - name: Debug gmp
+     debug:
+       msg: "{{ item.metadata.name }}"
+     with_items: "{{ gmp_list }}"
+
+   - name: Get mp
+     command: "rok core mp list -o json"
+     register: rok_response        
+   - name: Exctract mp infos from rok response
+     ansible.builtin.set_fact:
+       mp_list: "{{ (rok_response.stdout | from_json ) }}"
+   - name: Debug mp
+     debug:
+       msg: "{{ item.metadata.name }}"
+     with_items: "{{ mp_list }}"

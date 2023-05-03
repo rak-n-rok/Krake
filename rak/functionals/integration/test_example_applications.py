@@ -37,7 +37,7 @@ APP_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{EXAMPLES_DIR}"
 RESCHEDULING_INTERVAL = 60
 
 
-def test_mnist_application(minikube_clusters):
+def test_mnist_application(k8s_clusters):
     """
     Tests the functionality of the "Mnist" example application.
 
@@ -67,10 +67,10 @@ def test_mnist_application(minikube_clusters):
     """
 
     num_clusters = 2
-    assert len(minikube_clusters) == num_clusters
+    assert len(k8s_clusters) == num_clusters
 
     # The two clusters and metrics used in this test
-    clusters = random.sample(minikube_clusters, num_clusters)
+    clusters = random.sample(k8s_clusters, num_clusters)
 
     gmp = provider.get_global_static_metrics_provider()
     static_metrics = random.sample(gmp.get_valued_metrics(), num_clusters)
@@ -98,7 +98,7 @@ def test_mnist_application(minikube_clusters):
     score_cluster_1 = get_scheduling_score(clusters[0], static_metrics, metric_weights)
     score_cluster_2 = get_scheduling_score(clusters[1], static_metrics, metric_weights)
     debug_info = {
-        "minikubeclusters": minikube_clusters,
+        "k8sclusters": k8s_clusters,
         "metric_weights": metric_weights,
         "initial_metrics": static_metrics,
         "score_cluster_1_init": score_cluster_1,
@@ -153,7 +153,7 @@ def test_mnist_application(minikube_clusters):
         score_cluster_2_c = get_scheduling_score(clusters[1], static_metrics,
                                                  metric_weights)
         debug_info = {
-            "minikubeclusters": minikube_clusters,
+            "k8sclusters": k8s_clusters,
             "metric_weights": metric_weights,
             "initial_metrics": static_metrics,
             "score_cluster_1_init": score_cluster_1_c,

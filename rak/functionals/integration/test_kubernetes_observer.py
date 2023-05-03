@@ -43,7 +43,7 @@ CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
 OBSERVER_SCHEMA_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals"
 
 
-def test_kubernetes_observer_deletion(minikube_clusters):
+def test_kubernetes_observer_deletion(k8s_clusters):
     """Check that if an observed resource of an Application is deleted on its cluster,
     the Observer watches it and notifies the API, which leads to the recreation of the
     resource.
@@ -55,13 +55,13 @@ def test_kubernetes_observer_deletion(minikube_clusters):
     2. Ensure the presence of this resource after it has been deleted.
 
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = get_default_kubeconfig_path(minikube_cluster)
+    k8s_cluster = random.choice(k8s_clusters)
+    kubeconfig_path = get_default_kubeconfig_path(k8s_cluster)
 
-    environment = create_default_environment([minikube_cluster])
+    environment = create_default_environment([k8s_cluster])
     with Environment(environment):
         # 1. Delete an observed resource on the cluster
         error_message = "The deployment echo-demo could not be deleted"
@@ -78,7 +78,7 @@ def test_kubernetes_observer_deletion(minikube_clusters):
         )
 
 
-def test_kubernetes_observer_update_on_cluster(minikube_clusters):
+def test_kubernetes_observer_update_on_cluster(k8s_clusters):
     """Check that if an observed field of a resource is updated on its cluster, the
     Observer watches it and notifies the API, which leads to the resource being reverted
     to its original state.
@@ -91,13 +91,13 @@ def test_kubernetes_observer_update_on_cluster(minikube_clusters):
     to its original specifications.
 
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = get_default_kubeconfig_path(minikube_cluster)
+    k8s_cluster = random.choice(k8s_clusters)
+    kubeconfig_path = get_default_kubeconfig_path(k8s_cluster)
 
-    environment = create_default_environment([minikube_cluster])
+    environment = create_default_environment([k8s_cluster])
     with Environment(environment):
         # 1. Update a resource on the cluster
         patch = {
@@ -128,7 +128,7 @@ def test_kubernetes_observer_update_on_cluster(minikube_clusters):
         )
 
 
-def test_kubernetes_observer_update_on_cluster_nonobserved(minikube_clusters):
+def test_kubernetes_observer_update_on_cluster_nonobserved(k8s_clusters):
     """Check that if a non-observed field of a resource is updated on its cluster, the
     Observer doesn't notify the API. The resource is not reverted to its original state.
 
@@ -139,18 +139,18 @@ def test_kubernetes_observer_update_on_cluster_nonobserved(minikube_clusters):
     to its original specifications.
 
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    k8s_cluster = random.choice(k8s_clusters)
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
 
     manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
     observer_schema_path = (
         f"{OBSERVER_SCHEMA_PATH}/echo-demo-observer-schema-custom-1.yaml"
     )
     environment = create_simple_environment(
-        minikube_cluster,
+        k8s_cluster,
         kubeconfig_path,
         "echo-demo",
         manifest_path=manifest_path,
@@ -188,7 +188,7 @@ def test_kubernetes_observer_update_on_cluster_nonobserved(minikube_clusters):
             )
 
 
-def test_kubernetes_observer_update_on_cluster_noninitialized(minikube_clusters):
+def test_kubernetes_observer_update_on_cluster_noninitialized(k8s_clusters):
     """This test demonstrates that the Observer behavior also works on fields which are
     not initialized by the user, as long as the field is observed.
 
@@ -200,18 +200,18 @@ def test_kubernetes_observer_update_on_cluster_noninitialized(minikube_clusters)
     to its original specifications.
 
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    k8s_cluster = random.choice(k8s_clusters)
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
 
     manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
     observer_schema_path = (
         f"{OBSERVER_SCHEMA_PATH}/echo-demo-observer-schema-custom-1.yaml"
     )
     environment = create_simple_environment(
-        minikube_cluster,
+        k8s_cluster,
         kubeconfig_path,
         "echo-demo",
         manifest_path=manifest_path,
@@ -260,7 +260,7 @@ nginx_deployment = """
     """
 
 
-def test_kubernetes_observer_additional_resource(minikube_clusters):
+def test_kubernetes_observer_additional_resource(k8s_clusters):
     """Check that if a resource that does not belong to any Application is added on the
     cluster of an Application, the Observer should be silent and not notify the API. No
     changes should be observed.
@@ -274,13 +274,13 @@ def test_kubernetes_observer_additional_resource(minikube_clusters):
     4. Remove the additional resource.
 
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = get_default_kubeconfig_path(minikube_cluster)
+    k8s_cluster = random.choice(k8s_clusters)
+    kubeconfig_path = get_default_kubeconfig_path(k8s_cluster)
 
-    environment = create_default_environment([minikube_cluster])
+    environment = create_default_environment([k8s_cluster])
     with Environment(environment, creation_delay=30) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
@@ -361,7 +361,7 @@ def test_kubernetes_observer_additional_resource(minikube_clusters):
             )
 
 
-def test_kubernetes_observer_update_on_api(minikube_clusters):
+def test_kubernetes_observer_update_on_api(k8s_clusters):
     """Check that if an Application has been updated on the API, after the
     KubernetesController updated it on the cluster, it should not be reverted to its
     original state because of the KubernetesObserver.
@@ -373,13 +373,13 @@ def test_kubernetes_observer_update_on_api(minikube_clusters):
     revert its state to the original one.
 
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = get_default_kubeconfig_path(minikube_cluster)
+    k8s_cluster = random.choice(k8s_clusters)
+    kubeconfig_path = get_default_kubeconfig_path(k8s_cluster)
 
-    environment = create_default_environment([minikube_cluster])
+    environment = create_default_environment([k8s_cluster])
     with Environment(environment):
         # 1. Update the Application on the API
         run(f"rok kube app update echo-demo -f {MANIFEST_PATH}/echo-demo-update.yaml")
@@ -404,7 +404,7 @@ def test_kubernetes_observer_update_on_api(minikube_clusters):
         )
 
 
-def test_kubernetes_observer_delete_on_api(minikube_clusters):
+def test_kubernetes_observer_delete_on_api(k8s_clusters):
     """Check that if an Application has been deleted on the API, after the
     KubernetesController deleted it on the cluster, it should not be reverted to its
     original state because of the KubernetesObserver.
@@ -416,13 +416,13 @@ def test_kubernetes_observer_delete_on_api(minikube_clusters):
     trigger the recreation of the resources.
 
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = get_default_kubeconfig_path(minikube_cluster)
+    k8s_cluster = random.choice(k8s_clusters)
+    kubeconfig_path = get_default_kubeconfig_path(k8s_cluster)
 
-    environment = create_default_environment([minikube_cluster])
+    environment = create_default_environment([k8s_cluster])
     with Environment(environment) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
@@ -457,7 +457,7 @@ def test_kubernetes_observer_delete_on_api(minikube_clusters):
         )
 
 
-def test_kubernetes_observer_recreated(minikube_clusters):
+def test_kubernetes_observer_recreated(k8s_clusters):
     """Check that if an Application has been updated on the API, its corresponding
     KubernetesObserver has been updated too, by modifying the resources on the cluster,
     and checking that the observer reverted the resources to the updated state.
@@ -469,13 +469,13 @@ def test_kubernetes_observer_recreated(minikube_clusters):
     reverted: 1.4 --> 1.9
 
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = get_default_kubeconfig_path(minikube_cluster)
+    k8s_cluster = random.choice(k8s_clusters)
+    kubeconfig_path = get_default_kubeconfig_path(k8s_cluster)
 
-    environment = create_default_environment([minikube_cluster])
+    environment = create_default_environment([k8s_cluster])
     with Environment(environment):
         # 1. Update a resource on the API
         run(f"rok kube app update echo-demo -f {MANIFEST_PATH}/echo-demo-update.yaml")
@@ -525,7 +525,7 @@ class ContainerHealth(object):
     failed_pods: int = 0
 
 
-def test_kubernetes_observe_container_health(minikube_clusters):
+def test_kubernetes_observe_container_health(k8s_clusters):
     """Check that an applications information are changed according to their current
     pod (health) information.
 
@@ -535,13 +535,13 @@ def test_kubernetes_observe_container_health(minikube_clusters):
     3. Check if the pod health information changed according to the updated manifest
 
     Args:
-        minikube_clusters (list[PathLike]): a list of paths to kubeconfig files.
+        k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = get_default_kubeconfig_path(minikube_cluster)
+    k8s_cluster = random.choice(k8s_clusters)
+    kubeconfig_path = get_default_kubeconfig_path(k8s_cluster)
 
-    environment = create_default_environment([minikube_cluster])
+    environment = create_default_environment([k8s_cluster])
     with Environment(environment) as env:
 
         # 1. Check if the pod health information are correct

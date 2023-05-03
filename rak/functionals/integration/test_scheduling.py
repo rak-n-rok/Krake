@@ -87,7 +87,7 @@ METRIC_CONSTRAINT_EXPRESSIONS = {
 }
 
 
-def test_create_cluster_and_app(minikube_clusters):
+def test_create_cluster_and_app(k8s_clusters):
     """Basic end-to-end testing
 
     1. Create cluster and application;
@@ -97,9 +97,9 @@ def test_create_cluster_and_app(minikube_clusters):
     5. Check that the application and cluster were properly deleted.
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
     """
-    cluster = random.choice(minikube_clusters)
+    cluster = random.choice(k8s_clusters)
     environment = create_default_environment([cluster])
 
     # 1. Create cluster and application
@@ -117,7 +117,7 @@ def test_create_cluster_and_app(minikube_clusters):
     # (Checks 4-5 are performed automatically when exiting the environment);
 
 
-def test_create_on_other_namespace(minikube_clusters):
+def test_create_on_other_namespace(k8s_clusters):
     """Check that resources defined in a namespace which is NOT "default" in a manifest
     given to an application are deployed to the right namespace.
 
@@ -128,15 +128,15 @@ def test_create_on_other_namespace(minikube_clusters):
     4. Ensure no resource is left on the namespace
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    k8s_cluster = random.choice(k8s_clusters)
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
 
     manifest_path = f"{MANIFEST_PATH}/echo-demo-namespaced.yaml"
     environment = create_simple_environment(
-        minikube_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
+        k8s_cluster, kubeconfig_path, "echo-demo", manifest_path=manifest_path
     )
 
     def create_namespace(resources):
@@ -194,7 +194,7 @@ def test_create_on_other_namespace(minikube_clusters):
         )
 
 
-def test_scheduler_cluster_label_constraints(minikube_clusters):
+def test_scheduler_cluster_label_constraints(k8s_clusters):
     """Basic end-to-end testing of application cluster label constraints
 
     The test repeatedly creates an application and two clusters with the
@@ -217,7 +217,7 @@ def test_scheduler_cluster_label_constraints(minikube_clusters):
         3. Ensure that the application was scheduled to the requested cluster;
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
     num_clusters = 2
@@ -232,7 +232,7 @@ def test_scheduler_cluster_label_constraints(minikube_clusters):
 
         for app_cluster_constraint in constraints:
             # The two clusters used in this test (randomly ordered)
-            clusters = random.sample(minikube_clusters, num_clusters)
+            clusters = random.sample(k8s_clusters, num_clusters)
 
             # 1. Create two clusters from a config file with the cluster labels
             #     `location=DE` and `location=IT` (in random order);
@@ -251,20 +251,20 @@ def test_scheduler_cluster_label_constraints(minikube_clusters):
                 app.check_running_on(clusters[expected_index])
 
 
-def test_scheduler_clusters_with_metrics(minikube_clusters):
+def test_scheduler_clusters_with_metrics(k8s_clusters):
     """Basic end-to-end testing of namespaced and global cluster metrics
 
     Metrics and metrics provider are tested twice as follows:
 
         1. Set the metric values to different values in each run
-        2. Create two Minikube clusters (from a config file) with both a global
+        2. Create two Kubernetes clusters (from a config file) with both a global
         metric and a namespaced metric and an application. The clusters have
         different metric weights, which results in them having different scores.
         3. Ensure that the application was scheduled to the cluster with the
         highest score;
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
     # The two clusters and metrics used in this test
@@ -285,7 +285,7 @@ def test_scheduler_clusters_with_metrics(minikube_clusters):
 
     # -------------------------------------------------------------------
     num_clusters = 2
-    clusters = random.sample(minikube_clusters, num_clusters)
+    clusters = random.sample(k8s_clusters, num_clusters)
     mp = provider.get_namespaced_static_metrics_provider()
     namespaced_static_metric = random.choice(mp.get_valued_metrics())
     gmp = provider.get_global_static_metrics_provider()
@@ -324,7 +324,7 @@ def test_scheduler_clusters_with_metrics(minikube_clusters):
         # (Sanity check that a different cluster is chosen in each iteration)
         assert prev_max_score_cluster != max_score_cluster
 
-        # 2. Create two Minikube clusters (from a config file) with both a global
+        # 2. Create two Kubernetes clusters (from a config file) with both a global
         # metric and a namespaced metric and an application. The clusters have
         # different metric weights, which results in them having different scores.
 
@@ -339,17 +339,17 @@ def test_scheduler_clusters_with_metrics(minikube_clusters):
         prev_max_score_cluster = max_score_cluster
 
 
-def test_scheduler_clusters_with_global_metrics(minikube_clusters):
+def test_scheduler_clusters_with_global_metrics(k8s_clusters):
     """Basic end-to-end testing of clusters metrics
 
     Cluster metrics and metrics provider are tested multiple times (3) as follows:
 
-        1. Create two Minikube clusters (from a config file) with a randomly
+        1. Create two Kubernetes clusters (from a config file) with a randomly
             selected metric assigned to each cluster and an application.
         2. Ensure that the application was scheduled to the expected cluster;
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
     _gm_cmd = run(("rok core gm list -o json"))
@@ -370,7 +370,7 @@ def test_scheduler_clusters_with_global_metrics(minikube_clusters):
     for i in range(3):
         # The two clusters and metrics used in this test (randomly ordered)
         num_clusters = 2
-        clusters = random.sample(minikube_clusters, num_clusters)
+        clusters = random.sample(k8s_clusters, num_clusters)
         gmp = provider.get_global_prometheus_metrics_provider()
         prometheus_metrics = random.sample(gmp.get_valued_metrics(), num_clusters)
 
@@ -387,7 +387,7 @@ def test_scheduler_clusters_with_global_metrics(minikube_clusters):
             if prometheus_metrics[i].value == max_metric_value
         )
 
-        # 1. Create two Minikube clusters (from a config file) with a randomly
+        # 1. Create two Kubernetes clusters (from a config file) with a randomly
         #     selected metric assigned to each cluster and an application.
         metric_weights = {
             clusters[i]: [WeightedMetric(prometheus_metrics[i].metric, 1)]
@@ -419,7 +419,7 @@ def test_scheduler_clusters_with_global_metrics(minikube_clusters):
             app.check_running_on(expected_cluster, error_message=err_msg)
 
 
-def test_scheduler_clusters_with_one_metric(minikube_clusters):
+def test_scheduler_clusters_with_one_metric(k8s_clusters):
     """Basic end-to-end testing of clusters with namespaced and global metrics
 
     The same test is executed six times. First three times with one cluster
@@ -429,12 +429,12 @@ def test_scheduler_clusters_with_one_metric(minikube_clusters):
 
     The three tests of each setup, each run as follows:
 
-        1. Create two Minikube clusters (from a config file) (one with a
+        1. Create two Kubernetes clusters (from a config file) (one with a
             metric and one without any) and an application.
         2. Ensure that the app was scheduled to the cluster with the metric;
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
     _gm_cmd = run(("rok core gm list -o json"))
@@ -460,10 +460,10 @@ def test_scheduler_clusters_with_one_metric(minikube_clusters):
         for _ in range(3):
             # The two clusters and metrics used in this test (randomly ordered)
             num_clusters = 2
-            clusters = random.sample(minikube_clusters, num_clusters)
+            clusters = random.sample(k8s_clusters, num_clusters)
             static_metric = random.choice(mp.get_valued_metrics())
 
-            # 1. Create two Minikube clusters (from a config file) (one with a
+            # 1. Create two Kubernetes clusters (from a config file) (one with a
             #     namespaced metric and one without any) and an application.
             cluster_w_metrics = random.choice(clusters)
             metric_weights = dict.fromkeys(clusters, [])
@@ -478,14 +478,14 @@ def test_scheduler_clusters_with_one_metric(minikube_clusters):
                 app.check_running_on(cluster_w_metrics)
 
 
-def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
+def test_scheduler_cluster_label_constraints_with_metrics(k8s_clusters):
     """Basic end-to-end testing of application cluster label constraints with
     metrics
 
     Test iterates over the `CONSTRAINT_EXPRESSIONS` and applies workflow as follows:
 
         1. Create an application (with a cluster label constraint given from
-            `CONSTRAINT_EXPRESSIONS`) and two Minikube clusters (from a config file)
+            `CONSTRAINT_EXPRESSIONS`) and two Kubernetes clusters (from a config file)
             with cluster labels (randomly selected from: `location=DE`,
             `location=IT`) and randomly selected metrics.
         2. Ensure that the application was scheduled to the cluster, which the
@@ -493,7 +493,7 @@ def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
             label constraints have priority over the rank calculated from the metrics.
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
     mp = provider.get_global_prometheus_metrics_provider()
@@ -509,11 +509,11 @@ def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
         for app_cluster_constraint in constraints:
             # The two clusters, countries and metrics used in this test
             # (randomly ordered)
-            clusters = random.sample(minikube_clusters, num_clusters)
+            clusters = random.sample(k8s_clusters, num_clusters)
             prometheus_metrics = random.sample(mp.get_valued_metrics(), num_clusters)
 
             # 1. Create an application (with a cluster label constraint given from
-            # `CONSTRAINT_EXPRESSIONS`) and two Minikube clusters (from a config file)
+            # `CONSTRAINT_EXPRESSIONS`) and two Kubernetes clusters (from a config file)
             # with cluster labels (randomly selected from: `location=DE`,
             # `location=IT`) and randomly selected metrics.
             cluster_labels = create_cluster_label_info(clusters, "location", countries)
@@ -533,22 +533,22 @@ def test_scheduler_cluster_label_constraints_with_metrics(minikube_clusters):
                 app.check_running_on(clusters[expected_index])
 
 
-def test_scheduler_cluster_metric_constraints(minikube_clusters):
+def test_scheduler_cluster_metric_constraints(k8s_clusters):
     """
     Basic end-to-end testing of application cluster metric constraints (with metrics)
 
     Test iterates over the `CONSTRAINT_EXPRESSIONS` and applies workflow as follows:
 
         1. Create an application (with a cluster metric constraint given from
-            `CONSTRAINT_EXPRESSIONS`) and two Minikube clusters (from a config file)
-            with cluster metrics (randomly selected from: ``minikube_clusters
+            `CONSTRAINT_EXPRESSIONS`) and two Kubernetes clusters (from a config file)
+            with cluster metrics (randomly selected from: ``k8s_clusters
             ``) and randomly selected metrics.
         2. Ensure that the application was scheduled to the cluster, which the
             application selected through its cluster label constraints. The cluster
             label constraints have priority over the rank calculated from the metrics.
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
     mp = provider.get_global_prometheus_metrics_provider()
@@ -564,11 +564,11 @@ def test_scheduler_cluster_metric_constraints(minikube_clusters):
         for app_cluster_constraint in constraints:
             # The two clusters, countries and metrics used in this test
             # (randomly ordered)
-            clusters = random.sample(minikube_clusters, num_clusters)
+            clusters = random.sample(k8s_clusters, num_clusters)
             prometheus_metrics = random.sample(mp.get_valued_metrics(), num_clusters)
 
             # 1. Create an application (with a cluster label constraint given from
-            # `CONSTRAINT_EXPRESSIONS`) and two Minikube clusters (from a config file)
+            # `CONSTRAINT_EXPRESSIONS`) and two Kubernetes clusters (from a config file)
             # with cluster labels (randomly selected from: `location=DE`,
             # `location=IT`) and randomly selected metrics.
             cluster_labels = create_cluster_label_info(clusters, "load", load_values)
@@ -588,7 +588,7 @@ def test_scheduler_cluster_metric_constraints(minikube_clusters):
                 app.check_running_on(clusters[expected_index])
 
 
-def test_one_unreachable_metrics_provider(minikube_clusters):
+def test_one_unreachable_metrics_provider(k8s_clusters):
     """Basic end-to-end testing of unreachable metrics provider
 
     Test applies workflow as follows:
@@ -605,12 +605,12 @@ def test_one_unreachable_metrics_provider(minikube_clusters):
             added).
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
     # The two clusters and metrics used in this test (randomly ordered)
     num_clusters = 2
-    clusters = random.sample(minikube_clusters, num_clusters)
+    clusters = random.sample(k8s_clusters, num_clusters)
     unreachable_mp = provider.get_global_prometheus_metrics_provider(reachable=False)
     unreachable_prometheus_metric = random.choice(unreachable_mp.get_valued_metrics())
     reachable_mp = provider.get_global_prometheus_metrics_provider()
@@ -660,7 +660,7 @@ def test_one_unreachable_metrics_provider(minikube_clusters):
         )
 
 
-def test_all_unreachable_metrics_provider(minikube_clusters):
+def test_all_unreachable_metrics_provider(k8s_clusters):
     """Basic e2e testing of unreachable metrics provider
 
     Test applies workflow as follows:
@@ -675,7 +675,7 @@ def test_all_unreachable_metrics_provider(minikube_clusters):
         4. Ensure that the cluster without metrics is not reporting any failing metrics.
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
     _gm_cmd = run(("rok core gm list -o json"))
@@ -695,7 +695,7 @@ def test_all_unreachable_metrics_provider(minikube_clusters):
     # -------------------------------------------------------------------
     # The two clusters and metrics used in this test (randomly ordered)
     num_clusters = 2
-    clusters = random.sample(minikube_clusters, num_clusters)
+    clusters = random.sample(k8s_clusters, num_clusters)
     mp = provider.get_global_prometheus_metrics_provider(reachable=False)
     unreachable_metric = random.choice(mp.get_valued_metrics())
 
@@ -735,7 +735,7 @@ def test_all_unreachable_metrics_provider(minikube_clusters):
         assert cluster_wo_metric.get_metrics_reasons() == {}
 
 
-def test_metric_not_in_database(minikube_clusters):
+def test_metric_not_in_database(k8s_clusters):
     """Basic e2e testing of cluster referencing a metric not found in the Krake
     database.
 
@@ -748,12 +748,12 @@ def test_metric_not_in_database(minikube_clusters):
             the user of the failing metrics (state changed and list of reasons added).
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
     # The two clusters and metrics used in this test (randomly ordered)
     num_clusters = 2
-    chosen_cluster = random.sample(minikube_clusters, num_clusters)[0]
+    chosen_cluster = random.sample(k8s_clusters, num_clusters)[0]
 
     non_existent_metric = NonExistentMetric()
     metric_weights = {
@@ -782,7 +782,7 @@ def test_metric_not_in_database(minikube_clusters):
         assert metrics_reasons[non_existent_metric.name]["code"] == "UNKNOWN_METRIC"
 
 
-def test_cluster_not_online(minikube_clusters):
+def test_cluster_not_online(k8s_clusters):
     """Basic end-to-end testing of none online cluster
 
     Test applies workflow as follows:
@@ -791,27 +791,33 @@ def test_cluster_not_online(minikube_clusters):
         2. Ensure that the application was not scheduled to the cluster.
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
     num_clusters = 2
-    file_successful_cluster = random.sample(minikube_clusters, num_clusters)[0]
+    file_successful_cluster = random.sample(k8s_clusters, num_clusters)[0]
     file_failing_cluster = f"{CLUSTERS_CONFIGS}/failing_cluster"
 
     with open(f"{CLUSTERS_CONFIGS}/{file_successful_cluster}", "r") as f_success, \
          open(file_failing_cluster, "w") as f_failing:
         new_content = re.sub(":\d+\n", ":1234\n", f_success.read())
-        new_content = re.sub("name:\sminikube-cluster-(\d+)-(\d+)",
-                             "name: minikube-cluster-failing", new_content)
-        new_content = re.sub("cluster:\sminikube-cluster-(\d+)-(\d+)",
-                             "cluster: minikube-cluster-failing", new_content)
+        new_content = re.sub("name:(\s+)([^-\s]*)-cluster-(\d+)-(\d+)",
+                             "name: k8s-cluster-failing", new_content)
+        new_content = re.sub("cluster:(\s+)([^-\s]*)-cluster-(\d+)-(\d+)",
+                             "cluster: k8s-cluster-failing", new_content)
         f_failing.write(new_content)
         f_failing.close()
 
     environment = create_default_environment(
-        [file_failing_cluster], app_backoff_limit=1,
-        )
-    with Environment(environment, ignore_check=True, ignore_verification=True) as env:
+        [file_failing_cluster],
+        app_backoff_limit=1,
+    )
+
+    with Environment(
+        environment,
+        ignore_check=True,
+        ignore_verification=True
+    ) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
         # 1. Sleep a short period of time
@@ -821,14 +827,12 @@ def test_cluster_not_online(minikube_clusters):
         assert app.get_state() == "FAILED"
 
         # 3. Ensure that the cluster is offline
-        cluster_json = run(
-            (f"rok kube cluster list -ojson")
-        )
+        cluster_json = run("rok kube cluster list -o json")
         cluster_list = json.loads(cluster_json.output)
         assert cluster_list[0]["status"]["state"] == "OFFLINE"
 
 
-def test_tenant_separation(minikube_clusters):
+def test_tenant_separation(k8s_clusters):
     """Basic e2e testing of tenant separation.
 
     Test applies workflow as follows:
@@ -838,16 +842,16 @@ def test_tenant_separation(minikube_clusters):
 
 
     Args:
-        minikube_clusters (list): Names of the Minikube backend.
+        k8s_clusters (list): Names of the Kubernetes backend.
 
     """
-    minikube_cluster = random.choice(minikube_clusters)
-    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{minikube_cluster}"
+    k8s_cluster = random.choice(k8s_clusters)
+    kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
 
     # create app in namespace "secondary" and cluster in default namespace
     manifest_path = f"{MANIFEST_PATH}/echo-demo-namespaced.yaml"
     environment = create_simple_environment(
-        minikube_cluster,
+        k8s_cluster,
         kubeconfig_path,
         "echo-demo-namespaced",
         manifest_path=manifest_path,
