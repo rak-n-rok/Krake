@@ -1,12 +1,12 @@
 heat_template_version: queens
 
-description: Provision 3ks instance
+description: Provision cluster instance
 
 parameters:
 
   instance_name:
     type: string
-    description: Name of the k3s instance
+    description: Name of the cluster instance
 
   key:
     type: string
@@ -27,7 +27,7 @@ parameters:
     default: shared-public-IPv4
     description: >
       Name of the public network on which to associate a floating IP for
-      k3s
+      Microk8s
 
   common_secgroup:
     type: string
@@ -36,20 +36,20 @@ parameters:
 
   flavor:
     type: string
-    description: Name of the flavor to use for the 3ks instance
+    description: Name of the flavor to use for the k8s instance
     default: M.mem+
 
   create_floating_ip:
     type: boolean
     default: true
     description: >
-      Whether to create a floating IP for k3s instance or not
+      Whether to create a floating IP for cluster instance or not
 
   api_port:
     type: number
     default: 8443
     description: >
-      TCP port of the k3s API. A security group will be added allowing public
+      TCP port of the microk8s API. A security group will be added allowing public
       communication over this port.
 
   use_config_drive:
@@ -111,11 +111,11 @@ resources:
 
 outputs:
   private_ip:
-    description: IP address of 3ks instance in private network
+    description: IP address of cluster instance in private network
     value: { get_attr: [instance, first_address] }
 
   public_ip:
-    description: Floating IP address of 3ks instance
+    description: Floating IP address of cluster instance
     value: { get_attr: [floating_ip, floating_ip_address] }
     condition:
       equals:
