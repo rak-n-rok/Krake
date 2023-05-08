@@ -570,7 +570,7 @@ class ApplicationStatus(Status):
     """
 
     state: ApplicationState = ApplicationState.PENDING
-    container_health: ContainerHealth = ContainerHealth()
+    container_health: ContainerHealth = ContainerHealth
     kube_controller_triggered: datetime = None
     scheduled: datetime = None
     scheduled_to: ResourceRef = None

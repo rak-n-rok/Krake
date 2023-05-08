@@ -761,9 +761,9 @@ def test_label_multiple_errors():
         key = list(error_dict)[0]
 
         if key == "['a', 'b']":
-            assert error_dict[key] == "expected string or bytes-like object"
+            assert "expected string or bytes-like object" in error_dict[key]
         elif key == "True":
-            assert error_dict[key] == "expected string or bytes-like object"
+            assert "expected string or bytes-like object" in error_dict[key]
             true_counter += 1
         elif key == "$$":
             assert "Label key '$$' does not match the regex" in error_dict[key]
