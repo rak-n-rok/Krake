@@ -302,7 +302,7 @@ def field_for_schema(type_, default=dataclasses.MISSING, **metadata):
 
 class SerializableMeta(type):
     """Metaclass for :class:`Serializable`. It automatically converts a
-    specified class into an dataclass (see :func:`dataclasses.dataclass`) and
+    specified class into a dataclass (see :func:`dataclasses.dataclass`) and
     creates a corresponding :class:`marshmallow.Schema` class. The schema
     class is assigned to the :attr:`Schema` attribute.
     """

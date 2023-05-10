@@ -138,6 +138,14 @@ unittests-krake-3.10:
     COVERAGE_FILE: krake/.coverage.py310
 
 
+unittests-krake-3.11:
+  <<: *unittests-krake
+  image: python:3.11
+  variables:
+    TOXENV: py311
+    COVERAGE_FILE: krake/.coverage.py311
+
+
 flake8-krake:
   stage: test
   image: python:3.7
