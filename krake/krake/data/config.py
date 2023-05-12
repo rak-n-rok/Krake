@@ -342,6 +342,9 @@ class ApiConfiguration(Serializable):
     port: int = field(
         default=8080, metadata={"help": "Port to which the Krake API listens to."}
     )
+    ws_port: int = field(
+        default=8081, metadata={"help": "Websocket port to which the Krake API listens to"}
+    )
     etcd: EtcdConfiguration
     docs: DocsConfiguration
     tls: TlsServerConfiguration

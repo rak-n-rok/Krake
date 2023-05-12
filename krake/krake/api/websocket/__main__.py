@@ -8,12 +8,12 @@
 import logging
 import pprint
 from argparse import ArgumentParser
-from aiohttp import web
 from krake.data.config import ApiConfiguration
 from krake.utils import KrakeArgumentFormatter
+import asyncio
+import websockets
 
 from krake import load_yaml_config, setup_logging, ConfigurationOptionMapper, search_config
-from .app import create_app
 
 
 logger = logging.getLogger(__name__)
@@ -30,11 +30,14 @@ mapper.add_arguments(parser)
 
 async def handler(websocket):
     while True:
-        message = await websocket.recv()
+        try:
+            message = await websocket.recv()
+        except websockets.ConnectionClosedOK:
+            break
         print(message)
 
 
-def main(config):
+async def main(config):
     """Starts the API using the provided configuration.
 
     Args:
@@ -47,8 +50,8 @@ def main(config):
         "Krake configuration settings:\n %s", pprint.pformat(config.serialize())
     )
 
-    app = create_app(config)
-    web.run_app(app, ssl_context=app["ssl_context"], port=config.port)
+    async with websockets.serve(handler, "", config.ws_port):
+        await asyncio.Future()
 
 
 if __name__ == "__main__":
@@ -57,4 +60,4 @@ if __name__ == "__main__":
     config = load_yaml_config(args["config"] or search_config("api.yaml"))
     api_config = mapper.merge(config, args)
 
-    main(api_config)
+    asyncio.run(main(api_config))
