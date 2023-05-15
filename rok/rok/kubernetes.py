@@ -217,6 +217,13 @@ arg_metric_inheritance = argument(
     ),
 )
 
+arg_auto_cluster_create = argument(
+    "--auto-cluster-create",
+    dest="auto_cluster_create",
+    default=0,
+    help="Boolean value, if clusters should be automatically created",
+)
+
 
 class ApplicationListTable(BaseTable):
     state = Cell("status.state")
@@ -370,6 +377,7 @@ class ApplicationTable(ApplicationListTable):
 @arg_backoff
 @arg_backoff_delay
 @arg_backoff_limit
+@arg_auto_cluster_create
 @depends("config", "session")
 @printer(table=ApplicationTable())
 def create_application(
@@ -391,6 +399,7 @@ def create_application(
     backoff,
     backoff_delay,
     backoff_limit,
+    auto_cluster_create
 ):
     manifest = []
     tosca = {}
@@ -449,6 +458,7 @@ def create_application(
             "backoff": backoff,
             "backoff_delay": backoff_delay,
             "backoff_limit": backoff_limit,
+            "auto_cluster_create": auto_cluster_create,
         },
     }
 

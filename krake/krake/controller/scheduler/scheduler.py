@@ -1,4 +1,5 @@
 import asyncio
+import os
 from datetime import timedelta
 import logging
 import random
@@ -37,6 +38,14 @@ from .. import Controller, ControllerError, Reflector, WorkQueue
 from ...data.infrastructure import Cloud, GlobalCloud, CloudBinding, CloudState
 
 logger = logging.getLogger(__name__)
+
+
+class WaitingOnCluster(ControllerError):
+    """Raised in case when there is not enough resources for spawning an application
+    on any of the deployments.
+    """
+
+    code = ReasonCode.NO_SUITABLE_RESOURCE
 
 
 class NoClusterFound(ControllerError):
@@ -559,8 +568,8 @@ class KubernetesApplicationHandler(Handler):
 
     async def _update_retry_fields(self, app):
         logger.info(f"{app.metadata.name}: transition to "
-                    f"DEGRADED, remaining retries: {app.status.retries}"
-                    )
+                    f"DEGRADED, remaining retries: {app.status.retries}")
+
         if app.spec.backoff_limit > 0:
             app.status.retries -= 1
 
@@ -569,8 +578,7 @@ class KubernetesApplicationHandler(Handler):
         )
         app.status.scheduled_retry = utils.now() + delay
         logger.debug(f"{app.metadata.name}: scheduled retry to "
-                     f"{app.status.scheduled_retry}"
-                     )
+                     f"{app.status.scheduled_retry}")
 
     async def handle_kubernetes_applications(self, run_once=False):
         """Infinite loop which fetches and hands over the Kubernetes Application
@@ -599,6 +607,9 @@ class KubernetesApplicationHandler(Handler):
                     )
                 await self.kubernetes_application_received(app)
                 app.status.retries = app.spec.backoff_limit
+            except WaitingOnCluster:
+                await self.queue.put(app.metadata.uid, app, delay=30)
+                logger.debug(f"{app.metadata.name}: scheduled retry in 30 seconds")
             except ControllerError as error:
                 app.status.reason = Reason(code=error.code, message=error.message)
                 if app.status.retries > 0:
@@ -612,7 +623,9 @@ class KubernetesApplicationHandler(Handler):
                     logger.info(f"{app.metadata.name}: transition to FAILED")
 
                 await self.api.update_application_status(
-                    namespace=app.metadata.namespace, name=app.metadata.name, body=app
+                    namespace=app.metadata.namespace,
+                    name=app.metadata.name,
+                    body=app
                 )
             finally:
                 await self.queue.done(key)
@@ -719,6 +732,16 @@ class KubernetesApplicationHandler(Handler):
                          f"{self.reschedule_after} secs")
             await self.queue.put(app.metadata.uid, app, delay=self.reschedule_after)
 
+    @staticmethod
+    async def check_files_in_folder(folder_path):
+        while True:
+            entries = os.scandir(folder_path)
+            for entry in entries:
+                if entry.is_file():
+                    return True
+            else:
+                return False
+
     async def select_kubernetes_cluster(self, app, clusters):
         """Select suitable kubernetes cluster for application binding.
 
@@ -816,7 +839,78 @@ class KubernetesApplicationHandler(Handler):
 
         logger.debug(f"App {app.metadata.name}: matching cluster: {matching_clusters}")
 
-        if not matching_clusters:
+        if app.spec.auto_cluster_create and \
+           not matching_clusters and \
+           app.status.auto_cluster_create_started is None:
+
+            max_retries = 3
+            for _ in range(max_retries):
+                try:
+                    auto_cluster_name = self.auto_generate_cluster_name()
+                    wd = os.path.dirname(os.getcwd())
+                    folder_path = f"{wd}/examples/automation"
+                    if await self.check_files_in_folder(folder_path):
+                        break
+                        # files = os.listdir(folder_path)
+                        # files = [f for f in files if
+                        #          os.path.isfile(os.path.join(folder_path, f))]
+                        # first_file = files[0]
+                        # tosca_file_path = os.path.join(folder_path, first_file)
+                        # temp.metadata.namespace = app.metadata.namespace
+                        # temp.status.state = ClusterState.PENDING
+                        # self.client.session
+                        # to_create = {
+                        #     "metadata": {"name": auto_cluster_name, "labels": labels},
+                        #     "spec": {
+                        #         "tosca": yaml.safe_load(tosca_file_path),
+                        #         "metrics": metrics + global_metrics,
+                        #         "custom_resources": custom_resources,
+                        #         "backoff": backoff,
+                        #         "backoff_delay": backoff_delay,
+                        #         "backoff_limit": backoff_limit,
+                        #         "constraints": {
+                        #             "cloud": {
+                        #                 "labels": cloud_label_constraints,
+                        #                 "metrics": cloud_metric_constraints,
+                        #             },
+                        #         },
+                        #     },
+                        # }
+                        # resp = session.post(
+                        #     f"/kubernetes/namespaces/{namespace}/clusters",
+                        #     json=to_create)
+                        #
+                        # return resp.json()
+                        # app.auto_cluster_name = auto_cluster_name
+                        # break
+                    else:
+                        app.status.auto_cluster_create_started = auto_cluster_name
+                        break
+                except Exception as e:
+                    logger.error(f"An error occurred: {e}")
+
+            app.status.state = ApplicationState.WAITING_FOR_CLUSTER_CREATION
+
+            _ = await self.api.update_application_status(
+                namespace=app.metadata.namespace, name=app.metadata.name, body=app
+            )
+            raise WaitingOnCluster("Application is waiting for a new cluster to spawn")
+
+        elif app.status.auto_cluster_create_started:
+            logger.debug("Waiting on cluster to spawn")
+            created_clusters = [
+                cluster
+                for cluster in clusters
+                if cluster.metadata.deleted is None
+                and cluster.metadata.name == app.status.auto_cluster_create_started
+            ]
+            if created_clusters and \
+               created_clusters[0].status.state == ClusterState.ONLINE:
+                return created_clusters[0]
+
+            raise WaitingOnCluster("Application is waiting for a new cluster to spawn")
+
+        elif not matching_clusters:
             raise NoClusterFound("No matching Kubernetes cluster found")
 
         # If the application already has been scheduled it might be that it
@@ -986,6 +1080,12 @@ class KubernetesApplicationHandler(Handler):
             return Stickiness(weight=0, value=0)
 
         return Stickiness(weight=self.stickiness, value=1.0)
+
+    @staticmethod
+    def auto_generate_cluster_name():
+        random_number = random.randint(1000, 9999)
+        randomized_name = f"cluster-{random_number}"
+        return randomized_name
 
 
 class KubernetesClusterHandler(Handler):
@@ -1188,6 +1288,32 @@ class KubernetesClusterHandler(Handler):
         score = sum(metric.value * metric.weight for metric in metrics) / norm
 
         return CloudScore(score=score, cloud=cloud)
+
+
+async def rank_clusters_and_clouds(self, cluster, clouds, app, clusters):
+    """Compute the combined score of the clouds and clusters based on metrics values and
+    weights.
+
+    Args:
+        cluster (krake.data.kubernetes.Cluster): Cluster object for binding
+        clouds (list[Union[Cloud, GlobalCloud]]): List of clouds for which
+            the score has to be computed.
+        app (krake.data.kubernetes.Application): Application object for binding
+        clusters (list[Cluster]): List of clusters for which the score has to be
+            computed.
+
+    Returns:
+        list[Union[CloudScore, ClusterScore]]: list of all combined scores
+
+    """
+    cloud_scores = await self.rank_clouds(cluster, clouds)
+    cluster_scores = await self.rank_kubernetes_clusters(app, clusters)
+
+    combined_scores = cloud_scores + cluster_scores
+
+    combined_scores.sort(key=lambda x: x.score, reverse=True)
+
+    return combined_scores
 
 
 class OpenstackHandler(Handler):
