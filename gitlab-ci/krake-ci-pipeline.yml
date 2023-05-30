@@ -1,0 +1,340 @@
+stages:
+  - test
+  - e2e
+  - release
+
+variables:
+  ETCD_VER: v3.3.13
+  PROMETHEUS_VER: 2.12.0
+  CFSSL_VER: 1.4.1
+  CONFLUENT_VER: "6.1"
+
+  # Change pip's cache directory to be inside the project directory since we
+  # can only cache local items.
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+workflow:
+  rules:
+    - if: $CI_MERGE_REQUEST_IID
+    - if: $CI_COMMIT_TAG
+    - if: $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
+
+# Pip's cache doesn't store the python packages
+# https://pip.pypa.io/en/stable/reference/pip_install/#caching
+cache:
+  paths:
+    - .cache/pip
+
+# Unit tests and flake8 are run on commits on branches which are not yet in a
+# merge requests (including master), on merge requests, and on scheduled
+# pipeline (night runs). Unfortunately, this configuration create duplicates
+# pipelines on merge requests. Unit tests and Flake are run twice.
+
+# It is not possible to work around this issue. See
+# https://gitlab.com/gitlab-org/gitlab-foss/issues/56632. Until workflow rules
+# are added to the gitlab CI (See MR
+# https://gitlab.com/gitlab-org/gitlab/merge_requests/18130), we have to work
+# with duplicated pipelines on merge requests.
+
+.unittests-krake-template: &unittests-krake
+  stage: test
+  artifacts:
+    paths:
+      - krake/.coverage.*
+  only:
+    - tags
+    - branches
+    - merge_requests
+    - schedules
+
+  needs:
+    - flake8-krake
+    - flake8-rok
+
+  script:
+
+    - apt-get update
+    - apt-get dist-upgrade -y
+
+    # Download etcd
+    - mkdir /tmp/etcd-download
+    - curl -s -L https://github.com/etcd-io/etcd/releases/download/$ETCD_VER/etcd-$ETCD_VER-linux-amd64.tar.gz -o /tmp/etcd.tar.gz
+    - tar xzvf /tmp/etcd.tar.gz -C /tmp/etcd-download --strip-components=1
+    - mv /tmp/etcd-download/etcd /usr/local/bin
+    - rm -rf /tmp/etcd-download /tmp/etcd.tar.gz
+    - etcd --version
+
+    # Download prometheus
+    - mkdir /tmp/prometheus-download
+    - curl -s -L  https://github.com/prometheus/prometheus/releases/download/v$PROMETHEUS_VER/prometheus-$PROMETHEUS_VER.linux-amd64.tar.gz  -o /tmp/prometheus.tar.gz
+    - tar xzvf /tmp/prometheus.tar.gz -C /tmp/prometheus-download --strip-components=1
+    - mv /tmp/prometheus-download/prometheus /usr/local/bin
+    - rm -rf /tmp/prometheus-download /tmp/prometheus.tar.gz
+    - prometheus --version
+
+    # Download cfssl
+    - curl -s -L https://github.com/cloudflare/cfssl/releases/download/v${CFSSL_VER}/cfssl_${CFSSL_VER}_linux_amd64 -o /usr/local/bin/cfssl
+    - curl -s -L https://github.com/cloudflare/cfssl/releases/download/v${CFSSL_VER}/cfssljson_${CFSSL_VER}_linux_amd64 -o /usr/local/bin/cfssljson
+    - chmod +x /usr/local/bin/cfssl /usr/local/bin/cfssljson
+    - cfssl version
+    - cfssljson --version
+
+    # Download java for Keycloak
+    # see https://github.com/docker-library/openjdk/blob/0584b2804ed12dca7c5e264b5fc55fc07a3ac148/8-jre/slim/Dockerfile#L51
+    - mkdir -p /usr/share/man/man1
+    - apt-get install -y --no-install-recommends openjdk-11-jre
+    - java --version
+
+    # Download zookeeper, kafka and ksql
+    - apt-get update
+    - apt-get install software-properties-common -y
+    - >
+      for i in {1..10}; do
+        wget -qO - https://packages.confluent.io/deb/${CONFLUENT_VER}/archive.key | apt-key add - \
+        && break \
+        || sleep 20
+      done
+    - add-apt-repository "deb [arch=amd64] https://packages.confluent.io/deb/${CONFLUENT_VER} stable main"
+    - apt-get update
+    - apt-get install zookeeper confluent-kafka confluent-ksqldb -y
+    - which zookeeper-server-start
+    - which kafka-server-start
+    - which ksql-server-start
+
+    - pip install tox
+    - tox -- --cov krake/krake --no-cov-on-fail --cov-report= --runslow krake/tests
+  tags:
+    - docker
+
+
+unittests-krake-3.7:
+  <<: *unittests-krake
+  image: python:3.7
+  variables:
+    TOXENV: py37
+    COVERAGE_FILE: krake/.coverage.py37
+
+
+unittests-krake-3.8:
+  <<: *unittests-krake
+  image: python:3.8
+  variables:
+    TOXENV: py38
+    COVERAGE_FILE: krake/.coverage.py38
+
+
+unittests-krake-3.9:
+  <<: *unittests-krake
+  image: python:3.9
+  variables:
+    TOXENV: py39
+    COVERAGE_FILE: krake/.coverage.py39
+
+
+unittests-krake-3.10:
+  <<: *unittests-krake
+  image: python:3.10
+  variables:
+    TOXENV: py310
+    COVERAGE_FILE: krake/.coverage.py310
+
+
+flake8-krake:
+  stage: test
+  image: python:3.7
+  only:
+    - tags
+    - branches
+    - merge_requests
+    - schedules
+  script:
+    - pip install flake8
+    - flake8 krake/krake
+  tags:
+    - docker
+
+
+flake8-rok:
+  stage: test
+  image: python:3.7
+  only:
+    - tags
+    - branches
+    - merge_requests
+    - schedules
+  script:
+    - pip install flake8
+    - flake8 rok/rok
+  tags:
+    - docker
+
+
+# Combine code coverage reports from previous tox runs for all different
+# Python environments. Report code coverage for Krake Python package and exit
+# with non-zero if the code coverage ratio is under 85%.
+coverage-krake:
+  stage: e2e
+  image: python:3.7
+  script:
+    - pip install coverage
+    - coverage combine krake/.coverage.*
+    - coverage report --fail-under 85
+    - coverage html
+    - tar -czvf coverage.tar.gz htmlcov
+  only:
+    - tags
+    - branches
+    - merge_requests
+    - schedules
+  artifacts:
+    paths:
+      - coverage.tar.gz
+
+# Following job are for end-to-end testing. We're provisioning the staging
+# infrastructure in the e2e-provisioning job before and run the end-to-end tests, and cleanup
+# the staging infrastructure. They are run only on the master branch, on merge
+# requests, and on scheduled pipeline (night runs)
+e2e-provisioning:
+  stage: test
+  image: registry.gitlab.com/rak-n-rok/krake/ansible_image:latest
+  only:
+    - branches #TODO:!!! remove on final
+    - master
+    - merge_requests
+    - schedules
+  needs:
+    - flake8-krake
+    - flake8-rok
+  artifacts:
+    public: false #To not expose private ssh key
+    paths:
+      - ansible/.etc/hosts-CI.json
+      - .ssh/id_rsa
+  cache: []
+  variables:
+    ANSIBLE_CONFIG: ansible/ansible.cfg
+    ANSIBLE_INVENTORY: ansible/hosts-CI
+  script:
+    # Create SSH keys for to use during the whole pipeline
+    - mkdir .ssh/
+    - openstack keypair delete my_runner_key_$CI_PIPELINE_ID || true
+    - openstack keypair create my_runner_key_$CI_PIPELINE_ID > .ssh/id_rsa
+    - chmod 600 .ssh/id_rsa
+
+    # Configure host-CI template with the CI Pipeline ID
+    - sed -i "s/\$CI_PIPELINE_ID/$CI_PIPELINE_ID/g" ansible/hosts-CI
+
+    # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
+    - chmod -v 700 ansible/
+
+    ###################################
+    ### Provision the staging infra ###
+    ###################################
+    - time ansible-playbook  ansible/network.yml
+    - time ansible-playbook  ansible/gateway.yml
+    - time ansible-parallel  ansible/k3s_cluster.yml ansible/krake.yml 
+    #- time ansible-playbook  ansible/k3s_cluster.yml 
+    #- time ansible-playbook  ansible/krake.yml 
+    - time ansible-playbook  ansible/krake_handle_certs.yml
+    #- time ansible-playbook  ansible/site.yml
+
+    ##################################################
+    ### Smoke tests + Integration test preperation ###
+    ##################################################
+    - time ansible-playbook  ansible/smoke_tests.yml
+    - time ansible-playbook  ansible/integration_tests.yml --tags prepare-tests
+
+###############################################################################
+
+e2e-tests:
+  stage: e2e
+  image: registry.gitlab.com/rak-n-rok/krake/ansible_image:latest
+  artifacts:
+    when: on_failure
+    paths:
+      - ansible/E2E_logs/krake_logs.tar.gz
+  cache: []
+  only:
+    - branches #TODO:!!! remove on final
+    - master
+    - merge_requests
+    - schedules
+  variables:
+    ANSIBLE_CONFIG: ansible/ansible.cfg
+    ANSIBLE_INVENTORY: ansible/hosts-CI
+
+  script:
+    # Configure host-CI template with the CI Pipeline ID
+    - sed -i "s/\$CI_PIPELINE_ID/$CI_PIPELINE_ID/g" ansible/hosts-CI
+
+    # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
+    - chmod -v 700 ansible/
+
+    #########################
+    ### Integration tests ###
+    #########################
+    - time ansible-playbook ansible/integration_tests.yml --tags run-tests
+
+
+e2e-cleanup:
+  stage: release
+  image: registry.gitlab.com/rak-n-rok/krake/ansible_image:latest
+  only:
+    - branches #TODO:!!! remove on final
+    - master
+    - merge_requests
+    - schedules
+  variables:
+    ANSIBLE_CONFIG: ansible/ansible.cfg
+    ANSIBLE_INVENTORY: ansible/hosts-CI
+  dependencies: [] # To prevent downloading artefacts from previous stages
+  cache: []
+  script:
+    - echo "Run script to clean up OpenStack infrastructure"
+    # Delete the runner SSH keys
+    - openstack keypair delete my_runner_key_$CI_PIPELINE_ID || true
+    # Configure host-CI template with the CI Pipeline ID
+    - sed -i "s/\$CI_PIPELINE_ID/$CI_PIPELINE_ID/g" ansible/hosts-CI
+    #################################
+    ### Cleanup the staging infra ###
+    #################################
+    - ansible-playbook ansible/unprovision.yml
+  when: always
+
+
+pypi:
+  stage: release
+  image:
+    name: python:3.10
+  before_script:
+    - pip install --upgrade twine
+    - pip install --upgrade build
+  script:
+    - cd ./krake
+    - python3 -m build
+    - python3 -m twine upload dist/*
+  only:
+    - tags
+  except:
+    - branches
+
+
+docker:
+  stage: release
+  image:
+    name: gcr.io/kaniko-project/executor:v1.9.0-debug
+    entrypoint: [""]
+  script:
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(echo -n ${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD} | base64)\"}}}" > /kaniko/.docker/config.json
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "./docker/krake/Dockerfile"
+      --destination "registry.gitlab.com/rak-n-rok/krake:${CI_COMMIT_TAG}"
+      --destination "registry.gitlab.com/rak-n-rok/krake:latest"
+  only:
+    - tags
+  except:
+    - branches

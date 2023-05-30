@@ -1,5 +1,6 @@
 - name: Launch k3s VMs
   hosts: k3s_clusters
+  strategy: free
   gather_facts: false
   tasks:
 
@@ -44,8 +45,10 @@
         private_ip: "{{ outputs.private_ip }}"
         public_ip: "{{ outputs.public_ip | default(None) }}"
 
+
 - name: Setup k3s VMs
   hosts: k3s_clusters
+  strategy: free
   # Run gather_facts (setup) manually to avoid a timing problem if the VM is
   # not booted yet
   gather_facts: false
@@ -171,6 +174,7 @@
         - ".kube"
         - ".k3s"
 
+### k3s handle cluster certs: #################################################
 
 - name: Download cluster certificates
   hosts: k3s_clusters
@@ -191,9 +195,9 @@
           set_fact:
             k3s_config_file: "{{ cat_k3s_config_result.stdout | from_yaml }}"
 
-        - name: Debug k3s cluster config
-          debug:
-            var: k3s_config_file
+        #- name: Debug k3s cluster config
+        #  debug:
+        #    var: k3s_config_file
 
         - name: Extract server_add
           set_fact:
