@@ -13,3 +13,4 @@
 - import_playbook: k3s_cluster.yml
 - import_playbook: microk8s_cluster.yml
 - import_playbook: krake.yml
+- import_playbook: krake_handle_certs.yml

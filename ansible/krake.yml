@@ -46,6 +46,7 @@
         private_ip: "{{ outputs.private_ip }}"
         public_ip: "{{ outputs.public_ip | default(None) }}"
 
+
 - name: Setup Krake VMs
   become: yes
   # Run gather_facts (setup) manually to avoid a timing problem if the VM is

@@ -1,0 +1,12 @@
+# Dockerfile for assembling the ansible images used in the ci pipeline
+
+FROM python:3.8
+
+RUN apt-get update && apt-get upgrade -y
+
+# Pre-requisites: openstack, ansible and pytest
+RUN pip install python-openstackclient openstacksdk "ansible>=2.9" pytest ansible-parallel
+RUN apt-get update -y && apt-get install openssh-client rsync -y
+COPY ./ansible/requirements.yml krake-ci/ansible/requirements.yml
+RUN chmod -v 700 krake-ci/ansible/
+RUN ansible-galaxy install -r krake-ci/ansible/requirements.yml
