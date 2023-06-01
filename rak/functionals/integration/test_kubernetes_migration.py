@@ -138,7 +138,7 @@ def test_kubernetes_migration_at_cluster_constraint_update(k8s_clusters):
     triggers migration every time, by repeating the following steps 6 times:
         3a. Update a cluster label constraints of the application to match
         the other cluster.
-        3b. sleep 20 seconds
+        3b. sleep 10 seconds
         3c. Check which cluster the application is scheduled.
         3d. Assert that the application was migrated
 
@@ -176,8 +176,8 @@ def test_kubernetes_migration_at_cluster_constraint_update(k8s_clusters):
             )
             num_updates += 1
 
-            # 3b. sleep 20 seconds
-            time.sleep(20)
+            # 3b. sleep 10 seconds
+            time.sleep(10)
 
             # 3c. Check which cluster the application is scheduled.
             running_on = app.get_running_on()

@@ -120,18 +120,18 @@ def test_shutdown_hook(k8s_clusters):
 
         # 2. Start a deployment that uses the script for the Krake hook
         app_def.create_resource()
-        app_def.check_created(delay=20)
+        app_def.check_created(delay=10)
 
-        time.sleep(30)
+        #time.sleep(30)
 
         # 3. Tell the application to shut down.
         app_def.delete_resource()
 
-        time.sleep(60)
+        #time.sleep(60)
 
         # 4. Wait for the script to send the request to the API, that the shutdown
         # is finished
-        app_def.check_deleted(delay=60)
+        app_def.check_deleted(delay=10)
 
         # 4. Delete the added configmap
         error_message = f"The configmap {configmap_name} could not be deleted."
