@@ -310,7 +310,7 @@ def test_kubernetes_observer_additional_resource(k8s_clusters):
                 run(f"{kubectl_cmd(kubeconfig_path)} create -f {file.name}")
 
             # 3. Check that the Observer did not perform anything
-            time.sleep(20)
+            time.sleep(10)
 
             # Verify the created deployments: compare the name (and numbers) of expected
             # deployments to actual ones.

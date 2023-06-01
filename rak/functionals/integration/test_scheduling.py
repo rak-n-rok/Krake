@@ -106,7 +106,7 @@ def test_create_cluster_and_app(k8s_clusters):
     # 2. Check that the application is in RUNNING state
     # (Checks 1-2 are performed automatically when entering the environment);
 
-    with Environment(environment, creation_delay=60) as env:
+    with Environment(environment, creation_delay=10) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
         # 3. Ensure that the application was scheduled to the cluster;
@@ -158,7 +158,7 @@ def test_create_on_other_namespace(k8s_clusters):
         environment,
         before_handlers=[create_namespace],
         after_handlers=[delete_namespace],
-        creation_delay=60,
+        creation_delay=10,
     ) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
@@ -182,7 +182,7 @@ def test_create_on_other_namespace(k8s_clusters):
         )
 
         # 4. Ensure no resource is left on the namespace
-        time.sleep(30)  # Wait for the namespace to leave the "Terminating" state
+        time.sleep(10)  # Wait for the namespace to leave the "Terminating" state
 
         error_message = (
             "The deployment 'echo-demo' is still present in the 'secondary' namespace"
@@ -244,7 +244,7 @@ def test_scheduler_cluster_label_constraints(k8s_clusters):
                 cluster_labels=cluster_labels,
                 app_cluster_constraints=[app_cluster_constraint],
             )
-            with Environment(environment, creation_delay=60) as env:
+            with Environment(environment, creation_delay=10) as env:
                 app = env.resources[ResourceKind.APPLICATION][0]
 
                 # 3. Ensure that the application was scheduled to the requested cluster;
@@ -329,7 +329,7 @@ def test_scheduler_clusters_with_metrics(k8s_clusters):
         # different metric weights, which results in them having different scores.
 
         environment = create_default_environment(clusters, metrics=metric_weights)
-        with Environment(environment, creation_delay=60) as env:
+        with Environment(environment, creation_delay=10) as env:
             app = env.resources[ResourceKind.APPLICATION][0]
 
             # 3. Ensure that the application was scheduled to the cluster with the
@@ -396,7 +396,7 @@ def test_scheduler_clusters_with_global_metrics(k8s_clusters):
         environment = create_default_environment(
             clusters, metrics=metric_weights, app_backoff_limit=1
         )
-        with Environment(environment, creation_delay=30) as env:
+        with Environment(environment, creation_delay=10) as env:
             app = env.resources[ResourceKind.APPLICATION][0]
 
             # 2. Ensure that the application was scheduled to the expected cluster;
@@ -471,7 +471,7 @@ def test_scheduler_clusters_with_one_metric(k8s_clusters):
                 WeightedMetric(static_metric.metric, 1)
             ]
             environment = create_default_environment(clusters, metrics=metric_weights)
-            with Environment(environment, creation_delay=60) as env:
+            with Environment(environment, creation_delay=10) as env:
                 app = env.resources[ResourceKind.APPLICATION][0]
 
                 # 2. Ensure that the app was scheduled to the cluster with the metric;
@@ -526,7 +526,7 @@ def test_scheduler_cluster_label_constraints_with_metrics(k8s_clusters):
                 cluster_labels=cluster_labels,
                 app_cluster_constraints=[app_cluster_constraint],
             )
-            with Environment(environment, creation_delay=60) as env:
+            with Environment(environment, creation_delay=10) as env:
                 app = env.resources[ResourceKind.APPLICATION][0]
 
                 # 2. Ensure that the application was scheduled to the requested cluster;
@@ -581,7 +581,7 @@ def test_scheduler_cluster_metric_constraints(k8s_clusters):
                 cluster_labels=cluster_labels,
                 app_cluster_constraints=[app_cluster_constraint],
             )
-            with Environment(environment, creation_delay=60) as env:
+            with Environment(environment, creation_delay=10) as env:
                 app = env.resources[ResourceKind.APPLICATION][0]
 
                 # 2. Ensure that the application was scheduled to the requested cluster;
@@ -629,7 +629,7 @@ def test_one_unreachable_metrics_provider(k8s_clusters):
         for i in range(num_clusters)
     }
     environment = create_default_environment(clusters, metrics=metric_weights)
-    with Environment(environment, creation_delay=60) as env:
+    with Environment(environment, creation_delay=10) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
         # 2. Ensure that the application was scheduled to the expected cluster;
@@ -706,7 +706,7 @@ def test_all_unreachable_metrics_provider(k8s_clusters):
         clusters[1]: [],
     }
     environment = create_default_environment(clusters, metrics=metric_weights)
-    with Environment(environment, creation_delay=60) as env:
+    with Environment(environment, creation_delay=10) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
         # 2. Ensure that although all metrics providers are unreachable, the scheduler
@@ -715,7 +715,7 @@ def test_all_unreachable_metrics_provider(k8s_clusters):
         running_on = app.get_running_on()
         assert running_on in clusters
 
-        time.sleep(30)
+        time.sleep(10)
 
         # 3. Ensure that the status of the cluster with metrics was updated to notify
         # the user of the failing metrics (state changed and list of reasons added).
@@ -766,7 +766,7 @@ def test_metric_not_in_database(k8s_clusters):
         [chosen_cluster], metrics=metric_weights, app_backoff_limit=1
     )
     with Environment(
-        environment, creation_delay=60, app_expected_state="FAILED"
+        environment, creation_delay=10, app_expected_state="FAILED"
     ) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
 
@@ -821,7 +821,7 @@ def test_cluster_not_online(k8s_clusters):
         app = env.resources[ResourceKind.APPLICATION][0]
 
         # 1. Sleep a short period of time
-        time.sleep(60)
+        time.sleep(10)
 
         # 2. Ensure that the application was not scheduled to the cluster
         assert app.get_state() == "FAILED"
@@ -877,7 +877,7 @@ def test_tenant_separation(k8s_clusters):
         environment,
         before_handlers=[create_namespace],
         after_handlers=[delete_namespace],
-        creation_delay=60,
+        creation_delay=10,
         app_expected_state="DEGRADED"
     ) as env:
         app = env.resources[ResourceKind.APPLICATION][0]
@@ -894,7 +894,7 @@ def test_tenant_separation(k8s_clusters):
         )
 
         # 3. Ensure no resource is left on the namespace
-        time.sleep(30)  # Wait for the namespace to leave the "Terminating" state
+        time.sleep(10)  # Wait for the namespace to leave the "Terminating" state
 
         error_message = (
             "The deployment 'echo-demo-namespaced' is still present in \
