@@ -57,9 +57,9 @@ controllers:
   # scheduler:
   #   debounce: 2.0
 
-reschedule_after: 30
+reschedule_after: 10
 stickiness: 0.1
-poll_interval: 15
+poll_interval: 1
 
 # "Complete" Hook-related parameters
 complete_hook_user: "system:complete-hook"

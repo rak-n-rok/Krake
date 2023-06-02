@@ -1,5 +1,3 @@
-### krake handle certs #################################################
-
 - name: Generate cluster config
   become: yes
   become_user: krake
@@ -65,3 +63,51 @@
         with_items: "{{ groups['k3s_clusters'] }}"
 
       when: groups['k3s_clusters'] is defined
+
+    - name: Generate k3s cluster config
+      block:
+
+      - name: Create directory to host clusters infos
+        file:
+          path: "{{ krake_homedir }}/clusters/config"
+          state: directory
+
+      - name: Upload certificates directory
+        copy:
+          src: cluster_certs/
+          dest: "{{ cert_dir }}"
+          mode: preserve
+
+      - name: Generate kube config file
+        template:
+          src: files/krake/kube_k3s_config.j2
+          dest: "{{ krake_homedir }}/clusters/config/{{ item }}"
+        vars:
+          cluster_name: "{{ item }}"
+          cluster_ip: "{{ hostvars[item]['private_ip'] }}"
+          cluster_api_port: "{{ hostvars[item]['api_port'] }}"
+        with_items: "{{ groups['k3s_clusters'] }}"
+
+      when: groups['k3s_clusters'] is defined
+
+    - name: Generate microk8s cluster config
+      block:
+
+      - name: Create directory to host clusters infos
+        file:
+          path: "{{ krake_homedir }}/clusters/config"
+          state: directory
+
+      - name: Upload certificates directory
+        copy:
+          src: cluster_certs/
+          dest: "{{ cert_dir }}"
+          mode: preserve
+
+      - name: Generate kube config file
+        template:
+          src: "cluster_certs/{{ item }}/mk8s_config.j2"
+          dest: "{{ krake_homedir }}/clusters/config/{{ item }}"
+        with_items: "{{ groups['microk8s_clusters'] }}"
+
+      when: groups['microk8s_clusters'] is defined

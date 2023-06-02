@@ -7,7 +7,7 @@ variables:
   ETCD_VER: v3.3.13
   PROMETHEUS_VER: 2.12.0
   CFSSL_VER: 1.4.1
-  CONFLUENT_VER: "6.1"
+  CONFLUENT_VER: "7.0"
 
   # Change pip's cache directory to be inside the project directory since we
   # can only cache local items.
@@ -49,11 +49,6 @@ cache:
     - branches
     - merge_requests
     - schedules
-
-  needs:
-    - flake8-krake
-    - flake8-rok
-
   script:
 
     - apt-get update
@@ -85,7 +80,7 @@ cache:
     # Download java for Keycloak
     # see https://github.com/docker-library/openjdk/blob/0584b2804ed12dca7c5e264b5fc55fc07a3ac148/8-jre/slim/Dockerfile#L51
     - mkdir -p /usr/share/man/man1
-    - apt-get install -y --no-install-recommends openjdk-11-jre
+    - apt-get install -y --no-install-recommends openjdk-17-jre || dpkg --configure -a
     - java --version
 
     # Download zookeeper, kafka and ksql
@@ -98,11 +93,20 @@ cache:
         || sleep 20
       done
     - add-apt-repository "deb [arch=amd64] https://packages.confluent.io/deb/${CONFLUENT_VER} stable main"
+    # Manually insert this part into sources.list, since it won't show up otherwise
+    - echo "deb [arch=amd64] https://packages.confluent.io/deb/7.0 stable main" >> /etc/apt/sources.list
     - apt-get update
     - apt-get install zookeeper confluent-kafka confluent-ksqldb -y
     - which zookeeper-server-start
     - which kafka-server-start
     - which ksql-server-start
+
+    # This is hopefully only temporary, because Gitlab now uses Debian 12 for its runners, which messed with our
+    # pipeline, due to changes in the packages / package lists
+    - sed -i -e 's/ -XX:+UseConcMarkSweepGC//g' /bin/ksql-run-class
+    - sed -i -e 's/ -XX:+CMSClassUnloadingEnabled//g' /bin/ksql-run-class
+    - sed -i -e 's/ -XX:+CMSScavengeBeforeRemark//g' /bin/ksql-run-class
+    - sed -i -e 's/ -XX:+ExplicitGCInvokesConcurrent//g' /bin/ksql-run-class
 
     - pip install tox
     - tox -- --cov krake/krake --no-cov-on-fail --cov-report= --runslow krake/tests
@@ -140,6 +144,14 @@ unittests-krake-3.10:
   variables:
     TOXENV: py310
     COVERAGE_FILE: krake/.coverage.py310
+
+
+unittests-krake-3.11:
+  <<: *unittests-krake
+  image: python:3.11
+  variables:
+    TOXENV: py311
+    COVERAGE_FILE: krake/.coverage.py311
 
 
 flake8-krake:
@@ -193,6 +205,7 @@ coverage-krake:
     paths:
       - coverage.tar.gz
 
+
 # Following job are for end-to-end testing. We're provisioning the staging
 # infrastructure in the e2e-provisioning job before and run the end-to-end tests, and cleanup
 # the staging infrastructure. They are run only on the master branch, on merge
@@ -201,7 +214,6 @@ e2e-provisioning:
   stage: test
   image: registry.gitlab.com/rak-n-rok/krake/ansible_image:latest
   only:
-    - branches #TODO:!!! remove on final
     - master
     - merge_requests
     - schedules
@@ -233,23 +245,19 @@ e2e-provisioning:
     ###################################
     ### Provision the staging infra ###
     ###################################
-    - time ansible-playbook  ansible/network.yml
-    - time ansible-playbook  ansible/gateway.yml
-    - time ansible-parallel  ansible/k3s_cluster.yml ansible/krake.yml 
-    #- time ansible-playbook  ansible/k3s_cluster.yml 
-    #- time ansible-playbook  ansible/krake.yml 
-    - time ansible-playbook  ansible/krake_handle_certs.yml
-    #- time ansible-playbook  ansible/site.yml
+    - ansible-playbook  ansible/network.yml
+    - ansible-playbook  ansible/gateway.yml
+    - ansible-parallel  ansible/microk8s_cluster.yml ansible/krake.yml 
+    - ansible-playbook  ansible/krake_handle_certs.yml
 
     ##################################################
     ### Smoke tests + Integration test preperation ###
     ##################################################
-    - time ansible-playbook  ansible/smoke_tests.yml
-    - time ansible-playbook  ansible/integration_tests.yml --tags prepare-tests
+    - ansible-playbook  ansible/smoke_tests.yml
+    - ansible-playbook  ansible/integration_tests.yml --tags prepare-tests --skip-tags always
 
-###############################################################################
 
-e2e-tests:
+e2e-test-apps:
   stage: e2e
   image: registry.gitlab.com/rak-n-rok/krake/ansible_image:latest
   artifacts:
@@ -258,32 +266,53 @@ e2e-tests:
       - ansible/E2E_logs/krake_logs.tar.gz
   cache: []
   only:
-    - branches #TODO:!!! remove on final
     - master
     - merge_requests
     - schedules
   variables:
     ANSIBLE_CONFIG: ansible/ansible.cfg
     ANSIBLE_INVENTORY: ansible/hosts-CI
-
   script:
     # Configure host-CI template with the CI Pipeline ID
     - sed -i "s/\$CI_PIPELINE_ID/$CI_PIPELINE_ID/g" ansible/hosts-CI
-
     # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
     - chmod -v 700 ansible/
-
     #########################
     ### Integration tests ###
     #########################
-    - time ansible-playbook ansible/integration_tests.yml --tags run-tests
+    - ansible-playbook ansible/integration_tests.yml --tags "krake_with_clusters" --limit krake-$CI_PIPELINE_ID-app
+
+
+e2e-test-im:
+  stage: e2e
+  image: registry.gitlab.com/rak-n-rok/krake/ansible_image:latest
+  artifacts:
+    when: on_failure
+    paths:
+      - ansible/E2E_logs/krake_logs.tar.gz
+  cache: []
+  only:
+    - master
+    - merge_requests
+    - schedules
+  variables:
+    ANSIBLE_CONFIG: ansible/ansible.cfg
+    ANSIBLE_INVENTORY: ansible/hosts-CI
+  script:
+    # Configure host-CI template with the CI Pipeline ID
+    - sed -i "s/\$CI_PIPELINE_ID/$CI_PIPELINE_ID/g" ansible/hosts-CI
+    # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
+    - chmod -v 700 ansible/
+    #########################
+    ### Integration tests ###
+    #########################
+    - time ansible-playbook ansible/integration_tests.yml --tags "krake_im" --limit krake-$CI_PIPELINE_ID-im
 
 
 e2e-cleanup:
   stage: release
   image: registry.gitlab.com/rak-n-rok/krake/ansible_image:latest
   only:
-    - branches #TODO:!!! remove on final
     - master
     - merge_requests
     - schedules

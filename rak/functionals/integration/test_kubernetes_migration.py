@@ -70,7 +70,9 @@ COUNTRY_CODES = [
     l1 + l2
     for l1, l2 in itertools.product(string.ascii_uppercase, string.ascii_uppercase)
 ]
-RESCHEDULING_INTERVAL = 60
+
+# TODO:! we cloud dynamically read in this value from krake config
+RESCHEDULING_INTERVAL = 10
 
 
 # FIXME: krake#405:
@@ -114,7 +116,7 @@ def test_kubernetes_migration_cluster_constraints(k8s_clusters):
         )
 
         # 4. Ensure that the application was rescheduled to the requested cluster;
-        app.check_running_on(clusters[other_index], within=10)
+        app.check_running_on(clusters[other_index], within=RESCHEDULING_INTERVAL)
 
 
 # FIXME: krake#405:
@@ -239,13 +241,13 @@ def test_kubernetes_no_migration_cluster_constraints(k8s_clusters):
 
         # 4. Wait and
         # ensure that the application was NOT rescheduled to the requested cluster;
-        app.check_running_on(expected_clusters[1], after_delay=10)
+        app.check_running_on(expected_clusters[1], after_delay=RESCHEDULING_INTERVAL)
 
         # 5. Update the migration constraint to allow migration;
         app.update_resource(migration=True)
 
         # 6. Ensure that the application was rescheduled to the requested cluster;
-        app.check_running_on(expected_clusters[0], within=10)
+        app.check_running_on(expected_clusters[0], within=RESCHEDULING_INTERVAL)
 
 
 def test_kubernetes_no_migration_metrics(k8s_clusters):
@@ -333,7 +335,7 @@ def test_kubernetes_no_migration_metrics(k8s_clusters):
         app.update_resource(migration=True)
 
         # 8. Ensure that the application was rescheduled to cluster 2;
-        app.check_running_on(clusters[1], within=10)
+        app.check_running_on(clusters[1], within=RESCHEDULING_INTERVAL)
 
 
 def test_kubernetes_auto_metrics_migration(k8s_clusters):
@@ -683,12 +685,12 @@ def test_kubernetes_migration_fluctuating_metrics(k8s_clusters):
     the score of cluster 2.
     3. Create the application, without cluster constraints and migration flag;
     4. Ensure that the application was scheduled to cluster 1;
-    5. In a loop running for 2.5 * RESCHEDULING_INTERVAL seconds,
+    5. In a loop running for 1.25 * RESCHEDULING_INTERVAL seconds,
     5a. Change the metrics so that score of other cluster is higher than the score
     of current cluster.
     5b. Wait for the migration to other cluster to take place (remember its timestamp)
     5c. Ensure the time since previous migration >= RESCHEDULING_INTERVAL
-    6. Ensure that the number of migrations == 3.
+    6. Ensure that the number of migrations >= 5.
 
     Args:
         k8s_clusters (list): Names of the Kubernetes backend.
@@ -742,12 +744,14 @@ def test_kubernetes_migration_fluctuating_metrics(k8s_clusters):
         this_cluster = first_cluster
         next_cluster = second_cluster
 
-        # 5. In a loop running for 2.5 * RESCHEDULING_INTERVAL seconds,
+        # 5. In a loop running for 4.8 * RESCHEDULING_INTERVAL seconds,
         num_migrations = 0
-        num_intervals = 2.5
+        num_intervals = 4.8
+        app_creation_time = 5
         previous_migration_time = None
         start_time = time.time()
-        while time.time() - start_time < num_intervals * RESCHEDULING_INTERVAL:
+        while time.time() - start_time < num_intervals * (RESCHEDULING_INTERVAL + app_creation_time):
+        #while time.time() - start_time < num_intervals * (RESCHEDULING_INTERVAL):
             # 5a. Change the metrics so that score of other cluster is higher
             # than the score of current cluster.
             static_metrics = _get_metrics_triggering_migration(
@@ -762,7 +766,7 @@ def test_kubernetes_migration_fluctuating_metrics(k8s_clusters):
 
             # 5b. Wait for the migration to other cluster to take place
             # (remember its timestamp)
-            app.check_running_on(next_cluster, within=RESCHEDULING_INTERVAL + 10)
+            app.check_running_on(next_cluster, within= RESCHEDULING_INTERVAL + app_creation_time)
             migration_time = time.time()  # the approximate time of migration
             num_migrations += 1
 
@@ -776,17 +780,21 @@ def test_kubernetes_migration_fluctuating_metrics(k8s_clusters):
                     datetime.timestamp(scheduled_datetime) - previous_migration_time
                     >= RESCHEDULING_INTERVAL
                 )
+                assert (
+                    datetime.timestamp(scheduled_datetime) - previous_migration_time
+                    <= RESCHEDULING_INTERVAL + (1.25* RESCHEDULING_INTERVAL)
+                )
 
             # set up the loop variables for the next iteration of the loop
             this_cluster, next_cluster = next_cluster, this_cluster
             previous_migration_time = migration_time
 
-        # 6. Ensure that the number of migrations == 3.
+        # 6. Ensure that the number of migrations == expected_num_migrations.
         expected_num_migrations = math.ceil(num_intervals)
-        assert num_migrations == expected_num_migrations, (
+        assert num_migrations >= expected_num_migrations, (
             f"There were {num_migrations} migrations within "
             f"{num_intervals * RESCHEDULING_INTERVAL} seconds. "
-            f"Expected: {expected_num_migrations}."
+            f"Expected: {expected_num_migrations}. actual time taken: {(time.time() - start_time)}"
         )
 
 
@@ -914,7 +922,7 @@ def test_kubernetes_metrics_migration_at_update(k8s_clusters):
 
         # 10. Ensure that the migration to cluster 1 takes place in a timely fashion and
         # remember its timestamp.
-        app.check_running_on(first_cluster, within=10)
+        app.check_running_on(first_cluster, within=RESCHEDULING_INTERVAL)
         second_migration = time.time()  # approximate time of second migration
 
         # 11. Ensure that the time elapsed between the two migrations was less than

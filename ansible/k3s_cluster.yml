@@ -174,7 +174,6 @@
         - ".kube"
         - ".k3s"
 
-### k3s handle cluster certs: #################################################
 
 - name: Download cluster certificates
   hosts: k3s_clusters
@@ -194,10 +193,6 @@
         - name: Parse k3s config yaml into variable
           set_fact:
             k3s_config_file: "{{ cat_k3s_config_result.stdout | from_yaml }}"
-
-        #- name: Debug k3s cluster config
-        #  debug:
-        #    var: k3s_config_file
 
         - name: Extract server_add
           set_fact:
