@@ -116,6 +116,17 @@
     - name: Run Krake Integration tests
       block:
 
+        - name: Remove Krake infrastructure with IM
+          docker_compose:
+            project_src: "{{ git_dir }}/docker"
+            files:
+              #- "{{ git_dir }}/docker/krake/docker-compose.yaml"
+              #- "{{ git_dir }}/docker/prometheus/docker-compose.yaml"
+              - "{{ git_dir }}/docker/im/docker-compose.yaml"
+            state: absent
+          tags:
+            - krake_with_clusters
+
         - name: Install Tests dependencies
           pip:
             name: "{{ git_dir }}/rak/[test]"
@@ -124,26 +135,137 @@
             extra_args: --user
           tags:
             - always
+            - krake_im
+            - krake_with_clusters
+
+        - name: reset ssh connection
+          meta: reset_connection
+          tags:
+            - always
+            - krake_im
+            - krake_with_clusters
+
+#DEBUG krake user does not find 'pytest' with ansible ??? #TODO!!! remove on final !!!
+        - name: Read in folder
+          tags:
+            - always
+          ansible.builtin.shell: "ls -al /home/krake/git/krake/rak/functionals/integration/"
+          register: result
+        - name: Debug folder
+          tags:
+            - always
+          debug: 
+            var: result.stdout_lines
+
+        - name: Read whoami
+          tags:
+            - always
+          command: "whoami"
+          register: result_hostname
+        - name: Debug var
+          tags:
+            - always
+          debug: 
+            var: result_hostname.stdout_lines
+
+        #~ - name: Read ip address
+          #~ tags:
+            #~ - always
+          #~ command: "ip a s"
+          #~ register: result_ip
+        #~ - name: Debug folder
+          #~ tags:
+            #~ - always
+          #~ debug: 
+            #~ var: result_ip.stdout_lines
+
+        - name: Read in pip
+          tags:
+            - always
+          command: "pip3 list"
+          register: result_pip
+        - name: Debug var
+          tags:
+            - always
+          debug: 
+            var: result_pip.stdout_lines
+
+        - name: Is python there ?
+          tags:
+            - always
+          shell: "which python3"
+          register: result_py
+        - name: Debug folder
+          tags:
+            - always
+          debug: 
+            var: result_py.stdout_lines
+
+
+        - name: Read in pytest version_2
+          tags:
+            - always
+          shell: "python3 -m pytest --version"
+          register: result_pytest_version
+        - name: Debug folder
+          tags:
+            - always
+          debug: 
+            var: result_pytest_version
+
+        #~ - name: Read in pytest version_1
+          #~ tags:
+            #~ - always
+          #~ command: "pytest --version"
+          #~ register: result_pytest_version
+        #~ - name: Debug folder
+          #~ tags:
+            #~ - always
+          #~ debug: 
+            #~ var: result_pytest_version
+
+        #~ - name: Test rok
+          #~ tags:
+            #~ - always
+          #~ shell: "rok kube cluster list"
+          #~ register: result_rok
+        #~ - name: Debug rok
+          #~ tags:
+            #~ - always
+          #~ debug: 
+            #~ var: result_rok
+
+
+
+###############################################################################
+
+
 
         - name: Run integration tests for the core resources
-          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_core.py"
+          command: "python3 -m pytest {{ git_dir }}/{{test_dir}}/integration/test_core.py"
           tags:
             - test_core
+            - krake_im
 
         - name: Run integration tests for the infrastructure resources
-          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_infrastructure_resources.py"
+          command: "python3 -m pytest {{ git_dir }}/{{test_dir}}/integration/test_infrastructure_resources.py"
           tags:
             - test_infrastructure_resources
+            - krake_im
 
         - name: Run integration tests for the CRUD operations of actual k8s cluster
-          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_kubernetes_cluster.py --im_container {{ im_host }} --im_container_port {{ im_port }} --os_auth_url {{ os_auth_url }} --os_project_name {{ os_project_name }} --os_username {{ os_username }} --os_password {{ os_password }}"
+          command: "python3 -m pytest {{ git_dir }}/{{test_dir}}/integration/test_kubernetes_cluster.py --im_container {{ im_host }} --im_container_port {{ im_port }} --os_auth_url {{ os_auth_url }} --os_project_name {{ os_project_name }} --os_username {{ os_username }} --os_password {{ os_password }}"
           tags:
             - test_kubernetes_cluster
+            - krake_im
+
+
 
 
         - name: Generate k8s cluster list
           tags:
-            - always  
+            - always
+            - krake_with_clusters  
           block:
 
             - name: Inital k8s cluster list  
@@ -176,39 +298,46 @@
         #    tasks_from: debug_krake_resources
 
         - name: Run integration tests for the scheduling algorithm
-          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_scheduling.py --k8sclusters {{ k8s_clusters[0] }} {{ k8s_clusters[1] }}"
+          command: "python3 -m pytest {{ git_dir }}/{{test_dir}}/integration/test_scheduling.py --k8sclusters {{ k8s_clusters[0] }} {{ k8s_clusters[1] }}"
           tags:
             - test_scheduling
+            - krake_with_clusters
 
         - name: Run integration tests for the migration of kubernetes applications
-          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_kubernetes_migration.py --k8sclusters {{ k8s_clusters[0] }} {{ k8s_clusters[1] }}"
+          command: "python3 -m pytest {{ git_dir }}/{{test_dir}}/integration/test_kubernetes_migration.py --k8sclusters {{ k8s_clusters[0] }} {{ k8s_clusters[1] }}"
           tags:
             - test_kubernetes_migration
+            - krake_with_clusters
 
         - name: Run integration tests for the Krake k8s resources update
-          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_update.py --k8sclusters {{ k8s_clusters[0] }} {{ k8s_clusters[1] }}"
+          command: "python3 -m pytest {{ git_dir }}/{{test_dir}}/integration/test_update.py --k8sclusters {{ k8s_clusters[0] }} {{ k8s_clusters[1] }}"
           tags:
             - test_update
+            - krake_with_clusters
 
         - name: Run integration tests for the Kubernetes Observer
-          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_kubernetes_observer.py --k8sclusters {{ k8s_clusters[0] }} {{ k8s_clusters[1] }}"
+          command: "python3 -m pytest {{ git_dir }}/{{test_dir}}/integration/test_kubernetes_observer.py --k8sclusters {{ k8s_clusters[0] }} {{ k8s_clusters[1] }}"
           tags:
             - test_kubernetes_observer
+            - krake_with_clusters
 
         - name: Run integration tests for the hooks
-          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_hooks.py --k8sclusters {{ k8s_clusters[0] }} {{ k8s_clusters[1] }}"
+          command: "python3 -m pytest {{ git_dir }}/{{test_dir}}/integration/test_hooks.py --k8sclusters {{ k8s_clusters[0] }} {{ k8s_clusters[1] }}"
           tags:
             - test_hooks
+            - krake_with_clusters
 
         - name: Run integration tests for krake scripts
-          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_scripts.py --krake_container {{ api_host }} --etcd_container {{ etcd_host }} --etcd_container_port {{ etcd_port }}"
+          command: "python3 -m pytest {{ git_dir }}/{{test_dir}}/integration/test_scripts.py --krake_container {{ api_host }} --etcd_container {{ etcd_host }} --etcd_container_port {{ etcd_port }}"
           tags:
             - test_scripts
+            - krake_with_clusters
 
         - name: Run application example tests for krake
-          command: "pytest -s {{ git_dir }}/{{test_dir}}/integration/test_example_applications.py --k8sclusters {{ k8s_clusters[0] }} {{ k8s_clusters[1] }}"
+          command: "python3 -m pytest -s {{ git_dir }}/{{test_dir}}/integration/test_example_applications.py --k8sclusters {{ k8s_clusters[0] }} {{ k8s_clusters[1] }}"
           tags:
             - test_example_applications
+            - krake_with_clusters
           register: app_out
         - debug: msg="{{ app_out.stdout }}"
 
