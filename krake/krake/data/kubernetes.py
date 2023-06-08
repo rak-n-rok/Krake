@@ -671,6 +671,7 @@ class ClusterSpec(Serializable):
     # FIXME needs further discussion how to register stand-alone kubernetes cluster as
     #  a cluster which should be processed by krake.controller.scheduler
     metrics: List[MetricRef] = field(default_factory=list)
+    inherit_metrics: bool = field(default=False)
     backoff: int = field(default=1)
     backoff_delay: int = field(default=1)
     backoff_limit: int = field(default=-1)
@@ -792,7 +793,7 @@ class ClusterStatus(Status):
         running_on (ResourceRef): Reference to the cloud where the
             cluster is running.
         retries (int): Count of remaining retries to access the cluster. Is set
-            via the Attribute backoff in in ClusterSpec.
+            via the Attribute backoff in ClusterSpec.
     """
 
     kube_controller_triggered: datetime = None

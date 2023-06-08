@@ -343,8 +343,7 @@ class InfrastructureController(Controller):
 
         infrastructure_uuid = await provider.create(cluster)
 
-        # Save the infrastructure ID given by the provider as a
-        # cluster ID.
+        # Save the infrastructure ID given by the provider as a cluster ID.
         cluster.status.cluster_id = infrastructure_uuid
         cluster.status.running_on = cluster.status.scheduled_to
         cluster.status.last_applied_tosca = copy.deepcopy(cluster.spec.tosca)

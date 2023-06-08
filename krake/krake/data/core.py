@@ -236,6 +236,7 @@ class Metadata(Serializable):
         metadata={"immutable": True, "validate": _validate_resource_namespace},
     )
     labels: dict = field(default_factory=dict, metadata={"validate": _validate_labels})
+    inherit_labels: bool = field(default=False)
     finalizers: List[str] = field(default_factory=list)
 
     uid: str = field(metadata={"readonly": True})

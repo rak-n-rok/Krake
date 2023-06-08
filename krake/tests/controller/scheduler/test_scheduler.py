@@ -425,7 +425,7 @@ def test_kubernetes_match_cluster_metric_constraints():
         ]
     }
 
-    assert match_cluster_constraints(app, cluster, fetched_metrics)
+    assert match_cluster_constraints(app, cluster, fetched_metrics=fetched_metrics)
 
 
 def test_kubernetes_not_match_cluster_metrics_constraints():
@@ -450,7 +450,7 @@ def test_kubernetes_not_match_cluster_metrics_constraints():
             )
         ]
     }
-    assert not match_cluster_constraints(app, cluster, fetched_metrics)
+    assert not match_cluster_constraints(app, cluster, fetched_metrics=fetched_metrics)
 
 
 def test_kubernetes_match_empty_cluster_constraints():

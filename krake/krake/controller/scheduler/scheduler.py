@@ -3,6 +3,7 @@ from datetime import timedelta
 import logging
 import random
 from typing import NamedTuple, Union
+from copy import deepcopy
 
 from functools import total_ordering
 from aiohttp import ClientError
@@ -193,6 +194,7 @@ class Scheduler(Controller):
             self.queue,
             self.kubernetes_api,
             self.core_api,
+            self.infrastructure_api,
             self.stickiness,
             self.reschedule_after,
         )
@@ -517,9 +519,12 @@ class Handler(object):
 
 
 class KubernetesApplicationHandler(Handler):
-    def __init__(self, client, queue, api, core_api, stickiness, reschedule_after):
+    def __init__(self, client, queue, api, core_api, infrastructure_api,
+                 stickiness, reschedule_after):
 
         super(KubernetesApplicationHandler, self).__init__(client, queue, api, core_api)
+
+        self.infrastructure_api = infrastructure_api
 
         self.stickiness = stickiness
         self.reschedule_after = reschedule_after
@@ -734,22 +739,82 @@ class KubernetesApplicationHandler(Handler):
             and cluster.status.state is ClusterState.ONLINE
         )
 
-        possible_clusters = []
+        # possible_clusters = []
+
+        filtered_clusters = dict()
 
         fetched_metrics = dict()
         for cluster in clusters:
-            possible_clusters.append(cluster)
-            if cluster.spec.metrics:
-                async for metrics in self.fetch_metrics(cluster, cluster.spec.metrics):
-                    fetched_metrics[cluster.metadata.name] = metrics
+            # possible_clusters.append(cluster)
+            cluster_copy = deepcopy(cluster)
+            cluster_metrics = []
+            if cluster_copy.spec.metrics:
+                cluster_metrics = cluster.spec.metrics
 
-        logger.debug(f"App {app.metadata.name}: possible clusters: {possible_clusters}")
+            if ((cluster_copy.spec.inherit_metrics or
+                 cluster_copy.spec.constraints.cloud.metrics) or
+                (cluster_copy.metadata.inherit_labels or
+                 cluster_copy.spec.constraints.cloud.labels)) \
+               and cluster_copy.status.scheduled_to:
+
+                if cluster_copy.status.scheduled_to.namespace:
+                    cloud = await self.infrastructure_api.read_cloud(
+                        name=cluster_copy.status.scheduled_to.name,
+                        namespace=cluster_copy.status.scheduled_to.namespace,
+                    )
+                else:
+                    cloud = await self.infrastructure_api.read_global_cloud(
+                        name=cluster_copy.status.scheduled_to.name,
+                    )
+
+                if cluster_copy.metadata.inherit_labels:
+                    cluster_copy.metadata.labels = \
+                        {**cluster_copy.metadata.labels, **cloud.metadata.labels}
+                if cluster.spec.constraints.cloud.labels:
+                    label_dict = dict()
+                    for constraint in cluster.spec.constraints.cloud.metrics:
+                        for label in cloud.metadata.labels:
+                            if constraint.value == label:
+                                label_dict = {**label_dict,
+                                              **{label: cloud.metadata.labels[label]}}
+                    cluster_copy.metadata.labels = \
+                        {**cluster_copy.metadata.labels, **label_dict}
+
+                if cluster_copy.spec.inherit_metrics:
+                    cluster_metrics = list(set(
+                        cluster_metrics +
+                        cloud.spec.__getattribute__(cloud.spec.type).metrics
+                    ))
+                if cluster.spec.constraints.cloud.metrics:
+                    metric_list = list()
+                    for constraint in cluster.spec.constraints.cloud.metrics:
+                        for metric in cloud.spec.__getattribute__(
+                            cloud.spec.type
+                        ).metrics:
+                            if constraint.value == metric.name:
+                                metric_list.append(metric)
+                    cluster_metrics = list(set(
+                        cluster_metrics + metric_list
+                    ))
+
+            cluster_copy.spec.metrics = cluster_metrics
+
+            if cluster_copy.spec.metrics:
+                async for metrics in self.fetch_metrics(cluster, cluster_metrics):
+                    fetched_metrics[cluster.metadata.name] = metrics
+            filtered_clusters[cluster.metadata.name] = cluster_copy
+
+        logger.debug(
+            f"App {app.metadata.name}: possible clusters: {filtered_clusters}"
+        )
         logger.debug(f"App {app.metadata.name}: fetched metrics: {fetched_metrics}")
 
-        matching_clusters = [
-            cluster for cluster in existing_clusters
-            if match_cluster_constraints(app, cluster, fetched_metrics)
-        ]
+        matching_clusters = []
+        for cluster in existing_clusters:
+            if match_cluster_constraints(
+                app, filtered_clusters[cluster.metadata.name], fetched_metrics
+            ):
+                matching_clusters.append(cluster)
 
         logger.debug(f"App {app.metadata.name}: matching cluster: {matching_clusters}")
 
@@ -793,7 +858,7 @@ class KubernetesApplicationHandler(Handler):
                 if app_recently_scheduled:
                     return current
 
-        # Partition list if matching clusters into a list if clusters with
+        # Partition list of matching clusters into a list of clusters with
         # metrics and without metrics. Clusters with metrics are preferred
         # over clusters without metrics.
         with_metrics = [cluster for cluster in matching_clusters
@@ -830,11 +895,46 @@ class KubernetesApplicationHandler(Handler):
             list[ClusterScore]: list of all cluster's score
 
         """
-        return [
-            self.calculate_kubernetes_cluster_score(metrics, cluster, app)
-            for cluster in clusters
-            async for metrics in self.fetch_metrics(cluster, cluster.spec.metrics)
-        ]
+        scores = list()
+
+        for cluster in clusters:
+            cluster_metrics = cluster.spec.metrics
+            if (cluster.spec.inherit_metrics or
+                cluster.spec.constraints.cloud.metrics) and \
+               cluster.status.scheduled_to:
+                if cluster.status.scheduled_to.namespace:
+                    cloud = await self.infrastructure_api.read_cloud(
+                        name=cluster.status.scheduled_to.name,
+                        namespace=cluster.status.scheduled_to.namespace,
+                    )
+                else:
+                    cloud = await self.infrastructure_api.read_global_cloud(
+                        name=cluster.status.scheduled_to.name,
+                    )
+
+                if cluster.spec.inherit_metrics:
+                    cluster_metrics = list(set(
+                        cluster_metrics +
+                        cloud.spec.__getattribute__(cloud.spec.type).metrics
+                    ))
+
+                if cluster.spec.constraints.cloud.metrics:
+                    metric_list = list()
+                    for constraint in cluster.spec.constraints.cloud.metrics:
+                        for metric in cloud.spec.__getattribute__(
+                            cloud.spec.type
+                        ).metrics:
+                            if constraint.value == metric.name:
+                                metric_list.append(metric)
+                    cluster_metrics = list(set(
+                        cluster_metrics + metric_list
+                    ))
+            async for metrics in self.fetch_metrics(cluster, cluster_metrics):
+                scores.append(
+                    self.calculate_kubernetes_cluster_score(metrics, cluster, app)
+                )
+
+        return scores
 
     def calculate_kubernetes_cluster_score(self, metrics, cluster, app):
         """Calculate weighted sum of metrics values.
