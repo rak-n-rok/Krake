@@ -67,6 +67,11 @@ all:
         k3s-cluster-1:
           name: k3s1
           network: krake-network
+    microk8s_clusters:
+      hosts:
+        microk8s-cluster-1:
+          name: k8s1
+          network: krake-network
 
     krake_apps:
       hosts:
