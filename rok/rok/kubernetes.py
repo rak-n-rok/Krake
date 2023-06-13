@@ -1010,7 +1010,7 @@ def get_cluster(config, session, namespace, name):
         if data['spec']['constraints']['cloud']['labels']:
             for constraint in cluster['spec']['constraints']['cloud']['metrics']:
                 for label in cloud['metadata']['labels']:
-                    if constraint.value == label:
+                    if label in constraint:
                         inherited_labels[label] = cloud['metadata']['labels'][label]
         data['metadata']['labels'] = {**data['metadata']['labels'], **inherited_labels}
 
@@ -1023,7 +1023,7 @@ def get_cluster(config, session, namespace, name):
         if data['spec']['constraints']['cloud']['metrics']:
             for constraint in data['spec']['constraints']['cloud']['metrics']:
                 for metric in cloud['spec'][cloud['spec']['type']]['metrics']:
-                    if constraint['value'] == metric["name"]:
+                    if metric["name"] in constraint:
                         metric["inherited"] = True
                         inherited_metrics.append(metric)
 

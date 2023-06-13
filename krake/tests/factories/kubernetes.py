@@ -535,15 +535,6 @@ class ClusterStatusFactory(Factory):
         if self.state == ClusterState.PENDING:
             return None
 
-        if self.factory_parent:
-            namespace = self.factory_parent.metadata.namespace
-        else:
-            namespace = fuzzy_name()
-        name = fuzzy_name()
-        return ResourceRef(
-            api="infrastructure", kind="Cloud", name=name, namespace=namespace
-        )
-
     @lazy_attribute
     def running_on(self):
         if self.state == ClusterState.PENDING:

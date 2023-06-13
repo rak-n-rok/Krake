@@ -106,6 +106,9 @@ create
     ``-n | --namespace`` (optional):
         The namespace to which the Cluster has to be added. If none is given, the user namespace is selected.
 
+  	``--inherit-metrics`` (optional):
+		Enables inheritance of all metrics from the cloud the cluster is scheduled to.
+
     ``--global-metric`` (optional):
         The name and weight of a global cluster metric in the form: ``<name> <weight>``.
         Can be specified multiple times.
@@ -114,6 +117,9 @@ create
         The name and weight of a cluster metric in the form: ``<name> <weight>``.
         Can be specified multiple times.
 
+  	``--inherit-labels`` (optional):
+  		Enables inheritance of all labels from the cloud the cluster is scheduled to.
+  	
     ``-l | --label`` (optional):
         The key and the value of a cluster label in the form: ``<key>=<value>``.
         Can be specified multiple times.

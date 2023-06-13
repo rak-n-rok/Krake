@@ -64,6 +64,57 @@ Create ``my-cluster`` cluster with a `location` LabelConstraints, and observe wh
 
     You can observe the scheduler logs in `DEBUG` mode to gather additional understanding of the scheduling mechanism.
 
+Label inheritance for Clusters
+==============================
+
+Krake allows to inherit labels from a cloud to a cluster. To do this, either the ``--inherit-labels`` flag must be specified during creation or
+LabelConstraints should be used by the cluster, which would automatically mean, that specific labels would apply to the cluster, if the cluster runs on a registered Cloud resource.
+
+.. prompt:: bash $ auto
+
+    rok kube cluster create -f git/krake/rak/functionals/im-cluster.yaml my-cluster --inherit-labels
+    
+If this cluster is now observed, the inherited labels should be visible in the output. These labels are considered during scheduling like normal labels, which are directly attached to a cluster.
+Inherited labels are marked accordingly.
+
+.. prompt:: bash $ auto
+
+    $ rok kube cluster get my-cluster
+	+-----------------------+-----------------------------------------------------------------------------------------------+
+	| name                  | my-cluster                                                                                	|
+	| namespace             | system:admin                                                                              	|
+	| labels                | location: DE (inherited)                                                                  	|
+	| state                 | RUNNING                                                                                 	 	|
+	| reason                | None                                                                                      	|
+	| custom_resources      | []                                                                                        	|
+	| metrics               | []																							|
+	| failing_metrics       | None                                                                                      	|
+	| label constraints     | []                                                                                        	|
+	| metric constraints    | []                                                                                     	    |
+	| scheduled_to          | {'name': 'os-cloud-1', 'api': 'infrastructure', 'namespace': 'system:admin', 'kind': 'Cloud'} |
+	| running_on            | {'name': 'os-cloud-1', 'api': 'infrastructure', 'namespace': 'system:admin', 'kind': 'Cloud'} |
+	+-----------------------+-----------------------------------------------------------------------------------------------+
+
+A similar output can be observed, if a label constraint is defined for the cluster.
+
+.. prompt:: bash $ auto
+
+    $ rok kube cluster get my-cluster
+	+-----------------------+-----------------------------------------------------------------------------------------------+
+	| name                  | my-cluster                                                                                	|
+	| namespace             | system:admin                                                                              	|
+	| labels                | location: DE (inherited)                                                                  	|
+	| state                 | RUNNING                                                                                 	 	|
+	| reason                | None                                                                                      	|
+	| custom_resources      | []                                                                                        	|
+	| metrics               | []																							|
+	| failing_metrics       | None                                                                                      	|
+	| label constraints     | ['location=DE']                                                                               |
+	| metric constraints    | []                                                                                     	    |
+	| scheduled_to          | {'name': 'os-cloud-1', 'api': 'infrastructure', 'namespace': 'system:admin', 'kind': 'Cloud'} |
+	| running_on            | {'name': 'os-cloud-1', 'api': 'infrastructure', 'namespace': 'system:admin', 'kind': 'Cloud'} |
+	+-----------------------+-----------------------------------------------------------------------------------------------+
+
 
 Cleanup
 =======

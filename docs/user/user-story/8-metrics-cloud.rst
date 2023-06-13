@@ -125,6 +125,59 @@ Create the ``my-cluster`` cluster and check it is actually spawned on the second
     You can observe the scheduler logs in `DEBUG` mode to gather additional understanding of the scheduling mechanism.
 
 
+Metric inheritance for Clusters
+===============================
+
+Krake allows to inherit metrics from a cloud to a cluster. To do this, either the ``--inherit-metrics`` flag must be specified during creation or
+the cluster should contain a MetricConstraint and be scheduled to a cluster with the referenced metrics.
+
+.. prompt:: bash $ auto
+
+    rok kube cluster create -f git/krake/rak/functionals/im-cluster.yaml my-cluster --inherit-metrics
+    
+If this cluster is now observed, the inherited metrics should be visible in the output. These metrics are considered during scheduling like normal metrics, which are directly referenced to a cluster.
+Inherited metrics are marked accordingly.
+
+.. prompt:: bash $ auto
+
+    $ rok kube cluster get my-cluster
+	+-----------------------+-----------------------------------------------------------------------------------------------+
+	| name                  | my-cluster                                                                                	|
+	| namespace             | system:admin                                                                              	|
+	| labels                | None     						                                                               	|
+	| state                 | RUNNING                                                                                 	 	|
+	| reason                | None                                                                                      	|
+	| custom_resources      | []                                                                                        	|
+	| metrics               | [{'namespaced': False, 'weight': 1.0, 'name': 'electricity_cost_1', 'inherited': True}, 		|
+	|                       |  {'namespaced': False, 'weight': 10.0, 'name': 'green_energy_ratio_1', 'inherited': True}]    |
+	| failing_metrics       | None                                                                                      	|
+	| label constraints     | []                                                                                        	|
+	| metric constraints    | []                                                                                     	    |
+	| scheduled_to          | {'name': 'os-cloud-1', 'api': 'infrastructure', 'namespace': 'system:admin', 'kind': 'Cloud'} |
+	| running_on            | {'name': 'os-cloud-1', 'api': 'infrastructure', 'namespace': 'system:admin', 'kind': 'Cloud'} |
+	+-----------------------+-----------------------------------------------------------------------------------------------+
+
+A similar output can be observed, if a metric constraint is defined for the cluster.
+
+.. prompt:: bash $ auto
+
+    $ rok kube cluster get my-cluster
+	+-----------------------+-----------------------------------------------------------------------------------------------+
+	| name                  | my-cluster                                                                                	|
+	| namespace             | system:admin                                                                              	|
+	| labels                | None     						                                                               	|
+	| state                 | RUNNING                                                                                 	 	|
+	| reason                | None                                                                                      	|
+	| custom_resources      | []                                                                                        	|
+	| metrics               | [{'namespaced': False, 'weight': 10.0, 'name': 'green_energy_ratio_1', 'inherited': True}]    |
+	| failing_metrics       | None                                                                                      	|
+	| label constraints     | []                                                                                        	|
+	| metric constraints    | ['green_energy_ratio_1>5']                                                               	    |
+	| scheduled_to          | {'name': 'os-cloud-1', 'api': 'infrastructure', 'namespace': 'system:admin', 'kind': 'Cloud'} |
+	| running_on            | {'name': 'os-cloud-1', 'api': 'infrastructure', 'namespace': 'system:admin', 'kind': 'Cloud'} |
+	+-----------------------+-----------------------------------------------------------------------------------------------+
+
+
 Cleanup
 =======
 

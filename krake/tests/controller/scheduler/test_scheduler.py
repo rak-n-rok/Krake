@@ -645,6 +645,76 @@ async def test_kubernetes_score_with_metrics_only(aiohttp_server, config, loop):
             )
 
 
+async def test_kubernetes_score_with_inherited_metrics(aiohttp_server, config, db, loop):
+
+    cloud = CloudFactory(
+        metadata__name="test",
+        metadata__namespace="testing",
+        spec__openstack__metrics=[
+            MetricRef(name="metric-1", weight=1.0, namespaced=False)
+        ],
+    )
+    gcloud = GlobalCloudFactory(
+        metadata__name="test",
+        spec__openstack__metrics=[
+            MetricRef(name="metric-1", weight=1.0, namespaced=False)
+        ],
+    )
+
+    clusters = [
+        ClusterFactory(
+            spec__metrics=[],
+            spec__inherit_metrics=True,
+            status__scheduled_to=ResourceRef(
+                api="infrastructure",
+                kind="Cloud",
+                name=cloud.metadata.name,
+                namespace=cloud.metadata.namespace,
+            ),
+            status__state=ClusterState.ONLINE
+        ),
+        ClusterFactory(
+            spec__metrics=[],
+            spec__inherit_metrics=True,
+            status__scheduled_to=ResourceRef(
+                api="infrastructure",
+                kind="GlobalCloud",
+                name=gcloud.metadata.name,
+            ),
+            status__state=ClusterState.ONLINE
+        ),
+    ]
+
+    app = ApplicationFactory(
+        status__is_scheduled=False
+    )
+
+    static_provider = GlobalMetricsProviderFactory(
+        metadata__name="static-provider",
+        spec__type="static",
+        spec__static__metrics={"my_metric": 0.75},
+    )
+    metric = GlobalMetricFactory(
+        metadata__name="metric-1",
+        spec__provider__name="static-provider",
+        spec__provider__metric="my_metric",
+    )
+
+    await db.put(cloud)
+    await db.put(gcloud)
+    await db.put(metric)
+    await db.put(static_provider)
+
+    scheduler = Scheduler("http://localhost:8080", worker_count=0)
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        await scheduler.prepare(client)
+        await scheduler.kubernetes_application.rank_kubernetes_clusters(
+            app, clusters
+        )
+
+
 async def test_kubernetes_score_missing_metric(aiohttp_server, db, config, loop):
     """Test the error handling of the Scheduler in the case of fetching a metric
     referenced in a Cluster but not present in the database.
@@ -1111,6 +1181,66 @@ async def test_kubernetes_select_cluster_without_metric(aiohttp_server, config, 
         assert selected in clusters
 
 
+async def test_kubernetes_select_cluster_with_inherited_metrics(
+    aiohttp_server, config, db, loop
+):
+
+    prometheus = await aiohttp_server(make_prometheus({"load": ["1"]}))
+
+    cloud = CloudFactory(
+        metadata__name="test",
+        metadata__namespace="testing",
+        metadata__labels={},
+        spec__openstack__metrics=[MetricRef(name="load", weight=6.0, namespaced=False)],
+    )
+    cluster = ClusterFactory(
+        spec__inherit_metrics=True,
+        spec__metrics=[],
+        status__scheduled_to=ResourceRef(
+            api="infrastructure",
+            kind="Cloud",
+            name=cloud.metadata.name,
+            namespace=cloud.metadata.namespace,
+        ),
+        status__state=ClusterState.ONLINE,
+    )
+
+    app = ApplicationFactory(
+        spec__constraints__cluster__labels=[],
+        spec__constraints__cluster__metrics=[MetricConstraint.parse("load > 5")],
+        spec__constraints__cluster__custom_resources=[],
+    )
+
+    metric = GlobalMetricFactory(
+        metadata__name="load",
+        spec__min=0,
+        spec__max=1,
+        spec__provider__name="prometheus-test",
+        spec__provider__metric="load",
+    )
+    metrics_provider = GlobalMetricsProviderFactory(
+        metadata__name="prometheus-test",
+        spec__type="prometheus",
+        spec__prometheus__url=f"http://{prometheus.host}:{prometheus.port}",
+    )
+
+    await db.put(metric)
+    await db.put(metrics_provider)
+    await db.put(cloud)
+    await db.put(cluster)
+    await db.put(app)
+
+    scheduler = Scheduler("http://localhost:8080", worker_count=0)
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        await scheduler.prepare(client)
+        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
+            app, [cluster]
+        )
+        assert selected == cluster
+
+
 async def test_kubernetes_select_cluster_not_deleted(aiohttp_server, config, loop):
     # As the finally selected cluster is chosen randomly, perform the test several times
     # to ensure that the cluster has really been chosen the right way, not by chance.
@@ -1199,6 +1329,83 @@ async def test_kubernetes_select_cluster_with_constraints_without_metric(
             app, clusters
         )
         assert selected == clusters[0]
+
+
+async def test_kubernetes_select_cluster_with_inherited_labels_from_cloud(
+    aiohttp_server, config, db, loop
+):
+    cloud = CloudFactory(
+        metadata__name="test",
+        metadata__namespace="testing",
+        metadata__labels={"location": "IT"}
+    )
+    cluster = ClusterFactory(
+        metadata__inherit_labels=True,
+        spec__metrics=[],
+        status__scheduled_to=ResourceRef(
+            api="infrastructure",
+            kind="Cloud",
+            name=cloud.metadata.name,
+            namespace=cloud.metadata.namespace,
+        ),
+        status__state=ClusterState.ONLINE,
+    )
+
+    app = ApplicationFactory(
+        spec__constraints__cluster__labels=[LabelConstraint.parse("location is IT")],
+        spec__constraints__cluster__metrics=[],
+        spec__constraints__cluster__custom_resources=[],
+    )
+
+    await db.put(cloud)
+
+    scheduler = Scheduler("http://localhost:8080", worker_count=0)
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        await scheduler.prepare(client)
+        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
+            app, [cluster]
+        )
+        assert selected == cluster
+
+
+async def test_kubernetes_select_cluster_with_inherited_labels_from_global_cloud(
+    aiohttp_server, config, db, loop
+):
+    cloud = GlobalCloudFactory(
+        metadata__name="test",
+        metadata__namespace="testing",
+        metadata__labels={"location": "IT"}
+    )
+    cluster = ClusterFactory(
+        metadata__inherit_labels=True,
+        spec__metrics=[],
+        status__scheduled_to=ResourceRef(
+            api="infrastructure",
+            kind="GlobalCloud",
+            name=cloud.metadata.name,
+        ),
+        status__state=ClusterState.ONLINE,
+    )
+
+    app = ApplicationFactory(
+        spec__constraints__cluster__labels=[LabelConstraint.parse("location is IT")],
+        spec__constraints__cluster__metrics=[],
+        spec__constraints__cluster__custom_resources=[],
+    )
+
+    await db.put(cloud)
+
+    scheduler = Scheduler("http://localhost:8080", worker_count=0)
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        await scheduler.prepare(client)
+        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
+            app, [cluster]
+        )
+        assert selected == cluster
 
 
 async def test_kubernetes_select_cluster_sticky_without_metric(

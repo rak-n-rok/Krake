@@ -739,13 +739,10 @@ class KubernetesApplicationHandler(Handler):
             and cluster.status.state is ClusterState.ONLINE
         )
 
-        # possible_clusters = []
-
         filtered_clusters = dict()
 
         fetched_metrics = dict()
         for cluster in clusters:
-            # possible_clusters.append(cluster)
             cluster_copy = deepcopy(cluster)
             cluster_metrics = []
             if cluster_copy.spec.metrics:
@@ -781,10 +778,9 @@ class KubernetesApplicationHandler(Handler):
                         {**cluster_copy.metadata.labels, **label_dict}
 
                 if cluster_copy.spec.inherit_metrics:
-                    cluster_metrics = list(set(
-                        cluster_metrics +
-                        cloud.spec.__getattribute__(cloud.spec.type).metrics
-                    ))
+                    for metric in cloud.spec.__getattribute__(cloud.spec.type).metrics:
+                        cluster_metrics.append(metric) \
+                            if metric not in cluster_metrics else None
                 if cluster.spec.constraints.cloud.metrics:
                     metric_list = list()
                     for constraint in cluster.spec.constraints.cloud.metrics:
@@ -793,9 +789,9 @@ class KubernetesApplicationHandler(Handler):
                         ).metrics:
                             if constraint.value == metric.name:
                                 metric_list.append(metric)
-                    cluster_metrics = list(set(
-                        cluster_metrics + metric_list
-                    ))
+                    for metric in metric_list:
+                        cluster_metrics.append(metric) \
+                            if metric not in cluster_metrics else None
 
             cluster_copy.spec.metrics = cluster_metrics
 
@@ -809,12 +805,14 @@ class KubernetesApplicationHandler(Handler):
         )
         logger.debug(f"App {app.metadata.name}: fetched metrics: {fetched_metrics}")
 
-        matching_clusters = []
-        for cluster in existing_clusters:
+        matching_clusters = [
+            cluster for cluster in existing_clusters
             if match_cluster_constraints(
-                app, filtered_clusters[cluster.metadata.name], fetched_metrics
-            ):
-                matching_clusters.append(cluster)
+                app,
+                filtered_clusters[cluster.metadata.name],
+                fetched_metrics
+            )
+        ]
 
         logger.debug(f"App {app.metadata.name}: matching cluster: {matching_clusters}")
 
@@ -913,10 +911,9 @@ class KubernetesApplicationHandler(Handler):
                     )
 
                 if cluster.spec.inherit_metrics:
-                    cluster_metrics = list(set(
-                        cluster_metrics +
-                        cloud.spec.__getattribute__(cloud.spec.type).metrics
-                    ))
+                    for metric in cloud.spec.__getattribute__(cloud.spec.type).metrics:
+                        cluster_metrics.append(metric) \
+                            if metric not in cluster_metrics else None
 
                 if cluster.spec.constraints.cloud.metrics:
                     metric_list = list()
@@ -926,9 +923,9 @@ class KubernetesApplicationHandler(Handler):
                         ).metrics:
                             if constraint.value == metric.name:
                                 metric_list.append(metric)
-                    cluster_metrics = list(set(
-                        cluster_metrics + metric_list
-                    ))
+                    for metric in metric_list:
+                        cluster_metrics.append(metric) \
+                            if metric not in cluster_metrics else None
             async for metrics in self.fetch_metrics(cluster, cluster_metrics):
                 scores.append(
                     self.calculate_kubernetes_cluster_score(metrics, cluster, app)
