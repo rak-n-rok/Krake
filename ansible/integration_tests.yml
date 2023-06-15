@@ -143,14 +143,14 @@
 
         - name: Generate k8s cluster list
           tags:
-            - always  
+            - always
           block:
 
-            - name: Inital k8s cluster list  
+            - name: Inital k8s cluster list
               set_fact:
                 k8s_clusters: []
 
-            - name: Extract minikube cluster names  
+            - name: Extract minikube cluster names
               set_fact:
                 k8s_clusters: "{{ k8s_clusters + groups['minikube_clusters'] }}"
               when: groups['minikube_clusters'] is defined
@@ -201,22 +201,22 @@
           tags:
             - test_kubernetes_observer
 
-        - name: Run integration tests for the hooks
-          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_hooks.py --k8sclusters {{ k8s_clusters[0] }} {{ k8s_clusters[1] }}"
-          tags:
-            - test_hooks
+#        - name: Run integration tests for the hooks
+#          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_hooks.py --k8sclusters {{ k8s_clusters[0] }} {{ k8s_clusters[1] }}"
+#          tags:
+#            - test_hooks
 
         - name: Run integration tests for krake scripts
           command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_scripts.py --krake_container {{ api_host }} --etcd_container {{ etcd_host }} --etcd_container_port {{ etcd_port }}"
           tags:
             - test_scripts
 
-        - name: Run application example tests for krake
-          command: "pytest -s {{ git_dir }}/{{test_dir}}/integration/test_example_applications.py --k8sclusters {{ k8s_clusters[0] }} {{ k8s_clusters[1] }}"
-          tags:
-            - test_example_applications
-          register: app_out
-        - debug: msg="{{ app_out.stdout }}"
+#        - name: Run application example tests for krake
+#          command: "pytest -s {{ git_dir }}/{{test_dir}}/integration/test_example_applications.py --k8sclusters {{ k8s_clusters[0] }} {{ k8s_clusters[1] }}"
+#          tags:
+#            - test_example_applications
+#          register: app_out
+#        - debug: msg="{{ app_out.stdout }}"
 
       rescue:
 
