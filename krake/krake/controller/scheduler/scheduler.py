@@ -624,7 +624,7 @@ class KubernetesApplicationHandler(Handler):
         """
         # TODO: Evaluate spawning a new cluster
         if app.status.state is not ApplicationState.DEGRADED or \
-           utils.now() >= app.status.scheduled_retry:
+           (app.status.scheduled_retry and utils.now() >= app.status.scheduled_retry):
             await self.schedule_kubernetes_application(app)
             await self.reschedule_kubernetes_application(app)
 

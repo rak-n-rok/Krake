@@ -8,7 +8,7 @@ variables:
   ETCD_VER: v3.3.13
   PROMETHEUS_VER: 2.12.0
   CFSSL_VER: 1.4.1
-  CONFLUENT_VER: "6.1"
+  CONFLUENT_VER: "7.0"
 
   # Change pip's cache directory to be inside the project directory since we
   # can only cache local items.
@@ -81,7 +81,7 @@ cache:
     # Download java for Keycloak
     # see https://github.com/docker-library/openjdk/blob/0584b2804ed12dca7c5e264b5fc55fc07a3ac148/8-jre/slim/Dockerfile#L51
     - mkdir -p /usr/share/man/man1
-    - apt-get install -y --no-install-recommends openjdk-11-jre
+    - apt-get install -y --no-install-recommends openjdk-17-jre || dpkg --configure -a
     - java --version
 
     # Download zookeeper, kafka and ksql
@@ -94,11 +94,20 @@ cache:
         || sleep 20
       done
     - add-apt-repository "deb [arch=amd64] https://packages.confluent.io/deb/${CONFLUENT_VER} stable main"
+    # Manually insert this part into sources.list, since it won't show up otherwise
+    - echo "deb [arch=amd64] https://packages.confluent.io/deb/7.0 stable main" >> /etc/apt/sources.list
     - apt-get update
     - apt-get install zookeeper confluent-kafka confluent-ksqldb -y
     - which zookeeper-server-start
     - which kafka-server-start
     - which ksql-server-start
+
+    # This is hopefully only temporary, because Gitlab now uses Debian 12 for its runners, which messed with our
+    # pipeline, due to changes in the packages / package lists
+    - sed -i -e 's/ -XX:+UseConcMarkSweepGC//g' /bin/ksql-run-class
+    - sed -i -e 's/ -XX:+CMSClassUnloadingEnabled//g' /bin/ksql-run-class
+    - sed -i -e 's/ -XX:+CMSScavengeBeforeRemark//g' /bin/ksql-run-class
+    - sed -i -e 's/ -XX:+ExplicitGCInvokesConcurrent//g' /bin/ksql-run-class
 
     - pip install tox
     - tox -- --cov krake/krake --no-cov-on-fail --cov-report= --runslow krake/tests
