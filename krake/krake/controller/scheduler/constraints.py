@@ -115,7 +115,9 @@ def match_cluster_constraints(app, cluster, fetched_metrics=None):
 
     constraints = [
         AppClusterConstraint(
-            "label", app.spec.constraints.cluster.labels, _condition_label
+            "label",
+            app.spec.constraints.cluster.labels,
+            _condition_label
         ),
         AppClusterConstraint(
             "custom resource",

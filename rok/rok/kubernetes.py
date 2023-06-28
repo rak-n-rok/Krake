@@ -197,6 +197,26 @@ arg_cloud_metric_constraints = argument(
     help="Constraint for metrics of the cloud. Can be specified multiple times",
 )
 
+arg_label_inheritance = argument(
+    "--inherit-labels",
+    dest="inherit_labels",
+    action="store_true",
+    help=(
+        "Enables inheritance of all labels from the cloud "
+        "the cluster is scheduled to."
+    ),
+)
+
+arg_metric_inheritance = argument(
+    "--inherit-metrics",
+    dest="inherit_metrics",
+    action="store_true",
+    help=(
+        "Enables inheritance of all metrics from the cloud "
+        "the cluster is scheduled to."
+    ),
+)
+
 
 class ApplicationListTable(BaseTable):
     state = Cell("status.state")
@@ -872,8 +892,10 @@ def register_cluster(
 @arg_custom_resources
 @arg_metric
 @arg_global_metric
+@arg_metric_inheritance
 @arg_namespace
 @arg_labels
+@arg_label_inheritance
 @arg_cloud_label_constraints
 @arg_cloud_metric_constraints
 @arg_formatting
@@ -890,7 +912,9 @@ def create_cluster(
     namespace,
     metrics,
     global_metrics,
+    inherit_metrics,
     labels,
+    inherit_labels,
     cloud_label_constraints,
     cloud_metric_constraints,
     custom_resources,
@@ -902,10 +926,15 @@ def create_cluster(
         namespace = config["user"]
 
     to_create = {
-        "metadata": {"name": name, "labels": labels},
+        "metadata": {
+            "name": name,
+            "labels": labels,
+            "inherit_labels": inherit_labels
+        },
         "spec": {
             "tosca": yaml.safe_load(file),
             "metrics": metrics + global_metrics,
+            "inherit_metrics": inherit_metrics,
             "custom_resources": custom_resources,
             "backoff": backoff,
             "backoff_delay": backoff_delay,
@@ -955,7 +984,52 @@ def get_cluster(config, session, namespace, name):
         namespace = config["user"]
 
     resp = session.get(f"/kubernetes/namespaces/{namespace}/clusters/{name}")
-    return resp.json()
+    data = resp.json()
+
+    if ((data['spec']['inherit_metrics'] or
+         data['spec']['constraints']['cloud']['metrics']) or
+        (data['metadata']['inherit_labels'] or
+         data['spec']['constraints']['cloud']['labels'])) and \
+       data['status']['scheduled_to']:
+        if data['status']['scheduled_to']['namespace']:
+            cloud = session.get(
+                f"/infrastructure/namespaces/"
+                f"{data['status']['scheduled_to']['namespace']}"
+                f"/clouds/{data['status']['scheduled_to']['name']}"
+            ).json()
+        else:
+            cloud = session.get(
+                f"/infrastructure/globalclouds/{data['status']['scheduled_to']['name']}"
+            ).json()
+
+        inherited_labels = dict()
+        if data['metadata']['inherit_labels']:
+            for label in cloud['metadata']['labels']:
+                inherited_labels[label] = \
+                    cloud['metadata']['labels'][label] + " (inherited)"
+        if data['spec']['constraints']['cloud']['labels']:
+            for constraint in cluster['spec']['constraints']['cloud']['metrics']:
+                for label in cloud['metadata']['labels']:
+                    if label in constraint:
+                        inherited_labels[label] = cloud['metadata']['labels'][label]
+        data['metadata']['labels'] = {**data['metadata']['labels'], **inherited_labels}
+
+        inherited_metrics = list()
+        if data['spec']['inherit_metrics']:
+            for metric in cloud['spec'][cloud['spec']['type']]['metrics']:
+                metric["inherited"] = True
+                inherited_metrics.append(metric)
+
+        if data['spec']['constraints']['cloud']['metrics']:
+            for constraint in data['spec']['constraints']['cloud']['metrics']:
+                for metric in cloud['spec'][cloud['spec']['type']]['metrics']:
+                    if metric["name"] in constraint:
+                        metric["inherited"] = True
+                        inherited_metrics.append(metric)
+
+        data['spec']['metrics'] += inherited_metrics
+
+    return data
 
 
 @cluster.command(

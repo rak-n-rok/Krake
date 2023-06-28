@@ -208,7 +208,7 @@ def test_scheduler_cluster_label_constraints(k8s_clusters):
     whether the application due to this constraint is expected to be scheduled
     to the cluster with `location=DE`.
 
-    The work workflow for each iteration is as follows:
+    The workflow for each iteration is as follows:
 
         1. Create two clusters from a config file with the cluster labels
             `location=DE` and `location=IT` (in random order);
