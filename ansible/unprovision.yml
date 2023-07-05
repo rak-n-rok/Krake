@@ -1,5 +1,6 @@
 - name: Unprovision infrastructure
   hosts: all
+  strategy: free
   gather_facts: false
   tasks:
 

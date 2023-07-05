@@ -34,7 +34,7 @@ CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
 MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}"
 APP_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{EXAMPLES_DIR}"
 
-RESCHEDULING_INTERVAL = 60
+RESCHEDULING_INTERVAL = 10
 
 
 def test_mnist_application(k8s_clusters):
@@ -139,7 +139,7 @@ def test_mnist_application(k8s_clusters):
         # some time
         app_def.create_resource()
 
-        app_def.check_created(delay=180)
+        app_def.check_created(delay=130)
 
         # 6. Change the metrics so that score of cluster 1 is higher than
         # the score of cluster 2
