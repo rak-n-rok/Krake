@@ -511,10 +511,10 @@ def update_last_observed_manifest_list(observed_resource, response):
             # Element is not present in the Kubernetes response, nothing more to do
             break
 
-        if type(response[idx]) == dict:
+        if type(response[idx]) is dict:
             res.append(update_last_observed_manifest_dict(val, response[idx]))
 
-        elif type(response[idx]) == list:
+        elif type(response[idx]) is list:
             res.append(update_last_observed_manifest_list(val, response[idx]))
 
         else:

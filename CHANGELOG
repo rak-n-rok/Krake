@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clusters are set to ONLINE after a metrics provider can be reached again
 - Clusters can inherit metrics and labels from Clouds, if a specific flag is set or if their constraints requests them
 - Add support for using enumerables for metrics values
+- Exclude Python 3.7 support due to official end of life of this version
 
 ### Fixed
 
