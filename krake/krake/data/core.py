@@ -385,6 +385,7 @@ class MetricSpecProvider(Serializable):
 
 
 class MetricSpec(Serializable):
+    allowed_values: List[int]
     min: float
     max: float
     provider: MetricSpecProvider

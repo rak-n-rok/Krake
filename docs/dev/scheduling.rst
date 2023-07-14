@@ -373,6 +373,7 @@ Example
     metadata:
       name: heat_demand_zone_1  # name as stored in Krake API (for management purposes)
     spec:
+      allowed_values: []  # if empty list is provided, any value in the range min-max can be used
       max: 5.0
       min: 0.0
       provider:

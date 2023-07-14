@@ -13,6 +13,7 @@ kind: GlobalMetric
 metadata:
   name: heat_demand_zone_1
 spec:
+  allowed_values: []
   max: 5.0
   min: 0.0
   provider:
@@ -27,6 +28,7 @@ kind: GlobalMetric
 metadata:
   name: heat_demand_zone_2
 spec:
+  allowed_values: []
   max: 5.0
   min: 0.0
   provider:
@@ -41,6 +43,7 @@ kind: GlobalMetric
 metadata:
   name: heat_demand_zone_3
 spec:
+  allowed_values: []
   max: 5.0
   min: 0.0
   provider:
@@ -55,6 +58,7 @@ kind: GlobalMetric
 metadata:
   name: heat_demand_zone_4
 spec:
+  allowed_values: []
   max: 5.0
   min: 0.0
   provider:
@@ -69,10 +73,25 @@ kind: GlobalMetric
 metadata:
   name: heat_demand_zone_5
 spec:
+  allowed_values: []
   max: 5.0
   min: 0.0
   provider:
     metric: heat_demand_zone_5
+    name: prometheus
+
+---
+
+api: core
+kind: GlobalMetric
+metadata:
+  name: heat_demand_zone_6
+spec:
+  allowed_values: [0,1,4,5]
+  max: 5.0
+  min: 0.0
+  provider:
+    metric: heat_demand_zone_6
     name: prometheus
 
 ---

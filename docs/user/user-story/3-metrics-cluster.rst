@@ -28,6 +28,11 @@ score: a metrics with a low value, but a high weight may have more impact on the
 than a metric with medium value but low weight. The ``Cluster`` metrics and
 the computed score is then used in the ``Application`` scheduling process.
 
+``Metrics`` and ``GlobalMetrics`` are provided with a minimum and maximum value, which define the
+range in which the final values will be. Alternatively, specific allowed values
+(either via command line paramater, e.g. ``--allowed-values 1 2 3`` or as a list in a bootstrap file,
+see :ref:`support/prometheus_metrics.yaml``) can be set.
+
 For Krake to fetch the current value of a metric, a user needs to define where and how
 it can be requested. ``GlobalMetricsProvider`` resources can be created for this
 purpose. They have different types, to support different technologies. There is for

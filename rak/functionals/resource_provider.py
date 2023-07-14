@@ -403,6 +403,7 @@ class BaseMetricDefinition(ResourceDefinition, ABC):
             ResourceKind.METRIC or ResourceKind.GLOBALMETRIC
         namespace (str, optional): namespace of the metric.
             None iff kind == ResourceKind.GLOBALMETRIC
+        allowed_values (List(int)): List of possible values of this metric
         min (float): minimum value of this metric
         max (float): maximum value of this metric
         mp_name (str): name of the metrics provider which privides this metric.
@@ -412,11 +413,15 @@ class BaseMetricDefinition(ResourceDefinition, ABC):
         ValueError: if kind is incorrect or does not match the namespace
     """
 
-    def __init__(self, name, kind, namespace, min, max, mp_name, mp_metric_name):
+    def __init__(
+        self, name, kind, namespace, allowed_values, min, max, mp_name, mp_metric_name
+    ):
+
         super().__init__(name, kind, namespace)
         if kind not in [ResourceKind.METRIC, ResourceKind.GLOBALMETRIC]:
             raise ValueError(f"Unexpected type of metric: {kind}")
         self.kind = kind
+        self.allowed_values = allowed_values
         self.min = min
         self.max = max
         self.mp_name = mp_name
@@ -426,7 +431,7 @@ class BaseMetricDefinition(ResourceDefinition, ABC):
         )
 
     def _get_mutable_attributes(self):
-        return ["min", "max", "mp_name", "mp_metric_name"]
+        return ["allowed_values", "min", "max", "mp_name", "mp_metric_name"]
 
     def _get_default_values(self):
         default_values = dict.fromkeys(self._mutable_attributes, None)
@@ -436,6 +441,7 @@ class BaseMetricDefinition(ResourceDefinition, ABC):
     def _get_actual_mutable_attribute_values(self):
         metric = self.get_resource()
         return {
+            "allowed_values": metric["spec"]["allowed_values"],
             "min": metric["spec"]["min"],
             "max": metric["spec"]["max"],
             "mp_name": metric["spec"]["provider"]["name"],
@@ -448,6 +454,10 @@ class BaseMetricDefinition(ResourceDefinition, ABC):
             f"{self._mp_name_param} {self.mp_name} --metric-name {self.mp_metric_name} "
             f"{self.name}".split()
         )
+
+        if self.allowed_values:
+            cmd += f"--allowed-values {' '.join(self.allowed_values)} "
+
         if self.mp_metric_name:
             cmd += ["--metric-name", self.mp_metric_name]
         return cmd
@@ -455,7 +465,7 @@ class BaseMetricDefinition(ResourceDefinition, ABC):
     def creation_acceptance_criteria(self, error_message=None, expected_state=None):
         if not error_message:
             error_message = (
-                f"The {self.kind.value} {self.name} was not " f"properly created."
+                f"The {self.kind.value} {self.name} was not properly created."
             )
         return check_resource_exists(error_message=error_message)
 
@@ -465,8 +475,12 @@ class BaseMetricDefinition(ResourceDefinition, ABC):
     def get_command(self):
         return f"rok core {self.kind.value} get {self.name} -o json".split()
 
-    def update_command(self, min=None, max=None, mp_name=None, mp_metric_name=None):
+    def update_command(
+        self, allowed_values=None, min=None, max=None, mp_name=None, mp_metric_name=None
+    ):
         cmd = f"rok core {self.kind.value} update {self.name}".split()
+        if allowed_values:
+            cmd += ["allowed-values", allowed_values]
         if min:
             cmd += ["--min", min]
         if max:
@@ -505,6 +519,7 @@ class NonExistentMetric(BaseMetricDefinition):
             name,
             ResourceKind.GLOBALMETRIC,
             None,
+            allowed_values=[],
             min=0,
             max=1,
             mp_name=mp_name,
@@ -693,12 +708,14 @@ class ResourceProvider(Singleton):
                     {
                         "name": "electricity_cost_1",
                         "mp_name": "static_provider",
+                        "allowed_values": [],
                         "min": 0,
                         "max": 1,
                     },
                     {
                         "name": "green_energy_ratio_1",
                         "mp_name": "static_provider",
+                        "allowed_values": [],
                         "min": 0,
                         "max": 1,
                     },
@@ -720,6 +737,7 @@ class ResourceProvider(Singleton):
                         "mp_name": "static_provider_w_namespace",
                         # metric name at mp
                         "mp_metric_name": "existing_nsed_metric",
+                        "allowed_values": [],
                         "min": 0,
                         "max": 1,
                     },
@@ -754,36 +772,42 @@ class ResourceProvider(Singleton):
                     {
                         "name": "heat_demand_zone_1",
                         "mp_name": "prometheus",
+                        "allowed_values": [],
                         "min": 0,
                         "max": 5,
                     },
                     {
                         "name": "heat_demand_zone_2",
                         "mp_name": "prometheus",
+                        "allowed_values": [],
                         "min": 0,
                         "max": 5,
                     },
                     {
                         "name": "heat_demand_zone_3",
                         "mp_name": "prometheus",
+                        "allowed_values": [],
                         "min": 0,
                         "max": 5,
                     },
                     {
                         "name": "heat_demand_zone_4",
                         "mp_name": "prometheus",
+                        "allowed_values": [],
                         "min": 0,
                         "max": 5,
                     },
                     {
                         "name": "heat_demand_zone_5",
                         "mp_name": "prometheus",
+                        "allowed_values": [],
                         "min": 0,
                         "max": 5,
                     },
                     {
                         "name": "heat_demand_zone_unreachable",
                         "mp_name": "prometheus-unreachable",
+                        "allowed_values": [],
                         "min": 0,
                         "max": 5,
                     },
@@ -953,6 +977,7 @@ class ResourceProvider(Singleton):
                     metric_name,
                     kind,
                     namespace,
+                    metric_info["allowed_values"],
                     metric_info["min"],
                     metric_info["max"],
                     mp_name,

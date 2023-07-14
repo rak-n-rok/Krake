@@ -323,7 +323,7 @@ def check_metrics_provider_content(error_message, name, type, type_details=None)
     return validate
 
 
-def check_metric_content(error_message, name, mp_name, min, max, mp_metric_name=None):
+def check_metric_content(error_message, name, mp_name, min, max, allowed_values=[], mp_metric_name=None):
     """Create a callable to verify the content of a metric in a response from the
     krake API.
 
@@ -356,6 +356,7 @@ def check_metric_content(error_message, name, mp_name, min, max, mp_metric_name=
         "kind": "GlobalMetric",
         "metadata": {"name": name},
         "spec": {
+            "allowed_values": allowed_values,
             "max": float(max),
             "min": float(min),
             "provider": {"metric": mp_metric_name, "name": mp_name},
