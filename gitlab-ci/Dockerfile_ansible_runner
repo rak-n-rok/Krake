@@ -5,7 +5,7 @@ FROM python:3.10
 RUN apt-get update && apt-get upgrade -y
 
 # Pre-requisites: openstack, ansible and pytest
-RUN pip install python-openstackclient openstacksdk "ansible>=2.9" pytest ansible-parallel
+RUN pip install python-openstackclient openstacksdk "ansible>=2.9" pytest ansible-parallel python-heatclient
 RUN apt-get update -y && apt-get install openssh-client rsync -y
 COPY ./ansible/requirements.yml krake-ci/ansible/requirements.yml
 RUN chmod -v 700 krake-ci/ansible/

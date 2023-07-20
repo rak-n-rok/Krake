@@ -1,0 +1,15 @@
+e2e-os-project-cleanup:
+  image: registry.gitlab.com/rak-n-rok/krake/ansible_image:latest
+  only:
+    - schedules
+  variables:
+    ANSIBLE_CONFIG: ansible/ansible.cfg
+  dependencies: [] # To prevent downloading artefacts from previous stages
+  cache: []
+  script:
+    #- openstack stack list
+    - openstack stack delete --yes --wait $(openstack stack list | awk '{print $2}' | awk 'NR>2')
+    - openstack stack list
+    - openstack server list
+    - openstack router list
+    - openstack network list

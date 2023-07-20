@@ -241,20 +241,11 @@
     - name: Generate kube config template file
       delegate_to: localhost
       template:
+        variable_start_string: "&%" 
+        variable_end_string: "%&"
         src: files/krake/kube_microk8s_config.j2
         dest: "cluster_certs/{{ inventory_hostname }}/mk8s_config.j2"
       vars:
-        cert_dir: "&% directory_variable %&"
         cluster_add: "{{ server_add }}"
         cluster_name: "{{ inventory_hostname }}"
         client_token: "{{ microk8s_client_token }}"
-
-    - name: Switch back start and end string
-      delegate_to: localhost
-      template:
-        variable_start_string: "&%" 
-        variable_end_string: "%&"
-        src: "cluster_certs/{{ inventory_hostname }}/mk8s_config.j2"
-        dest: "cluster_certs/{{ inventory_hostname }}/mk8s_config.j2"
-      vars:
-         directory_variable: "{{ cert_dir }}"
