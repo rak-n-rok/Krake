@@ -1,8 +1,15 @@
 import pytest
+import unittest.mock as mock
+import influxdb_client
+
 from aiohttp import web, ClientSession, ClientConnectorError, ClientResponseError
 
 from krake.controller.scheduler import metrics
+
 from krake.controller.scheduler.metrics import MetricError, fetch_query
+from krake.controller.scheduler.metrics import MetricsProviderError
+from krake.controller.scheduler.metrics import Influx
+
 from krake.test_utils import server_endpoint, make_prometheus, make_kafka
 
 from tests.factories.core import GlobalMetricsProviderFactory, GlobalMetricFactory
@@ -271,7 +278,7 @@ async def test_static_provider_metric_unavailable(aiohttp_server):
 
 
 @pytest.mark.slow
-async def test_kafka_provider_against_kafka(ksql,loop):
+async def test_kafka_provider_against_kafka(ksql, loop):
     """Test that the Kafka Provider works against an actual KSQL database."""
     heat_demand_1_metric = ksql.kafka_table.metrics[0]
     metric = GlobalMetricFactory(
@@ -489,3 +496,121 @@ async def test_fetch_query_out_of_range():
             match=f"Invalid metric value for {metric.metadata.name!r}: 2 out of range",
         ):
             await fetch_query(session, metric, metrics_provider, 10)
+
+
+async def test_influx_query():
+    # Create a mock metric object
+    mock_metric = mock.MagicMock()
+    mock_metric.spec.provider.metric = 'metric_name'
+
+    # Set the necessary attributes for the metrics provider
+    mock_metrics_provider = mock.MagicMock()
+    mock_metrics_provider.spec.influx.url = 'http://localhost:8086'
+    mock_metrics_provider.spec.influx.token = 'your_token'
+    mock_metrics_provider.spec.influx.org = 'your_org'
+    mock_metrics_provider.spec.influx.bucket = 'your_bucket'
+    mock_metrics_provider.spec.type = 'influx'
+
+    class MockInfluxDBClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def query_api(self):
+            return self
+
+        def query(self, query):
+            # Mock the query result here
+            mock_table = mock.MagicMock()
+            mock_record = mock.MagicMock()
+            mock_record.values = {'_value': '10'}
+            mock_table.records = [mock_record]
+            return [mock_table]
+
+    # Create an instance of the Influx class with the custom mock class
+    with mock.patch('krake.controller.scheduler.metrics.InfluxDBClient',
+                    new=MockInfluxDBClient):
+        influx = Influx(mock.MagicMock(), metrics_provider=mock_metrics_provider)
+
+        # Call the query method
+        result = await influx.query(mock_metric)
+
+        # Assertions
+        assert result == 10.0
+
+
+async def test_influx_query_metrics_provider_error():
+    # Create a mock metric object
+    mock_metric = mock.MagicMock()
+    mock_metric.spec.provider.metric = 'metric_name'
+
+    # Set the necessary attributes for the metrics provider
+    mock_metrics_provider = mock.MagicMock()
+    mock_metrics_provider.spec.influx.url = 'http://localhost:8086'
+    mock_metrics_provider.spec.influx.token = 'your_token'
+    mock_metrics_provider.spec.influx.org = 'your_org'
+    mock_metrics_provider.spec.influx.bucket = 'your_bucket'
+    mock_metrics_provider.spec.type = 'influx'
+
+    class MockInfluxDBClientMetricsProviderError:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def query_api(self):
+            return self
+
+        def query(self, query):
+            # Raise an exception to simulate an error
+            raise influxdb_client.Error("Failed to query InfluxDB")
+
+    # Create an instance of the Influx class with the custom mock class
+    with mock.patch('krake.controller.scheduler.metrics.InfluxDBClient',
+                    new=MockInfluxDBClientMetricsProviderError):
+        influx = Influx(mock.MagicMock(), metrics_provider=mock_metrics_provider)
+
+        # Assert that the MetricsProviderError exception is raised
+        try:
+            await influx.query(mock_metric)
+        except MetricsProviderError:
+            # The exception is raised, so the test passes
+            pass
+        else:
+            raise AssertionError("MetricsProviderError not raised")
+
+
+async def test_query_metric_not_found():
+    # Create a mock metric object
+    mock_metric = mock.MagicMock()
+    mock_metric.spec.provider.metric = "mock_metric"
+
+    mock_metrics_provider = mock.MagicMock()
+    mock_metrics_provider.spec.influx.url = 'http://localhost:8086'
+    mock_metrics_provider.spec.influx.token = 'your_token'
+    mock_metrics_provider.spec.influx.org = 'your_org'
+    mock_metrics_provider.spec.influx.bucket = 'your_bucket'
+    mock_metrics_provider.spec.type = 'influx'
+
+    # Create a custom mock class that returns an empty result
+    class MockInfluxDBClientMetricError:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def query_api(self):
+            return self
+
+        def query(self, query):
+            # Return an empty result to simulate no records found
+            return []
+
+    # Create an instance of the Influx class with the custom mock class
+    with mock.patch("krake.controller.scheduler.metrics.InfluxDBClient",
+                    new=MockInfluxDBClientMetricError):
+        influx = Influx(mock.MagicMock(), metrics_provider=mock_metrics_provider)
+
+        # Assert that the MetricError exception is raised
+        try:
+            await influx.query(mock_metric)
+        except MetricError:
+            # The exception is raised, so the test passes
+            pass
+        else:
+            raise AssertionError("MetricError not raised")

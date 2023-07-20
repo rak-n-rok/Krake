@@ -11,8 +11,6 @@ from aiohttp import web
 from krake.controller.kubernetes.application.application import listen
 from kubernetes_asyncio.client import ApiClient
 
-from krake.krake.controller.kubernetes.hooks import listen
-
 
 def with_timeout(timeout):
     """Decorator function for coroutines

@@ -369,6 +369,7 @@ class Influx(Provider):
                 for record in table.records:
                     response = record.values['_value']
                     return float(response)
+
         except Exception as err:
             metric_provider_name = self.metrics_provider.metadata.name
             raise MetricsProviderError(

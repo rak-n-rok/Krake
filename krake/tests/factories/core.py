@@ -24,6 +24,7 @@ from krake.data.core import (
     StaticSpec,
     MetricRef,
     KafkaSpec,
+    InfluxSpec,
 )
 
 _existing_names = set()
@@ -225,6 +226,16 @@ class KafkaSpecFactory(Factory):
     url = fuzzy.FuzzyAttribute(fake.url)
 
 
+class InfluxSpecFactory(Factory):
+    class Meta:
+        model = InfluxSpec
+
+    url = fuzzy.FuzzyAttribute(fake.url)
+    token = fuzzy.FuzzyAttribute(fake.word)
+    org = fuzzy.FuzzyAttribute(fake.word)
+    bucket = fuzzy.FuzzyAttribute(fake.word)
+
+
 class StaticSpecFactory(Factory):
     class Meta:
         model = StaticSpec
@@ -251,11 +262,16 @@ class MetricsProviderSpecFactory(Factory):
             return self.type == "kafka"
 
         @lazy_attribute
+        def is_influx(self):
+            return self.type == "influx"
+
+        @lazy_attribute
         def is_static(self):
             return self.type == "static"
 
     prometheus = Maybe("is_prometheus", SubFactory(PrometheusSpecFactory), MISSING)
     kafka = Maybe("is_kafka", SubFactory(KafkaSpecFactory), MISSING)
+    influx = Maybe("is_influx", SubFactory(InfluxSpecFactory), MISSING)
     static = Maybe("is_static", SubFactory(StaticSpecFactory), MISSING)
 
     @lazy_attribute

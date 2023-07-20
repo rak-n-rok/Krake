@@ -31,6 +31,7 @@ install_requires = [
     "marshmallow-enum",
     "marshmallow-oneofschema",
     "marshmallow-union",
+    "mock",
     "pyOpenSSL",
     "python-magnumclient==3.*",
     "PyYAML==5.*",

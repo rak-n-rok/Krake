@@ -500,6 +500,12 @@ def _update_base_metrics_provider(
         mp["spec"][mp_type]["value_column"] = value_column
     if table:
         mp["spec"][mp_type]["table"] = table
+    if token:
+        mp["spec"][mp_type]["token"] = token
+    if org:
+        mp["spec"][mp_type]["org"] = org
+    if bucket:
+        mp["spec"][mp_type]["bucket"] = bucket
     return _update_base_resource(
         session, base_url, mp, name, config=config, namespace=namespace
     )
