@@ -4,7 +4,6 @@ floating_ip: false
 flavor: M.mem+
 
 # Minikube and kubectl configuration parameters
-#k3s_install_dir: /usr/local/bin
 microk8s_install_dir: /home/ubuntu
 microk8s_version: 1.26/stable
 

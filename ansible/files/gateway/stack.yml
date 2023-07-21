@@ -63,7 +63,7 @@ resources:
     properties:
       name: { get_param: instance_name }
       flavor: { get_param: flavor }
-      image: b06b77fc-d1bc-474d-8016-304003b22101 # Ubuntu 22.04 LTS x64
+      image: fd370d30-5165-4ad3-81bf-76b07bc4f726 # Ubuntu 22.04 LTS x64
       config_drive: { get_param: use_config_drive }
       key_name: { get_param: key }
       networks:
