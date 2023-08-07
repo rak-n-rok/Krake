@@ -23,7 +23,7 @@ tls:
   client_ca: $cert_dir/ca.pem
   client_cert: $cert_dir/system:scheduler.pem
   client_key: $cert_dir/system:scheduler-key.pem
-
+cluster_automation: $cluster_automation
 
 log:
   version: 1

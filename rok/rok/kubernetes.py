@@ -220,7 +220,7 @@ arg_metric_inheritance = argument(
 arg_auto_cluster_create = argument(
     "--auto-cluster-create",
     dest="auto_cluster_create",
-    default=0,
+    action="store_true",
     help="Boolean value, if clusters should be automatically created",
 )
 

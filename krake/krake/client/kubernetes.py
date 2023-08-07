@@ -284,7 +284,6 @@ class KubernetesApi(ApiClient):
             namespace=namespace,
         )
         url = self.client.url.with_path(path)
-
         resp = await self.client.session.request("POST", url, json=body.serialize())
         data = await resp.json()
         return Cluster.deserialize(data)

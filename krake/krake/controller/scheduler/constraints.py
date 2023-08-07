@@ -95,8 +95,8 @@ def _condition_metric(constraint, resource, fetched_metrics):
     return constraint.match(refs or {})
 
 
-def match_cluster_constraints(app, cluster, fetched_metrics=None):
-    """Evaluate if all application cluster constraints match cluster.
+def match_application_constraints(app, cluster, fetched_metrics=None):
+    """Evaluate if all application cluster constraints match a cluster or cloud.
 
     Args:
         app (krake.data.kubernetes.Application): Application that should be
@@ -132,7 +132,7 @@ def match_cluster_constraints(app, cluster, fetched_metrics=None):
     return _evaluate(app, cluster, constraints, fetched_metrics)
 
 
-def match_cloud_constraints(cluster, cloud, fetched_metrics=None):
+def match_cluster_constraints(cluster, cloud, fetched_metrics=None):
     """Evaluate if all cluster cloud constraints match a cloud.
 
     Args:
