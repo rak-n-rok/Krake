@@ -311,6 +311,12 @@ class SchedulerConfiguration(ControllerConfiguration):
             "to prevent too frequent rescheduling"
         },
     )
+    cluster_automation: str = field(
+        default="examples/automation/cluster.yaml",
+        metadata={
+            "help": "Location of the cluster files for automatically creating clusters"
+        }
+    )
 
 
 class KubernetesConfiguration(ControllerConfiguration):

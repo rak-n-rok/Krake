@@ -60,6 +60,7 @@ controllers:
 reschedule_after: 10
 stickiness: 0.1
 poll_interval: 1
+cluster_automation: "examples/automation/cluster.yaml"
 
 # "Complete" Hook-related parameters
 complete_hook_user: "system:complete-hook"

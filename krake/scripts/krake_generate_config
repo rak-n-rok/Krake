@@ -381,6 +381,14 @@ if __name__ == "__main__":
     )
     add_option(
         parser,
+        "--cluster_automation",
+        (
+            '""'
+        ),
+        default="examples/automation/cluster.yaml",
+    )
+    add_option(
+        parser,
         "--poll-interval",
         (
             "Time in seconds for the Infrastructure Controller"

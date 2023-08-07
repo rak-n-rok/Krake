@@ -220,7 +220,7 @@ arg_metric_inheritance = argument(
 arg_auto_cluster_create = argument(
     "--auto-cluster-create",
     dest="auto_cluster_create",
-    default=0,
+    action="store_true",
     help="Boolean value, if clusters should be automatically created",
 )
 
@@ -1017,11 +1017,12 @@ def get_cluster(config, session, namespace, name):
             for label in cloud['metadata']['labels']:
                 inherited_labels[label] = \
                     cloud['metadata']['labels'][label] + " (inherited)"
-        if data['spec']['constraints']['cloud']['labels']:
-            for constraint in cluster['spec']['constraints']['cloud']['metrics']:
-                for label in cloud['metadata']['labels']:
-                    if label in constraint:
-                        inherited_labels[label] = cloud['metadata']['labels'][label]
+            if data['spec']['constraints']['cloud']['labels']:
+                for constraint in data['spec']['constraints']['cloud']['labels']:
+                    for label in cloud['metadata']['labels']:
+                        if label in constraint:
+                            inherited_labels[label] = \
+                                cloud['metadata']['labels'][label] + " (inherited)"
         data['metadata']['labels'] = {**data['metadata']['labels'], **inherited_labels}
 
         inherited_metrics = list()
