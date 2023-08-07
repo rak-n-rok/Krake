@@ -40,6 +40,11 @@
         private_ip: "{{ outputs.private_ip }}"
         public_ip: "{{ outputs.public_ip | mandatory }}"
 
+    - name: Pause execution
+      ansible.builtin.pause:
+        seconds: 30
+
+
 - name: Setup network gateway instances
   hosts: gateways
   module_defaults:
