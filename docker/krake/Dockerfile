@@ -49,7 +49,9 @@ RUN pip install --upgrade pip && pip3 install /krake
 
 RUN useradd --create-home --uid $krake_uid --shell /bin/bash krake
 
+# in order to prevent logging file handlers from crashing
+RUN mkdir -p /home/krake/logs
+RUN chown krake /home/krake/logs
+
 USER krake
 WORKDIR /home/krake
-# in order to prevent logging file handlers from crashing
-RUN mkdir logs
