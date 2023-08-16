@@ -115,14 +115,6 @@ cache:
     - docker
 
 
-unittests-krake-3.7:
-  <<: *unittests-krake
-  image: python:3.7
-  variables:
-    TOXENV: py37
-    COVERAGE_FILE: krake/.coverage.py37
-
-
 unittests-krake-3.8:
   <<: *unittests-krake
   image: python:3.8
@@ -157,7 +149,7 @@ unittests-krake-3.11:
 
 flake8-krake:
   stage: test
-  image: python:3.7
+  image: python:3.8
   only:
     - tags
     - branches
@@ -172,7 +164,7 @@ flake8-krake:
 
 flake8-rok:
   stage: test
-  image: python:3.7
+  image: python:3.8
   only:
     - tags
     - branches
@@ -190,7 +182,7 @@ flake8-rok:
 # with non-zero if the code coverage ratio is under 85%.
 coverage-krake:
   stage: e2e
-  image: python:3.7
+  image: python:3.8
   script:
     - pip install coverage
     - coverage combine krake/.coverage.*
@@ -248,7 +240,7 @@ e2e-provisioning:
     ###################################
     - ansible-playbook  ansible/network.yml
     - ansible-playbook  ansible/gateway.yml
-    - ansible-parallel  ansible/microk8s_cluster.yml ansible/krake.yml 
+    - ansible-parallel  ansible/microk8s_cluster.yml ansible/krake.yml
     - ansible-playbook  ansible/krake_handle_certs.yml
 
     ##################################################
