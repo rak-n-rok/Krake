@@ -8,17 +8,3 @@ include:
   - local: gitlab-ci/cleanup_krake_os_project.yml
     rules:
       - if: $RUN_CLEAN_OS_PROJECT == "True" && $RUN_CI_PIPELINE == "False" && $CI_PIPELINE_SOURCE == "schedule" #scheduled Open Stack project cleanup
-
-  # Following code is for security testing in GitLab
-  - template: Security/Dependency-Scanning.gitlab-ci.yml
-    rules:
-      - if: $CI_PIPELINE_SOURCE == "schedule" && $RUN_CREATE_IMAGES == "False"
-  - template: Security/License-Scanning.gitlab-ci.yml
-    rules:
-      - if: $CI_PIPELINE_SOURCE == "schedule" && $RUN_CREATE_IMAGES == "False"
-  - template: Security/SAST.gitlab-ci.yml
-    rules:
-      - if: $CI_PIPELINE_SOURCE == "schedule" && $RUN_CREATE_IMAGES == "False"
-  - template: Security/Secret-Detection.gitlab-ci.yml
-    rules:
-      - if: $CI_PIPELINE_SOURCE == "schedule" && $RUN_CREATE_IMAGES == "False"
