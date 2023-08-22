@@ -429,20 +429,6 @@
             state: present
             build: no
 
-        - shell: docker restart {{ item }} && docker exec -u 0 {{ item }} chown -R krake /home/krake && docker exec {{ item }} ls -la /home/krake
-          loop:
-            - krake-api
-            - krake_krake-ctrl-garbage-collector_1
-            - krake_krake-ctrl-kubernetes-application_1
-            - krake_krake-ctrl-kubernetes-cluster_1
-            - krake_krake-ctrl-scheduler_1
-            - krake_krake-ctrl-infrastructure_1
-            - krake_krake-ctrl-magnum_1
-          register: shell_result
-
-        - debug:
-            var: shell_result.stdout_lines
-
         - name: Bootstrap etcd database
           shell : >
             docker exec -i {{ api_host }} krake_bootstrap_db --force -
