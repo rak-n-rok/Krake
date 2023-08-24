@@ -437,6 +437,14 @@ class PrometheusSpec(Serializable):
     url: str
 
 
+@MetricsProviderSpec.register("influx")
+class InfluxSpec(Serializable):
+    url: str
+    token: str
+    org: str
+    bucket: str
+
+
 @MetricsProviderSpec.register("kafka")
 class KafkaSpec(Serializable):
     """Specifications to connect to a KSQL database, and retrieve a specific row from a

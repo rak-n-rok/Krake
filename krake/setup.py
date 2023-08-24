@@ -31,6 +31,7 @@ install_requires = [
     "marshmallow-enum",
     "marshmallow-oneofschema",
     "marshmallow-union",
+    "mock",
     "pyOpenSSL",
     "python-magnumclient==3.*",
     "PyYAML==5.*",
@@ -39,7 +40,8 @@ install_requires = [
     "oslo.db==11.3.0",
     "tosca-parser==2.6.*",
     "deepdiff==6.2.*",
-    "yarl==1.8.*"
+    "yarl==1.8.*",
+    "influxdb_client",
 ]
 
 # webargs

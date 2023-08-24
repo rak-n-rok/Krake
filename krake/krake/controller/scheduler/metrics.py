@@ -36,6 +36,8 @@ from aiohttp import ClientError, ClientTimeout
 from krake.data.core import GlobalMetric
 from yarl import URL
 
+from influxdb_client import InfluxDBClient
+
 
 class BaseMetricError(Exception):
     """Base exception class for all errors related to metrics or metrics providers."""
@@ -310,6 +312,71 @@ class Kafka(Provider):
                 f" cannot be read from the KSQL response"
             )
             raise MetricError(message) from err
+
+
+class Influx(Provider):
+    """InfluxDB metrics provider client. It creates and handles queries to the given
+    InfluxDB server and evaluates requested metric values.
+
+    Args:
+        metrics_provider (krake.data.core.MetricsProvider): Metrics provider definition,
+            to use for getting information for fetching the queries.
+
+    """
+
+    type = "influx"
+
+    def __init__(self, session, metrics_provider):
+        self.session = session
+        self.metrics_provider = metrics_provider
+
+    async def query(self, metric):
+        """Querying a metric from an InfluxDB server.
+
+        Args:
+            metric (GlobalMetric): Metric description
+
+        Returns:
+            float: Metric value fetched from InfluxDB
+
+        Raises:
+            MetricError: If the request to InfluxDB fails, the response does
+                not contain the requested metric name or the metric cannot be
+                converted into a float.
+
+        """
+        metric_name = metric.spec.provider.metric
+
+        url = self.metrics_provider.spec.influx.url
+        token = self.metrics_provider.spec.influx.token
+        org = self.metrics_provider.spec.influx.org
+        bucket_name = self.metrics_provider.spec.influx.bucket
+
+        client = InfluxDBClient(url=url, token=token, org=org)
+        query_api = client.query_api()
+
+        query = f'''
+        from(bucket:"{bucket_name}")
+        |> range(start: -1h)
+        |> filter(fn: (r) => r._measurement == "{metric_name}")
+        |> last()
+        '''
+
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, query_api.query, query)
+            for table in result:
+                for record in table.records:
+                    response = record.values['_value']
+                    return float(response)
+
+        except Exception as err:
+            metric_provider_name = self.metrics_provider.metadata.name
+            raise MetricsProviderError(
+                f"Failed to query InfluxDB with provider {metric_provider_name!r}"
+            ) from err
+
+        raise MetricError(f"Metric {metric_name!r} not in InfluxDB response")
 
 
 class Static(Provider):

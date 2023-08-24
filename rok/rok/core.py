@@ -216,6 +216,7 @@ class _MetricsProviderType(Enum):
     PROMETHEUS = "prometheus"
     STATIC = "static"
     KAFKA = "kafka"
+    INFLUX = "influx"
 
 
 class BaseMetricsProviderListTable(BaseTable):
@@ -231,6 +232,9 @@ class BaseMetricsProviderTable(BaseMetricsProviderListTable):
             _MetricsProviderType.STATIC: {"metrics": dict_formatter},
             _MetricsProviderType.KAFKA: dict.fromkeys(
                 ["url", "comparison_column", "value_column", "table"]
+            ),
+            _MetricsProviderType.INFLUX: dict.fromkeys(
+                ["url", "token", "org", "bucket"]
             ),
         }
 
@@ -270,11 +274,15 @@ def _create_base_metrics_provider(
     comparison_column,
     value_column,
     table,
+    token,
+    org,
+    bucket,
     config=None,
     namespace=None,
 ):
     _validate_for_create_base_mp(
-        mp_type, metrics, url, comparison_column, value_column, table
+        mp_type, metrics, url, comparison_column, value_column, table, token, org,
+        bucket
     )
 
     mp_type = _MetricsProviderType(mp_type)
@@ -289,6 +297,8 @@ def _create_base_metrics_provider(
             "value_column": value_column,
             "table": table,
         }
+    elif mp_type == _MetricsProviderType.INFLUX:
+        type_dict = {"url": url, "token": token, "org": org, "bucket": bucket}
     else:
         raise SystemExit(f"Invalid metrics provider type: '{mp_type}'")
 
@@ -312,7 +322,8 @@ def _create_base_metrics_provider(
 
 
 def _validate_for_create_base_mp(
-    mp_type_str, metrics, url, comparison_column, value_column, table
+    mp_type_str, metrics, url, comparison_column, value_column, table, token, org,
+    bucket
 ):
     """Validate the provided parameters as input parameters for the
     _create_base_metrics_provider() method.
@@ -350,6 +361,9 @@ def _validate_for_create_base_mp(
             "value-column": value_column,
             "table": table,
         },
+        _MetricsProviderType.INFLUX: {
+            "url": url, "token": token, "org": org, "bucket": bucket
+        }
     }
     err_msg_fmt = (
         "Metrics provider type '{mp_type}' " "requires --{attr} to be specified"
@@ -368,7 +382,8 @@ def _get_base_metrics_provider(
 
 
 def _validate_for_update_base_mp(
-    mp_type_str, metrics, url, comparison_column, value_column, table
+    mp_type_str, metrics, url, comparison_column, value_column, table, token, org,
+    bucket
 ):
     """Validate the provided parameters as input parameters for the
     update_base_metrics_provider() method.
@@ -400,6 +415,9 @@ def _validate_for_update_base_mp(
             "metric": metrics,
         },
         _MetricsProviderType.KAFKA: {},
+        _MetricsProviderType.INFLUX: {
+            "url": url, "token": token, "org": org, "bucket": bucket
+        }
     }
     err_msg_fmt = "Metrics provider type '{mp_type}' requires --{attr} to be specified"
     for var_name, var in required_parameters[mp_type].items():
@@ -412,15 +430,30 @@ def _validate_for_update_base_mp(
             "comparison-column": comparison_column,
             "value-column": value_column,
             "table": table,
+            "token": token,
+            "org": org,
+            "bucket": bucket,
         },
         _MetricsProviderType.STATIC: {
             "url": url,
             "comparison-column": comparison_column,
             "value-column": value_column,
             "table": table,
+            "token": token,
+            "org": org,
+            "bucket": bucket,
         },
         _MetricsProviderType.KAFKA: {
             "metric": metrics,
+            "token": token,
+            "org": org,
+            "bucket": bucket,
+        },
+        _MetricsProviderType.INFLUX: {
+            "metric": metrics,
+            "comparison-column": comparison_column,
+            "value-column": value_column,
+            "table": table,
         },
     }
     err_msg_fmt = (
@@ -441,6 +474,9 @@ def _update_base_metrics_provider(
     comparison_column,
     value_column,
     table,
+    token,
+    org,
+    bucket,
     config=None,
     namespace=None,
 ):
@@ -450,7 +486,8 @@ def _update_base_metrics_provider(
     mp_type = mp["spec"]["type"]
 
     _validate_for_update_base_mp(
-        mp_type, metrics, mp_url, comparison_column, value_column, table
+        mp_type, metrics, mp_url, comparison_column, value_column, table, token, org,
+        bucket
     )
 
     if metrics:
@@ -463,6 +500,12 @@ def _update_base_metrics_provider(
         mp["spec"][mp_type]["value_column"] = value_column
     if table:
         mp["spec"][mp_type]["table"] = table
+    if token:
+        mp["spec"][mp_type]["token"] = token
+    if org:
+        mp["spec"][mp_type]["org"] = org
+    if bucket:
+        mp["spec"][mp_type]["bucket"] = bucket
     return _update_base_resource(
         session, base_url, mp, name, config=config, namespace=namespace
     )
@@ -532,6 +575,21 @@ def list_metricsproviders(config, session, namespace, all):
     help=f"Name of the column where the value of a metric is stored. "
     f"Only valid together with --type {_MetricsProviderType.KAFKA.value}.",
 )
+@argument(
+    "--token",
+    help=f"Authentication token used to securely connect to influx."
+    f"Only valid together with --type {_MetricsProviderType.INFLUX.value}.",
+)
+@argument(
+    "--org",
+    help=f"Organisation used in the influx context."
+    f"Only valid together with --type {_MetricsProviderType.INFLUX.value}.",
+)
+@argument(
+    "--bucket",
+    help=f"Name of the bucket which is used as metric source in influx."
+    f"Only valid together with --type {_MetricsProviderType.INFLUX.value}.",
+)
 @argument("name", help="Name of the metrics provider")
 @arg_namespace
 @arg_formatting
@@ -547,6 +605,9 @@ def create_metricsprovider(
     comparison_column,
     value_column,
     table,
+    token,
+    org,
+    bucket,
     name,
 ):
     return _create_base_metrics_provider(
@@ -560,6 +621,9 @@ def create_metricsprovider(
         comparison_column,
         value_column,
         table,
+        token,
+        org,
+        bucket,
         config=config,
         namespace=namespace,
     )
@@ -620,6 +684,21 @@ def get_metricsprovider(config, session, namespace, name):
     f"Only valid for metrics providers of type "
     f"{_MetricsProviderType.KAFKA.value}.",
 )
+@argument(
+    "--token",
+    help=f"Authentication token used to securely connect to influx."
+    f"Only valid together with --type {_MetricsProviderType.INFLUX.value}.",
+)
+@argument(
+    "--org",
+    help=f"Organisation used in the influx context."
+    f"Only valid together with --type {_MetricsProviderType.INFLUX.value}.",
+)
+@argument(
+    "--bucket",
+    help=f"Name of the bucket which is used as metric source in influx."
+    f"Only valid together with --type {_MetricsProviderType.INFLUX.value}.",
+)
 @arg_namespace
 @arg_formatting
 @depends("config", "session")
@@ -634,6 +713,9 @@ def update_metricsprovider(
     comparison_column,
     value_column,
     table,
+    token,
+    org,
+    bucket,
 ):
     return _update_base_metrics_provider(
         session,
@@ -645,6 +727,9 @@ def update_metricsprovider(
         comparison_column,
         value_column,
         table,
+        token,
+        org,
+        bucket,
         config=config,
         namespace=namespace,
     )
@@ -716,12 +801,37 @@ def list_globalmetricsproviders(session):
     help=f"Name of the column where the value of a metric is stored. "
     f"Only valid together with --type {_MetricsProviderType.KAFKA.value}.",
 )
+@argument(
+    "--token",
+    help=f"Authentication token used to securely connect to influx."
+    f"Only valid together with --type {_MetricsProviderType.INFLUX.value}.",
+)
+@argument(
+    "--org",
+    help=f"Organisation used in the influx context."
+    f"Only valid together with --type {_MetricsProviderType.INFLUX.value}.",
+)
+@argument(
+    "--bucket",
+    help=f"Name of the bucket which is used as metric source in influx."
+    f"Only valid together with --type {_MetricsProviderType.INFLUX.value}.",
+)
 @argument("name", help="Name of the global metrics provider")
 @arg_formatting
 @depends("session")
 @printer(table=BaseMetricsProviderTable())
 def create_globalmetricsprovider(
-    session, url, mp_type, metrics, comparison_column, value_column, table, name
+    session,
+    url,
+    mp_type,
+    metrics,
+    comparison_column,
+    value_column,
+    table,
+    name,
+    token,
+    org,
+    bucket,
 ):
     return _create_base_metrics_provider(
         session,
@@ -734,6 +844,9 @@ def create_globalmetricsprovider(
         comparison_column,
         value_column,
         table,
+        token,
+        org,
+        bucket,
     )
 
 
@@ -786,6 +899,21 @@ def get_globalmetricsprovider(session, name):
     f"Only valid for global metrics providers of type "
     f"{_MetricsProviderType.KAFKA.value}.",
 )
+@argument(
+    "--token",
+    help=f"Authentication token used to securely connect to influx."
+    f"Only valid together with --type {_MetricsProviderType.INFLUX.value}.",
+)
+@argument(
+    "--org",
+    help=f"Organisation used in the influx context."
+    f"Only valid together with --type {_MetricsProviderType.INFLUX.value}.",
+)
+@argument(
+    "--bucket",
+    help=f"Name of the bucket which is used as metric source in influx."
+    f"Only valid together with --type {_MetricsProviderType.INFLUX.value}.",
+)
 @arg_formatting
 @depends("session")
 @printer(table=BaseMetricsProviderTable())
@@ -797,6 +925,9 @@ def update_globalmetricsprovider(
     comparison_column,
     value_column,
     table,
+    token,
+    org,
+    bucket,
 ):
     return _update_base_metrics_provider(
         session,
@@ -808,6 +939,9 @@ def update_globalmetricsprovider(
         comparison_column,
         value_column,
         table,
+        token,
+        org,
+        bucket,
     )
 
 

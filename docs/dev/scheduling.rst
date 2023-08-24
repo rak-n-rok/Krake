@@ -305,10 +305,6 @@ Metrics and Metrics Providers
 Overview
 --------
 
-.. warning::
-
-    Due to stability and development issues on the side of Magnum, this feature isn't actively developed anymore.
-
 This section describes the metrics and their providers used in the Krake scheduling
 algorithm.
 
@@ -323,7 +319,7 @@ are bound to a namespace (hence why they're called 'namespaced') and can only be
 their respective context. In most of the documentation chapters, only ``GlobalMetrics``
 are talked about, but namespaced ``Metrics`` can also be used to follow these sections.
 
-The metrics for the Kubernetes clusters, Magnum clusters and OpenStack projects
+The metrics for the Cloud resources (OpenStack), Kubernetes clusters, Magnum clusters and OpenStack projects
 resources are defined by the ``-m`` or ``--metric`` option in the rok CLI, see
 :ref:`user/rok-documentation:Rok documentation`. Multiple metrics can be specified for
 one resource with the following syntax: `<name> <weight>`.
@@ -331,6 +327,9 @@ one resource with the following syntax: `<name> <weight>`.
 Examples:
 
 .. code:: bash
+
+  # Cloud resources:
+  rok infra cloud register <cloud resource depending parameters> --global-metric electricity_cost_1 10
 
   # Kubernetes clusters:
   rok kube cluster create <kubeconfig> --global-metric heat_demand_zone_1 0.45
@@ -351,6 +350,8 @@ supports the following types of metrics providers:
   metric from a Prometheus_ server;
 - **Kafka** metrics provider, which can be used to fetch the current value of a metric
   from a KSQL_ database;
+- **InfluxDB** metrics provider, which can be used to fetch the current value of a
+  metric from an Influx_ database;
 - **Static** metrics provider, which returns always the same value when a metric
   is fetched. Different metrics can be configured to be given by a Static provider,
   each with their respective value. The static provider was mostly designed for testing
@@ -404,6 +405,20 @@ Example
         table: my_table  # Name of the table in which the metrics are stored
         url: http://localhost:8080
         value_column: my_value_col  # Name of the column where the metrics values are stored
+
+    ---
+    # InfluxDB metrics provider
+    api: core
+    kind: GlobalMetricsProvider
+    metadata:
+      name: influx_provider
+    spec:
+      type: influx
+      influx:
+        bucket: my_bucket # Name of the bucket where the metrics values are stored
+        org: my_org # Name of the workspace where dashboards, tasks, buckets, members, etc. are managed in Influx
+        url: http://localhost:8086
+        token: my_token  # Influx API token for permission
 
     ---
     # Static metrics provider

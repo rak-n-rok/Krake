@@ -986,9 +986,9 @@ def get_cluster(config, session, namespace, name):
     resp = session.get(f"/kubernetes/namespaces/{namespace}/clusters/{name}")
     data = resp.json()
 
-    if ((data['spec']['inherit_metrics'] or
+    if ((("inherit_metrics" in data['spec'] and data['spec']['inherit_metrics']) or
          data['spec']['constraints']['cloud']['metrics']) or
-        (data['metadata']['inherit_labels'] or
+        (("inherit_labels" in data['spec'] and data['metadata']['inherit_labels']) or
          data['spec']['constraints']['cloud']['labels'])) and \
        data['status']['scheduled_to']:
         if data['status']['scheduled_to']['namespace']:
