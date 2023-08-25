@@ -19,7 +19,8 @@ Configuration is loaded from the ``controllers.scheduler`` section:
       client_ca: tmp/pki/ca.pem
       client_cert: tmp/pki/system:gc.pem
       client_key: tmp/pki/system:gc-key.pem
-    cluster_automation: examples/automation/cluster.yaml
+    automatic_cluster_creation:
+      tosca: examples/automation/cluster.yaml
 
     log:
       ...
@@ -68,7 +69,7 @@ def main(config):
         debounce=config.debounce,
         reschedule_after=config.reschedule_after,
         stickiness=config.stickiness,
-        cluster_automation=config.cluster_automation
+        cluster_creation_tosca=config.automatic_cluster_creation.tosca
     )
     run(scheduler)
 

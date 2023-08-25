@@ -104,6 +104,15 @@ class AuthenticationConfiguration(Serializable):
     strategy: StrategyConfiguration
 
 
+class AutomaticClusterCreationConfiguration(Serializable):
+    tosca: str = field(
+        default="examples/automation/cluster.yaml",
+        metadata={
+            "help": "Location of the tosca file to automatically create a cluster"
+        }
+    )
+
+
 def _validate_endpoint(endpoint):
     """Ensure that the provided endpoint is a valid URL and that it has a supported
     scheme.
@@ -311,12 +320,7 @@ class SchedulerConfiguration(ControllerConfiguration):
             "to prevent too frequent rescheduling"
         },
     )
-    cluster_automation: str = field(
-        default="examples/automation/cluster.yaml",
-        metadata={
-            "help": "Location of the cluster files for automatically creating clusters"
-        }
-    )
+    automatic_cluster_creation: AutomaticClusterCreationConfiguration
 
 
 class KubernetesConfiguration(ControllerConfiguration):

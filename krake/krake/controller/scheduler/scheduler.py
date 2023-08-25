@@ -170,7 +170,7 @@ class Scheduler(Controller):
         ssl_context=None,
         debounce=0,
         loop=None,
-        cluster_automation=None,
+        cluster_creation_tosca=None,
     ):
         super().__init__(
             api_endpoint, loop=loop, ssl_context=ssl_context, debounce=debounce
@@ -190,7 +190,7 @@ class Scheduler(Controller):
         self.worker_count = worker_count
         self.reschedule_after = reschedule_after
         self.stickiness = stickiness
-        self.cluster_automation = cluster_automation
+        self.cluster_creation_tosca = cluster_creation_tosca
 
         self.kubernetes_application = None
         self.kubernetes_cluster = None
@@ -215,7 +215,7 @@ class Scheduler(Controller):
             self.infrastructure_api,
             self.stickiness,
             self.reschedule_after,
-            self.cluster_automation
+            self.cluster_creation_tosca
         )
         self.kubernetes_cluster = KubernetesClusterHandler(
             self.client,
@@ -414,7 +414,7 @@ class Handler(object):
         references.
 
         If a :class:`MetricError` or `ClientError` occurs, the generator stops
-        which means resources where an error during metric fetching occurs can
+        which means resources where an error occurs during metric fetching can
         be skipped by:
 
         .. code:: python
@@ -432,7 +432,8 @@ class Handler(object):
                 that should be fetched.
 
         Raises:
-            AssertionError: if metrics are not set or stopped is set
+            AssertionError: raised if no metrics list is provided or the error iteration
+                is stopped, because no iteration on the reasons list was possible
 
         Yields:
             list[krake.controller.scheduler.metrics.QueryResult]: List of fetched
@@ -521,8 +522,8 @@ class Handler(object):
                     logger.error(error)
             return
         else:
-            if resource.status.state == ClusterState.FAILING_METRICS and \
-               resource.kind == Cluster.kind:
+            if resource.kind == Cluster.kind and \
+               resource.status.state == ClusterState.FAILING_METRICS:
                 resource.status.state = ClusterState.ONLINE
                 resource.status.reason = None
                 await self.api.update_cluster_status(
@@ -531,128 +532,8 @@ class Handler(object):
                     body=resource,
                 )
 
-        for metric, weight, value in fetched:
-            logger.debug(
-                "Received metric %r with value %r for %r", metric, value, resource
-            )
-
-        yield fetched
-
-    async def fetch_cloud_metrics(self, resource, metrics):
-        """Async generator for fetching metrics by the given list of metric
-        references.
-
-        If a :class:`MetricError` or `ClientError` occurs, the generator stops
-        which means resources where an error occurs during metric fetching can
-        be skipped by:
-
-        .. code:: python
-
-            scores = [
-                self.calculate_foo_score()
-                for foo in foos
-                async for metrics in self.fetch_cloud_metrics(foo, foo.spec.metrics)
-            ]
-
-        Args:
-            resource (krake.data.serializable.ApiObject): API resource to which
-                the metrics belong.
-            metrics (list[krake.data.core.MetricRef]): References to metrics
-                that should be fetched.
-
-        Raises:
-            AssertionError: raised if no metrics list is provided or the error iteration
-                is stopped, because no iteration on the reasons lsit was possible
-
-        Yields:
-            list[krake.controller.scheduler.metrics.QueryResult]: List of fetched
-                metrics with their value and weight.
-        """
-        assert metrics, "Got empty list of metric references"
-
-        errors = []
-        reasons = []
-        fetching = []
-        for metric_spec in metrics:
-            try:
-                if metric_spec.namespaced:
-
-                    if not resource.metadata.namespace:
-                        # Note: A non-namespaced resource (e.g. `GlobalCloud`)
-                        #   cannot reference the namespaced `Metric` resource,
-                        #   see #499 for details
-                        reasons.append(
-                            Reason(
-                                code=ReasonCode.INVALID_METRIC,
-                                message=(
-                                    "Attempt to reference a namespaced"
-                                    f" metric {metric_spec.name} on a non-namespaced"
-                                    f" resource {resource.metadata.name}"
-                                ),
-                            )
-                        )
-                        continue
-
-                    metric = await self.core_api.read_metric(
-                        name=metric_spec.name, namespace=resource.metadata.namespace
-                    )
-                    metrics_provider = await self.core_api.read_metrics_provider(
-                        name=metric.spec.provider.name,
-                        namespace=resource.metadata.namespace,
-                    )
-                else:
-                    metric = await self.core_api.read_global_metric(
-                        name=metric_spec.name
-                    )
-                    metrics_provider = await self.core_api.read_global_metrics_provider(
-                        name=metric.spec.provider.name
-                    )
-                fetching.append(
-                    fetch_query(
-                        self.client.session,
-                        metric,
-                        metrics_provider,
-                        metric_spec.weight,
-                    )
-                )
-                reasons.append(None)  # Add an empty placeholder when no error occurred.
-            except ClientError as err:
-                reasons.append(self.metrics_reason_from_err(err))
-                errors.append(err)
-
-        fetched = await asyncio.gather(*fetching, return_exceptions=True)
-
-        # Convert the errors which occurred when fetching the value of the remaining
-        # metrics into Reason instances.
-        # For this, the next occurrence of "None" inside the "reasons" list is used.
-        # Each one of this occurrence corresponds to a task for fetching the metric. So
-        # if for example the 3rd element in "fetched" is an error, the 3rd "None" in
-        # "reasons" must be replaced.
-        none_reason_iter = (i for i, reason in enumerate(reasons) if reason is None)
-        for result in fetched:
-            # Get the index of the next "None" inside "reasons".
-            index_of_none = next(none_reason_iter)
-            if isinstance(result, Exception):
-                reasons[index_of_none] = self.metrics_reason_from_err(result)
-                errors.append(result)
-
-        stopped = False
-        try:
-            next(none_reason_iter)
-        except StopIteration:
-            stopped = True
-        assert stopped
-
-        if any(reasons):
-            # If there is any issue with a metric, skip stop the generator.
-            await self.update_resource_status(resource, metrics, reasons)
-            for error in errors:
-                if error:
-                    logger.error(error)
-            return
-        else:
-            if resource.status.state == CloudState.FAILING_METRICS and \
-               resource.kind == Cloud.kind:
+            if resource.kind == Cloud.kind and \
+               resource.status.state == CloudState.FAILING_METRICS:
                 resource.status.state = CloudState.ONLINE
                 resource.status.reason = None
                 await self.api.update_cluster_status(
@@ -671,7 +552,7 @@ class Handler(object):
 
 class KubernetesApplicationHandler(Handler):
     def __init__(self, client, queue, api, core_api, infrastructure_api,
-                 stickiness, reschedule_after, cluster_automation):
+                 stickiness, reschedule_after, cluster_creation_tosca):
 
         super(KubernetesApplicationHandler, self).__init__(client, queue, api, core_api)
 
@@ -679,7 +560,7 @@ class KubernetesApplicationHandler(Handler):
 
         self.stickiness = stickiness
         self.reschedule_after = reschedule_after
-        self.cluster_automation = cluster_automation
+        self.cluster_creation_tosca = cluster_creation_tosca
 
     async def received_kubernetes_app(self, app):
         """Handler for Kubernetes application reflector.
@@ -849,7 +730,7 @@ class KubernetesApplicationHandler(Handler):
                     cluster_name = self.auto_generate_cluster_name()
 
                     with open(f"{os.path.dirname(os.getcwd())}/" +
-                              self.cluster_automation, 'r') as file:
+                              self.cluster_creation_tosca, 'r') as file:
                         tosca = yaml.safe_load(file)
 
                     to_create = Cluster(
@@ -1078,7 +959,7 @@ class KubernetesApplicationHandler(Handler):
         scores = list()
 
         for cloud in clouds:
-            async for metrics in self.fetch_cloud_metrics(
+            async for metrics in self.fetch_metrics(
                 cloud, cloud.spec.openstack.metrics
             ):
                 scores.append(

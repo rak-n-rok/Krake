@@ -94,7 +94,6 @@ def test_main(scheduler_config, log_to_file_config):
 
     scheduler_config.api_endpoint = "http://my-krake-api:1234"
     scheduler_config.log = log_config
-    scheduler_config.cluster_automation = "examples/automation/cluster.yaml"
 
     def wrapper(configuration):
         loop = asyncio.new_event_loop()

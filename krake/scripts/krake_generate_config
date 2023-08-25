@@ -381,9 +381,10 @@ if __name__ == "__main__":
     )
     add_option(
         parser,
-        "--cluster_automation",
+        "--cluster_creation_tosca",
         (
-            '""'
+            '"Path to the tosca file used for automatic'
+            ' cluster creation on request"'
         ),
         default="examples/automation/cluster.yaml",
     )

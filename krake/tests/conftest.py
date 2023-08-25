@@ -36,6 +36,7 @@ from krake.data.config import (
     HooksConfiguration,
     MagnumConfiguration,
     TlsClientConfiguration,
+    AutomaticClusterCreationConfiguration,
     ControllerConfiguration,
     SchedulerConfiguration,
     KubernetesConfiguration,
@@ -357,6 +358,23 @@ def tls_client_config():
 
 
 @pytest.fixture
+def automatic_cluster_creation_config():
+    """Create a configuration for the "automatic_cluster_creation" field
+    in the scheduler controller configuration.
+
+    Returns:
+        AutomaticClusterCreationConfiguration: the created configuration.
+
+    """
+    config = {
+        "tosca": "examples/automation/cluster.yaml"
+    }
+    return AutomaticClusterCreationConfiguration.deserialize(
+        config, creation_ignored=True
+    )
+
+
+@pytest.fixture
 def gc_config(tls_client_config):
     """Create a configuration for the Garbage Collector.
 
@@ -422,7 +440,7 @@ def infrastructure_config(tls_client_config):
 
 
 @pytest.fixture
-def scheduler_config(tls_client_config):
+def scheduler_config(tls_client_config, automatic_cluster_creation_config):
     """Create a configuration for the Scheduler.
 
     Returns:
@@ -430,7 +448,11 @@ def scheduler_config(tls_client_config):
 
     """
 
-    config = {"tls": tls_client_config.serialize(), "log": {}}
+    config = {
+        "tls": tls_client_config.serialize(),
+        "log": {},
+        "automatic_cluster_creation": automatic_cluster_creation_config.serialize()
+    }
     return SchedulerConfiguration.deserialize(config, creation_ignored=True)
 
 
