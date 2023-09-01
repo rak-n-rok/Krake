@@ -1,0 +1,5 @@
+python-openstackclient 
+openstacksdk 
+ansible >= 2.9 
+pytest 
+python-heatclient

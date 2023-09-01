@@ -22,6 +22,7 @@ API reference of all modules is provided.
     principles
     scheduling
     hooks
+    statefulness
     kubernetes-application-controller
     kubernetes-application-observer
     kubernetes-cluster-controller
@@ -32,3 +33,5 @@ API reference of all modules is provided.
     tosca
     ref/krake
     ref/rok
+    docker
+    gitlab-cicd
