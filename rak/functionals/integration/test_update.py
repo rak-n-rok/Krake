@@ -77,10 +77,10 @@ def test_update_application_manifest(k8s_clusters):
         manifest_spec = app_details["spec"]["manifest"][0]["spec"]["template"]["spec"]
         container_image = manifest_spec["containers"][0]["image"]
 
-        assert container_image == "k8s.gcr.io/echoserver:1.9"
+        assert container_image == "registry.k8s.io/echoserver:1.9"
 
         # 3. Check that the image version has been changed on the cluster
-        expected_image = "k8s.gcr.io/echoserver:1.9"
+        expected_image = "registry.k8s.io/echoserver:1.9"
         error_message = (
             f"The image of the container of deployment {app.name}"
             f"should have been updated to {expected_image}."
@@ -489,10 +489,10 @@ def test_update_application_tosca(k8s_clusters, tosca_from, file_server):
         manifest_spec = app_details["spec"]["manifest"][0]["spec"]["template"]["spec"]
         container_image = manifest_spec["containers"][0]["image"]
 
-        assert container_image == "k8s.gcr.io/echoserver:1.9"
+        assert container_image == "registry.k8s.io/echoserver:1.9"
 
         # 3. Check that the image version has been changed on the cluster
-        expected_image = "k8s.gcr.io/echoserver:1.9"
+        expected_image = "registry.k8s.io/echoserver:1.9"
         error_message = (
             f"The image of the container of deployment {app.name}"
             f" should have been updated to {expected_image}."
@@ -591,10 +591,10 @@ def test_update_application_csar(k8s_clusters, archive_files, file_server):
         manifest_spec = app_details["spec"]["manifest"][0]["spec"]["template"]["spec"]
         container_image = manifest_spec["containers"][0]["image"]
 
-        assert container_image == "k8s.gcr.io/echoserver:1.9"
+        assert container_image == "registry.k8s.io/echoserver:1.9"
 
         # 3. Check that the image version has been changed on the cluster
-        expected_image = "k8s.gcr.io/echoserver:1.9"
+        expected_image = "registry.k8s.io/echoserver:1.9"
         error_message = (
             f"The image of the container of deployment {app.name}"
             f" should have been updated to {expected_image}."
@@ -694,10 +694,10 @@ def test_update_manifest_application_by_tosca(
         manifest_spec = app_details["spec"]["manifest"][0]["spec"]["template"]["spec"]
         container_image = manifest_spec["containers"][0]["image"]
 
-        assert container_image == "k8s.gcr.io/echoserver:1.9"
+        assert container_image == "registry.k8s.io/echoserver:1.9"
 
         # 3. Check that the image version has been changed on the cluster
-        expected_image = "k8s.gcr.io/echoserver:1.9"
+        expected_image = "registry.k8s.io/echoserver:1.9"
         error_message = (
             f"The image of the container of deployment {app.name}"
             f" should have been updated to {expected_image}."
@@ -791,10 +791,10 @@ def test_update_manifest_application_by_csar(
         manifest_spec = app_details["spec"]["manifest"][0]["spec"]["template"]["spec"]
         container_image = manifest_spec["containers"][0]["image"]
 
-        assert container_image == "k8s.gcr.io/echoserver:1.9"
+        assert container_image == "registry.k8s.io/echoserver:1.9"
 
         # 3. Check that the image version has been changed on the cluster
-        expected_image = "k8s.gcr.io/echoserver:1.9"
+        expected_image = "registry.k8s.io/echoserver:1.9"
         error_message = (
             f"The image of the container of deployment {app.name}"
             f" should have been updated to {expected_image}."

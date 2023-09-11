@@ -444,9 +444,17 @@ class ResourceDefinition(ABC):
             return ""
 
     @staticmethod
+    def _get_auto_cluster_create_options(auto_cluster_create):
+        if auto_cluster_create is not None:
+            return ResourceDefinition._get_flag_str_options(
+                "--auto_cluster_create", ""
+            )
+        else:
+            return ""
+
+    @staticmethod
     def _get_namespace_options(namespace):
         return ResourceDefinition._get_flag_str_options("--namespace", namespace)
-
 
     @staticmethod
     def _get_flag_str_options(flag, values):
@@ -519,6 +527,7 @@ class ApplicationDefinition(ResourceDefinition):
         backoff=None,
         backoff_delay=None,
         backoff_limit=None,
+        auto_cluster_create=False,
     ):
         super().__init__(name=name, kind=ResourceKind.APPLICATION, namespace=namespace)
         assert (
@@ -538,6 +547,7 @@ class ApplicationDefinition(ResourceDefinition):
         self.backoff = backoff
         self.backoff_delay = backoff_delay
         self.backoff_limit = backoff_limit
+        self.auto_cluster_create = auto_cluster_create
         self._update_behavior = {
             "--remove-existing-labels",
             "--remove-existing-label-constraints",
@@ -559,6 +569,7 @@ class ApplicationDefinition(ResourceDefinition):
         defaults.update({"backoff": 1})
         defaults.update({"backoff_delay": 1})
         defaults.update({"backoff_limit": -1})
+        defaults.update({"auto_cluster_create": False})
         return defaults
 
     def _get_actual_mutable_attribute_values(self):
@@ -572,6 +583,7 @@ class ApplicationDefinition(ResourceDefinition):
             "backoff": app["spec"]["backoff"],
             "backoff_delay": app["spec"]["backoff_delay"],
             "backoff_limit": app["spec"]["backoff_limit"],
+            "auto_cluster_create": app["spec"]["auto_cluster_create"],
         }
 
     def creation_command(self, wait):
@@ -608,6 +620,7 @@ class ApplicationDefinition(ResourceDefinition):
         cmd += self._get_backoff_options(self.backoff)
         cmd += self._get_backoff_delay_options(self.backoff_delay)
         cmd += self._get_backoff_limit_options(self.backoff_limit)
+        cmd += self._get_auto_cluster_create_options(self.auto_cluster_create)
 
         return cmd
 

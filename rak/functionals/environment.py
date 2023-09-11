@@ -300,6 +300,7 @@ def create_multiple_cluster_environment(
     app_backoff=None,
     app_backoff_delay=None,
     app_backoff_limit=None,
+    auto_cluster_create=False,
 ):
     """Create the resource definitions for a test environment with
     one Application and multiple Clusters.
@@ -329,6 +330,7 @@ def create_multiple_cluster_environment(
             default: 1 (no backoff)
         app_backoff_delay (int, optional): delay [s] between attempts. default: 1
         app_backoff_limit (int, optional): a maximal number of attempts, default: -1 (infinite)
+        auto_cluster_create (bool, optional): flag for the creation of new clusters with clouds
 
     Returns:
         dict[int, list[ResourceDefinition]]: an environment definition to use to create
@@ -383,6 +385,7 @@ def create_multiple_cluster_environment(
                 backoff=app_backoff,
                 backoff_delay=app_backoff_delay,
                 backoff_limit=app_backoff_limit,
+                auto_cluster_create=auto_cluster_create,
             )
         ]
     return env
@@ -397,6 +400,7 @@ def create_default_environment(
     app_backoff=None,
     app_backoff_delay=None,
     app_backoff_limit=None,
+    auto_cluster_create=False,
 ):
     """Create and return a test environment definition with one application and
     len(cluster_names) clusters using default kubeconfig and manifest files.
@@ -447,4 +451,5 @@ def create_default_environment(
         app_backoff=app_backoff,
         app_backoff_delay=app_backoff_delay,
         app_backoff_limit=app_backoff_limit,
+        auto_cluster_create=auto_cluster_create,
     )

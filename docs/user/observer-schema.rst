@@ -23,7 +23,7 @@ done in the Kubernetes infrastructure or by the Kubernetes plane itself.
 
   The custom observer schema could be used even when the application is described by a TOSCA template or CSAR archive.
   Both file types are translated to Kubernetes manifests in Krake's Kubernetes application controller,
-  hence the custom observer schema file will be applied to the Kubernetes resources just like it happens during a "regular" 
+  hence the custom observer schema file will be applied to the Kubernetes resources just like it happens during a "regular"
   workflow, when a Kubernetes manifest is used, see :ref:`dev/tosca:TOSCA Workflow`.
 
 
@@ -63,7 +63,7 @@ Example of manifest file provided by the user:
         spec:
           containers:
           - name: echo
-            image: k8s.gcr.io/echoserver:1.10
+            image: registry.k8s.io/echoserver:1.10
             ports:
             - containerPort: 8080
     ---

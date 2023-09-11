@@ -532,15 +532,21 @@ class Handler(object):
                     body=resource,
                 )
 
-            if resource.kind == Cloud.kind and \
+            if resource.kind == Cloud.kind or resource.kind == GlobalCloud.kind and \
                resource.status.state == CloudState.FAILING_METRICS:
                 resource.status.state = CloudState.ONLINE
                 resource.status.reason = None
-                await self.api.update_cluster_status(
-                    namespace=resource.metadata.namespace,
-                    name=resource.metadata.name,
-                    body=resource,
-                )
+                if resource.kind == Cloud.kind:
+                    await self.api.update_cloud_status(
+                        namespace=resource.metadata.namespace,
+                        name=resource.metadata.name,
+                        body=resource,
+                    )
+                if resource.kind == GlobalCloud.kind:
+                    await self.api.update_global_cloud_status(
+                        name=resource.metadata.name,
+                        body=resource,
+                    )
 
         for metric, weight, value in fetched:
             logger.debug(

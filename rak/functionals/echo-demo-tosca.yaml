@@ -43,7 +43,7 @@ topology_template:
                   spec:
                     containers:
                     - name: echo
-                      image: k8s.gcr.io/echoserver:1.10
+                      image: registry.k8s.io/echoserver:1.10
                       ports:
                       - containerPort:
             - get_input: echo_demo_port

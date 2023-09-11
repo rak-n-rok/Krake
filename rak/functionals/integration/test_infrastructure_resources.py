@@ -8,7 +8,7 @@ the Krake API:
 The tests are performed against the Krake API, via the rok CLI.
 """
 import copy
-
+import random
 import pytest
 
 from functionals.utils import (
@@ -16,6 +16,19 @@ from functionals.utils import (
     check_http_code_in_output,
     check_response_content,
     check_empty_list,
+)
+from functionals.environment import (
+    Environment,
+    create_simple_environment,
+    create_default_environment,
+    CLUSTERS_CONFIGS,
+    MANIFEST_PATH,
+)
+from functionals.resource_definitions import ResourceKind
+from functionals.resource_provider import (
+    provider,
+    WeightedMetric,
+    NonExistentMetric
 )
 
 
@@ -336,3 +349,155 @@ def test_cloud_crudl(resource, cloud_type):
         f"rok infra {resource.lower()} list -o json",
         condition=check_empty_list(error_message),
     )
+
+
+@pytest.mark.skip(
+    reason="This test is skipped for now, since it is unsafe to have a real username "
+    "password combination in cleartext."
+)
+def test_scheduler_with_cloud(k8s_clusters):
+    """E2e test for scheduling an application  to a cloud if the metric score is better
+
+    Test applies workflow as follows:
+
+        1. Create a cluster with specific metrics
+        2. Create a cloud with a higher metric value
+        3. Create an application with the 'automatic_cluster_creation' flag
+        4. Ensure that the application is scheduled to a newly created cluster on the cloud.
+
+    Args:
+        k8s_clusters (list): Names of the Kubernetes backend.
+    """
+    # 1. Get Global Metrics (Provider)
+    gmp = provider.get_global_static_metrics_provider()
+    global_static_metric1 = gmp.get_valued_metrics()[0]
+    global_static_metric2 = gmp.get_valued_metrics()[1]
+
+    # --------------------------------
+    resource_name = "global_cloud"
+    expected_content_subset = {
+        "api": "infrastructure",
+        "kind": "GlobalCloud",
+        "metadata": {
+            "name": resource_name,
+        },
+        "spec": {
+            "type": "openstack",
+            "openstack": {
+                "auth": {
+                    "type": "password",
+                    "password": {
+                        "project": {"domain_id": "default", "name": "project"},
+                        "user": {
+                            "domain_name": "Default",
+                            "password": "pass",
+                            "username": "user",
+                        },
+                    },
+                },
+                "infrastructure_provider": {"name": "im-provider"},
+                "url": "http://keystone.example",
+            },
+        },
+        "status": {"state": "ONLINE"},
+    }
+    expected_content_updated = copy.deepcopy(expected_content_subset)
+    expected_content_updated["spec"]["openstack"]["url"] = "http://updated.example"
+
+    # 2. Register a cloud
+    error_message = f"The global cloud {resource_name} could not be registered."
+    run(
+        f"rok infra gc register {resource_name}"
+        f" --type openstack"
+        " --url http://keystone.example"
+        " --project project"
+        " --user user"
+        " --password pass"
+        " --global-infra-provider im-provider"
+        f" --global-metric {global_static_metric1.metric.mp_metric_name} 1"
+        f" --global-metric {global_static_metric2.metric.mp_metric_name} 1.5"
+        " -o json",
+        condition=check_response_content(
+            error_message,
+            expected_content_subset,
+        ),
+        retry=0,
+    )
+
+    # 3. Register an infrastructure provider
+    run(
+        "rok infra ip register im-provider"
+        " --type im"
+        " --url http://localhost:8800"
+        " --username test"
+        " --password test",
+        retry=0,
+    )
+
+    # 4. Create an application and check if it is scheduled to a cluster created
+    # on the cloud
+    cluster = random.choice(k8s_clusters)
+    environment = create_default_environment([cluster], auto_cluster_create=True)
+
+    with Environment(environment, creation_delay=10) as env:
+        app = env.resources[ResourceKind.APPLICATION][0]
+
+        cluster_details = run(
+            f"rok kube cluster get kind-cluster-1",
+            retry=90,
+            interval=10,
+        )
+        print(cluster_details.output)
+
+        cluster_details = run(
+            f"rok kube cluster get kind-cluster-2",
+            retry=90,
+            interval=10,
+        )
+        print(cluster_details.output)
+
+        ip_list = run(
+            f"rok infra ip list",
+            retry=90,
+            interval=10,
+        )
+        print(ip_list.output)
+        gc_list = run(
+            f"rok infra gc list",
+            retry=90,
+            interval=10,
+        )
+        print(gc_list.output)
+
+        app.check_running_on(cluster, after_delay=100)
+
+        app_list = run(
+            f"rok kube app list",
+            retry=90,
+            interval=10,
+        )
+        print(app_list.output)
+        app_details = run(
+            f"rok kube app get echo-demo",
+            retry=90,
+            interval=10,
+        )
+        print(app_details.output)
+
+    # 4. Delete the cloud
+    error_message = f"The global cloud {resource_name} could not be deleted."
+    run(
+        f"rok infra gc delete {resource_name} -o json",
+        condition=check_response_content(
+            error_message,
+            expected_content_updated,
+        ),
+        retry=0,
+    )
+
+    # TODO - check if app is on cluster of cloud
+    # - check if cluster is spawned
+    # - delete cluster
+    # - delete cloud
+
+    # maybe write environment for clouds

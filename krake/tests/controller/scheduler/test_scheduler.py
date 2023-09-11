@@ -3225,6 +3225,8 @@ async def test_cloud_score(
             }
         ),
     ]
+    for cloud in clouds:
+        await db.put(cloud)
 
     metrics = [
         GlobalMetricFactory(
@@ -3329,6 +3331,8 @@ async def test_global_cloud_score(
             }
         ),
     ]
+    for cloud in clouds:
+        await db.put(cloud)
 
     metrics = [
         GlobalMetricFactory(
@@ -4037,6 +4041,8 @@ async def test_cluster_prefer_cloud_with_global_metrics(
             ],
         }
     )
+    await db.put(cloud_miss)
+    await db.put(cloud)
 
     metric = GlobalMetricFactory(
         metadata__name="my_metric",
