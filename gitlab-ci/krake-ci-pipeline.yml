@@ -197,11 +197,12 @@ coverage-krake:
   artifacts:
     paths:
       - coverage.tar.gz
+  coverage: '/^TOTAL.*\s+(\d+\%)$/'
 
 
 # Following job are for end-to-end testing. We're provisioning the staging
-# infrastructure in the e2e-provisioning job before and run the end-to-end 
-# tests, and cleanup the staging infrastructure. They are run only on the 
+# infrastructure in the e2e-provisioning job before and run the end-to-end
+# tests, and cleanup the staging infrastructure. They are run only on the
 # master branch, on merge requests, and on scheduled pipeline (night runs)
 e2e-provisioning:
   stage: test
@@ -209,7 +210,7 @@ e2e-provisioning:
   only:
     - master
     - merge_requests
-    - schedules   
+    - schedules
   needs:
     - flake8-krake
     - flake8-rok
@@ -250,12 +251,12 @@ e2e-provisioning:
     - ansible-playbook  ansible/integration_tests.yml --tags prepare-tests --skip-tags always
 
 e2e-provisioning-backup:
-  # This job is executed if the provisioning of the OS infrastructure fails at 
-  # the first attempt. In addition, it enables debugging the provisioning 
-  # process, since the 'ansible-parallel' command from the previous stage does 
+  # This job is executed if the provisioning of the OS infrastructure fails at
+  # the first attempt. In addition, it enables debugging the provisioning
+  # process, since the 'ansible-parallel' command from the previous stage does
   # not provide useful output.
   stage: provisioning-backup
-  when: on_failure 
+  when: on_failure
   image: registry.gitlab.com/rak-n-rok/krake/ansible_image:latest
   only:
     - master
