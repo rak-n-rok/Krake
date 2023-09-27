@@ -119,7 +119,7 @@ create
 
   	``--inherit-labels`` (optional):
   		Enables inheritance of all labels from the cloud the cluster is scheduled to.
-  	
+
     ``-l | --label`` (optional):
         The key and the value of a cluster label in the form: ``<key>=<value>``.
         Can be specified multiple times.
@@ -314,6 +314,10 @@ create
     ``--backoff_delay`` (optional): delay [s] between attempts to handle the application. default: 1
 
     ``--backoff_limit`` (optional):  a maximal number of attempts to handle the application. If the attempt to handle the application failed, it will transfer to the Application State DEGRADED, instead of directly going into the State FAILED. Default: -1 (infinite)
+
+    ``--auto-cluster-create`` (optional): boolean value that determines, if clusters should be automatically created when
+      a cloud resource has a better scheduling score than all the other clusters or clouds
+
 
 list
     List all Applications of a namespace.
