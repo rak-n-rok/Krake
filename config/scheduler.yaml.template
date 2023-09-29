@@ -24,7 +24,8 @@ tls:
   client_cert: $cert_dir/system:scheduler.pem
   client_key: $cert_dir/system:scheduler-key.pem
 automatic_cluster_creation:
-  tosca: $cluster_creation_tosca
+  tosca_file: $cluster_creation_tosca_file
+  deletion_retention: $cluster_creation_deletion_retention
 
 log:
   version: 1

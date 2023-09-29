@@ -61,7 +61,8 @@ reschedule_after: 10
 stickiness: 0.1
 poll_interval: 1
 automatic_cluster_creation:
-  tosca: "examples/automation/cluster.yaml"
+  tosca_file: "examples/automation/cluster.yaml"
+  deletion_retention: 600
 
 # "Complete" Hook-related parameters
 complete_hook_user: "system:complete-hook"

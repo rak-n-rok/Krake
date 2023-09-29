@@ -16,7 +16,8 @@ data:
       client_cert: ""
       client_key: ""
     automatic_cluster_creation:
-      tosca: examples/automation/cluster.yaml
+      tosca_file: examples/automation/cluster.yaml
+      deletion_retention: 600
     log:
       version: 1
       level: INFO

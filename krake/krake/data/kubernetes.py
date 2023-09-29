@@ -666,6 +666,8 @@ class ClusterSpec(Serializable):
         backoff_delay (field, optional): delay [s] between attempts. default: 1
         backoff_limit (field, optional):  a maximal number of attempts,
             default: -1 (infinite)
+        auto_generated (boolean, optional): flag to show if the cluster was
+            automatically generated
     """
     kubeconfig: dict = field(
         metadata={"validate": _validate_kubeconfig}, default_factory=dict
@@ -682,6 +684,7 @@ class ClusterSpec(Serializable):
     backoff: int = field(default=1)
     backoff_delay: int = field(default=1)
     backoff_limit: int = field(default=-1)
+    auto_generated: bool = False
 
     def __post_init__(self):
         """Method automatically ran at the end of the :meth:`__init__` method, used to
@@ -788,17 +791,14 @@ class ClusterStatus(Status):
         state (ClusterState): Current state of the cluster.
         metrics_reasons (dict[str, Reason]): mapping of the name of the metrics for
             which an error occurred to the reason for which it occurred.
-        last_applied_tosca (dict): TOSCA template applied via
-            Krake.
+        last_applied_tosca (dict): TOSCA template applied via Krake.
         nodes (list[ClusterNode]): list of cluster nodes.
         cluster_id (str): UUID or name of the cluster (infrastructure) given by the
             infrastructure provider
         scheduled (datetime.datetime): Timestamp that represents the last time the
             cluster was scheduled to a cloud.
-        scheduled_to (ResourceRef): Reference to the cloud where the
-            cluster should run.
-        running_on (ResourceRef): Reference to the cloud where the
-            cluster is running.
+        scheduled_to (ResourceRef): Reference to the cloud where the cluster should run.
+        running_on (ResourceRef): Reference to the cloud where the cluster is running.
         retries (int): Count of remaining retries to access the cluster. Is set
             via the Attribute backoff in ClusterSpec.
     """

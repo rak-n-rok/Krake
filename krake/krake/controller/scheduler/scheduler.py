@@ -159,6 +159,10 @@ class Scheduler(Controller):
             before it reacts to a state change.
         loop (asyncio.AbstractEventLoop, optional): Event loop that should be
             used.
+        cluster_creation_tosca_file (string, optional): path to the tosca file used
+            for automatic cluster creation
+        cluster_creation_deletion_retention (int, optional): seconds until an
+            unused cluster is automatically deleted
     """
 
     def __init__(
@@ -170,7 +174,8 @@ class Scheduler(Controller):
         ssl_context=None,
         debounce=0,
         loop=None,
-        cluster_creation_tosca=None,
+        cluster_creation_tosca_file=None,
+        cluster_creation_deletion_retention=600
     ):
         super().__init__(
             api_endpoint, loop=loop, ssl_context=ssl_context, debounce=debounce
@@ -190,7 +195,8 @@ class Scheduler(Controller):
         self.worker_count = worker_count
         self.reschedule_after = reschedule_after
         self.stickiness = stickiness
-        self.cluster_creation_tosca = cluster_creation_tosca
+        self.cluster_creation_tosca_file = cluster_creation_tosca_file
+        self.cluster_creation_deletion_retention = cluster_creation_deletion_retention
 
         self.kubernetes_application = None
         self.kubernetes_cluster = None
@@ -215,7 +221,7 @@ class Scheduler(Controller):
             self.infrastructure_api,
             self.stickiness,
             self.reschedule_after,
-            self.cluster_creation_tosca
+            self.cluster_creation_tosca_file,
         )
         self.kubernetes_cluster = KubernetesClusterHandler(
             self.client,
@@ -223,6 +229,7 @@ class Scheduler(Controller):
             self.infrastructure_api,
             self.kubernetes_api,
             self.core_api,
+            self.cluster_creation_deletion_retention
         )
         for i in range(self.worker_count):
             self.register_task(
@@ -537,13 +544,13 @@ class Handler(object):
                 resource.status.state = CloudState.ONLINE
                 resource.status.reason = None
                 if resource.kind == Cloud.kind:
-                    await self.api.update_cloud_status(
+                    await self.infrastructure_api.update_cloud_status(
                         namespace=resource.metadata.namespace,
                         name=resource.metadata.name,
                         body=resource,
                     )
                 if resource.kind == GlobalCloud.kind:
-                    await self.api.update_global_cloud_status(
+                    await self.infrastructure_api.update_global_cloud_status(
                         name=resource.metadata.name,
                         body=resource,
                     )
@@ -558,7 +565,7 @@ class Handler(object):
 
 class KubernetesApplicationHandler(Handler):
     def __init__(self, client, queue, api, core_api, infrastructure_api,
-                 stickiness, reschedule_after, cluster_creation_tosca):
+                 stickiness, reschedule_after, cluster_creation_tosca_file):
 
         super(KubernetesApplicationHandler, self).__init__(client, queue, api, core_api)
 
@@ -566,7 +573,7 @@ class KubernetesApplicationHandler(Handler):
 
         self.stickiness = stickiness
         self.reschedule_after = reschedule_after
-        self.cluster_creation_tosca = cluster_creation_tosca
+        self.cluster_creation_tosca_file = cluster_creation_tosca_file
 
     async def received_kubernetes_app(self, app):
         """Handler for Kubernetes application reflector.
@@ -725,7 +732,7 @@ class KubernetesApplicationHandler(Handler):
                 app, clusters.items, clouds.items + global_clouds.items
             )
 
-            if (isinstance(maximum, Cloud) or isinstance(maximum, GlobalCloud)) and \
+            if (isinstance(maximum, (Cloud, GlobalCloud))) and \
                app.spec.auto_cluster_create and \
                app.status.auto_cluster_create_started is None:
 
@@ -736,7 +743,7 @@ class KubernetesApplicationHandler(Handler):
                     cluster_name = self.auto_generate_cluster_name()
 
                     with open(f"{os.path.dirname(os.getcwd())}/" +
-                              self.cluster_creation_tosca, 'r') as file:
+                              self.cluster_creation_tosca_file, 'r') as file:
                         tosca = yaml.safe_load(file)
 
                     to_create = Cluster(
@@ -755,6 +762,7 @@ class KubernetesApplicationHandler(Handler):
                                     metrics=app.spec.constraints.cluster.metrics,
                                 ),
                             ),
+                            auto_generated=True,
                         ),
                         status=ClusterStatus(
                             scheduled_to=ResourceRef(
@@ -877,15 +885,16 @@ class KubernetesApplicationHandler(Handler):
         Args:
             app (krake.data.kubernetes.Application): Application object for binding
             clusters (List[Cluster]):
-                Clusters between which the "best" one should be chosen.
+                Clusters from which the "best" one should be chosen.
             clouds (List[Union[Cloud,GlobalCloud]]):
-                Clouds between which the "best" one should be chosen.
+                Clouds from which the "best" one should be chosen.
 
         Returns:
             Union[Cloud,GlobalCloud,Cluster]:
                 Cluster or Cloud suitable for application binding
         """
         scores = []
+        cluster_scores = None
         try:
             cluster_scores = \
                 await self.fetch_kubernetes_cluster_scores(app, clusters)
@@ -912,7 +921,7 @@ class KubernetesApplicationHandler(Handler):
             app (krake.data.kubernetes.Application): Application object for binding
             clouds (list[Union[krake.data.kubernetes.Cloud,
                 krake.data.kubernetes.GlobalCloud]]):
-                Clouds between which the "best" one should be chosen.
+                Clouds from which the "best" one should be chosen.
 
         Returns:
             Union[Cloud,GlobalCloud]: Cloud suitable for application binding
@@ -1006,8 +1015,8 @@ class KubernetesApplicationHandler(Handler):
 
         Args:
             app (krake.data.kubernetes.Application): Application object for binding
-            clusters (list[krake.data.kubernetes.Cluster]): Clusters between which
-                the "best" one should be chosen.
+            clusters (list[krake.data.kubernetes.Cluster]):
+                Clusters from which the "best" one should be chosen.
 
         Returns:
             list[ClusterScore]: Scores of clusters suitable for binding
@@ -1234,9 +1243,6 @@ class KubernetesApplicationHandler(Handler):
             Cluster: The cluster object with its updated metrics and labels
         """
 
-        if cluster.spec.metrics:
-            cluster.spec.metrics = cluster.spec.metrics
-
         if (cluster.spec.inherit_metrics or cluster.spec.constraints.cloud.metrics or
             cluster.metadata.inherit_labels or cluster.spec.constraints.cloud.labels) \
                 and cluster.status.scheduled_to:
@@ -1290,14 +1296,17 @@ class KubernetesApplicationHandler(Handler):
 
 
 class KubernetesClusterHandler(Handler):
-    def __init__(self, client, queue, infrastructure_api, kubernetes_api, core_api):
-
+    def __init__(
+        self, client, queue, infrastructure_api, kubernetes_api, core_api,
+        cluster_creation_deletion_retention
+    ):
         super(KubernetesClusterHandler, self).__init__(
             client, queue, infrastructure_api, core_api
         )
 
         self.infrastructure_api = infrastructure_api
         self.kubernetes_api = kubernetes_api
+        self.cluster_creation_deletion_retention = cluster_creation_deletion_retention
 
     async def received_kubernetes_cluster(self, cluster):
         """Handler for Kubernetes cluster reflector.
@@ -1340,6 +1349,14 @@ class KubernetesClusterHandler(Handler):
             try:
                 logger.debug("Handling %r", cluster)
                 await self.schedule_kubernetes_cluster(cluster)
+
+                if cluster.spec.auto_generated and not cluster.metadata.deleted:
+                    logger.debug("Requeueing %r in %r seconds.",
+                                 cluster, self.cluster_creation_deletion_retention)
+                    await self.queue.put(
+                        cluster.metadata.uid, cluster,
+                        delay=self.cluster_creation_deletion_retention
+                    )
             except ControllerError as error:
                 cluster.status.reason = Reason(code=error.code, message=error.message)
                 cluster.status.state = ClusterState.FAILED
@@ -1366,6 +1383,23 @@ class KubernetesClusterHandler(Handler):
         assert cluster.status.scheduled_to is None, "Cluster is already bound"
 
         logger.info("Schedule %r", cluster)
+
+        cluster_has_apps = False
+        apps = await self.kubernetes_api.list_all_applications()
+        for app in apps.items:
+            if (app.status.scheduled_to and
+               app.status.scheduled_to.name == cluster.metadata.name) or \
+               cluster.status.state != ClusterState.ONLINE:
+                cluster_has_apps = True
+            break
+        if not cluster_has_apps and \
+           cluster.spec.auto_generated and \
+           not cluster.metadata.deleted:
+            await self.kubernetes_api.delete_cluster(
+                name=cluster.metadata.name,
+                namespace=cluster.metadata.namespace
+            )
+            logging.info("Marked %r to be deleted.", cluster)
 
         # Clouds from the same namespace as cluster are preferred over global clouds.
         clouds_namespaced = await self.infrastructure_api.list_clouds(

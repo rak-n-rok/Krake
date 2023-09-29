@@ -367,7 +367,8 @@ def automatic_cluster_creation_config():
 
     """
     config = {
-        "tosca": "examples/automation/cluster.yaml"
+        "tosca_file": "examples/automation/cluster.yaml",
+        "deletion_retention": 600,
     }
     return AutomaticClusterCreationConfiguration.deserialize(
         config, creation_ignored=True

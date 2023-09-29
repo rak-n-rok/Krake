@@ -309,10 +309,10 @@ the status of the app.
     | ...                   | ...                                           |
     +-----------------------+-----------------------------------------------+
 
-After several minutes a elapsed (depending on the system where the cluster is deployed), a new cluster should have been
+After several minutes have elapsed (depending on the system where the cluster is deployed), a new cluster should have been
 created. This cluster inherits the metrics and labels of the underlying cloud in order to provide the correct scheduling
 location for the app.
-When viewing the created cluster, the inherited values should be visible, since they're marked accordingly
+When viewing the created cluster, the inherited values should be visible, since they're marked accordingly.
 
 .. prompt:: bash $ auto
 

@@ -105,10 +105,16 @@ class AuthenticationConfiguration(Serializable):
 
 
 class AutomaticClusterCreationConfiguration(Serializable):
-    tosca: str = field(
+    tosca_file: str = field(
         default="examples/automation/cluster.yaml",
         metadata={
             "help": "Location of the tosca file to automatically create a cluster"
+        }
+    )
+    deletion_retention: int = field(
+        default=600,
+        metadata={
+            "help": "Time until the deletion of an empty generated cluster is started."
         }
     )
 

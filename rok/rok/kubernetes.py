@@ -330,7 +330,7 @@ class ApplicationTable(ApplicationListTable):
     scheduled_to = Cell("status.scheduled_to")
     scheduled = Cell("status.scheduled", formatter=format_datetime)
     running_on = Cell("status.running_on")
-    backoff_ = Cell("spec.backoff")
+    backoff = Cell("spec.backoff")
     backoff_delay = Cell("spec.backoff_delay")
     backoff_limit = Cell("spec.backoff_limit")
 
@@ -751,7 +751,7 @@ class ClusterTableDetail(ClusterTable):
     nodes_disk_pressure = Cell(
         "status.nodes", formatter=partial(nodes_formatter, disk_pressure=True)
     )
-    backoff_ = Cell("spec.backoff")
+    backoff = Cell("spec.backoff")
     backoff_delay = Cell("spec.backoff_delay")
     backoff_limit = Cell("spec.backoff_limit")
 
