@@ -169,7 +169,7 @@
 
           block:
 
-            - name: Inital k8s cluster list
+            - name: Initial k8s cluster list
               set_fact:
                 k8s_clusters: []
 
@@ -202,7 +202,6 @@
         #- import_role:
         #    name: krake
         #    tasks_from: debug_krake_resources
-
 
         - name: Run integration tests for the scheduling algorithm
           command: "python3 -m pytest {{ git_dir }}/{{test_dir}}/integration/test_scheduling.py --k8sclusters {{ k8s_clusters[0] }} {{ k8s_clusters[1] }}"

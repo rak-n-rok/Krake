@@ -436,9 +436,9 @@ class ApplicationSpec(Serializable):
             archive is located.
             This attribute is managed by the user.
         observer_schema (list[dict], optional): List of dictionaries of fields that
-            should be observed by the Kubernetes Observer. This attribute is managed by
-            the user. Using this attribute as a basis, the Kubernetes Controller
-            generates the ``status.mangled_observer_schema``.
+            should be observed by the Kubernetes Observer. This attribute is
+            managed by the user. Using this attribute as a basis, the Kubernetes
+            Controller generates the ``status.mangled_observer_schema``.
         constraints (Constraints, optional): Scheduling constraints
         hooks (list[str], optional): List of enabled hooks
         shutdown_grace_time (int): timeout in seconds for the shutdown hook
@@ -447,6 +447,8 @@ class ApplicationSpec(Serializable):
         backoff_delay (field, optional): delay [s] between attempts. default: 1
         backoff_limit (field, optional):  a maximal number of attempts,
             default: -1 (infinite)
+        auto_cluster_create (bool): flag to show if automatic cluster creation
+            is allowed
     """
 
     manifest: List[dict] = field(metadata={"validate": _validate_manifest})
@@ -461,6 +463,7 @@ class ApplicationSpec(Serializable):
     backoff: int = field(default=1)
     backoff_delay: int = field(default=1)
     backoff_limit: int = field(default=-1)
+    auto_cluster_create: bool = False
 
     def __post_init__(self):
         """Method automatically ran at the end of the :meth:`__init__` method, used to
@@ -506,6 +509,7 @@ class ApplicationState(Enum):
     WAITING_FOR_CLEANING = auto()
     READY_FOR_ACTION = auto()
     MIGRATING = auto()
+    WAITING_FOR_CLUSTER_CREATION = auto()
     DELETING = auto()
     DELETED = auto()
     DEGRADED = auto()
@@ -567,6 +571,8 @@ class ApplicationStatus(Status):
             identification.
         shutdown_grace_period (datetime): time period the shutdown method waits on after
             the shutdown command was issued to an object
+        auto_cluster_create_started (str): flag that shows if the automatic cluster
+            creation process was already started
     """
 
     state: ApplicationState = ApplicationState.PENDING
@@ -588,6 +594,7 @@ class ApplicationStatus(Status):
     shutdown_cert: str = None
     shutdown_key: str = None
     shutdown_grace_period: datetime = None
+    auto_cluster_create_started: str = None
 
 
 @persistent("/kubernetes/applications/{namespace}/{name}")
@@ -659,6 +666,8 @@ class ClusterSpec(Serializable):
         backoff_delay (field, optional): delay [s] between attempts. default: 1
         backoff_limit (field, optional):  a maximal number of attempts,
             default: -1 (infinite)
+        auto_generated (boolean, optional): flag to show if the cluster was
+            automatically generated
     """
     kubeconfig: dict = field(
         metadata={"validate": _validate_kubeconfig}, default_factory=dict
@@ -675,6 +684,7 @@ class ClusterSpec(Serializable):
     backoff: int = field(default=1)
     backoff_delay: int = field(default=1)
     backoff_limit: int = field(default=-1)
+    auto_generated: bool = False
 
     def __post_init__(self):
         """Method automatically ran at the end of the :meth:`__init__` method, used to
@@ -781,17 +791,14 @@ class ClusterStatus(Status):
         state (ClusterState): Current state of the cluster.
         metrics_reasons (dict[str, Reason]): mapping of the name of the metrics for
             which an error occurred to the reason for which it occurred.
-        last_applied_tosca (dict): TOSCA template applied via
-            Krake.
+        last_applied_tosca (dict): TOSCA template applied via Krake.
         nodes (list[ClusterNode]): list of cluster nodes.
         cluster_id (str): UUID or name of the cluster (infrastructure) given by the
             infrastructure provider
         scheduled (datetime.datetime): Timestamp that represents the last time the
             cluster was scheduled to a cloud.
-        scheduled_to (ResourceRef): Reference to the cloud where the
-            cluster should run.
-        running_on (ResourceRef): Reference to the cloud where the
-            cluster is running.
+        scheduled_to (ResourceRef): Reference to the cloud where the cluster should run.
+        running_on (ResourceRef): Reference to the cloud where the cluster is running.
         retries (int): Count of remaining retries to access the cluster. Is set
             via the Attribute backoff in ClusterSpec.
     """

@@ -104,6 +104,21 @@ class AuthenticationConfiguration(Serializable):
     strategy: StrategyConfiguration
 
 
+class AutomaticClusterCreationConfiguration(Serializable):
+    tosca_file: str = field(
+        default="examples/automation/cluster.yaml",
+        metadata={
+            "help": "Location of the tosca file to automatically create a cluster"
+        }
+    )
+    deletion_retention: int = field(
+        default=600,
+        metadata={
+            "help": "Time until the deletion of an empty generated cluster is started."
+        }
+    )
+
+
 def _validate_endpoint(endpoint):
     """Ensure that the provided endpoint is a valid URL and that it has a supported
     scheme.
@@ -311,6 +326,7 @@ class SchedulerConfiguration(ControllerConfiguration):
             "to prevent too frequent rescheduling"
         },
     )
+    automatic_cluster_creation: AutomaticClusterCreationConfiguration
 
 
 class KubernetesConfiguration(ControllerConfiguration):

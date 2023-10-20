@@ -282,6 +282,64 @@ Delete the Cluster, Cloud and the InfrastructureProvider.
     rok infra cloud delete os-cloud
     rok infra provider delete im-provider
 
+Automatic Cluster scaling
+=========================
+
+Clusters can also be scaled automatically, if some specific conditions are met. The cloud that should be used must have
+metrics and/or labels in order to provide a basis for the scheduling decision of Krake. Additionally, the users app needs
+to have set the ``--auto-cluster-create`` flag, which enables the automatic creation of a new cluster, if the underlying
+cloud has a better score than all the other clusters available.
+
+After the creation of the app, a cluster should be created by infrastructure provider. This can be checked by looking at
+the status of the app.
+
+.. prompt:: bash $ auto
+
+    $ rok kube app get my-app
+    +-----------------------+-----------------------------------------------+
+    | name                  | my-app                                        |
+    | namespace             | system:admin                                  |
+    | labels                | None                                          |
+    | created               | 2000-01-01 08:00:00                           |
+    | modified              | 2000-01-01 08:00:00                           |
+    | deleted               | None                                          |
+    | state                 | WAITING_FOR_CLUSTER_CREATION                  |
+    | container_health      | 0 active / 0 failed / 0 succeeded / 1 desired |
+    | services              | None                                          |
+    | ...                   | ...                                           |
+    +-----------------------+-----------------------------------------------+
+
+After several minutes have elapsed (depending on the system where the cluster is deployed), a new cluster should have been
+created. This cluster inherits the metrics and labels of the underlying cloud in order to provide the correct scheduling
+location for the app.
+When viewing the created cluster, the inherited values should be visible, since they're marked accordingly.
+
+.. prompt:: bash $ auto
+
+    $ rok kube cluster get auto-created-cluster
+    +-----------------------+---------------------------------------------------------------------------------------------+
+    | name                  | auto-created-cluster                                                                        |
+    | namespace             | system:admin                                                                                |
+    | labels                | location: DE (inherited)                                                                    |
+    | created               | 2000-01-01 08:00:00                                                                         |
+    | modified              | 2000-01-01 08:00:00                                                                         |
+    | deleted               | None                                                                                        |
+    | state                 | ONLINE                                                                                      |
+    | reason                | None                                                                                        |
+    | custom_resources      | []                                                                                          |
+    | metrics               | [{'weight': 1.0, 'namespaced': False, 'name': 'electricity_cost_1', 'inherited': true}      |
+    | failing_metrics       | None                                                                                        |
+    | label constraints     | []                                                                                          |
+    | metric constraints    | []                                                                                          |
+    | scheduled_to          | {'namespace': 'system:admin', 'kind': 'Cloud', 'name': 'os-cloud', 'api': 'infrastructure'} |
+    | scheduled             | 2000-01-01 08:00:00                                                                         |
+    | running_on            | {'namespace': 'system:admin', 'kind': 'Cloud', 'name': 'os-cloud', 'api': 'infrastructure'} |
+    | nodes                 | 2/2                                                                                         |
+    | nodes_pid_pressure    | 0/2                                                                                         |
+    | nodes_memory_pressure | 0/2                                                                                         |
+    | nodes_disk_pressure   | 0/2                                                                                         |
+    +-----------------------+---------------------------------------------------------------------------------------------+
+
 
 .. _jq: https://stedolan.github.io/jq/
 .. _kubectl: https://kubernetes.io/docs/tasks/tools/#kubectl

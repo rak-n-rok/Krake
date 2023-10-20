@@ -1,21 +1,27 @@
 import asyncio
+from aiohttp import web
 from contextlib import suppress
 from copy import copy
+import pytz
 
 from krake.api.app import create_app
 
 from krake.data.kubernetes import ClusterState
+from krake.data.kubernetes import Cluster
 from krake.controller.kubernetes.cluster import (
     KubernetesClusterController,
 )
-
 from krake.controller.kubernetes.hooks import (
     KubernetesClusterObserver,
 )
 from krake.client import Client
 from krake.test_utils import server_endpoint
 
-from tests.factories.kubernetes import ClusterFactory
+from tests.factories.fake import fake
+from tests.factories.kubernetes import (
+    ClusterFactory,
+    make_kubeconfig,
+)
 
 
 async def test_list_cluster(aiohttp_server, config):
@@ -52,6 +58,48 @@ async def test_list_cluster(aiohttp_server, config):
     observer_post_list_cluster = controller.observers
     # finally, the variables should be unequal
     assert observer_pre_list_cluster != observer_post_list_cluster
+
+
+async def test_cluster_loop(aiohttp_server, config, db, loop):
+    """Test the loop of a cluster
+
+    The Kubernetes Controller should update the cluster in the DB.
+    """
+    kubernetes_app = web.Application()
+    routes = web.RouteTableDef()
+    kubernetes_app.add_routes(routes)
+    kubernetes_server = await aiohttp_server(kubernetes_app)
+
+    cluster = ClusterFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        spec__kubeconfig=make_kubeconfig(kubernetes_server),
+        status__state=ClusterState.ONLINE,
+    )
+
+    await db.put(cluster)
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        controller = KubernetesClusterController(
+            server_endpoint(server), worker_count=0
+        )
+        await controller.prepare(client)
+
+        reflector_task = loop.create_task(controller.cluster_reflector())
+
+        await controller.handle_resource(run_once=True)
+        assert controller.queue.size() == 0
+
+        reflector_task.cancel()
+
+        with suppress(asyncio.CancelledError):
+            await reflector_task
+
+    stored = await db.get(
+        Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+    )
+    assert stored.status.retries == 0
 
 
 async def test_creation_of_cluster_reflector(aiohttp_server, config, loop):

@@ -217,6 +217,13 @@ arg_metric_inheritance = argument(
     ),
 )
 
+arg_auto_cluster_create = argument(
+    "--auto-cluster-create",
+    dest="auto_cluster_create",
+    action="store_true",
+    help="Boolean value, if clusters should be automatically created",
+)
+
 
 class ApplicationListTable(BaseTable):
     state = Cell("status.state")
@@ -323,7 +330,7 @@ class ApplicationTable(ApplicationListTable):
     scheduled_to = Cell("status.scheduled_to")
     scheduled = Cell("status.scheduled", formatter=format_datetime)
     running_on = Cell("status.running_on")
-    backoff_ = Cell("spec.backoff")
+    backoff = Cell("spec.backoff")
     backoff_delay = Cell("spec.backoff_delay")
     backoff_limit = Cell("spec.backoff_limit")
 
@@ -370,6 +377,7 @@ class ApplicationTable(ApplicationListTable):
 @arg_backoff
 @arg_backoff_delay
 @arg_backoff_limit
+@arg_auto_cluster_create
 @depends("config", "session")
 @printer(table=ApplicationTable())
 def create_application(
@@ -391,6 +399,7 @@ def create_application(
     backoff,
     backoff_delay,
     backoff_limit,
+    auto_cluster_create
 ):
     manifest = []
     tosca = {}
@@ -449,6 +458,7 @@ def create_application(
             "backoff": backoff,
             "backoff_delay": backoff_delay,
             "backoff_limit": backoff_limit,
+            "auto_cluster_create": auto_cluster_create,
         },
     }
 
@@ -741,7 +751,7 @@ class ClusterTableDetail(ClusterTable):
     nodes_disk_pressure = Cell(
         "status.nodes", formatter=partial(nodes_formatter, disk_pressure=True)
     )
-    backoff_ = Cell("spec.backoff")
+    backoff = Cell("spec.backoff")
     backoff_delay = Cell("spec.backoff_delay")
     backoff_limit = Cell("spec.backoff_limit")
 
@@ -1007,11 +1017,12 @@ def get_cluster(config, session, namespace, name):
             for label in cloud['metadata']['labels']:
                 inherited_labels[label] = \
                     cloud['metadata']['labels'][label] + " (inherited)"
-        if data['spec']['constraints']['cloud']['labels']:
-            for constraint in cluster['spec']['constraints']['cloud']['metrics']:
-                for label in cloud['metadata']['labels']:
-                    if label in constraint:
-                        inherited_labels[label] = cloud['metadata']['labels'][label]
+            if data['spec']['constraints']['cloud']['labels']:
+                for constraint in data['spec']['constraints']['cloud']['labels']:
+                    for label in cloud['metadata']['labels']:
+                        if label in constraint:
+                            inherited_labels[label] = \
+                                cloud['metadata']['labels'][label] + " (inherited)"
         data['metadata']['labels'] = {**data['metadata']['labels'], **inherited_labels}
 
         inherited_metrics = list()

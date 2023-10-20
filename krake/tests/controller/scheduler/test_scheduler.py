@@ -17,9 +17,9 @@ from krake.controller.scheduler import Scheduler
 from krake.controller.scheduler.metrics import QueryResult
 from krake.controller.scheduler.__main__ import main
 from krake.controller.scheduler.constraints import (
-    match_cluster_constraints,
+    match_application_constraints,
     match_project_constraints,
-    match_cloud_constraints,
+    match_cluster_constraints,
 )
 from krake.controller.scheduler.scheduler import NoProjectFound, NoClusterFound
 from krake.data.constraints import LabelConstraint, MetricConstraint
@@ -363,7 +363,7 @@ def test_kubernetes_match_cluster_label_constraints():
         spec__constraints__cluster__metrics=[],
         spec__constraints__cluster__custom_resources=[],
     )
-    assert match_cluster_constraints(app, cluster)
+    assert match_application_constraints(app, cluster)
 
 
 def test_kubernetes_not_match_cluster_label_constraints():
@@ -374,7 +374,7 @@ def test_kubernetes_not_match_cluster_label_constraints():
         spec__constraints__cluster__custom_resources=[],
     )
 
-    assert not match_cluster_constraints(app, cluster)
+    assert not match_application_constraints(app, cluster)
 
 
 def test_kubernetes_match_cluster_custom_resources_constraints():
@@ -388,7 +388,7 @@ def test_kubernetes_match_cluster_custom_resources_constraints():
         spec__constraints__cluster__metrics=[],
     )
 
-    assert match_cluster_constraints(app, cluster)
+    assert match_application_constraints(app, cluster)
 
 
 def test_kubernetes_not_match_cluster_custom_resources_constraints():
@@ -399,7 +399,7 @@ def test_kubernetes_not_match_cluster_custom_resources_constraints():
         spec__constraints__cluster__metrics=[],
     )
 
-    assert not match_cluster_constraints(app, cluster)
+    assert not match_application_constraints(app, cluster)
 
 
 def test_kubernetes_match_cluster_metric_constraints():
@@ -425,7 +425,7 @@ def test_kubernetes_match_cluster_metric_constraints():
         ]
     }
 
-    assert match_cluster_constraints(app, cluster, fetched_metrics=fetched_metrics)
+    assert match_application_constraints(app, cluster, fetched_metrics=fetched_metrics)
 
 
 def test_kubernetes_not_match_cluster_metrics_constraints():
@@ -450,7 +450,7 @@ def test_kubernetes_not_match_cluster_metrics_constraints():
             )
         ]
     }
-    assert not match_cluster_constraints(app, cluster, fetched_metrics=fetched_metrics)
+    assert not match_application_constraints(app, cluster, fetched_metrics=fetched_metrics)
 
 
 def test_kubernetes_match_empty_cluster_constraints():
@@ -463,9 +463,9 @@ def test_kubernetes_match_empty_cluster_constraints():
         spec__constraints__cluster__metrics=None,
     )
 
-    assert match_cluster_constraints(app1, cluster)
-    assert match_cluster_constraints(app2, cluster)
-    assert match_cluster_constraints(app3, cluster)
+    assert match_application_constraints(app1, cluster)
+    assert match_application_constraints(app2, cluster)
+    assert match_application_constraints(app3, cluster)
 
 
 async def test_kubernetes_score(aiohttp_server, config, db, loop):
@@ -1113,11 +1113,11 @@ async def test_kubernetes_prefer_cluster_with_global_metrics(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
-            app, (cluster_miss, cluster)
+        selected = await scheduler.kubernetes_application.select_scheduling_location(
+            app, (cluster_miss, cluster), []
         )
 
-    assert selected == cluster
+    assert cluster == selected
 
 
 @pytest.mark.skip(reason="The test wants to create/use a real K8s resource.")
@@ -1175,8 +1175,8 @@ async def test_kubernetes_select_cluster_without_metric(aiohttp_server, config, 
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
-            app, clusters
+        selected = await scheduler.kubernetes_application.select_scheduling_location(
+            app, clusters, []
         )
         assert selected in clusters
 
@@ -1235,10 +1235,10 @@ async def test_kubernetes_select_cluster_with_inherited_metrics(
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
-            app, [cluster]
+        selected = await scheduler.kubernetes_application.select_scheduling_location(
+            app, [cluster], []
         )
-        assert selected == cluster
+        assert cluster == selected
 
 
 async def test_kubernetes_select_cluster_not_deleted(aiohttp_server, config, loop):
@@ -1263,11 +1263,11 @@ async def test_kubernetes_select_cluster_not_deleted(aiohttp_server, config, loo
 
         async with Client(url=server_endpoint(server), loop=loop) as client:
             await scheduler.prepare(client)
-            selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
-                app, clusters
+            selected = await scheduler.kubernetes_application.select_scheduling_location(
+                app, clusters, []
             )
 
-            assert selected == clusters[index]
+            assert clusters[index] == selected
 
 
 async def test_kubernetes_select_cluster_online(aiohttp_server, config, loop):
@@ -1289,11 +1289,11 @@ async def test_kubernetes_select_cluster_online(aiohttp_server, config, loop):
 
         async with Client(url=server_endpoint(server), loop=loop) as client:
             await scheduler.prepare(client)
-            selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
-                app, clusters
+            selected = await scheduler.kubernetes_application.select_scheduling_location(
+                app, clusters, []
             )
 
-            assert selected == clusters[index]
+            assert clusters[index] == selected
 
 
 async def test_kubernetes_select_cluster_with_constraints_without_metric(
@@ -1325,10 +1325,10 @@ async def test_kubernetes_select_cluster_with_constraints_without_metric(
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
-            app, clusters
+        selected = await scheduler.kubernetes_application.select_scheduling_location(
+            app, clusters, []
         )
-        assert selected == clusters[0]
+        assert clusters[0] == selected
 
 
 async def test_kubernetes_select_cluster_with_inherited_labels_from_cloud(
@@ -1337,7 +1337,7 @@ async def test_kubernetes_select_cluster_with_inherited_labels_from_cloud(
     cloud = CloudFactory(
         metadata__name="test",
         metadata__namespace="testing",
-        metadata__labels={"location": "IT"}
+        metadata__labels={"location": "IT"},
     )
     cluster = ClusterFactory(
         metadata__inherit_labels=True,
@@ -1364,10 +1364,10 @@ async def test_kubernetes_select_cluster_with_inherited_labels_from_cloud(
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
-            app, [cluster]
+        selected = await scheduler.kubernetes_application.select_scheduling_location(
+            app, [cluster], []
         )
-        assert selected == cluster
+        assert cluster == selected
 
 
 async def test_kubernetes_select_cluster_with_inherited_labels_from_global_cloud(
@@ -1402,10 +1402,10 @@ async def test_kubernetes_select_cluster_with_inherited_labels_from_global_cloud
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
-            app, [cluster]
+        selected = await scheduler.kubernetes_application.select_scheduling_location(
+            app, [cluster], []
         )
-        assert selected == cluster
+        assert cluster == selected
 
 
 async def test_kubernetes_select_cluster_sticky_without_metric(
@@ -1425,10 +1425,10 @@ async def test_kubernetes_select_cluster_sticky_without_metric(
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
-            app, (cluster_a, cluster_b)
+        selected = await scheduler.kubernetes_application.select_scheduling_location(
+            app, (cluster_a, cluster_b), []
         )
-        assert selected == cluster_a
+        assert cluster_a == selected
 
 
 async def test_kubernetes_select_no_cluster_all_unreachable_metric(
@@ -1495,8 +1495,8 @@ async def test_kubernetes_select_no_cluster_all_unreachable_metric(
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
         with pytest.raises(NoClusterFound):
-            await scheduler.kubernetes_application.select_kubernetes_cluster(
-                app, clusters
+            await scheduler.kubernetes_application.select_scheduling_location(
+                app, clusters, []
             )
 
     for cluster in clusters:
@@ -1550,11 +1550,11 @@ async def test_kubernetes_select_cluster_some_unreachable_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
-            app, [cluster_wo_metric, cluster_w_unreachable, cluster_w_metric]
+        selected = await scheduler.kubernetes_application.select_scheduling_location(
+            app, [cluster_wo_metric, cluster_w_unreachable, cluster_w_metric], []
         )
 
-    assert selected == cluster_w_metric
+    assert cluster_w_metric == selected
 
 
 async def test_kubernetes_select_cluster_sticky_all_unreachable_metric(
@@ -1629,11 +1629,11 @@ async def test_kubernetes_select_cluster_sticky_all_unreachable_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
-            app, clusters
+        selected = await scheduler.kubernetes_application.select_scheduling_location(
+            app, clusters, []
         )
 
-    assert selected == current_wo_metric
+    assert current_wo_metric == selected
 
 
 async def test_kubernetes_select_cluster_sticky_others_with_metric(
@@ -1706,11 +1706,11 @@ async def test_kubernetes_select_cluster_sticky_others_with_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
-            app, clusters
+        selected = await scheduler.kubernetes_application.select_scheduling_location(
+            app, clusters, []
         )
 
-    assert selected == cluster_w_metric2
+    assert cluster_w_metric2 == selected
 
 
 async def test_kubernetes_select_cluster_sticky_reachable_metric(
@@ -1760,11 +1760,11 @@ async def test_kubernetes_select_cluster_sticky_reachable_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
-            app, clusters
+        selected = await scheduler.kubernetes_application.select_scheduling_location(
+            app, clusters, []
         )
 
-    assert selected == current_w_metric
+    assert current_w_metric == selected
 
 
 async def test_kubernetes_select_no_cluster_sticky_to_all_unreachable_metric(
@@ -1814,11 +1814,11 @@ async def test_kubernetes_select_no_cluster_sticky_to_all_unreachable_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
-            app, clusters
+        selected = await scheduler.kubernetes_application.select_scheduling_location(
+            app, clusters, []
         )
 
-    assert selected == cluster_wo_metric
+    assert cluster_wo_metric == selected
 
 
 async def test_kubernetes_select_cluster_sticky_unreachable_metric(
@@ -1871,11 +1871,11 @@ async def test_kubernetes_select_cluster_sticky_unreachable_metric(
     async with Client(url=server_endpoint(server), loop=loop) as client:
         scheduler = Scheduler(server_endpoint(server), worker_count=0)
         await scheduler.prepare(client)
-        selected = await scheduler.kubernetes_application.select_kubernetes_cluster(
-            app, clusters
+        selected = await scheduler.kubernetes_application.select_scheduling_location(
+            app, clusters, []
         )
 
-    assert selected == cluster_w_metric
+    assert cluster_w_metric == selected
 
 
 async def test_kubernetes_scheduling(aiohttp_server, config, db, loop):
@@ -3060,7 +3060,7 @@ def test_cluster_match_cloud_label_constraints(cloud_type, cloud_resource):
         spec__constraints__cloud__labels=[LabelConstraint.parse("location is IT")],
         spec__constraints__cloud__metrics=[],
     )
-    assert match_cloud_constraints(cluster, cloud)
+    assert match_cluster_constraints(cluster, cloud)
 
 
 @pytest.mark.parametrize(
@@ -3076,7 +3076,7 @@ def test_cluster_not_match_cloud_label_constraints(cloud_type, cloud_resource):
         spec__constraints__cloud__labels=[LabelConstraint.parse("location is IT")],
         spec__constraints__cloud__metrics=[],
     )
-    assert not match_cloud_constraints(cluster, cloud)
+    assert not match_cluster_constraints(cluster, cloud)
 
 
 @pytest.mark.parametrize(
@@ -3112,7 +3112,7 @@ def test_cluster_match_cloud_metric_constraints(cloud_type, cloud_resource):
             )
         ]
     }
-    assert match_cloud_constraints(cluster, cloud, fetched_metrics)
+    assert match_cluster_constraints(cluster, cloud, fetched_metrics)
 
 
 @pytest.mark.parametrize(
@@ -3148,7 +3148,7 @@ def test_cluster_not_match_cloud_metrics_constraints(cloud_type, cloud_resource)
             )
         ]
     }
-    assert not match_cloud_constraints(cluster, cloud, fetched_metrics)
+    assert not match_cluster_constraints(cluster, cloud, fetched_metrics)
 
 
 @pytest.mark.parametrize(
@@ -3169,9 +3169,9 @@ def test_cluster_match_empty_cloud_constraints(cloud_type, cloud_resource):
         spec__constraints__cloud__metrics=None,
     )
 
-    assert match_cloud_constraints(cluster1, cloud)
-    assert match_cloud_constraints(cluster2, cloud)
-    assert match_cloud_constraints(cluster3, cloud)
+    assert match_cluster_constraints(cluster1, cloud)
+    assert match_cluster_constraints(cluster2, cloud)
+    assert match_cluster_constraints(cluster3, cloud)
 
 
 @pytest.mark.parametrize(
@@ -3225,6 +3225,8 @@ async def test_cloud_score(
             }
         ),
     ]
+    for cloud in clouds:
+        await db.put(cloud)
 
     metrics = [
         GlobalMetricFactory(
@@ -3329,6 +3331,8 @@ async def test_global_cloud_score(
             }
         ),
     ]
+    for cloud in clouds:
+        await db.put(cloud)
 
     metrics = [
         GlobalMetricFactory(
@@ -4037,6 +4041,8 @@ async def test_cluster_prefer_cloud_with_global_metrics(
             ],
         }
     )
+    await db.put(cloud_miss)
+    await db.put(cloud)
 
     metric = GlobalMetricFactory(
         metadata__name="my_metric",

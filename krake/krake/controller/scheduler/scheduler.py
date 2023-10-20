@@ -1,7 +1,9 @@
 import asyncio
+import os
 from datetime import timedelta
 import logging
 import random
+import yaml
 from typing import NamedTuple, Union
 from copy import deepcopy
 
@@ -25,18 +27,32 @@ from krake.data.kubernetes import (
     Cluster,
     ClusterBinding,
     ClusterState,
+    Metadata,
+    ClusterSpec,
+    ClusterStatus,
+    ClusterCloudConstraints,
+    CloudConstraints,
+    ResourceRef
 )
 
 from .constraints import (
-    match_cluster_constraints,
+    match_application_constraints,
     match_project_constraints,
-    match_cloud_constraints,
+    match_cluster_constraints,
 )
 from .metrics import MetricError, fetch_query, MetricsProviderError
 from .. import Controller, ControllerError, Reflector, WorkQueue
 from ...data.infrastructure import Cloud, GlobalCloud, CloudBinding, CloudState
 
 logger = logging.getLogger(__name__)
+
+
+class WaitingOnCluster(ControllerError):
+    """Raised in case when there is not enough resources for spawning an application
+    on any of the deployments.
+    """
+
+    code = ReasonCode.NO_SUITABLE_RESOURCE
 
 
 class NoClusterFound(ControllerError):
@@ -105,19 +121,19 @@ class ClusterScore(NamedTuple):
 
 
 @orderable_by_score
-class ProjectScore(NamedTuple):
-    """Named tuple for ordering OpenStack projects based on a score"""
-
-    score: float
-    project: Project
-
-
-@orderable_by_score
 class CloudScore(NamedTuple):
     """Named tuple for ordering clouds based on a score"""
 
     score: float
     cloud: Union[Cloud, GlobalCloud]
+
+
+@orderable_by_score
+class ProjectScore(NamedTuple):
+    """Named tuple for ordering OpenStack projects based on a score"""
+
+    score: float
+    project: Project
 
 
 class Stickiness(NamedTuple):
@@ -143,6 +159,10 @@ class Scheduler(Controller):
             before it reacts to a state change.
         loop (asyncio.AbstractEventLoop, optional): Event loop that should be
             used.
+        cluster_creation_tosca_file (string, optional): path to the tosca file used
+            for automatic cluster creation
+        cluster_creation_deletion_retention (int, optional): seconds until an
+            unused cluster is automatically deleted
     """
 
     def __init__(
@@ -154,6 +174,8 @@ class Scheduler(Controller):
         ssl_context=None,
         debounce=0,
         loop=None,
+        cluster_creation_tosca_file=None,
+        cluster_creation_deletion_retention=600
     ):
         super().__init__(
             api_endpoint, loop=loop, ssl_context=ssl_context, debounce=debounce
@@ -173,6 +195,8 @@ class Scheduler(Controller):
         self.worker_count = worker_count
         self.reschedule_after = reschedule_after
         self.stickiness = stickiness
+        self.cluster_creation_tosca_file = cluster_creation_tosca_file
+        self.cluster_creation_deletion_retention = cluster_creation_deletion_retention
 
         self.kubernetes_application = None
         self.kubernetes_cluster = None
@@ -197,6 +221,7 @@ class Scheduler(Controller):
             self.infrastructure_api,
             self.stickiness,
             self.reschedule_after,
+            self.cluster_creation_tosca_file,
         )
         self.kubernetes_cluster = KubernetesClusterHandler(
             self.client,
@@ -204,6 +229,7 @@ class Scheduler(Controller):
             self.infrastructure_api,
             self.kubernetes_api,
             self.core_api,
+            self.cluster_creation_deletion_retention
         )
         for i in range(self.worker_count):
             self.register_task(
@@ -281,14 +307,16 @@ class Handler(object):
 
     @staticmethod
     def select_maximum(ranked):
-        """From a list of ClusterRank, get the one with the best rank. If several
-        ClusterRank have the same rank, one of them is chosen randomly.
+        """From a list of Scores, get the one with the best rank. If several
+        Scores have the same rank, one of them is chosen randomly.
 
         Args:
-            ranked (List[ClusterRank]): the best rank will be taken from this list.
+            ranked (List[Union[ClusterScore, CloudScore]]): the best rank will be taken
+                from this list.
 
         Returns:
-            ClusterRank: an element of the given list with the maximum rank.
+            Union[ClusterScore, CloudScore]: an element of the given list with
+                the maximum rank.
 
         """
         # Find all maxima
@@ -393,7 +421,7 @@ class Handler(object):
         references.
 
         If a :class:`MetricError` or `ClientError` occurs, the generator stops
-        which means resources where an error during metric fetching occurs can
+        which means resources where an error occurs during metric fetching can
         be skipped by:
 
         .. code:: python
@@ -411,7 +439,8 @@ class Handler(object):
                 that should be fetched.
 
         Raises:
-            AssertionError: if metrics are not set or stopped is set
+            AssertionError: raised if no metrics list is provided or the error iteration
+                is stopped, because no iteration on the reasons list was possible
 
         Yields:
             list[krake.controller.scheduler.metrics.QueryResult]: List of fetched
@@ -500,8 +529,8 @@ class Handler(object):
                     logger.error(error)
             return
         else:
-            if resource.status.state == ClusterState.FAILING_METRICS and \
-               resource.kind == Cluster.kind:
+            if resource.kind == Cluster.kind and \
+               resource.status.state == ClusterState.FAILING_METRICS:
                 resource.status.state = ClusterState.ONLINE
                 resource.status.reason = None
                 await self.api.update_cluster_status(
@@ -509,6 +538,22 @@ class Handler(object):
                     name=resource.metadata.name,
                     body=resource,
                 )
+
+            if resource.kind == Cloud.kind or resource.kind == GlobalCloud.kind and \
+               resource.status.state == CloudState.FAILING_METRICS:
+                resource.status.state = CloudState.ONLINE
+                resource.status.reason = None
+                if resource.kind == Cloud.kind:
+                    await self.infrastructure_api.update_cloud_status(
+                        namespace=resource.metadata.namespace,
+                        name=resource.metadata.name,
+                        body=resource,
+                    )
+                if resource.kind == GlobalCloud.kind:
+                    await self.infrastructure_api.update_global_cloud_status(
+                        name=resource.metadata.name,
+                        body=resource,
+                    )
 
         for metric, weight, value in fetched:
             logger.debug(
@@ -520,7 +565,7 @@ class Handler(object):
 
 class KubernetesApplicationHandler(Handler):
     def __init__(self, client, queue, api, core_api, infrastructure_api,
-                 stickiness, reschedule_after):
+                 stickiness, reschedule_after, cluster_creation_tosca_file):
 
         super(KubernetesApplicationHandler, self).__init__(client, queue, api, core_api)
 
@@ -528,6 +573,7 @@ class KubernetesApplicationHandler(Handler):
 
         self.stickiness = stickiness
         self.reschedule_after = reschedule_after
+        self.cluster_creation_tosca_file = cluster_creation_tosca_file
 
     async def received_kubernetes_app(self, app):
         """Handler for Kubernetes application reflector.
@@ -557,10 +603,11 @@ class KubernetesApplicationHandler(Handler):
             logger.debug("Accept %r", app)
             await self.queue.put(app.metadata.uid, app)
 
-    async def _update_retry_fields(self, app):
+    @staticmethod
+    async def _update_retry_fields(app):
         logger.info(f"{app.metadata.name}: transition to "
-                    f"DEGRADED, remaining retries: {app.status.retries}"
-                    )
+                    f"DEGRADED, remaining retries: {app.status.retries}")
+
         if app.spec.backoff_limit > 0:
             app.status.retries -= 1
 
@@ -569,8 +616,7 @@ class KubernetesApplicationHandler(Handler):
         )
         app.status.scheduled_retry = utils.now() + delay
         logger.debug(f"{app.metadata.name}: scheduled retry to "
-                     f"{app.status.scheduled_retry}"
-                     )
+                     f"{app.status.scheduled_retry}")
 
     async def handle_kubernetes_applications(self, run_once=False):
         """Infinite loop which fetches and hands over the Kubernetes Application
@@ -599,6 +645,9 @@ class KubernetesApplicationHandler(Handler):
                     )
                 await self.kubernetes_application_received(app)
                 app.status.retries = app.spec.backoff_limit
+            except WaitingOnCluster:
+                await self.queue.put(app.metadata.uid, app, delay=30)
+                logger.debug(f"{app.metadata.name}: scheduled retry in 30 seconds")
             except ControllerError as error:
                 app.status.reason = Reason(code=error.code, message=error.message)
                 if app.status.retries > 0:
@@ -612,7 +661,9 @@ class KubernetesApplicationHandler(Handler):
                     logger.info(f"{app.metadata.name}: transition to FAILED")
 
                 await self.api.update_application_status(
-                    namespace=app.metadata.namespace, name=app.metadata.name, body=app
+                    namespace=app.metadata.namespace,
+                    name=app.metadata.name,
+                    body=app
                 )
             finally:
                 await self.queue.done(key)
@@ -627,7 +678,6 @@ class KubernetesApplicationHandler(Handler):
             app (krake.data.kubernetes.Application): the Application to process.
 
         """
-        # TODO: Evaluate spawning a new cluster
         if app.status.state is not ApplicationState.DEGRADED or \
            (app.status.scheduled_retry and utils.now() >= app.status.scheduled_retry):
             await self.schedule_kubernetes_application(app)
@@ -650,10 +700,110 @@ class KubernetesApplicationHandler(Handler):
                 f"the application is disabled."
             )
             return
+
         namespace = app.metadata.namespace
         clusters = await self.api.list_clusters(namespace)
+        clouds = await self.infrastructure_api.list_clouds(namespace)
+        global_clouds = await self.infrastructure_api.list_global_clouds()
 
-        cluster = await self.select_kubernetes_cluster(app, clusters.items)
+        # If the app already has its cluster creation flag set, we can stop here and
+        # check if the new cluster is online
+        if app.status.auto_cluster_create_started:
+
+            logger.debug("Waiting on cluster to spawn")
+            created_clusters = [
+                cluster
+                for cluster in clusters.items
+                if cluster.metadata.deleted is None
+                and cluster.metadata.name == app.status.auto_cluster_create_started
+            ]
+            if created_clusters and \
+               created_clusters[0].status.state == ClusterState.ONLINE:
+                app.status.auto_cluster_create_started = None
+                cluster = created_clusters[0]
+            else:
+                # If the cluster is not online yet, raise the Waiting status again
+                raise WaitingOnCluster(
+                    f"Application {app.metadata.name} is waiting for a cluster to spawn"
+                )
+
+        else:
+            maximum = await self.select_scheduling_location(
+                app, clusters.items, clouds.items + global_clouds.items
+            )
+
+            if (isinstance(maximum, (Cloud, GlobalCloud))) and \
+               app.spec.auto_cluster_create and \
+               app.status.auto_cluster_create_started is None:
+
+                max_retries = 3
+
+                for _ in range(max_retries):
+
+                    cluster_name = self.auto_generate_cluster_name()
+
+                    with open(f"{os.path.dirname(os.getcwd())}/" +
+                              self.cluster_creation_tosca_file, 'r') as file:
+                        tosca = yaml.safe_load(file)
+
+                    to_create = Cluster(
+                        metadata=Metadata(
+                            name=cluster_name, namespace=app.metadata.namespace,
+                            uid=None, created=None, modified=None,
+                            inherit_labels=True,
+                        ),
+                        spec=ClusterSpec(
+                            tosca=tosca,
+                            backoff=1, backoff_delay=1, backoff_limit="-1",
+                            inherit_metrics=True,
+                            constraints=ClusterCloudConstraints(
+                                cloud=CloudConstraints(
+                                    labels=app.spec.constraints.cluster.labels,
+                                    metrics=app.spec.constraints.cluster.metrics,
+                                ),
+                            ),
+                            auto_generated=True,
+                        ),
+                        status=ClusterStatus(
+                            scheduled_to=ResourceRef(
+                                name=maximum.metadata.name,
+                                namespace=maximum.metadata.namespace,
+                                api=maximum.api,
+                                kind=maximum.kind,
+                            ),
+                        ),
+                    )
+
+                    try:
+                        resp = await self.api.create_cluster(
+                            namespace=app.metadata.namespace,
+                            body=to_create
+                        )
+                        if isinstance(resp, Cluster):
+                            app.status.auto_cluster_create_started = cluster_name
+                            break
+                    except Exception as e:
+                        logger.error(f"An error occurred when calling the client "
+                                     f"for cluster creation: {e}")
+
+                if app.status.auto_cluster_create_started:
+                    app.status.state = ApplicationState.WAITING_FOR_CLUSTER_CREATION
+
+                    _ = await self.api.update_application_status(
+                        namespace=app.metadata.namespace,
+                        name=app.metadata.name,
+                        body=app
+                    )
+                    raise WaitingOnCluster(f"Application {app.metadata.name} is "
+                                           f"waiting for a cluster to spawn")
+                else:
+                    raise ControllerError(f"The cluster on "
+                                          f"{maximum.cloud.metadata.name} "
+                                          f"couldn't be created")
+            elif isinstance(maximum, Cluster):
+                cluster = maximum
+            else:
+                raise NoClusterFound("No matching Kubernetes cluster found")
 
         scheduled_to = resource_ref(cluster)
 
@@ -719,104 +869,196 @@ class KubernetesApplicationHandler(Handler):
                          f"{self.reschedule_after} secs")
             await self.queue.put(app.metadata.uid, app, delay=self.reschedule_after)
 
-    async def select_kubernetes_cluster(self, app, clusters):
+    @staticmethod
+    async def check_files_in_folder(folder_path):
+        while True:
+            entries = os.scandir(folder_path)
+            for entry in entries:
+                if entry.is_file():
+                    return True
+            else:
+                return False
+
+    async def select_scheduling_location(self, app, clusters, clouds):
+        """Select a cluster or cloud for application binding.
+
+        Args:
+            app (krake.data.kubernetes.Application): Application object for binding
+            clusters (List[Cluster]):
+                Clusters from which the "best" one should be chosen.
+            clouds (List[Union[Cloud,GlobalCloud]]):
+                Clouds from which the "best" one should be chosen.
+
+        Returns:
+            Union[Cloud,GlobalCloud,Cluster]:
+                Cluster or Cloud suitable for application binding
+        """
+        scores = []
+        cluster_scores = None
+        try:
+            cluster_scores = \
+                await self.fetch_kubernetes_cluster_scores(app, clusters)
+            scores += cluster_scores
+            if app.spec.auto_cluster_create:
+                scores += await self.fetch_cloud_scores(app, clouds)
+        except TypeError as e:
+            if isinstance(cluster_scores, Cluster):
+                return cluster_scores
+            else:
+                raise e
+
+        maximum = self.select_maximum(scores)
+        if hasattr(maximum, 'cloud'):
+            return maximum.cloud
+        if hasattr(maximum, 'cluster'):
+            return maximum.cluster
+        raise NoClusterFound("No matching Kubernetes cluster found")
+
+    async def fetch_cloud_scores(self, app, clouds):
+        """Select suitable cloud to create a cluster on for application binding
+
+        Args:
+            app (krake.data.kubernetes.Application): Application object for binding
+            clouds (list[Union[krake.data.kubernetes.Cloud,
+                krake.data.kubernetes.GlobalCloud]]):
+                Clouds from which the "best" one should be chosen.
+
+        Returns:
+            Union[Cloud,GlobalCloud]: Cloud suitable for application binding
+        """
+        fetched_cloud_metrics = dict()
+        for cloud in clouds:
+            if cloud.spec.openstack.metrics:
+                async for metrics in self.fetch_metrics(
+                    cloud, cloud.spec.openstack.metrics
+                ):
+                    fetched_cloud_metrics[cloud.metadata.name] = metrics
+                logger.debug(f"App {app.metadata.name}: fetched cloud metrics: "
+                             f"{fetched_cloud_metrics}")
+
+        matching_clouds = [
+            cloud for cloud in clouds
+            if match_application_constraints(
+                app,
+                cloud,
+                fetched_cloud_metrics
+            )
+        ]
+        logger.debug(f"App {app.metadata.name}: matching cloud: {matching_clouds}")
+
+        clouds_with_metrics = [cloud for cloud in matching_clouds
+                               if cloud.spec.openstack.metrics]
+
+        if clouds_with_metrics:
+            scores = await self.rank_clouds(app, clouds_with_metrics)
+        else:
+            scores = [
+                self.calculate_cloud_score((), cloud, app)
+                for cloud in matching_clouds
+            ]
+        return scores
+
+    async def rank_clouds(self, app, clouds):
+        """Compute the score of the kubernetes clouds based on metrics values and
+        weights.
+
+        Args:
+            app (krake.data.kubernetes.Application): Application object for binding
+            clouds (list[Union[Cloud,GlobalCloud]]): List of clouds for which the score
+                has to be computed.
+
+        Returns:
+            list[CloudScore]: list of all cloud's score
+
+        """
+        scores = list()
+
+        for cloud in clouds:
+            async for metrics in self.fetch_metrics(
+                cloud, cloud.spec.openstack.metrics
+            ):
+                scores.append(
+                    self.calculate_cloud_score(metrics, cloud, app)
+                )
+
+        return scores
+
+    @staticmethod
+    def calculate_cloud_score(metrics, cloud, app):
+        """Calculate weighted sum of metrics values.
+
+        Args:
+            metrics (list[.metrics.QueryResult]): List of metric query results
+            cloud (Union[Cloud,GlobalCloud]):
+                cloud for which the score has to be computed.
+            app (krake.data.kubernetes.Application): Application object that
+                should be scheduled.
+
+        Returns:
+            CloudScore: score of the passed cloud based on metrics and application.
+
+        """
+        if not metrics:
+            cloud_score = CloudScore(score=0, cloud=cloud)
+            logger.debug(f"{app.metadata.name}: cloud score: {cloud_score}")
+            return cloud_score
+
+        norm = sum(metric.weight for metric in metrics)
+        score = (sum(metric.value * metric.weight for metric in metrics)) / norm
+
+        cloud_score = CloudScore(score=score, cloud=cloud)
+        logger.debug(f"{app.metadata.name}: cloud score: {cloud_score}")
+        return cloud_score
+
+    async def fetch_kubernetes_cluster_scores(self, app, clusters):
         """Select suitable kubernetes cluster for application binding.
 
         Args:
             app (krake.data.kubernetes.Application): Application object for binding
-            clusters (list[krake.data.kubernetes.Cluster]): Clusters between which
-                the "best" one should be chosen.
+            clusters (list[krake.data.kubernetes.Cluster]):
+                Clusters from which the "best" one should be chosen.
 
         Returns:
-            Cluster: Cluster suitable for application binding
+            list[ClusterScore]: Scores of clusters suitable for binding
 
         """
         # Reject clusters marked as deleted and clusters that are not online
         existing_clusters = (
-            cluster
-            for cluster in clusters
-            if cluster.metadata.deleted is None
-            and cluster.status.state is ClusterState.ONLINE
+            cluster for cluster in clusters
+            if cluster.metadata.deleted is None and
+            cluster.status.state is ClusterState.ONLINE
         )
-
+        # Check cluster_copy and cluster again
         filtered_clusters = dict()
 
         fetched_metrics = dict()
         for cluster in clusters:
             cluster_copy = deepcopy(cluster)
-            cluster_metrics = []
-            if cluster_copy.spec.metrics:
-                cluster_metrics = cluster.spec.metrics
 
-            if ((cluster_copy.spec.inherit_metrics or
-                 cluster_copy.spec.constraints.cloud.metrics) or
-                (cluster_copy.metadata.inherit_labels or
-                 cluster_copy.spec.constraints.cloud.labels)) \
-               and cluster_copy.status.scheduled_to:
-
-                if cluster_copy.status.scheduled_to.namespace:
-                    cloud = await self.infrastructure_api.read_cloud(
-                        name=cluster_copy.status.scheduled_to.name,
-                        namespace=cluster_copy.status.scheduled_to.namespace,
-                    )
-                else:
-                    cloud = await self.infrastructure_api.read_global_cloud(
-                        name=cluster_copy.status.scheduled_to.name,
-                    )
-
-                if cluster_copy.metadata.inherit_labels:
-                    cluster_copy.metadata.labels = \
-                        {**cluster_copy.metadata.labels, **cloud.metadata.labels}
-                if cluster.spec.constraints.cloud.labels:
-                    label_dict = dict()
-                    for constraint in cluster.spec.constraints.cloud.metrics:
-                        for label in cloud.metadata.labels:
-                            if constraint.value == label:
-                                label_dict = {**label_dict,
-                                              **{label: cloud.metadata.labels[label]}}
-                    cluster_copy.metadata.labels = \
-                        {**cluster_copy.metadata.labels, **label_dict}
-
-                if cluster_copy.spec.inherit_metrics:
-                    for metric in cloud.spec.__getattribute__(cloud.spec.type).metrics:
-                        cluster_metrics.append(metric) \
-                            if metric not in cluster_metrics else None
-                if cluster.spec.constraints.cloud.metrics:
-                    metric_list = list()
-                    for constraint in cluster.spec.constraints.cloud.metrics:
-                        for metric in cloud.spec.__getattribute__(
-                            cloud.spec.type
-                        ).metrics:
-                            if constraint.value == metric.name:
-                                metric_list.append(metric)
-                    for metric in metric_list:
-                        cluster_metrics.append(metric) \
-                            if metric not in cluster_metrics else None
-
-            cluster_copy.spec.metrics = cluster_metrics
+            cluster_copy = await self.update_inherited_cluster_values(cluster_copy)
 
             if cluster_copy.spec.metrics:
-                async for metrics in self.fetch_metrics(cluster, cluster_metrics):
+                async for metrics in self.fetch_metrics(
+                    cluster, cluster_copy.spec.metrics
+                ):
                     fetched_metrics[cluster.metadata.name] = metrics
             filtered_clusters[cluster.metadata.name] = cluster_copy
 
-        logger.debug(
-            f"App {app.metadata.name}: possible clusters: {filtered_clusters}"
-        )
-        logger.debug(f"App {app.metadata.name}: fetched metrics: {fetched_metrics}")
+        logger.debug(f"App {app.metadata.name}: "
+                     f"possible clusters: {filtered_clusters}")
+        logger.debug(f"App {app.metadata.name}: "
+                     f"fetched cluster metrics: {fetched_metrics}")
 
         matching_clusters = [
             cluster for cluster in existing_clusters
-            if match_cluster_constraints(
+            if match_application_constraints(
                 app,
                 filtered_clusters[cluster.metadata.name],
                 fetched_metrics
             )
         ]
 
-        logger.debug(f"App {app.metadata.name}: matching cluster: {matching_clusters}")
-
-        if not matching_clusters:
+        if not matching_clusters and not app.spec.auto_cluster_create:
             raise NoClusterFound("No matching Kubernetes cluster found")
 
         # If the application already has been scheduled it might be that it
@@ -859,15 +1101,17 @@ class KubernetesApplicationHandler(Handler):
         # Partition list of matching clusters into a list of clusters with
         # metrics and without metrics. Clusters with metrics are preferred
         # over clusters without metrics.
-        with_metrics = [cluster for cluster in matching_clusters
-                        if cluster.spec.metrics]
+        clusters_with_metrics = [cluster for cluster in matching_clusters
+                                 if cluster.metadata.name in fetched_metrics.keys()]
 
         # Only use clusters without metrics when there are no clusters with
         # metrics.
         scores = []
-        if with_metrics:
+        if clusters_with_metrics:
             # Compute the score of all clusters based on their metric
-            scores = await self.rank_kubernetes_clusters(app, with_metrics)
+            cluster_scores = \
+                await self.rank_kubernetes_clusters(app, clusters_with_metrics)
+            scores += cluster_scores
 
         if not scores:
             # If no score of cluster with metrics could be computed (e.g. due to
@@ -878,7 +1122,7 @@ class KubernetesApplicationHandler(Handler):
                 for cluster in matching_clusters
             ]
 
-        return self.select_maximum(scores).cluster
+        return scores
 
     async def rank_kubernetes_clusters(self, app, clusters):
         """Compute the score of the kubernetes clusters based on metrics values and
@@ -890,7 +1134,7 @@ class KubernetesApplicationHandler(Handler):
                 computed.
 
         Returns:
-            list[ClusterScore]: list of all cluster's score
+            list[Union[ClusterScore,CloudScore]]: list of all cluster's score
 
         """
         scores = list()
@@ -987,16 +1231,82 @@ class KubernetesApplicationHandler(Handler):
 
         return Stickiness(weight=self.stickiness, value=1.0)
 
+    async def update_inherited_cluster_values(self, cluster):
+        """Update metrics and labels for a cluster. The new values are a combination
+        of its own values as well as the values derived from the corresponding cloud
+        if either a constraint is set or the inheritance flags are active.
+
+        Args:
+            cluster (Cluster): cluster for which the metrics need to be calculated.
+
+        Returns:
+            Cluster: The cluster object with its updated metrics and labels
+        """
+
+        if (cluster.spec.inherit_metrics or cluster.spec.constraints.cloud.metrics or
+            cluster.metadata.inherit_labels or cluster.spec.constraints.cloud.labels) \
+                and cluster.status.scheduled_to:
+
+            if cluster.status.scheduled_to.namespace:
+                cloud = await self.infrastructure_api.read_cloud(
+                    name=cluster.status.scheduled_to.name,
+                    namespace=cluster.status.scheduled_to.namespace,
+                )
+            else:
+                cloud = await self.infrastructure_api.read_global_cloud(
+                    name=cluster.status.scheduled_to.name,
+                )
+
+            if cluster.metadata.inherit_labels:
+                cluster.metadata.labels = \
+                    {**cluster.metadata.labels, **cloud.metadata.labels}
+            if cluster.spec.constraints.cloud.labels:
+                label_dict = dict()
+                for constraint in cluster.spec.constraints.cloud.metrics:
+                    for label in cloud.metadata.labels:
+                        if constraint.value == label:
+                            label_dict = {**label_dict,
+                                          **{label: cloud.metadata.labels[label]}}
+                cluster.metadata.labels = \
+                    {**cluster.metadata.labels, **label_dict}
+
+            metrics = []
+            if cluster.spec.inherit_metrics:
+                for metric in cloud.spec.__getattribute__(cloud.spec.type).metrics:
+                    metrics.append(metric) \
+                        if metric not in metrics else None
+            if cluster.spec.constraints.cloud.metrics:
+                metric_list = list()
+                for constraint in cluster.spec.constraints.cloud.metrics:
+                    for metric in cloud.spec.__getattribute__(
+                            cloud.spec.type
+                    ).metrics:
+                        if constraint.value == metric.name:
+                            metric_list.append(metric)
+                for metric in metric_list:
+                    metrics.append(metric) \
+                        if metric not in metrics else None
+
+            cluster.spec.metrics += metrics
+        return cluster
+
+    @staticmethod
+    def auto_generate_cluster_name():
+        return f"cluster-{random.randint(1000, 9999)}"
+
 
 class KubernetesClusterHandler(Handler):
-    def __init__(self, client, queue, infrastructure_api, kubernetes_api, core_api):
-
+    def __init__(
+        self, client, queue, infrastructure_api, kubernetes_api, core_api,
+        cluster_creation_deletion_retention
+    ):
         super(KubernetesClusterHandler, self).__init__(
             client, queue, infrastructure_api, core_api
         )
 
         self.infrastructure_api = infrastructure_api
         self.kubernetes_api = kubernetes_api
+        self.cluster_creation_deletion_retention = cluster_creation_deletion_retention
 
     async def received_kubernetes_cluster(self, cluster):
         """Handler for Kubernetes cluster reflector.
@@ -1039,6 +1349,14 @@ class KubernetesClusterHandler(Handler):
             try:
                 logger.debug("Handling %r", cluster)
                 await self.schedule_kubernetes_cluster(cluster)
+
+                if cluster.spec.auto_generated and not cluster.metadata.deleted:
+                    logger.debug("Requeueing %r in %r seconds.",
+                                 cluster, self.cluster_creation_deletion_retention)
+                    await self.queue.put(
+                        cluster.metadata.uid, cluster,
+                        delay=self.cluster_creation_deletion_retention
+                    )
             except ControllerError as error:
                 cluster.status.reason = Reason(code=error.code, message=error.message)
                 cluster.status.state = ClusterState.FAILED
@@ -1065,6 +1383,23 @@ class KubernetesClusterHandler(Handler):
         assert cluster.status.scheduled_to is None, "Cluster is already bound"
 
         logger.info("Schedule %r", cluster)
+
+        cluster_has_apps = False
+        apps = await self.kubernetes_api.list_all_applications()
+        for app in apps.items:
+            if (app.status.scheduled_to and
+               app.status.scheduled_to.name == cluster.metadata.name) or \
+               cluster.status.state != ClusterState.ONLINE:
+                cluster_has_apps = True
+            break
+        if not cluster_has_apps and \
+           cluster.spec.auto_generated and \
+           not cluster.metadata.deleted:
+            await self.kubernetes_api.delete_cluster(
+                name=cluster.metadata.name,
+                namespace=cluster.metadata.namespace
+            )
+            logging.info("Marked %r to be deleted.", cluster)
 
         # Clouds from the same namespace as cluster are preferred over global clouds.
         clouds_namespaced = await self.infrastructure_api.list_clouds(
@@ -1119,7 +1454,7 @@ class KubernetesClusterHandler(Handler):
         matching = [
             cloud
             for cloud in existing_clouds
-            if match_cloud_constraints(cluster, cloud, fetched_metrics)
+            if match_cluster_constraints(cluster, cloud, fetched_metrics)
         ]
 
         if not matching:
@@ -1188,6 +1523,32 @@ class KubernetesClusterHandler(Handler):
         score = sum(metric.value * metric.weight for metric in metrics) / norm
 
         return CloudScore(score=score, cloud=cloud)
+
+
+async def rank_clusters_and_clouds(self, cluster, clouds, app, clusters):
+    """Compute the combined score of the clouds and clusters based on metrics values and
+    weights.
+
+    Args:
+        cluster (krake.data.kubernetes.Cluster): Cluster object for binding
+        clouds (list[Union[Cloud, GlobalCloud]]): List of clouds for which
+            the score has to be computed.
+        app (krake.data.kubernetes.Application): Application object for binding
+        clusters (list[Cluster]): List of clusters for which the score has to be
+            computed.
+
+    Returns:
+        list[Union[CloudScore, ClusterScore]]: list of all combined scores
+
+    """
+    cloud_scores = await self.rank_clouds(cluster, clouds)
+    cluster_scores = await self.rank_kubernetes_clusters(app, clusters)
+
+    combined_scores = cloud_scores + cluster_scores
+
+    combined_scores.sort(key=lambda x: x.score, reverse=True)
+
+    return combined_scores
 
 
 class OpenstackHandler(Handler):

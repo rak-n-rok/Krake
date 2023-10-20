@@ -105,7 +105,7 @@ def test_kubernetes_observer_update_on_cluster(k8s_clusters):
                 "template": {
                     "spec": {
                         "containers": [
-                            {"name": "echo", "image": "k8s.gcr.io/echoserver:1.4"}
+                            {"name": "echo", "image": "registry.k8s.io/echoserver:1.4"}
                         ]
                     }
                 }
@@ -118,7 +118,7 @@ def test_kubernetes_observer_update_on_cluster(k8s_clusters):
         run(command, condition=check_return_code(error_message))
 
         # 2. Check if the resource updated has been reverted to its previous state
-        expected_image = "k8s.gcr.io/echoserver:1.10"
+        expected_image = "registry.k8s.io/echoserver:1.10"
         error_message = (
             "The Observer did not revert the deployment to its previous state."
         )
@@ -164,7 +164,7 @@ def test_kubernetes_observer_update_on_cluster_nonobserved(k8s_clusters):
                 "template": {
                     "spec": {
                         "containers": [
-                            {"name": "echo", "image": "k8s.gcr.io/echoserver:1.4"}
+                            {"name": "echo", "image": "registry.k8s.io/echoserver:1.4"}
                         ]
                     }
                 }
@@ -177,7 +177,7 @@ def test_kubernetes_observer_update_on_cluster_nonobserved(k8s_clusters):
         run(command, condition=check_return_code(error_message))
 
         # 2. Check that the image has not been reverted to the previous state
-        expected_image = "k8s.gcr.io/echoserver:1.10"
+        expected_image = "registry.k8s.io/echoserver:1.10"
         error_message = (
             "The Observer did not revert the deployment to its previous state."
         )
@@ -385,7 +385,7 @@ def test_kubernetes_observer_update_on_api(k8s_clusters):
         run(f"rok kube app update echo-demo -f {MANIFEST_PATH}/echo-demo-update.yaml")
 
         # 2. Check if the resource has been updated on the cluster
-        expected_image = "k8s.gcr.io/echoserver:1.9"
+        expected_image = "registry.k8s.io/echoserver:1.9"
         error_message = "The deployment was not updated on the cluster."
         run(
             f"{kubectl_cmd(kubeconfig_path)} get deployment echo-demo -o json",
@@ -394,7 +394,7 @@ def test_kubernetes_observer_update_on_api(k8s_clusters):
 
         # 3. Check again that the resource has then NOT been updated by the Observer.
         time.sleep(10)
-        expected_image = "k8s.gcr.io/echoserver:1.9"
+        expected_image = "registry.k8s.io/echoserver:1.9"
         error_message = (
             "The observer should not update the Application back to its previous state."
         )
@@ -446,7 +446,7 @@ def test_kubernetes_observer_delete_on_api(k8s_clusters):
         # 4. Check that the resource has not been reverted to its previous state due to
         # the observer.
         time.sleep(10)
-        expected_image = "k8s.gcr.io/echoserver:1.9"
+        expected_image = "registry.k8s.io/echoserver:1.9"
         error_message = (
             "The kubernetes observer should not update the Application back to its "
             "previous state."
@@ -481,7 +481,7 @@ def test_kubernetes_observer_recreated(k8s_clusters):
         run(f"rok kube app update echo-demo -f {MANIFEST_PATH}/echo-demo-update.yaml")
 
         # Ensure that the resource has been updated on the cluster
-        expected_image = "k8s.gcr.io/echoserver:1.9"
+        expected_image = "registry.k8s.io/echoserver:1.9"
         error_message = "The deployment was not updated on the cluster."
         run(
             f"{kubectl_cmd(kubeconfig_path)} get deployment echo-demo -o json",
@@ -494,7 +494,7 @@ def test_kubernetes_observer_recreated(k8s_clusters):
                 "template": {
                     "spec": {
                         "containers": [
-                            {"name": "echo", "image": "k8s.gcr.io/echoserver:1.4"}
+                            {"name": "echo", "image": "registry.k8s.io/echoserver:1.4"}
                         ]
                     }
                 }
@@ -507,7 +507,7 @@ def test_kubernetes_observer_recreated(k8s_clusters):
         run(command, condition=check_return_code(error_message))
 
         # 3. Check if the resource updated has been reverted to the updated state
-        expected_image = "k8s.gcr.io/echoserver:1.9"
+        expected_image = "registry.k8s.io/echoserver:1.9"
         error_message = (
             "The kubernetes observer should update the Application back to its previous"
             " state."
