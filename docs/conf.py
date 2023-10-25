@@ -48,10 +48,13 @@ Matthias Goerens <matthias.goerens@cloudandheat.com>
 Orianne Bargain <orianne.bargain@cloudandheat.com>
 Paul Seidler <paul.seidler@cloudandheat.com>
 Yannic Ahrens <yannic.ahrens@cloudandheat.com>
+Hannes Baum <hannes.baum@cloudandheat.com>
+Patrick Thiem <patrick.thiem@cloudandheat.com>
+Toni Finger <toni.finger@cloudandheat.com>
 """
 
 # The full version, including alpha/beta/rc tags
-release = get_version("krake/__about__.py")
+release = get_version("../krake/krake/__about__.py")
 
 
 # -- General configuration ---------------------------------------------------
@@ -67,6 +70,7 @@ extensions = [
     "sphinx.ext.autosectionlabel",
     "sphinx_rtd_theme",
     "sphinx-prompt",
+    "sphinxcontrib.plantuml",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
