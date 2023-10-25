@@ -11,6 +11,7 @@ Welcome to Krake's documentation!
    :caption: Contents:
 
    quickstart
+   project-description
    user/index
    admin/index
    dev/index

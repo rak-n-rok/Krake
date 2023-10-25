@@ -11,7 +11,7 @@ formats: all
 
 # Configuration of the Python environment to be used
 python:
-  version: 3.8
+  version: 3.9
   install:
     - requirements: docs/requirements.txt
     - method: pip

@@ -177,6 +177,23 @@ flake8-rok:
     - docker
 
 
+test-build-docs:
+  stage: test
+  image: python:3.9
+  only:
+    - tags
+    - branches
+    - merge_requests
+    - schedules
+  script:
+    - cd ./docs
+    - pip install -r requirements.txt
+    - make html
+
+
+
+
+
 # Combine code coverage reports from previous tox runs for all different
 # Python environments. Report code coverage for Krake Python package and exit
 # with non-zero if the code coverage ratio is under 85%.
@@ -223,6 +240,7 @@ e2e-provisioning:
   variables:
     ANSIBLE_CONFIG: ansible/ansible.cfg
     ANSIBLE_INVENTORY: ansible/hosts-CI
+  retry: 2
   script:
     # Create SSH keys for to use during the whole pipeline
     - mkdir .ssh/
@@ -238,56 +256,13 @@ e2e-provisioning:
 
     ###################################
     ### Provision the staging infra ###
-    ###################################
+    ###################################    
+    # - ansible-playbook  ansible/site.yml
     - ansible-playbook  ansible/network.yml
     - ansible-playbook  ansible/gateway.yml
-    - ansible-parallel  ansible/microk8s_cluster.yml ansible/krake.yml
+    - ansible-playbook  ansible/microk8s_cluster.yml 
+    - ansible-playbook  ansible/krake.yml
     - ansible-playbook  ansible/krake_handle_certs.yml
-
-    ##################################################
-    ### Smoke tests + Integration test preperation ###
-    ##################################################
-    - ansible-playbook  ansible/smoke_tests.yml
-    - ansible-playbook  ansible/integration_tests.yml --tags prepare-tests --skip-tags always
-
-e2e-provisioning-backup:
-  # This job is executed if the provisioning of the OS infrastructure fails at
-  # the first attempt. In addition, it enables debugging the provisioning
-  # process, since the 'ansible-parallel' command from the previous stage does
-  # not provide useful output.
-  stage: provisioning-backup
-  when: on_failure
-  image: registry.gitlab.com/rak-n-rok/krake/ansible_image:latest
-  only:
-    - master
-    - merge_requests
-    - schedules
-  artifacts:
-    public: false #To not expose private ssh key
-    paths:
-      - ansible/.etc/hosts-CI.json
-      - .ssh/id_rsa
-  cache: []
-  variables:
-    ANSIBLE_CONFIG: ansible/ansible.cfg
-    ANSIBLE_INVENTORY: ansible/hosts-CI
-  script:
-    # Create SSH keys for to use during the whole pipeline
-    - mkdir .ssh/
-    - openstack keypair delete my_runner_key_$CI_PIPELINE_ID || true
-    - openstack keypair create my_runner_key_$CI_PIPELINE_ID > .ssh/id_rsa
-    - chmod 600 .ssh/id_rsa
-
-    # Configure host-CI template with the CI Pipeline ID
-    - sed -i "s/\$CI_PIPELINE_ID/$CI_PIPELINE_ID/g" ansible/hosts-CI
-
-    # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
-    - chmod -v 700 ansible/
-
-    ###################################
-    ### Provision the staging infra ###
-    ###################################
-    - ansible-playbook  ansible/site.yml
 
     ##################################################
     ### Smoke tests + Integration test preperation ###
@@ -360,6 +335,7 @@ e2e-cleanup:
     ANSIBLE_INVENTORY: ansible/hosts-CI
   dependencies: [] # To prevent downloading artefacts from previous stages
   cache: []
+  retry: 2
   script:
     - echo "Run script to clean up OpenStack infrastructure"
     # Delete the runner SSH keys
