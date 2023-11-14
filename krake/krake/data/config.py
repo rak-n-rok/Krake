@@ -290,6 +290,27 @@ class HooksConfiguration(Serializable):
     shutdown: ShutdownHookConfiguration
 
 
+class MigrationRetryConfiguration(Serializable):
+    max: int = field(
+        default=10,
+        metadata={
+            "help": (
+                "Maximum number of retries for the transfer of "
+                "a single file of an application"
+            )
+        }
+    )
+    timeout: int = field(
+        default=60,
+        metadata={
+            "help": "Timeout after a failed migration for the next rescheduling"
+        },
+    )
+
+
+class MigrationConfiguration(Serializable):
+    retry: MigrationRetryConfiguration
+
 ###################################
 #    Components configurations    #
 ###################################
@@ -331,6 +352,10 @@ class SchedulerConfiguration(ControllerConfiguration):
 
 class KubernetesConfiguration(ControllerConfiguration):
     hooks: HooksConfiguration
+
+
+class KubernetesApplicationConfiguration(KubernetesConfiguration):
+    migration: MigrationConfiguration
 
 
 class MagnumConfiguration(ControllerConfiguration):

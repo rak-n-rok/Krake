@@ -156,14 +156,14 @@ async def test_main_help(loop):
 
 
 @pytest.mark.slow
-def test_main(kube_config, log_to_file_config):
-    """Test the main function of the Kubernetes Controller, and verify that it starts,
+def test_main(kube_app_config, log_to_file_config):
+    """Test the main function of the Kubernetes Application Controller, and verify that it starts,
     display the right output and stops without issue.
     """
     log_config, file_path = log_to_file_config()
 
-    kube_config.api_endpoint = "http://my-krake-api:1234"
-    kube_config.log = log_config
+    kube_app_config.api_endpoint = "http://my-krake-api:1234"
+    kube_app_config.log = log_config
 
     def wrapper(configuration):
         loop = asyncio.new_event_loop()
@@ -171,7 +171,7 @@ def test_main(kube_config, log_to_file_config):
         main(configuration)
 
     # Start the process and let it time to initialize
-    process = multiprocessing.Process(target=wrapper, args=(kube_config,))
+    process = multiprocessing.Process(target=wrapper, args=(kube_app_config,))
     process.start()
     time.sleep(2)
 

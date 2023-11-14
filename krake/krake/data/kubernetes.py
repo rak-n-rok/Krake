@@ -574,6 +574,9 @@ class ApplicationStatus(Status):
             the shutdown command was issued to an object
         auto_cluster_create_started (str): flag that shows if the automatic cluster
             creation process was already started
+        migration_retries (int): number of retries for this migration
+        migration_timeout (int):
+            timestamp until the timeout for migration of this app ends
     """
 
     state: ApplicationState = ApplicationState.PENDING
@@ -596,6 +599,8 @@ class ApplicationStatus(Status):
     shutdown_key: str = None
     shutdown_grace_period: datetime = None
     auto_cluster_create_started: str = None
+    migration_retries: int = 0
+    migration_timeout: int = 0
 
 
 @persistent("/kubernetes/applications/{namespace}/{name}")

@@ -23,6 +23,10 @@ data:
         cert_dest: /etc/krake_shutdown_cert
         env_token: KRAKE_SHUTDOWN_TOKEN
         env_url: KRAKE_SHUTDOWN_URL
+    migration:
+      retry:
+        max: 10
+        timeout: 60
     tls:
       enabled: False
       client_ca: ""
