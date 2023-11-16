@@ -1,0 +1,60 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sd-deployment
+spec:
+  selector:
+    matchLabels:
+      app: null
+  template:
+    metadata:
+      labels:
+        app: null
+    spec:
+      containers:
+      - command:
+        - null
+        - null
+        - null
+        - observer_schema_list_max_length: 3
+          observer_schema_list_min_length: 3
+        env:
+        - name: null
+          value: null
+        - observer_schema_list_max_length: 1
+          observer_schema_list_min_length: 1
+        image: null
+        name: null
+        ports:
+        - containerPort: null
+        - observer_schema_list_max_length: 1
+          observer_schema_list_min_length: 1
+        volumeMounts:
+        - mountPath: null
+          name: null
+        - observer_schema_list_max_length: 2
+          observer_schema_list_min_length: 1
+      - observer_schema_list_max_length: 1
+        observer_schema_list_min_length: 1
+      volumes:
+      - configMap:
+          name: null
+        name: null
+      - observer_schema_list_max_length: 1
+        observer_schema_list_min_length: 1
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shutdown
+spec:
+  ports:
+  - port: null
+    protocol: null
+    targetPort: null
+  - observer_schema_list_max_length: 1
+    observer_schema_list_min_length: 1
+  selector:
+    app: null
+  type: null

@@ -50,6 +50,11 @@ hooks:
     env_token: $shutdown_hook_env_token
     env_url: $shutdown_hook_env_url
     $external_shutdown_endpoint_key_and_value
+migration:
+  retry:
+    max: 10
+    timeout: 60
+
 
 tls:
   enabled: $tls_enabled

@@ -1,5 +1,10 @@
 import asyncio
 import logging
+import json
+import tempfile
+import time
+import subprocess
+
 from contextlib import suppress
 from copy import deepcopy
 from functools import partial
@@ -8,6 +13,9 @@ from requests.exceptions import ConnectionError
 from aiohttp import ClientResponseError, ClientConnectorError
 from krake.controller.kubernetes.client import KubernetesClient
 
+from kubernetes import config
+from kubernetes.client.api import core_v1_api
+from kubernetes.stream import stream
 from kubernetes_asyncio.client.rest import ApiException
 from typing import NamedTuple, Tuple
 
@@ -32,6 +40,18 @@ logger = logging.getLogger(__name__)
 
 class InvalidStateError(ControllerError):
     """Kubernetes' application is in an invalid state"""
+
+    code = ReasonCode.INTERNAL_ERROR
+
+
+class MigrationError(ControllerError):
+    """Error happened during a migration call"""
+
+    code = ReasonCode.INTERNAL_ERROR
+
+
+class MaxTriesError(ControllerError):
+    """Maximum tries on an action were reached"""
 
     code = ReasonCode.INTERNAL_ERROR
 
@@ -208,7 +228,9 @@ class ResourceDelta(NamedTuple):
             or current[-1]["observer_schema_list_current_length"]
             > observed[-1]["observer_schema_list_max_length"]
         ):
-            raise ModifiedResourceException(f"Invalid list length for list {current}")
+            raise ModifiedResourceException(
+                f"Invalid list length for list {current} and {observed}"
+            )
 
     @classmethod
     def calculate(cls, app):
@@ -274,7 +296,8 @@ class ResourceDelta(NamedTuple):
                     cls._calculate_modified_dict(
                         observed_resource, desired_resource, current_resource
                     )
-                except ModifiedResourceException:
+                except ModifiedResourceException as e:
+                    logger.info("CALC : " + str(e))
                     modified.append(desired_resource)
 
         # Check if there are resources which were previously created (i.e. present in
@@ -326,12 +349,14 @@ class KubernetesApplicationController(Controller):
             used.
         ssl_context (ssl.SSLContext, optional): if given, this context will be
             used to communicate with the API endpoint.
-        debounce (float, optional): value of the debounce for the
-            :class:`WorkQueue`.
+        debounce (float, optional): value of debounce for the :class:`WorkQueue`.
         worker_count (int, optional): the amount of worker function that should be
             run as background tasks.
         time_step (float, optional): for the Observers: the number of seconds between
             two observations of the actual resource.
+        migration_max_retries (int): maximum number of retries if a migration fails
+        migration_timeout (int): timeout to calculate the next scheduling after
+            the failure of a migration
     """
 
     def __init__(
@@ -343,6 +368,8 @@ class KubernetesApplicationController(Controller):
         debounce=0,
         hooks=None,
         time_step=2,
+        migration_max_retries=10,
+        migration_timeout=60,
     ):
         super().__init__(
             api_endpoint, loop=loop, ssl_context=ssl_context, debounce=debounce
@@ -356,6 +383,9 @@ class KubernetesApplicationController(Controller):
 
         self.observer_time_step = time_step
         self.observers = {}
+
+        self.migration_max_retries = migration_max_retries
+        self.migration_timeout = migration_timeout
 
     def check_external_endpoint(self):
         """Ensure the scheme in the external endpoint (if provided) is matching the
@@ -385,6 +415,34 @@ class KubernetesApplicationController(Controller):
 
         final_url = str(endpoint_url.with_scheme(scheme))
         self.hooks.complete.external_endpoint = final_url
+
+    @staticmethod
+    def check_for_volumes(app):
+        for manifest in app.spec.manifest:
+            try:
+                containers = manifest.get("spec", {}).get("containers", [])
+                for container in containers:
+                    if container.get("volumeMounts"):
+                        return True
+            except Exception:
+                continue
+        return False
+
+    @staticmethod
+    def get_volume_paths(app):
+        paths = []
+        for manifest in getattr(app.spec, 'manifest', []):
+            try:
+                containers = getattr(manifest.spec, 'containers', [])
+                for container in containers:
+                    volume_mounts = getattr(container, 'volumeMounts', [])
+                    for vm in volume_mounts:
+                        mount_path = getattr(vm, 'mountPath', None)
+                        if mount_path:
+                            paths.append(mount_path)
+            except Exception:
+                continue
+        return paths
 
     @staticmethod
     def scheduled_or_deleting(app):
@@ -634,7 +692,7 @@ class KubernetesApplicationController(Controller):
                 copy.status.state is ApplicationState.READY_FOR_ACTION
                 or "shutdown" not in copy.spec.hooks
             ):
-                logger.info(f"{app.metadata.name} migrate")
+                logger.debug(f"{app.metadata.name} migrating")
                 # Migrate the Application
                 await listen.hook(
                     HookType.ApplicationPreMigrate,
@@ -642,7 +700,10 @@ class KubernetesApplicationController(Controller):
                     resource=copy,
                     start=start_observer,
                 )
-                await self._migrate_application(copy)
+                if self.check_for_volumes(app=copy):
+                    await self._migrate_application_with_volumes(copy)
+                else:
+                    await self._migrate_application(copy)
                 await listen.hook(
                     HookType.ApplicationPostMigrate,
                     controller=self,
@@ -650,7 +711,7 @@ class KubernetesApplicationController(Controller):
                     start=start_observer,
                 )
         else:
-            logger.info(f"{app.metadata.name} reconcile")
+            logger.debug(f"{app.metadata.name} reconciling")
             # Reconcile the Application
             await listen.hook(
                 HookType.ApplicationPreReconcile,
@@ -879,6 +940,7 @@ class KubernetesApplicationController(Controller):
             namespace=app.status.scheduled_to.namespace,
             name=app.status.scheduled_to.name,
         )
+
         async with KubernetesClient(
             cluster.spec.kubeconfig, cluster.spec.custom_resources
         ) as kube:
@@ -938,6 +1000,193 @@ class KubernetesApplicationController(Controller):
 
         # Application is now running on the scheduled cluster
         app.status.running_on = app.status.scheduled_to
+
+    async def transfer_file(self, src_cnf, trg_cnf, app_name, app_namespace, file):
+
+        tries = 0
+        while True:
+            logger.info("Trying migration of %s" % file)
+
+            config.load_kube_config(src_cnf)
+            core_v1_src = core_v1_api.CoreV1Api()
+
+            sha_src = stream(
+                core_v1_src.connect_get_namespaced_pod_exec,
+                app_name,
+                app_namespace,
+                command=['sha256sum', file.lstrip("/")],
+                stderr=True, stdin=False,
+                stdout=True, tty=False
+            )
+
+            snd = subprocess.run(
+                ["kubectl", "exec", app_name, "--kubeconfig", src_cnf, "--", "tar", "-cvf", "-", file],  # noqa: E501
+                check=True, capture_output=True)
+            _ = subprocess.run(
+                ["kubectl", "exec", app_name, "--kubeconfig", trg_cnf, "-i", "--", "tar", "-xvf", "-"],  # noqa: E501
+                input=snd.stdout, capture_output=True)
+
+            config.load_kube_config(trg_cnf)
+            core_v1_trg = core_v1_api.CoreV1Api()
+
+            sha_trg = stream(
+                core_v1_trg.connect_get_namespaced_pod_exec,
+                app_name,
+                app_namespace,
+                command=['sha256sum', file.lstrip("/")],
+                stderr=True, stdin=False,
+                stdout=True, tty=False
+            )
+
+            if sha_trg == sha_src:
+                logger.debug("Migration of %s finished successfully" % file)
+                break
+            else:
+                logger.warning("Migration of %s failed" % file)
+                tries += 1
+                if tries >= self.migration_max_retries:
+                    raise MaxTriesError("")
+
+    async def transfer_data(self, src_cluster, trg_cluster, app):
+
+        src_cluster = await self.kubernetes_api.read_cluster(
+            namespace=src_cluster.namespace, name=src_cluster.name
+        )
+        trg_cluster = await self.kubernetes_api.read_cluster(
+            namespace=trg_cluster.namespace, name=trg_cluster.name
+        )
+
+        with tempfile.NamedTemporaryFile(mode='w', encoding="utf-8") as src, \
+             tempfile.NamedTemporaryFile(mode='w', encoding="utf-8") as trg:
+            src.write(json.dumps(src_cluster.spec.kubeconfig))
+            src.flush()
+            trg.write(json.dumps(trg_cluster.spec.kubeconfig))
+            trg.flush()
+
+            for manifest in app.spec.manifest:
+                if manifest["kind"] == "Pod":
+                    namespace = getattr(manifest["metadata"], "namespace", "default")
+                    for container in manifest["spec"]["containers"]:
+                        if "volumeMounts" in container:
+
+                            config.load_kube_config(src.name)
+                            core_v1_src = core_v1_api.CoreV1Api()
+
+                            active = True
+                            while active:
+                                try:
+                                    resp = core_v1_src.read_namespaced_pod(
+                                        name=manifest["metadata"]["name"],
+                                        namespace=namespace,
+                                        _request_timeout=5
+                                    )
+                                except Exception:
+                                    continue
+                                    # return
+                                if resp.status.phase == 'Running':
+                                    active = False
+                                time.sleep(1)
+
+                            for volume_mount in container["volumeMounts"]:
+                                try:
+                                    files = stream(core_v1_src.connect_get_namespaced_pod_exec,  # noqa: E501
+                                                   manifest["metadata"]["name"],
+                                                   namespace,
+                                                   command=['find', volume_mount["mountPath"], '-type', 'f'],  # noqa: E501
+                                                   stderr=True, stdin=False,
+                                                   stdout=True, tty=False)
+                                except Exception:
+                                    raise MigrationError("")
+
+                                files = files.splitlines()
+                                for file in files:
+                                    if file.endswith("/"):
+                                        continue
+                                    await self.transfer_file(src.name,
+                                                             trg.name,
+                                                             manifest["metadata"]["name"],  # noqa: E501
+                                                             namespace,
+                                                             file)
+
+    async def _migrate_application_with_volumes(self, app):
+        app = await self.kubernetes_api.read_application(
+            namespace=app.metadata.namespace, name=app.metadata.name
+        )
+        if app.status.scheduled_to == app.status.running_on:
+            return
+
+        logger.info(
+            "Migrate %r (with volume) from %r to %r",
+            app,
+            app.status.running_on,
+            app.status.scheduled_to,
+        )
+        # Ensure finalizer exists before changing Kubernetes objects
+        await self._ensure_finalizer(app)
+
+        # Transition into "MIGRATING" state
+        app.status.state = ApplicationState.MIGRATING
+
+        await self.kubernetes_api.update_application_status(
+            namespace=app.metadata.namespace, name=app.metadata.name, body=app
+        )
+
+        old_app = deepcopy(app)
+
+        # Mangle desired spec resource by Mangling hook
+        await self.kubernetes_api.read_cluster(
+            namespace=app.status.scheduled_to.namespace,
+            name=app.status.scheduled_to.name,
+        )
+        generate_default_observer_schema(app)
+        update_last_applied_manifest_from_spec(app)
+        await listen.hook(
+            HookType.ApplicationMangling,
+            app=app,
+            api_endpoint=self.api_endpoint,
+            ssl_context=self.ssl_context,
+            config=self.hooks,
+        )
+
+        # Create complete manifest on the new cluster
+        delta = ResourceDelta(
+            new=tuple(app.status.last_applied_manifest), modified=(), deleted=()
+        )
+
+        await self._apply_manifest(app, delta)
+
+        # Try to the migrate the data to the new cluster
+        try:
+            await self.transfer_data(
+                old_app.status.running_on,
+                app.status.running_on,
+                app
+            )
+        except (MaxTriesError, MigrationError):
+            logger.error("Couldn't migrate %r, resetting to old location", app)
+
+            # Delete all resources currently running on the new cluster
+            await self._delete_manifest(app)
+            app = old_app
+            app.status.scheduled_to = app.status.running_on
+            app.status.migration_retries += 1
+            app.status.migration_timeout = \
+                int(time.time()) + \
+                (self.migration_timeout * app.status.migration_retries)
+        else:
+            # Delete all resources currently running on the old cluster
+            await self._delete_manifest(old_app)
+            app.status.migration_retries = 0
+            app.status.migration_timeout = 0
+
+        # Transition into "RUNNING" state
+        app.status.shutdown_grace_period = None
+        app.status.state = ApplicationState.RUNNING
+        await self.kubernetes_api.update_application_status(
+            namespace=app.metadata.namespace, name=app.metadata.name, body=app
+        )
+
+        logger.info("Migration of %r finished", app)
 
     async def _migrate_application(self, app):
         logger.info(

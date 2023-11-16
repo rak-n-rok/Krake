@@ -33,13 +33,26 @@ shutdown, since it only initiates the graceful shutdown.
 The actual application needs to handle its data integrity and storage itself during the
 shutdown process.
 
+Direct file transfer
+====================
+
+Krake enables direct data transfer between two clusters, if an application is migrated.
+To migrate data, Krake looks for attached volumes and then tries to migrate every file
+and directory inside this volume to the new cluster. This is done by packing a file
+with `tar` and sending it via a socket connection directly to the application on the new
+cluster, where it is unpacked with `tar` again. If this process fails, it is repeated for
+a configurable number of times. If no transfer is possible, the application isn't
+rescheduled to the new cluster and instead remains on the old cluster.
+The following figure demonstrates this principle.
+
+.. figure:: /img/statefulness_direct.png
+
 External storage
 ================
 
-At the moment, Krake implements statefulness through external storage solutions like buckets
+Krake also has the possibility to use external storage solutions like buckets
 (e.g. Amazon S3, Minio) or other network accessible options.
-This is only a very simple form of statefulness, which would require a user to also
-have access to external storage or setup some solution himself.
+This requires a user to also provide and have access to an external storage solution.
 
 The following figure demonstrates this principle.
 
@@ -47,5 +60,5 @@ The following figure demonstrates this principle.
 
     Shutdown hook workflow with an external persistent storage
 
-This solution requires no mechanism for transferring storage by Krake itself, since the
+This variant requires no mechanism for transferring storage by Krake itself, since the
 storage isn't managed by Krake; the storage solution basically acts as a static backend.

@@ -28,6 +28,10 @@ Configuration is loaded from the ``controllers.kubernetes.application`` section:
         cert_dest: /etc/krake_cert
         env_token: KRAKE_SHUTDOWN_TOKEN
         env_url: KRAKE_SHUTDOWN_URL
+    migration:
+      retry:
+        max: 10
+        timeout: 60
 
     tls:
       enabled: false
@@ -50,7 +54,7 @@ from krake import (
     ConfigurationOptionMapper,
     load_yaml_config,
 )
-from krake.data.config import KubernetesConfiguration
+from krake.data.config import KubernetesApplicationConfiguration
 from krake.utils import KrakeArgumentFormatter
 
 from ....controller import create_ssl_context, run
@@ -66,7 +70,7 @@ parser = ArgumentParser(
 )
 parser.add_argument("-c", "--config", type=str, help="Path to configuration YAML file")
 
-mapper = ConfigurationOptionMapper(KubernetesConfiguration)
+mapper = ConfigurationOptionMapper(KubernetesApplicationConfiguration)
 mapper.add_arguments(parser)
 
 
@@ -87,6 +91,8 @@ def main(config):
         ssl_context=ssl_context,
         debounce=config.debounce,
         hooks=config.hooks,
+        migration_max_retries=config.migration.retry.max,
+        migration_timeout=config.migration.retry.timeout,
     )
     run(controller)
 

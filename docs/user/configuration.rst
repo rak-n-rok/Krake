@@ -439,6 +439,19 @@ hooks (string)
             env_url_). By default, the value stored in the variable is the
             api_endpoint_. Example: ``https://krake.external.host:1234``.
 
+hooks (string)
+    All the parameters for the migration of an application are described here.
+
+    retry (string)
+        This section defines the parameters needed for the retrying of migrations.
+
+        max (string)
+            Maximum number of retries for the transfer of a single file of an application.
+        timeout (string)
+            Timeout after a failure until the next rescheduling of the application takes place.
+            This value will be multiplicated with the current number of tries.
+
+
 Scheduler
 ---------
 Additional parameters, specific for the Scheduler:

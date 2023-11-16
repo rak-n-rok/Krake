@@ -2,7 +2,7 @@ import logging
 
 import requests
 from kubernetes_asyncio.config.kube_config import KubeConfigLoader
-from kubernetes_asyncio import client as k8s_client
+from kubernetes_asyncio import client as AsyncK8sClient
 from kubernetes_asyncio.client import (
     ApiClient,
     Configuration,
@@ -63,9 +63,9 @@ class ApiAdapter(object):
             )(name=name, namespace=namespace)
 
         if hasattr(self.api, f"read_{camel_to_snake_case(kind)}"):
-            return await getattr(self.api, f"read_{camel_to_snake_case(kind)}")(
-                name=name
-            )
+            return await getattr(
+                self.api, f"read_{camel_to_snake_case(kind)}"
+            )(name=name)
 
         raise UnsupportedResourceError(f"{kind} resources are not supported.")
 
@@ -76,9 +76,9 @@ class ApiAdapter(object):
             )(body=body, namespace=namespace)
 
         if hasattr(self.api, f"create_{camel_to_snake_case(kind)}"):
-            return await getattr(self.api, f"create_{camel_to_snake_case(kind)}")(
-                body=body
-            )
+            return await getattr(
+                self.api, f"create_{camel_to_snake_case(kind)}"
+            )(body=body)
 
         raise UnsupportedResourceError(f"{kind} resources are not supported.")
 
@@ -89,9 +89,9 @@ class ApiAdapter(object):
             )(name=name, body=body, namespace=namespace)
 
         if hasattr(self.api, f"patch_{camel_to_snake_case(kind)}"):
-            return await getattr(self.api, f"patch_{camel_to_snake_case(kind)}")(
-                name=name, body=body
-            )
+            return await getattr(
+                self.api, f"patch_{camel_to_snake_case(kind)}"
+            )(name=name, body=body)
 
         raise UnsupportedResourceError(f"{kind} resources are not supported.")
 
@@ -102,9 +102,9 @@ class ApiAdapter(object):
             )(name=name, namespace=namespace)
 
         if hasattr(self.api, f"delete_{camel_to_snake_case(kind)}"):
-            return await getattr(self.api, f"delete_{camel_to_snake_case(kind)}")(
-                name=name
-            )
+            return await getattr(
+                self.api, f"delete_{camel_to_snake_case(kind)}"
+            )(name=name)
 
         raise UnsupportedResourceError(f"{kind} resources are not supported.")
 
@@ -192,7 +192,7 @@ class KubernetesClient(object):
         kubeconfig (dict): provided kubeconfig file, to connect to the cluster.
         custom_resources (list[str]): name of all custom resources that are available on
             the current cluster.
-        resource_apis (dict): mapping of a Kubernetes's resource name to the API object
+        resource_apis (dict): mapping of a Kubernetes' resource name to the API object
             of the Kubernetes client which manages it (e.g. a Pod belongs to the
             "CoreV1" API of Kubernetes, so the mapping would be "Pod" ->
             <client.CoreV1Api_instance>), wrapped in an :class:`ApiAdapter` instance.
@@ -223,7 +223,7 @@ class KubernetesClient(object):
         Args:
             response (object): the response, as handed over by the Kubernetes client
                 library.
-            kind (str): kind of the original resource that was managed (may be different
+            kind (str): kind of the original resource that was managed (maybe different
                 from the kind of the response).
             action (str): the type of action performed to get this response.
 
@@ -345,7 +345,7 @@ class KubernetesClient(object):
         group = "".join(word.capitalize() for word in group.split("."))
 
         try:
-            fcn_to_call = getattr(k8s_client, f"{group}{version.capitalize()}Api")
+            fcn_to_call = getattr(AsyncK8sClient, f"{group}{version.capitalize()}Api")
             return ApiAdapter(fcn_to_call(self.api_client))
         except AttributeError:
             try:
@@ -428,8 +428,8 @@ class KubernetesClient(object):
         """Apply the given resource on the cluster using its internal data as reference.
 
         Args:
-            resource (dict): the resource to create, as a manifest file translated in
-                dict.
+            resource (dict): the resource to create, as a manifest file translated
+                in dict.
 
         Returns:
             object: response from the cluster as given by the Kubernetes client.
@@ -438,13 +438,17 @@ class KubernetesClient(object):
         group, version, kind, name, namespace = self.get_immutables(resource)
 
         resource_api = await self.get_resource_api(group, version, kind)
-
-        try:
-            resp = await resource_api.read(kind, name=name, namespace=namespace)
-        except ApiException as err:
-            if err.status != 404:
-                raise
-            resp = None
+        while True:
+            try:
+                resp = await resource_api.read(kind, name=name, namespace=namespace)
+                break
+            except ApiException as err:
+                if err.status != 404:
+                    raise
+                resp = None
+                break
+            except TimeoutError:
+                continue
 
         if resp is None:
             resp = await resource_api.create(kind, body=resource, namespace=namespace)
@@ -458,12 +462,12 @@ class KubernetesClient(object):
         return resp
 
     async def delete(self, resource):
-        """Delete the given resource on the cluster using its internal data as
-        reference.
+        """Delete the given resource on the cluster using its internal data
+        as reference.
 
         Args:
-            resource (dict): the resource to delete, as a manifest file translated in
-                dict.
+            resource (dict): the resource to delete, as a manifest file translated
+                in dict.
 
         Returns:
             kubernetes_asyncio.client.models.v1_status.V1Status: response from the

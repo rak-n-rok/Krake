@@ -40,6 +40,7 @@ from krake.data.config import (
     ControllerConfiguration,
     SchedulerConfiguration,
     KubernetesConfiguration,
+    KubernetesApplicationConfiguration,
     InfrastructureConfiguration,
 )
 
@@ -412,6 +413,38 @@ def kube_config(tls_client_config):
         "log": {},
     }
     return KubernetesConfiguration.deserialize(config, creation_ignored=True)
+
+
+@pytest.fixture
+def kube_app_config(tls_client_config):
+    """Create a configuration for the Kubernetes Application Controller.
+
+    Returns:
+        KubernetesApplicationConfiguration: the created configuration.
+
+    """
+
+    config = {
+        "tls": tls_client_config.serialize(),
+        "hooks": {
+            "complete": {
+                "intermediate_src": "/etc/krake/certs/kube.pem",
+                "intermediate_key_src": "/etc/krake/certs/kube-key.pem",
+            },
+            "shutdown": {
+                "intermediate_src": "/etc/krake/certs/kube.pem",
+                "intermediate_key_src": "/etc/krake/certs/kube-key.pem",
+            },
+        },
+        "log": {},
+        "migration": {
+            "retry": {
+                "max": 10,
+                "timeout": 60
+            }
+        }
+    }
+    return KubernetesApplicationConfiguration.deserialize(config, creation_ignored=True)
 
 
 @pytest.fixture

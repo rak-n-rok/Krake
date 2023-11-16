@@ -463,6 +463,7 @@ class ApplicationSpec(Serializable):
     backoff: int = field(default=1)
     backoff_delay: int = field(default=1)
     backoff_limit: int = field(default=-1)
+    storage_migration: str = "none"
     auto_cluster_create: bool = False
 
     def __post_init__(self):
@@ -573,6 +574,9 @@ class ApplicationStatus(Status):
             the shutdown command was issued to an object
         auto_cluster_create_started (str): flag that shows if the automatic cluster
             creation process was already started
+        migration_retries (int): number of retries for this migration
+        migration_timeout (int):
+            timestamp until the timeout for migration of this app ends
     """
 
     state: ApplicationState = ApplicationState.PENDING
@@ -595,6 +599,8 @@ class ApplicationStatus(Status):
     shutdown_key: str = None
     shutdown_grace_period: datetime = None
     auto_cluster_create_started: str = None
+    migration_retries: int = 0
+    migration_timeout: int = 0
 
 
 @persistent("/kubernetes/applications/{namespace}/{name}")
@@ -800,7 +806,7 @@ class ClusterStatus(Status):
         scheduled_to (ResourceRef): Reference to the cloud where the cluster should run.
         running_on (ResourceRef): Reference to the cloud where the cluster is running.
         retries (int): Count of remaining retries to access the cluster. Is set
-            via the Attribute backoff in ClusterSpec.
+            via the Attribute backoff in the ClusterSpec.
     """
 
     kube_controller_triggered: datetime = None

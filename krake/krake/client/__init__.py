@@ -68,7 +68,7 @@ class Client(object):
 class Watcher(object):
     """Async context manager used by ``watch_*()`` methods of :class:`ClientApi`.
 
-    The context manager returns the async generator of resources. On entering
+    The context manager returns the async generator of resources. On entering,
     it is ensured that the watch is created. This means inside the context a
     watch is already established.
 

@@ -3,6 +3,7 @@ import os
 from datetime import timedelta
 import logging
 import random
+import time
 import yaml
 from typing import NamedTuple, Union
 from copy import deepcopy
@@ -698,6 +699,13 @@ class KubernetesApplicationHandler(Handler):
             logger.debug(
                 f"App {app.metadata.name}: not migrating, since migration of "
                 f"the application is disabled."
+            )
+            return
+
+        if app.status.migration_timeout > int(time.time()):
+            logger.debug(
+                f"Not scheduling, since {app.metadata.name} "
+                f"just failed a migration"
             )
             return
 
