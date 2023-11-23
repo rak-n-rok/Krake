@@ -16,7 +16,8 @@
   register: reboot_required_file
   stat:
     path: /var/run/reboot-required
-    get_md5: no
+    checksum_algorithm: md5
+    get_checksum: false
 
 - name: Reboot the machine if the kernel has been updated
   become: true
