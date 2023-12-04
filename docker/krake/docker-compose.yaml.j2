@@ -135,6 +135,10 @@ services:
     secrets:
       - source: scheduler-config
         target: "{{ krake.config.path }}/scheduler.yaml"
+      - source: space4air-config
+        target: "{{ krake.config.path }}/s4air.yaml"
+      - source: cluster-automation-template
+        target: "{{ krake.config.path }}/automation/cluster.yaml"
       {% if krake.enable_tls -%}
       - source: ca-cert
         target: "{{ krake.cert_dir }}/ca.pem"
@@ -154,6 +158,8 @@ services:
     secrets:
       - source: infrastructure-config
         target: "{{ krake.config.path }}/infrastructure.yaml"
+      - source: space4air-config
+        target: "{{ krake.config.path }}/s4air.yaml"
       {% if krake.enable_tls -%}
       - source: ca-cert
         target: "{{ krake.cert_dir }}/ca.pem"
@@ -200,6 +206,10 @@ secrets:
 
   scheduler-config:
     file: "{{ krake.config.path }}/scheduler.yaml"
+  space4air-config:
+    file: "{{ krake.config.path }}/s4air.yaml"
+  cluster-automation-template:
+    file: "{{ krake.config.path }}/automation/cluster.yaml"
 
   infrastructure-config:
     file: "{{ krake.config.path }}/infrastructure.yaml"

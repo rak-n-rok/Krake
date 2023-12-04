@@ -395,3 +395,30 @@ class ApiConfiguration(Serializable):
     default_roles: List[Role] = field(default_factory=list)
     default_role_bindings: List[RoleBinding] = field(default_factory=list)
     log: dict
+
+
+class Space4AIRLogsConfiguration(Serializable):
+    type: str = field(
+        default="file",
+        metadata={"help": "Access type for the logs files"}
+    )
+    path: str = field(
+        default="/tmp/space4air/logs/",
+        metadata={"help": "Local or web path for the logs files"}
+    )
+    file_search: str = field(
+        default="test.log",
+        metadata={"help": "Name of the log files to search for"}
+    )
+
+
+class Space4AIRConfiguration(Serializable):
+    host: str = field(
+        default="localhost",
+        metadata={"help": "Host address of the Space4AIR service"}
+    )
+    port: str = field(
+        default="5000",
+        metadata={"help": "Port of the Space4AIR service"}
+    )
+    logs: Space4AIRLogsConfiguration

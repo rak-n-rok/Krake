@@ -32,7 +32,7 @@ from krake.controller.kubernetes.hooks import (
 )
 from krake.utils import now, get_kubernetes_resource_idx
 from krake.data.core import ReasonCode, resource_ref, Reason
-from krake.data.kubernetes import ApplicationState
+from krake.data.kubernetes import ApplicationState, ClusterState
 from ..tosca import ToscaParserException
 
 logger = logging.getLogger(__name__)
@@ -54,6 +54,14 @@ class MaxTriesError(ControllerError):
     """Maximum tries on an action were reached"""
 
     code = ReasonCode.INTERNAL_ERROR
+
+
+class WaitingOnCluster(ControllerError):
+    """Raised in case when there is not enough resources for spawning an application
+    on any of the deployments.
+    """
+
+    code = ReasonCode.NO_SUITABLE_RESOURCE
 
 
 class ResourceID(NamedTuple):
@@ -559,6 +567,14 @@ class KubernetesApplicationController(Controller):
         app.status.kube_controller_triggered = now()
         assert app.metadata.modified is not None
 
+        current = await self.kubernetes_api.read_application(
+            namespace=app.metadata.namespace,
+            name=app.metadata.name,
+        )
+        if current.status.state == ApplicationState.WAITING_FOR_CLUSTER_CREATION and \
+           current.status.auto_cluster_create_started:
+            return current
+
         app = await self.kubernetes_api.update_application_status(
             namespace=app.metadata.namespace,
             name=app.metadata.name,
@@ -594,6 +610,9 @@ class KubernetesApplicationController(Controller):
                     name=app.metadata.name,
                     body=app,
                 )
+            except WaitingOnCluster:
+                await self.queue.put(key, app, delay=30)
+                logger.debug(f"{app.metadata.name}: scheduled retry in 30 seconds")
             except ControllerError as error:
                 app.status.reason = Reason(code=error.code, message=error.message)
                 app.status.state = ApplicationState.FAILED
@@ -624,7 +643,41 @@ class KubernetesApplicationController(Controller):
         logger.debug(f"received {app}")
 
         copy = deepcopy(app)
-        if copy.metadata.deleted:
+        if copy.status.auto_cluster_create_started:
+            if copy.status.state is ApplicationState.SCHEDULING:
+                if "shutdown" in copy.spec.hooks and copy.status.running_on:
+                    logger.debug(f"{app.metadata.name} shutdown due to "
+                                 f"creation of a new cluster")
+
+                    copy.status.state = ApplicationState.WAITING_FOR_CLEANING
+                    await self.kubernetes_api.update_application_status(
+                        namespace=copy.metadata.namespace,
+                        name=copy.metadata.name,
+                        body=copy,
+                    )
+
+                    await self._shutdown_application(copy)
+                else:
+                    copy.status.state = ApplicationState.READY_FOR_ACTION
+                    await self.kubernetes_api.update_application_status(
+                        namespace=copy.metadata.namespace,
+                        name=copy.metadata.name,
+                        body=copy,
+                    )
+
+            if copy.status.state is ApplicationState.READY_FOR_ACTION:
+
+                await self._delete_manifest(copy)
+
+                copy.status.running_on = None
+                copy.status.state = ApplicationState.WAITING_FOR_CLUSTER_CREATION
+                await self.kubernetes_api.update_application_status(
+                    namespace=copy.metadata.namespace,
+                    name=copy.metadata.name,
+                    body=copy,
+                )
+
+        elif copy.metadata.deleted:
             # Delete the Application
             try:
                 if (
@@ -665,7 +718,7 @@ class KubernetesApplicationController(Controller):
         ):
             if (
                 "shutdown" in copy.spec.hooks
-                and copy.status.state is not ApplicationState.READY_FOR_ACTION
+                and copy.status.state not in (ApplicationState.READY_FOR_ACTION, ApplicationState.MIGRATING)
             ):
                 logger.debug(f"{app.metadata.name} shutdown due to "
                              f"running_on != scheduled_to")
@@ -689,7 +742,7 @@ class KubernetesApplicationController(Controller):
             elif (
                 # Don't need to check for shutdown hook here, since the state
                 # READY_FOR_ACTION is only set
-                copy.status.state is ApplicationState.READY_FOR_ACTION
+                copy.status.state in (ApplicationState.READY_FOR_ACTION, ApplicationState.MIGRATING)
                 or "shutdown" not in copy.spec.hooks
             ):
                 logger.debug(f"{app.metadata.name} migrating")
@@ -700,10 +753,13 @@ class KubernetesApplicationController(Controller):
                     resource=copy,
                     start=start_observer,
                 )
-                if self.check_for_volumes(app=copy):
-                    await self._migrate_application_with_volumes(copy)
-                else:
-                    await self._migrate_application(copy)
+                # Ignoring this for AISprint
+                # --------------
+                # if self.check_for_volumes(app=copy):
+                #     await self._migrate_application_with_volumes(copy)
+                # else:
+                # --------------
+                await self._migrate_application(copy)
                 await listen.hook(
                     HookType.ApplicationPostMigrate,
                     controller=self,
@@ -711,6 +767,9 @@ class KubernetesApplicationController(Controller):
                     start=start_observer,
                 )
         else:
+            if app.status.state is ApplicationState.WAITING_FOR_CLUSTER_CREATION and \
+               app.status.auto_cluster_create_started:
+                return
             logger.debug(f"{app.metadata.name} reconciling")
             # Reconcile the Application
             await listen.hook(
@@ -796,8 +855,11 @@ class KubernetesApplicationController(Controller):
                         response=resp,
                     )
 
-        if app.status.running_on:
-            app.metadata.owners.remove(app.status.running_on)
+        try:
+            if app.status.running_on:
+                app.metadata.owners.remove(app.status.running_on)
+        except ValueError:
+            logger.error(f"{app.status.running_on} couldn't be found in the list for {app.metadata.name}")
 
         # Clear manifest in status
         app.status.running_on = None
@@ -861,7 +923,7 @@ class KubernetesApplicationController(Controller):
             )
 
         # Mangle desired spec resource by Mangling hook
-        await self.kubernetes_api.read_cluster(
+        cluster = await self.kubernetes_api.read_cluster(
             namespace=app.status.scheduled_to.namespace,
             name=app.status.scheduled_to.name,
         )
@@ -897,6 +959,17 @@ class KubernetesApplicationController(Controller):
 
         # Ensure finalizer exists before changing Kubernetes objects
         await self._ensure_finalizer(app)
+
+        if cluster.status.state is not ClusterState.ONLINE:
+            # Transition into "WAITING_ON_CLUSTER_CREATION" state if the expected cluster
+            # is not online yet
+            logger.debug(f"{app.metadata.name} transition to ApplicationState.WAITING_ON_CLUSTER_CREATION "
+                         f"as the expected cluster is not available yet.")
+            app.status.state = ApplicationState.WAITING_FOR_CLUSTER_CREATION
+            await self.kubernetes_api.update_application_status(
+                namespace=app.metadata.namespace, name=app.metadata.name, body=app
+            )
+            raise WaitingOnCluster("The requested cluster is not yet available.")
 
         if not app.status.running_on:
             # Transition into "CREATING" state if the application is currently
@@ -1221,6 +1294,16 @@ class KubernetesApplicationController(Controller):
             ssl_context=self.ssl_context,
             config=self.hooks,
         )
+        cluster = await self.kubernetes_api.read_cluster(
+            namespace=app.status.scheduled_to.namespace,
+            name=app.status.scheduled_to.name,
+        )
+
+        if cluster.status.state != ClusterState.ONLINE:
+            raise WaitingOnCluster(
+                f"Migration of {app.metadata.name} is waiting for a cluster to spawn"
+            )
+
         # Create complete manifest on the new cluster
         delta = ResourceDelta(
             new=tuple(app.status.last_applied_manifest), modified=(), deleted=()

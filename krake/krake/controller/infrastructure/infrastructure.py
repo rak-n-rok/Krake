@@ -10,6 +10,7 @@ from krake.data.kubernetes import ClusterState
 from krake.data.infrastructure import GlobalCloud, Cloud
 from krake.client.kubernetes import KubernetesApi
 from krake.client.infrastructure import InfrastructureApi
+from krake.controller.kubernetes.hooks import listen, HookType
 
 from .providers import (
     InfrastructureProvider,
@@ -289,7 +290,8 @@ class InfrastructureController(Controller):
         # represented by the `cluster.spec.tosca` field) and the current state
         # (which is stored in the `cluster.status.last_applied_tosca` field)
         if DeepDiff(
-            cluster.spec.tosca, cluster.status.last_applied_tosca, ignore_order=True
+            cluster.spec.tosca, cluster.status.last_applied_tosca, ignore_order=True,
+            exclude_paths="root['topology_template']['node_templates']['wn']['capabilities']['host']['properties']['num_cpus']"  # noqa: E501
         ):
             logger.info("Reconciliation of %r started.", cluster)
             # Ensure that deletion finalizer exists
@@ -341,6 +343,10 @@ class InfrastructureController(Controller):
             body=cluster,
         )
 
+        await listen.hook(
+            HookType.ClusterPreCreate,
+            cluster=cluster,
+        )
         infrastructure_uuid = await provider.create(cluster)
 
         # Save the infrastructure ID given by the provider as a cluster ID.

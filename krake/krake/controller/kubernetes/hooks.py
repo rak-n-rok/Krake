@@ -5,6 +5,7 @@ define when the hook will be executed.
 """
 import asyncio
 import logging
+import os
 import random
 from base64 import b64encode
 from collections import defaultdict
@@ -21,6 +22,9 @@ from typing import NamedTuple
 import yarl
 from aiohttp import ClientConnectorError
 
+from krake import (
+    load_yaml_config,
+)
 from krake.controller import Observer
 from krake.controller.kubernetes.client import KubernetesClient, InvalidManifestError
 from krake.controller.kubernetes.tosca import ToscaParser, ToscaParserException
@@ -73,6 +77,7 @@ class HookType(Enum):
     ApplicationPostDelete = auto()
     ClusterCreation = auto()
     ClusterDeletion = auto()
+    ClusterPreCreate = auto()
 
 
 class HookDispatcher(object):
@@ -751,6 +756,9 @@ class KubernetesApplicationObserver(Observer):
         if status.container_health is None:
             status.container_health = ContainerHealth()
 
+        if status.state is not ApplicationState.RUNNING:
+            return
+
         if hasattr(resource, 'status') and resource.status is not None:
             if resource.kind == "Pod":
                 container_state = resource.status.container_statuses[0].state
@@ -859,7 +867,7 @@ class KubernetesApplicationObserver(Observer):
                     return app.status
 
                 resource = resp
-                self._set_container_health(resource, status)
+                # self._set_container_health(resource, status)
 
             observed_manifest = update_last_observed_manifest_dict(
                 observed_resource, resp.to_dict()
@@ -2332,3 +2340,68 @@ class Shutdown(Hook):
                 )
             )
         return sub_resources
+
+
+@listen.on(HookType.ClusterPreCreate)
+async def check_space4air_service(cluster):
+    config = load_yaml_config("/etc/krake/s4air.yaml")
+
+    import requests
+
+    files = {"file": ""}
+
+    if config["logs"]["type"] == "file":
+        path = ""
+        if config["logs"]["file_search"]:
+            for root, dirs, fls in os.walk(config["logs"]["path"]):
+                if config["logs"]["file_search"] in fls:
+                    path = os.path.join(root, config["logs"]["file_search"])
+        else:
+            path = config["logs"]["path"]
+
+        for enc in ('utf-8', 'latin_1'):
+            try:
+                with open(path, encoding=enc) as f:
+                    files["file"] = f.read()
+            except OSError:
+                logger.error("The logs file could not be found locally.")
+                return
+            except UnicodeDecodeError:
+                continue
+    elif config["logs"]["type"] == "http":
+        try:
+            resp = requests.get(config["logs"]["path"])
+            resp.raise_for_status()
+            files["file"] = resp.text
+        except requests.exceptions.HTTPError:
+            logger.error(
+                "The logs file could not be found at the provided http address."
+            )
+            return
+    else:
+        print("The logs location type provided in the config is not supported.")
+        return
+
+    try:
+        resp = requests.post(
+            "http://" + config["host"] + ":" + str(config["port"]) + "/krake",
+            files=files
+        )
+        resp.raise_for_status()
+        logger.debug("Cores set by Space4AIR: " + str(resp.json()[1]["cores"]))
+        cluster.spec.tosca["topology_template"]["node_templates"][
+            "wn"
+        ]["capabilities"]["host"]["properties"]["num_cpus"] = resp.json()[1]["cores"]
+        logger.info(
+            "Configuration data for the new cluster "
+            "was received from the Space4AIR service."
+        )
+    except requests.exceptions.HTTPError:
+        logger.error("The Space4AIR service didn't send a suitable response.")
+    except AttributeError as e:
+        logger.error(
+            "The following attribute couldn't be found in the provided data: " + str(e)
+        )
+    return
+
+

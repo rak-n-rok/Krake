@@ -19,7 +19,7 @@ import os
 def main(name, port):
     os.execvp(
         "docker",
-        ["docker", "run", "-d", "-p", f"{port}:8800", "--name", name, "grycap/im"],
+        ["docker", "run", "-d", "-p", f"{port}:8800", "--name", name, "grycap/im:1.13.1"],
     )
 
 

@@ -16,6 +16,7 @@ from . import persistent
 from .serializable import Serializable, ApiObject
 from .core import Metadata, ListMetadata, Status, ResourceRef, MetricRef, Reason
 from .constraints import LabelConstraint, MetricConstraint
+from .infrastructure import Cloud, GlobalCloud
 
 
 # Set `toscaparser` logger to the WARNING level.
@@ -507,10 +508,14 @@ class ApplicationState(Enum):
     TRANSLATING = auto()
     RETRYING = auto()
     RESTARTING = auto()
+
+    SCHEDULING = auto()
+
     WAITING_FOR_CLEANING = auto()
     READY_FOR_ACTION = auto()
     MIGRATING = auto()
     WAITING_FOR_CLUSTER_CREATION = auto()
+
     DELETING = auto()
     DELETED = auto()
     DEGRADED = auto()
@@ -599,7 +604,7 @@ class ApplicationStatus(Status):
     shutdown_cert: str = None
     shutdown_key: str = None
     shutdown_grace_period: datetime = None
-    auto_cluster_create_started: str = None
+    auto_cluster_create_started: ResourceRef = None
     migration_retries: int = 0
     migration_timeout: int = 0
 
