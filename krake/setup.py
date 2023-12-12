@@ -22,6 +22,7 @@ def get_version(rel_path):
 install_requires = [
     "aiohttp==3.*",
     "aiohttp-cors==0.7.*",
+    "docker==6.*",
     "etcd3-py==0.1.*",
     "keystoneauth1==4.*",
     "kubernetes",
