@@ -299,12 +299,13 @@ class Scheduler(Controller):
 
 
 class Handler(object):
-    def __init__(self, client, queue, api, core_api):
+    def __init__(self, client, queue, api, core_api, infrastructure_api):
 
         self.client = client
         self.queue = queue
         self.api = api
         self.core_api = core_api
+        self.infrastructure_api = infrastructure_api
 
     @staticmethod
     def select_maximum(ranked):
@@ -391,10 +392,10 @@ class Handler(object):
             update_status_client = self.api.update_project_status
         elif resource.kind == Cloud.kind:
             resource.status.state = CloudState.FAILING_METRICS
-            update_status_client = self.api.update_cloud_status
+            update_status_client = self.infrastructure_api.update_cloud_status
         elif resource.kind == GlobalCloud.kind:
             resource.status.state = CloudState.FAILING_METRICS
-            update_status_client = self.api.update_global_cloud_status
+            update_status_client = self.infrastructure_api.update_global_cloud_status
             global_resource = True
         else:
             raise ValueError(f"Unsupported kind: {resource.kind}.")
@@ -568,9 +569,9 @@ class KubernetesApplicationHandler(Handler):
     def __init__(self, client, queue, api, core_api, infrastructure_api,
                  stickiness, reschedule_after, cluster_creation_tosca_file):
 
-        super(KubernetesApplicationHandler, self).__init__(client, queue, api, core_api)
-
-        self.infrastructure_api = infrastructure_api
+        super(KubernetesApplicationHandler, self).__init__(
+            client, queue, api, core_api, infrastructure_api
+        )
 
         self.stickiness = stickiness
         self.reschedule_after = reschedule_after
@@ -750,8 +751,7 @@ class KubernetesApplicationHandler(Handler):
 
                     cluster_name = self.auto_generate_cluster_name()
 
-                    with open(f"{os.path.dirname(os.getcwd())}/" +
-                              self.cluster_creation_tosca_file, 'r') as file:
+                    with open(self.cluster_creation_tosca_file, 'r') as file:
                         tosca = yaml.safe_load(file)
 
                     to_create = Cluster(
@@ -1309,10 +1309,9 @@ class KubernetesClusterHandler(Handler):
         cluster_creation_deletion_retention
     ):
         super(KubernetesClusterHandler, self).__init__(
-            client, queue, infrastructure_api, core_api
+            client, queue, kubernetes_api, core_api, infrastructure_api
         )
 
-        self.infrastructure_api = infrastructure_api
         self.kubernetes_api = kubernetes_api
         self.cluster_creation_deletion_retention = cluster_creation_deletion_retention
 
@@ -1562,7 +1561,7 @@ async def rank_clusters_and_clouds(self, cluster, clouds, app, clusters):
 class OpenstackHandler(Handler):
     def __init__(self, client, queue, api, core_api):
 
-        super(OpenstackHandler, self).__init__(client, queue, api, core_api)
+        super(OpenstackHandler, self).__init__(client, queue, api, core_api, None)
 
     async def received_magnum_cluster(self, cluster):
         """Handler for Kubernetes application reflector.
@@ -1926,7 +1925,8 @@ class OpenstackHandler(Handler):
 
         return Stickiness(weight=self.stickiness, value=1.0)
 
-    def calculate_openstack_project_scores(self, metrics, project):
+    @staticmethod
+    def calculate_openstack_project_scores(metrics, project):
         """Calculate score of OpenStack project based on the given metrics.
 
         Args:
