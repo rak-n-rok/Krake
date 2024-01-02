@@ -42,7 +42,7 @@
       command: "{{ git_dir }}/docker/generate --config {{ git_dir }}/docker/docker.yaml {{ git_dir }}/docker/im"
 
     - name: Remove Krake infrastructure with prometheus and IM
-      docker_compose:
+      community.general.docker_compose:
         project_src: "{{ git_dir }}/docker"
         files:
           - "{{ git_dir }}/docker/krake/docker-compose.yaml"
@@ -51,7 +51,7 @@
         state: absent
 
     - name: Start Krake infrastructure with prometheus and IM
-      docker_compose:
+      community.general.docker_compose:
         project_src: "{{ git_dir }}/docker"
         files:
           - "{{ git_dir }}/docker/krake/docker-compose.yaml"
@@ -117,7 +117,7 @@
       block:
 
         - name: Remove Krake infrastructure with IM
-          docker_compose:
+          community.general.docker_compose:
             project_src: "{{ git_dir }}/docker"
             files:
               - "{{ git_dir }}/docker/im/docker-compose.yaml"
