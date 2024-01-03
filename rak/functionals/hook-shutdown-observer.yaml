@@ -58,3 +58,10 @@ spec:
   selector:
     app: null
   type: null
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sd-service-configmap
+data:
+  hook-script-shutdown-service.py: null

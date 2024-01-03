@@ -15,7 +15,7 @@ spec:
       volumes:
       - name: scripts-volume
         configMap:
-          name: scripts-configmap
+          name: cmp-configmap
       containers:
       - name: script-deploy
         image: nyurik/alpine-python3-requests
@@ -30,19 +30,19 @@ spec:
         - -c
         - |
           echo "copy scripts to /tmp (configMap is read-only)"
-          cp /opt/hook-script.py /tmp
-          echo "apply 'chmod +x' to /tmp/hook-script.py"
-          chmod +x /tmp/hook-script.py
-          echo "execute hook-script.py now"
+          cp /opt/hook-complete-script.py /tmp
+          echo "apply 'chmod +x' to /tmp/hook-complete-script.py"
+          chmod +x /tmp/hook-complete-script.py
+          echo "execute hook-complete-script.py now"
           sleep 2
-          /tmp/hook-script.py
+          /tmp/hook-complete-script.py
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: scripts-configmap
+  name: cmp-configmap
 data:
-  hook-script.py: |
+  hook-complete-script.py: |
     #!/usr/bin/env python3
     """This script is used by the "complete" hook test, to act as a dummy job being started
     in a Deployment that belongs to a Krake Application.
