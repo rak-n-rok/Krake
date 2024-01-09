@@ -1409,28 +1409,29 @@ class KubernetesClusterHandler(Handler):
             logging.info("Marked %r to be deleted.", cluster)
 
         # Only try to reschedule clusters that are not auto generated
-        if not cluster.spec.auto_generated:
-            # Clouds from the same namespace as the cluster
-            # are preferred over global clouds
-            clouds_namespaced = await self.infrastructure_api.list_clouds(
-                namespace=cluster.metadata.namespace
-            )
-            try:
-                cloud = await self.select_cloud(cluster, clouds_namespaced.items)
-            except NoCloudFound:
-                # Try to find global clouds if there is no namespaced one.
-                clouds_global = await self.infrastructure_api.list_global_clouds()
-                cloud = await self.select_cloud(cluster, clouds_global.items)
+        if cluster.spec.auto_generated and cluster.status.scheduled_to:
+            return
+        # Clouds from the same namespace as the cluster
+        # are preferred over global clouds
+        clouds_namespaced = await self.infrastructure_api.list_clouds(
+            namespace=cluster.metadata.namespace
+        )
+        try:
+            cloud = await self.select_cloud(cluster, clouds_namespaced.items)
+        except NoCloudFound:
+            # Try to find global clouds if there is no namespaced one.
+            clouds_global = await self.infrastructure_api.list_global_clouds()
+            cloud = await self.select_cloud(cluster, clouds_global.items)
 
-            scheduled_to = resource_ref(cloud)
+        scheduled_to = resource_ref(cloud)
 
-            logger.info("Scheduled %r to %r", cluster, cloud)
+        logger.info("Scheduled %r to %r", cluster, cloud)
 
-            await self.kubernetes_api.update_cluster_binding(
-                namespace=cluster.metadata.namespace,
-                name=cluster.metadata.name,
-                body=CloudBinding(cloud=scheduled_to),
-            )
+        await self.kubernetes_api.update_cluster_binding(
+            namespace=cluster.metadata.namespace,
+            name=cluster.metadata.name,
+            body=CloudBinding(cloud=scheduled_to),
+        )
 
     @staticmethod
     def get_cloud_metrics(cloud):

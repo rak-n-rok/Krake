@@ -22,8 +22,10 @@ def get_version(rel_path):
 install_requires = [
     "aiohttp==3.*",
     "aiohttp-cors==0.7.*",
+    "deepdiff==6.2.*",
     "docker==6.*",
     "etcd3-py==0.1.*",
+    "influxdb_client",
     "keystoneauth1==4.*",
     "kubernetes",
     "kubernetes-asyncio==22.*",
@@ -34,16 +36,14 @@ install_requires = [
     "marshmallow-oneofschema",
     "marshmallow-union",
     "mock",
+    "oslo.db==11.3.0",
     "pyOpenSSL",
     "python-magnumclient==3.*",
     "PyYAML==5.*",
-    "requests==2.*",
+    "requests==2.29.*",
     "SQLAlchemy==1.4.46",
-    "oslo.db==11.3.0",
     "tosca-parser==2.6.*",
-    "deepdiff==6.2.*",
     "yarl==1.8.*",
-    "influxdb_client",
 ]
 
 # webargs
