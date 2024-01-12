@@ -32,6 +32,11 @@ services:
       ETCD_INITIAL_CLUSTER: {{ etcd.host }}=http://{{ etcd.host }}:{{ etcd.peer_port }}
       ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:{{ etcd.port }}
       ETCD_LISTEN_PEER_URLS: http://0.0.0.0:{{ etcd.peer_port }}
+      ETCD_MAX_SNAPSHOTS: 3
+      ETCD_MAX_WALS: 3
+      ETCD_SNAPSHOT_COUNT: 5000
+      ETCD_AUTO_COMPACTION_MODE: periodic
+      ETCD_AUTO_COMPACTION_RETENTION: 6
 
   krake-api:
     container_name: {{ api.host }}
