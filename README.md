@@ -139,7 +139,11 @@ Initialize folders needed to store certificates and configuration files. These w
 mkdir -p cluster_certs/certs cluster_certs/config
 ```
 
-#### 1. Minikube
+#### Setup Kubernetes cluster
+
+Use either [minikube](#minikube) or [kinD](#kind) to create a Kubernetes cluster.
+
+##### Minikube
 
 Create a minikube instance and download the kubeconfig file, as well as the certificate and key file
 necessary to connect to your minikube instance.
@@ -198,7 +202,7 @@ users:
     client-key: /home/USER/repos/krake/cluster_certs/certs/client.key
 ```
 
-#### 2. KinD
+##### KinD
 
 Create a kind instance and save the kubeconfig file in the `cluster_certs` directory
 
@@ -246,6 +250,8 @@ python3 -m krake.controller.infrastructure
 ```
 
 There is also a [script](https://gitlab.com/rak-n-rok/krake/-/snippets/2042674) (see snippets section on git) provided in the git repository to start all parts of Krake using „tmux“.
+
+#### Using the Krake CLI
 
 Finally we register the minikube (or kind) instance as a Krake backend and use Krake to
 deploy an `echoserver` application.
