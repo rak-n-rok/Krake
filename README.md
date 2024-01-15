@@ -214,8 +214,8 @@ Prerequisites
 - [kind][kind]
 
 ```bash
-# The name of your k8s cluster
-CLUSTER_NAME="mykindcluter"
+# Set the name of your k8s cluster
+CLUSTER_NAME="mykindcluster"
 # Start single node k8s cluster
 kind create cluster --name $CLUSTER_NAME --kubeconfig cluster_certs/config/$CLUSTER_NAME.yaml
 ```
