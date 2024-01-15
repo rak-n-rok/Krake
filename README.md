@@ -117,6 +117,7 @@ starting Krake:
 
 ```bash
 # Run the neccessary etcd server first
+# NOTE: Make sure `etcd` is in your $PATH
 support/etcd
 # Create roles for the RBAC authorization mode.
 krake_bootstrap_db bootstrapping/base_roles.yaml
