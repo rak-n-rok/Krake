@@ -70,14 +70,12 @@ either with or without development dependencies. Installing them into a
 python3 -m venv .env
 source .env/bin/activate
 # Install "krake" and "rok" without development dependencies
-pip install --editable rok/
-pip install --editable krake/
+pip3 install --editable rok/
+pip3 install --editable krake/
 ```
 
 ```bash
-# Install "krake" and "rok" with development dependencies
-pip install --editable "rok/[dev]"
-pip install --editable "krake/[dev]"
+pip3 install --editable "krake/[dev]"
 ```
 
 ### Setup
@@ -153,7 +151,7 @@ cp ~/.minikube/profiles/minikube/client.* cluster_certs/certs
 cp ~/.minikube/ca.crt cluster_certs/certs
 
 # Copy/generate config.yaml for later use with krake
-kubectl config view >> cluster_certs/config/minikube_conf.yaml
+minikube kubectl config view >> cluster_certs/config/minikube_conf.yaml
 
 # Adjust the following paths in the copied config.yaml:
 # - clusters.*.cluster.certificate-authority: "./cluster_certs/certs/ca.crt"
@@ -229,22 +227,22 @@ support/etcd
 support/prometheus
 
 # Run the API
-python -m krake.api
+python3 -m krake.api
 
 # Run the Garbage Collector
-python -m krake.controller.gc
+python3 -m krake.controller.gc
 
 # Run the krake Scheduler
-python -m krake.controller.scheduler
+python3 -m krake.controller.scheduler
 
 # Run the Kubernetes cluster controller
-python -m krake.controller.kubernetes.cluster
+python3 -m krake.controller.kubernetes.cluster
 
 # Run the Kubernetes application controller
-python -m krake.controller.kubernetes.application
+python3 -m krake.controller.kubernetes.application
 
 # Run the Infrastructure controller
-python -m krake.controller.infrastructure
+python3 -m krake.controller.infrastructure
 ```
 
 There is also a [script](https://gitlab.com/rak-n-rok/krake/-/snippets/2042674) (see snippets section on git) provided in the git repository to start all parts of Krake using „tmux“.
