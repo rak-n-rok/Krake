@@ -149,11 +149,16 @@ necessary to connect to your minikube instance.
 ```bash
 minikube start
 # Copy client and ca certificate to the above created folders
-cp /home/USER/.minikube/profiles/minikube/client.* cluster_certs/certs
-cp /home/USER/.minikube/ca.crt cluster_certs/certs
+cp ~/.minikube/profiles/minikube/client.* cluster_certs/certs
+cp ~/.minikube/ca.crt cluster_certs/certs
 
 # Copy/generate config.yaml for later use with krake
 kubectl config view >> cluster_certs/config/minikube_conf.yaml
+
+# Adjust the following paths in the copied config.yaml:
+# - clusters.*.cluster.certificate-authority: "./cluster_certs/certs/ca.crt"
+# - users.*.user.client-certificate: "./cluster_certs/certs/client.crt"
+# - users.*.user.client-key: "./cluster_certs/certs/client.key"
 ```
 
 **Attention:** If you have installed both kind and minikube this command would list both configurations. In this case, you should remove the kind configuration.
@@ -164,7 +169,7 @@ Here you can see an example configuration of minikube for Krake:
 apiVersion: v1
 clusters:
 - cluster:
-    certificate-authority: /home/USER/.minikube/ca.crt
+    certificate-authority: /home/USER/repos/krake/cluster_certs/certs/ca.crt
     extensions:
     - extension:
         last-update: Wed, 30 Mar 2022 12:36:02 CEST
@@ -191,8 +196,8 @@ preferences: {}
 users:
 - name: minikube2
   user:
-    client-certificate: /home/USER/.minikube/profiles/minikube/client.crt
-    client-key: /home/USER/.minikube/profiles/minikube/client.key
+    client-certificate: /home/USER/repos/krake/cluster_certs/certs/client.crt
+    client-key: /home/USER/repos/krake/cluster_certs/certs/client.key
 ```
 
 #### 2. KinD
