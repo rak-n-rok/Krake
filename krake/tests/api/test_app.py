@@ -26,6 +26,7 @@ def test_main(config, tmp_path):
     """Test the main function of the API, and verify that it starts, display the right
     output and stops without issue.
     """
+    config.host = "localhost"
     config.port = 1234
     config.log = {"version": 1, "level": "INFO"}
 
@@ -50,7 +51,7 @@ def test_main(config, tmp_path):
     with open(file_path, "r") as f:
         output = f.read()
 
-    assert "Running on http://0.0.0.0:1234" in output
+    assert "Running on http://localhost:1234" in output
 
 
 async def test_index(aiohttp_client, no_db_config):

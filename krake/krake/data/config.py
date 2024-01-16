@@ -380,6 +380,10 @@ class InfrastructureConfiguration(ControllerConfiguration):
 
 
 class ApiConfiguration(Serializable):
+    host: str = field(
+        default="localhost",
+        metadata={"help": "Host IP address or 'localhost' to expose the Krake API at."}
+    )
     port: int = field(
         default=8080, metadata={"help": "Port to which the Krake API listens to."}
     )
