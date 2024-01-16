@@ -1,5 +1,6 @@
 ## Configuration file for the Krake API
 
+host: $api_host
 port: $api_port
 
 etcd:

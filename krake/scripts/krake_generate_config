@@ -317,7 +317,7 @@ if __name__ == "__main__":
     add_option(
         parser,
         "--api-host",
-        "API endpoint host for the controllers.",
+        "Name or IP address of the host providing the Krake API",
         default="localhost",
     )
     add_option(
