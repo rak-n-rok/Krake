@@ -255,10 +255,13 @@ There is also a [script](https://gitlab.com/rak-n-rok/krake/-/snippets/2042674) 
 
 #### Using the Krake CLI
 
-Finally we register the minikube (or kind) instance as a Krake backend and use Krake to
-deploy an `echoserver` application.
+Finally we can:
+1. Register a Kubernetes cluster as a Krake backend
+2. Use Krake to deploy an `echoserver` application to test the setup
 
-```bash
+The following example shows these basics:
+
+```console
 # List current clusters; there should be none
 $ rok kube cluster list
 +------+-----------+--------+---------+----------+---------+-------+
