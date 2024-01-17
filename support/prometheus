@@ -45,6 +45,8 @@ root_dir = Path(__file__).parent.parent.resolve()
 
 temp_dir = root_dir / "tmp/prometheus"
 
+data_dir = temp_dir / "data"
+
 prometheus_config = """
 global:
     scrape_interval: {interval}s
@@ -114,7 +116,8 @@ async def prometheus_server(config, interval, port):
 
     proc = await asyncio.create_subprocess_shell(
         f"prometheus --config.file {str(config_file)} "
-        f"--web.enable-admin-api --web.listen-address :{str(port)}"
+        f"--web.enable-admin-api --web.listen-address :{str(port)} "
+        f"--storage.tsdb.path={str(data_dir)}"
     )
     await proc.communicate()
 
