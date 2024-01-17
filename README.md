@@ -39,7 +39,7 @@ project is desired or required.
 
 - [etcdv3][etcd]
 - [Python][python] >= 3.7
-- [Setup at least one minikube VM][minikube] or [kind instance][kind] alternatively
+- At least one setup Kubernetes cluster (See [howto](#setup-kubernetes-cluster))
 
 #### Test applications
 
@@ -141,7 +141,7 @@ mkdir -p cluster_certs/certs cluster_certs/config
 
 #### Setup Kubernetes cluster
 
-Use either [minikube](#minikube) or [kinD](#kind) to create a Kubernetes cluster.
+Use any Kubernetes cluster you prefer. For starters, we recommend either [minikube](#minikube) or [kinD](#kind) as a first cluster.
 
 ##### Minikube
 
