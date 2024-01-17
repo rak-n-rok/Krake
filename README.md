@@ -445,6 +445,9 @@ us, find us on our [Krake Matrix room][krake-matrix].
 If you wish to contribute, you can also check the
 [Contributing](CONTRIBUTING.md) guide.
 
+Further detailed information can also be found on our website at
+[krake.cloud](https://krake.cloud/).
+
 ## Project Background
 
 The Rak'n'Rok project has initially been developed at
