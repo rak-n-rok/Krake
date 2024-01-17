@@ -421,8 +421,9 @@ To work with these more complex examples, see the respective User Stories about
 
 ### Testing
 
-Tests are placed in the `tests/` directory inside the Python packages and can
-be run via `pytest`.
+Tests are placed in the [tests/](./tests/) directory inside the Python packages and can
+be run via `pytest`. (pytest should have been installed previously as a development
+dependency)
 
 ```bash
 # Run tests of the "krake" package
