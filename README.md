@@ -62,17 +62,19 @@ git clone https://gitlab.com/rak-n-rok/krake.git
 cd krake
 ```
 
-All dependencies can be installed via the corresponding `setup.py` scripts,
-either with or without development dependencies. Installing them into a
-[Python virtualenv][virtualenv] is recommended.
+Install "rok" and "krake" Python packages.
+Installing them into a [Python virtualenv][virtualenv] is recommended. All dependencies
+are installed via the corresponding `setup.py` scripts.
 
 ```bash
 python3 -m venv .env
 source .env/bin/activate
-# Install "krake" and "rok" without development dependencies
-pip3 install --editable rok/
-pip3 install --editable krake/
+
+pip3 install rok/
+pip3 install krake/
 ```
+
+For development "krake" can also be installed with additional development dependencies:
 
 ```bash
 pip3 install --editable "krake/[dev]"
