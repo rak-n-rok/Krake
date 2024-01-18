@@ -351,11 +351,7 @@ class CoreApi(object):
                 raise HttpProblemError(web.HTTPConflict, problem)
 
         if body == entity:
-            problem = HttpProblem(
-                detail="The body contained no update.",
-                title=HttpProblemTitle.UPDATE_ERROR
-            )
-            raise HttpProblemError(web.HTTPBadRequest, problem)
+            return web.json_response(entity.serialize())
 
         try:
             entity.update(body)
