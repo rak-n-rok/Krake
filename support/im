@@ -23,20 +23,19 @@ def main(name, port):
     )
 
 
-parser = ArgumentParser(description=("IM instance for development purposes"))
-parser.add_argument(
-    "--name",
-    default="im",
-    help="human-readable name for this IM docker container. Default: im",
-)
-parser.add_argument(
-    "--port",
-    type=int,
-    default=8800,
-    help="IM instance port to listen on. Default: 8800",
-)
-
-
 if __name__ == "__main__":
+    parser = ArgumentParser(description=("IM instance for development purposes"))
+    parser.add_argument(
+        "--name",
+        default="im",
+        help="human-readable name for this IM docker container. Default: im",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8800,
+        help="IM instance port to listen on. Default: 8800",
+    )
+
     args = vars(parser.parse_args())
     main(**args)
