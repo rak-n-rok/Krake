@@ -49,10 +49,12 @@ Test constraints, metrics and metrics providers are globally defined as follows:
 """
 import itertools
 import math
+import os
 import pytest
 import random
 import string
 import time
+import yaml
 
 from functionals.utils import (
     create_cluster_label_info,
@@ -74,8 +76,24 @@ COUNTRY_CODES = [
     for l1, l2 in itertools.product(string.ascii_uppercase, string.ascii_uppercase)
 ]
 
+
 # TODO:! we cloud dynamically read in this value from krake config
-RESCHEDULING_INTERVAL = 10
+def _read_value_from_config(value, default):
+    options = [
+        "scheduler.yaml",
+        os.path.join("/etc/krake/", "scheduler.yaml"),
+        os.path.join(f"{KRAKE_HOMEDIR}/{GIT_DIR}/config", "scheduler.yaml")
+    ]
+    for path in options:
+        if os.path.exists(path):
+            with open(path, "r") as fd:
+                data = yaml.safe_load(fd)
+                print(data)
+                return data[value]
+    return default
+
+
+RESCHEDULING_INTERVAL = _read_value_from_config("reschedule_after", 60)
 
 
 # FIXME: krake#405:
