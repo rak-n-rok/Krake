@@ -13,13 +13,16 @@ Read the IM docs for details: https://imdocs.readthedocs.io/en/latest/
 
 """
 from argparse import ArgumentParser
+from functools import reduce
 import os
 
 
 def main(name, port):
     os.execvp(
         "docker",
-        ["docker", "run", "-d", "-p", f"{port}:8800", "--name", name, "grycap/im"],
+        ["docker", "run", "-d"] \
+            + reduce(lambda a, b: a+b, [["-p", f"{x}:8800"] for x in port]) \
+            + ["--name", name, "docker.io/grycap/im"],
     )
 
 
@@ -32,9 +35,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--port",
-        type=int,
-        default=8800,
-        help="IM instance port to listen on. Default: 8800",
+        type=str, nargs='*',
+        default=["127.0.0.1:8800", "[::1]:8800"],
+        help=("IM instance port to listen on. Optionally an IP address can be "
+              "prepended with a semicolon. Multiple values can be specified. "
+              "Default: 127.0.0.1:8800, [::1]:8800"),
     )
 
     args = vars(parser.parse_args())
