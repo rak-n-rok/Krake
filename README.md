@@ -39,7 +39,7 @@ project is desired or required.
 
 - [etcdv3][etcd]
 - [Python][python] >= 3.7
-- [Setup at least one minikube VM][minikube] or [kind instance][kind] alternatively
+- At least one setup Kubernetes cluster (See [howto](#setup-kubernetes-cluster))
 
 #### Test applications
 
