@@ -70,14 +70,12 @@ either with or without development dependencies. Installing them into a
 python3 -m venv .env
 source .env/bin/activate
 # Install "krake" and "rok" without development dependencies
-pip install --editable rok/
-pip install --editable krake/
+pip3 install --editable rok/
+pip3 install --editable krake/
 ```
 
 ```bash
-# Install "krake" and "rok" with development dependencies
-pip install --editable "rok/[dev]"
-pip install --editable "krake/[dev]"
+pip3 install --editable "krake/[dev]"
 ```
 
 ### Setup
