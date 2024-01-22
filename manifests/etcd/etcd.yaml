@@ -3,12 +3,26 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: development
+  labels:
+    environment: development
+    app.kubernetes.io/instance: etcd-zeutcr
+    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/part-of: krake
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: etcd
   namespace: development
+  labels:
+    environment: development
+    app.kubernetes.io/name: etcd
+    app.kubernetes.io/instance: etcd-zeutcr
+    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: krake
 spec:
   clusterIP: None
   ports:
@@ -17,7 +31,7 @@ spec:
   - port: 2380
     name: peer
   selector:
-    app: etcd
+    app.kubernetes.io/name: etcd
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -25,18 +39,30 @@ metadata:
   name: etcd
   namespace: development
   labels:
-    app: etcd
+    environment: development
+    app.kubernetes.io/name: etcd
+    app.kubernetes.io/instance: etcd-zeutcr
+    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: krake
 spec:
   serviceName: etcd
   replicas: 3
   selector:
     matchLabels:
-      app: etcd
+      app.kubernetes.io/name: etcd
   template:
     metadata:
       name: etcd
       labels:
-        app: etcd
+        environment: development
+        app.kubernetes.io/name: etcd
+        app.kubernetes.io/instance: etcd-zeutcr
+        app.kubernetes.io/version: "1.0"
+        app.kubernetes.io/managed-by: kubectl
+        app.kubernetes.io/component: database
+        app.kubernetes.io/part-of: krake
     spec:
       containers:
       - name: etcd

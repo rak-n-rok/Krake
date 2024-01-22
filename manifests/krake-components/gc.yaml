@@ -4,6 +4,14 @@ kind: ConfigMap
 metadata:
   name: krake-gc
   namespace: development
+  labels:
+    environment: development
+    app.kubernetes.io/name: krake-gc
+    app.kubernetes.io/instance: krake-api-zeutcr
+    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/component: gc
+    app.kubernetes.io/part-of: krake
 data:
   garbage_collector.yaml: |
     api_endpoint: http://krake-api:8080
@@ -39,7 +47,13 @@ metadata:
   name: krake-gc
   namespace: development
   labels:
+    environment: development
     app.kubernetes.io/name: krake-gc
+    app.kubernetes.io/instance: krake-api-zeutcr
+    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/component: go
+    app.kubernetes.io/part-of: krake
 spec:
   replicas: 1
   selector:
@@ -48,7 +62,13 @@ spec:
   template:
     metadata:
       labels:
+        environment: development
         app.kubernetes.io/name: krake-gc
+        app.kubernetes.io/instance: krake-api-zeutcr
+        app.kubernetes.io/version: "1.0"
+        app.kubernetes.io/managed-by: kubectl
+        app.kubernetes.io/component: go
+        app.kubernetes.io/part-of: krake
     spec:
       containers:
       - name: krake-gc

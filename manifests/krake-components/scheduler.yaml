@@ -4,6 +4,14 @@ kind: ConfigMap
 metadata:
   name: krake-scheduler
   namespace: development
+  labels:
+    environment: development
+    app.kubernetes.io/name: krake-scheduler
+    app.kubernetes.io/instance: krake-api-zeutcr
+    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/component: scheduler
+    app.kubernetes.io/part-of: krake
 data:
   scheduler.yaml: |
     api_endpoint: http://krake-api:8080
@@ -44,7 +52,13 @@ metadata:
   name: krake-scheduler
   namespace: development
   labels:
+    environment: development
     app.kubernetes.io/name: krake-scheduler
+    app.kubernetes.io/instance: krake-api-zeutcr
+    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/component: scheduler
+    app.kubernetes.io/part-of: krake
 spec:
   replicas: 1
   selector:
@@ -53,7 +67,13 @@ spec:
   template:
     metadata:
       labels:
+        environment: development
         app.kubernetes.io/name: krake-scheduler
+        app.kubernetes.io/instance: krake-api-zeutcr
+        app.kubernetes.io/version: "1.0"
+        app.kubernetes.io/managed-by: kubectl
+        app.kubernetes.io/component: scheduler
+        app.kubernetes.io/part-of: krake
     spec:
       containers:
       - name: krake-scheduler

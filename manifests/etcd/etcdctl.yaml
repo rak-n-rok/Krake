@@ -5,7 +5,13 @@ metadata:
   name: etcdctl
   namespace: development
   labels:
-    app.kubernetes.io/name: debian
+    environment: development
+    app.kubernetes.io/name: etcdctl
+    app.kubernetes.io/instance: etcd-zeutcr
+    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/component: tools
+    app.kubernetes.io/part-of: krake
 spec:
   containers:
   - name: etcdctl

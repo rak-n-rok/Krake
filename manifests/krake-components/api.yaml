@@ -4,6 +4,14 @@ kind: ConfigMap
 metadata:
   name: krake-api
   namespace: development
+  labels:
+    environment: development
+    app.kubernetes.io/name: krake-api
+    app.kubernetes.io/instance: krake-api-zeutcr
+    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: krake
 data:
   api.yaml: |
     port: 8080
@@ -54,6 +62,14 @@ kind: Service
 metadata:
   name: krake-api
   namespace: development
+  labels:
+    environment: development
+    app.kubernetes.io/name: krake-api
+    app.kubernetes.io/instance: krake-api-zeutcr
+    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: krake
 spec:
   type: NodePort
   selector:
@@ -67,8 +83,15 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: krake-api
+  namespace: development
   labels:
+    environment: development
     app.kubernetes.io/name: krake-api
+    app.kubernetes.io/instance: krake-api-zeutcr
+    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: krake
 spec:
   replicas: 3
   selector:
@@ -77,7 +100,13 @@ spec:
   template:
     metadata:
       labels:
+        environment: development
         app.kubernetes.io/name: krake-api
+        app.kubernetes.io/instance: krake-api-zeutcr
+        app.kubernetes.io/version: "1.0"
+        app.kubernetes.io/managed-by: kubectl
+        app.kubernetes.io/component: api
+        app.kubernetes.io/part-of: krake
     spec:
       containers:
       - name: krake-api
