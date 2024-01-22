@@ -336,6 +336,10 @@ e2e-cleanup:
     - master
     - merge_requests
     - schedules
+  needs:
+    - e2e-provisioning  # In case only this job runs but not it successors we include it here
+    - e2e-test-apps
+    - e2e-test-im
   variables:
     ANSIBLE_CONFIG: ansible/ansible.cfg
     ANSIBLE_INVENTORY: ansible/hosts-CI
