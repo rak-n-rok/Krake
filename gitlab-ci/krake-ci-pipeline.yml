@@ -283,6 +283,9 @@ e2e-test-apps:
     - master
     - merge_requests
     - schedules
+  needs:
+    - e2e-provisioning
+  when: on_success
   variables:
     ANSIBLE_CONFIG: ansible/ansible.cfg
     ANSIBLE_INVENTORY: ansible/hosts-CI
