@@ -52,8 +52,15 @@ spec:
         app.kubernetes.io/name: krake-magnum
     spec:
       containers:
-      - image: raknrok/krake
-        name: krake-magnum
+      - name: krake-magnum
+        image: raknrok/krake
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
         command:
           - "python"
           - "-m"

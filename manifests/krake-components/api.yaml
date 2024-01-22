@@ -80,8 +80,15 @@ spec:
         app.kubernetes.io/name: krake-api
     spec:
       containers:
-      - image: raknrok/krake
-        name: krake-api
+      - name: krake-api
+        image: raknrok/krake
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
         command: ["python", "-m", "krake.api"]
         ports:
           - containerPort: 8080

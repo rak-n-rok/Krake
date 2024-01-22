@@ -41,6 +41,13 @@ spec:
       containers:
       - name: etcd
         image: quay.io/coreos/etcd:latest
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
         ports:
         - containerPort: 2379
           name: client
@@ -68,6 +75,7 @@ spec:
       name: data
     spec:
       accessModes: [ "ReadWriteOnce" ]
+      storageClassName: csi-sc-cinderplugin
       resources:
         requests:
           storage: 1Gi

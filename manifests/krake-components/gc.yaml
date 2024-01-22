@@ -51,8 +51,15 @@ spec:
         app.kubernetes.io/name: krake-gc
     spec:
       containers:
-      - image: raknrok/krake
-        name: krake-gc
+      - name: krake-gc
+        image: raknrok/krake
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
         command:
           - "python"
           - "-m"

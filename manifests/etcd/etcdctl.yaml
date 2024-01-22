@@ -8,7 +8,14 @@ metadata:
     app.kubernetes.io/name: debian
 spec:
   containers:
-  - image: bitnami/etcd:latest
+  - name: etcdctl
+    image: bitnami/etcd:latest
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
     imagePullPolicy: IfNotPresent
-    name: etcdctl
     command: ["tail", "-f", "/dev/null"]
