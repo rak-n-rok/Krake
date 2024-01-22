@@ -3,6 +3,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: krake-magnum
+  namespace: development
 data:
   magnum.yaml: |
     api_endpoint: http://krake-api:8080
@@ -37,6 +38,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: krake-magnum
+  namespace: development
   labels:
     app.kubernetes.io/name: krake-magnum
 spec:

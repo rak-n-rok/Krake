@@ -3,6 +3,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: krake-api
+  namespace: development
 data:
   api.yaml: |
     port: 8080
@@ -52,6 +53,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: krake-api
+  namespace: development
 spec:
   type: NodePort
   selector:

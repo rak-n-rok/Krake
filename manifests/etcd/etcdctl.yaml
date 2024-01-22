@@ -3,6 +3,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: etcdctl
+  namespace: development
   labels:
     app.kubernetes.io/name: debian
 spec:

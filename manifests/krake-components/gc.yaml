@@ -3,6 +3,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: krake-gc
+  namespace: development
 data:
   garbage_collector.yaml: |
     api_endpoint: http://krake-api:8080
@@ -36,6 +37,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: krake-gc
+  namespace: development
   labels:
     app.kubernetes.io/name: krake-gc
 spec:
