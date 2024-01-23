@@ -71,3 +71,6 @@ krake/dist/*
 
 # Virtualenv managed by Poetry
 .venv/
+
+# direnv related
+/.direnv/
