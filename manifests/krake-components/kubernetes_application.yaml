@@ -10,7 +10,7 @@ metadata:
     app.kubernetes.io/instance: krake-api-zeutcr
     app.kubernetes.io/version: "1.0.1"
     app.kubernetes.io/managed-by: kubectl
-    app.kubernetes.io/component: application
+    app.kubernetes.io/component: backend
     app.kubernetes.io/part-of: krake
 data:
   kubernetes_application.yaml: |
@@ -71,7 +71,7 @@ metadata:
     app.kubernetes.io/instance: krake-api-zeutcr
     app.kubernetes.io/version: "1.0.1"
     app.kubernetes.io/managed-by: kubectl
-    app.kubernetes.io/component: application
+    app.kubernetes.io/component: backend
     app.kubernetes.io/part-of: krake
 spec:
   replicas: 1
@@ -86,7 +86,7 @@ spec:
         app.kubernetes.io/instance: krake-api-zeutcr
         app.kubernetes.io/version: "1.0.1"
         app.kubernetes.io/managed-by: kubectl
-        app.kubernetes.io/component: application
+        app.kubernetes.io/component: backend
         app.kubernetes.io/part-of: krake
     spec:
       containers:
