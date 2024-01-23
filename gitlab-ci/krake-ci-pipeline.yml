@@ -109,7 +109,7 @@ cache:
     - sed -i -e 's/ -XX:+CMSScavengeBeforeRemark//g' /bin/ksql-run-class
     - sed -i -e 's/ -XX:+ExplicitGCInvokesConcurrent//g' /bin/ksql-run-class
 
-    - pip install tox
+    - pip install poetry tox
     - tox -- --cov krake/krake --no-cov-on-fail --cov-report= --runslow krake/tests
   tags:
     - docker
@@ -256,11 +256,11 @@ e2e-provisioning:
 
     ###################################
     ### Provision the staging infra ###
-    ###################################    
+    ###################################
     # - ansible-playbook  ansible/site.yml
     - ansible-playbook  ansible/network.yml
     - ansible-playbook  ansible/gateway.yml
-    - ansible-playbook  ansible/microk8s_cluster.yml 
+    - ansible-playbook  ansible/microk8s_cluster.yml
     - ansible-playbook  ansible/krake.yml
     - ansible-playbook  ansible/krake_handle_certs.yml
 
