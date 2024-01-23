@@ -8,7 +8,7 @@ metadata:
     environment: development
     app.kubernetes.io/name: krake-kubernetes-application
     app.kubernetes.io/instance: krake-api-zeutcr
-    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/version: "1.0.1"
     app.kubernetes.io/managed-by: kubectl
     app.kubernetes.io/component: application
     app.kubernetes.io/part-of: krake
@@ -69,7 +69,7 @@ metadata:
     environment: development
     app.kubernetes.io/name: krake-kubernetes-application
     app.kubernetes.io/instance: krake-api-zeutcr
-    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/version: "1.0.1"
     app.kubernetes.io/managed-by: kubectl
     app.kubernetes.io/component: application
     app.kubernetes.io/part-of: krake
@@ -84,14 +84,14 @@ spec:
         environment: development
         app.kubernetes.io/name: krake-kubernetes-application
         app.kubernetes.io/instance: krake-api-zeutcr
-        app.kubernetes.io/version: "1.0"
+        app.kubernetes.io/version: "1.0.1"
         app.kubernetes.io/managed-by: kubectl
         app.kubernetes.io/component: application
         app.kubernetes.io/part-of: krake
     spec:
       containers:
       - name: krake-kubernetes-application
-        image: raknrok/krake
+        image: registry.gitlab.com/rak-n-rok/krake:1.0.1
         resources:
           requests:
             memory: "128Mi"
