@@ -4615,4 +4615,4 @@ ansible = ["ansible", "openstacksdk", "python-openstackclient"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "67fec847cd4e5bad0964338ae376682bfbe87c039965ac48a211fd2aee9b4fd7"
+content-hash = "8473456adca3fc90a703b40155d98c46ee8ccb60f9afd41aa2dc968680fb8825"
