@@ -8,7 +8,7 @@ metadata:
     environment: development
     app.kubernetes.io/name: krake-scheduler
     app.kubernetes.io/instance: krake-api-zeutcr
-    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/version: "1.0.1"
     app.kubernetes.io/managed-by: kubectl
     app.kubernetes.io/component: scheduler
     app.kubernetes.io/part-of: krake
@@ -55,7 +55,7 @@ metadata:
     environment: development
     app.kubernetes.io/name: krake-scheduler
     app.kubernetes.io/instance: krake-api-zeutcr
-    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/version: "1.0.1"
     app.kubernetes.io/managed-by: kubectl
     app.kubernetes.io/component: scheduler
     app.kubernetes.io/part-of: krake
@@ -70,14 +70,14 @@ spec:
         environment: development
         app.kubernetes.io/name: krake-scheduler
         app.kubernetes.io/instance: krake-api-zeutcr
-        app.kubernetes.io/version: "1.0"
+        app.kubernetes.io/version: "1.0.1"
         app.kubernetes.io/managed-by: kubectl
         app.kubernetes.io/component: scheduler
         app.kubernetes.io/part-of: krake
     spec:
       containers:
       - name: krake-scheduler
-        image: raknrok/krake
+        image: registry.gitlab.com/rak-n-rok/krake:1.0.1
         resources:
           requests:
             memory: "128Mi"
