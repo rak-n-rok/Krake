@@ -39,7 +39,7 @@ project is desired or required.
 
 - [etcdv3][etcd]
 - [Python][python] >= 3.7
-- [Setup at least one minikube VM][minikube] or [kind instance][kind] alternatively
+- At least one setup Kubernetes cluster (See [howto](#setup-kubernetes-cluster))
 
 #### Test applications
 
@@ -62,22 +62,22 @@ git clone https://gitlab.com/rak-n-rok/krake.git
 cd krake
 ```
 
-All dependencies can be installed via the corresponding `setup.py` scripts,
-either with or without development dependencies. Installing them into a
-[Python virtualenv][virtualenv] is recommended.
+Install "rok" and "krake" Python packages.
+Installing them into a [Python virtualenv][virtualenv] is recommended. All dependencies
+are installed via the corresponding `setup.py` scripts.
 
 ```bash
 python3 -m venv .env
 source .env/bin/activate
-# Install "krake" and "rok" without development dependencies
-pip install --editable rok/
-pip install --editable krake/
+
+pip3 install rok/
+pip3 install krake/
 ```
 
+For development "krake" can also be installed with additional development dependencies:
+
 ```bash
-# Install "krake" and "rok" with development dependencies
-pip install --editable "rok/[dev]"
-pip install --editable "krake/[dev]"
+pip3 install --editable "krake/[dev]"
 ```
 
 ### Setup
@@ -117,6 +117,7 @@ starting Krake:
 
 ```bash
 # Run the neccessary etcd server first
+# NOTE: Make sure `etcd` is in your $PATH
 support/etcd
 # Create roles for the RBAC authorization mode.
 krake_bootstrap_db bootstrapping/base_roles.yaml
@@ -140,7 +141,11 @@ Initialize folders needed to store certificates and configuration files. These w
 mkdir -p cluster_certs/certs cluster_certs/config
 ```
 
-#### 1. Minikube
+#### Setup Kubernetes cluster
+
+Use any Kubernetes cluster you prefer. For starters, we recommend either [minikube](#minikube) or [kinD](#kind) as a first cluster.
+
+##### Minikube
 
 Create a minikube instance and download the kubeconfig file, as well as the certificate and key file
 necessary to connect to your minikube instance.
@@ -148,11 +153,16 @@ necessary to connect to your minikube instance.
 ```bash
 minikube start
 # Copy client and ca certificate to the above created folders
-cp /home/USER/.minikube/profiles/minikube/client.* cluster_certs/certs
-cp /home/USER/.minikube/ca.crt cluster_certs/certs
+cp ~/.minikube/profiles/minikube/client.* cluster_certs/certs
+cp ~/.minikube/ca.crt cluster_certs/certs
 
 # Copy/generate config.yaml for later use with krake
-kubectl config view >> cluster_certs/config/minikube_conf.yaml
+minikube kubectl config view >> cluster_certs/config/minikube_conf.yaml
+
+# Adjust the following paths in the copied config.yaml:
+# - clusters.*.cluster.certificate-authority: "./cluster_certs/certs/ca.crt"
+# - users.*.user.client-certificate: "./cluster_certs/certs/client.crt"
+# - users.*.user.client-key: "./cluster_certs/certs/client.key"
 ```
 
 **Attention:** If you have installed both kind and minikube this command would list both configurations. In this case, you should remove the kind configuration.
@@ -163,7 +173,7 @@ Here you can see an example configuration of minikube for Krake:
 apiVersion: v1
 clusters:
 - cluster:
-    certificate-authority: /home/USER/.minikube/ca.crt
+    certificate-authority: /home/USER/repos/krake/cluster_certs/certs/ca.crt
     extensions:
     - extension:
         last-update: Wed, 30 Mar 2022 12:36:02 CEST
@@ -190,11 +200,11 @@ preferences: {}
 users:
 - name: minikube2
   user:
-    client-certificate: /home/USER/.minikube/profiles/minikube/client.crt
-    client-key: /home/USER/.minikube/profiles/minikube/client.key
+    client-certificate: /home/USER/repos/krake/cluster_certs/certs/client.crt
+    client-key: /home/USER/repos/krake/cluster_certs/certs/client.key
 ```
 
-#### 2. KinD
+##### KinD
 
 Create a kind instance and save the kubeconfig file in the `cluster_certs` directory
 
@@ -204,8 +214,8 @@ Prerequisites
 - [kind][kind]
 
 ```bash
-# The name of your k8s cluster
-CLUSTER_NAME="mykindcluter"
+# Set the name of your k8s cluster
+CLUSTER_NAME="mykindcluster"
 # Start single node k8s cluster
 kind create cluster --name $CLUSTER_NAME --kubeconfig cluster_certs/config/$CLUSTER_NAME.yaml
 ```
@@ -223,30 +233,35 @@ support/etcd
 support/prometheus
 
 # Run the API
-python -m krake.api
+python3 -m krake.api
 
 # Run the Garbage Collector
-python -m krake.controller.gc
+python3 -m krake.controller.gc
 
 # Run the krake Scheduler
-python -m krake.controller.scheduler
+python3 -m krake.controller.scheduler
 
 # Run the Kubernetes cluster controller
-python -m krake.controller.kubernetes.cluster
+python3 -m krake.controller.kubernetes.cluster
 
 # Run the Kubernetes application controller
-python -m krake.controller.kubernetes.application
+python3 -m krake.controller.kubernetes.application
 
 # Run the Infrastructure controller
-python -m krake.controller.infrastructure
+python3 -m krake.controller.infrastructure
 ```
 
 There is also a [script](https://gitlab.com/rak-n-rok/krake/-/snippets/2042674) (see snippets section on git) provided in the git repository to start all parts of Krake using „tmux“.
 
-Finally we register the minikube (or kind) instance as a Krake backend and use Krake to
-deploy an `echoserver` application.
+#### Using the Krake CLI
 
-```bash
+Finally we can:
+1. Register a Kubernetes cluster as a Krake backend
+2. Use Krake to deploy an `echoserver` application to test the setup
+
+The following example shows these basics:
+
+```console
 # List current clusters; there should be none
 $ rok kube cluster list
 +------+-----------+--------+---------+----------+---------+-------+
@@ -399,20 +414,16 @@ clusters to specific clouds based on the calculated metric values from the sched
 algorithm and the label constraints of the resources.
 
 Possible usable Metrics Providers can be found in the corresponding
-[section][https://rak-n-rok.readthedocs.io/projects/krake/en/latest/dev/scheduling.html#metrics-and-metrics-providers]
-.
+[documentation section][metrics-docu-section].
 
 To work with these more complex examples, see the respective User Stories about
-[Metrics][https://rak-n-rok.readthedocs.io/projects/krake/en/latest/user/user-story/3-metrics-cluster.html]
-and
-[Labels][https://rak-n-rok.readthedocs.io/projects/krake/en/latest/user/user-story/2-labels-cluster.html]
-.
-
+[Metrics][metrics-user-story] and [Labels][labels-user-story].
 
 ### Testing
 
-Tests are placed in the `tests/` directory inside the Python packages and can
-be run via `pytest`.
+Tests are placed in the [tests/](./tests/) directory inside the Python packages and can
+be run via `pytest`. (pytest should have been installed previously as a development
+dependency)
 
 ```bash
 # Run tests of the "krake" package
@@ -433,6 +444,9 @@ us, find us on our [Krake Matrix room][krake-matrix].
 
 If you wish to contribute, you can also check the
 [Contributing](CONTRIBUTING.md) guide.
+
+Further detailed information can also be found on our website at
+[krake.cloud](https://krake.cloud/).
 
 ## Project Background
 
@@ -458,3 +472,6 @@ transformed to an open source project in September 2019.
 [kind]: https://kind.sigs.k8s.io/
 [docker]: https://www.docker.com/
 [pypi]: https://pypi.org/project/krake/
+[metrics-docu-section]: https://rak-n-rok.readthedocs.io/projects/krake/en/latest/dev/scheduling.html#metrics-and-metrics-providers
+[metrics-user-story]: https://rak-n-rok.readthedocs.io/projects/krake/en/latest/user/user-story/3-metrics-cluster.html
+[labels-user-story]: https://rak-n-rok.readthedocs.io/projects/krake/en/latest/user/user-story/2-labels-cluster.html
