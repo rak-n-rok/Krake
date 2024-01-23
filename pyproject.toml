@@ -1,0 +1,58 @@
+[tool.poetry]
+name = "krake"
+version = "1.0.1"
+description = "Krake is an orchestrator engine for containerized and virtualized workloads across distributed and heterogeneous cloud platforms."
+authors = ["Krake Development Team <krake@cloudandheat.com>"]
+license = "Apache-2.0"
+readme = "README.md"
+packages = [
+    { include = "krake", from = "krake" },
+    { include = "rok", from = "rok" }
+]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+aiohttp = "3.*"
+aiohttp-cors = "0.7.*"
+deepdiff = "6.2.*"
+docker = "6.*"
+etcd3-py = "0.1.*"
+influxdb_client = "*"
+keystoneauth1 = "4.*"
+kubernetes = "*"
+kubernetes-asyncio = "22.*"
+lark-parser = "0.11.*"
+makefun = "1.*"
+marshmallow = "3.*"
+marshmallow-enum = "*"
+marshmallow-oneofschema = "*"
+marshmallow-union = "*"
+oslo-db = "11.3.0"
+pyopenssl = "*"
+python-dateutil = "2.*"
+python-magnumclient = "3.*"
+pyyaml = "^6.0.1"
+requests = "2.29.*"
+sqlalchemy = "1.4.46"
+texttable = "1.*"
+tosca-parser = "2.6.*"
+yarl = "1.8.*"
+webargs = "^8.4.0"
+
+[tool.poetry.group.dev]
+# TODO: groups (https://python-poetry.org/docs/pyproject/#dependencies-and-dependency-groups)
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+
+[tool.poetry.scripts]
+# TODO: https://python-poetry.org/docs/pyproject/#scripts
+rok = "rok.__main__:main"
+
+[tool.poetry.extras]
+# TODO: https://python-poetry.org/docs/pyproject/#extras
+ansible = []
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

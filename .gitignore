@@ -68,3 +68,6 @@ __pycache__/
 # PyPi directories
 krake/build/*
 krake/dist/*
+
+# Virtualenv managed by Poetry
+.venv/
