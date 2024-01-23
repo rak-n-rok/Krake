@@ -40,13 +40,36 @@ yarl = "1.8.*"
 webargs = "^8.4.0"
 
 [tool.poetry.group.dev]
-# TODO: groups (https://python-poetry.org/docs/pyproject/#dependencies-and-dependency-groups)
 optional = true
 
 [tool.poetry.group.dev.dependencies]
+dataclasses = "0.6.*"
+deepdiff = "6.2.*"
+factory-boy = "2.*"
+keystone = "20.*"
+markupsafe = "2.0.1"
+minio = "*"
+mock = "4.*"
+pre-commit = "2.*"
+prometheus-async = "19.*"
+prometheus-client = "0.7.*"
+pytest = "6.*"
+pytest-aiohttp = "0.3.*"
+pytest-cov = "3.*"
+pytest-httpserver = "1.*"
+pytest-timeout = "*"
+pytz = "2021.*"
+tox = "3.*"
+werkzeug = "2.1.*"
+
+[tool.poetry.group.api_generator]
+optional = true
+
+[tool.poetry.group.api_generator.dependencies]
+black = "21.11b1"
+jinja2 = "3.*"
 
 [tool.poetry.scripts]
-# TODO: https://python-poetry.org/docs/pyproject/#scripts
 rok = "rok.__main__:main"
 
 [tool.poetry.extras]
