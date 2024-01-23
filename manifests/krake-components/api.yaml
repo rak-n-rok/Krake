@@ -38,6 +38,8 @@ data:
           enabled: True
           name: system:admin
     authorization: always-allow
+    docs:
+      problem_base_url: https://gitlab.com/rak-n-rok/krake
     log:
       version: 1
       level: INFO
@@ -110,7 +112,7 @@ spec:
     spec:
       containers:
       - name: krake-api
-        image: raknrok/krake
+        image: registry.gitlab.com/rak-n-rok/krake:1.0.1
         resources:
           requests:
             memory: "128Mi"
