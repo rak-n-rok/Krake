@@ -73,6 +73,7 @@ spec:
       containers:
       - name: krake-gc
         image: registry.gitlab.com/rak-n-rok/krake:1.0.1
+        imagePullPolicy: Always
         resources:
           requests:
             memory: "128Mi"
