@@ -55,7 +55,7 @@ spec:
     spec:
       containers:
       - name: etcd
-        image: quay.io/coreos/etcd:latest
+        image: gcr.io/etcd-development/etcd:v3.4.29
         resources:
           requests:
             memory: "128Mi"
@@ -71,20 +71,29 @@ spec:
         volumeMounts:
         - name: data
           mountPath: /var/run/etcd
-        command:
-          - /bin/sh
-          - -c
-          - |
-            PEERS="etcd-0=http://etcd-0.etcd:2380,etcd-1=http://etcd-1.etcd:2380,etcd-2=http://etcd-2.etcd:2380"
-            exec etcd --name ${HOSTNAME} \
-              --listen-peer-urls http://0.0.0.0:2380 \
-              --listen-client-urls http://0.0.0.0:2379 \
-              --advertise-client-urls http://${HOSTNAME}.etcd:2379 \
-              --initial-advertise-peer-urls http://${HOSTNAME}:2380 \
-              --initial-cluster-token etcd-cluster-1 \
-              --initial-cluster ${PEERS} \
-              --initial-cluster-state new \
-              --data-dir /var/run/etcd/default.etcd
+        env:
+          - name: ETCD_QUOTA_BACKEND_BYTES
+            value: "805306368"
+          - name: ETCD_INITIAL_CLUSTER_TOKEN
+            value: etcd-krake-database-zeutcr
+          - name: ETCD_NAME
+            valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          - name: ETCD_INITIAL_CLUSTER_STATE
+            value: new
+          - name: ETCD_INITIAL_CLUSTER
+            value: etcd-0=http://etcd-0.etcd:2380,etcd-1=http://etcd-1.etcd:2380,etcd-2=http://etcd-2.etcd:2380
+          - name: ETCD_LISTEN_CLIENT_URLS
+            value: http://0.0.0.0:2379
+          - name: ETCD_LISTEN_PEER_URLS
+            value: http://0.0.0.0:2380
+          - name: ETCD_ADVERTISE_CLIENT_URLS
+            value: "http://$(ETCD_NAME).etcd:2379"
+          - name: ETCD_INITIAL_ADVERTISE_PEER_URLS
+            value: "http://$(ETCD_NAME).etcd:2380"
+          - name: ETCD_DATA_DIR
+            value: /var/run/etcd/default
   volumeClaimTemplates:
   - metadata:
       name: data
