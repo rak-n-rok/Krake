@@ -3748,35 +3748,49 @@ pyasn1 = ">=0.1.3"
 
 [[package]]
 name = "scrypt"
-version = "0.8.21"
+version = "0.8.20"
 description = "Bindings for the scrypt key derivation function library"
 optional = false
 python-versions = "*"
 files = [
-    {file = "scrypt-0.8.21-cp310-cp310-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:5306a35a3ef2c51781fbe00d8487feabd510e8ea8792e2f1688126eaa6459f6c"},
-    {file = "scrypt-0.8.21-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5faa1717bc285c51a04c8836314ead33d6887a2970c45e01be70b3b861c25a28"},
-    {file = "scrypt-0.8.21-cp310-cp310-musllinux_1_1_i686.whl", hash = "sha256:2f725fbc25078682a06582067d7b062d527f6fa97178f77d50f7a45520c78d71"},
-    {file = "scrypt-0.8.21-cp310-cp310-musllinux_1_1_x86_64.whl", hash = "sha256:2b7ed0385e273e987452ecd2234d46fb68b505f52f5aad125ec8fc8d7918c1cc"},
-    {file = "scrypt-0.8.21-cp312-cp312-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:a082395e92d705afa5837ece82e712c002aa2de034c5b0595b482cf21e7d3224"},
-    {file = "scrypt-0.8.21-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:b34d5a3a59a59b710128b5a9fb18a09c71b2b31292fde283a1bea96d85571fc5"},
-    {file = "scrypt-0.8.21-cp312-cp312-musllinux_1_1_i686.whl", hash = "sha256:9760b0468d085a54c28d6b681c661101a6964a2e1bf964c22e0b7308a1cb2249"},
-    {file = "scrypt-0.8.21-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:e7e64b3714cdcbabebb9a08635689bc7f546c2af8526d84c435727f0e6a9b802"},
-    {file = "scrypt-0.8.21-cp36-cp36m-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:e2930bacae0b62e592329d851879f615af33aaae400b183b74099aee716799dd"},
-    {file = "scrypt-0.8.21-cp36-cp36m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e0713542ccf2d5e3ecb0424f390377f686b98241d37ec337056d59afda645c58"},
-    {file = "scrypt-0.8.21-cp36-cp36m-musllinux_1_1_i686.whl", hash = "sha256:a15530568917eb51686c890e8c454a8bf0cf891ec16799427d811db855300192"},
-    {file = "scrypt-0.8.21-cp36-cp36m-musllinux_1_1_x86_64.whl", hash = "sha256:452500adef138260f62d8341ad9f4054971dd6b18a6b53297cfe3617778b2acf"},
-    {file = "scrypt-0.8.21-cp37-cp37m-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:bfcbe0d4e13dfa65024c56c75b727af834b61169d1388a474db03a8085a3e328"},
-    {file = "scrypt-0.8.21-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0daf863ca85b565c3d8b26053f1f5e51fe3992436e57c75ce5397a5bb4b6c96e"},
-    {file = "scrypt-0.8.21-cp37-cp37m-musllinux_1_1_i686.whl", hash = "sha256:91ab79519d92f4b2c9379b7dcc4a04c868b40d58c5a01c5714e89911a0b19209"},
-    {file = "scrypt-0.8.21-cp37-cp37m-musllinux_1_1_x86_64.whl", hash = "sha256:44407a17826618671cd7b674f0b99b42c6edd2293edea5daef099043bc68c32f"},
-    {file = "scrypt-0.8.21-cp38-cp38-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:0621318fc0ad918638fca42980b5adf8aeed4b2691b633505890fa1e5e349d86"},
-    {file = "scrypt-0.8.21-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:67eb4ca01e81ebb904c4243527b848d59d49dbb698d8cec81f73c6d8a529363d"},
-    {file = "scrypt-0.8.21-cp38-cp38-musllinux_1_1_i686.whl", hash = "sha256:b972e49029440df2678aa607a8a420183f2e9220ef048adecd5b2413a191dbc5"},
-    {file = "scrypt-0.8.21-cp38-cp38-musllinux_1_1_x86_64.whl", hash = "sha256:1f2af799f635c16f18cdc3afe8ac6d0bcdcc0cf2f51ba4a27c50acbdccb3f308"},
-    {file = "scrypt-0.8.21-cp39-cp39-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:c8f44cc08b04e9ca8c14b6f11131f2f08a99305d0b475749d31156ab4bafbceb"},
-    {file = "scrypt-0.8.21-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:6a64a8c6da499a3b27c372f895a3d57d1a9bca05ba7d1723ed727cdbc1a1d758"},
-    {file = "scrypt-0.8.21-cp39-cp39-musllinux_1_1_i686.whl", hash = "sha256:4908eadae22742108dc992eb27f75100cdc28d6fbe214259af5276fe75239c7a"},
-    {file = "scrypt-0.8.21-cp39-cp39-musllinux_1_1_x86_64.whl", hash = "sha256:43dadfb8177d1acefadf6ce33c0dc5dd145c2cf7acf6a87afd011e150131de42"},
+    {file = "scrypt-0.8.20-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:2e4f7c5cff06dfd45207760a81381aeb8dc9f88bc722794d82728a5449dbdb0d"},
+    {file = "scrypt-0.8.20-cp310-cp310-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:809b423a7107c5dd047c8bd1733a33fb0c5f16a884d9a2389e8446945fbcce0c"},
+    {file = "scrypt-0.8.20-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:6dbb0f472ac6c27d336c0ef6e0d66ff7ef1112ebb79604c1a71faa725d105c72"},
+    {file = "scrypt-0.8.20-cp310-cp310-musllinux_1_1_i686.whl", hash = "sha256:3a008e868b68b56d9947e69c3f2bf42a8cb9a85f0b849d014c9d265932deb5b5"},
+    {file = "scrypt-0.8.20-cp310-cp310-musllinux_1_1_x86_64.whl", hash = "sha256:47b9b6b312dfb98804fdb073d0cc7320f21e215d28c277018449e77e3763e70e"},
+    {file = "scrypt-0.8.20-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:9c986af7320b4bf967934b505ee019243282b575e07d9f8517596a6254586482"},
+    {file = "scrypt-0.8.20-cp36-cp36m-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e90edf96a805e4ea981201b21065717f61f1fd718cb5000ce0445fabcaa0d988"},
+    {file = "scrypt-0.8.20-cp36-cp36m-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:3ca103672508ba4711df6b2dda1011aa0d347939cb2d5857c407b8e4544ec303"},
+    {file = "scrypt-0.8.20-cp36-cp36m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:76b9d5493487f0018e5c0926357eaa8a4a7120786268741169337e9d4e0b0612"},
+    {file = "scrypt-0.8.20-cp36-cp36m-musllinux_1_1_i686.whl", hash = "sha256:10ffebb09a3bc6a87d3a4d67e10de9c5d2557d240d71fdada42301173ba0a107"},
+    {file = "scrypt-0.8.20-cp36-cp36m-musllinux_1_1_x86_64.whl", hash = "sha256:610930e3f4d52427664cb6afd402407fa07dbc1b7f3c6083c26abf16f63a6455"},
+    {file = "scrypt-0.8.20-cp36-cp36m-win32.whl", hash = "sha256:efaa4ad229cc46760a6e5b9fdf2dc71a13db06ee455ec749ea8adacad2ba78a8"},
+    {file = "scrypt-0.8.20-cp36-cp36m-win_amd64.whl", hash = "sha256:efac56d0c6b7d7b806ebfeb2154bd39cdb511f0ccb9e197e945a07980f001245"},
+    {file = "scrypt-0.8.20-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:d2d3031aa4a11a1ca2e1145526517a761f3f3cf6fd0e039b25daaa79a54d6b42"},
+    {file = "scrypt-0.8.20-cp37-cp37m-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:56af4b0154c08e2d36c96c9b055fe104a3a0e829b04e272137c89e0e019b978a"},
+    {file = "scrypt-0.8.20-cp37-cp37m-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:75fffdbb8deb7b481c12a2177b686c5a518083e5254f842b34057840f3f3795b"},
+    {file = "scrypt-0.8.20-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:2b9c7fce4eaabe7a668924b851746f115be4cd337adc75e36b84dc8d0c28386f"},
+    {file = "scrypt-0.8.20-cp37-cp37m-musllinux_1_1_i686.whl", hash = "sha256:f6367c71527ad1b107644eb17e77509c0b37fdbd5cca0a5e1180d1a4a37b61ca"},
+    {file = "scrypt-0.8.20-cp37-cp37m-musllinux_1_1_x86_64.whl", hash = "sha256:ff96e6025176363c90f5fb6bb7b80b25605010de7972e2d5097ff9f9adb08f87"},
+    {file = "scrypt-0.8.20-cp37-cp37m-win32.whl", hash = "sha256:84e2d37bea004c737352f507fa0b4b3d9fa0bffc027331d3291a4e523066cc3c"},
+    {file = "scrypt-0.8.20-cp37-cp37m-win_amd64.whl", hash = "sha256:02a00c05a3d434f473f3767b36c4d7e5122a72641b93b25c4cc0245e59b6ef58"},
+    {file = "scrypt-0.8.20-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:5eebe8082494cac4d8db42325fe7a9344b4d0c84c90c7951abf1041f07a18318"},
+    {file = "scrypt-0.8.20-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:1b25f81ef66e1f0605d1ff5be9b799747b0ef56ae751a6308d4dc25980bc3156"},
+    {file = "scrypt-0.8.20-cp38-cp38-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:620f2a3a44ea20a1c013e94ced4f3e1d908fc8bb48c3475bbc155277b14386cf"},
+    {file = "scrypt-0.8.20-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:61dfaff95a184fd32ddc69102e267c8b03daded9fc7ec02e64ff6cc68a91bb6e"},
+    {file = "scrypt-0.8.20-cp38-cp38-musllinux_1_1_i686.whl", hash = "sha256:9e4f565feb2cad4c126a66037d6569917aaaaf35f5fecf7a179421b68d584f1a"},
+    {file = "scrypt-0.8.20-cp38-cp38-musllinux_1_1_x86_64.whl", hash = "sha256:d2e3bcbcd98da1ca3c4adfb62693a445a8c88b65ce507df502a8c5a7966d19f3"},
+    {file = "scrypt-0.8.20-cp38-cp38-win32.whl", hash = "sha256:5b5d406b3dff9bd885065a0b1b5ad9e01739dbddd3c9d13749cb66cf1ad2623f"},
+    {file = "scrypt-0.8.20-cp38-cp38-win_amd64.whl", hash = "sha256:fecc315a58bbf409807ef6e6f1aaffb2cba90898f9283e47513a09b09ad8f49d"},
+    {file = "scrypt-0.8.20-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:25fb074d9c4721d10f8abedacb20695a4d62c83a2f90e8791a75b29b3fc7f33d"},
+    {file = "scrypt-0.8.20-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:1ba29376d964f4ffefffc01f53d8ed5df123051996cfed1cba0c78e9b76dbdf1"},
+    {file = "scrypt-0.8.20-cp39-cp39-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:c7a248180b82738738693abfff6d6e9418d04c3ad533eefe839b4d8a3dd2e534"},
+    {file = "scrypt-0.8.20-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:17eb9097850988fedf78f0f7cc2be379699fbf9016e54be416c15a7314d5b661"},
+    {file = "scrypt-0.8.20-cp39-cp39-musllinux_1_1_i686.whl", hash = "sha256:3069f6dd07115dd094d9301c8397f99aa141691029c1ab66847046673a3f8c4a"},
+    {file = "scrypt-0.8.20-cp39-cp39-musllinux_1_1_x86_64.whl", hash = "sha256:f9fd69646cb8015525eff22292b5545d10490dcb8d0ce429b47f4952cd840aef"},
+    {file = "scrypt-0.8.20-cp39-cp39-win32.whl", hash = "sha256:ae606705fa1d54aa0d5ba8e3272bb4d3f801543c8090e11ced00de46c4feff40"},
+    {file = "scrypt-0.8.20-cp39-cp39-win_amd64.whl", hash = "sha256:776b6778d6bdd0794b404f20af9509c8e09dc0b7bc5683e2b6612a6ca8231b11"},
+    {file = "scrypt-0.8.20.tar.gz", hash = "sha256:0d226c1c6744fb2e308b391410669b1df5cfe82637ffcb5ed489bf82b2d2eb78"},
 ]
 
 [[package]]
@@ -4615,4 +4629,4 @@ ansible = ["ansible", "openstacksdk", "python-openstackclient"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "8473456adca3fc90a703b40155d98c46ee8ccb60f9afd41aa2dc968680fb8825"
+content-hash = "d8a9ecd1a7e32799feded2dfc512fbd08cff627297c843c53efd2672586f457a"

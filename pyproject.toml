@@ -70,6 +70,7 @@ pytest-timeout = "*"
 pytz = "2021.*"
 tox = "3.*"
 werkzeug = "2.1.*"
+scrypt = "0.8.20"  # pinned only for compat with python3.11
 
 [tool.poetry.scripts]
 rok = "rok.__main__:main"
