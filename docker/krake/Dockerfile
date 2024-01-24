@@ -44,13 +44,21 @@ COPY --from=builder /etc/krake /etc/krake
 # Install Krake
 COPY ./krake/krake /krake/krake
 COPY ./krake/scripts /krake/scripts
-COPY ./krake/setup.py /krake
-RUN pip install --upgrade pip && pip3 install /krake
+COPY ./pyproject.toml ./poetry.lock /
+# We are in a container and can skip Poetry's virtualenv handling,
+# which makes things at lot easier for us
+RUN pip install poetry \
+  && poetry config virtualenvs.create false \
+  && poetry install
 
 RUN useradd --create-home --uid $krake_uid --shell /bin/bash krake
 RUN chown krake:krake /home/krake
 RUN chmod 777 /home/krake
 RUN install -d -o krake -g krake -m 777 /home/krake/logs
 
+# Setting PYTHONPATH is necessary because Poetry installs only the
+# dependencies, but not krake itself into the system wide site-packages
+# folder (in contrast to the old pip install)
+ENV PYTHONPATH=/krake
 USER krake
 WORKDIR /home/krake
