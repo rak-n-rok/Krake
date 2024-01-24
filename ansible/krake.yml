@@ -248,7 +248,7 @@
             owner: krake
             group: krake
 
-    - name: Install pip and dependencies
+    - name: Install pip dependencies
       tags:
         - pip
       block:
@@ -485,14 +485,22 @@
             owner: krake
             group: krake
 
-        - name: Install Krake rok
+        - name: Install Poetry
           tags:
             - synchronize
+            - poetry
             - pip
           pip:
-            name: "{{ git_dir }}/rok"
+            name: poetry
             executable: pip3
-            extra_args: --user
+
+        - name: Install Krake dependencies with Poetry
+          tags:
+            - synchronize
+            - poetry
+          command:
+            chdir: "{{ git_dir }}"
+            cmd: poetry install --with=dev
 
         - name: Create Krake rok configuration file
           script: >
