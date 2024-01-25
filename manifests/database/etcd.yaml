@@ -8,7 +8,7 @@ metadata:
     environment: development
     app.kubernetes.io/name: etcd
     app.kubernetes.io/instance: etcd-zeutcr
-    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/version: "1.0.1"
     app.kubernetes.io/managed-by: kubectl
     app.kubernetes.io/component: database
     app.kubernetes.io/part-of: krake
@@ -31,7 +31,7 @@ metadata:
     environment: development
     app.kubernetes.io/name: etcd
     app.kubernetes.io/instance: etcd-zeutcr
-    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/version: "1.0.1"
     app.kubernetes.io/managed-by: kubectl
     app.kubernetes.io/component: database
     app.kubernetes.io/part-of: krake
@@ -48,7 +48,7 @@ spec:
         environment: development
         app.kubernetes.io/name: etcd
         app.kubernetes.io/instance: etcd-zeutcr
-        app.kubernetes.io/version: "1.0"
+        app.kubernetes.io/version: "1.0.1"
         app.kubernetes.io/managed-by: kubectl
         app.kubernetes.io/component: database
         app.kubernetes.io/part-of: krake
