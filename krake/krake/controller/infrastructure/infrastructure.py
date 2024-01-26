@@ -131,16 +131,25 @@ class InfrastructureController(Controller):
             else:
                 logger.debug("Reject %r", cluster)
 
+        # TODO:
+        # async def list_cluster(self, cluster):
+        #     await register_observer(self, cluster)
+        #     await self.simple_on_receive(self, cluster, ?condition=accept)
+
         self.cluster_reflector = Reflector(
             listing=self.kubernetes_api.list_all_clusters,
             watching=self.kubernetes_api.watch_all_clusters,
-            on_list=enqueue,
+            on_list=enqueue,  # TODO: Use wrapper function that registers an observer
             on_add=enqueue,
             on_update=enqueue,
             on_delete=enqueue,
             resource_plural="Kubernetes Clusters",
         )
         self.register_task(self.cluster_reflector, name="Cluster_Reflector")
+
+    # TODO:
+    # async def on_status_update(self, cluster):
+    #     write updated cluster to Krake Kubernetes API
 
     async def cleanup(self):
         self.cluster_reflector = None
