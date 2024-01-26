@@ -51,26 +51,37 @@ class InfrastructureController(Controller):
 
     Args:
         api_endpoint (str): URL to the API
+        worker_count (int, optional): the amount of worker function that should be
+            run as background tasks.
         loop (asyncio.AbstractEventLoop, optional): Event loop that should be
             used.
         ssl_context (ssl.SSLContext, optional): if given, this context will be
             used to communicate with the API endpoint.
         debounce (float, optional): value of the debounce for the
             :class:`WorkQueue`.
-        worker_count (int, optional): the amount of worker function that should be
-            run as background tasks.
         poll_interval (float, optional): time in second between two attempts to modify a
             cluster (creation, deletion, update, change from FAILED state...).
 
     """
 
-    def __init__(self, *args, worker_count=5, poll_interval=30, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.worker_count = worker_count
-        self.poll_interval = poll_interval
+    def __init__(
+        self,
+        api_endpoint,
+        worker_count=5,
+        loop=None,
+        ssl_context=None,
+        debounce=0,
+        poll_interval=30,
+    ):
+        super().__init__(
+            api_endpoint, loop=loop, ssl_context=ssl_context, debounce=debounce
+        )
         self.kubernetes_api = None
         self.infrastructure_api = None
         self.cluster_reflector = None
+
+        self.worker_count = worker_count
+        self.poll_interval = poll_interval
 
     async def prepare(self, client):
         assert client is not None
