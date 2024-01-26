@@ -18,33 +18,14 @@ def get_version(rel_path):
         raise RuntimeError("Unable to find version string.")
 
 
-install_requires = [
-    "aiohttp==3.*",
-    "aiohttp-cors==0.7.*",
-    "deepdiff==6.2.*",
-    "docker==6.*",
-    "etcd3-py==0.1.*",
-    "influxdb_client",
-    "keystoneauth1==4.*",
-    "kubernetes",
-    "kubernetes-asyncio==22.*",
-    "lark-parser==0.11.*",
-    "makefun==1.*",
-    "marshmallow==3.*",
-    "marshmallow-enum",
-    "marshmallow-oneofschema",
-    "marshmallow-union",
-    "mock",
-    "oslo.db==11.3.0",
-    "pyOpenSSL",
-    "python-magnumclient==3.*",
-    "PyYAML==5.*",
-    "requests==2.29.*",
-    "SQLAlchemy==1.4.46",
-    "tosca-parser==2.6.*",
-    "yarl==1.8.*",
-    "webargs==8.*",
-]
+def read_requirements(requirements_file):
+    with open(requirements_file) as stream:
+        contents = stream.read()
+    return [
+        line
+        for line in contents.splitlines()
+        if line.strip() and not line.startswith("#")
+    ]
 
 
 setup(
@@ -56,7 +37,7 @@ setup(
     maintainer_email="krake@cloudandheat.com",
     python_requires=">=3.8",
     packages=find_packages(),
-    install_requires=install_requires,
+    install_requires=read_requirements("requirements.in"),
     extras_require={
         "dev": {
             "factory-boy==2.*",
