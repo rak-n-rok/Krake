@@ -39,30 +39,9 @@ setup(
     packages=find_packages(),
     install_requires=read_requirements("requirements.in"),
     extras_require={
-        "dev": {
-            "factory-boy==2.*",
-            "mock==4.*",
-            "prometheus-async==19.*",
-            "prometheus-client==0.7.*",
-            "pytest==6.*",
-            "pytest-aiohttp==0.3.*",
-            "pytest-cov==3.*",
-            "pytest-httpserver==1.*",
-            "pytz==2021.*",
-            "tox==3.*",
-            "pre-commit==2.*",
-            "keystone==20.*",
-            "pytest-httpserver==1.*",
-        },
-        "ansible": {
-            "ansible>=2.9",
-            "python-openstackclient",
-            "openstacksdk",
-        },
-        "api_generator": {
-            "black==21.11b1",
-            "jinja2==3.*",
-        },
+        "dev": read_requirements("requirements_dev.in"),
+        "ansible": read_requirements("requirements_ansible.in"),
+        "api_generator": read_requirements("requirements_api_generator.in"),
     },
     scripts=[
         "scripts/krake_bootstrap_db",
