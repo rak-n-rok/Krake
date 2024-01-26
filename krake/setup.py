@@ -1,12 +1,13 @@
+from pathlib import Path
 from setuptools import setup, find_packages
-import codecs
-import os.path
+
+
+BASEDIR = Path(__file__).parent.absolute()
 
 
 def read(rel_path):
-    here = os.path.abspath(os.path.dirname(__file__))
-    with codecs.open(os.path.join(here, rel_path), "r") as fp:
-        return fp.read()
+    with open(Path(BASEDIR, rel_path)) as stream:
+        return stream.read()
 
 
 def get_version(rel_path):
@@ -19,8 +20,7 @@ def get_version(rel_path):
 
 
 def read_requirements(requirements_file):
-    with open(requirements_file) as stream:
-        contents = stream.read()
+    contents = read(requirements_file)
     return [
         line
         for line in contents.splitlines()
