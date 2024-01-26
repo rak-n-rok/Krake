@@ -59,7 +59,7 @@ class InfrastructureController(Controller):
             :class:`WorkQueue`.
         worker_count (int, optional): the amount of worker function that should be
             run as background tasks.
-        poll_interval (float, optional): time in second before two attempts to modify a
+        poll_interval (float, optional): time in second between two attempts to modify a
             cluster (creation, deletion, update, change from FAILED state...).
 
     """
