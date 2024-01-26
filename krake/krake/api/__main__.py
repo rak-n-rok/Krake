@@ -42,7 +42,7 @@ def main(config):
     )
 
     app = create_app(config)
-    web.run_app(app, ssl_context=app["ssl_context"], port=config.port)
+    web.run_app(app, ssl_context=app["ssl_context"], host=config.host, port=config.port)
 
 
 if __name__ == "__main__":
