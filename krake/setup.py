@@ -37,11 +37,11 @@ setup(
     maintainer_email="krake@cloudandheat.com",
     python_requires=">=3.8",
     packages=find_packages(),
-    install_requires=read_requirements("requirements.in"),
+    install_requires=read_requirements("requirements/main.in"),
     extras_require={
-        "dev": read_requirements("requirements_dev.in"),
-        "ansible": read_requirements("requirements_ansible.in"),
-        "api_generator": read_requirements("requirements_api_generator.in"),
+        "dev": read_requirements("requirements/dev.in"),
+        "ansible": read_requirements("requirements/ansible.in"),
+        "api_generator": read_requirements("requirements/api_generator.in"),
     },
     scripts=[
         "scripts/krake_bootstrap_db",
