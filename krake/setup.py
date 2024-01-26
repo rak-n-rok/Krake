@@ -1,4 +1,3 @@
-import sys
 from setuptools import setup, find_packages
 import codecs
 import os.path
@@ -6,13 +5,13 @@ import os.path
 
 def read(rel_path):
     here = os.path.abspath(os.path.dirname(__file__))
-    with codecs.open(os.path.join(here, rel_path), 'r') as fp:
+    with codecs.open(os.path.join(here, rel_path), "r") as fp:
         return fp.read()
 
 
 def get_version(rel_path):
     for line in read(rel_path).splitlines():
-        if line.startswith('__version__'):
+        if line.startswith("__version__"):
             delim = '"' if '"' in line else "'"
             return line.split(delim)[1]
     else:
@@ -44,18 +43,8 @@ install_requires = [
     "SQLAlchemy==1.4.46",
     "tosca-parser==2.6.*",
     "yarl==1.8.*",
+    "webargs==8.*",
 ]
-
-# webargs
-if sys.version_info < (3, 10):
-    install_requires.append("webargs==8.*")
-else:
-    install_requires.append("webargs==6.*")
-
-# The newest importlib_metadata version isn't completely compatible with the oldest
-# python version Krake supports (or better so, the tests we wrote with that).
-if sys.version_info < (3, 8):
-    install_requires.append("importlib_metadata==3.6.*")
 
 
 setup(
@@ -87,15 +76,15 @@ setup(
         "ansible": {
             "ansible>=2.9",
             "python-openstackclient",
-            "openstacksdk"
+            "openstacksdk",
         },
         "api_generator": {
             "black==21.11b1",
-            "jinja2==3.*"
+            "jinja2==3.*",
         },
     },
     scripts=[
         "scripts/krake_bootstrap_db",
-        "scripts/krake_generate_config"
+        "scripts/krake_generate_config",
     ],
 )
