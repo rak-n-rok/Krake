@@ -70,14 +70,14 @@ are installed via the corresponding `setup.py` scripts.
 python3 -m venv .env
 source .env/bin/activate
 
-pip3 install rok/
-pip3 install krake/
+pip3 install --editable ./rok
+pip3 install --editable ./krake
 ```
 
 For development "krake" can also be installed with additional development dependencies:
 
 ```bash
-pip3 install --editable "krake/[dev]"
+pip3 install --editable "./krake[dev]"
 ```
 
 ### Setup
