@@ -515,6 +515,7 @@ class ApplicationState(Enum):
     DELETED = auto()
     DEGRADED = auto()
     FAILED = auto()
+    COMPLETED = auto()
 
     def equals(self, string):
         return self.name == string.upper()
