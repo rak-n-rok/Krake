@@ -77,7 +77,7 @@ spec:
     spec:
       containers:
       - name: etcd
-        image: gcr.io/etcd-development/etcd:v3.4.29
+        image: gcr.io/etcd-development/etcd:v3.5.12
         imagePullPolicy: Always
         resources:
           requests:
