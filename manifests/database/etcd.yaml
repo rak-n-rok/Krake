@@ -22,6 +22,28 @@ spec:
   selector:
     app.kubernetes.io/name: etcd
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: etcd-client
+  namespace: development
+  labels:
+    environment: development
+    app.kubernetes.io/name: etcd
+    app.kubernetes.io/instance: etcd-zeutcr
+    app.kubernetes.io/version: "1.0.1"
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: krake
+spec:
+  type: NodePort
+  ports:
+  - port: 2379
+    protocol: TCP
+    targetPort: 2379
+  selector:
+    app.kubernetes.io/name: etcd
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
