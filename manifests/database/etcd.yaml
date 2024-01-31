@@ -91,6 +91,33 @@ spec:
           name: client
         - containerPort: 2380
           name: peer
+        startupProbe:
+          failureThreshold: 24
+          httpGet:
+            path: /readyz?verbose=true
+            port: 2379
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 15
+        readinessProbe:
+          failureThreshold: 24
+          httpGet:
+            path: /health
+            port: 2379
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 15
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /livez?verbose=true
+            port: 2379
+            scheme: HTTP
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 3
         volumeMounts:
         - name: data
           mountPath: /var/run/etcd

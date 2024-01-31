@@ -122,6 +122,33 @@ spec:
             memory: "256Mi"
             cpu: "200m"
         command: ["python", "-m", "krake.api"]
+        startupProbe:
+          failureThreshold: 24
+          httpGet:
+            path: /
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 15
+        readinessProbe:
+          failureThreshold: 24
+          httpGet:
+            path: /
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 15
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /
+            port: 8080
+            scheme: HTTP
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 3
         ports:
           - containerPort: 8080
             name: krake-api
