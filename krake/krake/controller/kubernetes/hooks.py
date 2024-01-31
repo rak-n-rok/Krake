@@ -746,7 +746,8 @@ class KubernetesApplicationObserver(Observer):
         self.cluster = cluster
         self.kubernetes_api = None
 
-    def _set_container_health(self, resource, status):
+    @staticmethod
+    def _set_container_health(resource, status):
         if status.container_health is None:
             status.container_health = ContainerHealth()
 
@@ -756,7 +757,7 @@ class KubernetesApplicationObserver(Observer):
                 status.container_health.desired_pods = 1
                 if container_state.terminated is not None:
                     if resource.spec.restart_policy == "Never":
-                        status.state = ApplicationState.DEGRADED
+                        status.state = ApplicationState.COMPLETED
                     else:
                         status.state = ApplicationState.RESTARTING
                     status.container_health.running_pods = 0
@@ -810,6 +811,8 @@ class KubernetesApplicationObserver(Observer):
 
                 if isinstance(resource.status.succeeded, int):
                     status.container_health.completed_pods = resource.status.succeeded
+                    if resource.status.succeeded == resource.spec.completions:
+                        status.state = ApplicationState.COMPLETED
                 else:
                     status.container_health.completed_pods = 0
 
