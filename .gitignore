@@ -65,6 +65,6 @@ __pycache__/
 .idea
 .vscode
 
-# PyPi directories
-krake/build/*
-krake/dist/*
+# Built python packages
+build/
+dist/
