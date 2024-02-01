@@ -85,6 +85,15 @@ spec:
           - "python"
           - "-m"
           - "krake.controller.kubernetes.cluster"
+        livenessProbe:
+          exec:
+            command:
+            - cat
+            - /proc/1/cmdline
+          failureThreshold: 3
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 3
         volumeMounts:
         - name: config-volume
           mountPath: /etc/krake
