@@ -43,6 +43,8 @@ google-auth==2.27.0
 greenlet==3.0.3
 identify==2.5.33
 idna==3.6
+importlib-metadata==7.0.1
+importlib-resources==6.1.1
 influxdb-client==1.40.0
 iniconfig==2.0.0
 iso8601==2.1.0
@@ -169,3 +171,4 @@ wrapt==1.16.0
 xmlschema==2.5.1
 yappi==1.6.0
 yarl==1.8.2
+zipp==3.17.0
