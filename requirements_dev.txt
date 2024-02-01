@@ -117,7 +117,7 @@ PyJWT==2.8.0
 pyOpenSSL==24.0.0
 pyparsing==3.1.1
 pyperclip==1.8.2
-pysaml2==7.5.0
+pysaml2==7.3.1
 pytest==6.2.5
 pytest-aiohttp==0.3.0
 pytest-cov==3.0.0
