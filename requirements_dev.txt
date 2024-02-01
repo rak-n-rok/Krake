@@ -137,7 +137,7 @@ rfc3986==2.0.0
 Routes==2.5.1
 rpds-py==0.17.1
 rsa==4.9
-scrypt==0.8.21
+scrypt==0.8.20
 semantic-version==2.10.0
 simplejson==3.19.2
 six==1.16.0
