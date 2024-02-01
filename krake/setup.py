@@ -43,14 +43,9 @@ install_requires = [
     "requests==2.29.*",
     "SQLAlchemy==1.4.46",
     "tosca-parser==2.6.*",
+    "webargs>=8.4.0",
     "yarl==1.8.*",
 ]
-
-# webargs
-if sys.version_info < (3, 10):
-    install_requires.append("webargs==8.*")
-else:
-    install_requires.append("webargs==6.*")
 
 
 setup(

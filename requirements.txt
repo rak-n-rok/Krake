@@ -97,7 +97,7 @@ typing_extensions==4.9.0
 tzdata==2023.4
 urllib3==1.26.18
 wcwidth==0.2.13
-webargs==6.1.1
+webargs==8.4.0
 websocket-client==1.7.0
 wrapt==1.16.0
 yarl==1.8.2
