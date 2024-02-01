@@ -45,11 +45,19 @@ RUN mkdir -p /etc/krake && \
 COPY ./requirements.txt /tmp
 RUN pip install --no-deps -r /tmp/requirements.txt
 
-# Copy krake sources and install it into the virtualenv
+# Copy krake sources
 COPY ./krake/krake /krake/krake
 COPY ./krake/scripts /krake/scripts
 COPY ./krake/setup.py /krake
-RUN pip install --no-deps /krake
+
+# Install krake into the virtualenv
+# Note:
+# - We always use `pip install` with the `--no-deps` flag, which ensures that
+#   we do no accidentally pull in dependencies which are not specified in the
+#   requirements.txt file.
+# - The final `pip check` tests if all dependencies are satisfied, i.e., it
+#   will fail if our requirements.txt is incomplete or inconsistent.
+RUN pip install --no-deps /krake && pip check
 
 FROM base as runner
 
