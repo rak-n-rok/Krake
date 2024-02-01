@@ -25,10 +25,10 @@ cd krake
 Prepare your Kubernetes environment based on some manifests:
 
 ``` shell
-kubectl apply -f manifests/namespace.yaml  # Create namespace in k8s
-kubectl apply -f manifests/database/.      # Create database components in k8s
-kubectl apply -f manifests/backend/.       # Create backend components in k8s
-kubectl apply -f manifests/frontend/.      # Create frontend components in k8s
+kubectl apply -f manifests/namespace.yaml # Create namespace in k8s
+kubectl apply -f manifests/database/      # Create database components in k8s
+kubectl apply -f manifests/backend/       # Create backend components in k8s
+kubectl apply -f manifests/frontend/      # Create frontend components in k8s
 ```
 
 ### Setup
@@ -53,9 +53,9 @@ pip install --editable krake/
 Bootstrapping and configuring Krake amd the database in Kubernetes:
 
 ``` shell
-# using kubectl get nodes -o jsonpath='{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}' 
+# using "kubectl get nodes -o jsonpath='{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}'"
 # to find a valid endpoint and replace db-host
-# using kubectl get svc etcd-client to find nodeport and replace db-port
+# using "kubectl get svc etcd-client" to find nodeport and replace db-port
 
 ./.env/bin/krake_bootstrap_db --db-host=172.30.154.217 --db-port=30071 bootstrapping/base_roles.yaml
 
@@ -68,17 +68,17 @@ krake_generate_config --allow-anonymous --static-authentication-enabled config/a
 
 krake_generate_config rok.yaml.template
 
-# using kubectl get nodes -o jsonpath='{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}' 
+# using "kubectl get nodes -o jsonpath='{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}'"
 # to find a valid endpoint and replace db-host
-# using kubectl get svc krake-api to find nodeport from and replace db-port
+# using "kubectl get svc krake-api" to find nodeport from and replace db-port
 
 # edit rok.yaml and repace api_url
 # api_url: http://172.30.154.217:30446
 
-# using kubectl get nodes -o jsonpath='{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}' 
+# using "kubectl get nodes -o jsonpath='{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}'"
 # to find a valid endpoint and replace db-host
-# using kubectl get svc etcd-client to find nodeport and replace db-port
-./.env/bin/krake_bootstrap_db --db-host=172.30.154.217 --db-port=30071 support/prometheus_metrics.yaml support/static_metrics.yaml
+# using "kubectl get svc etcd-client" to find nodeport and replace db-port
+./.env/bin/krake_bootstrap_db --db-host=172.30.154.217 --db-port=32375 support/prometheus_metrics.yaml support/static_metrics.yaml
 
 # prepare Krake Kubernetes direct access
 mkdir -p cluster_certs/certs cluster_certs/config
@@ -99,20 +99,24 @@ Using Krake CLI to execute demo test cases on your Kubernetes cluster:
 
 ``` shell
 for i in {1..3}; do
+  echo
   echo "Iteration: " $i 
-  sleep 2
+  kubectl get pods
+  sleep 4
   rok kube app create -f rak/functionals/echo-demo.yaml echo-demo
+  sleep 2
   rok kube app list
   rok kube cluster list
+  sleep 2
   rok kube app get echo-demo
-  kubectl get pods
   sleep 2
   rok kube app delete echo-demo
   sleep 8
 done
-sleep 2
+sleep 8
 rok kube cluster list
 rok kube app list
+kubectl get pods
 ```
 
 ## Uninstall
@@ -120,8 +124,8 @@ rok kube app list
 To remove the Krake components from Kubernetes, the following steps must be completed:
 
 ``` shell
-kubectl delete -f manifests/frontend/.        # Delete the frontend components
-kubectl delete -f manifests/backend/.         # Delete the backend components
-kubectl delete -f manifests/database/.        # Delete the database components 
-kubectl delete -f manifests/namespace.yaml    # Delete the namespace
+kubectl delete -f manifests/frontend/        # Delete the frontend components
+kubectl delete -f manifests/backend/         # Delete the backend components
+kubectl delete -f manifests/database/        # Delete the database components
+kubectl delete -f manifests/namespace.yaml   # Delete the namespace
 ```
