@@ -68,7 +68,7 @@ setup(
             "pytest-aiohttp==0.3.*",
             "pytest-cov==3.*",
             "pytest-httpserver==1.*",
-            "pytz==2021.*",
+            "pytz",
             "tox==3.*",
         },
         "ansible": {
