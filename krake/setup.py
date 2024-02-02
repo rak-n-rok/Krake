@@ -23,19 +23,16 @@ install_requires = [
     "aiohttp==3.*",
     "aiohttp-cors==0.7.*",
     "deepdiff==6.2.*",
-    "docker==6.*",
     "etcd3-py==0.1.*",
     "influxdb_client",
     "keystoneauth1==4.*",
     "kubernetes",
     "kubernetes-asyncio==22.*",
     "lark-parser==0.11.*",
-    "makefun==1.*",
     "marshmallow==3.*",
     "marshmallow-enum",
     "marshmallow-oneofschema",
     "marshmallow-union",
-    "mock",
     "oslo.db==11.3.0",
     "pyOpenSSL",
     "python-magnumclient==3.*",
@@ -62,7 +59,9 @@ setup(
     extras_require={
         "dev": {
             "factory-boy==2.*",
+            "keystone==20.*",
             "mock==4.*",
+            "pre-commit==2.*",
             "prometheus-async==19.*",
             "prometheus-client==0.7.*",
             "pytest==6.*",
@@ -71,22 +70,19 @@ setup(
             "pytest-httpserver==1.*",
             "pytz==2021.*",
             "tox==3.*",
-            "pre-commit==2.*",
-            "keystone==20.*",
-            "pytest-httpserver==1.*",
         },
         "ansible": {
             "ansible>=2.9",
+            "openstacksdk",
             "python-openstackclient",
-            "openstacksdk"
         },
         "api_generator": {
             "black==21.11b1",
-            "jinja2==3.*"
+            "jinja2==3.*",
         },
     },
     scripts=[
         "scripts/krake_bootstrap_db",
-        "scripts/krake_generate_config"
+        "scripts/krake_generate_config",
     ],
 )
