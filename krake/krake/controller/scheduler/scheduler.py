@@ -325,6 +325,14 @@ class Handler(object):
         best = max(ranked)
         maximum = [rank for rank in ranked if rank == best]
 
+        contains_clusters = False
+        for maxm in maximum:
+            if hasattr(maxm, "cluster"):
+                contains_clusters = True
+
+        if contains_clusters:
+            maximum = [m for m in maximum if hasattr(m, "cluster")]
+
         # Select randomly between best projects
         return random.choice(maximum)
 
