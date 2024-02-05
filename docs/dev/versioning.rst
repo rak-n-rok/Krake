@@ -11,7 +11,7 @@ Single Source
 
 In order to have consistent versioning across all parts of the Krake project, a single source for
 the version was introduced. This version will be retrieved by all modules, that need to access this
-version number, as well as the ``setup.py``, which provides the version for the PyPi package.
+version number, as well as in ``pyproject.toml``, which provides the metadata for the PyPI package.
 
 The version can be found in the ``__about__.py`` inside of the krake module, which also provides
 other constant, global variables. This version can then be loaded into other (sub)modules by

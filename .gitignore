@@ -43,6 +43,9 @@ __pycache__/
 .tox/
 .coverage*
 
+# Python virtualenv
+.venv/
+
 # pip egg installation files
 *.egg-info/
 

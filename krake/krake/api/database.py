@@ -118,8 +118,6 @@ class EtcdClient(AioClient):
         #   in the constructor which is very ugly! Because we consider moving
         #   to an gRPC-based etcd client, we should not invest too much effort
         #   into fixing this problem.
-        #
-        #   When this is fixed, requests should be removed from the setup.py
         resp = requests.get(
             self._url("/version", prefix=False),
             cert=self.cert,
