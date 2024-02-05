@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=69.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "krake"
+authors = [
+    {name = "Krake Development Team", email = "krake@cloudandheat.com"},
+]
+description = ""
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "Apache-2.0"}
+dynamic = ["version"]
+dependencies = [
+    "aiohttp==3.*",
+    "aiohttp-cors==0.7.*",
+    "deepdiff==6.2.*",
+    "docker==6.*",
+    "etcd3-py==0.1.*",
+    "importlib_metadata==3.6.*; python_version<'3.8'",
+    "influxdb_client",
+    "keystoneauth1==4.*",
+    "kubernetes",
+    "kubernetes-asyncio==22.*",
+    "lark-parser==0.11.*",
+    "makefun==1.*",
+    "marshmallow==3.*",
+    "marshmallow-enum",
+    "marshmallow-oneofschema",
+    "marshmallow-union",
+    "mock",
+    "oslo.db==11.3.0",
+    "pyOpenSSL",
+    "python-magnumclient==3.*",
+    "PyYAML==5.*",
+    "requests==2.29.*",
+    "SQLAlchemy==1.4.46",
+    "tosca-parser==2.6.*",
+    "webargs==6.*; python_version>='3.10'",
+    "webargs==8.*; python_version<'3.10'",
+    "yarl==1.8.*",
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "krake.__about__.__version__"}
+
+[project.urls]
+Homepage = "https://krake.cloud"
+Documentation = "https://rak-n-rok.readthedocs.io/projects/krake/en/latest/"
+Repository = "https://gitlab.com/rak-n-rok/krake"
+
+[project.optional-dependencies]
+dev = [
+    "factory-boy==2.*",
+    "keystone==20.*",
+    "mock==4.*",
+    "pre-commit==2.*",
+    "prometheus-async==19.*",
+    "prometheus-client==0.7.*",
+    "pytest==6.*",
+    "pytest-aiohttp==0.3.*",
+    "pytest-cov==3.*",
+    "pytest-httpserver==1.*",
+    "pytz==2021.*",
+    "tox==3.*",
+]
+ansible = [
+    "ansible>=2.9",
+    "openstacksdk",
+    "python-openstackclient",
+]
+api_generator = [
+    "black==21.11b1",
+    "jinja2==3.*",
+]

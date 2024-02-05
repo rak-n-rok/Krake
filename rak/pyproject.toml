@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=69.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rak"
+version = "1.0.0"
+authors = [
+    {name = "Krake Development Team", email = "krake@cloudandheat.com"},
+]
+requires-python = ">=3.8"
+license = {text = "Apache-2.0"}
+classifiers = [
+    "Private :: Do Not Upload",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://krake.cloud"
+Documentation = "https://rak-n-rok.readthedocs.io/projects/krake/en/latest/"
+Repository = "https://gitlab.com/rak-n-rok/krake"
+
+[project.optional-dependencies]
+test = [
+    "dataclasses==0.6.*",
+    "deepdiff==6.2.*",
+    "docker==4.*",
+    # jinja2 imports `soft_unicode` from markupsafe library.
+    # `soft_unicode` was removed in markupsafe==2.1.0.
+    "markupsafe==2.0.1",
+    "minio",
+    "pytest==6.*",
+    "pytest-httpserver==1.*",
+    "pytest-timeout",
+    "Werkzeug==2.1.*",
+    "yarl==1.8.*",
+]
