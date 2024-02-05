@@ -110,7 +110,7 @@ cache:
     - sed -i -e 's/ -XX:+ExplicitGCInvokesConcurrent//g' /bin/ksql-run-class
 
     - pip install tox
-    - tox -- --cov krake/krake --no-cov-on-fail --cov-report= --runslow krake/tests
+    - tox run -- --cov krake/krake --no-cov-on-fail --cov-report= --runslow krake/tests
   tags:
     - docker
 

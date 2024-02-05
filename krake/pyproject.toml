@@ -64,7 +64,7 @@ test = [
 ]
 dev = [
     "pre-commit==2.*",
-    "tox==3.*",
+    "tox>=4.12",
 ]
 ansible = [
     "ansible>=2.9",
