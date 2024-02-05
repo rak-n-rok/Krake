@@ -13,7 +13,7 @@ requires-python = ">=3.8"
 license = {text = "Apache-2.0"}
 dependencies = [
     "python-dateutil==2.*",
-    "PyYAML==5.*",
+    "PyYAML==6.*",
     "requests==2.*",
     "texttable==1.*",
 ]

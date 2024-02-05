@@ -12,34 +12,32 @@ readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "Apache-2.0"}
 dynamic = ["version"]
+# Only add direct dependencies here and use the most abstract version
+# restriction possible (e.g., a lower bound).
+# The exact versions including versions of transitive dependencies are
+# compiled with pip-compile and recorded in the requirements*.txt files.
+# Version constraints on transitive dependencies can be placed in
+# constraints.txt.
 dependencies = [
     "aiohttp==3.*",
     "aiohttp-cors==0.7.*",
     "deepdiff==6.2.*",
-    "docker==6.*",
     "etcd3-py==0.1.*",
-    "importlib_metadata==3.6.*; python_version<'3.8'",
     "influxdb_client",
     "keystoneauth1==4.*",
     "kubernetes",
     "kubernetes-asyncio==22.*",
     "lark-parser==0.11.*",
-    "makefun==1.*",
     "marshmallow==3.*",
     "marshmallow-enum",
-    "marshmallow-oneofschema",
     "marshmallow-union",
-    "mock",
-    "oslo.db==11.3.0",
     "pyOpenSSL",
     "python-magnumclient==3.*",
-    "PyYAML==5.*",
+    "PyYAML==6.*",
     "requests==2.29.*",
     "semantic-version>=2.10",
-    "SQLAlchemy==1.4.46",
     "tosca-parser==2.6.*",
-    "webargs==6.*; python_version>='3.10'",
-    "webargs==8.*; python_version<'3.10'",
+    "webargs==8.*",
     "yarl==1.8.*",
 ]
 
@@ -62,7 +60,7 @@ test = [
     "pytest-aiohttp==0.3.*",
     "pytest-cov==3.*",
     "pytest-httpserver==1.*",
-    "pytz==2021.*",
+    "pytz",
 ]
 dev = [
     "pre-commit==2.*",
