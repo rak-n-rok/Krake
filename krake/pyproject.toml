@@ -51,11 +51,10 @@ Documentation = "https://rak-n-rok.readthedocs.io/projects/krake/en/latest/"
 Repository = "https://gitlab.com/rak-n-rok/krake"
 
 [project.optional-dependencies]
-dev = [
+test = [
     "factory-boy==2.*",
     "keystone==20.*",
     "mock==4.*",
-    "pre-commit==2.*",
     "prometheus-async==19.*",
     "prometheus-client==0.7.*",
     "pytest==6.*",
@@ -63,6 +62,9 @@ dev = [
     "pytest-cov==3.*",
     "pytest-httpserver==1.*",
     "pytz==2021.*",
+]
+dev = [
+    "pre-commit==2.*",
     "tox==3.*",
 ]
 ansible = [
