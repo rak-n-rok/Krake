@@ -85,14 +85,14 @@ The `docker/generate` script expects configuration file for the docker infrastru
 bundles. These configuration files are required and should be passed via the script's
 ``--config`` argument. The configuration file could be crafted by hand,
 using the `docker/docker.yaml.template` as a base example, or it can be generated
-using the `krake_generate_config` script, which is used to generate all Krake
-configuration files.
+using the `krake/scripts/krake_generate_config` script, which is used to generate all
+Krake configuration files.
 
 You can generate the minimal recommended configuration as follows:
 
 .. code:: bash
 
-    krake_generate_config --dst docker docker/docker.yaml.template --api-host krake-api --etcd-host krake-db
+    krake/scripts/krake_generate_config --dst docker docker/docker.yaml.template --api-host krake-api --etcd-host krake-db
 
 The above command generates the `docker/docker.yaml` configuration file.
 By applying it with the following command, the docker bundle for the target infrastructure will 
@@ -141,7 +141,7 @@ You can generate the minimal recommended configuration as follows:
 
     sudo mkdir /etc/krake
     sudo $(id -u):$(id -g) /etc/krake/
-    krake_generate_config --dst /etc/krake config/*.template rok.yaml.template \
+    krake/scripts/krake_generate_config --dst /etc/krake config/*.template rok.yaml.template \
       --api-host krake-api --etcd-host krake-db --allow-anonymous \
       --static-authentication-enabled
 

@@ -95,9 +95,9 @@ then be modified at will.
 
 ```bash
 # First, start the generate script to have initial config files
-krake_generate_config config/*.template rok.yaml.template
+krake/scripts/krake_generate_config config/*.template rok.yaml.template
 
-krake_generate_config --allow-anonymous --static-authentication-enabled config/api.yaml.template
+krake/scripts/krake_generate_config --allow-anonymous --static-authentication-enabled config/api.yaml.template
 
 # You can then modify each file at your preference.
 # afterwards create that folder which is expected:
@@ -108,7 +108,7 @@ sudo cp *.yaml /etc/krake
 
 # Optional: you can use the rok configuration template as you prefer. It can also be generated.
 # Otherwise rok will use the default configuration
-krake_generate_config rok.yaml.template
+krake/scripts/krake_generate_config rok.yaml.template
 ```
 
 The `--allow-anonymous` and `--static-authentication-enabled` options set the API with
