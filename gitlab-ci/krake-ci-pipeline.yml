@@ -179,7 +179,7 @@ flake8-rok:
 
 test-build-docs:
   stage: test
-  image: python:3.9
+  image: python:3.10
   only:
     - tags
     - branches
