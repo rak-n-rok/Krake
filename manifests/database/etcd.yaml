@@ -126,6 +126,16 @@ spec:
             value: "http://$(ETCD_NAME).etcd:2380"
           - name: ETCD_DATA_DIR
             value: /var/run/etcd/default
+          - name: ETCD_MAX_SNAPSHOTS
+            value: "3"
+          - name: ETCD_MAX_WALS
+            value: "3"
+          - name: ETCD_SNAPSHOT_COUNT
+            value: "5000"
+          - name: ETCD_AUTO_COMPACTION_MODE
+            value: periodic
+          - name: ETCD_AUTO_COMPACTION_RETENTION
+            value: "6h"
   volumeClaimTemplates:
   - metadata:
       name: data
