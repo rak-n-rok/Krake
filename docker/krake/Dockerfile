@@ -36,10 +36,9 @@ ENV PATH="/opt/krake/bin:${PATH}"
 RUN pip install --upgrade pip setuptools
 
 # Generate the default configuration files
-COPY ./krake/scripts /krake
+COPY ./krake/scripts/krake_generate_config /opt/krake/bin
 COPY ./config /tmp/config
-RUN mkdir -p /etc/krake && \
-  python3 /krake/krake_generate_config --dst /etc/krake /tmp/config/*.template
+RUN mkdir -p /etc/krake && krake_generate_config --dst /etc/krake /tmp/config/*.template
 
 # Install the pinned requirements, which must match the python version of the
 # base image, into the virtualenv
@@ -48,7 +47,6 @@ RUN pip install --no-deps -r /tmp/requirements.txt
 
 # Copy krake sources
 COPY ./krake/krake /krake/krake
-COPY ./krake/scripts /krake/scripts
 COPY ./krake/pyproject.toml /krake
 
 # Install krake into the virtualenv
