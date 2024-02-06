@@ -49,6 +49,9 @@ Homepage = "https://krake.cloud"
 Documentation = "https://rak-n-rok.readthedocs.io/projects/krake/en/latest/"
 Repository = "https://gitlab.com/rak-n-rok/krake"
 
+[project.scripts]
+krake_bootstrap_db = "krake.tools.bootstrap_db:cli"
+
 [project.optional-dependencies]
 test = [
     "factory-boy==2.*",

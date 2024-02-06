@@ -425,7 +425,7 @@ def add_option(parser, name, help, short=None, default=None, action=None, **kwar
         parser.add_argument(option, action=action, help=help, **kwargs)
 
 
-if __name__ == "__main__":
+def cli():
     parser = argparse.ArgumentParser(
         description=(
             "Insert Krake resources into the database directly, without using the API."
