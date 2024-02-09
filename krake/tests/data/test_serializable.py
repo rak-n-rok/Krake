@@ -3,7 +3,7 @@ from typing import List, Dict, Union
 import pytest
 from dataclasses import field
 from krake.data.config import HooksConfiguration
-from krake.data.core import Metadata, ListMetadata
+from krake.data.core import Metadata
 from krake.data.kubernetes import ClusterList
 from marshmallow import ValidationError
 
@@ -350,7 +350,7 @@ def test_api_object_repr():
 
     # List
     items = [ClusterFactory()] * 10
-    cluster_list = ClusterList(metadata=ListMetadata(), items=items)
+    cluster_list = ClusterList(items=items)
     cluster_list_repr = "<kubernetes.ClusterList length=10>"
     assert repr(cluster_list) == cluster_list_repr
 

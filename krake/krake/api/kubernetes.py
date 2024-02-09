@@ -23,7 +23,8 @@ from krake.api.helpers import (
     make_create_request_schema,
     ListQuery,
 )
-from krake.data.core import WatchEvent, WatchEventType, ListMetadata
+
+from krake.data.core import WatchEvent, WatchEventType
 from krake.data.infrastructure import CloudBinding
 from krake.data.kubernetes import (
     ApplicationList,
@@ -152,7 +153,7 @@ class KubernetesApi(object):
                     )
                 ]
 
-            body = ApplicationList(metadata=ListMetadata(), items=objs)
+            body = ApplicationList(items=objs)
             return web.json_response(body.serialize())
 
         # Watching resources
@@ -484,7 +485,7 @@ class KubernetesApi(object):
                     )
                 ]
 
-            body = ClusterList(metadata=ListMetadata(), items=objs)
+            body = ClusterList(items=objs)
             return web.json_response(body.serialize())
 
         # Watching resources

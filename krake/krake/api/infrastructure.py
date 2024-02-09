@@ -19,7 +19,8 @@ from krake.api.helpers import (
     HttpProblemError,
     ListQuery,
 )
-from krake.data.core import WatchEvent, WatchEventType, ListMetadata
+
+from krake.data.core import WatchEvent, WatchEventType
 from krake.data.infrastructure import (
     Cloud,
     CloudList,
@@ -116,7 +117,7 @@ class InfrastructureApi(object):
         if not watch:
             objs = [obj async for obj in session(request).all(resource_class)]
 
-            body = GlobalInfrastructureProviderList(metadata=ListMetadata(), items=objs)
+            body = GlobalInfrastructureProviderList(items=objs)
             return web.json_response(body.serialize())
 
         # Watching resources
@@ -303,7 +304,7 @@ class InfrastructureApi(object):
                     )
                 ]
 
-            body = InfrastructureProviderList(metadata=ListMetadata(), items=objs)
+            body = InfrastructureProviderList(items=objs)
             return web.json_response(body.serialize())
 
         # Watching resources
@@ -467,7 +468,7 @@ class InfrastructureApi(object):
         if not watch:
             objs = [obj async for obj in session(request).all(resource_class)]
 
-            body = GlobalCloudList(metadata=ListMetadata(), items=objs)
+            body = GlobalCloudList(items=objs)
             return web.json_response(body.serialize())
 
         # Watching resources
@@ -666,7 +667,7 @@ class InfrastructureApi(object):
                     )
                 ]
 
-            body = CloudList(metadata=ListMetadata(), items=objs)
+            body = CloudList(items=objs)
             return web.json_response(body.serialize())
 
         # Watching resources

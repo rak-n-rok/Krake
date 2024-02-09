@@ -18,7 +18,7 @@ from krake.api.helpers import (
     HttpProblemError,
     ListQuery,
 )
-from krake.data.core import WatchEvent, WatchEventType, ListMetadata
+from krake.data.core import WatchEvent, WatchEventType
 from krake.data.core import (
     GlobalMetric,
     GlobalMetricList,
@@ -116,9 +116,7 @@ class CoreApi(object):
         if not watch:
             objs = [obj async for obj in session(request).all(resource_class)]
 
-            body = GlobalMetricList(
-                metadata=ListMetadata(), items=objs
-            )
+            body = GlobalMetricList(items=objs)
             return web.json_response(body.serialize())
 
         # Watching resources
@@ -285,9 +283,7 @@ class CoreApi(object):
         if not watch:
             objs = [obj async for obj in session(request).all(resource_class)]
 
-            body = GlobalMetricsProviderList(
-                metadata=ListMetadata(), items=objs
-            )
+            body = GlobalMetricsProviderList(items=objs)
             return web.json_response(body.serialize())
 
         # Watching resources
@@ -447,9 +443,7 @@ class CoreApi(object):
         if not watch:
             objs = [obj async for obj in session(request).all(resource_class)]
 
-            body = RoleList(
-                metadata=ListMetadata(), items=objs
-            )
+            body = RoleList(items=objs)
             return web.json_response(body.serialize())
 
         # Watching resources
@@ -614,9 +608,7 @@ class CoreApi(object):
         if not watch:
             objs = [obj async for obj in session(request).all(resource_class)]
 
-            body = RoleBindingList(
-                metadata=ListMetadata(), items=objs
-            )
+            body = RoleBindingList(items=objs)
             return web.json_response(body.serialize())
 
         # Watching resources
@@ -802,9 +794,7 @@ class CoreApi(object):
                     )
                 ]
 
-            body = MetricList(
-                metadata=ListMetadata(), items=objs
-            )
+            body = MetricList(items=objs)
             return web.json_response(body.serialize())
 
         # Watching resources
@@ -994,9 +984,7 @@ class CoreApi(object):
                     )
                 ]
 
-            body = MetricsProviderList(
-                metadata=ListMetadata(), items=objs
-            )
+            body = MetricsProviderList(items=objs)
             return web.json_response(body.serialize())
 
         # Watching resources

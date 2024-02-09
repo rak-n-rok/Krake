@@ -4,7 +4,7 @@ from typing import List, Dict
 
 from . import persistent
 from .serializable import PolymorphicContainer, Serializable, ApiObject
-from .core import Metadata, ListMetadata, Status, ResourceRef, MetricRef, Reason
+from .core import Metadata, Status, ResourceRef, MetricRef, Reason
 from .constraints import LabelConstraint
 
 
@@ -123,7 +123,6 @@ class Project(ApiObject):
 class ProjectList(ApiObject):
     api: str = "openstack"
     kind: str = "ProjectList"
-    metadata: ListMetadata
     items: List[Project]
 
 
@@ -212,7 +211,6 @@ class MagnumCluster(ApiObject):
 class MagnumClusterList(ApiObject):
     api: str = "openstack"
     kind: str = "MagnumClusterList"
-    metadata: ListMetadata
     items: List[MagnumCluster]
 
 

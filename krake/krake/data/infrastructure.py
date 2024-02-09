@@ -6,7 +6,7 @@ from dataclasses import field
 from marshmallow import ValidationError
 
 from . import persistent
-from .core import ListMetadata, Metadata, Reason, MetricRef, ResourceRef
+from .core import Metadata, Reason, MetricRef, ResourceRef
 from .serializable import ApiObject, Serializable, PolymorphicContainer
 
 
@@ -57,7 +57,6 @@ class GlobalInfrastructureProvider(ApiObject):
 class GlobalInfrastructureProviderList(ApiObject):
     api: str = "infrastructure"
     kind: str = "GlobalInfrastructureProviderList"
-    metadata: ListMetadata
     items: List[GlobalInfrastructureProvider]
 
 
@@ -72,7 +71,6 @@ class InfrastructureProvider(ApiObject):
 class InfrastructureProviderList(ApiObject):
     api: str = "infrastructure"
     kind: str = "InfrastructureProviderList"
-    metadata: ListMetadata
     items: List[InfrastructureProvider]
 
 
@@ -218,7 +216,6 @@ class GlobalCloud(ApiObject):
 class GlobalCloudList(ApiObject):
     api: str = "infrastructure"
     kind: str = "GlobalCloudList"
-    metadata: ListMetadata
     items: List[GlobalCloud]
 
 
@@ -234,5 +231,4 @@ class Cloud(ApiObject):
 class CloudList(ApiObject):
     api: str = "infrastructure"
     kind: str = "CloudList"
-    metadata: ListMetadata
     items: List[Cloud]

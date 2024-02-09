@@ -23,7 +23,7 @@ from krake.controller import (
     create_ssl_context,
     _extract_ssl_config,
 )
-from krake.data.core import WatchEvent, WatchEventType, ListMetadata, RoleList
+from krake.data.core import WatchEvent, WatchEventType, RoleList
 from krake.data.kubernetes import ApplicationState
 from tests.controller import SimpleWorker
 
@@ -895,7 +895,7 @@ async def test_controller_resilience_api_watch_fail(aiohttp_server, config, db, 
         watch = request.rel_url.query.get("watch")
         if watch is None:
             # Create a mock "list" response
-            body = RoleList(metadata=ListMetadata(), items=[])
+            body = RoleList(items=[])
             return web.json_response(body.serialize())
         raise web.HTTPInternalServerError()
 
