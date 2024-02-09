@@ -26,6 +26,7 @@ from krake.data.core import (
     KafkaSpec,
     InfluxSpec,
     Label,
+    StaticSpecItem,
 )
 
 _existing_names = set()
@@ -66,6 +67,16 @@ def fuzzy_labels(size=None):
     for _ in range(size):
         label = Label(key=fake.word(), value=fake.word())
         ret.append(label)
+    return ret
+
+
+def fuzzy_metrics(size=None):
+    if size is None:
+        size = fake.pyint(0, 3)
+    ret = []
+    for _ in range(size):
+        metric = StaticSpecItem(name=fake.word(), weight=fake.pyfloat())
+        ret.append(metric)
     return ret
 
 
@@ -251,12 +262,7 @@ class StaticSpecFactory(Factory):
     class Meta:
         model = StaticSpec
 
-    metrics = Dict(
-        {
-            "static_metric_1": fuzzy.FuzzyFloat(0, 1),
-            "static_metric_2": fuzzy.FuzzyFloat(0, 1),
-        }
-    )
+    metrics = fuzzy.FuzzyAttribute(fuzzy_metrics)
 
 
 class MetricsProviderSpecFactory(Factory):

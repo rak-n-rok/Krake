@@ -19,7 +19,7 @@ from .formatters import (
     BaseTable,
     Cell,
     printer,
-    dict_formatter,
+    metrics_formatter,
 )
 
 # Parsers
@@ -229,7 +229,7 @@ class BaseMetricsProviderTable(BaseMetricsProviderListTable):
 
         mp_attrs = {
             _MetricsProviderType.PROMETHEUS: {"url": None},
-            _MetricsProviderType.STATIC: {"metrics": dict_formatter},
+            _MetricsProviderType.STATIC: {"metrics": metrics_formatter},
             _MetricsProviderType.KAFKA: dict.fromkeys(
                 ["url", "comparison_column", "value_column", "table"]
             ),
@@ -289,7 +289,11 @@ def _create_base_metrics_provider(
     if mp_type == _MetricsProviderType.PROMETHEUS:
         type_dict = {"url": url}
     elif mp_type == _MetricsProviderType.STATIC:
-        type_dict = {"metrics": {m["name"]: m["weight"] for m in metrics}}
+        items = []
+        for metric in metrics:
+            items.append(metric)
+
+        type_dict = {"metrics": items}
     elif mp_type == _MetricsProviderType.KAFKA:
         type_dict = {
             "url": url,
@@ -480,18 +484,18 @@ def _update_base_metrics_provider(
     config=None,
     namespace=None,
 ):
+
     mp = _get_base_metrics_provider(
         session, base_url, kind, name, config=config, namespace=namespace
     )
     mp_type = mp["spec"]["type"]
-
     _validate_for_update_base_mp(
         mp_type, metrics, mp_url, comparison_column, value_column, table, token, org,
         bucket
     )
 
     if metrics:
-        mp["spec"][mp_type]["metrics"] = {m["name"]: m["weight"] for m in metrics}
+        mp["spec"][mp_type]["metrics"] = metrics
     if mp_url:
         mp["spec"][mp_type]["url"] = mp_url
     if comparison_column:

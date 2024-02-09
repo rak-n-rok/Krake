@@ -418,4 +418,3 @@ class Static(Provider):
             raise MetricError(f"Metric {name!r} not defined")
         else:
             return match[0].weight
-

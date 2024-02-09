@@ -23,8 +23,7 @@ from krake.controller.scheduler.constraints import (
 )
 from krake.controller.scheduler.scheduler import NoProjectFound, NoClusterFound
 from krake.data.constraints import LabelConstraint, MetricConstraint
-from krake.data.core import ResourceRef, MetricRef
-from krake.data.core import resource_ref, ReasonCode
+from krake.data.core import ResourceRef, MetricRef, resource_ref, ReasonCode, Label, StaticSpecItem
 from krake.data.infrastructure import CloudState
 from krake.data.kubernetes import Application, ApplicationState, Cluster, ClusterState
 from krake.data.openstack import (
@@ -451,7 +450,8 @@ def test_kubernetes_not_match_cluster_metrics_constraints():
             )
         ]
     }
-    assert not match_application_constraints(app, cluster, fetched_metrics=fetched_metrics)
+    assert not match_application_constraints(
+        app, cluster, fetched_metrics=fetched_metrics)
 
 
 def test_kubernetes_match_empty_cluster_constraints():
@@ -524,6 +524,7 @@ async def test_kubernetes_score(aiohttp_server, config, db, loop):
             spec__provider__metric="test_metric_2",
         ),
     ]
+    static_metric = StaticSpecItem(name="test_metric_2", weight=0.5)
     providers = [
         MetricsProviderFactory(
             metadata__name="test-prometheus",
@@ -533,7 +534,7 @@ async def test_kubernetes_score(aiohttp_server, config, db, loop):
         MetricsProviderFactory(
             metadata__name="test-static",
             spec__type="static",
-            spec__static__metrics={"test_metric_2": 0.5},
+            spec__static__metrics=[static_metric]
         ),
         GlobalMetricsProviderFactory(
             metadata__name="test-prometheus",
@@ -543,7 +544,7 @@ async def test_kubernetes_score(aiohttp_server, config, db, loop):
         GlobalMetricsProviderFactory(
             metadata__name="test-static",
             spec__type="static",
-            spec__static__metrics={"test_metric_2": 0.5},
+            spec__static__metrics=[static_metric]
         ),
     ]
 
@@ -586,11 +587,11 @@ async def test_kubernetes_score_sticky(aiohttp_server, config, db, loop):
         status__scheduled_to=resource_ref(cluster_a),
     )
     pending_app = ApplicationFactory(status__state=ApplicationState.PENDING)
-
+    static_metric = StaticSpecItem(name="my_metric", weight=0.75)
     static_provider = GlobalMetricsProviderFactory(
         metadata__name="static-provider",
         spec__type="static",
-        spec__static__metrics={"my_metric": 0.75},
+        spec__static__metrics=[static_metric]
     )
     metric = GlobalMetricFactory(
         metadata__name="metric-1",
@@ -646,7 +647,8 @@ async def test_kubernetes_score_with_metrics_only(aiohttp_server, config, loop):
             )
 
 
-async def test_kubernetes_score_with_inherited_metrics(aiohttp_server, config, db, loop):
+async def test_kubernetes_score_with_inherited_metrics(
+        aiohttp_server, config, db, loop):
 
     cloud = CloudFactory(
         metadata__name="test",
@@ -690,10 +692,11 @@ async def test_kubernetes_score_with_inherited_metrics(aiohttp_server, config, d
         status__is_scheduled=False
     )
 
+    static_metric = StaticSpecItem(name="my_metric", weight=0.75)
     static_provider = GlobalMetricsProviderFactory(
         metadata__name="static-provider",
         spec__type="static",
-        spec__static__metrics={"my_metric": 0.75},
+        spec__static__metrics=[static_metric],
     )
     metric = GlobalMetricFactory(
         metadata__name="metric-1",
@@ -2538,7 +2541,7 @@ async def test_openstack_score(aiohttp_server, config, db, loop):
     static_provider = GlobalMetricsProviderFactory(
         metadata__name="test-static",
         spec__type="static",
-        spec__static__metrics={"test_metric_2": 0.5},
+        spec__static__metrics=[StaticSpecItem(name="test_metric_2", weight=0.5)]
     )
 
     for metric in metrics:
@@ -3261,7 +3264,7 @@ async def test_cloud_score(
         MetricsProviderFactory(
             metadata__name="test-static",
             spec__type="static",
-            spec__static__metrics={"test_metric_2": 0.5},
+            spec__static__metrics=[StaticSpecItem(name="test_metric_2", weight=0.5)]
         ),
         GlobalMetricsProviderFactory(
             metadata__name="test-prometheus",
@@ -3271,7 +3274,7 @@ async def test_cloud_score(
         GlobalMetricsProviderFactory(
             metadata__name="test-static",
             spec__type="static",
-            spec__static__metrics={"test_metric_2": 0.5},
+            spec__static__metrics=[StaticSpecItem(name="test_metric_2", weight=0.5)]
         ),
     ]
 

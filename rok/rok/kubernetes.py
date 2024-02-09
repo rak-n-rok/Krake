@@ -961,7 +961,6 @@ def create_cluster(
     if namespace is None:
         namespace = config["user"]
 
-
     to_create = {
         "metadata": {
             "name": name,

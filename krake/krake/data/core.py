@@ -443,9 +443,14 @@ class KafkaSpec(Serializable):
     url: str
 
 
+class StaticSpecItem(Serializable):
+    name: str = field(init=True)
+    weight: float = field(init=True)
+
+
 @MetricsProviderSpec.register("static")
 class StaticSpec(Serializable):
-    metrics: Dict[str, float]
+    metrics: List[StaticSpecItem]
 
 
 class BaseMetricsProvider(ApiObject):
