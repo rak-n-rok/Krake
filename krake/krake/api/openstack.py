@@ -19,7 +19,7 @@ from krake.api.helpers import (
     HttpProblemError,
     ListQuery,
 )
-from krake.data.core import WatchEvent, WatchEventType, ListMetadata
+from krake.data.core import WatchEvent, WatchEventType
 from krake.data.openstack import (
     ProjectList,
     Project,
@@ -126,7 +126,7 @@ class OpenStackApi(object):
                     )
                 ]
 
-            body = MagnumClusterList(metadata=ListMetadata(), items=objs)
+            body = MagnumClusterList(items=objs)
             return web.json_response(body.serialize())
 
         # Watching resources
@@ -346,7 +346,7 @@ class OpenStackApi(object):
                     )
                 ]
 
-            body = ProjectList(metadata=ListMetadata(), items=objs)
+            body = ProjectList(items=objs)
             return web.json_response(body.serialize())
 
         # Watching resources

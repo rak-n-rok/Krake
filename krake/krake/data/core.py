@@ -252,10 +252,6 @@ class CoreMetadata(Serializable):
     uid: str
 
 
-class ListMetadata(Serializable):
-    pass  # TODO
-
-
 class ReasonCode(IntEnum):
     INTERNAL_ERROR = 1  # Default error
 
@@ -336,7 +332,6 @@ class Role(ApiObject):
 class RoleList(ApiObject):
     api: str = "core"
     kind: str = "RoleList"
-    metadata: ListMetadata
     items: List[Role]
 
 
@@ -352,7 +347,6 @@ class RoleBinding(ApiObject):
 class RoleBindingList(ApiObject):
     api: str = "core"
     kind: str = "RoleBindingList"
-    metadata: ListMetadata
     items: List[RoleBinding]
 
 
@@ -417,14 +411,12 @@ class Metric(BaseMetric):
 class MetricList(ApiObject):
     api: str = "core"
     kind: str = "MetricList"
-    metadata: ListMetadata
     items: List[Metric]
 
 
 class GlobalMetricList(ApiObject):
     api: str = "core"
     kind: str = "GlobalMetricList"
-    metadata: ListMetadata
     items: List[GlobalMetric]
 
 
@@ -496,14 +488,12 @@ class MetricsProvider(BaseMetricsProvider):
 class MetricsProviderList(ApiObject):
     api: str = "core"
     kind: str = "MetricsProviderList"
-    metadata: ListMetadata
     items: List[MetricsProvider]
 
 
 class GlobalMetricsProviderList(ApiObject):
     api: str = "core"
     kind: str = "GlobalMetricsProviderList"
-    metadata: ListMetadata
     items: List[GlobalMetricsProvider]
 
 

@@ -14,7 +14,7 @@ from toscaparser.common.exception import TOSCAException
 from krake.utils import get_kubernetes_resource_idx, cache_non_hashable
 from . import persistent
 from .serializable import Serializable, ApiObject
-from .core import Metadata, ListMetadata, Status, ResourceRef, MetricRef, Reason
+from .core import Metadata, Status, ResourceRef, MetricRef, Reason
 from .constraints import LabelConstraint, MetricConstraint
 
 
@@ -616,7 +616,6 @@ class Application(ApiObject):
 class ApplicationList(ApiObject):
     api: str = "kubernetes"
     kind: str = "ApplicationList"
-    metadata: ListMetadata
     items: List[Application]
 
 
@@ -834,5 +833,4 @@ class Cluster(ApiObject):
 class ClusterList(ApiObject):
     api: str = "kubernetes"
     kind: str = "ClusterList"
-    metadata: ListMetadata
     items: List[Cluster]

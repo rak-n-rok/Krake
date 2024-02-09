@@ -677,14 +677,15 @@ class ApiObject(Serializable):
     def __repr__(self):
         representation = [f"{self.api}.{self.kind}"]
 
-        if hasattr(self.metadata, "namespace") and self.metadata.namespace:
-            representation.append(f"namespace={self.metadata.namespace!r}")
+        if hasattr(self, "metadata"):
+            if hasattr(self.metadata, "namespace") and self.metadata.namespace:
+                representation.append(f"namespace={self.metadata.namespace!r}")
 
-        if hasattr(self.metadata, "name"):
-            representation.append(f"name={self.metadata.name!r}")
+            if hasattr(self.metadata, "name"):
+                representation.append(f"name={self.metadata.name!r}")
 
-        if hasattr(self.metadata, "uid"):
-            representation.append(f"uid={self.metadata.uid!r}")
+            if hasattr(self.metadata, "uid"):
+                representation.append(f"uid={self.metadata.uid!r}")
 
         if hasattr(self, "items"):
             representation.append(f"length={len(self.items)}")
