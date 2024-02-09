@@ -1274,17 +1274,18 @@ class KubernetesApplicationHandler(Handler):
                 )
 
             if cluster.metadata.inherit_labels:
-                cluster.metadata.labels = \
-                    {**cluster.metadata.labels, **cloud.metadata.labels}
+                cluster.metadata.labels = [
+                    *cluster.metadata.labels,
+                    *cloud.metadata.labels
+                ]
             if cluster.spec.constraints.cloud.labels:
-                label_dict = dict()
+                label_list = list()
                 for constraint in cluster.spec.constraints.cloud.metrics:
                     for label in cloud.metadata.labels:
                         if constraint.value == label:
-                            label_dict = {**label_dict,
-                                          **{label: cloud.metadata.labels[label]}}
-                cluster.metadata.labels = \
-                    {**cluster.metadata.labels, **label_dict}
+                            label_list.append(label)
+                cluster.metadata.labels = [*cluster.metadata.labels, *label_list]
+#                    {**cluster.metadata.labels, **label_dict}
 
             metrics = []
             if cluster.spec.inherit_metrics:
@@ -1649,7 +1650,7 @@ class OpenstackHandler(Handler):
 
         # TODO: Instead of copying labels and metrics, refactor the scheduler
         #   to support transitive labels and metrics.
-        cluster.metadata.labels = {**project.metadata.labels, **cluster.metadata.labels}
+        cluster.metadata.labels = [*project.metadata.labels, *cluster.metadata.labels]
 
         # If a metric with the same name is already specified in the Magnum
         # cluster spec, this takes precedence.

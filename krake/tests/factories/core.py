@@ -1,7 +1,7 @@
 from dataclasses import MISSING
 
 import pytz
-from factory import Factory, SubFactory, List, lazy_attribute, fuzzy, Maybe, Dict
+from factory import Factory, SubFactory, List, lazy_attribute, fuzzy, Maybe
 from datetime import timedelta
 
 from .fake import fake
@@ -25,6 +25,8 @@ from krake.data.core import (
     MetricRef,
     KafkaSpec,
     InfluxSpec,
+    Label,
+    StaticSpecItem,
 )
 
 _existing_names = set()
@@ -56,6 +58,26 @@ def fuzzy_dict(size=None):
     if size is None:
         size = fake.pyint(0, 3)
     return {fake.word(): fake.word() for _ in range(size)}
+
+
+def fuzzy_labels(size=None):
+    if size is None:
+        size = fake.pyint(0, 3)
+    ret = []
+    for _ in range(size):
+        label = Label(key=fake.word(), value=fake.word())
+        ret.append(label)
+    return ret
+
+
+def fuzzy_metrics(size=None):
+    if size is None:
+        size = fake.pyint(0, 3)
+    ret = []
+    for _ in range(size):
+        metric = StaticSpecItem(name=fake.word(), weight=fake.pyfloat())
+        ret.append(metric)
+    return ret
 
 
 def fuzzy_sample(population, k=None):
@@ -93,7 +115,7 @@ class MetadataFactory(Factory):
     name = fuzzy.FuzzyAttribute(fuzzy_name)
     namespace = "testing"
     uid = fuzzy.FuzzyAttribute(fake.uuid4)
-    labels = fuzzy.FuzzyAttribute(fuzzy_dict)
+    labels = fuzzy.FuzzyAttribute(fuzzy_labels)
     deleted = None  # Not deleted by default
 
     @lazy_attribute
@@ -240,12 +262,7 @@ class StaticSpecFactory(Factory):
     class Meta:
         model = StaticSpec
 
-    metrics = Dict(
-        {
-            "static_metric_1": fuzzy.FuzzyFloat(0, 1),
-            "static_metric_2": fuzzy.FuzzyFloat(0, 1),
-        }
-    )
+    metrics = fuzzy.FuzzyAttribute(fuzzy_metrics)
 
 
 class MetricsProviderSpecFactory(Factory):

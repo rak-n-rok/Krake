@@ -116,7 +116,7 @@ def test_roles_crud(session):
             "name": name,
             "created": resp_data["metadata"]["created"],
             "modified": resp_data["metadata"]["modified"],
-            "labels": {"Testlabel": "Testlabel"},
+            "labels": [{"key": "Testlabel", "value": "Testlabel"}]
         },
     }
     resp = session.put(req_url, json=data)
@@ -134,7 +134,9 @@ def test_roles_crud(session):
         < datetime.strptime(resp_data["metadata"]["modified"], "%Y-%m-%dT%H:%M:%S.%f%z")
         < datetime.now(timezone.utc)
     )
-    assert resp_data["metadata"]["labels"] == {"Testlabel": "Testlabel"}
+    assert resp_data["metadata"]["labels"] == [
+        {"key": "Testlabel", "value": "Testlabel"}
+    ]
 
     # 8. Update the role with an empty update and expect failure
     try:
@@ -213,7 +215,7 @@ def test_rolebindings_crud(session):
             "name": name,
             "created": "2021-09-09T08:18:50.856741+00:00",
             "modified": "2021-09-09T08:18:50.856741+00:00",
-            "labels": {},
+            "labels": [],
         },
     }
     try:
@@ -255,7 +257,7 @@ def test_rolebindings_crud(session):
             "name": name,
             "created": resp_data["metadata"]["created"],
             "modified": resp_data["metadata"]["modified"],
-            "labels": {"Testlabel": "Testlabel"},
+            "labels": [{"key": "Testlabel", "value": "Testlabel"}]
         },
     }
     resp = session.put(req_url, json=data)
@@ -274,7 +276,9 @@ def test_rolebindings_crud(session):
         < datetime.strptime(resp_data["metadata"]["modified"], "%Y-%m-%dT%H:%M:%S.%f%z")
         < datetime.now(timezone.utc)
     )
-    assert resp_data["metadata"]["labels"] == {"Testlabel": "Testlabel"}
+    assert resp_data["metadata"]["labels"] == [
+        {"key": "Testlabel", "value": "Testlabel"}
+    ]
 
     # 8. Update the rolebinding with an empty update and expect failure
     try:
@@ -329,7 +333,7 @@ def test_mp_crud():
     # Set up the input parameters based on the metrics provider type
     # The values for the creation:
     prom_type_details = {"url": "http://firstprometheusurl:8081"}
-    stat_type_details = {"metrics": {"m1": 1, "m2": 2}}
+    stat_type_details = {"metrics": [{"name": "m1", "weight": 1}, {"name": "m2", "weight": 2}]}
     kafka_type_details = {
         "url": "http://firstkafkaurl:8180",
         "comparison_column": "compcol",
@@ -338,7 +342,7 @@ def test_mp_crud():
     }
     # The values for the update:
     new_url = "https://newurl:8083"
-    new_metrics = {"m3": 3}
+    new_metrics = [{"name": "m3", "weight": 3}]
     new_table = "new_table_name"
     # Save them in a dict:
     type_details = {
@@ -359,7 +363,7 @@ def test_mp_crud():
     create_args = {
         MetricsProviderType.PROMETHEUS: f"--url {prom_type_details['url']}",
         MetricsProviderType.STATIC: " ".join(
-            f"-m {m} {v}" for m, v in stat_type_details["metrics"].items()
+            f'-m {metric["name"]} {metric["weight"]}' for metric in stat_type_details["metrics"]
         ),
         MetricsProviderType.KAFKA: (
             f"--comparison-column {kafka_type_details['comparison_column']} "
@@ -372,7 +376,7 @@ def test_mp_crud():
     update_args = {
         MetricsProviderType.PROMETHEUS: f"--url {new_url}",
         MetricsProviderType.STATIC: " ".join(
-            f"-m {m} {v}" for m, v in new_metrics.items()
+            f'-m {metric["name"]} {metric["weight"]}' for metric in new_metrics
         ),
         MetricsProviderType.KAFKA: f"--table {new_table}",
     }

@@ -540,27 +540,27 @@ def test_schema_validation():
 @pytest.mark.parametrize(
     "label_value",
     [
-        {"key": "value"},
-        {"key1": "value"},
-        {"key": "value1"},
-        {"key-one": "value"},
-        {"key": "value-one"},
-        {"key-1": "value"},
-        {"key": "value-1"},
-        {"k": "value"},
-        {"key": "v"},
-        {"kk": "value"},
-        {"key": "vv"},
-        {"k.k": "value"},
-        {"key": "v-v"},
-        {"key_one.one": "value"},
-        {"key": "value.one_one"},
-        {"url.com/name": "value"},
-        {"url1.com/name": "value"},
-        {"url-suffix/name": "value"},
-        {"url.com/name-one": "value"},
-        {"url1.com/name-one": "value"},
-        {"url-suffix/name-one": "value"},
+        [{"key": "key",                 "value": "value"}],
+        [{"key": "key1",                "value": "value"}],
+        [{"key": "key",                 "value": "value1"}],
+        [{"key": "key-one",             "value": "value"}],
+        [{"key": "key",                 "value": "value-one"}],
+        [{"key": "key-1",               "value": "value"}],
+        [{"key": "key",                 "value": "value-1"}],
+        [{"key": "k",                   "value": "value"}],
+        [{"key": "key",                 "value": "v"}],
+        [{"key": "kk",                  "value": "value"}],
+        [{"key": "key",                 "value": "vv"}],
+        [{"key": "k.k",                 "value": "value"}],
+        [{"key": "key",                 "value": "v-v"}],
+        [{"key": "key_one.one",         "value": "value"}],
+        [{"key": "key",                 "value": "value.one_one"}],
+        [{"key": "url.com/name",        "value": "value"}],
+        [{"key": "url1.com/name",       "value": "value"}],
+        [{"key": "url-suffix/name",     "value": "value"}],
+        [{"key": "url.com/name-one",    "value": "value"}],
+        [{"key": "url1.com/name-one",   "value": "value"}],
+        [{"key": "url-suffix/name-one", "value": "value"}],
     ],
 )
 def test_label_validation(label_value):
@@ -573,47 +573,52 @@ def test_label_validation(label_value):
 @pytest.mark.parametrize(
     "label_value",
     [
-        {"key!": "value"},
-        {"key.": "value"},
-        {"-key": "value"},
-        {"-k": "value"},
-        {"-": "value"},
-        {"url/second/key": "value"},
-        {"url/": "value"},
-        {"/key": "value"},
-        {"k" * 70: "value"},
-        {"p" * 300 + "/" + "k" * 60: "value"},
+        [{"key": "key!",           "value": "value"}],
+        [{"key": "key.",           "value": "value"}],
+        [{"key": "-key",           "value": "value"}],
+        [{"key": "-k",             "value": "value"}],
+        [{"key": "-",              "value": "value"}],
+        [{"key": "url/second/key", "value": "value"}],
+        [{"key": "url/",           "value": "value"}],
+        [{"key": "/key",           "value": "value"}],
+        [{"key": "k" * 70,         "value": "value"}],
+        [{"key": "p" * 300 + "/" + "k" * 60, "value": "value"}],
     ],
 )
 def test_label_validation_reject_str_key(label_value):
     # Test that invalid strings as label keys raise an exception.
     data = MetadataFactory(labels=label_value)
-
     with pytest.raises(ValidationError, match="Label key"):
         Metadata.deserialize(data.serialize())
 
 
 @pytest.mark.parametrize(
-    "label_value", [{True: "value"}, {None: "value"}, {10: "value"}, {0.1: "value"}]
+    "label_value", [
+        [{"key": True, "value": "value"}],
+        [{"key": None, "value": "value"}],
+        [{"key": 10,   "value": "value"}],
+        [{"key": 0.1,  "value": "value"}]
+    ]
 )
 def test_label_validation_reject_key(label_value):
     """Test that invalid types as label keys raise an exception."""
-    data = MetadataFactory(labels=label_value)
-
-    with pytest.raises(ValidationError, match="expected string or bytes-like object"):
-        Metadata.deserialize(data.serialize())
+    # supplying the label to MetadataFactory would lead to implicit type conversion
+    data = MetadataFactory().serialize()
+    data["labels"] = label_value
+    with pytest.raises(ValidationError):
+        Metadata.deserialize(data)
 
 
 @pytest.mark.parametrize(
     "label_value",
     [
-        {"key": "value$"},
-        {"key": "value."},
-        {"key": "-value"},
-        {"key": "v-"},
-        {"key": "."},
-        {"key": "url.com/value"},
-        {"key": "v" * 70},
+        [{"key": "key", "value": "value$"}],
+        [{"key": "key", "value": "value."}],
+        [{"key": "key", "value": "-value"}],
+        [{"key": "key", "value": "v-"}],
+        [{"key": "key", "value": "."}],
+        [{"key": "key", "value":  "url.com/value"}],
+        [{"key": "key", "value": "v" * 70}],
     ],
 )
 def test_label_validation_reject_str_value(label_value):
@@ -696,78 +701,70 @@ def test_external_endpoint_validation_invalid_scheme(hooks_config, endpoint):
 @pytest.mark.parametrize(
     "label_value",
     [
-        {"key": True},
-        {"key": None},
-        {"key": []},
-        {"key": [None, True]},
-        {"key": ["foo", "bar"]},
-        {"key": {"invalid": "value"}},
+        [{"key": "key", "value": True}],
+        [{"key": "key", "value": None}],
+        [{"key": "key", "value": []}],
+        [{"key": "key", "value": [None, True]}],
+        [{"key": "key", "value": ["foo", "bar"]}],
+        [{"key": "key", "value": {"invalid": "value"}}],
     ],
 )
 def test_label_validation_reject_value(label_value):
     """Test that invalid types as label values raise an exception."""
-    data = MetadataFactory(labels=label_value)
+    data = MetadataFactory().serialize()
+    data["labels"] = label_value
 
-    with pytest.raises(ValidationError, match="expected string or bytes-like object"):
-        Metadata.deserialize(data.serialize())
+    with pytest.raises(ValidationError):
+        Metadata.deserialize(data)
 
 
 def test_label_multiple_errors():
     """ "Test that invalid types as label values raise an exception."""
-
     # 1. Label value is wrong
-    data = MetadataFactory(labels={"key1": [None, True]})
-    with pytest.raises(
-        ValidationError, match="expected string or bytes-like object"
-    ) as info:
-        Metadata.deserialize(data.serialize())
+    data = MetadataFactory().serialize()
+    data["labels"] = [{"key": "key1", "value": [None, True]}]
+    with pytest.raises(ValidationError) as info:
+        Metadata.deserialize(data)
 
     label_errors = info.value.messages["labels"]
     assert len(label_errors) == 1
-    all_keys = list(label_errors[0].keys())
+    all_keys = list(label_errors[0].values())
     assert len(all_keys) == 1
-    assert all_keys[0] == "[None, True]"
+    assert all_keys[0] == ['Not a valid string.']
 
-    # 2. Label key and values are wrong
-    data = MetadataFactory(labels={False: True})
-    with pytest.raises(
-        ValidationError, match="expected string or bytes-like object"
-    ) as info:
-        Metadata.deserialize(data.serialize())
+    # 2. Label key and value are wrong
+    data = MetadataFactory().serialize()
+    data["labels"] = [{"key": False, "value": True}]
+    with pytest.raises(ValidationError) as info:
+        Metadata.deserialize(data)
 
     label_errors = info.value.messages["labels"]
-    assert len(label_errors) == 2
+    assert len(label_errors) == 1
     # Take the only key of each dictionary in list label_errors:
     # name of the invalid key or value
-    error_keys = {list(d)[0] for d in label_errors if len(list(d)) == 1}
-    assert error_keys == {"False", "True"}
+    assert label_errors[0] == {
+        'key': ['Not a valid string.'],
+        'value': ['Not a valid string.']}
 
     # 3. Different issues:
     #    - 1st label: invalid value
     #    - 2nd label: valid
     #    - 3rd label: invalid key
-    data = MetadataFactory(
-        labels={"key1": ["a", "b"], "key2": "valid", "$$": "valid", True: True}
-    )
+    data = MetadataFactory().serialize()
+    data["labels"] = [
+        {"key": "key1", "value":  ["a", "b"]},
+        {"key": "key2", "value":  "valid"},
+        {"key": "$$", "value": "valid"},
+        {"key": True, "value": True}]
     with pytest.raises(ValidationError) as info:
-        Metadata.deserialize(data.serialize())
+        print(info)
+        Metadata.deserialize(data)
 
     label_errors = info.value.messages["labels"]
-    assert len(label_errors) == 4
-
-    true_counter = 0
-    for error_dict in label_errors:
-        assert len(error_dict) == 1
-        key = list(error_dict)[0]
-
-        if key == "['a', 'b']":
-            assert "expected string or bytes-like object" in error_dict[key]
-        elif key == "True":
-            assert "expected string or bytes-like object" in error_dict[key]
-            true_counter += 1
-        elif key == "$$":
-            assert "Label key '$$' does not match the regex" in error_dict[key]
-        else:
-            assert False, "Another element of the labels was invalid."
-
-    assert true_counter == 2
+    assert len(label_errors) == 3
+    assert label_errors[0] == {'value': ['Not a valid string.']}
+    assert label_errors[2] == {'_schema': [{'$$':
+        "Label key '$$' does not match the regex '^((\\\\w|(\\\\w[\\\\w\\\\-_.]{0,251}\\\\w))\\\\/)?(\\\\w|(\\\\w[\\\\w\\\\-_.]{0,61}\\\\w))$'."}]}
+    assert label_errors[3] == {
+        'key': ['Not a valid string.'],
+        'value': ['Not a valid string.']}

@@ -39,6 +39,8 @@ from .formatters import (
     pods_formatter,
 )
 
+from .helpers import wrap_labels
+
 warnings.formatwarning = lambda message, *args, **kwargs: f"WARNING: {message}\n"
 
 WARN_RESOURCES = {
@@ -229,6 +231,20 @@ class ApplicationListTable(BaseTable):
     state = Cell("status.state")
 
 
+def handle_tosca_warnings(tosca):
+    tosca_warn_resources = set()
+    for node in (
+            tosca.get("topology_template", {}).get("node_templates", {}).values()
+    ):
+        if node:
+            for warn_resource in WARN_RESOURCES:
+                if warn_resource in json.dumps(
+                    node.get("properties", {}).get("spec", {})
+                ):
+                    tosca_warn_resources.add(warn_resource)
+    return tosca_warn_resources
+
+
 def handle_warning(app):
     """Handle warning message print out
 
@@ -268,16 +284,7 @@ def handle_warning(app):
                 ]
             )
         elif tosca:
-            for node in (
-                tosca.get("topology_template", {}).get("node_templates", {}).values()
-            ):
-                if node:
-                    for warn_resource in WARN_RESOURCES:
-                        if warn_resource in json.dumps(
-                            node.get("properties", {}).get("spec", {})
-                        ):
-                            warn_resources.add(warn_resource)
-
+            warn_resources.union(handle_tosca_warnings(tosca))
         if warn_resources:
             warnings.warn(
                 f"Migration of k8s resources like `{', '.join(warn_resources)}`"
@@ -441,7 +448,10 @@ def create_application(
         observer_schema = list(yaml.safe_load_all(observer_schema_file))
 
     app = {
-        "metadata": {"name": name, "labels": labels},
+        "metadata": {
+            "name": name,
+            "labels": wrap_labels(labels),
+        },
         "spec": {
             "manifest": manifest,
             "tosca": tosca,
@@ -496,6 +506,45 @@ def get_application(config, session, namespace, name):
 
     resp = session.get(f"/kubernetes/namespaces/{namespace}/applications/{name}")
     return resp.json()
+
+
+def load_manifest(file, url, app):
+    manifest = None
+    tosca = None
+    csar = None
+    if file:
+        definition = list(yaml.safe_load_all(file))
+        if is_tosca_definition(definition):
+            # The previously generated k8s manifest should be removed
+            manifest = []
+            tosca = definition
+        else:
+            manifest = definition
+    elif url:
+        if url.endswith(("yaml", "yml")):
+            # The previously generated k8s manifest should be removed
+            manifest = []
+            tosca = url
+        elif url.endswith(("zip", "csar")):
+            # The previously generated k8s manifest as well as TOSCA template
+            # (if there is one) should be removed
+            manifest = []
+            tosca = {}
+            csar = url
+        else:
+            sys.exit(
+                "Error: Application should be defined by a TOSCA template URL"
+                " with `.yaml` or `.yml` suffix or a CSAR archive URL with"
+                " `.csar` or `.zip` suffix."
+            )
+    if manifest:
+        app["spec"]["manifest"] = manifest
+    if tosca:
+        app["spec"]["tosca"] = tosca
+    if csar:
+        app["spec"]["csar"] = csar
+
+    return app
 
 
 @application.command("update", help="Update Kubernetes application")
@@ -584,41 +633,15 @@ def update_application(
         namespace = config["user"]
 
     resp = session.get(f"/kubernetes/namespaces/{namespace}/applications/{name}")
-    app = resp.json()
-
-    if file:
-        definition = list(yaml.safe_load_all(file))
-        if is_tosca_definition(definition):
-            # The previously generated k8s manifest should be removed
-            app["spec"]["manifest"] = []
-            app["spec"]["tosca"], *_ = definition
-        else:
-            app["spec"]["manifest"] = definition
-    elif url:
-        if url.endswith(("yaml", "yml")):
-            # The previously generated k8s manifest should be removed
-            app["spec"]["manifest"] = []
-            app["spec"]["tosca"] = url
-        elif url.endswith(("zip", "csar")):
-            # The previously generated k8s manifest as well as TOSCA template
-            # (if there is one) should be removed
-            app["spec"]["manifest"] = []
-            app["spec"]["tosca"] = {}
-            app["spec"]["csar"] = url
-        else:
-            sys.exit(
-                "Error: Application should be defined by a TOSCA template URL"
-                " with `.yaml` or `.yml` suffix or a CSAR archive URL with"
-                " `.csar` or `.zip` suffix."
-            )
+    app = load_manifest(file, url, resp.json())
 
     if observer_schema_file:
         observer_schema = list(yaml.safe_load_all(observer_schema_file))
         app["spec"]["observer_schema"] = observer_schema
     if remove_existing_labels:
-        app["metadata"]["labels"] = {}
+        app["metadata"]["labels"] = []
     if labels:
-        app["metadata"]["labels"].update(labels)
+        app["metadata"]["labels"] = list(set(app["metadata"][labels]) | set(labels))
     if hooks:
         app["spec"]["hooks"] = hooks
 
@@ -866,7 +889,10 @@ def register_cluster(
     cluster_config, cluster_name = create_cluster_config(kubeconfig, context)
 
     to_register = {
-        "metadata": {"name": cluster_name, "labels": labels},
+        "metadata": {
+            "name": cluster_name,
+            "labels": wrap_labels(labels),
+        },
         "spec": {
             "kubeconfig": cluster_config,
             "metrics": metrics + global_metrics,
@@ -938,7 +964,7 @@ def create_cluster(
     to_create = {
         "metadata": {
             "name": name,
-            "labels": labels,
+            "labels": wrap_labels(labels),
             "inherit_labels": inherit_labels
         },
         "spec": {
@@ -983,6 +1009,31 @@ def list_clusters(config, session, namespace, all):
     return body["items"]
 
 
+def inherit_or_cloud_metrics(data):
+    return (("inherit_metrics" in data['spec'] and data['spec']['inherit_metrics'])
+            or data['spec']['constraints']['cloud']['metrics'])
+
+
+def inherit_or_cloud_labels(data):
+    return (("inherit_labels" in data['spec'] and data['metadata']['inherit_labels'])
+            or data['spec']['constraints']['cloud']['labels'])
+
+
+def inherit_labels(data, cloud):
+    inherited_labels = dict()
+    if data['metadata']['inherit_labels']:
+        for label in cloud['metadata']['labels']:
+            inherited_labels[label] = \
+                cloud['metadata']['labels'][label] + " (inherited)"
+        if data['spec']['constraints']['cloud']['labels']:
+            for constraint in data['spec']['constraints']['cloud']['labels']:
+                for label in cloud['metadata']['labels']:
+                    if label in constraint:
+                        inherited_labels[label] = \
+                            cloud['metadata']['labels'][label] + " (inherited)"
+    return inherited_labels
+
+
 @cluster.command("get", help="Get Kubernetes cluster")
 @argument("name", help="Kubernetes cluster name")
 @arg_namespace
@@ -996,10 +1047,7 @@ def get_cluster(config, session, namespace, name):
     resp = session.get(f"/kubernetes/namespaces/{namespace}/clusters/{name}")
     data = resp.json()
 
-    if ((("inherit_metrics" in data['spec'] and data['spec']['inherit_metrics']) or
-         data['spec']['constraints']['cloud']['metrics']) or
-        (("inherit_labels" in data['spec'] and data['metadata']['inherit_labels']) or
-         data['spec']['constraints']['cloud']['labels'])) and \
+    if (inherit_or_cloud_metrics(data) or inherit_or_cloud_labels(data)) and \
        data['status']['scheduled_to']:
         if data['status']['scheduled_to']['namespace']:
             cloud = session.get(
@@ -1012,18 +1060,8 @@ def get_cluster(config, session, namespace, name):
                 f"/infrastructure/globalclouds/{data['status']['scheduled_to']['name']}"
             ).json()
 
-        inherited_labels = dict()
-        if data['metadata']['inherit_labels']:
-            for label in cloud['metadata']['labels']:
-                inherited_labels[label] = \
-                    cloud['metadata']['labels'][label] + " (inherited)"
-            if data['spec']['constraints']['cloud']['labels']:
-                for constraint in data['spec']['constraints']['cloud']['labels']:
-                    for label in cloud['metadata']['labels']:
-                        if label in constraint:
-                            inherited_labels[label] = \
-                                cloud['metadata']['labels'][label] + " (inherited)"
-        data['metadata']['labels'] = {**data['metadata']['labels'], **inherited_labels}
+        inherited_labels = inherit_labels(data, cloud)
+        data['metadata']['labels'] = [*data['metadata']['labels'], *inherited_labels]
 
         inherited_metrics = list()
         if data['spec']['inherit_metrics']:
@@ -1125,9 +1163,11 @@ def update_cluster(
     if kubeconfig:
         to_update["spec"]["kubeconfig"], _ = create_cluster_config(kubeconfig, context)
     if remove_existing_labels:
-        to_update["metadata"]["labels"] = {}
+        to_update["metadata"]["labels"] = []
     if labels:
-        to_update["metadata"]["labels"].update(labels)
+        to_update["metadata"]["labels"] = list(
+            set(to_update["metadata"][labels]) | set(labels)
+        )
     if remove_existing_metrics:
         to_update["spec"]["metrics"] = []
     if metrics or global_metrics:

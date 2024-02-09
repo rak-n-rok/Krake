@@ -10,6 +10,8 @@ from krake.controller.scheduler.metrics import MetricError, fetch_query
 from krake.controller.scheduler.metrics import MetricsProviderError
 from krake.controller.scheduler.metrics import Influx
 
+from krake.data.core import StaticSpecItem
+
 from krake.test_utils import server_endpoint, make_prometheus, make_kafka
 
 from tests.factories.core import GlobalMetricsProviderFactory, GlobalMetricFactory
@@ -242,7 +244,8 @@ async def test_prometheus_provider_connection_error(aiohttp_server, loop):
 
 async def test_static_provider(aiohttp_server):
     metrics_provider = GlobalMetricsProviderFactory(
-        spec__type="static", spec__static__metrics={"my_metric": 0.42}
+        spec__type="static",
+        spec__static__metrics=[StaticSpecItem(name="my_metric", weight=0.42)]
     )
     metric = GlobalMetricFactory(
         spec__provider__name=metrics_provider.metadata.name,
@@ -262,7 +265,8 @@ async def test_static_provider_metric_unavailable(aiohttp_server):
     Metric resource is not found.
     """
     metrics_provider = GlobalMetricsProviderFactory(
-        spec__type="static", spec__static__metrics={"my_metric": 0.42}
+        spec__type="static",
+        spec__static__metrics=[StaticSpecItem(name="my_metric", weight=0.42)]
     )
     metric = GlobalMetricFactory(
         spec__provider__name=metrics_provider.metadata.name,
@@ -462,7 +466,8 @@ async def test_kafka_provider_connection_error(aiohttp_server, loop):
 async def test_fetch_query():
     """Test the output of the fetch_query function in normal conditions."""
     metrics_provider = GlobalMetricsProviderFactory(
-        spec__type="static", spec__static__metrics={"my_metric": 0.42}
+        spec__type="static",
+        spec__static__metrics=[StaticSpecItem(name="my_metric", weight=0.42)]
     )
     metric = GlobalMetricFactory(
         spec__provider__name=metrics_provider.metadata.name,
@@ -482,7 +487,9 @@ async def test_fetch_query_out_of_range():
     range: should raise an exception.
     """
     metrics_provider = GlobalMetricsProviderFactory(
-        spec__type="static", spec__static__metrics={"my_metric": 2}  # higher than max
+        spec__type="static",
+        spec__static__metrics=[
+            StaticSpecItem(name="my_metric", weight=2)]
     )
     # Default max is 1
     metric = GlobalMetricFactory(

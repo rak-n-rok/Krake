@@ -227,10 +227,10 @@ class EqualConstraint(LabelConstraint):
         return (self.label, self.value)
 
     def match(self, labels):
-        try:
-            return labels[self.label] == self.value
-        except KeyError:
+        match = list(filter(lambda label: (label.key == self.label), labels))
+        if not any(True for _ in match):
             return False
+        return match[0].value == self.value
 
 
 class NotEqualConstraint(EqualConstraint):
@@ -250,10 +250,10 @@ class NotEqualConstraint(EqualConstraint):
         return f"{self.label} is not {self.value}"
 
     def match(self, labels):
-        try:
-            return labels[self.label] != self.value
-        except KeyError:
+        match = list(filter(lambda label: (label.key == self.label), labels))
+        if not any(True for _ in match):
             return False
+        return match[0].value != self.value
 
 
 class InConstraint(LabelConstraint):
@@ -279,10 +279,10 @@ class InConstraint(LabelConstraint):
         return (self.label, self.values)
 
     def match(self, labels):
-        try:
-            return labels[self.label] in self.values
-        except KeyError:
+        match = list(filter(lambda label: (label.key == self.label), labels))
+        if not any(True for _ in match):
             return False
+        return match[0].value in self.values
 
 
 class NotInConstraint(InConstraint):
@@ -300,10 +300,10 @@ class NotInConstraint(InConstraint):
         return f"{self.label} not in ({', '.join(self.values)})"
 
     def match(self, labels):
-        try:
-            return labels[self.label] not in self.values
-        except KeyError:
+        match = list(filter(lambda label: (label.key == self.label), labels))
+        if not any(True for _ in match):
             return False
+        return match[0].value not in self.values
 
 
 class MetricConstraint(object):

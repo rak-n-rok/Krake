@@ -23,8 +23,7 @@ from krake.controller.scheduler.constraints import (
 )
 from krake.controller.scheduler.scheduler import NoProjectFound, NoClusterFound
 from krake.data.constraints import LabelConstraint, MetricConstraint
-from krake.data.core import ResourceRef, MetricRef
-from krake.data.core import resource_ref, ReasonCode
+from krake.data.core import ResourceRef, MetricRef, resource_ref, ReasonCode, Label, StaticSpecItem
 from krake.data.infrastructure import CloudState
 from krake.data.kubernetes import Application, ApplicationState, Cluster, ClusterState
 from krake.data.openstack import (
@@ -355,8 +354,9 @@ async def test_openstack_reception(aiohttp_server, config, db, loop):
 
 
 def test_kubernetes_match_cluster_label_constraints():
+    label = Label(key="location", value="IT")
     cluster = ClusterFactory(
-        metadata__labels={"location": "IT"}, status__state=ClusterState.ONLINE
+        metadata__labels=[label], status__state=ClusterState.ONLINE
     )
     app = ApplicationFactory(
         spec__constraints__cluster__labels=[LabelConstraint.parse("location is IT")],
@@ -450,7 +450,8 @@ def test_kubernetes_not_match_cluster_metrics_constraints():
             )
         ]
     }
-    assert not match_application_constraints(app, cluster, fetched_metrics=fetched_metrics)
+    assert not match_application_constraints(
+        app, cluster, fetched_metrics=fetched_metrics)
 
 
 def test_kubernetes_match_empty_cluster_constraints():
@@ -523,6 +524,7 @@ async def test_kubernetes_score(aiohttp_server, config, db, loop):
             spec__provider__metric="test_metric_2",
         ),
     ]
+    static_metric = StaticSpecItem(name="test_metric_2", weight=0.5)
     providers = [
         MetricsProviderFactory(
             metadata__name="test-prometheus",
@@ -532,7 +534,7 @@ async def test_kubernetes_score(aiohttp_server, config, db, loop):
         MetricsProviderFactory(
             metadata__name="test-static",
             spec__type="static",
-            spec__static__metrics={"test_metric_2": 0.5},
+            spec__static__metrics=[static_metric]
         ),
         GlobalMetricsProviderFactory(
             metadata__name="test-prometheus",
@@ -542,7 +544,7 @@ async def test_kubernetes_score(aiohttp_server, config, db, loop):
         GlobalMetricsProviderFactory(
             metadata__name="test-static",
             spec__type="static",
-            spec__static__metrics={"test_metric_2": 0.5},
+            spec__static__metrics=[static_metric]
         ),
     ]
 
@@ -585,11 +587,11 @@ async def test_kubernetes_score_sticky(aiohttp_server, config, db, loop):
         status__scheduled_to=resource_ref(cluster_a),
     )
     pending_app = ApplicationFactory(status__state=ApplicationState.PENDING)
-
+    static_metric = StaticSpecItem(name="my_metric", weight=0.75)
     static_provider = GlobalMetricsProviderFactory(
         metadata__name="static-provider",
         spec__type="static",
-        spec__static__metrics={"my_metric": 0.75},
+        spec__static__metrics=[static_metric]
     )
     metric = GlobalMetricFactory(
         metadata__name="metric-1",
@@ -645,7 +647,8 @@ async def test_kubernetes_score_with_metrics_only(aiohttp_server, config, loop):
             )
 
 
-async def test_kubernetes_score_with_inherited_metrics(aiohttp_server, config, db, loop):
+async def test_kubernetes_score_with_inherited_metrics(
+        aiohttp_server, config, db, loop):
 
     cloud = CloudFactory(
         metadata__name="test",
@@ -689,10 +692,11 @@ async def test_kubernetes_score_with_inherited_metrics(aiohttp_server, config, d
         status__is_scheduled=False
     )
 
+    static_metric = StaticSpecItem(name="my_metric", weight=0.75)
     static_provider = GlobalMetricsProviderFactory(
         metadata__name="static-provider",
         spec__type="static",
-        spec__static__metrics={"my_metric": 0.75},
+        spec__static__metrics=[static_metric],
     )
     metric = GlobalMetricFactory(
         metadata__name="metric-1",
@@ -1308,7 +1312,7 @@ async def test_kubernetes_select_cluster_with_constraints_without_metric(
     clusters = [
         ClusterFactory(
             spec__metrics=[],
-            metadata__labels={"location": country},
+            metadata__labels=[Label(key="location", value=country)],
             status__state=ClusterState.ONLINE,
         )
         for country in countries
@@ -1337,7 +1341,7 @@ async def test_kubernetes_select_cluster_with_inherited_labels_from_cloud(
     cloud = CloudFactory(
         metadata__name="test",
         metadata__namespace="testing",
-        metadata__labels={"location": "IT"},
+        metadata__labels=[Label(key="location", value="IT")]
     )
     cluster = ClusterFactory(
         metadata__inherit_labels=True,
@@ -1376,7 +1380,7 @@ async def test_kubernetes_select_cluster_with_inherited_labels_from_global_cloud
     cloud = GlobalCloudFactory(
         metadata__name="test",
         metadata__namespace="testing",
-        metadata__labels={"location": "IT"}
+        metadata__labels=[Label(key="location", value="IT")]
     )
     cluster = ClusterFactory(
         metadata__inherit_labels=True,
@@ -2474,7 +2478,7 @@ async def test_kubernetes_application_reschedule_no_update(
 
 
 def test_openstack_match_project_label_constraints():
-    project = ProjectFactory(metadata__labels={"location": "IT"})
+    project = ProjectFactory(metadata__labels=[Label(key="location",  value="IT")])
     cluster = MagnumClusterFactory(
         spec__constraints__project__labels=[LabelConstraint.parse("location is IT")]
     )
@@ -2537,7 +2541,7 @@ async def test_openstack_score(aiohttp_server, config, db, loop):
     static_provider = GlobalMetricsProviderFactory(
         metadata__name="test-static",
         spec__type="static",
-        spec__static__metrics={"test_metric_2": 0.5},
+        spec__static__metrics=[StaticSpecItem(name="test_metric_2", weight=0.5)]
     )
 
     for metric in metrics:
@@ -2961,7 +2965,8 @@ async def test_select_project_with_constraints_without_metric(
     # that the expected project is chosen, even in case of failures.
     countries = ["IT"] + fake.words(99)
     projects = [
-        ProjectFactory(spec__metrics=[], metadata__labels={"location": country})
+        ProjectFactory(spec__metrics=[],
+            metadata__labels=[Label(key="location", value=country)])
         for country in countries
     ]
 
@@ -3054,7 +3059,7 @@ async def test_openstack_scheduling_error(aiohttp_server, config, db, loop):
 def test_cluster_match_cloud_label_constraints(cloud_type, cloud_resource):
     cloud = cloud_resource(
         spec__type=cloud_type,
-        metadata__labels={"location": "IT"},
+        metadata__labels=[Label(key="location", value="IT")]
     )
     cluster = ClusterFactory(
         spec__constraints__cloud__labels=[LabelConstraint.parse("location is IT")],
@@ -3259,7 +3264,7 @@ async def test_cloud_score(
         MetricsProviderFactory(
             metadata__name="test-static",
             spec__type="static",
-            spec__static__metrics={"test_metric_2": 0.5},
+            spec__static__metrics=[StaticSpecItem(name="test_metric_2", weight=0.5)]
         ),
         GlobalMetricsProviderFactory(
             metadata__name="test-prometheus",
@@ -3269,7 +3274,7 @@ async def test_cloud_score(
         GlobalMetricsProviderFactory(
             metadata__name="test-static",
             spec__type="static",
-            spec__static__metrics={"test_metric_2": 0.5},
+            spec__static__metrics=[StaticSpecItem(name="test_metric_2", weight=0.5)]
         ),
     ]
 
@@ -4223,7 +4228,7 @@ async def test_cluster_select_cloud_with_constraints_without_metric(
             **{
                 "spec__type": cloud_type,
                 f"spec__{cloud_type}__metrics": [],
-                "metadata__labels": {"location": country},
+                "metadata__labels": [Label(key="location", value=country)]
             }
         )
         for country in countries
