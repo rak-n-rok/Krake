@@ -1,0 +1,619 @@
+openapi: 3.0.3
+info:
+  title: core_api
+  description:
+    The krake core api
+  version: 0.1.0
+servers:
+  - url: https://localhost:8080
+
+paths:
+  # === metrics ===
+  # global
+  /core/globalmetrics:
+    post:
+      tags:
+      - Metrics
+      - global
+      requestBody:
+        $ref: '#/components/requestBodies/Metric'
+      responses:
+        "200":
+          $ref: '#/components/responses/Metric'
+    get:
+      tags:
+      - Metrics
+      - global
+      responses:
+        "200":
+          $ref: '#/components/responses/MetricList'
+  # non-global (default namespace)
+  /core/metrics:
+    get:
+      tags:
+      - Metrics
+      responses:
+        "200":
+          $ref: '#/components/responses/MetricList'
+  # namespaced
+  /core/namespaces/{namespace}/metrics:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    post:
+      tags:
+      - Metrics
+      requestBody:
+        $ref: '#/components/requestBodies/Metric'
+      responses:
+        "200":
+          $ref: '#/components/responses/Metric'
+    get:
+      tags:
+      - Metrics
+      responses:
+        "200":
+          $ref: '#/components/responses/MetricList'
+  /core/namespaces/{namespace}/metrics/{name}:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    - $ref: '#/components/parameters/Name'
+    get:
+      tags:
+        - Metrics
+      responses:
+        "200":
+          $ref: '#/components/responses/Metric'
+    put:
+      tags:
+        - Metrics
+      requestBody:
+        $ref: '#/components/requestBodies/Metric'
+      responses:
+        "200":
+          $ref: '#/components/responses/Metric'
+    delete:
+      tags:
+        - Metrics
+      responses:
+        "200":
+          $ref: '#/components/responses/Metric'
+
+
+  # === metrics providers ===
+  # global
+  /core/globalmetricsproviders:
+    post:
+      tags:
+      - MetricsProvider
+      - global
+      requestBody:
+        $ref: '#/components/requestBodies/MetricsProvider'
+      responses:
+        "200":
+          $ref: '#/components/responses/MetricsProvider'
+    get:
+      tags:
+      - MetricsProvider
+      - global
+      responses:
+        "200":
+          $ref: '#/components/responses/MetricsProviderList'
+  # non-global (default namespace)
+  /core/metricsproviders:
+    get:
+      tags:
+      - MetricsProvider
+      responses:
+        "200":
+          $ref: '#/components/responses/MetricsProviderList'
+  # namespaced
+  /core/namespaces/{namespace}/metricsproviders:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    get:
+      tags:
+      - MetricsProvider
+      responses:
+        "200":
+          $ref: '#/components/responses/MetricsProviderList'
+    post:
+      tags:
+      - MetricsProvider
+      requestBody:
+        $ref: '#/components/requestBodies/MetricsProvider'
+      responses:
+        "200":
+          $ref: '#/components/responses/MetricsProvider'
+  /core/namespaces/{namespace}/metricsproviders/{name}:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    - $ref: '#/components/parameters/Name'
+    get:
+      tags:
+      - MetricsProvider
+      responses:
+        "200":
+          $ref: '#/components/responses/MetricsProvider'
+    put:
+      tags:
+      - MetricsProvider
+      requestBody:
+        $ref: '#/components/requestBodies/MetricsProvider'
+      responses:
+        "200":
+          $ref: '#/components/responses/MetricsProvider'
+    delete:
+      tags:
+      - MetricsProvider
+      responses:
+        "200":
+          $ref: '#/components/responses/MetricsProvider'
+  # === roles ===
+  /core/namespaces/{namespace}/roles:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    post:
+      tags:
+        - Roles
+      requestBody:
+        $ref: '#/components/requestBodies/Role'
+      responses:
+        "200":
+          $ref: '#/components/responses/Role'
+    get:
+      tags:
+      - Roles
+      responses:
+        "200":
+          $ref: '#/components/responses/Role'
+  /core/namespaces/{namespace}/roles/{name}:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    - $ref: '#/components/parameters/Name'
+    get:
+      tags:
+      - Roles
+      responses:
+        "200":
+          $ref: '#/components/responses/Role'
+    put:
+      tags:
+      - Roles
+      requestBody:
+        $ref: '#/components/requestBodies/Role'
+      responses:
+        "200":
+          $ref: '#/components/responses/Role'
+    delete:
+      tags:
+      - Roles
+      responses:
+        "200":
+          $ref: '#/components/responses/Role'
+  /core/roles:
+    get:
+      tags:
+      - Roles
+      responses:
+        "200":
+          $ref: '#/components/responses/RolesList'
+  # === role bindings ===
+  /core/namespaces/{namespace}/rolebindings:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    get:
+      tags:
+      - RoleBindings
+      responses:
+        "200":
+          $ref: '#/components/responses/RoleBindingList'
+    post:
+      tags:
+        - RoleBindings
+      requestBody:
+        $ref: '#/components/requestBodies/RoleBinding'
+      responses:
+        "200":
+          $ref: '#/components/responses/RoleBinding'
+  /core/namespaces/{namespace}/rolebindings/{name}:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    - $ref: '#/components/parameters/Name'
+    get:
+      responses:
+        "200":
+          $ref: '#/components/responses/RoleBinding'
+    put:
+      requestBody:
+        $ref: '#/components/requestBodies/RoleBinding'
+      responses:
+        "200":
+          $ref: '#/components/responses/RoleBinding'
+    delete:
+      responses:
+        "200":
+          $ref: '#/components/responses/RoleBinding'
+  /core/rolebindings:
+    get:
+      tags:
+      - RoleBindings
+      responses:
+        "200":
+          $ref: '#/components/responses/RoleBindingList'
+components:
+  parameters:
+    Namespace:
+      in: path
+      name: namespace
+      schema:
+        type: string
+      required: true
+      description: The namespace the command/query is performed in
+    Name:
+      in: path
+      name: name
+      schema:
+        type: string
+      required: true
+      description: The name of the resource to perform the command/query on
+
+  requestBodies:
+    Metric:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Metric'
+    MetricsProvider:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MetricsProvider'
+    Role:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Role'
+    RoleBinding:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RoleBinding'
+
+  responses:
+    MetricList:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MetricList'
+    Metric:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Metric'
+    MetricsProviderList:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MetricsProviderList'
+    MetricsProvider:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MetricsProvider'
+    RolesList:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RoleList'
+    Role:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Role'
+    RoleBindingList:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RoleBindingList'
+    RoleBinding:
+      description:  ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RoleBinding'
+
+  schemas:
+    # common abstractions
+    BaseResourceList:
+      type: object
+      required:
+      - api
+      - kind
+      - metadata
+      properties:
+        api:
+          type: string
+        kind:
+          type: string
+        metadata:
+          type: object
+    BaseResource:
+      type: object
+      required:
+      - api
+      - kind
+      - metadata
+      properties:
+        api:
+          type: string
+        kind:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+    Metadata:
+      type: object
+      required:
+      - name
+      - uid
+      - finalizers
+      - created
+      - modified
+      - deleted
+      - metadata
+      properties:
+        uid:
+          type: string
+          format: uuid
+        name:
+          type: string
+        namespace:
+          type: string
+          example: null
+        created:
+          type: string
+          format: date-time
+        modified:
+          type: string
+          format: date-time
+        deleted:
+          type: string
+          format: date-time
+        owners:
+          type: array
+          items:
+            type: string
+        labels:
+          type: object
+        inherit_labels:
+          type: boolean
+          example: false
+        finalizers:
+          type: array
+          items:
+            type: string
+    # metrics
+    MetricList:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResourceList'
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Metric'
+    Metric:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResource'
+      required:
+      - spec
+      properties:
+        spec:
+          $ref: '#/components/schemas/MetricSpec'
+    MetricSpec:
+      type: object
+      required:
+      -  allowed_values
+      -  min
+      -  max
+      -  provider
+      properties:
+        allowed_values:
+          type: array
+          items:
+            type: integer
+        min:
+          type: number
+          format: float
+        max:
+          type: number
+          format: float
+        provider:
+          $ref: '#/components/schemas/MetricSpecProvider'
+    MetricSpecProvider:
+      type: object
+      properties:
+        name:
+          type: string
+        metric:
+          type: string
+    # metric providers
+    MetricsProviderList:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResourceList'
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricsProvider'
+    MetricsProvider:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResource'
+      required:
+      - spec
+      properties:
+        spec:
+          $ref: '#/components/schemas/MetricProviderSpec'
+    MetricProviderSpec:
+      type: object
+      oneOf:
+      - $ref: '#/components/schemas/PrometheusMetricProviderSpec'
+      - $ref: '#/components/schemas/InfluxDBMetricProviderSpec'
+      - $ref: '#/components/schemas/StaticMetricProviderSpec'
+      - $ref: '#/components/schemas/KafkaMetricProviderSpec'
+    PrometheusMetricProviderSpec:
+      type: object
+      required:
+      - type
+      - prometheus
+      properties:
+        type:
+          type: string
+          example: "prometheus"
+        prometheus:
+          type: object
+          required:
+          - url
+          properties:
+            url:
+              type: string
+              format: url
+              example: "http://localhost:1234"
+    InfluxDBMetricProviderSpec:
+      type: object
+      required:
+      - type
+      properties:
+        type:
+          type: string
+          example: influx
+        influx:
+          type: object
+          required:
+          - url
+          - token
+          - org
+          - bucket
+          properties:
+            url:
+              type: string
+              format: url
+            token:
+              type: string
+              format: password
+            org:
+              type: string
+            bucket:
+              type: string
+    StaticMetricProviderSpec:
+      type: object
+      required:
+      - type
+      - static
+      properties:
+        type:
+          type: string
+          example: "static"
+        static:
+          type: object
+    KafkaMetricProviderSpec:
+      type: object
+      required:
+      - type
+      properties:
+        type:
+          type: string
+          example: "kafka"
+        kafka:
+          type: object
+          required:
+          - url
+          - table
+          - comparison_column
+          - value_column
+          properties:
+            url:
+              type: string
+              format: url
+            table:
+              type: string
+            comparison_column:
+              type: string
+            value_column:
+              type: string
+    # roles and role bindings
+    RoleList:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResourceList'
+      properties:
+        rules:
+          type: array
+          items:
+              $ref: '#/components/schemas/Role'
+    Role:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResource'
+      properties:
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/Rule'
+    Rule:
+      type: object
+      required:
+      - api
+      - resources
+      - namespaces
+      - verbs
+      properties:
+        api:
+          type: string
+        resources:
+          type: array
+          items:
+            type: string
+        namespaces:
+          type: array
+          items:
+            type: string
+        verbs:
+          type: array
+          items:
+            type: string
+    RoleBindingList:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResourceList'
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleBinding'
+    RoleBinding:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResource'
+      properties:
+        users:
+          type: array
+          items:
+            type: string
+        roles:
+          type: array
+          items:
+            type: string
