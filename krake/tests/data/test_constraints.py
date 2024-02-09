@@ -15,7 +15,7 @@ from krake.data.constraints import (
     GreaterThanOrEqualMetricConstraint
 )
 from krake.data.kubernetes import ClusterConstraints
-from krake.data.core import MetricRef
+from krake.data.core import MetricRef, Label
 import lark
 from marshmallow import ValidationError
 
@@ -165,41 +165,35 @@ def test_parse_notin_constraint(expression):
 
 
 def test_equal_constraint_match():
-    assert LabelConstraint.parse("location is DE").match({"location": "DE"})
-
-    assert not LabelConstraint.parse("location is DE").match({"location": "SK"})
-    assert not LabelConstraint.parse("location is DE").match({"country": "SK"})
-    assert not LabelConstraint.parse("location is DE").match({"country": "DE"})
+    constraint = LabelConstraint.parse("location is DE")
+    assert constraint.match([Label(key="location", value="DE")])
+    assert not constraint.match([Label(key="location", value="SK")])
+    assert not constraint.match([Label(key="country", value="SK")])
+    assert not constraint.match([Label(key="country", value="DE")])
 
 
 def test_notequal_constraint_match():
-    assert LabelConstraint.parse("location is not DE").match({"location": "SK"})
-
-    assert not LabelConstraint.parse("location is not DE").match({"location": "DE"})
-    assert not LabelConstraint.parse("location is not DE").match({"country": "DE"})
-    assert not LabelConstraint.parse("location is not DE").match({"country": "SK"})
+    constraint = LabelConstraint.parse("location is not DE")
+    assert constraint.match([Label(key="location", value="SK")])
+    assert not constraint.match([Label(key="country", value="DE")])
+    assert not constraint.match([Label(key="country", value="SK")])
+    assert not constraint.match([Label(key="location", value="DE")])
 
 
 def test_in_constraint_match():
-    assert LabelConstraint.parse("location in (DE, SK)").match({"location": "SK"})
-
-    assert not LabelConstraint.parse("location in (DE, SK)").match({"location": "EU"})
-    assert not LabelConstraint.parse("location in (DE, SK)").match({"country": "EU"})
-    assert not LabelConstraint.parse("location in (DE, SK)").match({"country": "SK"})
+    constraint = LabelConstraint.parse("location in (DE, SK)")
+    assert constraint.match([Label(key="location", value="SK")])
+    assert not constraint.match([Label(key="location", value="EU")])
+    assert not constraint.match([Label(key="country", value="SK")])
+    assert not constraint.match([Label(key="country", value="SK")])
 
 
 def test_notin_constraint_match():
-    assert LabelConstraint.parse("location not in (DE, SK)").match({"location": "EU"})
-
-    assert not LabelConstraint.parse("location not in (DE, SK)").match(
-        {"location": "DE"}
-    )
-    assert not LabelConstraint.parse("location not in (DE, SK)").match(
-        {"country": "DE"}
-    )
-    assert not LabelConstraint.parse("location not in (DE, SK)").match(
-        {"country": "SK"}
-    )
+    constraint = LabelConstraint.parse("location not in (DE, SK)")
+    assert constraint.match([Label(key="location", value="EU")])
+    assert not constraint.match([Label(key="location", value="DE")])
+    assert not constraint.match([Label(key="country", value="DE")])
+    assert not constraint.match([Label(key="country", value="SK")])
 
 
 def test_str_equal_constraint():
@@ -483,7 +477,7 @@ def test_parse_equal_metric_constraint(expression):
         "load is not 5"
     ]
 )
-def test_parse_notequal_constraint(expression):
+def test_parse_not_equal_constraint(expression):
     constraint = MetricConstraint.parse(expression)
 
     assert constraint.metric == "load"

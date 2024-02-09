@@ -253,6 +253,26 @@ def dict_formatter(attr):
     return "".join(formatted_attr)[:-1]  # Remove the last end of line character
 
 
+def labels_formatter(attr):
+    """Format a list of labels into a more readable format
+
+    Args:
+        attr(list): an list of tuples (key,value)
+
+    Returns:
+        str: Formatted labels list
+    """
+    if not attr:
+        return str(None)
+
+    formatted_attr = []
+    for item in attr:
+        formatted_item = item["value"] + "=" + item["key"]
+        formatted_attr.append(f"{formatted_item}\n")
+
+    return "".join(formatted_attr)[:-1]  # Remove the last end of line character
+
+
 def list_formatter(attr):
     """Format a list into a more readable format
 
@@ -530,7 +550,7 @@ class BaseTable(Table):
 
     name = Cell("metadata.name")
     namespace = Cell("metadata.namespace")
-    labels = Cell("metadata.labels", formatter=dict_formatter)
+    labels = Cell("metadata.labels", formatter=labels_formatter)
     created = Cell("metadata.created", formatter=format_datetime)
     modified = Cell("metadata.modified", formatter=format_datetime)
     deleted = Cell("metadata.deleted", formatter=format_datetime)

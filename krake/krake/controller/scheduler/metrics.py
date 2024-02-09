@@ -412,8 +412,10 @@ class Static(Provider):
 
         """
         name = metric.spec.provider.metric
+        metrics = self.metrics_provider.spec.static.metrics
+        match = list(filter(lambda metric: (metric.name == name), metrics))
+        if not any(True for _ in match):
+            raise MetricError(f"Metric {name!r} not defined")
+        else:
+            return match[0].weight
 
-        try:
-            return self.metrics_provider.spec.static.metrics[name]
-        except KeyError as err:
-            raise MetricError(f"Metric {name!r} not defined") from err

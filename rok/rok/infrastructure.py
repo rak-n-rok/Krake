@@ -26,6 +26,8 @@ from .formatters import (
     printer,
 )
 
+from .helpers import wrap_labels
+
 # Parsers
 infrastructure = ParserSpec(
     "infrastructure", aliases=["infra"], help="Manage infrastructure resources"
@@ -138,6 +140,8 @@ def register_globalinfrastructureprovider(
             "kind": "GlobalInfrastructureProvider",
             "metadata": {
                 "name": name,
+                "labels": [],
+                "deletion_state": {"deleted": False}
             },
             "spec": {
                 "type": "im",
@@ -336,6 +340,11 @@ def register_infrastructureprovider(
             "kind": "InfrastructureProvider",
             "metadata": {
                 "name": name,
+<<<<<<< HEAD
+=======
+                "labels": [],
+                "deletion_state": {"deleted": False}
+>>>>>>> 43ba0b2 (Adapt labels)
             },
             "spec": {
                 "type": "im",
@@ -575,7 +584,12 @@ def register_globalcloud(
             "kind": "GlobalCloud",
             "metadata": {
                 "name": name,
+<<<<<<< HEAD
                 "labels": labels,
+=======
+                "deletion_state": {"deleted": False},
+                "labels": wrap_labels(labels),
+>>>>>>> 43ba0b2 (Adapt labels)
             },
             "spec": {
                 "type": "openstack",
@@ -690,7 +704,7 @@ def update_globalcloud(
 
     if cloud_resource["spec"]["type"] == CloudType.OPENSTACK:
         if labels:
-            cloud_resource["metadata"]["labels"] = labels
+            cloud_resource["metadata"]["labels"] = wrap_labels(labels)
         if url:
             cloud_resource["spec"]["openstack"]["url"] = url
         if global_metrics:
@@ -864,7 +878,12 @@ def register_cloud(
             "kind": "Cloud",
             "metadata": {
                 "name": name,
+<<<<<<< HEAD
                 "labels": labels,
+=======
+                "labels": wrap_labels(labels),
+                "deletion_state": {"deleted": False}
+>>>>>>> 43ba0b2 (Adapt labels)
             },
             "spec": {
                 "type": "openstack",
@@ -1000,7 +1019,7 @@ def update_cloud(
 
     if cloud_resource["spec"]["type"] == CloudType.OPENSTACK:
         if labels:
-            cloud_resource["metadata"]["labels"] = labels
+            cloud_resource["metadata"]["labels"] = wrap_labels(labels)
         if url:
             cloud_resource["spec"]["openstack"]["url"] = url
         if metrics or global_metrics:

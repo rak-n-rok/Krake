@@ -116,7 +116,7 @@ def test_roles_crud(session):
             "name": name,
             "created": resp_data["metadata"]["created"],
             "modified": resp_data["metadata"]["modified"],
-            "labels": {"Testlabel": "Testlabel"},
+            "labels": [{"key": "Testlabel", "value": "Testlabel"}]
         },
     }
     resp = session.put(req_url, json=data)
@@ -134,7 +134,9 @@ def test_roles_crud(session):
         < datetime.strptime(resp_data["metadata"]["modified"], "%Y-%m-%dT%H:%M:%S.%f%z")
         < datetime.now(timezone.utc)
     )
-    assert resp_data["metadata"]["labels"] == {"Testlabel": "Testlabel"}
+    assert resp_data["metadata"]["labels"] == [
+        {"key": "Testlabel", "value": "Testlabel"}
+    ]
 
     # 8. Update the role with an empty update and expect failure
     try:
@@ -213,7 +215,7 @@ def test_rolebindings_crud(session):
             "name": name,
             "created": "2021-09-09T08:18:50.856741+00:00",
             "modified": "2021-09-09T08:18:50.856741+00:00",
-            "labels": {},
+            "labels": [],
         },
     }
     try:
@@ -255,7 +257,7 @@ def test_rolebindings_crud(session):
             "name": name,
             "created": resp_data["metadata"]["created"],
             "modified": resp_data["metadata"]["modified"],
-            "labels": {"Testlabel": "Testlabel"},
+            "labels": [{"key": "Testlabel", "value": "Testlabel"}]
         },
     }
     resp = session.put(req_url, json=data)
@@ -274,7 +276,9 @@ def test_rolebindings_crud(session):
         < datetime.strptime(resp_data["metadata"]["modified"], "%Y-%m-%dT%H:%M:%S.%f%z")
         < datetime.now(timezone.utc)
     )
-    assert resp_data["metadata"]["labels"] == {"Testlabel": "Testlabel"}
+    assert resp_data["metadata"]["labels"] == [
+        {"key": "Testlabel", "value": "Testlabel"}
+    ]
 
     # 8. Update the rolebinding with an empty update and expect failure
     try:

@@ -7,7 +7,7 @@ from operator import attrgetter
 
 from krake.api.app import create_app
 from krake.api.helpers import HttpProblem, HttpProblemTitle
-from krake.data.core import WatchEventType, WatchEvent, resource_ref, ResourceRef
+from krake.data.core import WatchEventType, WatchEvent, resource_ref, ResourceRef, Label
 from krake.data.openstack import (
     MagnumClusterList,
     Project,
@@ -893,7 +893,7 @@ async def test_update_project(aiohttp_client, config, db):
     await db.put(data)
 
     auth = AuthMethodFactory(type="password")
-    labels = {"my-label": "my-value"}
+    labels = [Label(key="my-label", value="my-value")]
     data.spec.auth = auth
     data.metadata.labels = labels
 

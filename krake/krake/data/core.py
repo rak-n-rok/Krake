@@ -2,13 +2,13 @@ import re
 from enum import Enum, IntEnum, auto
 from datetime import datetime
 from dataclasses import field
-from typing import List, Dict
+from typing import List
 
 from marshmallow import ValidationError
 
 from . import persistent
 from .serializable import Serializable, ApiObject, PolymorphicContainer
-
+from .. import utils
 
 class ResourceRef(Serializable):
     api: str
@@ -113,56 +113,6 @@ def validate_value(value):
         )
 
 
-def _validate_labels(labels):
-    """Check that keys and values in the given labels match against their corresponding
-    regular expressions.
-
-    Args:
-        labels (dict): the different labels to validate.
-
-    Raises:
-        ValidationError: if any of the keys and labels does not match their respective
-            regular expression. The error contains as message the list of all errors
-            which occurred in the labels. Each element of the list is a dictionary with
-            one key-value pair:
-            - key: the label key or label value for which an error occurred as string.
-            - value: the error message.
-
-            .. code:: python
-
-                # Example:
-                labels = {
-                    "key1": "valid",
-                    "key2": ["invalid"],
-                    "$$": "invalid",
-                    True: True,
-                }
-                try:
-                    _validate_labels(labels)
-                except ValidationError as err:
-                    assert err.messages == [
-                        {"['invalid']": 'expected string or bytes-like object'},
-                        {'$$': "Label key '$$' does not match the regex [...]"},
-                        {'True': 'expected string or bytes-like object'},
-                        {'True': 'expected string or bytes-like object'},
-                    ]
-    """
-    errors = []
-    for key, value in labels.items():
-        try:
-            validate_key(key)
-        except (ValidationError, TypeError) as err:
-            errors.append({str(key): str(err)})
-
-        try:
-            validate_value(value)
-        except (ValidationError, TypeError) as err:
-            errors.append({str(value): str(err)})
-
-    if errors:
-        raise ValidationError(list(errors))
-
-
 _resource_name_pattern = None
 _resource_name_regex = None
 
@@ -229,13 +179,50 @@ def _validate_resource_namespace(namespace):
         raise ValidationError("Invalid character in resource namespace.")
 
 
+class Label(Serializable):
+    key: str = field(init=True)
+    value: str = field(init=True)
+
+    def match(self, key, value):
+        return self.key == key and self.value == value
+
+    def __hash__(self):
+        return hash(self.key)
+
+    def __post_init__(self):
+        """Check that key and value of this label match against their corresponding
+    regular expressions.
+
+    Raises:
+        ValidationError: if one of key or value does not match their respective
+            regular expression. The error contains as message a dict with the label
+            index as key and a dict of errors as value which occurred in this label.
+            The error dict contains key-value pairs:
+            - key: the label key or label value for which an error occurred as string.
+            - value: the error message.
+        """
+        errors = []
+        try:
+            validate_key(self.key)
+        except (ValidationError, TypeError) as err:
+            errors.append({str(self.key): str(err)})
+
+        try:
+            validate_value(self.value)
+        except (ValidationError, TypeError) as err:
+            errors.append({str(self.value): str(err)})
+
+        if errors:
+            raise ValidationError(list(errors))
+
+
 class Metadata(Serializable):
     name: str = field(metadata={"immutable": True, "validate": _validate_resource_name})
     namespace: str = field(
         default=None,
         metadata={"immutable": True, "validate": _validate_resource_namespace},
     )
-    labels: dict = field(default_factory=dict, metadata={"validate": _validate_labels})
+    labels: List[Label] = field(default_factory=list)
     inherit_labels: bool = field(default=False)
     finalizers: List[str] = field(default_factory=list)
 
@@ -243,7 +230,6 @@ class Metadata(Serializable):
     created: datetime = field(metadata={"readonly": True})
     modified: datetime = field(metadata={"readonly": True})
     deleted: datetime = field(default=None, metadata={"readonly": True})
-
     owners: List[ResourceRef] = field(default_factory=list)
 
 

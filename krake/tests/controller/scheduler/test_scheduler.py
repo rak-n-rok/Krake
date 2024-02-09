@@ -355,8 +355,9 @@ async def test_openstack_reception(aiohttp_server, config, db, loop):
 
 
 def test_kubernetes_match_cluster_label_constraints():
+    label = Label(key="location", value="IT")
     cluster = ClusterFactory(
-        metadata__labels={"location": "IT"}, status__state=ClusterState.ONLINE
+        metadata__labels=[label], status__state=ClusterState.ONLINE
     )
     app = ApplicationFactory(
         spec__constraints__cluster__labels=[LabelConstraint.parse("location is IT")],
@@ -1308,7 +1309,7 @@ async def test_kubernetes_select_cluster_with_constraints_without_metric(
     clusters = [
         ClusterFactory(
             spec__metrics=[],
-            metadata__labels={"location": country},
+            metadata__labels=[Label(key="location", value=country)],
             status__state=ClusterState.ONLINE,
         )
         for country in countries
@@ -1337,7 +1338,7 @@ async def test_kubernetes_select_cluster_with_inherited_labels_from_cloud(
     cloud = CloudFactory(
         metadata__name="test",
         metadata__namespace="testing",
-        metadata__labels={"location": "IT"},
+        metadata__labels=[Label(key="location", value="IT")]
     )
     cluster = ClusterFactory(
         metadata__inherit_labels=True,
@@ -1376,7 +1377,7 @@ async def test_kubernetes_select_cluster_with_inherited_labels_from_global_cloud
     cloud = GlobalCloudFactory(
         metadata__name="test",
         metadata__namespace="testing",
-        metadata__labels={"location": "IT"}
+        metadata__labels=[Label(key="location", value="IT")]
     )
     cluster = ClusterFactory(
         metadata__inherit_labels=True,
@@ -2474,7 +2475,7 @@ async def test_kubernetes_application_reschedule_no_update(
 
 
 def test_openstack_match_project_label_constraints():
-    project = ProjectFactory(metadata__labels={"location": "IT"})
+    project = ProjectFactory(metadata__labels=[Label(key="location",  value="IT")])
     cluster = MagnumClusterFactory(
         spec__constraints__project__labels=[LabelConstraint.parse("location is IT")]
     )
@@ -2961,7 +2962,8 @@ async def test_select_project_with_constraints_without_metric(
     # that the expected project is chosen, even in case of failures.
     countries = ["IT"] + fake.words(99)
     projects = [
-        ProjectFactory(spec__metrics=[], metadata__labels={"location": country})
+        ProjectFactory(spec__metrics=[],
+            metadata__labels=[Label(key="location", value=country)])
         for country in countries
     ]
 
@@ -3054,7 +3056,7 @@ async def test_openstack_scheduling_error(aiohttp_server, config, db, loop):
 def test_cluster_match_cloud_label_constraints(cloud_type, cloud_resource):
     cloud = cloud_resource(
         spec__type=cloud_type,
-        metadata__labels={"location": "IT"},
+        metadata__labels=[Label(key="location", value="IT")]
     )
     cluster = ClusterFactory(
         spec__constraints__cloud__labels=[LabelConstraint.parse("location is IT")],
@@ -4223,7 +4225,7 @@ async def test_cluster_select_cloud_with_constraints_without_metric(
             **{
                 "spec__type": cloud_type,
                 f"spec__{cloud_type}__metrics": [],
-                "metadata__labels": {"location": country},
+                "metadata__labels": [Label(key="location", value=country)]
             }
         )
         for country in countries
