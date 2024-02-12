@@ -75,6 +75,7 @@ class HookDispatcher(object):
         except KeyError:
             pass
         else:
+            logger.debug("Running hook %s", hook)
             for handler in handlers:
                 if iscoroutinefunction(handler):
                     await handler(**kwargs)
