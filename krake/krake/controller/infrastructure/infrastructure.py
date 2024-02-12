@@ -367,6 +367,19 @@ class InfrastructureController(Controller):
             body=cluster,
         )
 
+        # Create a cluster infrastructure observer as soon as it is created
+        if cluster.metadata.uid not in self.observers:
+            await listen.hook(
+                HookType.ClusterCreation,
+                controller=self,
+                resource=copy.deepcopy(cluster),
+                start=True,
+            )
+        else:
+            logger.warning(
+                f"Resource {cluster} already had an observer registered before it was"
+                " actually created in the real world. Something is off.")
+
     async def on_reconcile(self, cluster, provider):
         """Called when a cluster needs reconciliation.
 
