@@ -236,6 +236,7 @@
             - rak
             - rok
             - rok.yaml.template
+            - requirements
             - support
 
         # rsync does not honour become_user
