@@ -55,6 +55,8 @@ class InfrastructureController(Controller):
             run as background tasks.
         poll_interval (float, optional): time in second before two attempts to modify a
             cluster (creation, deletion, update, change from FAILED state...).
+        time_step (float, optional): for the Observers: the number of seconds between
+            two observations of the actual resource.
 
     """
 
@@ -65,6 +67,7 @@ class InfrastructureController(Controller):
         loop=None,
         ssl_context=None,
         debounce=0,
+        time_step=2,
         poll_interval=30,
     ):
         super().__init__(
@@ -76,6 +79,9 @@ class InfrastructureController(Controller):
 
         self.worker_count = worker_count
         self.poll_interval = poll_interval
+
+        self.observer_time_step = time_step
+        self.observers = {}
 
     async def receive_cluster(self, cluster):
         # Always cleanup deleted clusters even if they are in FAILED
