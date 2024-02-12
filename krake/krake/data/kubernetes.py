@@ -774,6 +774,78 @@ class ClusterNodeMetadata(Serializable):
     name: str
 
 
+class InfrastructureNodeCredential(Serializable):
+    """Cluster node credential subresource of :class:`ClusterNode`.
+
+    Holds the type and data of a single cluster node credential.
+
+    Attributes:
+        type (str): Type of the credential (one of: "login")
+        username (str): Name of the login user.
+        password (str, optional): Password of the login user. Is suppressed in repr.
+        private_key (str, optional): SSH key whose public part is registered for the
+            login user. Is suppressed in repr.
+
+    One of password or private_key should be specified.
+    """
+
+    _types = ["login"]  # Supported credential types
+
+    type: str
+    username: str
+    password: str = field(default=None, repr=False)
+    private_key: str = field(default=None, repr=False)
+
+    def __post_init__(self):
+        # Allow only supported credential types
+        if self.type not in self._types:
+            raise ValidationError(
+                f"""Invalid credential type '{self.type}', must be one of"""
+                f""" {', '.join([f"'{t}'" for t in self._types])}."""
+            )
+
+
+class InfrastructureNode(Serializable):
+    """A data object representing a real world node belonging to a cluster
+
+    Usually corresponds to a VM/node/etc. reported by an infrastructure provider.
+
+    Attributes:
+        ip_addresses (list[str], optional): Current IP addresses of the cluster node.
+        credentials (List[ClusterNodeCredential]): Current credentials of the cluster
+            node.
+    """
+    ip_addresses: List[str] = None
+    credentials: List[InfrastructureNodeCredential] = field(default_factory=list)
+
+
+class ClusterInfrastructureData(Serializable):
+    """A data object holding data about the real world infrastructure of a cluster
+
+    Usually holds all data that was collected from an infrastructure provider.
+
+    Attributes:
+        nodes (list[InfrastructureNode]): List of infrastructure nodes on which the
+            cluster is running.
+    """
+
+    nodes: List[InfrastructureNode] = field(default_factory=list)
+
+
+class ClusterInfrastructure(Serializable):
+    """Cluster infrastructure subresource of :class:`Cluster`
+
+    Attributes:
+        updated (datetime): Time when the cluster infrastructure data was last updated.
+        data (ClusterInfrastructureData): Data about the real world infrastructure of
+            the cluster that was retrieved from an infrastructure provider and is not
+            status or metric, e.g. credentials, specs.
+    """
+
+    updated: datetime = None
+    data: ClusterInfrastructureData = None
+
+
 class ClusterNode(Serializable):
     """Cluster node subresource of :class:`ClusterStatus`.
 
@@ -833,6 +905,9 @@ class Cluster(ApiObject):
         metadata (Metadata): Metadata about the API object
         spec (ClusterSpec): The specification of the cluster
         status (ClusterStatus): The status of the cluster (subresource)
+        infrastructure (ClusterInfrastructure): The infrastructure data of the cluster
+            (subresource). `None` means that no infrastructure data is available or has
+            been supplied yet.
     """
 
     api: str = "kubernetes"
@@ -840,6 +915,12 @@ class Cluster(ApiObject):
     metadata: Metadata
     spec: ClusterSpec
     status: ClusterStatus = field(metadata={"subresource": True})
+    infrastructure: ClusterInfrastructure = \
+        field(metadata={"subresource": True}, default=None)
+    #   NOTE: `None` has been choosen to mean no data availabe or supplied yet instead
+    #   of an empty ClusterInfrastructure object which would mean that the cluster is
+    #   backed by no actual infrastructure which is impossible or that its
+    #   infrastructure is just getting created.
 
 
 class ClusterList(ApiObject):
