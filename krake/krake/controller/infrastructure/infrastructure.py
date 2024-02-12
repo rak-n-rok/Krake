@@ -5,9 +5,9 @@ import logging
 from aiohttp import ClientResponseError
 from deepdiff import DeepDiff
 
-from krake.data.core import Reason, ReasonCode
+from krake.data.core import Reason
 from krake.data.kubernetes import ClusterState
-from krake.data.infrastructure import GlobalCloud, Cloud
+from krake.client import InvalidResourceError as InvalidResourceClientError
 from krake.client.kubernetes import KubernetesApi
 from krake.client.infrastructure import InfrastructureApi
 
@@ -35,12 +35,6 @@ class InfrastructureControllerError(ControllerError):
     """Base exception class for all errors related to infrastructure controller."""
 
     code = None
-
-
-class InvalidResourceError(InfrastructureControllerError):
-    """Raised when the cluster resource has an invalid structure."""
-
-    code = ReasonCode.INVALID_RESOURCE
 
 
 class InfrastructureController(Controller):
@@ -75,8 +69,9 @@ class InfrastructureController(Controller):
     async def prepare(self, client):
         assert client is not None
         self.client = client
-        self.kubernetes_api = KubernetesApi(self.client)
         self.infrastructure_api = InfrastructureApi(self.client)
+        self.kubernetes_api = KubernetesApi(self.client,
+                                            infrastructure_api=self.infrastructure_api)
 
         for i in range(self.worker_count):
             self.register_task(self.handle_resource, name=f"worker_{i}")
@@ -150,93 +145,6 @@ class InfrastructureController(Controller):
             if run_once:
                 break  # Only used for tests
 
-    async def get_cloud(self, cluster):
-        """Get the cloud which was bounded to the Cluster.
-
-        Args:
-            cluster (krake.data.kubernetes.Cluster): the Cluster with binding.
-
-        Raises:
-            InvalidResourceError: When the cluster binding is wrong.
-        """
-        if cluster.status.scheduled_to.kind == GlobalCloud.kind:
-            try:
-                return await self.infrastructure_api.read_global_cloud(
-                    name=cluster.status.scheduled_to.name,
-                )
-            except ClientResponseError as err:
-                if err.status == 404:
-                    raise InvalidResourceError(
-                        message="Unable to find bound global cloud: "
-                        f"{cluster.status.scheduled_to.name}."
-                    )
-
-                raise
-
-        if cluster.status.scheduled_to.kind == Cloud.kind:
-            try:
-                return await self.infrastructure_api.read_cloud(
-                    namespace=cluster.status.scheduled_to.namespace,
-                    name=cluster.status.scheduled_to.name,
-                )
-            except ClientResponseError as err:
-                if err.status == 404:
-                    raise InvalidResourceError(
-                        message="Unable to find bound cloud: "
-                        f"{cluster.status.scheduled_to.name}."
-                    )
-
-                raise
-
-        raise InvalidResourceError(
-            message="Unsupported cluster binding type"
-            f": {cluster.status.scheduled_to.kind}."
-        )
-
-    async def get_infrastructure_provider(self, cloud):
-        """Get the infrastructure provider referenced in the given cloud.
-
-        Args:
-            cloud (Union[Cloud, GlobalCLoud]): the cloud with the
-                infrastructure provider reference.
-
-        Raises:
-            InvalidResourceError: When the cluster reference to
-                the infrastructure provider is wrong.
-
-        Returns:
-            Union[InfrastructureProvider, GlobalInfrastructureProvider]:
-                Infrastructure provider referenced in the given cloud.
-        """
-        if cloud.spec.type == "openstack":
-            try:
-                return await self.infrastructure_api.read_infrastructure_provider(
-                    namespace=cloud.metadata.namespace,
-                    name=cloud.spec.openstack.infrastructure_provider.name,
-                )
-            except ClientResponseError as err:
-                if err.status == 404:
-                    try:
-                        return await self.infrastructure_api.read_global_infrastructure_provider(  # noqa: E501
-                            name=cloud.spec.openstack.infrastructure_provider.name
-                        )
-                    except ClientResponseError as err:
-                        if err.status == 404:
-                            raise InvalidResourceError(
-                                message=(
-                                    "Unable to find infrastructure provider "
-                                    f"{cloud.spec.openstack.infrastructure_provider.name} "  # noqa: E501
-                                    f"referenced in the bound cloud `{cloud.metadata.name}"  # noqa: E501
-                                )
-                            )
-
-                        raise
-                raise
-
-        raise InvalidResourceError(
-            message=f"Unsupported cloud type: {cloud.spec.type}."
-        )
-
     async def process_cluster(self, cluster):
         """Process a Cluster: if the given cluster is marked for deletion, delete
         the actual cluster. Otherwise, start the reconciliation between a Cluster
@@ -248,8 +156,9 @@ class InfrastructureController(Controller):
         """
         try:
             logger.debug("Handle %r", cluster)
-            cloud = await self.get_cloud(cluster)
-            infrastructure_provider = await self.get_infrastructure_provider(cloud)
+            cloud = await self.kubernetes_api.get_cloud(cluster)
+            infrastructure_provider = \
+                await self.infrastructure_api.get_infrastructure_provider(cloud)
             provider = InfrastructureProvider(
                 session=self.client.session,
                 cloud=cloud,
@@ -261,7 +170,7 @@ class InfrastructureController(Controller):
             else:
                 await self.reconcile_cluster(cluster, provider)
 
-        except ControllerError as error:
+        except (ControllerError, InvalidResourceClientError) as error:
             logger.error(error)
 
             reason = Reason(code=error.code, message=error.message)
