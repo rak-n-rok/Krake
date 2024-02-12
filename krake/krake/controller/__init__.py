@@ -347,6 +347,8 @@ class Reflector(object):
                 connection was possible.
 
         """
+        logger.debug("Called reflector %r", self)
+
         retries = 0
         base_delay = sigmoid_delay(retries)
         while True:
