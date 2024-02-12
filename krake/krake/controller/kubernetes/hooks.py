@@ -1,21 +1,18 @@
-"""This module defines the Hook Dispatcher and listeners for registering and
-executing hooks. Hook Dispatcher emits hooks based on :class:`Hook` attributes which
-define when the hook will be executed.
+"""Kubernetes controller specific hooks
 
+Provides the hooks specific to kubernetes controllers.
 """
 
 import asyncio
 import logging
 import random
 from base64 import b64encode
-from collections import defaultdict
-from contextlib import suppress
 from copy import deepcopy
+from contextlib import suppress
 from datetime import datetime
 from functools import reduce
 from operator import getitem
 from enum import Enum, auto
-from inspect import iscoroutinefunction
 from OpenSSL import crypto
 from typing import NamedTuple
 
@@ -23,6 +20,7 @@ import yarl
 from aiohttp import ClientConnectorError
 
 from krake.controller import Observer
+from krake.controller.hooks import HookDispatcher
 from krake.controller.kubernetes.client import KubernetesClient, InvalidManifestError
 from krake.controller.kubernetes.tosca import ToscaParser, ToscaParserException
 from krake.utils import camel_to_snake_case, get_kubernetes_resource_idx
@@ -76,75 +74,6 @@ class HookType(Enum):
     ApplicationPostDelete = auto()
     ClusterCreation = auto()
     ClusterDeletion = auto()
-
-
-class HookDispatcher(object):
-    """Simple wrapper around a registry of handlers associated to :class:`Hook`
-     attributes. Each :class:`Hook` attribute defines when the handler will be
-     executed.
-
-    Listeners for certain hooks can be registered via :meth:`on`. Registered
-    listeners are executed via :meth:`hook`.
-
-    Example:
-        .. code:: python
-
-        listen = HookDispatcher()
-
-        @listen.on(HookType.PreApply)
-        def to_perform_before_app_creation(app, cluster, resource, controller):
-            # Do Stuff
-
-        @listen.on(HookType.PostApply)
-        def another_to_perform_after_app_creation(app, cluster, resource, resp):
-            # Do Stuff
-
-        @listen.on(HookType.PostDelete)
-        def to_perform_after_app_deletion(app, cluster, resource, resp):
-            # Do Stuff
-
-    """
-
-    def __init__(self):
-        self.registry = defaultdict(list)
-
-    def on(self, hook):
-        """Decorator function to add a new handler to the registry.
-
-        Args:
-            hook (HookType): Hook attribute for which to register the handler.
-
-        Returns:
-            callable: Decorator for registering listeners for the specified
-            hook.
-
-        """
-
-        def decorator(handler):
-            self.registry[hook].append(handler)
-
-            return handler
-
-        return decorator
-
-    async def hook(self, hook, **kwargs):
-        """Execute the list of handlers associated to the provided :class:`Hook`
-        attribute.
-
-        Args:
-            hook (HookType): The hook attribute for which to execute handlers.
-
-        """
-        try:
-            handlers = self.registry[hook]
-        except KeyError:
-            pass
-        else:
-            for handler in handlers:
-                if iscoroutinefunction(handler):
-                    await handler(**kwargs)
-                else:
-                    handler(**kwargs)
 
 
 listen = HookDispatcher()
