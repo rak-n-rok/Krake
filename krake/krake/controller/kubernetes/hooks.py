@@ -1118,7 +1118,7 @@ async def register_observer(controller, resource, start=True, **kwargs):
         logger.debug("Unknown resource kind. No observer was registered.", resource)
         return
 
-    logger.debug(f"Start observer for {resource.kind} %r", resource.metadata.name)
+    logger.debug(f"Start observer for {resource.kind} {repr(resource.metadata.name)}")
     task = None
     if start:
         task = controller.loop.create_task(observer.run())
@@ -1181,8 +1181,7 @@ async def translate_tosca(controller, app, **kwargs):
     if not app.spec.tosca and not app.spec.csar:
         raise ToscaParserException(
             "Application should be defined by a Kubernetes manifest,"
-            " a TOSCA template or a CSAR archive: %r",
-            app,
+            f" a TOSCA template or a CSAR archive: {repr(app)}"
         )
     app.status.state = ApplicationState.TRANSLATING
     await controller.kubernetes_api.update_application_status(
