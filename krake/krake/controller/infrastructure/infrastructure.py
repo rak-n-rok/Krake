@@ -58,13 +58,24 @@ class InfrastructureController(Controller):
 
     """
 
-    def __init__(self, *args, worker_count=5, poll_interval=30, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.worker_count = worker_count
-        self.poll_interval = poll_interval
+    def __init__(
+        self,
+        api_endpoint,
+        worker_count=5,
+        loop=None,
+        ssl_context=None,
+        debounce=0,
+        poll_interval=30,
+    ):
+        super().__init__(
+            api_endpoint, loop=loop, ssl_context=ssl_context, debounce=debounce
+        )
         self.kubernetes_api = None
         self.infrastructure_api = None
         self.cluster_reflector = None
+
+        self.worker_count = worker_count
+        self.poll_interval = poll_interval
 
     async def prepare(self, client):
         assert client is not None
