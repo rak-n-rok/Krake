@@ -11,6 +11,9 @@ from krake.client import InvalidResourceError as InvalidResourceClientError
 from krake.client.kubernetes import KubernetesApi
 from krake.client.infrastructure import InfrastructureApi
 
+from .hooks import (
+    register_observer, unregister_observer,
+)
 from .providers import (
     InfrastructureProvider,
     InfrastructureProviderNotFoundError,
@@ -116,6 +119,26 @@ class InfrastructureController(Controller):
         else:
             logger.debug("Reject %r", cluster)
 
+    async def list_cluster(self, cluster):
+        """Receive a cluster into the controller and observe it
+
+        Ensures that the given clusters has an observer attached and enqueues it into
+        the work queue of the controller.
+
+        This method is to be called by the reflector on listing all existing clusters at
+        startup.
+
+        Args:
+            cluster (krake.data.kubernetes.Cluster): the cluster to receive
+        """
+        if cluster.metadata.uid in self.observers:
+            # If an observer was started before, stop it
+            await unregister_observer(self, cluster)
+        # Register an observer
+        await register_observer(self, cluster)
+
+        await self.receive_cluster(cluster)
+
     async def prepare(self, client):
         assert client is not None
         self.client = client
@@ -129,7 +152,7 @@ class InfrastructureController(Controller):
         self.cluster_reflector = Reflector(
             listing=self.kubernetes_api.list_all_clusters,
             watching=self.kubernetes_api.watch_all_clusters,
-            on_list=self.receive_cluster,
+            on_list=self.list_cluster,
             on_add=self.receive_cluster,
             on_update=self.receive_cluster,
             on_delete=self.receive_cluster,
