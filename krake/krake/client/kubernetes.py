@@ -429,13 +429,24 @@ class KubernetesApi(ApiClient):
         return Cluster.deserialize(data)
 
     async def get_cloud(self, cluster):
-        """Get the cloud which was bounded to the Cluster.
+        """Get the cloud to which a cluster is bound.
+
+        Returns the cloud object that is referenced in the given cluster object.
 
         Args:
-            cluster (krake.data.kubernetes.Cluster): the Cluster with binding.
+            cluster (krake.data.kubernetes.Cluster): the Cluster with a cloud binding.
+
+        Delegates to:
+            :meth:`self._infrastructure_api.read_global_cloud`
+            :meth:`self._infrastructure_api.read_cloud`
+
+        Returns:
+            Union[krake.data.infrastructure.Cloud,
+                krake.data.infrastructure.GlobalCloud]: The cloud to which the given
+                cluster is bound.
 
         Raises:
-            InvalidResourceError: When the cluster binding is wrong.
+            InvalidResourceError: When the cluster binding type is unsupported.
         """
         if cluster.status.scheduled_to.kind == GlobalCloud.kind:
             try:
