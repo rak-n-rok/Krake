@@ -127,12 +127,15 @@ async def register_observer(controller, resource, get_observer, start=True, **kw
             "Unsupported resource kind. No observer was registered.", resource)
         return
 
-    logger.debug(f"Start observer for {resource.kind} %r", resource.metadata.name)
+    logger.debug(f"Starting observer for {resource.kind} %r", resource.metadata.name)
     task = None
     if start:
         task = controller.loop.create_task(observer.run())
 
     controller.observers[resource.metadata.uid] = (observer, task)
+
+    logger.debug(
+        "Started and registered observer %r for resource %r", observer, resource)
 
 
 async def unregister_observer(controller, resource, **kwargs):
@@ -155,10 +158,11 @@ async def unregister_observer(controller, resource, **kwargs):
     """
 
     if resource.metadata.uid not in controller.observers:
+        logger.debug("Observer is already unregistered for resource %r", resource)
         return
 
-    logger.debug(f"Stop observer for {resource.kind} {resource.metadata.name}")
-    _, task = controller.observers.pop(resource.metadata.uid)
+    logger.debug("Stopping observer for resource %r", resource)
+    observer, task = controller.observers.pop(resource.metadata.uid)
 
     if task is not None:
         task.cancel()
@@ -168,3 +172,11 @@ async def unregister_observer(controller, resource, **kwargs):
                 await task
         except asyncio.TimeoutError:
             logger.debug("Observer timed out before being unregistered")
+
+        logger.debug(
+            "Unregistered and stopped running observer %r for resource %r",
+            observer, resource)
+    else:
+        logger.debug(
+            "Unregistered unstarted observer %r for resource %r",
+            observer, resource)
