@@ -31,6 +31,7 @@ from krake.data.kubernetes import (
     Cluster,
     ClusterList,
     ClusterBinding,
+    ClusterInfrastructure,
     ApplicationComplete,
     ApplicationShutdown,
     ApplicationState,
@@ -616,6 +617,48 @@ class KubernetesApi(object):
         logger.info(
             "Update %s of %s %r (%s)",
             "Status",
+            "Cluster",
+            entity.metadata.name,
+            entity.metadata.uid,
+        )
+
+        return web.json_response(entity.serialize())
+
+    @routes.route(
+        "PUT", "/kubernetes/namespaces/{namespace}/clusters/{name}/infrastructure")
+    @protected(api="kubernetes", resource="clusters/infrastructure", verb="update")
+    @use_schema("body", Cluster.Schema)
+    @load("entity", Cluster)
+    async def update_cluster_infra_data(request, body, entity):
+        if body == entity:
+            problem = HttpProblem(
+                detail="The body contained no update.",
+                title=HttpProblemTitle.UPDATE_ERROR,
+            )
+            raise HttpProblemError(web.HTTPBadRequest, problem)
+
+        source = getattr(body, "infrastructure")
+        dest = getattr(entity, "infrastructure")
+
+        # NOTE: The infrastructure attribute of Cluster objects is None by default.
+        #       If it was not set before and we receive None we must create the
+        #       subresource in order to enable updating it.
+        if dest is None:
+            dest = ClusterInfrastructure()
+            setattr(entity, "infrastructure", dest)
+
+        source.updated = utils.now()
+
+        try:
+            dest.update(source)
+        except ValueError as e:
+            problem = HttpProblem(detail=str(e), title=HttpProblemTitle.UPDATE_ERROR)
+            raise HttpProblemError(web.HTTPBadRequest, problem)
+
+        await session(request).put(entity)
+        logger.info(
+            "Update %s of %s %r (%s)",
+            "Infrastructure state",
             "Cluster",
             entity.metadata.name,
             entity.metadata.uid,
