@@ -4,8 +4,8 @@ Defines the HookDispatcher and listeners for registering and executing hooks.
 HookDispatcher emits hooks based on :class:`Hook` attributes which define when the hook
 will be executed.
 
-Provides hooks that are shared between all controllers, such as the ones for observer
-registration.
+Provides hooks that are shared between all controllers, such as the base ones for
+observer registration.
 """
 
 import asyncio
@@ -13,12 +13,6 @@ from collections import defaultdict
 from contextlib import suppress
 from inspect import iscoroutinefunction
 import logging
-
-from krake.controller.kubernetes.hooks import (
-    KubernetesApplicationObserver,
-    KubernetesClusterObserver,
-)
-from krake.data.kubernetes import Application, Cluster
 
 
 logger = logging.getLogger(__name__)
@@ -94,44 +88,43 @@ class HookDispatcher(object):
                     handler(**kwargs)
 
 
-async def register_observer(controller, resource, start=True, **kwargs):
+async def register_observer(controller, resource, get_observer, start=True, **kwargs):
     """Create, start and register an observer for a resource
 
     Creates a suitable observer for the given resource and registers it via the
     controller's `observers` attribute. Unless `start=False` is given starts the created
     observer as a background task.
 
+    This is a base hook that can be customized via the `get_observer` argument.
+
     Args:
         controller (Controller): the controller in which the observer shall be
             registered. Must have the `observers` attribute.
         resource (krake.data.serializable.ApiObject): the resource to observe.
+        get_observer (Callable[[Controller, krake.data.serializable.ApiObject],
+            Observer]): a function that returns a suitable observer object for the given
+            resource and raises a :class:`ValueError` when it does not support the
+            resource's kind.
         start (bool, optional): whether the observer shall be started or not.
 
     The `kwargs` argument is ignored. Because all hooks can be accessed via the uniform
     HookDispatcher.hook interface `kwargs` catches all excess arguments that are not
     applicable to this hook.
+
+    Delegates to:
+        :func:`get_observer`: to get the right observer
     """
 
-    if resource.kind == Application.kind:
-        cluster = await controller.kubernetes_api.read_cluster(
-            namespace=resource.status.running_on.namespace,
-            name=resource.status.running_on.name,
-        )
-        observer = KubernetesApplicationObserver(
-            cluster,
-            resource,
-            controller.on_status_update,
-            time_step=controller.observer_time_step,
-        )
-
-    elif resource.kind == Cluster.kind:
-        observer = KubernetesClusterObserver(
-            resource,
-            controller.on_status_update,
-            time_step=controller.observer_time_step,
-        )
-    else:
-        logger.debug("Unknown resource kind. No observer was registered.", resource)
+    try:
+        if iscoroutinefunction(get_observer):
+            observer = await get_observer(resource)
+        else:
+            observer = get_observer(resource)
+    except ValueError:
+        # FIXME: A more specific error should be used here to tell that the given
+        # resource kind is not supported by any observer.
+        logger.warning(
+            "Unsupported resource kind. No observer was registered.", resource)
         return
 
     logger.debug(f"Start observer for {resource.kind} %r", resource.metadata.name)
@@ -147,6 +140,8 @@ async def unregister_observer(controller, resource, **kwargs):
 
     Removes the observer for the given resource from the controller's `observers`
     property. Does nothing, if no such observer is registered.
+
+    This is a base hook.
 
     Args:
         controller (Controller): the controller from which the observer shall be

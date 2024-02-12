@@ -20,6 +20,7 @@ from aiohttp import ClientConnectorError
 from krake.controller import Observer
 from krake.controller.hooks import (
     HookDispatcher,
+    # these are just customizable base hooks
     register_observer as _register_observer,
     unregister_observer as _unregister_observer,
 )
@@ -30,9 +31,11 @@ from kubernetes_asyncio.client.rest import ApiException
 from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio import client
 from krake.data.kubernetes import (
+    Application,
     ApplicationStatus,
     ApplicationState,
     ContainerHealth,
+    Cluster,
     ClusterStatus,
     ClusterState,
     ClusterNodeCondition,
@@ -1009,7 +1012,7 @@ class KubernetesClusterObserver(Observer):
 @listen.on(HookType.ApplicationPostReconcile)
 @listen.on(HookType.ApplicationPostMigrate)
 @listen.on(HookType.ClusterCreation)
-async def register_observer(*args, **kwargs):
+async def register_observer(controller, *args, **kwargs):
     """Create, start and register an observer for a cluster or application
 
     Creates a suitable observer for the given cluster or application resource and
@@ -1034,9 +1037,54 @@ async def register_observer(*args, **kwargs):
         - ApplicationPostMigrate
         - ClusterCreation
 
-    Wrapper for :func:`krake.controller.hooks.register_observer`
+    Partial of :func:`krake.controller.hooks.register_observer`
     """
-    await _register_observer(*args, **kwargs)
+
+    async def get_observer(resource):
+        """Get a new observer for a resource
+
+        Creates an returns a suitable observer for the given resource.
+
+        Args:
+            resource (Union[krake.data.kubernetes.Cluster,
+                krake.data.kubernetes.Application]): the cluster or application to
+                create an observer for.
+
+        Returns:
+            krake.krake.controller.kubernetes.KubernetesApplicationObserver: a
+                kubernetes application observer instance when the given resource is an
+                application.
+            krake.krake.controller.kubernetes.KubernetesClusterObserver: a kubernetes
+                cluster observer instance when the given resource is a cluster.
+
+        Raises:
+            ValueError: when the given resource kind is not supported.
+        """
+        if resource.kind == Application.kind:
+            cluster = await controller.kubernetes_api.read_cluster(
+                namespace=resource.status.running_on.namespace,
+                name=resource.status.running_on.name,
+            )
+            return KubernetesApplicationObserver(
+                cluster,
+                resource,
+                controller.on_status_update,
+                time_step=controller.observer_time_step,
+            )
+
+        elif resource.kind == Cluster.kind:
+            return KubernetesClusterObserver(
+                resource,
+                controller.on_status_update,
+                time_step=controller.observer_time_step,
+            )
+        else:
+            raise ValueError(f"Wrong resource kind '{resource.kind}' of resource"
+                             f" {resource}. Must be '{Application.kind}' or "
+                             f" '{Cluster.kind}'.")
+
+    # Call base hook customized with the `get_observer` argument
+    await _register_observer(controller, *args, get_observer=get_observer, **kwargs)
 
 
 @listen.on(HookType.ApplicationPreReconcile)
@@ -1068,8 +1116,9 @@ async def unregister_observer(*args, **kwargs):
         - ApplicationPreDelete
         - ClusterDeletion
 
-    Wrapper for :func:`krake.controller.hooks.unregister_observer`
+    Partial of :func:`krake.controller.hooks.unregister_observer`
     """
+
     await _unregister_observer(*args, **kwargs)
 
 
