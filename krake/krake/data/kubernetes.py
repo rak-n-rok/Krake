@@ -826,9 +826,12 @@ class ClusterInfrastructureData(Serializable):
     Attributes:
         nodes (list[InfrastructureNode]): List of infrastructure nodes on which the
             cluster is running.
+        kubeconfig (dict): Admin kubeconfig of the cluster that an infrastructure
+            provider reported.
     """
 
     nodes: List[InfrastructureNode] = field(default_factory=list)
+    kubeconfig: dict = None
 
 
 class ClusterInfrastructure(Serializable):
