@@ -5,6 +5,7 @@ import sys
 import dataclasses
 from enum import Enum
 from datetime import datetime, date
+from uuid import UUID
 import typing
 from webargs import fields
 from marshmallow import (
@@ -217,6 +218,7 @@ _native_to_marshmallow = {
     dict: fields.Dict,
     datetime: fields.DateTime,
     date: fields.Date,
+    UUID: fields.UUID,
 }
 
 

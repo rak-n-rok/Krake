@@ -1,5 +1,6 @@
 from enum import auto, Enum
 from typing import List, Dict
+from uuid import UUID
 
 from dataclasses import field
 
@@ -236,3 +237,75 @@ class CloudList(ApiObject):
     kind: str = "CloudList"
     metadata: ListMetadata
     items: List[Cloud]
+
+
+class InfrastructureProviderVmCredential(Serializable):
+    """Data object that contains all parts of a single credential of an infrastructure
+    provider VM
+
+    This object is to be directly derived from the response of an infrastructure
+    provider. It represents data in the infrastructure provider API rather than the
+    Krake infrastructure API.
+
+    Attributes:
+        username (str): Username
+        private_key (str, optional): Private SSH key
+        password (str. optional): Password
+    """
+
+    username: str
+    private_key: str = None
+    password: str = None
+
+
+class InfrastructureProviderVm(Serializable):
+    """Data object that represents a VM in an infrastructure provider
+
+    This object is to be directly derived from the response of an infrastructure
+    provider. It represents data in the infrastructure provider API rather than the
+    Krake infrastructure API.
+
+    Attributes:
+        name (str): Name of the VM
+        ip_addresses (List[str], optional): List of IP addresses that are assigned to
+            the VM
+        credentials (InfrastructureProviderVmCredential, optional): List of credentials
+            of the VM
+    """
+
+    name: str
+    ip_addresses: List[str] = field(default_factory=list)
+    credentials: List[InfrastructureProviderVmCredential] = field(default_factory=list)
+
+
+class InfrastructureProviderCluster(Serializable):
+    """Data object that represents a cluster in an infrastructure provider
+
+    This object is to be directly derived from the response of an infrastructure
+    provider. It represents data in the infrastructure provider API rather than the
+    Krake infrastructure API.
+
+    Args:
+        id (Union[str, UUID]): Cluster uuid set by the infrastructure provider. Will
+            always be stored as type :class:`UUID` internally.
+        vms (List[InfrastructureProviderVm]): A list of infrastructure provider VMs on
+            which the cluster with the given id runs.
+
+    Attributes:
+        id (UUID): Same as argument.
+        vms: Same as argument.
+
+    Raises:
+        ValueError: when the given id is not an UUID.
+    """
+    id: UUID
+    vms: List[InfrastructureProviderVm]
+
+    def __post_init__(self):
+        # Ensure that the id is stored as uuid object
+        # Try to convert other data types
+        if not isinstance(self.id, UUID):
+            try:
+                self.id = UUID(self.id)
+            except ValueError as e:
+                raise ValidationError("The given id is not in UUID format.") from e
