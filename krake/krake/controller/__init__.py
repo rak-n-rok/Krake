@@ -298,7 +298,7 @@ class Reflector(object):
 
         resource_list = await self.client_list()
         for resource in resource_list.items:
-            logger.debug("Received %r", resource)
+            logger.debug(f"Received {repr(resource)}")
             await self.on_list(resource)
 
     async def watch_resource(self, watcher):
@@ -312,7 +312,7 @@ class Reflector(object):
         """
         logger.info(f"Watching {self.resource_plural}")
         async for event in watcher:
-            logger.debug("Received %r", event)
+            logger.debug(f"Received {repr(event)}")
             resource = event.object
 
             # If an event handler has been given, process it
@@ -513,7 +513,7 @@ class Observer(object):
         # ---- Occupy the mutex ----
         self.updating_resource = True
 
-        logger.debug("Updating registered resource %s", self.resource)
+        logger.debug(f"Updating registered resource {self.resource}")
 
         updated = await self.on_res_update(to_update)
 
@@ -542,7 +542,7 @@ class Observer(object):
                 the updated resource representation.
         """
 
-        logger.debug("Observing registered resource %s", self.resource)
+        logger.debug(f"Observing registered resource {self.resource}")
 
         while True:
             # Check actual resource
@@ -554,11 +554,11 @@ class Observer(object):
             # Return new resource if it changed
             if changed:
                 logger.info(
-                    "Actual resource for %s changed.", resource_ref(self.resource)
-                )
+                    f"Actual resource of {resource_ref(self.resource)} did change")
                 yield changed_resource
             else:
-                logger.debug("Resource %s did not change", resource_ref(self.resource))
+                logger.debug(
+                    f"Actual resource of {resource_ref(self.resource)} did not change")
 
             await asyncio.sleep(self.time_step)
 
@@ -700,7 +700,7 @@ class Controller(object):
         if condition(resource):
             await self.queue.put(resource.metadata.uid, resource)
         else:
-            logger.debug("Resource rejected: %s", resource)
+            logger.debug(f"Resource rejected: {resource}")
 
     async def retry(self, coro, name=""):
         """Start a background task. If the task fails not too regularly, restart it
