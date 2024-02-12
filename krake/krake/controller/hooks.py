@@ -95,20 +95,23 @@ class HookDispatcher(object):
 
 
 async def register_observer(controller, resource, start=True, **kwargs):
-    """Create an observer for the given resource, and start it as a background task if
-    wanted.
+    """Create, start and register an observer for a resource
 
-    If an observer already existed for this resource, it is stopped and deleted.
+    Creates a suitable observer for the given resource and registers it via the
+    controller's `observers` attribute. Unless `start=False` is given starts the created
+    observer as a background task.
 
     Args:
-        controller (Controller): the controller for which the observer will be
-            added in the list of working observers.
-        resource (krake.data.kubernetes.Application): the Application to observe or
-        resource (krake.data.kubernetes.Cluster): the Cluster to observe.
-        start (bool, optional): if False, does not start the observer as background
-            task.
+        controller (Controller): the controller in which the observer shall be
+            registered. Must have the `observers` attribute.
+        resource (krake.data.serializable.ApiObject): the resource to observe.
+        start (bool, optional): whether the observer shall be started or not.
 
+    The `kwargs` argument is ignored. Because all hooks can be accessed via the uniform
+    HookDispatcher.hook interface `kwargs` catches all excess arguments that are not
+    applicable to this hook.
     """
+
     if resource.kind == Application.kind:
         cluster = await controller.kubernetes_api.read_cluster(
             namespace=resource.status.running_on.namespace,
@@ -140,18 +143,22 @@ async def register_observer(controller, resource, start=True, **kwargs):
 
 
 async def unregister_observer(controller, resource, **kwargs):
-    """Stop and delete the observer for the given resource. If no observer is started,
-    do nothing.
+    """Unregister and stop an observer for a resource
+
+    Removes the observer for the given resource from the controller's `observers`
+    property. Does nothing, if no such observer is registered.
 
     Args:
-        controller (Controller): the controller for which the observer will be
-            removed from the list of working observers.
-        resource (krake.data.kubernetes.Application): the Application whose observer
-        will be stopped or
-        resource (krake.data.kubernetes.Cluster): the Cluster whose observer will be
-        stopped.
+        controller (Controller): the controller from which the observer shall be
+            removed.
+        resource (krake.data.serializable.ApiObject): the resource whose observer shall
+            be stopped.
 
+    The `kwargs` argument is ignored. Because all hooks can be accessed via the uniform
+    HookDispatcher.hook interface `kwargs` catches all excess arguments that are not
+    applicable to this hook.
     """
+
     if resource.metadata.uid not in controller.observers:
         return
 
