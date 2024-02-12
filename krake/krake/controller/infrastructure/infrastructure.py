@@ -120,6 +120,30 @@ class InfrastructureController(Controller):
         )
         self.register_task(self.cluster_reflector, name="Cluster_Reflector")
 
+    async def on_infrastructure_update(self, updated_cluster):
+        """Propagate changed cluster infrastructure data to the Krake API
+
+        Pushes the given cluster into the Krake Kubernetes API to update its
+        infrastructure subresource.
+
+        This method is to be called when the infrastructure of a cluster changed.
+        Expected callers are observers that noticed a real world infrastructure change.
+
+        Args:
+            updated_cluster (krake.data.kubernetes.Cluster): a cluster with updated
+                infrastructure data
+        """
+        logger.debug(
+            f"Infrastructure data of cluster {updated_cluster} has to be updated,"
+            " updating now.")
+
+        cluster = await self.kubernetes_api.update_cluster_infra_data(
+            namespace=updated_cluster.metadata.namespace,
+            name=updated_cluster.metadata.name,
+            body=updated_cluster,
+        )
+        return cluster
+
     async def cleanup(self):
         self.cluster_reflector = None
         self.kubernetes_api = None
