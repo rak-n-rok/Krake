@@ -290,16 +290,20 @@ class InfrastructureProviderCluster(Serializable):
             always be stored as type :class:`UUID` internally.
         vms (List[InfrastructureProviderVm]): A list of infrastructure provider VMs on
             which the cluster with the given id runs.
+        kubeconfig (dict): The kubeconfig of the cluster.
 
     Attributes:
         id (UUID): Same as argument.
         vms: Same as argument.
+        kubeconfig: Same as argument.
 
     Raises:
         ValueError: when the given id is not an UUID.
     """
+
     id: UUID
     vms: List[InfrastructureProviderVm]
+    kubeconfig: dict
 
     def __post_init__(self):
         # Ensure that the id is stored as uuid object

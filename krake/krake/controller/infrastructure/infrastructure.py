@@ -708,6 +708,11 @@ class InfrastructureController(Controller):
             body=cluster,
         )
 
+    # NOTE: Updating the kubeconfig of a cluster resource should be done by an observer
+    # instead because it is its task instead to transfer data from the infrastructure
+    # provider to resources in the Krake API. Also no controlling task (state
+    # transition, actions on actual resources, etc.) is done here.
+    # However the current observer implementation does not easily allow that.
     async def reconcile_cluster_resource(self, cluster, provider):
         """Reconcile a connecting cluster resource
 

@@ -855,6 +855,45 @@ async def test_InfrastuctureManager_get(aiohttp_server, config, db, loop):
                 }
             )
 
+    # Example serialized kubeconfig
+    # taken from a real infrastructure manager API response
+    serialized_kubeconfig = (
+        "apiVersion: v1\n"
+        "clusters:\n"
+        "- cluster:\n"
+        "    certificate-authority-data: LS0tCg==\n"  # value truncated
+        "    server: https://example.com:6443\n"  # host modified
+        "  name: kubernetes\n"
+        "contexts:\n"
+        "- context:\n"
+        "    cluster: kubernetes\n"
+        "    user: kubernetes-admin\n"
+        "  name: kubernetes-admin@kubernetes\n"
+        "current-context: kubernetes-admin@kubernetes\n"
+        "kind: Config\n"
+        "preferences: {}\n"
+        "users:\n"
+        "- name: kubernetes-admin\n"
+        "  user:\n"
+        "    client-certificate-data: LS0tCg==\n"  # value truncated
+        "    client-key-data: LS0tLQo=\n"  # value truncated
+    )
+    kubeconfig = yaml.safe_load(serialized_kubeconfig)
+
+    @routes.get("/infrastructures/{infra_uuid}/outputs")
+    @record_aiohttp_requests(
+        infra_data_retrieval_recorder,
+        endpoint=f"/infrastructures/{infra_uuid}/outputs", method="get")
+    async def _(request):
+        return web.json_response(
+            {
+                "outputs": {
+                    "kubeconfig": serialized_kubeconfig,
+                },
+            }
+        )
+
+
     @routes.get(f"/infrastructures/{infra_uuid}")
     @record_aiohttp_requests(
         infra_data_retrieval_recorder,
@@ -929,6 +968,7 @@ async def test_InfrastuctureManager_get(aiohttp_server, config, db, loop):
                 ],
             ),
         ],
+        kubeconfig=kubeconfig,
     )
 
     # Assert that the cluster data was correctly requested from the infra manager
@@ -945,6 +985,10 @@ async def test_InfrastuctureManager_get(aiohttp_server, config, db, loop):
             ),
             mock.call(
                 endpoint=f"/infrastructures/{infra_uuid}/vms/1", method="get",
+                content="",
+            ),
+            mock.call(
+                endpoint=f"/infrastructures/{infra_uuid}/outputs", method="get",
                 content="",
             ),
         ],

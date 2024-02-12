@@ -966,7 +966,13 @@ class InfrastructureManager(InfrastructureProvider):
         vms = [await self._get_vm_by_url(url)
                for url in await self._enumerate_cluster_nodes_by_url(infrastructure_id)]
 
+        try:
+            kubeconfig = await self.get_kubeconfig(cluster)
+        except InfrastructureProviderRetrieveError:
+            kubeconfig = None  # kubeconfig could not be retrieved but it is optional
+
         return InfrastructureProviderCluster(
             id=infrastructure_id,
             vms=vms,
+            kubeconfig=kubeconfig,
         )
