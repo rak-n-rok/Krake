@@ -825,6 +825,16 @@ class ClusterStatus(Status):
 
 @persistent("/kubernetes/clusters/{namespace}/{name}")
 class Cluster(ApiObject):
+    """An API object that represents a cluster
+
+    Attributes:
+        api (str, optional): The name of the Krake API the object belongs to
+        kind (str, optional): Type of the API object
+        metadata (Metadata): Metadata about the API object
+        spec (ClusterSpec): The specification of the cluster
+        status (ClusterStatus): The status of the cluster (subresource)
+    """
+
     api: str = "kubernetes"
     kind: str = "Cluster"
     metadata: Metadata
@@ -833,6 +843,15 @@ class Cluster(ApiObject):
 
 
 class ClusterList(ApiObject):
+    """An API object that holds a list of clusters
+
+    Attributes:
+        api (str, optional): The name of the Krake API the object belongs to
+        kind (str, optional): Type of the API object
+        metadata (ListMetadata): Metadata about the API object
+        items (List[Cluster]): A list of cluster API objects
+    """
+
     api: str = "kubernetes"
     kind: str = "ClusterList"
     metadata: ListMetadata
