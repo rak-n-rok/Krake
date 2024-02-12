@@ -3,12 +3,10 @@
 Provides the hooks specific to kubernetes controllers.
 """
 
-import asyncio
 import logging
 import random
 from base64 import b64encode
 from copy import deepcopy
-from contextlib import suppress
 from datetime import datetime
 from functools import reduce
 from operator import getitem
@@ -20,7 +18,11 @@ import yarl
 from aiohttp import ClientConnectorError
 
 from krake.controller import Observer
-from krake.controller.hooks import HookDispatcher
+from krake.controller.hooks import (
+    HookDispatcher,
+    register_observer as _register_observer,
+    unregister_observer as _unregister_observer,
+)
 from krake.controller.kubernetes.client import KubernetesClient, InvalidManifestError
 from krake.controller.kubernetes.tosca import ToscaParser, ToscaParserException
 from krake.utils import camel_to_snake_case, get_kubernetes_resource_idx
@@ -28,11 +30,9 @@ from kubernetes_asyncio.client.rest import ApiException
 from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio import client
 from krake.data.kubernetes import (
-    Application,
     ApplicationStatus,
     ApplicationState,
     ContainerHealth,
-    Cluster,
     ClusterStatus,
     ClusterState,
     ClusterNodeCondition,
@@ -1009,7 +1009,7 @@ class KubernetesClusterObserver(Observer):
 @listen.on(HookType.ApplicationPostReconcile)
 @listen.on(HookType.ApplicationPostMigrate)
 @listen.on(HookType.ClusterCreation)
-async def register_observer(controller, resource, start=True, **kwargs):
+async def register_observer(*args, **kwargs):
     """Create an observer for the given Application or Cluster, and start it as a
     background task if wanted.
 
@@ -1025,41 +1025,14 @@ async def register_observer(controller, resource, start=True, **kwargs):
             task.
 
     """
-    if resource.kind == Application.kind:
-        cluster = await controller.kubernetes_api.read_cluster(
-            namespace=resource.status.running_on.namespace,
-            name=resource.status.running_on.name,
-        )
-        observer = KubernetesApplicationObserver(
-            cluster,
-            resource,
-            controller.on_status_update,
-            time_step=controller.observer_time_step,
-        )
-
-    elif resource.kind == Cluster.kind:
-        observer = KubernetesClusterObserver(
-            resource,
-            controller.on_status_update,
-            time_step=controller.observer_time_step,
-        )
-    else:
-        logger.debug("Unknown resource kind. No observer was registered.", resource)
-        return
-
-    logger.debug(f"Start observer for {resource.kind} {repr(resource.metadata.name)}")
-    task = None
-    if start:
-        task = controller.loop.create_task(observer.run())
-
-    controller.observers[resource.metadata.uid] = (observer, task)
+    await _register_observer(*args, **kwargs)
 
 
 @listen.on(HookType.ApplicationPreReconcile)
 @listen.on(HookType.ApplicationPreMigrate)
 @listen.on(HookType.ApplicationPreDelete)
 @listen.on(HookType.ClusterDeletion)
-async def unregister_observer(controller, resource, **kwargs):
+async def unregister_observer(*args, **kwargs):
     """Stop and delete the observer for the given Application or Cluster. If no observer
     is started, do nothing.
 
@@ -1072,18 +1045,7 @@ async def unregister_observer(controller, resource, **kwargs):
         stopped.
 
     """
-    if resource.metadata.uid not in controller.observers:
-        return
-
-    logger.debug(f"Stop observer for {resource.kind} {resource.metadata.name}")
-    _, task = controller.observers.pop(resource.metadata.uid)
-    task.cancel()
-
-    try:
-        with suppress(asyncio.CancelledError):
-            await task
-    except asyncio.TimeoutError:
-        logger.debug("Observer timed out before being unregistered")
+    await _unregister_observer(*args, **kwargs)
 
 
 @listen.on(HookType.ApplicationToscaTranslation)
