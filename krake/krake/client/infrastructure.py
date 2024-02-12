@@ -1,4 +1,6 @@
-from krake.client import Watcher, ApiClient
+from aiohttp import ClientResponseError
+
+from krake.client import Watcher, ApiClient, InvalidResourceError
 from krake.data.infrastructure import (
     GlobalInfrastructureProvider,
     GlobalCloud,
@@ -619,3 +621,47 @@ class InfrastructureApi(ApiClient):
         resp = await self.client.session.request("PUT", url, json=body.serialize())
         data = await resp.json()
         return Cloud.deserialize(data)
+
+    async def get_infrastructure_provider(self, cloud):
+        """Get the infrastructure provider referenced in the given cloud.
+
+        Args:
+            cloud (Union[Cloud, GlobalCLoud]): the cloud with the
+                infrastructure provider reference.
+
+        Raises:
+            InvalidResourceError: When the cluster reference to
+                the infrastructure provider is wrong.
+
+        Returns:
+            Union[InfrastructureProvider, GlobalInfrastructureProvider]:
+                Infrastructure provider referenced in the given cloud.
+        """
+        if cloud.spec.type == "openstack":
+            try:
+                return await self.read_infrastructure_provider(
+                    namespace=cloud.metadata.namespace,
+                    name=cloud.spec.openstack.infrastructure_provider.name,
+                )
+            except ClientResponseError as err:
+                if err.status == 404:
+                    try:
+                        return await self.read_global_infrastructure_provider(  # noqa: E501
+                            name=cloud.spec.openstack.infrastructure_provider.name
+                        )
+                    except ClientResponseError as err:
+                        if err.status == 404:
+                            raise InvalidResourceError(
+                                message=(
+                                    "Unable to find infrastructure provider "
+                                    f"{cloud.spec.openstack.infrastructure_provider.name} "  # noqa: E501
+                                    f"referenced in the bound cloud `{cloud.metadata.name}"  # noqa: E501
+                                )
+                            )
+
+                        raise
+                raise
+        else:
+            raise InvalidResourceError(
+                message=f"Unsupported cloud type: {cloud.spec.type}."
+            )

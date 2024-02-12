@@ -1,4 +1,10 @@
-from krake.client import Watcher, ApiClient
+from functools import cached_property
+
+from aiohttp import ClientResponseError
+
+from krake.client import Watcher, ApiClient, InvalidResourceError
+from krake.client.infrastructure import InfrastructureApi
+from krake.data.infrastructure import Cloud, GlobalCloud
 from krake.data.kubernetes import Cluster, ClusterList, ApplicationList, Application
 
 
@@ -15,6 +21,9 @@ class KubernetesApi(ApiClient):
 
     Args:
         client (krake.client.Client): API client for accessing the Krake HTTP API
+        infrastructure_api (krake.client.infrastructure.InfrastructureApi, optional):
+            Infrastructure API client to use. If not given it is created from the given
+            :arg:`client` on first use.
 
     """
 
@@ -22,6 +31,16 @@ class KubernetesApi(ApiClient):
         "Application": "Applications",
         "Cluster": "Clusters",
     }
+
+    def __init__(self, *args, infrastructure_api=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if infrastructure_api is not None:
+            self._infrastructure_api = infrastructure_api
+
+    @cached_property
+    def _infrastructure_api(self):
+        return InfrastructureApi(self.client)
 
     async def create_application(self, body, namespace):
         """Creates the specified Application.
@@ -408,6 +427,49 @@ class KubernetesApi(ApiClient):
         resp = await self.client.session.request("GET", url)
         data = await resp.json()
         return Cluster.deserialize(data)
+
+    async def get_cloud(self, cluster):
+        """Get the cloud which was bounded to the Cluster.
+
+        Args:
+            cluster (krake.data.kubernetes.Cluster): the Cluster with binding.
+
+        Raises:
+            InvalidResourceError: When the cluster binding is wrong.
+        """
+        if cluster.status.scheduled_to.kind == GlobalCloud.kind:
+            try:
+                return await self._infrastructure_api.read_global_cloud(
+                    name=cluster.status.scheduled_to.name,
+                )
+            except ClientResponseError as err:
+                if err.status == 404:
+                    raise InvalidResourceError(
+                        message="Unable to find bound global cloud: "
+                        f"{cluster.status.scheduled_to.name}."
+                    )
+
+                raise
+
+        if cluster.status.scheduled_to.kind == Cloud.kind:
+            try:
+                return await self._infrastructure_api.read_cloud(
+                    namespace=cluster.status.scheduled_to.namespace,
+                    name=cluster.status.scheduled_to.name,
+                )
+            except ClientResponseError as err:
+                if err.status == 404:
+                    raise InvalidResourceError(
+                        message="Unable to find bound cloud: "
+                        f"{cluster.status.scheduled_to.name}."
+                    )
+
+                raise
+
+        raise InvalidResourceError(
+            message="Unsupported cluster binding type"
+            f": {cluster.status.scheduled_to.kind}."
+        )
 
     async def update_cluster(self, body, namespace, name):
         """Updates the specified Cluster.

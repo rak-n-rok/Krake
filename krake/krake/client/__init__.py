@@ -5,8 +5,15 @@ leverages the same data models as the API server from :mod:`krake.data`.
 import json
 
 from aiohttp import ClientSession, TCPConnector, ClientTimeout, ClientPayloadError
-from krake.data.core import WatchEvent
+from krake.error import ResourceHandlingError
+from krake.data.core import ReasonCode, WatchEvent
 from yarl import URL
+
+
+class InvalidResourceError(ResourceHandlingError):
+    """Raised when a resource has an invalid structure."""
+
+    code = ReasonCode.INVALID_RESOURCE
 
 
 class Client(object):
