@@ -77,6 +77,39 @@ class InfrastructureController(Controller):
         self.worker_count = worker_count
         self.poll_interval = poll_interval
 
+    async def receive_cluster(self, cluster):
+        # Always cleanup deleted clusters even if they are in FAILED
+        # state.
+        if cluster.metadata.deleted:
+            if (
+                cluster.metadata.finalizers
+                and cluster.metadata.finalizers[-1] == DELETION_FINALIZER
+            ):
+                # Safeguard for infinite looping: deleted
+                # cluster is enqueued after the poll interval to slow
+                # down the infinite retry loop.
+                logger.debug(
+                    "Enqueue deleted but failed %r in %ss",
+                    cluster,
+                    self.poll_interval,
+                )
+                await self.queue.put(
+                    cluster.metadata.uid, cluster, delay=DELETION_DELAY
+                )
+            else:
+                logger.debug("Reject deleted %r without finalizer", cluster)
+
+        # Ignore all other failed clusters
+        elif cluster.status.state == ClusterState.FAILED:
+            logger.debug("Reject failed %r", cluster)
+
+        # Accept scheduled clusters
+        elif cluster.status.scheduled_to:
+            logger.debug("Enqueue scheduled %r", cluster)
+            await self.queue.put(cluster.metadata.uid, cluster)
+        else:
+            logger.debug("Reject %r", cluster)
+
     async def prepare(self, client):
         assert client is not None
         self.client = client
@@ -87,46 +120,13 @@ class InfrastructureController(Controller):
         for i in range(self.worker_count):
             self.register_task(self.handle_resource, name=f"worker_{i}")
 
-        async def enqueue(cluster):
-            # Always cleanup deleted clusters even if they are in FAILED
-            # state.
-            if cluster.metadata.deleted:
-                if (
-                    cluster.metadata.finalizers
-                    and cluster.metadata.finalizers[-1] == DELETION_FINALIZER
-                ):
-                    # Safeguard for infinite looping: deleted
-                    # cluster is enqueued after the poll interval to slow
-                    # down the infinite retry loop.
-                    logger.debug(
-                        "Enqueue deleted but failed %r in %ss",
-                        cluster,
-                        self.poll_interval,
-                    )
-                    await self.queue.put(
-                        cluster.metadata.uid, cluster, delay=DELETION_DELAY
-                    )
-                else:
-                    logger.debug("Reject deleted %r without finalizer", cluster)
-
-            # Ignore all other failed clusters
-            elif cluster.status.state == ClusterState.FAILED:
-                logger.debug("Reject failed %r", cluster)
-
-            # Accept scheduled clusters
-            elif cluster.status.scheduled_to:
-                logger.debug("Enqueue scheduled %r", cluster)
-                await self.queue.put(cluster.metadata.uid, cluster)
-            else:
-                logger.debug("Reject %r", cluster)
-
         self.cluster_reflector = Reflector(
             listing=self.kubernetes_api.list_all_clusters,
             watching=self.kubernetes_api.watch_all_clusters,
-            on_list=enqueue,
-            on_add=enqueue,
-            on_update=enqueue,
-            on_delete=enqueue,
+            on_list=self.receive_cluster,
+            on_add=self.receive_cluster,
+            on_update=self.receive_cluster,
+            on_delete=self.receive_cluster,
             resource_plural="Kubernetes Clusters",
         )
         self.register_task(self.cluster_reflector, name="Cluster_Reflector")
