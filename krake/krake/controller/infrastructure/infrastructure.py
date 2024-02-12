@@ -13,6 +13,7 @@ from krake.client.infrastructure import InfrastructureApi
 
 from .hooks import (
     register_observer, unregister_observer,
+    listen, HookType,
 )
 from .providers import (
     InfrastructureProvider,
@@ -218,6 +219,9 @@ class InfrastructureController(Controller):
             cluster (krake.data.kubernetes.Cluster): the Cluster to process.
 
         """
+
+        cluster_copy = copy.deepcopy(cluster)
+
         try:
             logger.debug("Handle %r", cluster)
             cloud = await self.kubernetes_api.read_cluster_obj_binding(cluster)
@@ -230,9 +234,46 @@ class InfrastructureController(Controller):
             )
 
             if cluster.metadata.deleted:
+                # Remove a cluster observer, if the cluster is going to be deleted
+                await listen.hook(
+                    HookType.ClusterDeletion,
+                    controller=self,
+                    resource=cluster_copy,
+                )
+                # Remove the cluster
                 await self.delete_cluster(cluster, provider)
             else:
+                # Reconcile the cluster otherwise
                 await self.reconcile_cluster(cluster, provider)
+
+                # Ensure the cluster is correctly observed
+
+                # Create an infrastructure cluster observer, if the cluster is not
+                # observed yet.
+                if cluster_copy.metadata.uid not in self.observers:
+                    await listen.hook(
+                        HookType.ClusterCreation,
+                        controller=self,
+                        resource=cluster_copy,
+                        start=True,
+                    )
+                # If copy of the received cluster is not equal to
+                # the cluster saved in the corresponding infrastructure cluster
+                # observer, then the cluster observer will be deleted and created again
+                # to sync the observer again to the saved cluster in Krake
+                elif cluster_copy != \
+                        self.observers[cluster_copy.metadata.uid][0].resource:
+                    await listen.hook(
+                        HookType.ClusterDeletion,
+                        controller=self,
+                        resource=cluster_copy,
+                    )
+                    await listen.hook(
+                        HookType.ClusterCreation,
+                        controller=self,
+                        resource=cluster_copy,
+                        start=True,
+                    )
 
         except (ControllerError, InvalidResourceClientError) as error:
             logger.error(error)
