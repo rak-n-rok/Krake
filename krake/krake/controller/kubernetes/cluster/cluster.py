@@ -3,7 +3,6 @@ import datetime
 import logging
 from contextlib import suppress
 from copy import deepcopy
-from functools import partial
 from datetime import timedelta
 
 from kubernetes_asyncio.client.rest import ApiException
@@ -132,6 +131,9 @@ class KubernetesClusterController(Controller):
             # Start an observer only if an actual resource exists on a cluster
             await register_observer(self, cluster)
 
+        await self.receive_cluster(cluster)
+
+    async def receive_cluster(self, cluster):
         await self.simple_on_receive(cluster, self.accept_accessible)
 
     async def prepare(self, client):
@@ -142,15 +144,12 @@ class KubernetesClusterController(Controller):
         for i in range(self.worker_count):
             self.register_task(self.handle_resource, name=f"worker_{i}")
 
-        receive_cluster = partial(
-            self.simple_on_receive, condition=self.accept_accessible
-        )
         self.cluster_reflector = Reflector(
             listing=self.kubernetes_api.list_all_clusters,
             watching=self.kubernetes_api.watch_all_clusters,
             on_list=self.list_cluster,
-            on_add=receive_cluster,
-            on_update=receive_cluster,
+            on_add=self.receive_cluster,
+            on_update=self.receive_cluster,
             resource_plural="Kubernetes Clusters",
         )
         self.register_task(self.cluster_reflector, name="Cluster_Reflector")
