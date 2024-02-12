@@ -1,7 +1,10 @@
 """Module comprises Krake infrastructure providers abstraction.
 """
 import enum
+from itertools import groupby
 from typing import NamedTuple
+import re
+from uuid import UUID
 
 import yaml
 from aiohttp import ClientResponseError, ClientError
@@ -9,6 +12,11 @@ from yarl import URL
 
 from krake.controller import ControllerError
 from krake.data.core import ReasonCode
+from krake.data.infrastructure import (
+    InfrastructureProviderCluster,
+    InfrastructureProviderVm,
+    InfrastructureProviderVmCredential
+)
 
 
 class InfrastructureProviderError(ControllerError):
@@ -162,6 +170,38 @@ class InfrastructureProvider(object):
         """Retrieve a cluster kubeconfig using the infrastructure provider."""
         raise NotImplementedError()
 
+    async def get(self, cluster):
+        """Retrieve information about a cluster using the infrastructure provider.
+
+        Returns:
+            InfrastructureProviderCluster: data object that represents the corresponding
+               cluster in the infrastructureprovider
+
+        Raises:
+            NotImplementedError: when the method is not supported by the infrastructure
+                provider or was not implemented yet.
+        """
+        raise NotImplementedError()
+
+    async def get_vm(self, cluster, ident):
+        """Retrieve information about a cluster VM using an infrastructure provider.
+
+        Args:
+            cluster (krake.data.kubernetes.Cluster): a cluster managed by the
+                infrastructure manager.
+            ident (Union[UUID|int|str]): a UUID, index, number, name or similiar that
+                identifies the VM in the infrastructure provider.
+
+        Returns:
+            InfrastructureProviderVm: A data object that represents an infrastructure
+                manager VM with the retrieved information.
+
+        Raises:
+            NotImplementedError: when the method is not supported by the infrastructure
+                provider or was not implemented yet.
+        """
+        raise NotImplementedError()
+
 
 class IMAuthPassword(NamedTuple):
     """Container that contains data for IM service password authentication."""
@@ -255,7 +295,7 @@ class CloudOpenStackAuthPassword(NamedTuple):
 class InfrastructureManager(InfrastructureProvider):
     """IM infrastructure provider client.
 
-    Implements client calls (create, retrieve, delete, update) of the
+    Implements client calls (create, retrieve, delete, update, get) of the
     IM infrastructure provider.
 
     Read the IM docs:
@@ -715,3 +755,218 @@ class InfrastructureManager(InfrastructureProvider):
                     f" kubeconfig {kubeconfig}."
                 )
             )
+
+    async def _enumerate_cluster_nodes_by_url(self, infrastructure_id):
+        """Return a list of urls that covers all VMs of the referenced infrastructure
+        manager infrastructure.
+
+        Args:
+            infrastructure_id (UUID): uuid of the infrastructure
+
+        Returns:
+            List[str]: List of URLs that reference VMs in the infrastructure provider
+                API.
+
+        Raises:
+            InfrastructureProviderRetrieveError: If the given infrastructure does not
+                exist or cannot be retrieved.
+        """
+        url = (
+            URL(self.infrastructure_provider.spec.im.url)
+            / "infrastructures/"
+            / str(infrastructure_id)
+        )
+        headers = {
+            "Authorization": self._auth_header,
+            "Accept": "application/json"
+        }
+        try:
+            async with self.session.get(url, headers=headers) as resp:
+                resp.raise_for_status()
+                json_response = await resp.json()
+        except ClientError as err:
+            if isinstance(err, ClientResponseError) and err.status == 404:
+                raise InfrastructureProviderNotFoundError(
+                    message=f"Infrastructure {infrastructure_id} not found."
+                )
+
+            raise InfrastructureProviderRetrieveError(
+                message=(
+                    f"Failed to retrieve infrastructure {infrastructure_id} with"
+                    f" IM provider {self.infrastructure_provider.metadata.name},"
+                    f" error: {err!r}"
+                )
+            )
+        return [item['uri'] for item in json_response['uri-list']]
+
+    async def _get_vm_by_url(self, url):
+        """Retrieve VM information by url from the infrastructure manager
+
+        Args:
+            url (str): URL of a VM in the infrastructure manager API.
+
+        Returns:
+            InfrastructureProviderVm: A data object that represents an infrastructure
+                manager VM with the retrieved information.
+
+        Raises:
+            InfrastructureProviderRetrieveError: If the given infrastructure does not
+                exist or cannot be retrieved.
+        """
+        headers = {
+            "Authorization": self._auth_header,
+            "Accept": "application/json"
+        }
+        try:
+            async with self.session.get(url, headers=headers) as resp:
+                resp.raise_for_status()
+                response = await resp.json()
+        except ClientError as err:
+            if isinstance(err, ClientResponseError) and err.status == 404:
+                raise InfrastructureProviderNotFoundError(
+                    message=f"Infrastructure not found at url '{url}'."
+                )
+
+            raise InfrastructureProviderRetrieveError(
+                message=(
+                    f"Failed to retrieve VM information from IM provider url '{url}'"
+                    f" {self.infrastructure_provider.metadata.name}, error: {err!r}"
+                )
+            )
+
+        # Get VM by filtering the RADL JSON response for infrastructure manager systems
+        # NOTE: We expect only one system in the response
+        radl_system = [x for x in response['radl'] if x['class'] == "system"][0]
+        if not radl_system:
+            raise InfrastructureProviderNotFoundError(
+                message=f"VM not found at '{url}'."
+            )
+
+        # Get the VM's ip addresses by filtering all net_interface.*.ip keys and
+        #  extracting their value
+        ip_addresses = [v for k, v in radl_system.items()
+                        if re.match(r'^net_interface\.[0-9]+\.ip$', k) is not None]
+
+        # Bundle the VM's credentials
+        _cred_key_prefix_regex = r'^disk\.[0-9]+\.os\.credentials\.'
+        _cred_key_regex = rf'{_cred_key_prefix_regex}(username|password|private_key)$'
+        # Filter all items that contain credential related data
+        cred_items = \
+            {k: v for k, v in radl_system.items() if re.match(_cred_key_regex, k)}
+        # Group loose credential items (by prefix)
+        extracted_credentials = [
+            # strip group prefix from captured keys
+            {re.sub(rf"^{k}", "", a): b for a, b in v}
+            for k, v in groupby(
+                # sort list of credential items before grouping
+                sorted(cred_items.items()),
+                # group key equals the *matched* key prefix
+                key=lambda x: re.match(_cred_key_prefix_regex, x[0]).group(0)
+            )
+        ]
+        # EXAMPLE: See below for an example on how the above block converts the
+        #          `radl_system` dictionary into the `extracted_credentials` list.
+        #
+        #          radl_system = {
+        #               "disk.0.os.credentials.username": "user1",
+        #               "disk.0.os.credentials.password": "password1",
+        #               "disk.0.image.name": "foobar",
+        #               "disk.1.os.credentials.username": "user2",
+        #               "disk.1.os.credentials.private_key": "privatekey2",
+        #               "disk.1.os.credentials.public_key": "pubkey2",
+        #               "gpu.vendor": "AMD",
+        #          }
+        #          extracted_credentials = [
+        #               {"username": "user1", "password": "password1"},
+        #               {"username": "user2", "private_key": "privatekey2"}
+        #                 # "public_key" is ignored because
+        #                 #  it is not matched by _cred_key_regex
+        #          ]
+
+        # Pack all extracted credentials into InfrastructureProviderVmCredential objects
+        credentials = [
+            InfrastructureProviderVmCredential(
+                username=cred.get('username', None),
+                password=cred.get('password', None),
+                private_key=cred.get('private_key', None),
+            )
+            for cred in extracted_credentials
+        ]
+
+        return InfrastructureProviderVm(
+            name=radl_system['instance_name'],
+            ip_addresses=ip_addresses,
+            credentials=credentials,
+        )
+
+    async def get_vm(self, cluster, ident):
+        """Retrieve information about a cluster VM using the infrastructure manager.
+
+        Args:
+            cluster (krake.data.kubernetes.Cluster): a cluster managed by the
+                infrastructure manager.
+            ident (int): index of the VM in the infrastructure manager.
+
+        Returns:
+            InfrastructureProviderVm: A data object that represents an infrastructure
+                manager VM with the retrieved information.
+
+        Raises:
+            InfrastructureProviderRetrieveError: when the VM informations cannot be
+                retrieved.
+            ValueError: when the given `ident` value is not an integer.
+            ValueError: when the given cluster has no valid cluster id.
+
+        Delegates to:
+            :meth:`self._get_vm_by_url`: To retrieve the cluster VM information by url
+        """
+        if not isinstance(ident, int):
+            raise ValueError(f"Given VM index (ident) is not an integer: {str(ident)}")
+
+        try:
+            infrastructure_id = UUID(cluster.status.cluster_id)
+        except ValueError as e:
+            raise ValueError("Given cluster has no valid `status.cluster_id`") from e
+
+        index = str(ident)
+        infrastructure_id = cluster.status.cluster_id
+
+        url = (
+            URL(self.infrastructure_provider.spec.im.url)
+            / "infrastructures/"
+            / infrastructure_id
+            / "vms"
+            / index
+        )
+        return await self._get_vm_by_url(url)
+
+    async def get(self, cluster):
+        """Retrieve information about a cluster using the infrastructure manager.
+
+        Args:
+            cluster (krake.data.kubernetes.Cluster): a cluster managed by the
+                infrastructure manager.
+
+        Returns:
+            InfrastructureProviderCluster: data object that represents the corresponding
+                real world cluster in the infrastructure manager.
+
+        Raises:
+            ValueError: when the given cluster has no valid cluster_id
+                ('status.cluster_id' property).
+            InfrastructureProviderRetrieveError: when the given cluster has no
+                cluster_id or some non-optional information (vms) could not be collected
+                from the infrastructure manager.
+        """
+        try:
+            infrastructure_id = UUID(cluster.status.cluster_id)
+        except ValueError as e:
+            raise ValueError("Given cluster has no valid `status.cluster_id`") from e
+
+        vms = [await self._get_vm_by_url(url)
+               for url in await self._enumerate_cluster_nodes_by_url(infrastructure_id)]
+
+        return InfrastructureProviderCluster(
+            id=infrastructure_id,
+            vms=vms,
+        )
