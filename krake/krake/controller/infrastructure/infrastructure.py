@@ -157,26 +157,24 @@ class InfrastructureController(Controller):
                 # cluster is enqueued after the poll interval to slow
                 # down the infinite retry loop.
                 logger.debug(
-                    "Enqueue deleted but failed %r in %ss",
-                    cluster,
-                    self.poll_interval,
-                )
+                    f"Enqueuing deleted but failed cluster {cluster} in"
+                    f" {self.poll_interval}s")
                 await self.queue.put(
                     cluster.metadata.uid, cluster, delay=DELETION_DELAY
                 )
             else:
-                logger.debug("Reject deleted %r without finalizer", cluster)
+                logger.debug(f"Ignoring deleted cluster {cluster} without finalizer")
 
         # Ignore all other failed clusters
         elif cluster.status.state == ClusterState.FAILED:
-            logger.debug("Reject failed %r", cluster)
+            logger.debug(f"Ignoring failed cluster {cluster}")
 
         # Accept scheduled clusters
         elif cluster.status.scheduled_to:
-            logger.debug("Enqueue scheduled %r", cluster)
+            logger.debug(f"Enqueuing scheduled cluster {cluster}")
             await self.queue.put(cluster.metadata.uid, cluster)
         else:
-            logger.debug("Reject %r", cluster)
+            logger.debug(f"Ignoring cluster {cluster}")
 
     async def list_cluster(self, cluster):
         """Receive a cluster into the controller and observe it
@@ -286,10 +284,12 @@ class InfrastructureController(Controller):
 
         while True:
             key, cluster = await self.queue.get()
+            logger.debug(f"Handling resource from queue: {cluster}")
             try:
                 await self.process_cluster(cluster)
             finally:
                 await self.queue.done(key)
+                logger.debug(f"Handled resource from queue (done): {cluster}")
             if run_once:
                 break  # Only used for tests
 
@@ -317,8 +317,8 @@ class InfrastructureController(Controller):
         """
         cluster_copy = copy.deepcopy(cluster)
 
+        logger.debug(f"Processing cluster {cluster}")
         try:
-            logger.debug("Handle %r", cluster)
             cloud = await self.kubernetes_api.read_cluster_obj_binding(cluster)
             infrastructure_provider = \
                 await self.infrastructure_api.read_cloud_obj_binding(cloud)
@@ -410,7 +410,7 @@ class InfrastructureController(Controller):
         if DeepDiff(
             cluster.spec.tosca, cluster.status.last_applied_tosca, ignore_order=True
         ):
-            logger.info("Reconciliation of %r started.", cluster)
+            logger.info(f"Reconcilation started for cluster '{cluster.metadata.name}'")
             # Ensure that deletion finalizer exists
             if DELETION_FINALIZER not in cluster.metadata.finalizers:
                 cluster.metadata.finalizers.append(DELETION_FINALIZER)
@@ -427,13 +427,13 @@ class InfrastructureController(Controller):
 
         # Always re-configure when the cluster state is `FAILING_RECONCILIATION`.
         elif cluster.status.state == ClusterState.FAILING_RECONCILIATION:
-            logger.info("Reconfigure %r", cluster)
             await self.on_reconfigure(cluster, provider)
 
         # Stop reconciliation when the cluster state is `ONLINE`
         # or `CONNECTING` state.
         elif cluster.status.state in (ClusterState.ONLINE, ClusterState.CONNECTING):
-            logger.info("Reconciliation of %r finished.", cluster)
+            logger.info(
+                f"Reconciliation finished for cluster '{cluster.metadata.name}'")
             return
 
         # Always wait for connecting when some cluster action is in
@@ -465,6 +465,8 @@ class InfrastructureController(Controller):
         Delegates to:
             :meth:`provider.create`: to create the actual cluster
         """
+        logger.info(f"Creating cluster '{cluster.metadata.name}'")
+
         # Transition into "CREATING" state
         cluster.status.state = ClusterState.CREATING
         await self.kubernetes_api.update_cluster_status(
@@ -517,6 +519,8 @@ class InfrastructureController(Controller):
         Delegates to:
             :meth:`provider.reconcile`: to reconcile the actual cluster
         """
+        logger.debug(f"Reconciling cluster {cluster}")
+
         # Transition into "RECONCILING" state
         cluster.status.state = ClusterState.RECONCILING
         await self.kubernetes_api.update_cluster_status(
@@ -560,13 +564,14 @@ class InfrastructureController(Controller):
         Delegates to:
             :meth:`provider.reconfigure`: to reconfigure the actual cluster
         """
+        logger.info(f"Reconfiguring cluster '{cluster.metadata.name}'")
         try:
             await provider.reconfigure(cluster)
         except InfrastructureProviderReconfigureError:
             # Failed to reconfigure cluster.
             # Transition into `FAILING_RECONCILIATION` state.
             # The cluster will be enqueued again in the next controller loop.
-            logger.debug("Unable to reconfigure cluster %r", cluster)
+            logger.debug(f"Unable to reconfigure cluster {cluster}")
             cluster.status.state = ClusterState.FAILING_RECONCILIATION
 
             await self.kubernetes_api.update_cluster_status(
@@ -673,19 +678,21 @@ class InfrastructureController(Controller):
                     body=cluster,
                 )
                 raise InfrastructureProviderReconcileError(
-                    message=("Reconciliation of the cluster failed: %r", cluster)
+                    message=(f"Reconciliation failed for cluster {cluster}")
                 )
 
             if state == InfrastructureState.FAILED:
                 raise InfrastructureProviderReconcileError(
-                    message=("Reconciliation of the cluster failed: %r", cluster)
+                    message=(f"Reconciliation failed for cluster {cluster}")
                 )
 
             if state == InfrastructureState.CONFIGURED:
-                logger.debug("Cluster %r reconciliation complete", cluster)
+                logger.debug(f"Cluster reconciliation complete for cluster {cluster}")
                 break
 
-            logger.info("Reconciliation on %r still in progress", cluster)
+            logger.info(
+                "Reconciliation still in progress for cluster"
+                f" '{cluster.metadata.name}'")
             await asyncio.sleep(self.poll_interval)
 
         # Transition into `CONNECTING` state once the cluster in configured.
@@ -723,9 +730,8 @@ class InfrastructureController(Controller):
         """
         if cluster.status.state != ClusterState.CONNECTING:
             logger.debug(
-                "Cluster %r not connecting. Skip cluster resource reconciliation.",
-                cluster,
-            )
+                f"Cluster {cluster} not connecting. Skipping cluster resource"
+                " reconciliation.")
             return
 
         cluster.spec.kubeconfig = await provider.get_kubeconfig(cluster)
@@ -778,7 +784,7 @@ class InfrastructureController(Controller):
         if cluster.status.cluster_id and cluster.status.state != ClusterState.PENDING:
 
             if cluster.status.state != ClusterState.DELETING:
-                logger.info("Delete %r", cluster)
+                logger.info(f"Deleting cluster '{cluster.metadata.name}'")
                 try:
                     await provider.delete(cluster)
                 except InfrastructureProviderNotFoundError:
@@ -795,12 +801,12 @@ class InfrastructureController(Controller):
                 try:
                     state = await provider.get_state(cluster)
                 except InfrastructureProviderNotFoundError:
-                    logger.info("The cluster has been deleted: %r", cluster)
+                    logger.info(f"Deleted cluster '{cluster.metadata.name}'")
                     break
 
                 if state == InfrastructureState.FAILED:
                     raise InfrastructureProviderDeleteError(
-                        message=("Deletion of the cluster failed: %r", cluster)
+                        message=(f"Deletion failed for cluster '{cluster}'")
                     )
 
                 await asyncio.sleep(self.poll_interval)
