@@ -552,6 +552,7 @@ class ClusterInfrastructureDataFactory(Factory):
         lambda o: list(InfrastructureNodeFactory()
                        for _ in range(o.node_count))
     )
+    # TODO: Set kubeconfig attribute
 
 
 class ClusterInfrastructureFactory(Factory):

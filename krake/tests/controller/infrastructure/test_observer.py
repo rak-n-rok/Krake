@@ -218,6 +218,34 @@ async def test_InfrastructureProviderClusterObserver_fetch_actual_resource(
                 }
             )
 
+    @routes.get(f"/infrastructures/{cluster_id}/outputs")
+    async def _(request):
+        return web.json_response(
+            {
+                "outputs": {
+                    "kubeconfig": "apiVersion: v1\n"
+                                  "clusters:\n"
+                                  "- cluster:\n"
+                                  "    certificate-authority-data: 0tLS0tCg==\n"
+                                  "    server: https://example.com:6443\n"
+                                  "  name: kubernetes\n"
+                                  "contexts:\n"
+                                  "- context:\n"
+                                  "    cluster: kubernetes\n"
+                                  "user: kubernetes-admin\n"
+                                  "  name: kubernetes-admin@kubernetes\n"
+                                  "current-context: kubernetes-admin@kubernetes\n"
+                                  "kind: Config\n"
+                                  "preferences: {}\n"
+                                  "users:\n"
+                                  "- name: kubernetes-admin\n"
+                                  "  user:\n"
+                                  "    client-certificate-data: 0tLS0tCg==\n"
+                                  "    client-key-data: LS0tLQo=\n"
+                },
+            }
+        )
+
     im_server_port = randint(30000, 50000)
 
     @routes.get(f"/infrastructures/{cluster_id}")
