@@ -623,19 +623,27 @@ class InfrastructureApi(ApiClient):
         return Cloud.deserialize(data)
 
     async def get_infrastructure_provider(self, cloud):
-        """Get the infrastructure provider referenced in the given cloud.
+        """Get the infrastructure provider attached to a cloud.
+
+        Returns the infrastructure provider object referenced in the given cloud object.
 
         Args:
-            cloud (Union[Cloud, GlobalCLoud]): the cloud with the
-                infrastructure provider reference.
+            cloud (Union[krake.data.infrastructure.Cloud,
+                krake.data.infrastructure.GlobalCloud]): the cloud with the
+                infrastructure provider attached.
 
-        Raises:
-            InvalidResourceError: When the cluster reference to
-                the infrastructure provider is wrong.
+        Delegates to:
+            :meth:`self.read_infrastructure_provider`
+            :meth:`self.read_global_infrastructure_provider`
 
         Returns:
-            Union[InfrastructureProvider, GlobalInfrastructureProvider]:
-                Infrastructure provider referenced in the given cloud.
+            Union[krake.data.infrastructure.InfrastructureProvider,
+                krake.data.infrastructure.GlobalInfrastructureProvider]: Infrastructure
+                provider attached to the given cloud.
+
+        Raises:
+            InvalidResourceError: When the type of the given cloud is unsupported or
+                when the attached infrastructure provider does not exist.
         """
         if cloud.spec.type == "openstack":
             try:
