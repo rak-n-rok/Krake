@@ -77,6 +77,15 @@
         packages:
           - python3-pip
 
+    # FIXME: we shouldn't override the system wide pip and setuptools
+    - name: Upgrade pip and setuptools to latest version
+      pip:
+        name:
+          - pip
+          - setuptools
+        executable: pip3
+        state: latest
+
     # Inspired from https://stackoverflow.com/questions/37333305/ansible-create-a-user-with-sudo-privileges
     - name: Create 'wheel' group
       group:
