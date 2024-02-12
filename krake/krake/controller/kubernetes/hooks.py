@@ -1010,20 +1010,31 @@ class KubernetesClusterObserver(Observer):
 @listen.on(HookType.ApplicationPostMigrate)
 @listen.on(HookType.ClusterCreation)
 async def register_observer(*args, **kwargs):
-    """Create an observer for the given Application or Cluster, and start it as a
-    background task if wanted.
+    """Create, start and register an observer for a cluster or application
 
-    If an observer already existed for this Application or Cluster, it is stopped
-    and deleted.
+    Creates a suitable observer for the given cluster or application resource and
+    registers it in the kubernetes controller. Unless `start=False` is given starts the
+    created observer as a background task.
 
     Args:
-        controller (KubernetesController): the controller for which the observer will be
-            added in the list of working observers.
-        resource (krake.data.kubernetes.Application): the Application to observe or
-        resource (krake.data.kubernetes.Cluster): the Cluster to observe.
-        start (bool, optional): if False, does not start the observer as background
-            task.
+        controller (Union[KubernetesClusterController,
+            KubernetesApplicationController]): the kubernetes controller in which the
+            observer shall be registered.
+        resource (Union[krake.data.kubernetes.Cluster,
+            krake.data.kubernetes.Application]): the cluster or application to observe.
+        start (bool, optional): whether the observer shall be started or not.
 
+    The `kwargs` argument is ignored. Because all hooks can be accessed via the uniform
+    HookDispatcher.hook interface `kwargs` catches all excess arguments that are not
+    applicable to this hook.
+    Arguments that apply to this hook are explicitly listed.
+
+    Registered under the following hooks:
+        - ApplicationPostReconcile
+        - ApplicationPostMigrate
+        - ClusterCreation
+
+    Wrapper for :func:`krake.controller.hooks.register_observer`
     """
     await _register_observer(*args, **kwargs)
 
@@ -1033,17 +1044,31 @@ async def register_observer(*args, **kwargs):
 @listen.on(HookType.ApplicationPreDelete)
 @listen.on(HookType.ClusterDeletion)
 async def unregister_observer(*args, **kwargs):
-    """Stop and delete the observer for the given Application or Cluster. If no observer
-    is started, do nothing.
+    """Unregister and stop an observer for a cluster or application
+
+    Removes the observer for the given cluster or application from the kubernetes
+    controller. Does nothing, if no such observer is registered.
 
     Args:
-        controller (KubernetesController): the controller for which the observer will be
-            removed from the list of working observers.
-        resource (krake.data.kubernetes.Application): the Application whose observer
-        will be stopped or
-        resource (krake.data.kubernetes.Cluster): the Cluster whose observer will be
-        stopped.
+        controller (Union[KubernetesClusterController,
+            KubernetesApplicationController]): the kubernetes controller from which the
+            observer shall be removed.
+        resource (Union[krake.data.kubernetes.Cluster,
+            krake.data.kubernetes.Application]): the cluster or application whose
+            observer shall be stopped.
 
+    The `kwargs` argument is ignored. Because all hooks can be accessed via the uniform
+    HookDispatcher.hook interface `kwargs` catches all excess arguments that are not
+    applicable to this hook.
+    Arguments that apply to this hook are explicitly listed.
+
+    Registered under the following hooks:
+        - ApplicationPreReconcile
+        - ApplicationPreMigrate
+        - ApplicationPreDelete
+        - ClusterDeletion
+
+    Wrapper for :func:`krake.controller.hooks.unregister_observer`
     """
     await _unregister_observer(*args, **kwargs)
 
