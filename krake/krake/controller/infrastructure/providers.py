@@ -152,23 +152,23 @@ class InfrastructureProvider(object):
         return object.__new__(mcls.registry[provider_type])
 
     async def create(self, cluster):
-        """Create a cluster using the infrastructure provider."""
+        """Create a cluster using an infrastructure provider."""
         raise NotImplementedError()
 
     async def reconcile(self, cluster):
-        """Update a cluster using the infrastructure provider."""
+        """Update a cluster using an infrastructure provider."""
         raise NotImplementedError()
 
     async def delete(self, cluster):
-        """Delete a cluster using the infrastructure provider."""
+        """Delete a cluster using an infrastructure provider."""
         raise NotImplementedError()
 
     async def get_state(self, cluster):
-        """Retrieve a cluster using the infrastructure provider."""
+        """Retrieve a cluster's state using an infrastructure provider."""
         raise NotImplementedError()
 
     async def get_kubeconfig(self, cluster):
-        """Retrieve a cluster kubeconfig using the infrastructure provider."""
+        """Retrieve a cluster's kubeconfig using an infrastructure provider."""
         raise NotImplementedError()
 
     async def get(self, cluster):
