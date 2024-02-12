@@ -654,7 +654,7 @@ class InfrastructureApi(ApiClient):
             except ClientResponseError as err:
                 if err.status == 404:
                     try:
-                        return await self.read_global_infrastructure_provider(  # noqa: E501
+                        return await self.read_global_infrastructure_provider(
                             name=cloud.spec.openstack.infrastructure_provider.name
                         )
                     except ClientResponseError as err:
