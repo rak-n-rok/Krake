@@ -42,25 +42,69 @@ class InfrastructureControllerError(ControllerError):
 
 
 class InfrastructureController(Controller):
-    """The Infrastructure controller receives the Cluster resources from
-    the API and acts on them, by creating, updating or deleting their actual
-    cluster counterparts. It uses various infrastructure provider
-    clients (IM, Yaook, etc.) for this purpose.
+    """The controller that manages the infrastructure of and monitors clusters that are
+    bound to a cloud.
+
+    Queries and watches the Krake Kubernetes API for cluster resources utilizing a
+    reflector (:class:`Reflector`) and acts on them, by creating, updating or deleting
+    their actual cluster counterparts via an infrastructure provider
+    (:class:`InfrastructureProvider`). Receiving and handling of resources is decoupled
+    by an internal work queue :class:`WorkQueue`.
+
+    Transitions the cluster resources between the following :class:`ClusterState`s as
+    the actions on the actual cluster counterparts progress:
+        - PENDING               (initial state)
+        - CONNECTING            (cluster state)
+        - CREATING              (cluster infra state)
+        - RECONCILING           (cluster infra state)
+        - DELETING              (cluster infra state)
+        - FAILING_RECONCILATION (cluster infra state)
+        - FAILED                (cluster infra state)
+
+    Monitors the infrastructure of the actual cluster counterparts via an infrastructure
+    provider by attaching an observer to each managed resource. Infrastructure cluster
+    observers (:class:`InfrastructureClusterObserver`) trigger the controller to sync
+    the cluster resources in the Krake API with the observations they made.
 
     Args:
-        api_endpoint (str): URL to the API
+        api_endpoint (str): Base URL of the Krake API
+        worker_count (int, optional): The amount of workers that should handle resources
+            (workers are run as background tasks)
         loop (asyncio.AbstractEventLoop, optional): Event loop that should be
             used.
         ssl_context (ssl.SSLContext, optional): if given, this context will be
             used to communicate with the API endpoint.
         debounce (float, optional): value of the debounce for the
             :class:`WorkQueue`.
-        worker_count (int, optional): the amount of worker function that should be
-            run as background tasks.
-        poll_interval (float, optional): time in second before two attempts to modify a
-            cluster (creation, deletion, update, change from FAILED state...).
+        poll_interval (float, optional): time in seconds between two attempts to modify
+            a cluster (creation, deletion, update, change from FAILED state...).
         time_step (float, optional): for the Observers: the number of seconds between
             two observations of the actual resource.
+
+    Attributes:
+        loop: Same as argument. (inherited)
+        queue (krake.controller.WorkQueue): The work queue of the controller in which
+            received resources are put by the controller's reflector and from which
+            the controller's resource handlers take resources for processing.
+            (inherited)
+        tasks (List[Tuple[Coroutine, str]]): A list in which the controller registers
+            its tasks as tuples containing a coroutine and a name. (inherited)
+        max_retry (int): Number of times a task should be retried before testing the
+            brust time. Set to 3 during init. (inherited)
+        burst_time (int): Maximum acceptable average time for a retried task.
+            (inherited)
+        ssl_context: Same as argument. (inherited)
+        api_endpoint: Same as argument. (inherited)
+        client: Same as argument. (inherited)
+        kubernetes_api (krake.client.kubernetes.KubernetesApi): Krake Kubernetes API
+            client. Set in :meth:`prepare`.
+        infrastructure_api (krake.client.infrastructure.InfrastructurApi): Krake
+            infrastructure API client. Set in :meth:`prepare`.
+        worker_count: Same as argument.
+        poll_interval: Same as argument.
+        observer_time_step: Same as :arg:`time_step`.
+        observers (Dict[str, Tuple[krake.controller.infrastructure.hooks.Observer,
+            asyncio.Task]]): Mapping that registers an observer to a resource (uid).
 
     """
 
@@ -88,8 +132,22 @@ class InfrastructureController(Controller):
         self.observers = {}
 
     async def receive_cluster(self, cluster):
-        # Always cleanup deleted clusters even if they are in FAILED
-        # state.
+        """Receive a cluster into the controller
+
+        Enqueues the given cluster into the worker queue of the controller.
+
+        Clusters with the following properties are ignored:
+        - no finalizer
+        - state is FAILED
+        - not scheduled
+
+        This function is to be called by the reflector on any cluster event.
+
+        Args:
+            cluster (krake.data.kubernetes.Cluster): the cluster to receive
+        """
+
+        # Always cleanup deleted clusters even if they are in FAILED state.
         if cluster.metadata.deleted:
             if (
                 cluster.metadata.finalizers
@@ -141,6 +199,21 @@ class InfrastructureController(Controller):
         await self.receive_cluster(cluster)
 
     async def prepare(self, client):
+        """Prepare the controller for operation
+
+        Steps:
+            1. Derives API clients for the Krake Kubernetes and Krake Infrastructure API
+               from the given API client.
+            2. Registers the set amount of handlers (worker tasks) to process resources
+               from the controller's worker queue. [1]
+            3. Registers a reflector (additional worker task) that feeds resources from
+               the Krake API into the controller's worker queue.
+
+        [1] :meth:`self.handle_resource` is used as resource handler
+
+        Args:
+            client (krake.client.Client): Krake API client the controller should use
+        """
         assert client is not None
         self.client = client
         self.infrastructure_api = InfrastructureApi(self.client)
@@ -186,19 +259,29 @@ class InfrastructureController(Controller):
         return cluster
 
     async def cleanup(self):
+        """Cleanup the controller
+
+        Resets the following properties to None:
+        - cluster_reflector
+        - kubernetes_api
+        - infrastructure_api
+        """
         self.cluster_reflector = None
         self.kubernetes_api = None
         self.infrastructure_api = None
 
     async def handle_resource(self, run_once=False):
-        """Infinite loop which fetches and hand over the resources to the right
-        coroutine.
+        """Infinitly handle resources from the controller's worker queue
+
+        Fetches resources from the controller's worker queue and hands them over to the
+        the right coroutine in an infinite loop.
 
         Args:
-            run_once (bool, optional): if True, the function only handles one resource,
-                then stops. Otherwise, continue to handle each new resource on the
-                queue indefinitely.
+            run_once (bool, optional): when set to True, only one loop is performed.
+                (Handle one resource, then stop). Should only be used for testing.
 
+        Delegates to:
+            :meth:`self.process_cluster`: to process the fetched cluster resource
         """
 
         while True:
@@ -211,15 +294,27 @@ class InfrastructureController(Controller):
                 break  # Only used for tests
 
     async def process_cluster(self, cluster):
-        """Process a Cluster: if the given cluster is marked for deletion, delete
-        the actual cluster. Otherwise, start the reconciliation between a Cluster
-        spec and its state.
+        """Process a cluster
+
+        Performs one of the following actions:
+            - Deletes the corresponding actual cluster if the given cluster it is marked
+              for deletion. Runs the ClusterDeletion hook beforehand (to remove the
+              observation).
+            - Starts reconciliation between the spec and the state of the given cluster.
+              Runs the ClusterCreation hook afterwards (to ensure correct observation).
 
         Args:
             cluster (krake.data.kubernetes.Cluster): the Cluster to process.
 
-        """
+        Delegates to:
+            :meth:`self.delete_cluster`: to delete the given cluster if needed
+            :meth:`self.reconcile_cluster`: to reconcile the given cluster otherwise
 
+        Raises:
+            InvalidResourceError: uncaught from
+                :meth:`self.infrastructure_api.get_cloud` and
+                :meth:`self.infrastructure_api.get_infrastructure_provider`
+        """
         cluster_copy = copy.deepcopy(cluster)
 
         try:
@@ -289,8 +384,14 @@ class InfrastructureController(Controller):
             )
 
     async def reconcile_cluster(self, cluster, provider):
-        """Depending on the state of the given cluster, start the rapprochement
-        of the current state of the cluster to the desired one.
+        """Reconcile a cluster via an infrastructure provider
+
+        Starts the rapprochement of the current to the desired state of the given
+        cluster depending on its state.
+        - If the cluster is not already running, the actual cluster is created.
+        - If the cluster was updated, it is reconciled.
+        - If the cluster is in FAILING_RECONCILATION state, it is reconfigured.
+        - If the cluster is in ONLINE or CONNECTING state, it is skipped.
 
         Args:
             cluster (krake.data.kubernetes.Cluster): the cluster whose actual state
@@ -298,6 +399,10 @@ class InfrastructureController(Controller):
             provider (Union[InfrastructureProvider, GlobalInfrastructureProvider]):
                 infrastructure provider that performs the operation on the cluster.
 
+        Delegates to:
+            :meth:`self.on_create`: to create the actual cluster for the given one
+            :meth:`self.on_reconcile`: to reconcile the given cluster
+            :meth:`self.on_reconfigure`: to reconfigure the given cluster
         """
         # Recursively look for all the changes between the desired state (which is
         # represented by the `cluster.spec.tosca` field) and the current state
@@ -338,14 +443,27 @@ class InfrastructureController(Controller):
         await self.reconcile_cluster_resource(cluster, provider)
 
     async def on_create(self, cluster, provider):
-        """Called when a cluster needs to be created.
+        """Create the actual cluster to a given cluster resource via an
+        infrastructure provider
+
+        This method is to be called when a cluster needs to be created.
+
+        Steps:
+            1. Sets the cluster's state to CREATING
+            2. Creates the actual cluster via the given infrastructure provider
+            3. Captures the cluster id
+            4. Markes the cluster as running
+            5. Saves the applied cluster TOSCA configuration
+            6. Runs the ClusterCreation hook (to start observation)
 
         Args:
-            cluster (krake.data.kubernetes.Cluster): the cluster that needs
-                to be created.
+            cluster (krake.data.kubernetes.Cluster): the cluster that needs to be
+                created.
             provider (Union[InfrastructureProvider, GlobalInfrastructureProvider]):
                 infrastructure provider that performs the operation on the cluster.
 
+        Delegates to:
+            :meth:`provider.create`: to create the actual cluster
         """
         # Transition into "CREATING" state
         cluster.status.state = ClusterState.CREATING
@@ -381,7 +499,14 @@ class InfrastructureController(Controller):
                 " actually created in the real world. Something is off.")
 
     async def on_reconcile(self, cluster, provider):
-        """Called when a cluster needs reconciliation.
+        """Reconcile a cluster via an infrastructure provider
+
+        This method is to be called when a cluster needs to be reconciled.
+
+        Steps:
+            1. Sets the cluster's state to RECONCILING
+            2. Reconciles the actual cluster via the given infrastructure provider
+            3. Saves the applied cluster TOSCA configuration
 
         Args:
             cluster (krake.data.kubernetes.Cluster): the cluster that needs
@@ -389,6 +514,8 @@ class InfrastructureController(Controller):
             provider (Union[InfrastructureProvider, GlobalInfrastructureProvider]):
                 infrastructure provider that performs the operation on the cluster.
 
+        Delegates to:
+            :meth:`provider.reconcile`: to reconcile the actual cluster
         """
         # Transition into "RECONCILING" state
         cluster.status.state = ClusterState.RECONCILING
@@ -408,7 +535,9 @@ class InfrastructureController(Controller):
         )
 
     async def on_reconfigure(self, cluster, provider):
-        """Called when a cluster needs reconfiguration.
+        """Reconfigure a cluster via an infrastructure provider
+
+        This method is to be called when a cluster needs to be reconfigured.
 
         In case of provider failures (e.g. restart) the provider may expect the
         "special" call that ensures the in-sync state of the managed cluster.
@@ -416,12 +545,20 @@ class InfrastructureController(Controller):
         implementation is provider specific and may or may not call a specific
         provider action.
 
+        Steps:
+            1. Reconfigures the actual cluster via the given infrastructure provider
+            2. Sets the cluster's state ...
+               - to FAILING_RECONCILATION if reconfiguration failed
+               - to RECONCILING if reconfiguration succeeded
+
         Args:
             cluster (krake.data.kubernetes.Cluster): the cluster that needs
                 to be reconfigured.
             provider (Union[InfrastructureProvider, GlobalInfrastructureProvider]):
                 infrastructure provider that performs the operation on the cluster.
 
+        Delegates to:
+            :meth:`provider.reconfigure`: to reconfigure the actual cluster
         """
         try:
             await provider.reconfigure(cluster)
@@ -450,17 +587,38 @@ class InfrastructureController(Controller):
             )
 
     async def wait_for_connecting(self, cluster, provider):
-        """Waiting for a cluster to be in a `CONNECTING` state.
+        """Wait for the infrastructure of a cluster to be configured
+
+        Continously checks the cluster's infrastructure state by polling the given
+        infrastructure provider in the set poll interval until one of the following
+        infrastructure states are reached:
+        - cluster was deleted (InfrastructureProviderNotFoundError):
+          Transitions cluster into PENDING state.
+        - state cannot be retrieved (InfrastructureProviderRetrieveError):
+          Reconcilation failed, transitions cluster into FAILING_RECONCILATION state and
+          raises InfrastructureProviderReconcileError.
+        - state is UNCONFIGURED:
+          Reconcilation failed, transitions cluster into FAILING_RECONCILATION state and
+          raises InfrastructureProviderReconcileError.
+        - state is FAILED:
+          Reconcilation failed, raises InfrastructureProviderReconcileError.
+        - state is CONFIGURED:
+          Reconcilation complete, transitions cluster into CONNECTING state.
+
+        This method is to be called after cluster reconcilation is started in order to
+        wait for the desired state to actually be reached.
 
         Args:
-            cluster (krake.data.kubernetes.Cluster): the cluster on which
-                an operation is performed that needs to be awaited.
+            cluster (krake.data.kubernetes.Cluster): the cluster on which an operation
+                is performed that needs to be awaited.
             provider (Union[InfrastructureProvider, GlobalInfrastructureProvider]):
                 infrastructure provider that performs the operation on the cluster.
 
         Raises:
-            InfrastructureProviderCreateError: if the creation of the cluster failed.
+            InfrastructureProviderReconcileError: when the reconcilation failed
 
+        Delegates to:
+            :meth:`provider.get_state`: to retrieve the cluster's infrastructure state
         """
         while True:
             try:
@@ -544,18 +702,24 @@ class InfrastructureController(Controller):
         )
 
     async def reconcile_cluster_resource(self, cluster, provider):
-        """Update the Cluster resource.
+        """Reconcile a connecting cluster resource
+
+        Updates the cluster resource with the kubeconfig retrieved from the given
+        infrastructure provider.
+        NOTE: This is required in order to connect to the cluster later on.
+
+        This method is to be called while the cluster is in CONNECTING state after
+        reconcilation.
 
         Args:
-            cluster (krake.data.kubernetes.Cluster): the cluster that needs
-                to be updated.
+            cluster (krake.data.kubernetes.Cluster): the cluster that needs to be
+                updated.
             provider (Union[InfrastructureProvider, GlobalInfrastructureProvider]):
                 infrastructure provider that performs the operation on the cluster.
 
         Raises:
-            ClientResponseError: when updating the Kubernetes cluster resource,
-                raise if any HTTP error except 400 is raised.
-
+            ClientResponseError: when updating of the cluster in the Krake Kubernetes
+                API failed with any HTTP error except 400 (body contained no update).
         """
         if cluster.status.state != ClusterState.CONNECTING:
             logger.debug(
@@ -577,19 +741,23 @@ class InfrastructureController(Controller):
                 raise
 
     async def delete_cluster(self, cluster, provider):
-        """Initiate the deletion of the actual given cluster, and wait for its
-        deletion. The finalizer specific to the Controller is also removed from
-        the cluster resource.
+        """Delete a cluster via an infrastructure provider
+
+        Deletes the actual cluster corresponding to the given cluster resource and waits
+        for its deletion to finish (polls the infrastructure provider in the set poll
+        interval).
+        Also removes the controller specific finalizer from the cluster resource.
 
         Args:
-            cluster (krake.data.kubernetes.Cluster): the cluster that needs
-                to be deleted.
+            cluster (krake.data.kubernetes.Cluster): the cluster that is to be deleted.
             provider (Union[InfrastructureProvider, GlobalInfrastructureProvider]):
                 infrastructure provider that performs the deletion of the cluster.
 
         Raises:
-            InfrastructureProviderDeleteError: If the cluster deletion failed.
-
+            ClientResponseError: when any HTTP error except 404 (not found) occurs while
+                checking the Krake Kubernetes API for existance of the given cluster
+                resource.
+            InfrastructureProviderDeleteError: when the cluster deletion failed.
         """
 
         # FIXME: during its deletion, a Cluster is updated, and thus put into the
