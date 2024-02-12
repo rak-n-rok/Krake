@@ -471,3 +471,23 @@ class KubernetesApi(ApiClient):
         resp = await self.client.session.request("PUT", url, json=body.serialize())
         data = await resp.json()
         return Cluster.deserialize(data)
+
+    async def update_cluster_infra_data(self, body, namespace, name):
+        """Update the infrastructure data of the specified Cluster.
+
+        Args:
+            body (Cluster): Body of the HTTP request.
+            namespace (str): namespace in which the Cluster will be updated.
+            name (str): name of the Cluster.
+
+        Returns:
+            Cluster: Body of the HTTP response.
+
+        """
+        path = "/kubernetes/namespaces/{namespace}/clusters/{name}/infrastructure".\
+            format(namespace=namespace, name=name)
+        url = self.client.url.with_path(path)
+
+        resp = await self.client.session.request("PUT", url, json=body.serialize())
+        data = await resp.json()
+        return Cluster.deserialize(data)
