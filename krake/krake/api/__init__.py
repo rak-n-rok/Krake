@@ -3,3 +3,7 @@ implemented as an :mod:`aiohttp` application.
 """
 
 from krake.__about__ import __version__
+
+__all__ = [
+    "__version__",
+]
