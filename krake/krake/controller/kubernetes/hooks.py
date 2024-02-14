@@ -30,11 +30,13 @@ from kubernetes_asyncio.client.rest import ApiException
 from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio import client
 from krake.data.kubernetes import (
-    ClusterState,
     Application,
+    ApplicationStatus,
     ApplicationState,
     ContainerHealth,
     Cluster,
+    ClusterStatus,
+    ClusterState,
     ClusterNodeCondition,
     ClusterNode,
     ClusterNodeStatus,
@@ -827,7 +829,7 @@ class KubernetesApplicationObserver(Observer):
                 else:
                     status.container_health.failed_pods = 0
 
-    async def poll_resource(self):
+    async def fetch_actual_resource(self):
         """Fetch the current status of the Application monitored by the Observer.
 
         Returns:
@@ -874,6 +876,46 @@ class KubernetesApplicationObserver(Observer):
 
         return status
 
+    async def check_observation(self, observation):
+        """Check and apply an observation if it has not already been made
+
+        Compares the given observation against the registered application resource and
+        reports the outcome. In case there is a difference applies the observation to a
+        copy of the registered resource and returns that additionally.
+
+        Args:
+            observation (Union[krake.data.kubernetes.ApplicationStatus]): an observed
+                application status.
+
+        Returns:
+            Tuple[True, krake.data.kubernetes.Application]: (when the observation is
+                new) the fact that a change was observed and an updated copy of
+                registered application resource.
+            Tuple[False, None]: (when the observation is not new) only the fact that no
+                change was observed.
+
+        Raises:
+            ValueError: when the given observation is not an application status.
+        """
+
+        changed, to_update = False, None
+
+        # Discriminate by observation type
+        # NOTE: Currently we only need to support :class:`ApplicationStatus`.
+        if isinstance(observation, ApplicationStatus):
+            if self.resource.status != observation:
+                changed = True
+                to_update = deepcopy(self.resource)
+                to_update.status = observation
+
+        else:
+            raise ValueError(
+                f"Received unsupported observation of type '{type(observation)}'"
+                f" for the observed resource {self.resource}"
+            )
+
+        return (True, to_update) if changed else (False, None)
+
 
 class KubernetesClusterObserver(Observer):
     """Observer specific for Kubernetes Clusters. One observer is created for each
@@ -906,11 +948,11 @@ class KubernetesClusterObserver(Observer):
     def __init__(self, resource, on_res_update, time_step=2):
         super().__init__(resource, on_res_update, time_step)
 
-    async def poll_resource(self):
-        """Fetch the current status of the Cluster monitored by the Observer.
+    async def fetch_actual_resource(self):
+        """Fetch the current status of the observed cluster
 
         Note regarding exceptions handling:
-          The current cluster status is fetched by :func:`poll_resource` from its API.
+          The current cluster status is fetched from its API.
           If the cluster API is shutting down the API server responds with a 503
           (service unavailable, apiserver is shutting down) HTTP response which
           leads to the kubernetes client ApiException. If the cluster's API has been
@@ -993,6 +1035,46 @@ class KubernetesClusterObserver(Observer):
 
             status.state = ClusterState.ONLINE
             return status
+
+    async def check_observation(self, observation):
+        """Apply an observation if it has not already been made
+
+        Compares the given observation against the registered cluster resource and
+        reports the outcome. In case there is a difference applies the observation to a
+        copy of the registered resource and returns that additionally.
+
+        Args:
+            observation (Union[krake.data.kubernetes.ClusterStatus]): an observed
+                cluster status.
+
+        Returns:
+            Tuple[True, krake.data.kubernetes.Cluster]: (when the observation is
+                new) the fact that a change was observed and an updated copy of the
+                registered cluster resource.
+            Tuple[False, None]: (when the observation is not new) only the fact that no
+                change was observed.
+
+        Raises:
+            ValueError: when the given observation is not a cluster status.
+        """
+
+        changed, to_update = False, None
+
+        # Discriminate by observation type
+        # NOTE: Currently we only need to support :class:`ClusterStatus`.
+        if isinstance(observation, ClusterStatus):
+            if self.resource.status.state != observation.state:
+                changed = True
+                to_update = deepcopy(self.resource)
+                to_update.status = observation
+
+        else:
+            raise ValueError(
+                f"Received unsupported observation of type '{type(observation)}'"
+                f" for the observed resource {self.resource}"
+            )
+
+        return (True, to_update) if changed else (False, None)
 
 
 @listen.on(HookType.ApplicationPostReconcile)
