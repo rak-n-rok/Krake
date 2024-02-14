@@ -173,12 +173,6 @@
         owner: krake
         mode: 0600
 
-    - name: Append Public key (temp)
-      lineinfile:
-        path: /home/krake/.ssh/authorized_keys
-        line: '\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCWN+x0bj/a0pglisqS2I3ElHXuGw2GkcmudLAsc6AkngYkx3OevO4VutCsCvY6zFmP6UZwjvT6cEql+O5AxSfgjdPhSYhMFyOZTVP5i67mZASIDr1EJucX0ajryCa4vyDzqvRniRK3NyZsD3TBxvgVntnjs5xgTtr9RnFwTbDDIwXwYlP+WsJ25HNiEjZLklfJkrv+bn6OOUmgBa/Hx2zGQWIHmlwhIIVsg+d4Xn/ZUFrZom42xIx0XE3cieyklKMkKSjk1Yc8OGJoUP8LLC2uKs8VmSVxOK7WwvBFeImPGpXI4+pGG409t8qInq5PXYGE2yHpOxoC4uP8N8DsenL+Ws/az1USKG9VeA4lHI8EEgKz4f5AntS0u7zIV1yrPPvIDfWG6c+V0wcFj2DnNigWbOZu38jUTexuTUTeuh9SIdQMmuiQ6rswWGaWy47IaSQcJU/40fHCnfKhXWqsFh2j+roiowgbi8bUzym/OYLQCY8PxJH15aNjuEedn8pZPFE= hannesbaum@630-650'
-        create: yes
-
 - name: Manage Krake VM
   become: yes
   become_user: krake
