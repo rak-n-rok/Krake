@@ -1,6 +1,5 @@
 stages:
   - test
-  - provisioning-backup
   - e2e
   - release
 
@@ -111,8 +110,6 @@ cache:
 
     - pip install tox
     - tox run -- --cov krake/krake --no-cov-on-fail --cov-report= --runslow krake/tests
-  tags:
-    - docker
 
 
 unittests-krake-3.8:
@@ -158,8 +155,6 @@ flake8-krake:
   script:
     - pip install -r gitlab-ci/requirements_lint.txt
     - flake8 krake/krake
-  tags:
-    - docker
 
 
 flake8-rok:
@@ -173,8 +168,6 @@ flake8-rok:
   script:
     - pip install -r gitlab-ci/requirements_lint.txt
     - flake8 rok/rok
-  tags:
-    - docker
 
 
 test-build-docs:
@@ -256,11 +249,11 @@ e2e-provisioning:
 
     ###################################
     ### Provision the staging infra ###
-    ###################################    
+    ###################################
     # - ansible-playbook  ansible/site.yml
     - ansible-playbook  ansible/network.yml
     - ansible-playbook  ansible/gateway.yml
-    - ansible-playbook  ansible/microk8s_cluster.yml 
+    - ansible-playbook  ansible/microk8s_cluster.yml
     - ansible-playbook  ansible/krake.yml
     - ansible-playbook  ansible/krake_handle_certs.yml
 
