@@ -11,5 +11,3 @@ sys.path.insert(0, parent)
 from krake.__about__ import (  # noqa: E402
     __version__
 )
-
-__version__ = __version__
