@@ -86,6 +86,9 @@ For development, Krake can also be installed with additional test and developmen
 pip install --editable './krake[test,dev]'
 ```
 
+Alternatively, you can setup your virtualenv with exactly the same dependencies that are
+used in CI. See [docs/dev/dependencies.rst](docs/dev/dependencies.rst) for details.
+
 ### Setup
 
 #### Configuration
