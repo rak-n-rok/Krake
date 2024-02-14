@@ -22,7 +22,6 @@ from aiohttp import ClientError
 
 from krake.error import ResourceHandlingError
 from krake.client import Client
-from krake.data.kubernetes import Cluster, Application
 
 logger = logging.getLogger(__name__)
 
@@ -444,63 +443,121 @@ class Observer(object):
         self.on_res_update = on_res_update
         self.time_step = time_step
 
-    async def poll_resource(self):
-        """Fetch the current status of the watched resource.
+    async def fetch_actual_resource(self):
+        """Make an observation by fetching real world data for the registered resource
 
         Returns:
-            krake.data.core.Status:
+            Any: structured data derived from the observation.
 
+        Raises:
+            Exception: when the observation could not be made
         """
-        raise NotImplementedError("Implement poll_resources")
+        raise NotImplementedError("Implement fetch_actual_resource")
+
+    async def check_observation(self, observation):
+        """Check and apply an observation if it has not already been applied
+
+        Compares the given observation against the registered resource and reports the
+        outcome. In case there is a difference applies the observation to a copy of the
+        registered resource and returns that additionally.
+
+        Args:
+            observation (any): a data object that was derived from an observation of the
+                actual counterpart of the registered resource.
+
+        Returns:
+            Tuple[True, object]: (when the observation is new) the fact that a change
+                was observed and an updated copy of registered resource.
+            Tuple[False]: (when the observation is not new) only the fact that no change
+                was observed.
+
+        Raises:
+            ValueError: when the given observation (type) is not supported by the
+                observer.
+        """
+        raise NotImplementedError("Implement check_observation")
+
+    async def update_resource(self, to_update):
+        """Update the registered resource
+
+        Calls the :meth:`on_res_update` hook to update the global representation of the
+        registered resource (in the Krake API). If the update succeeds also updates the
+        local copy.
+
+        Args:
+            to_update: an updated version of the registered resource.
+
+        Delegates to:
+            :meth:`on_res_update`: to update the global representation of registered
+                resource.
+        """
+
+        logger.debug("Updating registered resource %s", self.resource)
+
+        updated = await self.on_res_update(to_update)
+
+        # If the API accepted the update, observe the new status.
+        # If not, there may be a connectivity issue for now, so the Observer
+        # will try again in the next iteration of its main loop.
+        if updated:
+            self.resource = updated
 
     async def observe_resource(self):
-        """Update the watched resource if its status is different from the status
-        observed. The status sent for the update is the observed one.
+        """Observe the registered resource and yield resource changes
+
+        Observes the actual counterpart of the registered resource in the set interval
+        (`time_step`) and yields an updated copy of the registered resource when it
+        changed.
+
+        Yields:
+            An updated copy of the registered resource.
+
+        Delegates to:
+            :meth:`fetch_actual_resource`: to make an observation
+            :meth:`check_observation`: to check if a change has been observed and get
+                the updated resource representation.
         """
-        status = await self.poll_resource()
 
-        if self.resource.kind == Application.kind:
-            if self.resource.status != status:
+        logger.debug("Observing registered resource %s", self.resource)
+
+        while True:
+            # Check actual resource
+            observation = await self.fetch_actual_resource()
+
+            # Check if actual resource changed
+            changed, changed_resource = await self.check_observation(observation)
+
+            # Return new resource if it changed
+            if changed:
                 logger.info(
                     "Actual resource for %s changed.", resource_ref(self.resource)
                 )
-
-                to_update = deepcopy(self.resource)
-                to_update.status = status
-                updated = await self.on_res_update(to_update)
-
-                # If the API accepted the update, observe the new status.
-                # If not, there may be a connectivity issue for now, so the Observer
-                # will try again in the next iteration of its main loop.
-                if updated:
-                    self.resource = updated
+                yield changed_resource
             else:
                 logger.debug("Resource %s did not change", resource_ref(self.resource))
 
-        if self.resource.kind == Cluster.kind:
-            if self.resource.status.state != status.state:
-                logger.info(
-                    "Actual resource for %s changed.", resource_ref(self.resource)
-                )
-
-                to_update = deepcopy(self.resource)
-                to_update.status = status
-                updated = await self.on_res_update(to_update)
-
-                # If the API accepted the update, observe the new status.
-                # If not, there may be a connectivity issue for now, so the Observer
-                # will try again in the next iteration of its main loop.
-                if updated:
-                    self.resource = updated
-            else:
-                logger.debug("Resource %s did not change", resource_ref(self.resource))
+            await asyncio.sleep(self.time_step)
 
     async def run(self):
-        """Start the observing process indefinitely, with the Observer time step."""
-        while True:
-            await asyncio.sleep(self.time_step)
-            logger.debug("Observing registered resource: %s", self.resource)
-            await self.observe_resource()
+        """Start the observation process
+
+        Observes and updates the registered resource indefinitely.
+
+        Delegates to:
+            :meth:`observe_resource`: to monitor the real world counterpart of the
+                registered resource for changes.
+            :meth:`update_resource`: to update the registered resource with the changes.
+        """
+
+        # Continously update the resource representation from observed changes of
+        # the actual resource.
+        async for changed_resource in self.observe_resource():
+            await self.update_resource(changed_resource)
+
+        logger.error(
+            "Continous observation of resource %s stopped unexpectedly.",
+            resource_ref(self.resource)
+        )
 
 
 class ControllerError(ResourceHandlingError):
