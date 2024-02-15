@@ -83,9 +83,12 @@
           - golang-cfssl
           - etcd-client
 
-    - name: Upgrade pip to latest version
+    # FIXME: we shouldn't override the system wide pip and setuptools
+    - name: Upgrade pip and setuptools to latest version
       pip:
-        name: pip
+        name:
+          - pip
+          - setuptools
         executable: pip3
         state: latest
 
@@ -236,6 +239,7 @@
             - rak
             - rok
             - rok.yaml.template
+            - requirements
             - support
 
         # rsync does not honour become_user

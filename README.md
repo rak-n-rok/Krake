@@ -38,7 +38,7 @@ project is desired or required.
 #### Krake deployment
 
 - [etcdv3][etcd]
-- [Python][python] >= 3.7
+- [Python][python] >= 3.8
 - At least one setup Kubernetes cluster (See [howto](#setup-kubernetes-cluster))
 
 #### Test applications
@@ -57,28 +57,37 @@ Optional requirement:
 ### Installation
 
 Clone the repository into a location of your choice.
+
 ```bash
 git clone https://gitlab.com/rak-n-rok/krake.git
 cd krake
 ```
 
-Install "rok" and "krake" Python packages.
-Installing them into a [Python virtualenv][virtualenv] is recommended. All dependencies
-are installed via the corresponding `setup.py` scripts.
+Create and activate a [Python virtualenv][virtualenv] with up-to-date versions of `pip` and
+`setuptools`:
 
 ```bash
-python3 -m venv .env
-source .env/bin/activate
-
-pip3 install rok/
-pip3 install krake/
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -U pip setuptools
 ```
 
-For development "krake" can also be installed with additional development dependencies:
+Use `pip` to install Krake, `rok` and their dependencies into the virtualenv. Note that we install
+from a local path and not from PyPI, which is important!
 
 ```bash
-pip3 install --editable "krake/[dev]"
+pip install --editable ./krake
+pip install --editable ./rok
 ```
+
+For development, Krake can also be installed with additional test and development dependencies:
+
+```bash
+pip install --editable './krake[test,dev]'
+```
+
+Alternatively, you can setup your virtualenv with exactly the same dependencies that are
+used in CI. See [docs/dev/dependencies.rst](docs/dev/dependencies.rst) for details.
 
 ### Setup
 
@@ -89,9 +98,9 @@ then be modified at will.
 
 ```bash
 # First, start the generate script to have initial config files
-krake_generate_config config/*.template rok.yaml.template
+krake/scripts/krake_generate_config config/*.template rok.yaml.template
 
-krake_generate_config --allow-anonymous --static-authentication-enabled config/api.yaml.template
+krake/scripts/krake_generate_config --allow-anonymous --static-authentication-enabled config/api.yaml.template
 
 # You can then modify each file at your preference.
 # afterwards create that folder which is expected:
@@ -102,7 +111,7 @@ sudo cp *.yaml /etc/krake
 
 # Optional: you can use the rok configuration template as you prefer. It can also be generated.
 # Otherwise rok will use the default configuration
-krake_generate_config rok.yaml.template
+krake/scripts/krake_generate_config rok.yaml.template
 ```
 
 The `--allow-anonymous` and `--static-authentication-enabled` options set the API with

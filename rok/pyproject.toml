@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=69.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rok"
+version = "1.0.0"
+authors = [
+    {name = "Krake Development Team", email = "krake@cloudandheat.com"},
+]
+description = "Command line interface for Krake"
+requires-python = ">=3.8"
+license = {text = "Apache-2.0"}
+dependencies = [
+    "python-dateutil==2.*",
+    "PyYAML==6.*",
+    "requests==2.*",
+    "texttable==1.*",
+]
+
+[project.urls]
+Homepage = "https://krake.cloud"
+Documentation = "https://rak-n-rok.readthedocs.io/projects/krake/en/latest/"
+Repository = "https://gitlab.com/rak-n-rok/krake"
+
+[project.scripts]
+rok = "rok.__main__:main"

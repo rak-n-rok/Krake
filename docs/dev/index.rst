@@ -19,6 +19,7 @@ API reference of all modules is provided.
     concepts
     packages
     versioning
+    dependencies
     principles
     scheduling
     hooks

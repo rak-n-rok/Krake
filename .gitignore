@@ -43,6 +43,9 @@ __pycache__/
 .tox/
 .coverage*
 
+# Python virtualenv
+.venv/
+
 # pip egg installation files
 *.egg-info/
 
@@ -65,6 +68,6 @@ __pycache__/
 .idea
 .vscode
 
-# PyPi directories
-krake/build/*
-krake/dist/*
+# Built python packages
+build/
+dist/

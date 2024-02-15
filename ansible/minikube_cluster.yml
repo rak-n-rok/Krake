@@ -87,6 +87,15 @@
           - conntrack
           - docker.io
 
+    # FIXME: we shouldn't override the system wide pip and setuptools
+    - name: Upgrade pip and setuptools to latest version
+      pip:
+        name:
+          - pip
+          - setuptools
+      executable: pip3
+      state: latest
+
     # TODO: Remove once issue is resolved
     #   C&H infra currently suffers from "MTU bug" when typical value of 1500 causes connectivity
     #   issues. Following is a workaround.

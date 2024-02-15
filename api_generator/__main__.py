@@ -7,13 +7,11 @@ modifying an existing one. It allows the creation of:
  * the unit tests for Krake clients using the given API definition.
  * the unit tests for the Krake server using the given API definition.
 
-To use it, the ``extras_requires`` called ``api_generator`` of the ``setup.py`` must be
-installed. Use the following:
+To use it, install Krake with the ``api_generator`` extra as follows:
 
 .. code:: bash
 
-    pip install "krake/[api_generator]"
-
+    pip install './krake[api_generator]'
 
 To see all possible generators, use:
 
