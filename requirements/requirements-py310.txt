@@ -235,7 +235,7 @@ pyyaml==6.0.1
     #   tosca-parser
 reactivex==4.0.4
     # via influxdb-client
-requests==2.29.0
+requests==2.31.0
     # via
     #   etcd3-py
     #   keystoneauth1
