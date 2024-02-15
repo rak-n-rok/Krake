@@ -9,8 +9,12 @@ install_requires = [
 ]
 
 setup(
-    name="rok",
-    version="1.0.0",
+    name="krakectl",
+    version="0.0.0",
+    description="",
+    url="https://gitlab.com/rak-n-rok/krake",
+    maintainer="Krake Development Team",
+    maintainer_email="krake@cloudandheat.com",
     python_requires=">=3.8",
     packages=find_packages(),
     install_requires=install_requires,
