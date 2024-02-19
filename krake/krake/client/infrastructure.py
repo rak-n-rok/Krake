@@ -622,7 +622,37 @@ class InfrastructureApi(ApiClient):
         data = await resp.json()
         return Cloud.deserialize(data)
 
-    async def get_infrastructure_provider(self, cloud):
+    async def read_cloud_binding(self, namespace, name):
+        """Get the infrastructure provider attached to a cloud.
+
+        Returns the infrastructure provider object referenced in the specified cloud.
+
+        Args:
+            namespace (str): namespace of the Cloud.
+            name (str): name of the Cloud.
+
+        This is a wrapper for :meth:`read_cloud_obj_binding`
+        """
+        return await self.read_cloud_obj_binding(
+            cloud=await self.read_cloud(namespace=namespace, name=name)
+        )
+
+    async def read_global_cloud_binding(self, name):
+        """Get the infrastructure provider attached to a global cloud.
+
+        Returns the infrastructure provider object referenced in the specified global
+        cloud.
+
+        Args:
+            name (str): name of the GlobalCloud.
+
+        This is a wrapper for :meth:`read_cloud_obj_binding`
+        """
+        return await self.read_cloud_obj_binding(
+            cloud=await self.read_global_cloud(name=name)
+        )
+
+    async def read_cloud_obj_binding(self, cloud):
         """Get the infrastructure provider attached to a cloud.
 
         Returns the infrastructure provider object referenced in the given cloud object.
