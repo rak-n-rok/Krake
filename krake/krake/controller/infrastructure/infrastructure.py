@@ -156,9 +156,9 @@ class InfrastructureController(Controller):
         """
         try:
             logger.debug("Handle %r", cluster)
-            cloud = await self.kubernetes_api.get_cloud(cluster)
+            cloud = await self.kubernetes_api.read_cluster_obj_binding(cluster)
             infrastructure_provider = \
-                await self.infrastructure_api.get_infrastructure_provider(cloud)
+                await self.infrastructure_api.read_cloud_obj_binding(cloud)
             provider = InfrastructureProvider(
                 session=self.client.session,
                 cloud=cloud,

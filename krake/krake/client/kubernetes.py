@@ -428,7 +428,22 @@ class KubernetesApi(ApiClient):
         data = await resp.json()
         return Cluster.deserialize(data)
 
-    async def get_cloud(self, cluster):
+    async def read_cluster_binding(self, namespace, name):
+        """Get the cloud to which a Cluster is bound.
+
+        Returns the cloud object that is referenced in the specified cluster.
+
+        Args:
+            namespace (str): namespace of the Cluster
+            name (str): name of the Cluster.
+
+        This is a wrapper for :meth:`self.read_cluster_obj_binding`.
+        """
+        return await self.read_cluster_obj_binding(
+            cluster=await self.read_cluster(namespace=namespace, name=name)
+        )
+
+    async def read_cluster_obj_binding(self, cluster):
         """Get the cloud to which a cluster is bound.
 
         Returns the cloud object that is referenced in the given cluster object.
