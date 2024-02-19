@@ -5,7 +5,7 @@ from krake.client import Client
 from krake.client.infrastructure import InfrastructureApi
 from krake.data.core import WatchEventType
 from krake.data.infrastructure import (
-    InfrastructureProvider,
+    InfrastructureProvider, InfrastructureProviderRef,
     Cloud,
     GlobalCloud,
     GlobalInfrastructureProvider,
@@ -771,3 +771,83 @@ async def test_update_cloud_status(aiohttp_server, config, db, loop):
     assert stored == received
     assert stored.status.state == CloudState.FAILING_METRICS
     assert list(stored.status.metrics_reasons.keys()) == ["my-metric"]
+
+
+async def test_read_cloud_binding(aiohttp_server, config, db, loop):
+    """Test the :meth:`read_cloud_binding` method
+
+    Checks that the method returns the regular infrastructure provider registered for a
+    regular cloud.
+
+    Steps:
+        1. Create a cloud and a suitable infrastructure provider
+        2. Register the infrastructure provider for the cloud
+        3. Put both resources into the Krake database
+        4. Call the target method with the cloud
+
+    Asserts:
+        The registered infrastructure provider is returned
+    """
+
+    infra_provider = InfrastructureProviderFactory()
+    cloud = CloudFactory()
+
+    # Register infrastructure provider for cloud
+    # NOTE: That is essentially what `rok.infrastructure.update_cloud` does through the
+    #       Krake API.
+    cloud.spec.openstack.infrastructure_provider = \
+        InfrastructureProviderRef(name=infra_provider.metadata.name,
+                                  namespaced=infra_provider.metadata.namespace)
+
+    await db.put(infra_provider)
+    await db.put(cloud)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        infrastructure_api = InfrastructureApi(client)
+        received = await infrastructure_api.read_cloud_binding(
+            namespace=cloud.metadata.namespace,
+            name=cloud.metadata.name
+        )
+
+        assert received == infra_provider
+
+
+async def test_read_global_cloud_binding(aiohttp_server, config, db, loop):
+    """Test the :meth:`read_global_cloud_binding` method
+
+    Checks that the method returns the global infrastructure provider registered for a
+    global cloud.
+
+    Steps:
+        1. Create a global cloud and a suitable infrastructure provider
+        2. Register the infrastructure provider for the global cloud
+        3. Put both resources into the Krake database
+        4. Call the target method with the global cloud
+
+    Asserts:
+        The registered global infrastructure provider is returned
+    """
+
+    global_infra_provider = GlobalInfrastructureProviderFactory()
+    global_cloud = GlobalCloudFactory()
+
+    # Register infrastructure provider for cloud
+    # NOTE: That is essentially what `rok.infrastructure.update_cloud` does through the
+    #       Krake API.
+    global_cloud.spec.openstack.infrastructure_provider = \
+        InfrastructureProviderRef(name=global_infra_provider.metadata.name)
+
+    await db.put(global_infra_provider)
+    await db.put(global_cloud)
+
+    server = await aiohttp_server(create_app(config=config))
+
+    async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
+        infrastructure_api = InfrastructureApi(client)
+        received = await infrastructure_api.read_global_cloud_binding(
+            name=global_cloud.metadata.name
+        )
+
+        assert received == global_infra_provider
