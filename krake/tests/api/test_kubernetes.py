@@ -1,5 +1,6 @@
 import asyncio
 import copy
+from datetime import datetime
 import json
 import pytz
 import yaml
@@ -29,6 +30,7 @@ from tests.factories.infrastructure import CloudFactory
 
 from tests.factories.kubernetes import (
     ClusterFactory,
+    ClusterInfrastructureFactory,
     ApplicationFactory,
     ReasonFactory,
 )
@@ -1589,3 +1591,57 @@ async def test_update_cluster_status_rbac(rbac_allow, config, aiohttp_client):
             "/kubernetes/namespaces/testing/clusters/my-resource/status"
         )
         assert resp.status == 415
+
+
+async def test_update_cluster_infra_data(aiohttp_client, config, db):
+    """Test updating of the cluster infrastructure subresource.
+
+    Tests the `/kubernetes/namespaces/testing/clusters/id:/infrastructure` API endpoint
+    of the Krake API to correctly update the Krake database during a sequence of
+    cluster infrastructure update requests.
+    1. First infrastructure update and data not yet available
+       subresource transition: None -> ClusterInfrastructure(data=None)
+    2. Node data not yet available
+       subresource transition:
+           ClusterInfrastructure(data=None)
+           -> ClusterInfrastructure(data=ClusterInfrastructureData(nodes=[]))
+    3. Node data available
+       subresource transition:
+           ClusterInfrastructure(data=ClusterInfrastructureData(nodes=[]))
+           -> ClusterInfrastructure(data=ClusterInfrastructureData(nodes=[...]))
+    """
+
+    client = await aiohttp_client(create_app(config=config))
+
+    # Create fresh cluster without infrastructure and insert into Krake database
+    data = ClusterFactory(with_infrastructure=False)
+    await db.put(data)
+
+    update_sequence = [
+        {"with_data": False},                  # case 1: data not yet available
+        {"with_data": True, "node_count": 0},  # case 2: node data not yet available
+        {"with_data": True, "node_count": 2},  # case 3: node data available
+    ]
+
+    for infrastructure_params in update_sequence:
+        # Generate some infrastructure data
+        cluster_infrastructure = ClusterInfrastructureFactory(**infrastructure_params)
+
+        # Update local cluster copy with infrastructure data
+        data.infrastructure = cluster_infrastructure
+
+        resp = await client.put(
+            f"/kubernetes/namespaces/testing/clusters/{data.metadata.name}/infrastructure",  # noqa: E501
+            json=data.serialize(),
+        )
+        assert resp.status == 200
+        received = Cluster.deserialize(await resp.json())
+        assert received.api == "kubernetes"
+        assert received.kind == "Cluster"
+
+        assert received.infrastructure is not None
+        assert isinstance(received.infrastructure.updated, datetime)
+        assert received.infrastructure.data == data.infrastructure.data
+
+        stored = await db.get(Cluster, namespace="testing", name=data.metadata.name)
+        assert stored.infrastructure == received.infrastructure
