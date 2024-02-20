@@ -461,6 +461,16 @@ class ClusterNodeStatusFactory(Factory):
 
 
 class InfrastructureNodeCredentialFactory(Factory):
+    """Generate :class:`InfrastructureNodeCredential` object.
+
+    Args:
+        enabled_secrets (list(str), optional): list of "secrets" attributes to generate
+            (default: <at-least-one>)
+
+    Returns:
+        krake.data.kubernetes.InfrastructureNodeCredential
+    """
+
     class Meta:
         model = InfrastructureNodeCredential
 
@@ -486,6 +496,18 @@ class InfrastructureNodeCredentialFactory(Factory):
 
 
 class InfrastructureNodeFactory(Factory):
+    """Generate an :class:`InfrastructureNode` object.
+
+    Args:
+        ip_address_count (int, optional): amount of ip addresses to generate
+            (default: 0-3)
+        credential_count (int, optional): amount of credentials to generate
+            (default: 0-2)
+
+    Returns:
+        krake.data.kubernetes.InfrastructureNode
+    """
+
     class Meta:
         model = InfrastructureNode
 
@@ -509,6 +531,15 @@ class InfrastructureNodeFactory(Factory):
 
 
 class ClusterInfrastructureDataFactory(Factory):
+    """Generate a :class:`ClusterInfrastructureData` object.
+
+    Args:
+        node_count (int): amount of nodes to generate (default: 0-5)
+
+    Returns:
+        krake.data.kubernetes.ClusterInfrastructureData
+    """
+
     class Meta:
         model = ClusterInfrastructureData
 
@@ -524,6 +555,16 @@ class ClusterInfrastructureDataFactory(Factory):
 
 
 class ClusterInfrastructureFactory(Factory):
+    """Generate a :class:`ClusterInfrastructure` object.
+
+    Args:
+        with_data (bool): whether to data should be generated (default: True).
+        node_count (int): amount of nodes to generate (default: 0-5)
+
+    Returns:
+        krake.data.kubernetes.ClusterInfrastructure
+    """
+
     class Meta:
         model = ClusterInfrastructure
 
@@ -645,6 +686,17 @@ class ClusterStatusFactory(Factory):
 
 
 class ClusterFactory(Factory):
+    """Generate a :class:`Cluster` object.
+
+    Args:
+        with_infrastructure (bool): whether to generate infrastructure (default: False).
+        infrastructure_params (dict(str, any)): kwargs to pass to the
+            :class:`ClusterInfrastructureFactory` (default: with_data=True).
+
+    Returns:
+        krake.data.kubernetes.Cluster
+    """
+
     class Meta:
         model = Cluster
 
