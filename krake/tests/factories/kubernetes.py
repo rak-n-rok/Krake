@@ -4,16 +4,19 @@ from copy import deepcopy
 from factory import (
     Factory,
     SubFactory,
-    lazy_attribute,
+    LazyAttribute, lazy_attribute,
+    LazyFunction,
     fuzzy,
     Iterator,
     post_generation,
+    random,
 )
 import yaml
 import pytz
 
 from .fake import fake
 from .core import MetadataFactory, ReasonFactory, MetricRefFactory
+from .common import ssh_ed25519_key_pair_factory, test_net_ip_address_generator
 from krake.data.core import ResourceRef
 from krake.data.kubernetes import (
     ApplicationSpec,
@@ -34,6 +37,10 @@ from krake.data.kubernetes import (
     ClusterState,
     ClusterCloudConstraints,
     CloudConstraints,
+    InfrastructureNodeCredential,
+    InfrastructureNode,
+    ClusterInfrastructureData,
+    ClusterInfrastructure,
 )
 from krake.data.constraints import (
     EqualConstraint,
@@ -454,6 +461,87 @@ class ClusterNodeStatusFactory(Factory):
         ]
 
 
+class InfrastructureNodeCredentialFactory(Factory):
+    class Meta:
+        model = InfrastructureNodeCredential
+
+    class Params:
+        # Control which secrets are generated,
+        #  by default at least one
+        enabled_secrets = LazyFunction(
+            lambda: random.randgen.sample(
+                ["password", "private_key"], k=random.randgen.randint(1, 2)
+            )
+        )
+
+    type = fuzzy.FuzzyChoice(choices=InfrastructureNodeCredential._types)
+    username = fuzzy.FuzzyAttribute(fake.word)
+    password = LazyAttribute(
+        lambda o: fake.pystr()
+                  if "password" in o.enabled_secrets else None  # noqa: E131
+    )
+    private_key = LazyAttribute(
+        lambda o: ssh_ed25519_key_pair_factory()[0]
+                  if "private_key" in o.enabled_secrets else None  # noqa: E131
+    )
+
+
+class InfrastructureNodeFactory(Factory):
+    class Meta:
+        model = InfrastructureNode
+
+    class Params:
+        # Control how many ip addresses and credentials are generated,
+        #  by default 0-3 ip addresses and 0-2 credentials are created
+        ip_address_count = LazyFunction(
+            lambda: random.randgen.randint(0, 3)
+        )
+        credential_count = LazyFunction(
+            lambda: random.randgen.randint(0, 2)
+        )
+
+    ip_addresses = LazyAttribute(
+        lambda o: list(test_net_ip_address_generator(o.ip_address_count))
+    )
+    credentials = LazyAttribute(
+        lambda o: list(InfrastructureNodeCredentialFactory()
+                       for _ in range(o.credential_count))
+    )
+
+
+class ClusterInfrastructureDataFactory(Factory):
+    class Meta:
+        model = ClusterInfrastructureData
+
+    class Params:
+        node_count = LazyFunction(
+            lambda: random.randgen.randint(0, 5)
+        )
+
+    nodes = LazyAttribute(
+        lambda o: list(InfrastructureNodeFactory()
+                       for _ in range(o.node_count))
+    )
+
+
+class ClusterInfrastructureFactory(Factory):
+    class Meta:
+        model = ClusterInfrastructure
+
+    class Params:
+        # Control if infrastructure data is generated,
+        #  by default data is generated
+        with_data = True
+        node_count = LazyFunction(
+            lambda: random.randgen.randint(0, 5)
+        )
+
+    data = LazyAttribute(
+        lambda o: ClusterInfrastructureDataFactory(node_count=o.node_count)
+                  if o.with_data else None  # noqa: E131
+    )
+
+
 class ClusterNodeFactory(Factory):
     class Meta:
         model = ClusterNode
@@ -561,6 +649,14 @@ class ClusterFactory(Factory):
     class Meta:
         model = Cluster
 
+    class Params:
+        with_infrastructure = False
+        infrastructure_params = {"with_data": True}
+
     metadata = SubFactory(MetadataFactory)
     spec = SubFactory(ClusterSpecFactory)
     status = SubFactory(ClusterStatusFactory)
+    infrastructure = LazyAttribute(
+        lambda o: ClusterInfrastructureFactory(**infrastructure_params)  # noqa: F821
+                  if o.with_infrastructure else None  # noqa: E131
+    )
