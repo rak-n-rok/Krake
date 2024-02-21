@@ -3,6 +3,15 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: krake-scheduler
+  namespace: development
+  labels:
+    environment: development
+    app.kubernetes.io/name: krake-scheduler
+    app.kubernetes.io/instance: krake-api-zeutcr
+    app.kubernetes.io/version: "1.0.1"
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: krake
 data:
   scheduler.yaml: |
     api_endpoint: http://krake-api:8080
@@ -41,8 +50,15 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: krake-scheduler
+  namespace: development
   labels:
+    environment: development
     app.kubernetes.io/name: krake-scheduler
+    app.kubernetes.io/instance: krake-api-zeutcr
+    app.kubernetes.io/version: "1.0.1"
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: krake
 spec:
   replicas: 1
   selector:
@@ -51,15 +67,38 @@ spec:
   template:
     metadata:
       labels:
+        environment: development
         app.kubernetes.io/name: krake-scheduler
+        app.kubernetes.io/instance: krake-api-zeutcr
+        app.kubernetes.io/version: "1.0.1"
+        app.kubernetes.io/managed-by: kubectl
+        app.kubernetes.io/component: backend
+        app.kubernetes.io/part-of: krake
     spec:
       containers:
-      - image: raknrok/krake
-        name: krake-scheduler
+      - name: krake-scheduler
+        image: registry.gitlab.com/rak-n-rok/krake:1.0.1
+        imagePullPolicy: Always
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
         command:
           - "python"
           - "-m"
           - "krake.controller.scheduler"
+        livenessProbe:
+          exec:
+            command:
+            - cat
+            - /proc/1/cmdline
+          failureThreshold: 3
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 3
         volumeMounts:
         - name: config-volume
           mountPath: /etc/krake
