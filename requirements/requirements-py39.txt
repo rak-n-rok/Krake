@@ -40,7 +40,7 @@ cliff==4.5.0
     #   tosca-parser
 cmd2==2.4.3
     # via cliff
-cryptography==42.0.2
+cryptography==42.0.4
     # via
     #   etcd3-py
     #   openstacksdk
