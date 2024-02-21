@@ -1,0 +1,161 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: krake-api
+  namespace: development
+  labels:
+    environment: development
+    app.kubernetes.io/name: krake-api
+    app.kubernetes.io/instance: krake-api-zeutcr
+    app.kubernetes.io/version: "1.0.1"
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: krake
+data:
+  api.yaml: |
+    port: 8080
+    etcd:
+      host: etcd
+      port: 2379
+      retry_transactions: 1
+    tls:
+      enabled: False
+      cert: ""
+      key: ""
+      client_ca: ""
+    authentication:
+      allow_anonymous: True
+      strategy:
+        keystone:
+          enabled: False
+          endpoint: http://localhost:5000/v3
+        keycloak:
+          enabled: False
+          endpoint: http://localhost:9080/
+          realm: krake
+        static:
+          enabled: True
+          name: system:admin
+    authorization: always-allow
+    docs:
+      problem_base_url: https://gitlab.com/rak-n-rok/krake
+    log:
+      version: 1
+      level: INFO
+      disable_existing_loggers: false
+      formatters:
+        krake:
+          format: "%(asctime)s - [%(name)s] - [%(levelname)-5s] - %(message)s"
+      handlers:
+        console:
+          class: logging.StreamHandler
+          formatter: krake
+          stream: ext://sys.stdout
+      root:
+        handlers: [console]
+      loggers:
+        krake:
+          handlers: [console]
+          propagate: no
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: krake-api
+  namespace: development
+  labels:
+    environment: development
+    app.kubernetes.io/name: krake-api
+    app.kubernetes.io/instance: krake-api-zeutcr
+    app.kubernetes.io/version: "1.0.1"
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: krake
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: krake-api
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: krake-api
+  namespace: development
+  labels:
+    environment: development
+    app.kubernetes.io/name: krake-api
+    app.kubernetes.io/instance: krake-api-zeutcr
+    app.kubernetes.io/version: "1.0.1"
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: krake
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: krake-api
+  template:
+    metadata:
+      labels:
+        environment: development
+        app.kubernetes.io/name: krake-api
+        app.kubernetes.io/instance: krake-api-zeutcr
+        app.kubernetes.io/version: "1.0.1"
+        app.kubernetes.io/managed-by: kubectl
+        app.kubernetes.io/component: frontend
+        app.kubernetes.io/part-of: krake
+    spec:
+      containers:
+      - name: krake-api
+        image: registry.gitlab.com/rak-n-rok/krake:1.0.1
+        imagePullPolicy: Always
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        command: ["python", "-m", "krake.api"]
+        startupProbe:
+          failureThreshold: 24
+          httpGet:
+            path: /
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 15
+        readinessProbe:
+          failureThreshold: 24
+          httpGet:
+            path: /
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 15
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /
+            port: 8080
+            scheme: HTTP
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 3
+        ports:
+          - containerPort: 8080
+            name: krake-api
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/krake
+      volumes:
+        - name: config-volume
+          configMap:
+            name: krake-api

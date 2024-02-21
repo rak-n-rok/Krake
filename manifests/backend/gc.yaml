@@ -1,0 +1,103 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: krake-gc
+  namespace: development
+  labels:
+    environment: development
+    app.kubernetes.io/name: krake-gc
+    app.kubernetes.io/instance: krake-api-zeutcr
+    app.kubernetes.io/version: "1.0.1"
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: krake
+data:
+  garbage_collector.yaml: |
+    api_endpoint: http://krake-api:8080
+    worker_count: 5
+    debounce: 1.0
+    tls:
+      enabled: False
+      client_ca: ""
+      client_cert: ""
+      client_key: ""
+    log:
+      version: 1
+      level: INFO
+      disable_existing_loggers: false
+      formatters:
+        krake:
+          format: "%(asctime)s - [%(name)s] - [%(levelname)-5s] - %(message)s"
+      handlers:
+        console:
+          class: logging.StreamHandler
+          formatter: krake
+          stream: ext://sys.stdout
+      root:
+        handlers: [console]
+      loggers:
+        krake:
+          handlers: [console]
+          propagate: no
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: krake-gc
+  namespace: development
+  labels:
+    environment: development
+    app.kubernetes.io/name: krake-gc
+    app.kubernetes.io/instance: krake-api-zeutcr
+    app.kubernetes.io/version: "1.0.1"
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: krake
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: krake-gc
+  template:
+    metadata:
+      labels:
+        environment: development
+        app.kubernetes.io/name: krake-gc
+        app.kubernetes.io/instance: krake-api-zeutcr
+        app.kubernetes.io/version: "1.0.1"
+        app.kubernetes.io/managed-by: kubectl
+        app.kubernetes.io/component: backend
+        app.kubernetes.io/part-of: krake
+    spec:
+      containers:
+      - name: krake-gc
+        image: registry.gitlab.com/rak-n-rok/krake:1.0.1
+        imagePullPolicy: Always
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        command:
+          - "python"
+          - "-m"
+          - "krake.controller.gc"
+        livenessProbe:
+          exec:
+            command:
+            - cat
+            - /proc/1/cmdline
+          failureThreshold: 3
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 3
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/krake
+      volumes:
+        - name: config-volume
+          configMap:
+            name: krake-gc
