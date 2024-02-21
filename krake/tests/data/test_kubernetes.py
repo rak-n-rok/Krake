@@ -4,7 +4,12 @@ import yaml
 from copy import deepcopy
 from marshmallow import ValidationError
 
-from krake.data.kubernetes import Application, Cluster, ObserverSchemaError
+from krake.data.kubernetes import (
+    Application,
+    Cluster,
+    InfrastructureNodeCredential,
+    ObserverSchemaError,
+)
 from tests.controller.kubernetes import nginx_manifest
 from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
 
@@ -536,3 +541,18 @@ def test_observer_schema_init_invalid_custom_not_in_manifest():
         ObserverSchemaError, match="Observed resource must be in manifest"
     ):
         ApplicationFactory(spec__observer_schema=invalid_custom_schema)
+
+
+def test_infrastructure_node_credential_error_handling():
+    """Ensure :class:`InfrastructureNodeCredential` objects cannot be created with an
+    unknown type.
+    """
+
+    _unkown_credential_type = "invalid-a82bfed"
+
+    with pytest.raises(
+        ValidationError,
+        match=f"Invalid credential type '{_unkown_credential_type}',"
+              f" must be one of 'login'.",
+    ):
+        InfrastructureNodeCredential(type=_unkown_credential_type, username="testuser")
