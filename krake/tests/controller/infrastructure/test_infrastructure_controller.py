@@ -23,6 +23,7 @@ from krake.client import Client
 from krake.controller.infrastructure.infrastructure import (
     DELETION_FINALIZER,
     InfrastructureController,
+    HookType,
 )
 from krake.data.infrastructure import InfrastructureProviderRef
 from krake.test_utils import server_endpoint, with_timeout
@@ -289,7 +290,14 @@ async def test_cluster_unknown_cloud(
             server_endpoint(api_server), worker_count=0, poll_interval=0.1
         )
         await controller.prepare(client)
-        await controller.process_cluster(cluster)
+
+        # Mock the hooking mechanism and call process_cluster
+        with mock.patch(
+            target='krake.controller.infrastructure.infrastructure.listen.hook',
+            new=mock.AsyncMock()
+        ) as mocked_hook:
+            await controller.process_cluster(cluster)
+            mocked_hook.assert_not_called()
 
     stored = await db.get(
         Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
@@ -357,7 +365,14 @@ async def test_cluster_unknown_infrastructure_provider(
             server_endpoint(api_server), worker_count=0, poll_interval=0.1
         )
         await controller.prepare(client)
-        await controller.process_cluster(cluster)
+
+        # Mock the hooking mechanism and call process_cluster
+        with mock.patch(
+            target='krake.controller.infrastructure.infrastructure.listen.hook',
+            new=mock.AsyncMock()
+        ) as mocked_hook:
+            await controller.process_cluster(cluster)
+            mocked_hook.assert_not_called()
 
     stored = await db.get(
         Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
@@ -478,8 +493,33 @@ async def test_cluster_create_by_im_provider(
         controller = InfrastructureController(
             server_endpoint(api_server), worker_count=0, poll_interval=0.1
         )
+
         await controller.prepare(client)
-        await controller.process_cluster(cluster)
+
+        # Mock the hooking mechanism and call process_cluster
+        with mock.patch(
+            target='krake.controller.infrastructure.infrastructure.listen.hook',
+            new=mock.AsyncMock()
+        ) as mocked_hook:
+            await controller.process_cluster(cluster)
+
+            # Check that the ClusterCreation hook is called
+            # FIXME: Implement __eq__ method in resource objects.
+            #        Because process_cluster passes a copy of the cluster resource
+            #        object to the hook and the object does not implement sufficient
+            #        equality checking we need to check it separately.
+            #        These checks below are incomplete.
+            mocked_hook.assert_any_call(
+                HookType.ClusterCreation,
+                controller=controller,
+                resource=mock.ANY,  # checked afterwards
+                start=True,
+            )
+            resource_call_arg = mocked_hook.call_args.kwargs["resource"]
+            assert resource_call_arg.kind == cluster.kind
+            assert resource_call_arg.metadata.uid == cluster.metadata.uid
+            assert resource_call_arg.metadata.name == cluster.metadata.name
+            assert resource_call_arg.metadata.namespace == cluster.metadata.namespace
 
     stored = await db.get(
         Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
@@ -592,7 +632,31 @@ async def test_cluster_create_by_im_provider_no_kubeconfig(
             server_endpoint(api_server), worker_count=0, poll_interval=0.1
         )
         await controller.prepare(client)
-        await controller.process_cluster(cluster)
+
+        # Mock the hooking mechanism and call process_cluster
+        with mock.patch(
+            target='krake.controller.infrastructure.infrastructure.listen.hook',
+            new=mock.AsyncMock()
+        ) as mocked_hook:
+            await controller.process_cluster(cluster)
+
+            # Check that the ClusterCreation hook is called
+            # FIXME: Implement __eq__ method in resource objects.
+            #        Because process_cluster passes a copy of the cluster resource
+            #        object to the hook and the object does not implement sufficient
+            #        equality checking we need to check it separately.
+            #        These checks below are incomplete.
+            mocked_hook.assert_any_call(
+                HookType.ClusterCreation,
+                controller=controller,
+                resource=mock.ANY,  # checked afterwards
+                start=True,
+            )
+            resource_call_arg = mocked_hook.call_args.kwargs["resource"]
+            assert resource_call_arg.kind == cluster.kind
+            assert resource_call_arg.metadata.uid == cluster.metadata.uid
+            assert resource_call_arg.metadata.name == cluster.metadata.name
+            assert resource_call_arg.metadata.namespace == cluster.metadata.namespace
 
     stored = await db.get(
         Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
@@ -670,7 +734,14 @@ async def test_cluster_create_by_im_provider_unreachable(
             server_endpoint(api_server), worker_count=0, poll_interval=0.1
         )
         await controller.prepare(client)
-        await controller.process_cluster(cluster)
+
+        # Mock the hooking mechanism and call process_cluster
+        with mock.patch(
+            target='krake.controller.infrastructure.infrastructure.listen.hook',
+            new=mock.AsyncMock()
+        ) as mocked_hook:
+            await controller.process_cluster(cluster)
+            mocked_hook.assert_not_called()
 
     stored = await db.get(
         Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
@@ -804,7 +875,31 @@ async def test_cluster_update_by_im_provider(
             server_endpoint(api_server), worker_count=0, poll_interval=0.1
         )
         await controller.prepare(client)
-        await controller.process_cluster(cluster)
+
+        # Mock the hooking mechanism and call process_cluster
+        with mock.patch(
+            target='krake.controller.infrastructure.infrastructure.listen.hook',
+            new=mock.AsyncMock()
+        ) as mocked_hook:
+            await controller.process_cluster(cluster)
+
+            # Check that the ClusterCreation hook is called
+            # FIXME: Implement __eq__ method in resource objects.
+            #        Because process_cluster passes a copy of the cluster resource
+            #        object to the hook and the object does not implement sufficient
+            #        equality checking we need to check it separately.
+            #        These checks below are incomplete.
+            mocked_hook.assert_any_call(
+                HookType.ClusterCreation,
+                controller=controller,
+                resource=mock.ANY,  # checked afterwards
+                start=True,
+            )
+            resource_call_arg = mocked_hook.call_args.kwargs["resource"]
+            assert resource_call_arg.kind == cluster.kind
+            assert resource_call_arg.metadata.uid == cluster.metadata.uid
+            assert resource_call_arg.metadata.name == cluster.metadata.name
+            assert resource_call_arg.metadata.namespace == cluster.metadata.namespace
 
     stored = await db.get(
         Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
@@ -902,7 +997,14 @@ async def test_cluster_update_by_im_provider_unreachable(
             server_endpoint(api_server), worker_count=0, poll_interval=0.1
         )
         await controller.prepare(client)
-        await controller.process_cluster(cluster)
+
+        # Mock the hooking mechanism and call process_cluster
+        with mock.patch(
+            target='krake.controller.infrastructure.infrastructure.listen.hook',
+            new=mock.AsyncMock()
+        ) as mocked_hook:
+            await controller.process_cluster(cluster)
+            mocked_hook.assert_not_called()
 
     stored = await db.get(
         Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
@@ -1000,7 +1102,30 @@ async def test_cluster_delete_by_im_provider(
             server_endpoint(api_server), worker_count=0, poll_interval=0.1
         )
         await controller.prepare(client)
-        await controller.process_cluster(cluster)
+
+        # Mock the hooking mechanism and call process_cluster
+        with mock.patch(
+            target='krake.controller.infrastructure.infrastructure.listen.hook',
+            new=mock.AsyncMock()
+        ) as mocked_hook:
+            await controller.process_cluster(cluster)
+
+            # Check that the ClusterCreation hook is called
+            # FIXME: Implement __eq__ method in resource objects.
+            #        Because process_cluster passes a copy of the cluster resource
+            #        object to the hook and the object does not implement sufficient
+            #        equality checking we need to check it separately.
+            #        These checks below are incomplete.
+            mocked_hook.assert_any_call(
+                HookType.ClusterDeletion,
+                controller=controller,
+                resource=mock.ANY,  # checked afterwards
+            )
+            resource_call_arg = mocked_hook.call_args.kwargs["resource"]
+            assert resource_call_arg.kind == cluster.kind
+            assert resource_call_arg.metadata.uid == cluster.metadata.uid
+            assert resource_call_arg.metadata.name == cluster.metadata.name
+            assert resource_call_arg.metadata.namespace == cluster.metadata.namespace
 
     stored = await db.get(
         Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
@@ -1083,7 +1208,30 @@ async def test_cluster_delete_by_im_provider_unreachable(
             server_endpoint(api_server), worker_count=0, poll_interval=0.1
         )
         await controller.prepare(client)
-        await controller.process_cluster(cluster)
+
+        # Mock the hooking mechanism and call process_cluster
+        with mock.patch(
+            target='krake.controller.infrastructure.infrastructure.listen.hook',
+            new=mock.AsyncMock()
+        ) as mocked_hook:
+            await controller.process_cluster(cluster)
+
+            # Check that the ClusterCreation hook is called
+            # FIXME: Implement __eq__ method in resource objects.
+            #        Because process_cluster passes a copy of the cluster resource
+            #        object to the hook and the object does not implement sufficient
+            #        equality checking we need to check it separately.
+            #        These checks below are incomplete.
+            mocked_hook.assert_any_call(
+                HookType.ClusterDeletion,
+                controller=controller,
+                resource=mock.ANY,  # checked afterwards
+            )
+            resource_call_arg = mocked_hook.call_args.kwargs["resource"]
+            assert resource_call_arg.kind == cluster.kind
+            assert resource_call_arg.metadata.uid == cluster.metadata.uid
+            assert resource_call_arg.metadata.name == cluster.metadata.name
+            assert resource_call_arg.metadata.namespace == cluster.metadata.namespace
 
     stored = await db.get(
         Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
