@@ -82,7 +82,7 @@ class InfrastructureProviderRef(Serializable):
     namespaced: bool = False
 
 
-class CloudBinding(ApiObject):
+class CloudBinding(Serializable):
     api: str = "infrastructure"
     kind: str = "CloudBinding"
     cloud: ResourceRef
