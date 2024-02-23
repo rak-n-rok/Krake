@@ -34,7 +34,12 @@ from krake.controller.kubernetes.hooks import (
     KubernetesApplicationObserver,
 )
 from krake.client import Client
-from krake.test_utils import server_endpoint, get_first_container, serialize_k8s_object
+from krake.test_utils import (
+    server_endpoint,
+    get_first_container,
+    serialize_k8s_object,
+    with_timeout,
+)
 
 from tests.factories.fake import fake
 from tests.factories.kubernetes import (
@@ -99,8 +104,8 @@ async def test_observer_temporarily_unreachable_cluster(
     is deployed in the temporarily unreachable cluster.
 
     If the cluster is temporarily unreachable the last known application status is
-    returned from :func:`poll_resource`. The application status should not change
-    as we do not know the real current state.
+    returned from :func:`fetch_actual_resource`. The application status should not
+    change as we do not know the real current state.
 
     """
     routes = web.RouteTableDef()
@@ -163,10 +168,11 @@ async def test_observer_temporarily_unreachable_cluster(
         before = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
         )
-        await observer.observe_resource()
+
+        await with_timeout(1, stop=True)(observer.run)()
         # Transmit cluster API to the offline state, responds with HTTP 503 return code
         is_cluster_offline = True
-        await observer.observe_resource()
+        await with_timeout(1, stop=True)(observer.run)()
         after = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
         )
@@ -179,6 +185,7 @@ async def test_observer_temporarily_unreachable_cluster(
         assert after == before
 
 
+@pytest.mark.slow
 async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
     """Test the Observer's behavior on update of a resource on the k8s cluster directly
 
@@ -354,43 +361,44 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
     # Observe an unmodified resource
     # As no changes are noticed by the Observer, the res_update function will not be
     # called.
+
     actual_state = 0
     assert calls_to_res_update == 0
 
     # Modify the actual resource "externally"
     actual_state = 1
-    await observer.observe_resource()
+    await with_timeout(1, stop=True)(observer.run)()
     assert calls_to_res_update == 1
 
     # Delete the service "externally"
     actual_state = 2
-    await observer.observe_resource()
+    await with_timeout(1, stop=True)(observer.run)()
     assert calls_to_res_update == 2
 
     # State (3): The Service's first port's protocol is changed to "UDP"
     # As this field is *not* observed, the ``on_res_update`` method shouldn't be called
     actual_state = 3
-    await observer.observe_resource()
+    await with_timeout(1, stop=True)(observer.run)()
     assert calls_to_res_update == 3
 
     # State (4): A second port is added to the Service.
     actual_state = 4
-    await observer.observe_resource()
+    await with_timeout(1, stop=True)(observer.run)()
     assert calls_to_res_update == 4
 
     # State (5): A third port is added to the Service.
     actual_state = 5
-    await observer.observe_resource()
+    await with_timeout(1, stop=True)(observer.run)()
     assert calls_to_res_update == 5
 
     # State (6): All ports are removed from the Service.
     actual_state = 6
-    await observer.observe_resource()
+    await with_timeout(1, stop=True)(observer.run)()
     assert calls_to_res_update == 6
 
     # State (7): The Secret is deleted
     actual_state = 7
-    await observer.observe_resource()
+    await with_timeout(1, stop=True)(observer.run)()
     assert calls_to_res_update == 7
 
 
@@ -545,12 +553,12 @@ async def test_observer_on_poll_update_default_namespace(
 
     # State (1): The Deployment image version changed to "1.6"
     actual_state = 1
-    await observer.observe_resource()
+    await with_timeout(1, stop=True)(observer.run)()
     assert calls_to_res_update == 1
 
     # State (2): The Deployment replicas count is changed to 2.
     actual_state = 2
-    await observer.observe_resource()
+    await with_timeout(1, stop=True)(observer.run)()
     assert calls_to_res_update == 2
 
     assert called_get and called_post, "GET and POST did not get call at least once."
@@ -686,12 +694,12 @@ async def test_observer_on_poll_update_cluster_default_namespace(
 
     # Modify the actual resource "externally"
     actual_state = 1
-    await observer.observe_resource()
+    await with_timeout(1, stop=True)(observer.run)()
     assert calls_to_res_update == 1
 
     # Delete the service "externally"
     actual_state = 2
-    await observer.observe_resource()
+    await with_timeout(1, stop=True)(observer.run)()
     assert calls_to_res_update == 2
 
     assert called_get and called_post, "GET and POST did not get call at least once."
@@ -813,12 +821,12 @@ async def test_observer_on_poll_update_manifest_namespace_set(
 
     # Modify the actual resource "externally"
     actual_state = 1
-    await observer.observe_resource()
+    await with_timeout(1, stop=True)(observer.run)()
     assert calls_to_res_update == 1
 
     # Delete the service "externally"
     actual_state = 2
-    await observer.observe_resource()
+    await with_timeout(1, stop=True)(observer.run)()
     assert calls_to_res_update == 2
 
     assert called_get and called_post, "GET and POST did not get call at least once."
@@ -889,7 +897,7 @@ async def test_observer_on_status_update(aiohttp_server, db, config, loop):
             cluster, app, controller.on_status_update, time_step=-1
         )
 
-        await observer.observe_resource()
+        await with_timeout(1, stop=True)(observer.run)()
         updated = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
         )
@@ -1032,7 +1040,7 @@ async def test_observer_on_status_update_mangled(
 
         actual_state = 1
 
-        await observer.observe_resource()
+        await with_timeout(1, stop=True)(observer.run)()
         assert calls_to_res_update == 1
 
         updated = await db.get(
@@ -1064,7 +1072,7 @@ async def check_observer_does_not_update(observer, app, db):
     before = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    await observer.observe_resource()
+    await with_timeout(1, stop=True)(observer.run)()
     after = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
@@ -1312,7 +1320,7 @@ async def test_observer_on_delete(aiohttp_server, config, db, loop):
         before = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
         )
-        await observer.observe_resource()
+        await with_timeout(1, stop=True)(observer.run)()
         after = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
         )
@@ -1866,9 +1874,9 @@ async def test_create_kubernetes_cluster_observer(aiohttp_server, config, loop, 
 
         # the initial state of the observer could be CONNECTING
         assert observer.resource.status.state == ClusterState.CONNECTING
-        # After the observe_resource method is called, the observer
-        # should set the cluster's polled status.
-        await observer.observe_resource()
+        # After the run method ran for a short amount of time, the observer
+        # should have set cluster's polled status.
+        await with_timeout(1, stop=True)(observer.run)()
         # since there is no real connection to the cluster, the state should be OFFLINE
         assert observer.resource.status.state == ClusterState.OFFLINE
 
@@ -1973,9 +1981,9 @@ async def test_create_kubernetes_cluster_observer_ready(
 
         # The initial state of the observer should be CONNECTING
         assert observer.resource.status.state == ClusterState.CONNECTING
-        # After the observe_resource method is called, the observer
-        # should set the cluster's polled status.
-        await observer.observe_resource()
+        # After the run method ran for a short amount of time, the observer
+        # should have set cluster's polled status.
+        await with_timeout(1, stop=True)(observer.run)()
 
         if ready is True:
             # The state should be ONLINE as the cluster node is `Ready`
@@ -2085,7 +2093,7 @@ async def test_create_kubernetes_cluster_observer_ready_with_internally_offline_
         # The initial state of the observer should be OFFLINE
         assert observer.resource.status.state == ClusterState.OFFLINE
 
-        await observer.observe_resource()
+        await with_timeout(1, stop=True)(observer.run)()
 
         # The state should be CONNECTING, as the cluster state is transiting
         # from OFFLINE to ONLINE
@@ -2097,8 +2105,8 @@ async def test_create_kubernetes_cluster_observer_ready_with_internally_offline_
         # The cluster's status should be updated by the kubernetes controller
         assert observer.resource.status.state == stored.status.state
 
-        # On the next observe_resource should change to cluster state to ONLINE
-        await observer.observe_resource()
+        # On the next run should change cluster state to ONLINE
+        await with_timeout(1, stop=True)(observer.run)()
 
         assert observer.resource.status.state == ClusterState.ONLINE
 
@@ -2200,9 +2208,9 @@ async def test_create_kubernetes_cluster_observer_failing_metrics(
 
         # The initial state of the observer should be FAILING_METRICS
         assert observer.resource.status.state == ClusterState.FAILING_METRICS
-        # After the observe_resource method is called, the observer
-        # should set the cluster's polled status.
-        await observer.observe_resource()
+        # After the run method ran for a short amount of time, the observer
+        # should have set cluster's polled status.
+        await with_timeout(1, stop=True)(observer.run)()
         # The observer cluster status should be the same as the
         # ClusterState after the poll
         assert observer.resource.status.state == ClusterState.FAILING_METRICS
@@ -2309,9 +2317,9 @@ async def test_create_kubernetes_cluster_observer_pressure(
 
         # The initial state of the observer should be CONNECTING
         assert observer.resource.status.state == ClusterState.CONNECTING
-        # After the observe_resource method is called, the observer
-        # should set the cluster's polled status.
-        await observer.observe_resource()
+        # After the run method ran for a short amount of time, the observer
+        # should have set cluster's polled status.
+        await with_timeout(1, stop=True)(observer.run)()
         # The state should be UNHEALTHY as the cluster node is
         # under [Memory|Disk|PID]Pressure
         assert observer.resource.status.state == ClusterState.UNHEALTHY
@@ -2448,9 +2456,9 @@ async def test_create_kubernetes_cluster_observer_ready_two_nodes(
 
         # The initial state of the observer should be CONNECTING
         assert observer.resource.status.state == ClusterState.CONNECTING
-        # After the observe_resource method is called, the observer
-        # should set the cluster's polled status.
-        await observer.observe_resource()
+        # After the run method ran for a short amount of time, the observer
+        # should have set cluster's polled status.
+        await with_timeout(1, stop=True)(observer.run)()
 
         if ready is True:
             # The state should be ONLINE as the cluster node is `Ready`
@@ -2595,9 +2603,9 @@ async def test_create_kubernetes_cluster_observer_pressure_two_nodes(
 
         # The initial state of the observer should be CONNECTING
         assert observer.resource.status.state == ClusterState.CONNECTING
-        # After the observe_resource method is called, the observer
-        # should set the cluster's polled status.
-        await observer.observe_resource()
+        # After the run method ran for a short amount of time, the observer
+        # should have set cluster's polled status.
+        await with_timeout(1, stop=True)(observer.run)()
         # The state should be UNHEALTHY as the cluster node is
         # under [Memory|Disk|PID]Pressure
         assert observer.resource.status.state == ClusterState.UNHEALTHY
@@ -2661,7 +2669,7 @@ async def test_create_kubernetes_cluster_observer_offline(
             "list_node",
             side_effect=ClientConnectorError(connection_key, OSError()),
         ):
-            await observer.observe_resource()
+            await with_timeout(1, stop=True)(observer.run)()
         # The state should be OFFLINE as the cluster API is unreachable
         assert observer.resource.status.state == ClusterState.OFFLINE
         stored = await db.get(
@@ -2693,7 +2701,7 @@ async def test_create_kubernetes_cluster_observer_offline_non2xx_response(
     In that case, the OFFLINE cluster state should be set.
 
     Note regarding 503 Service Unavailable:
-        The current cluster status is fetched by :func:`poll_resource`
+        The current cluster status is fetched by :func:`fetch_actual_resource`
         from its API. If the cluster API is shutting down the API
         server responds with a 503 (service unavailable, apiserver
         is shutting down) HTTP response.
@@ -2730,9 +2738,9 @@ async def test_create_kubernetes_cluster_observer_offline_non2xx_response(
 
         # The initial state of the observer should be CONNECTING
         assert observer.resource.status.state == ClusterState.CONNECTING
-        # After the observe_resource method is called, the observer
-        # should set the cluster's polled status.
-        await observer.observe_resource()
+        # After the run method ran for a short amount of time, the observer
+        # should have set cluster's polled status.
+        await with_timeout(1, stop=True)(observer.run)()
 
         # The state should be OFFLINE as the cluster API responds
         # with non 2xx HTTP code.

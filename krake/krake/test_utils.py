@@ -13,8 +13,19 @@ from krake.controller.kubernetes.application.application import listen
 from kubernetes_asyncio.client import ApiClient
 
 
-def with_timeout(timeout):
+class CoroTimeoutReached(object):
+    def __init__(self, coro, timeout=None):
+        self.coro = coro
+        self.timeout = timeout
+
+
+def with_timeout(timeout, stop=False):
     """Decorator function for coroutines
+
+    Run a coroutine for a maximum period of time.
+
+    With `stop=True` this can also be used to run indefinitely running coroutines only
+    for a given finite period of time.
 
     Example:
         .. code:: python
@@ -27,6 +38,10 @@ def with_timeout(timeout):
 
     Args:
         timeout (int, float): Timeout interval in seconds
+        stop (bool): If True gracefully return from the coroutine
+            when it exceeded the given timeout.
+            Instead of raising :class:`TimeoutError` a :class:`CoroTimeoutReached`
+            object is returned as the coroutine's return value.
 
     Returns:
         callable: Decorator that can be used for decorating coroutines.
@@ -36,8 +51,14 @@ def with_timeout(timeout):
     def decorator(fn):
         @wraps(fn)
         async def wrapper(*args, **kwargs):
-            return await asyncio.wait_for(fn(*args, **kwargs), timeout=timeout)
-
+            try:
+                return await asyncio.wait_for(fn(*args, **kwargs), timeout=timeout)
+            except asyncio.TimeoutError as e:
+                if stop:
+                    # Gracefully return when stop is requested
+                    return CoroTimeoutReached(coro=fn, timeout=timeout)
+                else:
+                    raise e
         return wrapper
 
     return decorator
