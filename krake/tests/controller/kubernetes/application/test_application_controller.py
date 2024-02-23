@@ -2490,7 +2490,7 @@ async def test_app_management_no_error_logs(aiohttp_server, config, db, loop, ca
         # 2. Observe the resource
         actual_state = 2
         observer, task = controller.observers[app.metadata.uid]
-        await observer.observe_resource()
+        await with_timeout(1, stop=True)(observer.run)()
 
         # 3. Delete the resource
         actual_state = 3

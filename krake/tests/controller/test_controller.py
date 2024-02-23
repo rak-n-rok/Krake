@@ -1,4 +1,5 @@
 import asyncio
+from copy import deepcopy
 import sys
 import logging
 import pytest
@@ -929,14 +930,25 @@ async def test_observer(loop):
         assert resource.status == real_world_status
         is_res_updated.set_result(resource)
 
-    async def new_poll_resources():
+    async def new_fetch_actual_resource():
         # change the real world status compared to the one registered
         return real_world_status
 
-    observer = Observer(app, on_res_update)
-    observer.poll_resource = new_poll_resources
+    observation_consumed = False
 
-    await observer.observe_resource()
+    async def new_check_observation(observation):
+        if not observation_consumed:
+            to_update = deepcopy(observer.resource)
+            to_update.status = observation
+            return (True, to_update)
+        else:
+            return (False, None)
+
+    observer = Observer(app, on_res_update)
+    observer.fetch_actual_resource = new_fetch_actual_resource
+    observer.check_observation = new_check_observation
+
+    await with_timeout(1, stop=True)(observer.run)()
 
     # Ensure that the on_res_update function is called
     assert is_res_updated.done()
@@ -952,34 +964,64 @@ async def test_observer_run(loop):
     is_res_updated = loop.create_future()
 
     app = ApplicationFactory(status__state=ApplicationState.RUNNING)
-    real_world_status = ApplicationStatusFactory(state=ApplicationState.RUNNING)
+    real_world_statuses = [
+        ApplicationState.MIGRATING,  # new
+        ApplicationState.MIGRATING,  # <wait>1
+        ApplicationState.MIGRATING,  # <wait>2
+        ApplicationState.RUNNING,    # new
+        ApplicationState.RUNNING,    # <wait>3
+                                     # -- observer canceled
+        ApplicationState.MIGRATING,  # new
+        ApplicationState.MIGRATING,  # <wait>4
+        ApplicationState.MIGRATING,  # <wait>5
+        ApplicationState.RUNNING,    # new
+    ]
 
     async def on_res_update(resource):
         nonlocal count
         count += 1
-        if count == 3:
+        if count == 2:
             is_res_updated.set_result(resource)
+        return resource
 
-    async def new_poll_resources():
-        # change the real world status compared to the one registered, to trigger the
-        # call to on_res_update
-        return real_world_status
-
+    # Create observer
+    # and implement all unimplemented methods
     observer = Observer(app, on_res_update, time_step=1)
-    observer.poll_resource = new_poll_resources
 
-    # Run the task 4 seconds to let it do several loops.
+    def app_state_generator():
+        for app_state in real_world_statuses:
+            yield ApplicationStatusFactory(state=app_state)
+
+    gen_app_with_state = app_state_generator()
+
+    async def fetch_actual_resource():
+        nonlocal gen_app_with_state
+        return next(gen_app_with_state)
+
+    async def check_observation(observation):
+        if observer.resource.status.state != observation.state:
+            to_update = deepcopy(observer.resource)
+            to_update.status = observation
+            return (True, to_update)
+        else:
+            return (False, None)
+
+    observer.fetch_actual_resource = fetch_actual_resource
+    observer.check_observation = check_observation
+
+    # Run the task 3.5 seconds to let it do several loops.
     run_task = loop.create_task(observer.run())
-    await asyncio.sleep(4)
+    await asyncio.sleep(3.5)
 
     run_task.cancel()
     with suppress(asyncio.CancelledError):
         await run_task
 
-    # Ensure that the on_res_update function has been called 3 times (see the content of
-    # on_res_update()): as there was a 4 seconds sleep, and the time_step of the
-    # Observer is 1 seconds, only 3 loops of the Observer.run() method could finish.
-    assert count == 3
+    # Ensure that the on_res_update function has been called 2 times (see the content of
+    # on_res_update()): as the observer was given 3.5 seconds, and with the time_step of
+    # 1 Second, only the first 2 state changes can be observed thus only 2 loops of the
+    # Observer.run() method could finish.
+    assert count == 2
 
     assert is_res_updated.done()
     await is_res_updated
