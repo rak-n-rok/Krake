@@ -451,6 +451,7 @@ def create_application(
         "metadata": {
             "name": name,
             "labels": wrap_labels(labels),
+            "deletion_state": {"deleted": False}
         },
         "spec": {
             "manifest": manifest,
@@ -892,6 +893,7 @@ def register_cluster(
         "metadata": {
             "name": cluster_name,
             "labels": wrap_labels(labels),
+            "deletion_state": {"deleted": False}
         },
         "spec": {
             "kubeconfig": cluster_config,
@@ -965,6 +967,7 @@ def create_cluster(
         "metadata": {
             "name": name,
             "labels": wrap_labels(labels),
+            "deletion_state": {"deleted": False},
             "inherit_labels": inherit_labels
         },
         "spec": {

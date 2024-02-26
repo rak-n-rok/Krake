@@ -19,7 +19,7 @@ from krake.api.helpers import (
     HttpProblemError,
     ListQuery,
 )
-from krake.data.core import WatchEvent, WatchEventType
+from krake.data.core import WatchEvent, WatchEventType, DeletionState
 from krake.data.openstack import (
     ProjectList,
     Project,
@@ -86,12 +86,12 @@ class OpenStackApi(object):
     @load("entity", MagnumCluster)
     async def delete_magnum_cluster(request, entity):
         # Resource is already deleting
-        if entity.metadata.deleted:
+        if entity.metadata.deletion_state.deleted:
             return web.json_response(entity.serialize())
 
         # TODO: Should be update "modified" here?
         # Resource marked as deletion, to be deleted by the Garbage Collector
-        entity.metadata.deleted = utils.now()
+        entity.metadata.deletion_state = DeletionState.create_deleted()
         entity.metadata.finalizers.append("cascade_deletion")
 
         await session(request).put(entity)
@@ -172,7 +172,7 @@ class OpenStackApi(object):
     async def update_magnum_cluster(request, body, entity):
         # Once a resource is in the "deletion in progress" state, finalizers
         # can only be removed.
-        if entity.metadata.deleted:
+        if entity.metadata.deletion_state.deleted:
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 problem = HttpProblem(
                     detail="Finalizers can only be removed"
@@ -198,7 +198,7 @@ class OpenStackApi(object):
 
         # Resource is in "deletion in progress" state and all finalizers have
         # been removed. Delete the resource from database.
-        if entity.metadata.deleted and not entity.metadata.finalizers:
+        if entity.metadata.deletion_state.deleted and not entity.metadata.finalizers:
             await session(request).delete(entity)
             logger.info(
                 "Delete %s %r (%s)",
@@ -309,12 +309,12 @@ class OpenStackApi(object):
     @load("entity", Project)
     async def delete_project(request, entity):
         # Resource is already deleting
-        if entity.metadata.deleted:
+        if entity.metadata.deletion_state.deleted:
             return web.json_response(entity.serialize())
 
         # TODO: Should be update "modified" here?
         # Resource marked as deletion, to be deleted by the Garbage Collector
-        entity.metadata.deleted = utils.now()
+        entity.metadata.deletion_state = DeletionState.create_deleted()
         entity.metadata.finalizers.append("cascade_deletion")
 
         await session(request).put(entity)
@@ -392,7 +392,7 @@ class OpenStackApi(object):
     async def update_project(request, body, entity):
         # Once a resource is in the "deletion in progress" state, finalizers
         # can only be removed.
-        if entity.metadata.deleted:
+        if entity.metadata.deletion_state.deleted:
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 problem = HttpProblem(
                     detail="Finalizers can only be removed"
@@ -418,7 +418,7 @@ class OpenStackApi(object):
 
         # Resource is in "deletion in progress" state and all finalizers have
         # been removed. Delete the resource from database.
-        if entity.metadata.deleted and not entity.metadata.finalizers:
+        if entity.metadata.deletion_state.deleted and not entity.metadata.finalizers:
             await session(request).delete(entity)
             logger.info(
                 "Delete %s %r (%s)",

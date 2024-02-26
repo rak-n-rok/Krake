@@ -346,7 +346,7 @@ class GarbageCollector(Controller):
 
         """
         if (
-            resource.metadata.deleted
+            resource.metadata.deletion_state.deleted
             and resource.metadata.finalizers
             and resource.metadata.finalizers[-1] == "cascade_deletion"
         ):

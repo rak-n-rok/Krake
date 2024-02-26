@@ -27,6 +27,7 @@ from krake.data.core import (
     InfluxSpec,
     Label,
     StaticSpecItem,
+    DeletionState,
 )
 
 _existing_names = set()
@@ -116,7 +117,7 @@ class MetadataFactory(Factory):
     namespace = "testing"
     uid = fuzzy.FuzzyAttribute(fake.uuid4)
     labels = fuzzy.FuzzyAttribute(fuzzy_labels)
-    deleted = None  # Not deleted by default
+    deletion_state = DeletionState()  # Not deleted by default
 
     @lazy_attribute
     def created(self):

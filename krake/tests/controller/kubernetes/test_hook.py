@@ -40,6 +40,8 @@ from tests.controller.kubernetes import (
     secret_response,
 )
 
+from tests.api.test_core import validate_deletion_state_deleted
+
 
 async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
     """Verify that the Controller mangled the received Application to add elements of
@@ -904,7 +906,7 @@ async def test_complete_hook_sending(aiohttp_server, config, db, loop, hooks_con
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.metadata.deleted is not None
+    assert validate_deletion_state_deleted(stored.metadata.deletion_state)
 
 
 async def test_complete_hook_sending_tls(
@@ -1025,7 +1027,7 @@ async def test_complete_hook_sending_tls(
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.metadata.deleted is None
+    assert stored.metadata.deletion_state.deleted is False
 
     token, url = get_complete_hook_environment_value(stored)
 
@@ -1071,7 +1073,7 @@ async def test_complete_hook_sending_tls(
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.metadata.deleted is not None
+    assert validate_deletion_state_deleted(stored.metadata.deletion_state)
 
 
 async def test_complete_hook_sending_tls_rbac(
@@ -1208,7 +1210,7 @@ async def test_complete_hook_sending_tls_rbac(
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.metadata.deleted is None
+    assert stored.metadata.deletion_state.deleted is False
 
     token, url = get_complete_hook_environment_value(stored)
 
@@ -1262,7 +1264,7 @@ async def test_complete_hook_sending_tls_rbac(
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.metadata.deleted is not None
+    assert validate_deletion_state_deleted(stored.metadata.deletion_state)
 
 
 async def test_complete_hook_reschedule(
@@ -2251,7 +2253,7 @@ async def test_shutdown_hook_sending(aiohttp_server, config, db, loop, hooks_con
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.metadata.deleted is not None
+    assert validate_deletion_state_deleted(stored.metadata.deletion_state)
     assert stored.status.shutdown_grace_period is not None
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
@@ -2385,7 +2387,7 @@ async def test_shutdown_hook_sending_tls(
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.metadata.deleted is None
+    assert stored.metadata.deletion_state.deleted is False
 
     token, url = get_shutdown_hook_environment_value(stored)
 
@@ -2437,7 +2439,7 @@ async def test_shutdown_hook_sending_tls(
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.metadata.deleted is not None
+    assert validate_deletion_state_deleted(stored.metadata.deletion_state)
     assert stored.status.shutdown_grace_period is not None
 
     async with Client(
@@ -2587,7 +2589,7 @@ async def test_shutdown_hook_sending_tls_rbac(
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.metadata.deleted is None
+    assert stored.metadata.deletion_state.deleted is False
 
     token, url = get_shutdown_hook_environment_value(stored)
 
@@ -2647,7 +2649,7 @@ async def test_shutdown_hook_sending_tls_rbac(
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.metadata.deleted is not None
+    assert validate_deletion_state_deleted(stored.metadata.deletion_state)
     assert stored.status.shutdown_grace_period is not None
 
     async with Client(
@@ -2669,7 +2671,7 @@ async def test_shutdown_hook_sending_tls_rbac(
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
-    assert stored.metadata.deleted is not None
+    assert validate_deletion_state_deleted(stored.metadata.deletion_state)
     assert stored.status.shutdown_grace_period is None
 
 

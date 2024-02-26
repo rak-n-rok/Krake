@@ -24,7 +24,10 @@ from tests.factories.openstack import (
     MagnumClusterFactory,
 )
 
-from tests.factories.fake import fake
+from tests.api.test_core import (
+    supply_deletion_state_deleted,
+    validate_deletion_state_deleted
+)
 
 
 async def test_create_magnum_cluster(aiohttp_client, config, db):
@@ -88,10 +91,10 @@ async def test_delete_magnum_cluster(aiohttp_client, config, db):
     assert resp.status == 200
     received = MagnumCluster.deserialize(await resp.json())
     assert resource_ref(received) == resource_ref(data)
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     deleted = await db.get(MagnumCluster, namespace="testing", name=data.metadata.name)
-    assert deleted.metadata.deleted is not None
+    assert validate_deletion_state_deleted(deleted.metadata.deletion_state)
     assert "cascade_deletion" in deleted.metadata.finalizers
 
 
@@ -99,7 +102,8 @@ async def test_add_finalizer_in_deleted_magnum_cluster(aiohttp_client, config, d
     client = await aiohttp_client(create_app(config=config))
 
     data = MagnumClusterFactory(
-        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+        metadata__deletion_state=supply_deletion_state_deleted(None),
+        metadata__finalizers=["my-finalizer"]
     )
     await db.put(data)
 
@@ -133,7 +137,9 @@ async def test_delete_magnum_cluster_rbac(rbac_allow, config, aiohttp_client):
 async def test_delete_magnum_cluster_already_in_deletion(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
-    in_deletion = MagnumClusterFactory(metadata__deleted=fake.date_time())
+    in_deletion = MagnumClusterFactory(
+        metadata__deletion_state=supply_deletion_state_deleted(None)
+    )
     await db.put(in_deletion)
 
     resp = await client.delete(
@@ -234,7 +240,7 @@ async def test_watch_magnum_clusters(aiohttp_client, config, db, loop):
 
         received = MagnumCluster.deserialize(await resp.json())
         assert resource_ref(received) == resource_ref(resources[0])
-        assert received.metadata.deleted is not None
+        assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -331,7 +337,7 @@ async def test_watch_all_magnum_clusters(aiohttp_client, config, db, loop):
 
         received = MagnumCluster.deserialize(await resp.json())
         assert resource_ref(received) == resource_ref(resources[0])
-        assert received.metadata.deleted is not None
+        assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -395,7 +401,7 @@ async def test_update_magnum_cluster_to_delete(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = MagnumClusterFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
     await db.put(data)
@@ -613,10 +619,10 @@ async def test_delete_project(aiohttp_client, config, db):
     assert resp.status == 200
     received = Project.deserialize(await resp.json())
     assert resource_ref(received) == resource_ref(data)
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     deleted = await db.get(Project, namespace="testing", name=data.metadata.name)
-    assert deleted.metadata.deleted is not None
+    assert validate_deletion_state_deleted(deleted.metadata.deletion_state)
     assert "cascade_deletion" in deleted.metadata.finalizers
 
 
@@ -624,7 +630,8 @@ async def test_add_finalizer_in_deleted_project(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = ProjectFactory(
-        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+        metadata__deletion_state=supply_deletion_state_deleted(None),
+        metadata__finalizers=["my-finalizer"]
     )
     await db.put(data)
 
@@ -654,7 +661,9 @@ async def test_delete_project_rbac(rbac_allow, config, aiohttp_client):
 async def test_delete_project_already_in_deletion(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
-    in_deletion = ProjectFactory(metadata__deleted=fake.date_time())
+    in_deletion = ProjectFactory(
+        metadata__deletion_state=supply_deletion_state_deleted(None)
+    )
     await db.put(in_deletion)
 
     resp = await client.delete(
@@ -755,7 +764,7 @@ async def test_watch_projects(aiohttp_client, config, db, loop):
 
         received = Project.deserialize(await resp.json())
         assert resource_ref(received) == resource_ref(resources[0])
-        assert received.metadata.deleted is not None
+        assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -852,7 +861,7 @@ async def test_watch_all_projects(aiohttp_client, config, db, loop):
 
         received = Project.deserialize(await resp.json())
         assert resource_ref(received) == resource_ref(resources[0])
-        assert received.metadata.deleted is not None
+        assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -918,7 +927,7 @@ async def test_update_project_to_delete(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = ProjectFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
     await db.put(data)

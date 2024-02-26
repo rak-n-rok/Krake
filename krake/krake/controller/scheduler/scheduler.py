@@ -592,7 +592,7 @@ class KubernetesApplicationHandler(Handler):
             app (krake.data.kubernetes.Application): Application received from the API
 
         """
-        if app.metadata.deleted:
+        if app.metadata.deletion_state.deleted:
             # TODO: If an application is deleted, the scheduling of other
             #   applications should potentially be revised.
             logger.debug("Cancel rescheduling of deleted %r", app)
@@ -731,7 +731,7 @@ class KubernetesApplicationHandler(Handler):
             created_clusters = [
                 cluster
                 for cluster in clusters.items
-                if cluster.metadata.deleted is None
+                if cluster.metadata.deletion_state.deleted is False
                 and cluster.metadata.name == app.status.auto_cluster_create_started
             ]
             if created_clusters and \
@@ -1041,7 +1041,7 @@ class KubernetesApplicationHandler(Handler):
         # Reject clusters marked as deleted and clusters that are not online
         existing_clusters = (
             cluster for cluster in clusters
-            if cluster.metadata.deleted is None and
+            if cluster.metadata.deletion_state.deleted is False and
             cluster.status.state is ClusterState.ONLINE
         )
         # Check cluster_copy and cluster again
@@ -1333,7 +1333,7 @@ class KubernetesClusterHandler(Handler):
         """
         # For now, we do not reschedule clusters. Hence, not enqueuing
         # for rescheduling.
-        if cluster.metadata.deleted:
+        if cluster.metadata.deletion_state.deleted:
             logger.debug("Ignore deleted %r", cluster)
 
         elif cluster.spec.kubeconfig:
@@ -1366,7 +1366,8 @@ class KubernetesClusterHandler(Handler):
                 logger.debug("Handling %r", cluster)
                 await self.schedule_kubernetes_cluster(cluster)
 
-                if cluster.spec.auto_generated and not cluster.metadata.deleted:
+                if (cluster.spec.auto_generated and not
+                        cluster.metadata.deletion_state.deleted):
                     logger.debug("Requeueing %r in %r seconds.",
                                  cluster, self.cluster_creation_deletion_retention)
                     await self.queue.put(
@@ -1410,7 +1411,7 @@ class KubernetesClusterHandler(Handler):
             break
         if not cluster_has_apps and \
            cluster.spec.auto_generated and \
-           not cluster.metadata.deleted:
+           not cluster.metadata.deletion_state.deleted:
             await self.kubernetes_api.delete_cluster(
                 name=cluster.metadata.name,
                 namespace=cluster.metadata.namespace
@@ -1462,7 +1463,8 @@ class KubernetesClusterHandler(Handler):
 
         """
         # Reject clouds marked as deleted
-        existing_clouds = (cloud for cloud in clouds if cloud.metadata.deleted is None)
+        existing_clouds = (cloud for cloud in clouds if
+                           cloud.metadata.deletion_state.deleted is False)
         fetched_metrics = dict()
 
         for cloud in clouds:
@@ -1586,7 +1588,7 @@ class OpenstackHandler(Handler):
         """
         # For now, we do not reschedule Magnum clusters. Hence, not enqueuing
         # for rescheduling and not "scheduled" timestamp.
-        if cluster.metadata.deleted:
+        if cluster.metadata.deletion_state.deleted:
             logger.debug("Ignore deleted %r", cluster)
         elif cluster.status.project is None:
             logger.debug("Accept unbound %r", cluster)
@@ -1690,7 +1692,8 @@ class OpenstackHandler(Handler):
 
         """
         # Reject projects marked as deleted
-        projects = (project for project in projects if project.metadata.deleted is None)
+        projects = (project for project in projects if
+                    project.metadata.deletion_state.deleted is False)
         matching = [
             project
             for project in projects

@@ -28,7 +28,7 @@ from krake.data.config import (
     CompleteHookConfiguration,
     ShutdownHookConfiguration,
 )
-from krake.data.core import resource_ref, ReasonCode
+from krake.data.core import resource_ref, ReasonCode, DeletionState
 from krake.data.kubernetes import Application, ApplicationState
 from krake.controller.kubernetes.application.__main__ import main
 from krake.controller.kubernetes.application import (
@@ -46,13 +46,11 @@ from krake.controller.kubernetes.hooks import (
 )
 from krake.client import Client
 from krake.test_utils import server_endpoint, with_timeout, serialize_k8s_object
-from krake import utils
 from tests.controller.kubernetes.test_tosca import (
     create_tosca_from_resources,
     CSAR_META,
 )
 
-from tests.factories.fake import fake
 from tests.factories.kubernetes import (
     ApplicationFactory,
     ClusterFactory,
@@ -74,6 +72,8 @@ from tests.controller.kubernetes import (
     initial_last_observed_manifest_service,
     initial_last_observed_manifest,
 )
+
+from tests.api.test_core import supply_deletion_state_deleted
 
 
 @pytest.mark.parametrize(
@@ -235,7 +235,7 @@ async def test_app_reception(aiohttp_server, config, db, loop):
         status__state=ApplicationState.RUNNING,
         status__is_scheduled=True,
         status__running_on=resource_ref(cluster),
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
     )
     # Running, not scheduled and deleted without finalizers
     deleted_with_finalizer = ApplicationFactory(
@@ -243,7 +243,7 @@ async def test_app_reception(aiohttp_server, config, db, loop):
         status__is_scheduled=False,
         status__running_on=resource_ref(cluster),
         metadata__finalizers=["kubernetes_resources_deletion"],
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
     )
     # Failed, not scheduled and deleted with finalizers
     deleted_and_failed_with_finalizer = ApplicationFactory(
@@ -251,7 +251,7 @@ async def test_app_reception(aiohttp_server, config, db, loop):
         status__running_on=resource_ref(cluster),
         status__state=ApplicationState.FAILED,
         metadata__finalizers=["kubernetes_resources_deletion"],
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
     )
 
     assert pending.status.kube_controller_triggered is None
@@ -1888,7 +1888,7 @@ async def test_app_deletion(aiohttp_server, config, db, loop):
 
     # The application possesses the deleted timestamp, meaning it should be deleted.
     app = ApplicationFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         spec__manifest=nginx_manifest,
         spec__observer_schema=custom_observer_schema,
         status__state=ApplicationState.RUNNING,
@@ -1992,7 +1992,7 @@ async def test_app_deletion_temporarily_unreachable_cluster(
 
     # The application possesses the deleted timestamp, meaning it should be deleted.
     app = ApplicationFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         spec__manifest=nginx_manifest,
         spec__observer_schema=custom_observer_schema,
         status__state=ApplicationState.RUNNING,
@@ -2088,7 +2088,7 @@ async def test_app_deletion_with_shutdown_hook(
 
     # The application possesses the deleted timestamp, meaning it should be deleted.
     app = ApplicationFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         spec__manifest=nginx_manifest,
         spec__observer_schema=custom_observer_schema,
         spec__hooks=["shutdown"],
@@ -2193,7 +2193,7 @@ async def test_app_deletion_with_shutdown_hook_running_state(
 
     # The application possesses the deleted timestamp, meaning it should be deleted.
     app = ApplicationFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         spec__manifest=nginx_manifest,
         spec__observer_schema=custom_observer_schema,
         spec__hooks=["shutdown"],
@@ -2299,7 +2299,7 @@ async def test_app_deletion_with_shutdown_hook_app_not_found(
 
     # The application possesses the deleted timestamp, meaning it should be deleted.
     app = ApplicationFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         spec__manifest=nginx_manifest,
         spec__observer_schema=custom_observer_schema,
         spec__hooks=["shutdown"],
@@ -2372,7 +2372,7 @@ async def test_app_deletion_with_shutdown_hook_timeout(
 
     # The application possesses the deleted timestamp, meaning it should be deleted.
     app = ApplicationFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         spec__manifest=nginx_manifest,
         spec__observer_schema=custom_observer_schema,
         spec__hooks=["shutdown"],
@@ -2498,7 +2498,7 @@ async def test_app_management_no_error_logs(aiohttp_server, config, db, loop, ca
         stored = await db.get(
             Application, namespace=app.metadata.namespace, name=app.metadata.name
         )
-        stored.metadata.deleted = utils.now()
+        stored.metadata.deletionStat = DeletionState.create_deleted()
         stored.metadata.finalizers = ["kubernetes_resources_deletion"]
 
         await controller.resource_received(stored)

@@ -1,7 +1,5 @@
 import asyncio
 import json
-import datetime
-import time
 from contextlib import suppress
 
 import pytest
@@ -22,7 +20,7 @@ from krake.controller.kubernetes.hooks import (
     update_last_observed_manifest_from_resp,
     generate_default_observer_schema,
 )
-from krake.data.core import resource_ref
+from krake.data.core import resource_ref, DeletionState
 from krake.data.kubernetes import (
     Application,
     ApplicationState,
@@ -59,6 +57,8 @@ from tests.controller.kubernetes import (
     initial_last_observed_manifest_service,
     initial_last_observed_manifest,
 )
+
+from tests.api.test_core import supply_deletion_state_deleted
 
 
 async def test_reception_for_application_observer(aiohttp_server, config, db, loop):
@@ -1285,7 +1285,7 @@ async def test_observer_on_delete(aiohttp_server, config, db, loop):
     cluster = ClusterFactory(spec__kubeconfig=make_kubeconfig(kubernetes_server))
 
     app = ApplicationFactory(
-        metadata__deleted=fake.date_time(),
+        metadata__deletion_state=supply_deletion_state_deleted(None),
         status__state=ApplicationState.RUNNING,
         status__mangled_observer_schema=mangled_observer_schema,
         status__last_observed_manifest=initial_last_observed_manifest,
@@ -2790,7 +2790,7 @@ async def test_kubernetes_cluster_observer_on_cluster_delete(aiohttp_server, con
     await controller.resource_received(cluster)
     # when a datetime is set in cluster.medata.deleted the cluster should be deleted
     # with calling the resource_received method
-    cluster.metadata.deleted = datetime.datetime.now()
+    cluster.metadata.deletion_state = DeletionState.create_deleted()
     await controller.resource_received(cluster)
     assert controller.observers == {}
 

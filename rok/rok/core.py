@@ -153,7 +153,7 @@ def _delete_base_resource(session, base_url, kind, name, config=None, namespace=
         name (str): name of the resource
         config (dict): the config
         namespace (str, optional): the namespace within which the resource
-            should be created
+            should be deleted
 
     Returns:
         dict(str, object): The updated Metric resource in json representation
@@ -161,7 +161,7 @@ def _delete_base_resource(session, base_url, kind, name, config=None, namespace=
     request_url = _get_request_url(
         base_url, config=config, namespace=namespace, url_ext=name
     )
-    resp = session.delete(request_url, raise_for_status=False)
+    resp = session.delete(request_url, raise_for_status=True)
 
     if resp.status_code == 204:
         return None
@@ -311,6 +311,7 @@ def _create_base_metrics_provider(
         "kind": kind,
         "metadata": {
             "name": name,
+            "deletion_state": {"deleted": False},
         },
         "spec": {
             "type": mp_type.value,
@@ -1000,42 +1001,35 @@ def _create_base_metric(
                 f"min: '{min}'. max: '{max}'."
             )
 
+    metric = {
+        "api": "core",
+        "kind": kind,
+        "metadata": {
+            "name": name,
+            "deletion_state": {"deleted": False}
+        },
+    }
+
     if allowed_values:
         allowed_values.sort()
-
-        metric = {
-            "api": "core",
-            "kind": kind,
-            "metadata": {
-                "name": name,
-            },
-            "spec": {
-                "allowed_values": allowed_values,
-                "max": max,
-                "min": min,
-                "provider": {
-                    "metric": metric_name,
-                    "name": mp_name,
-                },
-            },
+        metric["spec"] = {
+            "allowed_values": allowed_values,
+            "max": max,
+            "min": min,
+            "provider": {
+                "metric": metric_name,
+                "name": mp_name,
+            }
         }
-
     else:
-        metric = {
-            "api": "core",
-            "kind": kind,
-            "metadata": {
-                "name": name,
-            },
-            "spec": {
-                "max": max,
-                "min": min,
-                "allowed_values": [],
-                "provider": {
-                    "metric": metric_name,
-                    "name": mp_name,
-                },
-            },
+        metric["spec"] = {
+            "max": max,
+            "min": min,
+            "allowed_values": [],
+            "provider": {
+                "metric": metric_name,
+                "name": mp_name,
+            }
         }
 
     return _create_base_resource(

@@ -15,7 +15,6 @@ from krake.controller.kubernetes.application import (
 )
 from krake.client import Client
 from krake.test_utils import server_endpoint
-from tests.factories import fake
 
 from tests.factories.kubernetes import (
     ApplicationFactory,
@@ -43,6 +42,8 @@ from tests.controller.kubernetes import (
     initial_last_observed_manifest_pv,
     initial_last_observed_manifest_cluster_role,
 )
+
+from tests.api.test_core import supply_deletion_state_deleted
 
 
 class Routes(NamedTuple):
@@ -231,7 +232,7 @@ async def test_resource_deletion(aiohttp_server, config, db, loop, resources):
 
     # The application possesses the deleted timestamp, meaning it should be deleted.
     app = ApplicationFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         spec__manifest=[resources.manifest],
         status__state=ApplicationState.RUNNING,
         status__scheduled_to=resource_ref(cluster),

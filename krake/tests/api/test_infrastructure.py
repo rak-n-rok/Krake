@@ -28,7 +28,10 @@ from tests.factories.infrastructure import (
     GlobalInfrastructureProviderFactory,
 )
 
-from tests.factories.fake import fake
+from tests.api.test_core import (
+    validate_deletion_state_deleted,
+    supply_deletion_state_deleted
+)
 
 
 async def test_create_global_infrastructure_provider(aiohttp_client, config, db):
@@ -96,10 +99,10 @@ async def test_delete_global_infrastructure_provider(aiohttp_client, config, db)
     assert resp.status == 200
     received = GlobalInfrastructureProvider.deserialize(await resp.json())
     assert resource_ref(received) == resource_ref(data)
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     deleted = await db.get(GlobalInfrastructureProvider, name=data.metadata.name)
-    assert deleted.metadata.deleted is not None
+    assert validate_deletion_state_deleted(deleted.metadata.deletion_state)
     assert "cascade_deletion" in deleted.metadata.finalizers
 
 
@@ -109,7 +112,8 @@ async def test_add_finalizer_in_deleted_global_infrastructure_provider(
     client = await aiohttp_client(create_app(config=config))
 
     data = GlobalInfrastructureProviderFactory(
-        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+        metadata__deletion_state=supply_deletion_state_deleted(None),
+        metadata__finalizers=["my-finalizer"]
     )
     await db.put(data)
 
@@ -150,7 +154,7 @@ async def test_delete_global_infrastructure_provider_already_in_deletion(
     client = await aiohttp_client(create_app(config=config))
 
     in_deletion = GlobalInfrastructureProviderFactory(
-        metadata__deleted=fake.date_time()
+        metadata__deletion_state=supply_deletion_state_deleted(None)
     )
     await db.put(in_deletion)
 
@@ -253,7 +257,7 @@ async def test_watch_global_infrastructure_providers(aiohttp_client, config, db,
 
         received = GlobalInfrastructureProvider.deserialize(await resp.json())
         assert resource_ref(received) == resource_ref(resources[0])
-        assert received.metadata.deleted is not None
+        assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -321,7 +325,7 @@ async def test_update_global_infrastructure_provider_to_delete(
     client = await aiohttp_client(create_app(config=config))
 
     data = GlobalInfrastructureProviderFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
     await db.put(data)
@@ -465,12 +469,12 @@ async def test_delete_infrastructure_provider(aiohttp_client, config, db):
     assert resp.status == 200
     received = InfrastructureProvider.deserialize(await resp.json())
     assert resource_ref(received) == resource_ref(data)
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     deleted = await db.get(
         InfrastructureProvider, namespace="testing", name=data.metadata.name
     )
-    assert deleted.metadata.deleted is not None
+    assert validate_deletion_state_deleted(deleted.metadata.deletion_state)
     assert "cascade_deletion" in deleted.metadata.finalizers
 
 
@@ -480,7 +484,8 @@ async def test_add_finalizer_in_deleted_infrastructure_provider(
     client = await aiohttp_client(create_app(config=config))
 
     data = InfrastructureProviderFactory(
-        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+        metadata__deletion_state=supply_deletion_state_deleted(None),
+        metadata__finalizers=["my-finalizer"]
     )
     await db.put(data)
 
@@ -519,7 +524,8 @@ async def test_delete_infrastructure_provider_already_in_deletion(
 ):
     client = await aiohttp_client(create_app(config=config))
 
-    in_deletion = InfrastructureProviderFactory(metadata__deleted=fake.date_time())
+    in_deletion = InfrastructureProviderFactory(
+        metadata__deletion_state=supply_deletion_state_deleted(None))
     await db.put(in_deletion)
 
     resp = await client.delete(
@@ -630,7 +636,7 @@ async def test_watch_infrastructure_providers(aiohttp_client, config, db, loop):
 
         received = InfrastructureProvider.deserialize(await resp.json())
         assert resource_ref(received) == resource_ref(resources[0])
-        assert received.metadata.deleted is not None
+        assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -733,7 +739,7 @@ async def test_watch_all_infrastructure_providers(aiohttp_client, config, db, lo
 
         received = InfrastructureProvider.deserialize(await resp.json())
         assert resource_ref(received) == resource_ref(resources[0])
-        assert received.metadata.deleted is not None
+        assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -803,7 +809,7 @@ async def test_update_infrastructure_provider_to_delete(aiohttp_client, config, 
     client = await aiohttp_client(create_app(config=config))
 
     data = InfrastructureProviderFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
     await db.put(data)
@@ -934,10 +940,10 @@ async def test_delete_global_cloud(aiohttp_client, config, db):
     assert resp.status == 200
     received = GlobalCloud.deserialize(await resp.json())
     assert resource_ref(received) == resource_ref(data)
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     deleted = await db.get(GlobalCloud, name=data.metadata.name)
-    assert deleted.metadata.deleted is not None
+    assert validate_deletion_state_deleted(deleted.metadata.deletion_state)
     assert "cascade_deletion" in deleted.metadata.finalizers
 
 
@@ -945,7 +951,8 @@ async def test_add_finalizer_in_deleted_global_cloud(aiohttp_client, config, db)
     client = await aiohttp_client(create_app(config=config))
 
     data = GlobalCloudFactory(
-        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+        metadata__deletion_state=supply_deletion_state_deleted(None),
+        metadata__finalizers=["my-finalizer"]
     )
     await db.put(data)
 
@@ -976,7 +983,8 @@ async def test_delete_global_cloud_rbac(rbac_allow, config, aiohttp_client):
 async def test_delete_global_cloud_already_in_deletion(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
-    in_deletion = GlobalCloudFactory(metadata__deleted=fake.date_time())
+    in_deletion = GlobalCloudFactory(
+        metadata__deletion_state=supply_deletion_state_deleted(None))
     await db.put(in_deletion)
 
     resp = await client.delete(
@@ -1073,7 +1081,7 @@ async def test_watch_global_clouds(aiohttp_client, config, db, loop):
 
         received = GlobalCloud.deserialize(await resp.json())
         assert resource_ref(received) == resource_ref(resources[0])
-        assert received.metadata.deleted is not None
+        assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -1132,7 +1140,7 @@ async def test_update_global_cloud_to_delete(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = GlobalCloudFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
     await db.put(data)
@@ -1293,10 +1301,10 @@ async def test_delete_cloud(aiohttp_client, config, db):
     assert resp.status == 200
     received = Cloud.deserialize(await resp.json())
     assert resource_ref(received) == resource_ref(data)
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     deleted = await db.get(Cloud, namespace="testing", name=data.metadata.name)
-    assert deleted.metadata.deleted is not None
+    assert validate_deletion_state_deleted(deleted.metadata.deletion_state)
     assert "cascade_deletion" in deleted.metadata.finalizers
 
 
@@ -1304,7 +1312,8 @@ async def test_add_finalizer_in_deleted_cloud(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = CloudFactory(
-        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+        metadata__deletion_state=supply_deletion_state_deleted(None),
+        metadata__finalizers=["my-finalizer"]
     )
     await db.put(data)
 
@@ -1338,7 +1347,8 @@ async def test_delete_cloud_rbac(rbac_allow, config, aiohttp_client):
 async def test_delete_cloud_already_in_deletion(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
-    in_deletion = CloudFactory(metadata__deleted=fake.date_time())
+    in_deletion = CloudFactory(
+        metadata__deletion_state=supply_deletion_state_deleted(None))
     await db.put(in_deletion)
 
     resp = await client.delete(
@@ -1442,7 +1452,7 @@ async def test_watch_clouds(aiohttp_client, config, db, loop):
 
         received = Cloud.deserialize(await resp.json())
         assert resource_ref(received) == resource_ref(resources[0])
-        assert received.metadata.deleted is not None
+        assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -1542,7 +1552,7 @@ async def test_watch_all_clouds(aiohttp_client, config, db, loop):
 
         received = Cloud.deserialize(await resp.json())
         assert resource_ref(received) == resource_ref(resources[0])
-        assert received.metadata.deleted is not None
+        assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -1604,7 +1614,7 @@ async def test_update_cloud_to_delete(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = CloudFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
     await db.put(data)

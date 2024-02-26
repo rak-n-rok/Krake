@@ -58,7 +58,14 @@ from krake import (
 )
 from krake.client.openstack import OpenStackApi
 from krake.client.kubernetes import KubernetesApi
-from krake.data.core import Reason, ReasonCode, Metadata, resource_ref, ResourceRef
+from krake.data.core import (
+    Reason,
+    ReasonCode,
+    Metadata,
+    resource_ref,
+    ResourceRef,
+    DeletionState
+)
 from krake.data.openstack import MagnumClusterState
 from krake.data.kubernetes import (
     Cluster as KubernetesCluster,
@@ -172,7 +179,7 @@ class MagnumClusterController(Controller):
         async def enqueue(cluster):
             # Always cleanup deleted clusters even if they are in FAILED
             # state.
-            if cluster.metadata.deleted:
+            if cluster.metadata.deletion_state.deleted:
                 if (
                     cluster.metadata.finalizers
                     and cluster.metadata.finalizers[-1] == DELETION_FINALIZER
@@ -257,7 +264,7 @@ class MagnumClusterController(Controller):
         try:
             logger.debug("Handle %r", cluster)
 
-            if cluster.metadata.deleted:
+            if cluster.metadata.deletion_state.deleted:
                 await self.delete_magnum_cluster(cluster)
             else:
                 await self.reconcile_magnum_cluster(cluster)
@@ -681,9 +688,11 @@ class MagnumClusterController(Controller):
                     uid=None,
                     created=None,
                     modified=None,
+                    deletion_state=DeletionState(),
                     owners=[resource_ref(cluster)],
                     # TODO: There should be support for transitive labels and
                     #   metrics in the scheduler. For now, we simply copy.
+                    # TODO verify this works with list[Label]
                     labels=cluster.metadata.labels.copy(),
                 ),
                 spec=KubernetesClusterSpec(

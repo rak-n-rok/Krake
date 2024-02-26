@@ -21,6 +21,8 @@ from tests.factories.infrastructure import (
     GlobalInfrastructureProviderFactory,
 )
 
+from tests.api.test_core import validate_deletion_state_deleted
+
 
 async def test_create_global_infrastructure_provider(aiohttp_server, config, db, loop):
     data = GlobalInfrastructureProviderFactory()
@@ -60,7 +62,7 @@ async def test_delete_global_infrastructure_provider(aiohttp_server, config, db,
 
     assert received.api == "infrastructure"
     assert received.kind == "GlobalInfrastructureProvider"
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     stored = await db.get(GlobalInfrastructureProvider, name=data.metadata.name)
     assert stored == received
@@ -205,7 +207,7 @@ async def test_delete_infrastructure_provider(aiohttp_server, config, db, loop):
 
     assert received.api == "infrastructure"
     assert received.kind == "InfrastructureProvider"
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     stored = await db.get(
         InfrastructureProvider,
@@ -410,7 +412,7 @@ async def test_delete_global_cloud(aiohttp_server, config, db, loop):
 
     assert received.api == "infrastructure"
     assert received.kind == "GlobalCloud"
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     stored = await db.get(GlobalCloud, name=data.metadata.name)
     assert stored == received
@@ -578,7 +580,7 @@ async def test_delete_cloud(aiohttp_server, config, db, loop):
 
     assert received.api == "infrastructure"
     assert received.kind == "Cloud"
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     stored = await db.get(
         Cloud, namespace=data.metadata.namespace, name=data.metadata.name

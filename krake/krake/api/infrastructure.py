@@ -19,8 +19,8 @@ from krake.api.helpers import (
     HttpProblemError,
     ListQuery,
 )
+from krake.data.core import WatchEvent, WatchEventType, DeletionState
 
-from krake.data.core import WatchEvent, WatchEventType
 from krake.data.infrastructure import (
     Cloud,
     CloudList,
@@ -85,12 +85,12 @@ class InfrastructureApi(object):
     @load("entity", GlobalInfrastructureProvider)
     async def delete_global_infrastructure_provider(request, entity):
         # Resource is already deleting
-        if entity.metadata.deleted:
+        if entity.metadata.deletion_state.deleted:
             return web.json_response(entity.serialize())
 
         # TODO: Should be update "modified" here?
         # Resource marked as deletion, to be deleted by the Garbage Collector
-        entity.metadata.deleted = utils.now()
+        entity.metadata.deletion_state = DeletionState.create_deleted()
         entity.metadata.finalizers.append("cascade_deletion")
 
         await session(request).put(entity)
@@ -165,7 +165,7 @@ class InfrastructureApi(object):
     async def update_global_infrastructure_provider(request, body, entity):
         # Once a resource is in the "deletion in progress" state, finalizers
         # can only be removed.
-        if entity.metadata.deleted:
+        if entity.metadata.deletion_state.deleted:
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 problem = HttpProblem(
                     detail="Finalizers can only be removed"
@@ -191,7 +191,7 @@ class InfrastructureApi(object):
 
         # Resource is in "deletion in progress" state and all finalizers have
         # been removed. Delete the resource from database.
-        if entity.metadata.deleted and not entity.metadata.finalizers:
+        if entity.metadata.deletion_state.deleted and not entity.metadata.finalizers:
             await session(request).delete(entity)
             logger.info(
                 "Delete %s %r (%s)",
@@ -260,12 +260,12 @@ class InfrastructureApi(object):
     @load("entity", InfrastructureProvider)
     async def delete_infrastructure_provider(request, entity):
         # Resource is already deleting
-        if entity.metadata.deleted:
+        if entity.metadata.deletion_state.deleted:
             return web.json_response(entity.serialize())
 
         # TODO: Should be update "modified" here?
         # Resource marked as deletion, to be deleted by the Garbage Collector
-        entity.metadata.deleted = utils.now()
+        entity.metadata.deletion_state = DeletionState.create_deleted()
         entity.metadata.finalizers.append("cascade_deletion")
 
         await session(request).put(entity)
@@ -354,7 +354,7 @@ class InfrastructureApi(object):
     async def update_infrastructure_provider(request, body, entity):
         # Once a resource is in the "deletion in progress" state, finalizers
         # can only be removed.
-        if entity.metadata.deleted:
+        if entity.metadata.deletion_state.deleted:
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 problem = HttpProblem(
                     detail="Finalizers can only be removed"
@@ -380,7 +380,7 @@ class InfrastructureApi(object):
 
         # Resource is in "deletion in progress" state and all finalizers have
         # been removed. Delete the resource from database.
-        if entity.metadata.deleted and not entity.metadata.finalizers:
+        if entity.metadata.deletion_state.deleted and not entity.metadata.finalizers:
             await session(request).delete(entity)
             logger.info(
                 "Delete %s %r (%s)",
@@ -440,12 +440,12 @@ class InfrastructureApi(object):
     @load("entity", GlobalCloud)
     async def delete_global_cloud(request, entity):
         # Resource is already deleting
-        if entity.metadata.deleted:
+        if entity.metadata.deletion_state.deleted:
             return web.json_response(entity.serialize())
 
         # TODO: Should be update "modified" here?
         # Resource marked as deletion, to be deleted by the Garbage Collector
-        entity.metadata.deleted = utils.now()
+        entity.metadata.deletion_state = DeletionState.create_deleted()
         entity.metadata.finalizers.append("cascade_deletion")
 
         await session(request).put(entity)
@@ -512,7 +512,7 @@ class InfrastructureApi(object):
     async def update_global_cloud(request, body, entity):
         # Once a resource is in the "deletion in progress" state, finalizers
         # can only be removed.
-        if entity.metadata.deleted:
+        if entity.metadata.deletion_state.deleted:
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 problem = HttpProblem(
                     detail="Finalizers can only be removed"
@@ -538,7 +538,7 @@ class InfrastructureApi(object):
 
         # Resource is in "deletion in progress" state and all finalizers have
         # been removed. Delete the resource from database.
-        if entity.metadata.deleted and not entity.metadata.finalizers:
+        if entity.metadata.deletion_state.deleted and not entity.metadata.finalizers:
             await session(request).delete(entity)
             logger.info(
                 "Delete %s %r (%s)",
@@ -630,12 +630,12 @@ class InfrastructureApi(object):
     @load("entity", Cloud)
     async def delete_cloud(request, entity):
         # Resource is already deleting
-        if entity.metadata.deleted:
+        if entity.metadata.deletion_state.deleted:
             return web.json_response(entity.serialize())
 
         # TODO: Should be update "modified" here?
         # Resource marked as deletion, to be deleted by the Garbage Collector
-        entity.metadata.deleted = utils.now()
+        entity.metadata.deletion_state = DeletionState.create_deleted()
         entity.metadata.finalizers.append("cascade_deletion")
 
         await session(request).put(entity)
@@ -713,7 +713,7 @@ class InfrastructureApi(object):
     async def update_cloud(request, body, entity):
         # Once a resource is in the "deletion in progress" state, finalizers
         # can only be removed.
-        if entity.metadata.deleted:
+        if entity.metadata.deletion_state.deleted:
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 problem = HttpProblem(
                     detail="Finalizers can only be removed"
@@ -739,7 +739,7 @@ class InfrastructureApi(object):
 
         # Resource is in "deletion in progress" state and all finalizers have
         # been removed. Delete the resource from database.
-        if entity.metadata.deleted and not entity.metadata.finalizers:
+        if entity.metadata.deletion_state.deleted and not entity.metadata.finalizers:
             await session(request).delete(entity)
             logger.info(
                 "Delete %s %r (%s)", "Cloud", entity.metadata.name, entity.metadata.uid

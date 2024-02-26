@@ -19,6 +19,8 @@ from tests.factories.openstack import (
     ReasonFactory,
 )
 
+from tests.api.test_core import validate_deletion_state_deleted
+
 
 async def test_create_magnum_cluster(aiohttp_server, config, db, loop):
     data = MagnumClusterFactory()
@@ -59,7 +61,7 @@ async def test_delete_magnum_cluster(aiohttp_server, config, db, loop):
 
     assert received.api == "openstack"
     assert received.kind == "MagnumCluster"
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     stored = await db.get(
         MagnumCluster, namespace=data.metadata.namespace, name=data.metadata.name
@@ -321,7 +323,7 @@ async def test_delete_project(aiohttp_server, config, db, loop):
 
     assert received.api == "openstack"
     assert received.kind == "Project"
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     stored = await db.get(
         Project, namespace=data.metadata.namespace, name=data.metadata.name

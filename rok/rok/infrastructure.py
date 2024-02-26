@@ -340,11 +340,8 @@ def register_infrastructureprovider(
             "kind": "InfrastructureProvider",
             "metadata": {
                 "name": name,
-<<<<<<< HEAD
-=======
                 "labels": [],
                 "deletion_state": {"deleted": False}
->>>>>>> 43ba0b2 (Adapt labels)
             },
             "spec": {
                 "type": "im",
@@ -584,12 +581,8 @@ def register_globalcloud(
             "kind": "GlobalCloud",
             "metadata": {
                 "name": name,
-<<<<<<< HEAD
-                "labels": labels,
-=======
                 "deletion_state": {"deleted": False},
                 "labels": wrap_labels(labels),
->>>>>>> 43ba0b2 (Adapt labels)
             },
             "spec": {
                 "type": "openstack",
@@ -878,12 +871,8 @@ def register_cloud(
             "kind": "Cloud",
             "metadata": {
                 "name": name,
-<<<<<<< HEAD
-                "labels": labels,
-=======
                 "labels": wrap_labels(labels),
                 "deletion_state": {"deleted": False}
->>>>>>> 43ba0b2 (Adapt labels)
             },
             "spec": {
                 "type": "openstack",

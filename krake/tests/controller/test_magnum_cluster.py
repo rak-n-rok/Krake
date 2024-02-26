@@ -29,6 +29,8 @@ from tests.factories.openstack import ProjectFactory, MagnumClusterFactory
 from tests.factories.kubernetes import ClusterFactory as KubernetesClusterFactory
 from tests.factories import fake
 
+from tests.api.test_core import supply_deletion_state_deleted
+
 
 @with_timeout(3)
 async def test_main_help(loop):
@@ -362,21 +364,21 @@ async def test_resource_reception(aiohttp_server, config, db, loop):
     # Running and deleted without finalizers
     deleted = MagnumClusterFactory(
         status__state=MagnumClusterState.RUNNING,
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
     )
 
     # Running, not scheduled and deleted with finalizers
     deleted_with_finalizer = MagnumClusterFactory(
         status__state=MagnumClusterState.RUNNING,
         metadata__finalizers=["magnum_cluster_deletion"],
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
     )
 
     # Failed and deleted with finalizers
     deleted_and_failed_with_finalizer = MagnumClusterFactory(
         status__state=MagnumClusterState.FAILED,
         metadata__finalizers=["magnum_cluster_deletion"],
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
     )
 
     assert pending.status.project is None
@@ -949,7 +951,7 @@ async def test_magnum_cluster_delete(aiohttp_server, config, db, loop):
         spec__url=f"{server_endpoint(openstack_server)}/identity/v3"
     )
     cluster = MagnumClusterFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["magnum_cluster_deletion", "cascade_deletion"],
         status__state=MagnumClusterState.RUNNING,
         status__project=resource_ref(project),
@@ -1019,7 +1021,7 @@ async def test_magnum_cluster_delete_update(aiohttp_server, config, db, loop):
     )
     # 0. Insert the cluster in a "to-be-deleted" state in the database
     cluster = MagnumClusterFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["magnum_cluster_deletion"],
         status__state=MagnumClusterState.RUNNING,
         status__project=resource_ref(project),
@@ -1095,7 +1097,7 @@ async def test_magnum_cluster_delete_failed(aiohttp_server, config, db, loop):
         spec__url=f"{server_endpoint(openstack_server)}/identity/v3"
     )
     cluster = MagnumClusterFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["magnum_cluster_deletion"],
         status__state=MagnumClusterState.DELETING,
         status__project=resource_ref(project),
@@ -1196,7 +1198,7 @@ async def test_retry_delete(aiohttp_server, config, db, loop):
         spec__url=f"{server_endpoint(openstack_server)}/identity/v3"
     )
     cluster = MagnumClusterFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["magnum_cluster_deletion"],
         status__state=MagnumClusterState.RUNNING,
         status__project=resource_ref(project),
