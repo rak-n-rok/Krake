@@ -4,6 +4,7 @@ import multiprocessing
 import sys
 import pytest
 import random
+import pytz
 import time
 from asyncio.subprocess import PIPE, STDOUT
 from aiohttp import web
@@ -23,7 +24,15 @@ from krake.controller.scheduler.constraints import (
 )
 from krake.controller.scheduler.scheduler import NoProjectFound, NoClusterFound
 from krake.data.constraints import LabelConstraint, MetricConstraint
-from krake.data.core import ResourceRef, MetricRef, resource_ref, ReasonCode, Label, StaticSpecItem
+from krake.data.core import (
+    ResourceRef,
+    MetricRef,
+    resource_ref,
+    ReasonCode,
+    Label,
+    StaticSpecItem,
+    DeletionState
+)
 from krake.data.infrastructure import CloudState
 from krake.data.kubernetes import Application, ApplicationState, Cluster, ClusterState
 from krake.data.openstack import (
@@ -45,6 +54,7 @@ from tests.factories.infrastructure import CloudFactory, GlobalCloudFactory
 from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
 from tests.factories.openstack import MagnumClusterFactory, ProjectFactory
 
+from tests.api.test_core import supply_deletion_state_deleted
 
 TOSCA_CLUSTER_MINIMAL = {
     "tosca_definitions_version": "tosca_simple_yaml_1_0",
@@ -150,7 +160,7 @@ async def test_kubernetes_reception(aiohttp_server, config, db, loop):
         status__state=ApplicationState.FAILED, status__is_scheduled=False
     )
     deleted = ApplicationFactory(
-        metadata__deleted=datetime.now(timezone.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         status__state=ApplicationState.RUNNING,
         status__is_scheduled=False,
     )
@@ -207,7 +217,7 @@ async def test_kubernetes_reception_no_migration(aiohttp_server, config, db, loo
         spec__constraints__migration=False,
     )
     deleted = ApplicationFactory(
-        metadata__deleted=datetime.now(timezone.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         status__state=ApplicationState.RUNNING,
         status__is_scheduled=False,
         spec__constraints__migration=False,
@@ -273,7 +283,7 @@ async def test_kubernetes_cluster_reception(aiohttp_server, config, db, loop):
     )
     deleted = ClusterFactory(
         status__state=ClusterState.PENDING,
-        metadata__deleted=datetime.now(timezone.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         status__scheduled_to=None,
         spec__kubeconfig={},
         spec__tosca=TOSCA_CLUSTER_MINIMAL,
@@ -328,7 +338,7 @@ async def test_openstack_reception(aiohttp_server, config, db, loop):
     )
     running = MagnumClusterFactory(status__state=MagnumClusterState.RUNNING)
     deleted = MagnumClusterFactory(
-        metadata__deleted=datetime.now(timezone.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         status__state=MagnumClusterState.RUNNING,
     )
 
@@ -1252,13 +1262,13 @@ async def test_kubernetes_select_cluster_not_deleted(aiohttp_server, config, loo
         index = random.randint(0, 9)
         clusters = [
             ClusterFactory(
-                metadata__deleted=datetime.now(timezone.utc),
+                metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
                 spec__metrics=[],
                 status__state=ClusterState.ONLINE,
             )
             for _ in range(10)
         ]
-        clusters[index].metadata.deleted = None
+        clusters[index].metadata.deletion_state = DeletionState()
 
         app = ApplicationFactory(spec__constraints=None)
 
@@ -2891,11 +2901,12 @@ async def test_select_project_not_deleted(aiohttp_server, config, loop):
         index = random.randint(0, 9)
         projects = [
             ProjectFactory(
-                metadata__deleted=datetime.now(timezone.utc), spec__metrics=[]
+                metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
+                spec__metrics=[]
             )
             for _ in range(10)
         ]
-        projects[index].metadata.deleted = None
+        projects[index].metadata.deletion_state = DeletionState()
 
         cluster = MagnumClusterFactory(spec__constraints=None)
 
@@ -4184,13 +4195,13 @@ async def test_cluster_select_cloud_not_deleted(
             cloud_resource(
                 **{
                     "spec__type": cloud_type,
-                    "metadata__deleted": datetime.now(timezone.utc),
+                    "metadata__deletion_state": supply_deletion_state_deleted(pytz.utc),
                     f"spec__{cloud_type}__metrics": [],
                 }
             )
             for _ in range(10)
         ]
-        clouds[index].metadata.deleted = None
+        clouds[index].metadata.deletion_state = DeletionState()
 
         cluster = ClusterFactory(
             status__state=ClusterState.PENDING,

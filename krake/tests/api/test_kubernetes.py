@@ -9,11 +9,16 @@ from secrets import token_urlsafe
 from copy import deepcopy
 
 from krake.data.infrastructure import CloudBinding
-from krake.utils import now
 
 from krake.api.app import create_app
 from krake.api.helpers import HttpProblem, HttpProblemTitle
-from krake.data.core import WatchEventType, WatchEvent, resource_ref, ResourceRef
+from krake.data.core import (
+    WatchEventType,
+    WatchEvent,
+    resource_ref,
+    ResourceRef,
+    DeletionState
+)
 from krake.data.kubernetes import (
     Application,
     ApplicationList,
@@ -24,6 +29,10 @@ from krake.data.kubernetes import (
     ClusterList,
     ClusterBinding,
     ClusterState,
+)
+from tests.api.test_core import (
+    validate_deletion_state_deleted,
+    supply_deletion_state_deleted
 )
 from tests.factories.infrastructure import CloudFactory
 
@@ -102,10 +111,10 @@ async def test_delete_application(aiohttp_client, config, db):
     assert resp.status == 200
     received = Application.deserialize(await resp.json())
     assert resource_ref(received) == resource_ref(data)
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     deleted = await db.get(Application, namespace="testing", name=data.metadata.name)
-    assert deleted.metadata.deleted is not None
+    assert validate_deletion_state_deleted(deleted.metadata.deletion_state)
     assert "cascade_deletion" in deleted.metadata.finalizers
 
 
@@ -113,7 +122,8 @@ async def test_add_finalizer_in_deleted_application(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = ApplicationFactory(
-        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+        metadata__deletion_state=supply_deletion_state_deleted(None),
+        metadata__finalizers=["my-finalizer"]
     )
     await db.put(data)
 
@@ -149,7 +159,9 @@ async def test_delete_application_rbac(rbac_allow, config, aiohttp_client):
 async def test_delete_application_already_in_deletion(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
-    in_deletion = ApplicationFactory(metadata__deleted=fake.date_time())
+    in_deletion = ApplicationFactory(
+        metadata__deletion_state=supply_deletion_state_deleted(None)
+    )
     await db.put(in_deletion)
 
     resp = await client.delete(
@@ -171,7 +183,7 @@ async def test_force_delete_application(aiohttp_client, config, db):
 
     received = Application.deserialize(await resp.json())
     assert resource_ref(received) == resource_ref(data)
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     deleted = await db.get(Application, namespace="testing", name=data.metadata.name)
     assert deleted is None
@@ -274,7 +286,7 @@ async def test_watch_applications(aiohttp_client, config, db, loop):
 
         received = Application.deserialize(await resp.json())
         assert resource_ref(received) == resource_ref(resources[0])
-        assert received.metadata.deleted is not None
+        assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -374,7 +386,7 @@ async def test_watch_all_applications(aiohttp_client, config, db, loop):
 
         received = Application.deserialize(await resp.json())
         assert resource_ref(received) == resource_ref(resources[0])
-        assert received.metadata.deleted is not None
+        assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -492,7 +504,7 @@ async def test_update_application_to_delete(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = ApplicationFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
     await db.put(data)
@@ -841,7 +853,7 @@ async def test_update_application_complete(aiohttp_client, config, db):
     assert resp.status == 200
     received = Application.deserialize(await resp.json())
     assert resource_ref(received) == resource_ref(data)
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     stored = await db.get(Application, namespace="testing", name=data.metadata.name)
     assert stored == received
@@ -879,7 +891,7 @@ async def test_update_application_complete_disabled(aiohttp_client, config, db):
     assert resp.status == 401
 
     stored = await db.get(Application, namespace="testing", name=app.metadata.name)
-    assert stored.metadata.deleted is None
+    assert stored.metadata.deletion_state.deleted is False
 
 
 async def test_update_application_complete_rbac(rbac_allow, config, aiohttp_client):
@@ -905,7 +917,7 @@ async def test_update_application_shutdown(aiohttp_client, config, db):
     data = ApplicationFactory(
         status__shutdown_token=token,
         status__state=ApplicationState.WAITING_FOR_CLEANING,
-        metadata__deleted=now(),
+        metadata__deletion_state=DeletionState.create_deleted()
     )
     await db.put(data)
 
@@ -918,7 +930,7 @@ async def test_update_application_shutdown(aiohttp_client, config, db):
     assert resp.status == 200
     received = Application.deserialize(await resp.json())
     assert resource_ref(received) == resource_ref(data)
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     stored = await db.get(Application, namespace="testing", name=data.metadata.name)
     assert stored == received
@@ -947,7 +959,7 @@ async def test_retry_application_shutdown(aiohttp_client, config, db):
     data = ApplicationFactory(
         status__shutdown_token=token,
         status__state=ApplicationState.DEGRADED,
-        metadata__deleted=now(),
+        metadata__deletion_state=DeletionState.create_deleted()
     )
     await db.put(data)
 
@@ -973,7 +985,7 @@ async def test_retry_application_shutdown_wrong_state(aiohttp_client, config, db
     app = ApplicationFactory(
         status__shutdown_token=token,
         status__state=ApplicationState.RUNNING,
-        metadata__deleted=now(),
+        metadata__deletion_state=DeletionState.create_deleted()
     )
     await db.put(app)
 
@@ -986,7 +998,7 @@ async def test_retry_application_shutdown_wrong_state(aiohttp_client, config, db
     assert resp.status == 400
 
     stored = await db.get(Application, namespace="testing", name=app.metadata.name)
-    assert stored.metadata.deleted is not None
+    assert validate_deletion_state_deleted(stored.metadata.deletion_state)
 
 
 async def test_update_application_status(aiohttp_client, config, db):
@@ -1108,10 +1120,10 @@ async def test_delete_cluster(aiohttp_client, config, db):
     assert resp.status == 200
     received = Cluster.deserialize(await resp.json())
     assert resource_ref(received) == resource_ref(data)
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     deleted = await db.get(Cluster, namespace="testing", name=data.metadata.name)
-    assert deleted.metadata.deleted is not None
+    assert validate_deletion_state_deleted(deleted.metadata.deletion_state)
     assert "cascade_deletion" in deleted.metadata.finalizers
 
 
@@ -1119,7 +1131,8 @@ async def test_add_finalizer_in_deleted_cluster(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = ClusterFactory(
-        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+        metadata__deletion_state=supply_deletion_state_deleted(None),
+        metadata__finalizers=["my-finalizer"]
     )
     await db.put(data)
 
@@ -1153,7 +1166,9 @@ async def test_delete_cluster_rbac(rbac_allow, config, aiohttp_client):
 async def test_delete_cluster_already_in_deletion(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
-    in_deletion = ClusterFactory(metadata__deleted=fake.date_time())
+    in_deletion = ClusterFactory(
+        metadata__deletion_state=supply_deletion_state_deleted(None)
+    )
     await db.put(in_deletion)
 
     resp = await client.delete(
@@ -1175,7 +1190,7 @@ async def test_force_delete_cluster(aiohttp_client, config, db):
 
     received = Cluster.deserialize(await resp.json())
     assert resource_ref(received) == resource_ref(data)
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     deleted = await db.get(Cluster, namespace="testing", name=data.metadata.name)
     assert deleted is None
@@ -1273,7 +1288,7 @@ async def test_watch_clusters(aiohttp_client, config, db, loop):
 
         received = Cluster.deserialize(await resp.json())
         assert resource_ref(received) == resource_ref(resources[0])
-        assert received.metadata.deleted is not None
+        assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -1370,7 +1385,7 @@ async def test_watch_all_clusters(aiohttp_client, config, db, loop):
 
         received = Cluster.deserialize(await resp.json())
         assert resource_ref(received) == resource_ref(resources[0])
-        assert received.metadata.deleted is not None
+        assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -1433,7 +1448,7 @@ async def test_update_cluster_to_delete(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = ClusterFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
     await db.put(data)

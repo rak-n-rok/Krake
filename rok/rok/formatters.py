@@ -125,6 +125,20 @@ def print_generic_yaml(value, file, **kwargs):
     yaml.dump(value, default_flow_style=False, stream=file)
 
 
+def format_deletion_state(deletion_state):
+    """Formats polymorphic deletion state to a human readable form
+
+    Args:
+        deletion_state (DeletionState): DeletionState
+
+    Returns:
+        str: Formatted time string to the human readable YY-mm-dd H:M:S format
+    """
+    if not deletion_state["deleted"]:
+        return None
+    return format_datetime(deletion_state["deletion_time"])
+
+
 def format_datetime(time_str):
     """Formats complex time string to the human readable form
 
@@ -574,4 +588,4 @@ class BaseTable(Table):
     labels = Cell("metadata.labels", formatter=labels_formatter)
     created = Cell("metadata.created", formatter=format_datetime)
     modified = Cell("metadata.modified", formatter=format_datetime)
-    deleted = Cell("metadata.deleted", formatter=format_datetime)
+    deleted = Cell("metadata.deletion_state", formatter=format_deletion_state)

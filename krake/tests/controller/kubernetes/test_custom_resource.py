@@ -8,9 +8,7 @@ import pytz
 import yaml
 
 from krake.api.app import create_app
-from krake.controller.kubernetes.client import InvalidCustomResourceDefinitionError
 from krake.controller.kubernetes.application.application import ResourceDelta
-from krake.data.core import resource_ref
 from krake.data.core import resource_ref, ReasonCode
 from krake.data.kubernetes import Application, ApplicationState
 from krake.controller.kubernetes.application import KubernetesApplicationController
@@ -19,12 +17,13 @@ from krake.client import Client
 from krake.test_utils import server_endpoint
 from tests.controller.kubernetes import crontab_crd, create_cron_resource
 
-from tests.factories.fake import fake
 from tests.factories.kubernetes import (
     ApplicationFactory,
     ClusterFactory,
     make_kubeconfig,
 )
+
+from tests.api.test_core import supply_deletion_state_deleted
 
 
 # snake_case response
@@ -578,7 +577,7 @@ async def test_app_custom_resource_deletion(aiohttp_server, config, db, loop):
         spec__custom_resources=["crontabs.stable.example.com"],
     )
     app = ApplicationFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         status__state=ApplicationState.RUNNING,
         status__scheduled_to=resource_ref(cluster),
         status__running_on=resource_ref(cluster),
@@ -926,7 +925,7 @@ async def test_app_custom_resource_deletion_non_ns(aiohttp_server, config, db, l
         spec__custom_resources=["crontabs.stable.example.com"],
     )
     app = ApplicationFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         status__state=ApplicationState.RUNNING,
         status__scheduled_to=resource_ref(cluster),
         status__running_on=resource_ref(cluster),

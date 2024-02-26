@@ -17,11 +17,12 @@ from krake.controller.kubernetes.hooks import (
 from krake.client import Client
 from krake.test_utils import server_endpoint
 
-from tests.factories.fake import fake
 from tests.factories.kubernetes import (
     ClusterFactory,
     make_kubeconfig,
 )
+
+from tests.api.test_core import supply_deletion_state_deleted
 
 
 async def test_list_cluster(aiohttp_server, config):
@@ -71,7 +72,7 @@ async def test_cluster_loop(aiohttp_server, config, db, loop):
     kubernetes_server = await aiohttp_server(kubernetes_app)
 
     cluster = ClusterFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         spec__kubeconfig=make_kubeconfig(kubernetes_server),
         status__state=ClusterState.ONLINE,
     )

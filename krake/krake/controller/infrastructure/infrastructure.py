@@ -84,7 +84,7 @@ class InfrastructureController(Controller):
         async def enqueue(cluster):
             # Always cleanup deleted clusters even if they are in FAILED
             # state.
-            if cluster.metadata.deleted:
+            if cluster.metadata.deletion_state.deleted:
                 if (
                     cluster.metadata.finalizers
                     and cluster.metadata.finalizers[-1] == DELETION_FINALIZER
@@ -256,7 +256,7 @@ class InfrastructureController(Controller):
                 infrastructure_provider=infrastructure_provider,
             )
 
-            if cluster.metadata.deleted:
+            if cluster.metadata.deletion_state.deleted:
                 await self.delete_cluster(cluster, provider)
             else:
                 await self.reconcile_cluster(cluster, provider)

@@ -21,6 +21,7 @@ from krake.data.core import (
     RoleBinding,
     RoleBindingList,
     Role,
+    DeletionState,
 )
 
 from tests.factories.core import (
@@ -36,6 +37,19 @@ from tests.factories.core import (
 )
 
 from tests.factories.fake import fake
+
+
+def supply_deletion_state_deleted(tz_info):
+    deletion = DeletionState.create_deleted()
+    if tz_info is None:
+        deletion.deletion_time = fake.date_time()
+    else:
+        deletion.deletion_time = fake.date_time(tz_info)
+    return deletion
+
+
+def validate_deletion_state_deleted(deletion_state):
+    return deletion_state.deleted is True and deletion_state.deletion_time is not None
 
 
 async def test_create_global_metric(aiohttp_client, config, db):
@@ -91,10 +105,10 @@ async def test_delete_global_metric(aiohttp_client, config, db):
     assert resp.status == 200
     received = GlobalMetric.deserialize(await resp.json())
     assert resource_ref(received) == resource_ref(data)
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     deleted = await db.get(GlobalMetric, name=data.metadata.name)
-    assert deleted.metadata.deleted is not None
+    assert validate_deletion_state_deleted(deleted.metadata.deletion_state)
     assert "cascade_deletion" in deleted.metadata.finalizers
 
 
@@ -102,7 +116,8 @@ async def test_add_finalizer_in_deleted_global_metric(aiohttp_client, config, db
     client = await aiohttp_client(create_app(config=config))
 
     data = GlobalMetricFactory(
-        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+        metadata__deletion_state=supply_deletion_state_deleted(None),
+        metadata__finalizers=["my-finalizer"]
     )
     await db.put(data)
 
@@ -133,7 +148,9 @@ async def test_delete_global_metric_rbac(rbac_allow, config, aiohttp_client):
 async def test_delete_global_metric_already_in_deletion(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
-    in_deletion = GlobalMetricFactory(metadata__deleted=fake.date_time())
+    in_deletion = GlobalMetricFactory(
+        metadata__deletion_state=supply_deletion_state_deleted(None)
+    )
     await db.put(in_deletion)
 
     resp = await client.delete(f"/core/globalmetrics/{in_deletion.metadata.name}")
@@ -221,7 +238,7 @@ async def test_watch_global_metrics(aiohttp_client, config, db, loop):
 
         received = GlobalMetric.deserialize(await resp.json())
         assert resource_ref(received) == resource_ref(resources[0])
-        assert received.metadata.deleted is not None
+        assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -279,7 +296,7 @@ async def test_update_global_metric_to_delete(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = GlobalMetricFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
     await db.put(data)
@@ -397,10 +414,10 @@ async def test_delete_global_metrics_provider(aiohttp_client, config, db):
     assert resp.status == 200
     received = GlobalMetricsProvider.deserialize(await resp.json())
     assert resource_ref(received) == resource_ref(data)
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     deleted = await db.get(GlobalMetricsProvider, name=data.metadata.name)
-    assert deleted.metadata.deleted is not None
+    assert validate_deletion_state_deleted(deleted.metadata.deletion_state)
     assert "cascade_deletion" in deleted.metadata.finalizers
 
 
@@ -410,7 +427,8 @@ async def test_add_finalizer_in_deleted_global_metrics_provider(
     client = await aiohttp_client(create_app(config=config))
 
     data = GlobalMetricsProviderFactory(
-        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+        metadata__deletion_state=supply_deletion_state_deleted(None),
+        metadata__finalizers=["my-finalizer"]
     )
     await db.put(data)
 
@@ -443,7 +461,8 @@ async def test_delete_global_metrics_provider_already_in_deletion(
 ):
     client = await aiohttp_client(create_app(config=config))
 
-    in_deletion = GlobalMetricsProviderFactory(metadata__deleted=fake.date_time())
+    in_deletion = GlobalMetricsProviderFactory(
+        metadata__deletion_state=supply_deletion_state_deleted(None))
     await db.put(in_deletion)
 
     resp = await client.delete(
@@ -537,7 +556,7 @@ async def test_watch_global_metrics_providers(aiohttp_client, config, db, loop):
 
         received = GlobalMetricsProvider.deserialize(await resp.json())
         assert resource_ref(received) == resource_ref(resources[0])
-        assert received.metadata.deleted is not None
+        assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -595,7 +614,7 @@ async def test_update_global_metrics_provider_to_delete(aiohttp_client, config, 
     client = await aiohttp_client(create_app(config=config))
 
     data = GlobalMetricsProviderFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
     await db.put(data)
@@ -750,12 +769,12 @@ async def test_delete_metric(aiohttp_client, config, db):
     assert resp.status == 200
     received = Metric.deserialize(await resp.json())
     assert resource_ref(received) == resource_ref(data)
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     deleted = await db.get(
         Metric, name=data.metadata.name, namespace=data.metadata.namespace
     )
-    assert deleted.metadata.deleted is not None
+    assert validate_deletion_state_deleted(deleted.metadata.deletion_state)
     assert "cascade_deletion" in deleted.metadata.finalizers
 
 
@@ -763,7 +782,8 @@ async def test_add_finalizer_in_deleted_metric(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = MetricFactory(
-        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+        metadata__deletion_state=supply_deletion_state_deleted(None),
+        metadata__finalizers=["my-finalizer"]
     )
     await db.put(data)
 
@@ -795,7 +815,9 @@ async def test_delete_metric_rbac(rbac_allow, config, aiohttp_client):
 async def test_delete_metric_already_in_deletion(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
-    in_deletion = MetricFactory(metadata__deleted=fake.date_time())
+    in_deletion = MetricFactory(
+        metadata__deletion_state=supply_deletion_state_deleted(None)
+    )
     await db.put(in_deletion)
 
     resp = await client.delete(
@@ -894,7 +916,7 @@ async def test_watch_metrics(aiohttp_client, config, db, loop):
 
         received = Metric.deserialize(await resp.json())
         assert resource_ref(received) == resource_ref(resources[0])
-        assert received.metadata.deleted is not None
+        assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -957,7 +979,7 @@ async def test_update_metric_to_delete(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = MetricFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
     await db.put(data)
@@ -1088,20 +1110,20 @@ async def test_delete_metrics_provider(aiohttp_client, config, db):
     assert resp.status == 200
     received = MetricsProvider.deserialize(await resp.json())
     assert resource_ref(received) == resource_ref(data)
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     deleted = await db.get(
         MetricsProvider, name=data.metadata.name, namespace=data.metadata.namespace
     )
-    assert deleted.metadata.deleted is not None
-    assert "cascade_deletion" in deleted.metadata.finalizers
+    assert validate_deletion_state_deleted(deleted.metadata.deletion_state)
 
 
 async def test_add_finalizer_in_deleted_metrics_provider(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = MetricsProviderFactory(
-        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+        metadata__deletion_state=supply_deletion_state_deleted(None),
+        metadata__finalizers=["my-finalizer"]
     )
     await db.put(data)
 
@@ -1136,7 +1158,8 @@ async def test_delete_metrics_provider_rbac(rbac_allow, config, aiohttp_client):
 async def test_delete_metrics_provider_already_in_deletion(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
-    in_deletion = MetricsProviderFactory(metadata__deleted=fake.date_time())
+    in_deletion = MetricsProviderFactory(
+        metadata__deletion_state=supply_deletion_state_deleted(None))
     await db.put(in_deletion)
 
     resp = await client.delete(
@@ -1237,7 +1260,7 @@ async def test_watch_metrics_providers(aiohttp_client, config, db, loop):
 
         received = MetricsProvider.deserialize(await resp.json())
         assert resource_ref(received) == resource_ref(resources[0])
-        assert received.metadata.deleted is not None
+        assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -1302,7 +1325,7 @@ async def test_update_metrics_provider_to_delete(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = MetricsProviderFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(None),
         metadata__finalizers=["cascade_deletion"],
     )
     await db.put(data)
@@ -1458,10 +1481,10 @@ async def test_delete_role(aiohttp_client, config, db):
     assert resp.status == 200
     received = Role.deserialize(await resp.json())
     assert resource_ref(received) == resource_ref(data)
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     deleted = await db.get(Role, name=data.metadata.name)
-    assert deleted.metadata.deleted is not None
+    assert validate_deletion_state_deleted(deleted.metadata.deletion_state)
     assert "cascade_deletion" in deleted.metadata.finalizers
 
 
@@ -1469,7 +1492,8 @@ async def test_add_finalizer_in_deleted_role(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = RoleFactory(
-        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+        metadata__deletion_state=supply_deletion_state_deleted(None),
+        metadata__finalizers=["my-finalizer"]
     )
     await db.put(data)
 
@@ -1498,7 +1522,8 @@ async def test_delete_role_rbac(rbac_allow, config, aiohttp_client):
 async def test_delete_role_already_in_deletion(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
-    in_deletion = RoleFactory(metadata__deleted=fake.date_time())
+    in_deletion = RoleFactory(
+        metadata__deletion_state=supply_deletion_state_deleted(None))
     await db.put(in_deletion)
 
     resp = await client.delete(f"/core/roles/{in_deletion.metadata.name}")
@@ -1586,7 +1611,7 @@ async def test_watch_roles(aiohttp_client, config, db, loop):
 
         received = Role.deserialize(await resp.json())
         assert resource_ref(received) == resource_ref(resources[0])
-        assert received.metadata.deleted is not None
+        assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -1646,7 +1671,7 @@ async def test_update_role_to_delete(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = RoleFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(None),
         metadata__finalizers=["cascade_deletion"],
     )
     await db.put(data)
@@ -1755,10 +1780,10 @@ async def test_delete_role_binding(aiohttp_client, config, db):
     assert resp.status == 200
     received = RoleBinding.deserialize(await resp.json())
     assert resource_ref(received) == resource_ref(data)
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     deleted = await db.get(RoleBinding, name=data.metadata.name)
-    assert deleted.metadata.deleted is not None
+    assert validate_deletion_state_deleted(deleted.metadata.deletion_state)
     assert "cascade_deletion" in deleted.metadata.finalizers
 
 
@@ -1766,7 +1791,8 @@ async def test_add_finalizer_in_deleted_role_binding(aiohttp_client, config, db)
     client = await aiohttp_client(create_app(config=config))
 
     data = RoleBindingFactory(
-        metadata__deleted=fake.date_time(), metadata__finalizers=["my-finalizer"]
+        metadata__deletion_state=supply_deletion_state_deleted(None),
+        metadata__finalizers=["my-finalizer"]
     )
     await db.put(data)
 
@@ -1797,7 +1823,8 @@ async def test_delete_role_binding_rbac(rbac_allow, config, aiohttp_client):
 async def test_delete_role_binding_already_in_deletion(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
-    in_deletion = RoleBindingFactory(metadata__deleted=fake.date_time())
+    in_deletion = RoleBindingFactory(
+        metadata__deletion_state=supply_deletion_state_deleted(None))
     await db.put(in_deletion)
 
     resp = await client.delete(f"/core/rolebindings/{in_deletion.metadata.name}")
@@ -1885,7 +1912,7 @@ async def test_watch_role_bindings(aiohttp_client, config, db, loop):
 
         received = RoleBinding.deserialize(await resp.json())
         assert resource_ref(received) == resource_ref(resources[0])
-        assert received.metadata.deleted is not None
+        assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     created = loop.create_future()
     watching = loop.create_task(watch(created))
@@ -1945,7 +1972,7 @@ async def test_update_role_binding_to_delete(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 
     data = RoleBindingFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
     await db.put(data)

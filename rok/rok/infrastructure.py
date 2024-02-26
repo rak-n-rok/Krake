@@ -341,10 +341,14 @@ def register_infrastructureprovider(
             "metadata": {
                 "name": name,
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
                 "labels": [],
                 "deletion_state": {"deleted": False}
 >>>>>>> 43ba0b2 (Adapt labels)
+=======
+                "deletion_state": {"deleted": False}
+>>>>>>> 4cd38b1 (Adapt DeletionState)
             },
             "spec": {
                 "type": "im",
@@ -586,10 +590,14 @@ def register_globalcloud(
                 "name": name,
 <<<<<<< HEAD
                 "labels": labels,
+<<<<<<< HEAD
 =======
                 "deletion_state": {"deleted": False},
                 "labels": wrap_labels(labels),
 >>>>>>> 43ba0b2 (Adapt labels)
+=======
+                "deletion_state": {"deleted": False},
+>>>>>>> 4cd38b1 (Adapt DeletionState)
             },
             "spec": {
                 "type": "openstack",
@@ -880,10 +888,14 @@ def register_cloud(
                 "name": name,
 <<<<<<< HEAD
                 "labels": labels,
+<<<<<<< HEAD
 =======
                 "labels": wrap_labels(labels),
                 "deletion_state": {"deleted": False}
 >>>>>>> 43ba0b2 (Adapt labels)
+=======
+                "deletion_state": {"deleted": False}
+>>>>>>> 4cd38b1 (Adapt DeletionState)
             },
             "spec": {
                 "type": "openstack",

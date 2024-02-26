@@ -291,7 +291,7 @@ class KubernetesClusterController(Controller):
 
         # Remove a cluster observer, if the cluster is going to be
         # deleted
-        if isinstance(copy.metadata.deleted, datetime.datetime):
+        if isinstance(copy.metadata.deletion_state.deletion_time, datetime.datetime):
             await listen.hook(
                 HookType.ClusterDeletion,
                 controller=self,

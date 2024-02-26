@@ -26,6 +26,8 @@ from tests.factories.core import (
     RoleRuleFactory,
 )
 
+from tests.api.test_core import validate_deletion_state_deleted
+
 
 async def test_create_global_metric(aiohttp_server, config, db, loop):
     data = GlobalMetricFactory()
@@ -60,7 +62,7 @@ async def test_delete_global_metric(aiohttp_server, config, db, loop):
     assert received.api == "core"
     assert received.kind == "GlobalMetric"
     assert received.spec == data.spec
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     stored = await db.get(GlobalMetric, name=data.metadata.name)
     assert stored == received
@@ -196,7 +198,7 @@ async def test_delete_global_metrics_provider(aiohttp_server, config, db, loop):
     assert received.api == "core"
     assert received.kind == "GlobalMetricsProvider"
     assert received.spec == data.spec
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     stored = await db.get(GlobalMetricsProvider, name=data.metadata.name)
     assert stored == received
@@ -337,7 +339,7 @@ async def test_delete_metric(aiohttp_server, config, db, loop):
     assert received.api == "core"
     assert received.kind == "Metric"
     assert received.spec == data.spec
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     stored = await db.get(
         Metric, name=data.metadata.name, namespace=data.metadata.namespace
@@ -483,7 +485,7 @@ async def test_delete_metrics_provider(aiohttp_server, config, db, loop):
     assert received.api == "core"
     assert received.kind == "MetricsProvider"
     assert received.spec == data.spec
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     stored = await db.get(
         MetricsProvider, name=data.metadata.name, namespace=data.metadata.namespace
@@ -622,7 +624,7 @@ async def test_delete_role(aiohttp_server, config, db, loop):
 
     assert received.api == "core"
     assert received.kind == "Role"
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     stored = await db.get(Role, name=data.metadata.name)
     assert stored == received
@@ -747,7 +749,7 @@ async def test_delete_role_binding(aiohttp_server, config, db, loop):
 
     assert received.api == "core"
     assert received.kind == "RoleBinding"
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     stored = await db.get(RoleBinding, name=data.metadata.name)
     assert stored == received

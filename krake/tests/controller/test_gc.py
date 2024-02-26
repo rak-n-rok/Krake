@@ -24,12 +24,16 @@ from krake.controller.gc import (
 from krake.utils import get_namespace_as_kwargs
 
 from tests.factories.core import MetadataFactory, RoleBindingFactory, RoleFactory
-from tests.factories.fake import fake
 from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
 from tests.factories.openstack import ProjectFactory
 from krake.data.serializable import Serializable
 from krake.test_utils import server_endpoint, with_timeout
 from tests.factories.openstack import MagnumClusterFactory
+
+from tests.api.test_core import (
+    supply_deletion_state_deleted,
+    validate_deletion_state_deleted
+)
 
 
 class UpperResource(Serializable):
@@ -315,19 +319,19 @@ async def test_resources_reception(aiohttp_server, config, db, loop):
     app_migrating = ApplicationFactory(status__state=ApplicationState.MIGRATING)
     app_deleting = ApplicationFactory(
         status__state=ApplicationState.RUNNING,
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cleanup", "cascade_deletion"],
     )
 
     cluster_alive = ClusterFactory()
     cluster_deleting = ClusterFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
 
     project_alive = ProjectFactory()
     project_deleting = ProjectFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
 
@@ -373,7 +377,7 @@ async def test_new_event_reception(aiohttp_server, config, db, loop):
 
     cluster_added = ClusterFactory()
     cluster_deleting = ClusterFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
 
@@ -402,7 +406,7 @@ async def test_update_event_reception(aiohttp_server, config, db, loop):
         assert resource_ref(cluster) in gc.graph._relationships
         assert gc.queue.size() == 0
 
-        cluster.metadata.deleted = fake.date_time(tzinfo=pytz.utc)
+        cluster.metadata.deletion_state = supply_deletion_state_deleted(pytz.utc)
         cluster.metadata.finalizers.append("cascade_deletion")
 
         await gc.on_received_update(cluster)
@@ -417,7 +421,7 @@ async def test_delete_event_reception(aiohttp_server, config, db, loop):
     ups = [MagnumClusterFactory() for _ in range(2)]
 
     cluster = ClusterFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__owners=[resource_ref(up) for up in ups],
     )
 
@@ -444,7 +448,7 @@ async def test_handle_resource(aiohttp_server, config, db, loop):
     gc = GarbageCollector(server_endpoint(server), worker_count=0, loop=loop)
 
     cluster = ClusterFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cascade_deletion"],
         metadata__owners=[],
     )
@@ -493,7 +497,7 @@ async def is_marked_for_deletion(resource, db):
     stored = await db.get(cls, name=resource.metadata.name, **kwargs)
     marked = (
         "cascade_deletion" in stored.metadata.finalizers
-        and stored.metadata.deleted is not None
+        and validate_deletion_state_deleted(stored.metadata.deletion_state)
     )
     return marked, stored
 
@@ -522,7 +526,7 @@ async def test_cascade_deletion(aiohttp_server, config, db, loop):
     gc = GarbageCollector(server_endpoint(server))
 
     cluster = ClusterFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
     cluster_ref = resource_ref(cluster)
@@ -584,7 +588,7 @@ async def test_cascade_deletion_non_namespaced(aiohttp_server, config, db, loop)
 
     role = RoleFactory(
         metadata__namespace=None,
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
     role_ref = resource_ref(role)
@@ -642,7 +646,7 @@ async def test_several_dependents_one_deleted(db, aiohttp_server, config, loop):
     cluster_a_ref = resource_ref(cluster_a)
 
     cluster_b = ClusterFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cascade_deletion"],
         metadata__owners=[cluster_a_ref],
     )
@@ -729,7 +733,7 @@ async def ensure_dependency_to_delete(gc, to_be_deleted, dependency_number):
 
     """
     key, from_queue = await gc.queue.get()
-    assert from_queue.metadata.deleted is not None
+    assert validate_deletion_state_deleted(from_queue.metadata.deletion_state)
 
     await gc.resource_received(from_queue)
     await gc.queue.done(key)
@@ -755,7 +759,7 @@ async def test_three_layers_deletion(aiohttp_server, config, db, loop):
     """
 
     upper = ClusterFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
     middle = ClusterFactory(metadata__owners=[resource_ref(upper)])

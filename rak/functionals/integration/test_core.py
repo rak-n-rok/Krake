@@ -77,7 +77,8 @@ def test_roles_crud(session):
             "name": name,
             "created": "2021-09-09T08:18:50.856741+00:00",
             "modified": "2021-09-09T08:18:50.856741+00:00",
-            "labels": {},
+            "deletion_state": {"deleted": False, "deletion_time": None},
+            "labels": [],
         },
     }
     try:
@@ -88,9 +89,13 @@ def test_roles_crud(session):
 
     # 4. Create a role
     before_creation = datetime.now(timezone.utc)
-    resp = session.post(
-        urljoin(base_url, url), json={"metadata": {"name": name}, "rules": []}
-    )
+    data = {
+        "metadata": {
+            "name": name,
+            "deletion_state":{"deleted":False}
+        },
+        "rules": []}
+    resp = session.post(urljoin(base_url, url), json=data)
     check_status_code(resp, 200)
 
     # 5. Get the role and check the content
@@ -116,6 +121,7 @@ def test_roles_crud(session):
             "name": name,
             "created": resp_data["metadata"]["created"],
             "modified": resp_data["metadata"]["modified"],
+            "deletion_state": {"deleted": False},
             "labels": [{"key": "Testlabel", "value": "Testlabel"}]
         },
     }
@@ -147,8 +153,14 @@ def test_roles_crud(session):
 
     # 9. Create a role with the same name and expect failure
     try:
+        data = {
+            "metadata": {
+                "name": name,
+                "deletion_state": {"deleted":False}
+            },
+            "rules": []}
         session.post(
-            urljoin(base_url, url), json={"metadata": {"name": name}, "rules": []}
+            urljoin(base_url, url), json=data
         )
     except requests.HTTPError as e:
         check_status_code(e.response, 409)
@@ -163,7 +175,7 @@ def test_roles_crud(session):
     check_status_code(resp, 200)
     resp_data = resp.json()
     for item in resp_data["items"]:
-        if item["metadata"]["deleted"] is not None:
+        if item["metadata"]["deletion_state"]["deleted"]:
             assert item["metadata"]["name"] == name
         else:
             assert item["metadata"]["name"] != name
@@ -216,6 +228,7 @@ def test_rolebindings_crud(session):
             "created": "2021-09-09T08:18:50.856741+00:00",
             "modified": "2021-09-09T08:18:50.856741+00:00",
             "labels": [],
+            "deletion_state": {"deleted": False},
         },
     }
     try:
@@ -226,9 +239,16 @@ def test_rolebindings_crud(session):
 
     # 4. Create a rolebinding
     before_creation = datetime.now(timezone.utc)
+    data = {
+        "metadata": {
+            "name": name,
+            "deletion_state" : {"deleted": False}
+        },
+        "users": [],
+        "roles": []}
     resp = session.post(
         urljoin(base_url, url),
-        json={"metadata": {"name": name}, "users": [], "roles": []},
+        json=data,
     )
     check_status_code(resp, 200)
 
@@ -257,7 +277,8 @@ def test_rolebindings_crud(session):
             "name": name,
             "created": resp_data["metadata"]["created"],
             "modified": resp_data["metadata"]["modified"],
-            "labels": [{"key": "Testlabel", "value": "Testlabel"}]
+            "labels": [{"key": "Testlabel", "value": "Testlabel"}],
+            "deletion_state": resp_data["metadata"]["deletion_state"]
         },
     }
     resp = session.put(req_url, json=data)
@@ -289,10 +310,14 @@ def test_rolebindings_crud(session):
 
     # 9. Create a rolebinding with the same name and expect failure
     try:
-        session.post(
-            urljoin(base_url, url),
-            json={"metadata": {"name": name}, "users": [], "roles": []},
-        )
+        data = {
+            "metadata": {
+                "name": name,
+                "deletion_state": {"deleted": False}
+            },
+            "users": [],
+            "roles": []}
+        session.post(urljoin(base_url, url), json=data)
     except requests.HTTPError as e:
         check_status_code(e.response, 409)
         pass
@@ -306,7 +331,7 @@ def test_rolebindings_crud(session):
     check_status_code(resp, 200)
     resp_data = resp.json()
     for item in resp_data["items"]:
-        if item["metadata"]["deleted"] is not None:
+        if item["metadata"]["deletion_state"]["deleted"]:
             assert item["metadata"]["name"] == name
         else:
             assert item["metadata"]["name"] != name

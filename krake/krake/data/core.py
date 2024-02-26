@@ -8,7 +8,7 @@ from marshmallow import ValidationError
 
 from . import persistent
 from .serializable import Serializable, ApiObject, PolymorphicContainer
-from .. import utils
+from krake import utils
 
 class ResourceRef(Serializable):
     api: str
@@ -216,6 +216,22 @@ class Label(Serializable):
             raise ValidationError(list(errors))
 
 
+class DeletionState(Serializable):
+    deleted: bool = field(default=False, init=True)
+    deletion_time: datetime = field(default=None, init=True)
+
+    @classmethod
+    def create_deleted(cls):
+        return DeletionState(deleted=True, deletion_time=utils.now())
+
+    def __post_init__(self):
+        if self.deleted:
+            if self.deletion_time is None:
+                raise ValidationError(
+                    "deletion time must not be null, if object is deleted."
+                )
+
+
 class Metadata(Serializable):
     name: str = field(metadata={"immutable": True, "validate": _validate_resource_name})
     namespace: str = field(
@@ -229,7 +245,7 @@ class Metadata(Serializable):
     uid: str = field(metadata={"readonly": True})
     created: datetime = field(metadata={"readonly": True})
     modified: datetime = field(metadata={"readonly": True})
-    deleted: datetime = field(default=None, metadata={"readonly": True})
+    deletion_state: DeletionState = field(metadata={"readonly": True})
     owners: List[ResourceRef] = field(default_factory=list)
 
 

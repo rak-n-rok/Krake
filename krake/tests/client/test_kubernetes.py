@@ -26,6 +26,8 @@ from tests.controller.kubernetes.test_tosca import (
     CSAR_META,
 )
 
+from tests.api.test_core import validate_deletion_state_deleted
+
 
 async def test_create_application(aiohttp_server, config, db, loop):
     data = ApplicationFactory(status__state=ApplicationState.PENDING)
@@ -67,7 +69,7 @@ async def test_delete_application(aiohttp_server, config, db, loop):
 
     assert received.api == "kubernetes"
     assert received.kind == "Application"
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     stored = await db.get(
         Application, namespace=data.metadata.namespace, name=data.metadata.name
@@ -564,12 +566,12 @@ async def test_update_application_complete(aiohttp_server, config, db, loop):
 
     assert received.api == "kubernetes"
     assert received.kind == "Application"
-    assert received.metadata.deleted
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
 
     stored = await db.get(
         Application, namespace=data.metadata.namespace, name=data.metadata.name
     )
-    assert stored.metadata.deleted
+    assert validate_deletion_state_deleted(stored.metadata.deletion_state)
 
 
 async def test_update_application_status(aiohttp_server, config, db, loop):
@@ -638,7 +640,7 @@ async def test_delete_cluster(aiohttp_server, config, db, loop):
 
     assert received.api == "kubernetes"
     assert received.kind == "Cluster"
-    assert received.metadata.deleted is not None
+    assert validate_deletion_state_deleted(received.metadata.deletion_state)
     assert received.spec == data.spec
 
     stored = await db.get(

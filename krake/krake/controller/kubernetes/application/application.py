@@ -457,7 +457,7 @@ class KubernetesApplicationController(Controller):
 
         """
         # Always cleanup deleted applications even if they are in FAILED state.
-        if app.metadata.deleted:
+        if app.metadata.deletion_state.deleted:
             if (
                 app.metadata.finalizers
                 and app.metadata.finalizers[-1] == "kubernetes_resources_deletion"
@@ -624,7 +624,7 @@ class KubernetesApplicationController(Controller):
         logger.debug(f"received {app}")
 
         copy = deepcopy(app)
-        if copy.metadata.deleted:
+        if copy.metadata.deletion_state.deleted:
             # Delete the Application
             try:
                 if (

@@ -40,6 +40,8 @@ from tests.factories.kubernetes import (
 )
 from tests.factories import fake
 
+from tests.api.test_core import supply_deletion_state_deleted
+
 
 TOSCA_CLUSTER_MINIMAL = {
     "tosca_definitions_version": "tosca_simple_yaml_1_0",
@@ -160,7 +162,7 @@ async def test_resource_reception(aiohttp_server, config, db, loop):
     # Deleted, but without finalizer
     deleted_without_finalizer = ClusterFactory(
         status__state=ClusterState.ONLINE,
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=[],
     )
     # The following should be put to the WorkQueue
@@ -178,7 +180,7 @@ async def test_resource_reception(aiohttp_server, config, db, loop):
     )
     deleted_with_finalizer = ClusterFactory(
         status__state=ClusterState.ONLINE,
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=[DELETION_FINALIZER],
     )
 
@@ -186,7 +188,7 @@ async def test_resource_reception(aiohttp_server, config, db, loop):
     deleted_and_failed_with_finalizer = ClusterFactory(
         status__state=ClusterState.FAILED,
         metadata__finalizers=[DELETION_FINALIZER],
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
     )
 
     await db.put(pending)
@@ -970,7 +972,7 @@ async def test_cluster_delete_by_im_provider(
     )
 
     cluster = ClusterFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=[DELETION_FINALIZER],
         status__state=ClusterState.ONLINE,
         status__cluster_id=cluster_id,
@@ -1053,7 +1055,7 @@ async def test_cluster_delete_by_im_provider_unreachable(
     )
 
     cluster = ClusterFactory(
-        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__deletion_state=supply_deletion_state_deleted(pytz.utc),
         metadata__finalizers=[DELETION_FINALIZER],
         status__state=ClusterState.ONLINE,
         status__cluster_id=cluster_id,
