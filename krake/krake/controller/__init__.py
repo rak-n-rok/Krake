@@ -443,6 +443,9 @@ class Observer(object):
         self.on_res_update = on_res_update
         self.time_step = time_step
 
+        # update_resource mutex status (True when an update is in progress)
+        self.updating_resource = False
+
     async def fetch_actual_resource(self):
         """Make an observation by fetching real world data for the registered resource
 
@@ -484,6 +487,14 @@ class Observer(object):
         registered resource (in the Krake API). If the update succeeds also updates the
         local copy.
 
+        WORKROUND:
+            The current implementation of the Krake API <-> etcd database connection
+            lacks any form of locking to prevent conflicting concurrent writes.
+            Concurrent writes may happen when this method is called multiple times in
+            quick succession.
+            To work around that deficit, this method was implemented as a mutex which
+            restricts the observer to one resource update at a time.
+
         Args:
             to_update: an updated version of the registered resource.
 
@@ -491,6 +502,16 @@ class Observer(object):
             :meth:`on_res_update`: to update the global representation of registered
                 resource.
         """
+
+        # Wait until mutex is free
+        while self.updating_resource:
+            logger.debug(
+                "Previous resource update still in progress. Waiting for it to finish."
+            )
+            await asyncio.sleep(self.time_step)
+
+        # ---- Occupy the mutex ----
+        self.updating_resource = True
 
         logger.debug("Updating registered resource %s", self.resource)
 
@@ -501,6 +522,9 @@ class Observer(object):
         # will try again in the next iteration of its main loop.
         if updated:
             self.resource = updated
+
+        # ---- Free the mutex ----
+        self.updating_resource = False
 
     async def observe_resource(self):
         """Observe the registered resource and yield resource changes
