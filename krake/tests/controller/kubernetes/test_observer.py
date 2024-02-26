@@ -2684,7 +2684,8 @@ async def test_create_kubernetes_cluster_observer_offline(
 async def test_create_kubernetes_cluster_observer_offline_non2xx_response(
     aiohttp_server, config, reason, db, loop
 ):
-    """Test the cluster status change when the cluster API responds with non 2xx HTTP code.
+    """Test the cluster status change when the cluster API responds with non 2xx HTTP
+    code.
 
     A Kubernetes cluster API could respond with non 2xx HTTP code
     for any reason. If the cluster API responds with non 2xx

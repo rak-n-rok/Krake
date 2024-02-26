@@ -10,6 +10,7 @@ from . import persistent
 from .serializable import Serializable, ApiObject, PolymorphicContainer
 from krake import utils
 
+
 class ResourceRef(Serializable):
     api: str
     namespace: str = field(default=None)
