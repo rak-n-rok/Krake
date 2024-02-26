@@ -357,6 +357,8 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
             # State (7): The Secret is deleted
             assert len(manifests) == 2
 
+        return resource
+
     observer = KubernetesApplicationObserver(cluster, app, on_res_update, time_step=-1)
 
     # Observe an unmodified resource
@@ -544,6 +546,8 @@ async def test_observer_on_poll_update_default_namespace(
         spec_image = get_first_container(resource.spec.manifest[0])["image"]
         assert spec_image == "nginx:1.7.9"
 
+        return resource
+
     observer = KubernetesApplicationObserver(cluster, app, on_res_update, time_step=-1)
 
     # Observe an unmodified resource
@@ -685,6 +689,8 @@ async def test_observer_on_poll_update_cluster_default_namespace(
         spec_image = get_first_container(resource.spec.manifest[0])["image"]
         assert spec_image == "nginx:1.7.9"
 
+        return resource
+
     observer = KubernetesApplicationObserver(cluster, app, on_res_update, time_step=-1)
 
     # Observe an unmodified resource
@@ -811,6 +817,8 @@ async def test_observer_on_poll_update_manifest_namespace_set(
         spec_image = get_first_container(resource.spec.manifest[0])["image"]
         assert spec_image == "nginx:1.7.9"
 
+        return resource
+
     generate_default_observer_schema(app)
     observer = KubernetesApplicationObserver(cluster, app, on_res_update, time_step=-1)
 
@@ -857,9 +865,12 @@ async def test_observer_on_status_update(aiohttp_server, db, config, loop):
         # The Service's first port's protocol is changed to "UDP"
         updated_service_response["spec"]["ports"][0]["protocol"] = "UDP"
         # A second port is added to the Service.
-        updated_service_response["spec"]["ports"].append(
+        # NOTE: We only want to append the port once, hence we check if it has been
+        #       added already during a previous invocation.
+        second_port = \
             {"nodePort": 32567, "port": 81, "protocol": "TCP", "targetPort": 81}
-        )
+        if second_port not in updated_service_response["spec"]["ports"]:
+            updated_service_response["spec"]["ports"].append(second_port)
         return web.json_response(updated_service_response)
 
     @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
@@ -1018,7 +1029,7 @@ async def test_observer_on_status_update_mangled(
             nonlocal calls_to_res_update, actual_state
             calls_to_res_update += 1
 
-            await func(resource)
+            return await func(resource)
 
         return on_res_update
 
@@ -1180,6 +1191,8 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
             # function should never be called
             # assert False
             assert True
+
+            return resource
 
         return on_res_update
 
