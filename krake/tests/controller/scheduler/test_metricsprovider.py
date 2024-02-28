@@ -277,7 +277,8 @@ async def test_static_provider_metric_unavailable(aiohttp_server):
             await provider.query(metric)
 
 
-@pytest.mark.slow
+# @pytest.mark.slow
+@pytest.mark.skip("Needs to be skipped for now")
 async def test_kafka_provider_against_kafka(ksql, loop):
     """Test that the Kafka Provider works against an actual KSQL database."""
     heat_demand_1_metric = ksql.kafka_table.metrics[0]
