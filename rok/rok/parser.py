@@ -4,6 +4,8 @@ module.
 from argparse import ArgumentParser, ArgumentError, Action
 import copy
 
+import shtab
+
 
 class ParserSpec(object):
     """Declarative parser specification for Python's standard :mod:`argparse`
@@ -114,6 +116,7 @@ class ParserSpec(object):
         """
         if parent is None:
             parser = ArgumentParser(*self.args, **self.kwargs)
+            shtab.add_argument_to(parser, ["--print-completion"])
         else:
             parser = parent.add_parser(*self.args, **self.kwargs)
 
