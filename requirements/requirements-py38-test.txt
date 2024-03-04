@@ -67,9 +67,7 @@ cliff==4.5.0
 cmd2==2.4.3
     # via cliff
 coverage[toml]==7.4.1
-    # via
-    #   coverage
-    #   pytest-cov
+    # via pytest-cov
 cryptography==42.0.2
     # via
     #   etcd3-py
@@ -550,6 +548,8 @@ semantic-version==2.10.0
     # via
     #   etcd3-py
     #   krake (krake/pyproject.toml)
+shtab==1.7.0
+    # via rok (rok/pyproject.toml)
 simplejson==3.19.2
     # via osc-lib
 six==1.16.0

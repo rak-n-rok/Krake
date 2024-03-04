@@ -16,6 +16,7 @@ dependencies = [
     "PyYAML==6.*",
     "requests==2.*",
     "texttable==1.*",
+    "shtab==1.*",
 ]
 
 [project.urls]
