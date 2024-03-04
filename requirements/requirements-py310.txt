@@ -258,6 +258,8 @@ semantic-version==2.10.0
     # via
     #   etcd3-py
     #   krake (krake/pyproject.toml)
+shtab==1.7.0
+    # via rok (rok/pyproject.toml)
 simplejson==3.19.2
     # via osc-lib
 six==1.16.0
