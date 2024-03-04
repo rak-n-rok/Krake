@@ -92,13 +92,19 @@
         executable: pip3
         state: latest
 
+    - name: Prepare GPG key for kubectl
+      ansible.builtin.shell: mkdir /etc/apt/keyrings/
+      ignore_errors: true
+
     - name: Add GPG key for kubectl
-      apt_key:
-        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+      ansible.builtin.shell: curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
     - name: Add APT repository for kubectl
-      apt_repository:
-        repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+      ansible.builtin.shell: echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list
+
+    - name: Update apt packages
+      apt:
+        update_cache: yes
 
     - name: Install kubectl
       apt:
