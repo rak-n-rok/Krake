@@ -1,4 +1,5 @@
 from aiohttp import web
+import asyncio
 from copy import deepcopy
 from itertools import groupby
 import pytest
@@ -10,6 +11,7 @@ from krake.client import Client
 from krake.client.kubernetes import KubernetesApi as KrakeKubernetesApi
 from krake.client.infrastructure import InfrastructureApi as KrakeInfrastructureApi
 from krake.controller.infrastructure import hooks as infra_controller_hooks
+from krake.controller.infrastructure.infrastructure import InfrastructureController
 from krake.data.core import resource_ref
 from krake.data.infrastructure import InfrastructureProviderRef
 from krake.data.kubernetes import (
@@ -693,3 +695,137 @@ async def test_InfrastructureProviderClusterObserver_run(monkeypatch):
     infra_provider_cluster_observer.check_observation.assert_not_called()
     on_res_update_mock.assert_not_called()
     client_mock.assert_not_called()
+
+
+@pytest.mark.parametrize("start_observer", [False, True])
+async def test_register_infra_provider_cluster_observer(
+    aiohttp_server, config, loop, db, start_observer,
+):
+    """Test the registration hook with the infrastructure provider cluster observer.
+
+    Tests that an infrastructure provider cluster observer can be registered in the
+    infrastructure controller for a given cluster.
+
+    Parameters:
+        start_observer=False: Leave the observer unstarted after registration.
+        start_observer=True: Start the observer after registration.
+
+    Asserts:
+        that the correct type of observer was choosen.
+        that the observer is added to the infrastructure controller's registry
+            and if started together with the corresponding task.
+        that the observer is started/not started.
+        that the observer would monitor the correct resource.
+    """
+
+    # Create a cluster to register an observer for
+    cluster = ClusterFactory()
+
+    server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        # Create and prepare infrastructure controller
+        controller = InfrastructureController(server_endpoint(server))
+        with mock.patch(
+            target='krake.controller.infrastructure.infrastructure.Reflector',
+            new=mock.Mock()
+        ), \
+        mock.patch.object(
+            target=controller, attribute='register_task',
+            new=mock.Mock()
+        ):
+            await controller.prepare(client)
+
+        # Run target method to register observer
+        with mock.patch(
+            target=('krake.controller.infrastructure.hooks.'
+                    'InfrastructureProviderClusterObserver.run'),
+            new=mock.AsyncMock()
+        ) as observer_run_mock:
+            await infra_controller_hooks.register_observer(
+                controller, cluster, start=start_observer
+            )
+
+            # Assert that the observer was started/not started (`run` method called)
+            #  based on the given start_observer directive
+            if start_observer:
+                observer_run_mock.assert_called_once()
+            else:
+                observer_run_mock.assert_not_called()
+
+    # Assert that an observer registration entry was created for the cluster
+    assert cluster.metadata.uid in controller.observers \
+        and len(controller.observers[cluster.metadata.uid]) == 2
+
+    # Assert that the correct observer has been registered
+    #  and if the observer was started the corresponding task as well
+    registered_observer, observer_task = controller.observers[cluster.metadata.uid]
+    assert isinstance(
+        registered_observer,
+        infra_controller_hooks.InfrastructureProviderClusterObserver
+    )
+    if start_observer:
+        assert isinstance(observer_task, asyncio.Task)
+    else:
+        assert observer_task is None
+
+    # Assert that the observer monitors the correct resource, etc.
+    assert registered_observer.resource == cluster
+    assert registered_observer.on_res_update == controller.on_infrastructure_update
+    assert registered_observer.time_step == controller.observer_time_step
+
+
+@pytest.mark.parametrize("observer_started", [False, True])
+async def test_unregister_infra_provider_cluster_observer(
+    aiohttp_server, config, observer_started
+):
+    """Test the registration hook with the infrastructure provider cluster observer.
+
+    Tests that an infrastructure provider cluster observer can be registered in the
+    infrastructure controller for a given cluster.
+
+    Parameters:
+        observer_started=False: The observer to unregister has not been not started.
+        observer_started=True: The observer to unregister was started.
+
+    Asserts:
+        that the observer is removed from the infrastructure controller's registry.
+        that a started observer is stopped.
+    """
+
+    # Create infrastructure controller
+    #  and record the current observer registry state
+    server = await aiohttp_server(create_app(config))
+    controller = InfrastructureController(server_endpoint(server))
+
+    expected_registered_observers = deepcopy(controller.observers)
+
+    # Create a new observer registration in the controller
+    # NOTE: We mock away everything irrelevant.
+    # NOTE: The observer task is simulated by an infinite async loop.
+    observed_cluster = ClusterFactory()
+
+    if observer_started:
+        async def infinite_await():
+            while True:
+                await asyncio.sleep(100)
+
+        observer_task = asyncio.Task(infinite_await())
+        assert not observer_task.cancelled()
+    else:
+        observer_task = None
+
+    registered_observer = infra_controller_hooks.InfrastructureProviderClusterObserver(
+        resource=observed_cluster, on_res_update=mock.Mock(), client=mock.Mock())
+
+    controller.observers[observed_cluster.metadata.uid] = \
+        (registered_observer, observer_task)
+
+    # Call the target method to unregister the above observer
+    await infra_controller_hooks.unregister_observer(controller, observed_cluster)
+
+    # Assert that the observer registry's state is as before
+    assert controller.observers == expected_registered_observers
+    # Assert that the observer was stopped if it had a task
+    if observer_started:
+        assert observer_task.cancelled()
