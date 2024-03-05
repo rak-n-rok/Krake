@@ -456,7 +456,8 @@ class Handler(object):
             list[krake.controller.scheduler.metrics.QueryResult]: List of fetched
                 metrics with their value and weight.
         """
-        assert metrics, "Got empty list of metric references"
+        if not metrics:
+            raise ValueError("Got empty list of metric references")
 
         errors = []
         reasons = []
@@ -529,7 +530,8 @@ class Handler(object):
             next(none_reason_iter)
         except StopIteration:
             stopped = True
-        assert stopped
+        if not stopped:
+            raise RuntimeError("No StopIteration signaled")
 
         if any(reasons):
             # If there is any issue with a metric, skip stop the generator.

@@ -306,8 +306,9 @@ def _validate_observer_schema_dict(partial_schema, first_level=False):
 
         try:
             metadata = partial_schema.pop("metadata")
-            assert isinstance(metadata, dict)
-        except (KeyError, AssertionError):
+            if not isinstance(metadata, dict):
+                raise TypeError("metadata must be a dictionary")
+        except (KeyError):
             raise AssertionError("metadata dictionary is not defined")
 
         try:
