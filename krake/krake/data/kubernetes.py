@@ -339,7 +339,7 @@ def _validate_observer_schema_list(partial_schema):
     if not isinstance(partial_schema[-1], dict):
         raise ValueError("Special list control dictionary not found")
     if "observer_schema_list_min_length" not in partial_schema[-1] \
-        or "observer_schema_list_max_length" not in partial_schema[-1]:
+            or "observer_schema_list_max_length" not in partial_schema[-1]:
         raise ValueError("Special list control dictionary malformed")
 
     observer_schema_list_min_length = partial_schema[-1][
@@ -362,11 +362,13 @@ def _validate_observer_schema_list(partial_schema):
     if observer_schema_list_max_length != 0:
         if observer_schema_list_max_length < observer_schema_list_min_length:
             raise ValueError("observer_schema_list_max_length is inferior to "
-            "observer_schema_list_min_length")
-        
+                  "observer_schema_list_min_length")
+
         if observer_schema_list_max_length < len(partial_schema[:-1]):
-            raise ValueError("observer_schema_list_max_length is inferior to the number of observed "
-            "elements")
+            raise ValueError(
+                "observer_schema_list_max_length is inferior to the number of observed "
+                "elements"
+                )
 
     for value in partial_schema[:-1]:
 
