@@ -2,9 +2,11 @@ import copy
 import multiprocessing
 import re
 import time
+from datetime import datetime
 
 import sys
 
+from unittest import mock
 import pytest
 import pytz
 import asyncio
@@ -25,7 +27,14 @@ from krake.controller.infrastructure.infrastructure import (
 from krake.data.infrastructure import InfrastructureProviderRef
 from krake.test_utils import server_endpoint, with_timeout
 from krake.data.core import resource_ref, ReasonCode, ResourceRef
-from krake.data.kubernetes import Cluster, ClusterState
+from krake.data.kubernetes import (
+    Cluster,
+    ClusterState,
+    ClusterInfrastructure,
+    ClusterInfrastructureData,
+    InfrastructureNode,
+    InfrastructureNodeCredential,
+)
 from krake.controller.infrastructure.__main__ import main
 from tests.factories.infrastructure import (
     InfrastructureProviderFactory,
@@ -1087,3 +1096,81 @@ async def test_cluster_delete_by_im_provider_unreachable(
         r" im_provider.*Service Unavailable.*",
         stored.status.reason.message,
     )
+
+
+async def test_InfrastructureController_on_infrastructure_update(
+    aiohttp_server,
+    config,
+    db,
+    loop
+):
+    """Test the `on_infrastructure_update` method
+    of the `InfrastructureController` class.
+
+    Tests that a prepared infrastructure controller correctly handles a cluster
+    infrastructure update by pushing it into the Krake API and returning the updated
+    cluster resource object from the API.
+
+    Asserts:
+        that the update of the cluster infrastructure subresource succeeded in the API.
+        that the update was applied to the Krake database as requested.
+        that the resource returned from the Krake API is as requested and the update
+            timestamp was set.
+    """
+
+    # Put initial cluster into Krake database
+    cluster = ClusterFactory()
+    await db.put(cluster)
+
+    # Update local cluster with infrastructure
+    updated_cluster = copy.deepcopy(cluster)
+    updated_cluster.infrastructure = ClusterInfrastructure(
+        data=ClusterInfrastructureData(
+            nodes=[
+                InfrastructureNode(
+                    ip_addresses=["192.0.2.3", "203.0.113.3"],
+                    credentials=[
+                        InfrastructureNodeCredential(
+                            type="login",
+                            username="cloudadm",
+                            private_key="PRIVATE_KEY-8x9Am",
+                        ),
+                    ],
+                ),
+            ],
+        ),
+    )
+
+    # Create and prepare infrastructure controller
+    #  while mocking away all unneeded calls
+    # Finally call the target method with the updated cluster
+    api_server = await aiohttp_server(create_app(config))
+
+    async with Client(url=server_endpoint(api_server), loop=loop) as client:
+        controller = InfrastructureController(server_endpoint(api_server))
+        with mock.patch(
+            target='krake.controller.infrastructure.infrastructure.Reflector',
+            new=mock.Mock()
+        ), \
+        mock.patch.object(
+            target=controller, attribute='register_task',
+            new=mock.Mock()
+        ):
+            await controller.prepare(client)
+
+        returned = await controller.on_infrastructure_update(updated_cluster)
+
+    # Assert that the input updated cluster is returned (by the Krake API)
+    #  and only the update timestamp was inserted
+    updated_cluster.infrastructure.updated = returned.infrastructure.updated
+    assert returned == updated_cluster
+
+    # Assert the correct type of the inserted infrastructure update timestamp
+    assert isinstance(returned.infrastructure.updated, datetime)
+
+    # Assert that the Krake database was updated correctly
+    stored = await db.get(
+        Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
+    )
+    #updated_cluster.infrastructure.updated = returned.infrastructure.updated
+    assert stored == updated_cluster
