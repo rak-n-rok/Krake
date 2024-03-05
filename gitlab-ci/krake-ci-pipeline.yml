@@ -4,7 +4,7 @@ stages:
   - release
 
 variables:
-  ETCD_VER: v3.3.13
+  ETCD_VER: v3.5.12
   PROMETHEUS_VER: 2.12.0
   CFSSL_VER: 1.4.1
   CONFLUENT_VER: "7.0"

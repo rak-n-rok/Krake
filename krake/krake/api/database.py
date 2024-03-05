@@ -168,7 +168,7 @@ class Session(object):
         loop (async.AbstractEventLoop, optional): asyncio event loop that
             should be used
 
-    .. _protobuf definitions: https://etcd.io/docs/v3.3.12/dev-guide/api_reference_v3/
+    .. _protobuf definitions: https://etcd.io/docs/v3.5/dev-guide/api_reference_v3/
 
     """
 

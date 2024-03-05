@@ -142,4 +142,4 @@ Development
 
 .. _CAP: https://en.wikipedia.org/wiki/CAP_theorem
 .. _Kubernetes design principles: https://github.com/kubernetes/community/blob/master/contributors/design-proposals/architecture/principles.md
-.. _etcd lease: https://etcd.io/docs/v3.3.12/dev-guide/interacting_v3/#grant-leases
+.. _etcd lease: https://etcd.io/docs/v3.5/dev-guide/interacting_v3/#grant-leases
