@@ -288,7 +288,8 @@ def _validate_observer_schema_dict(partial_schema, first_level=False):
 
     Raises:
         KeyError: If the partial observer_schema is not valid
-        TypeError: If the partial observer_schema is not valid (value of key metadata is not of type dictionary)
+        TypeError: If the partial observer_schema is not valid
+            (value of key metadata is not of type dictionary)
 
     In case of ``first_level`` dictionary (i.e. complete ``observer_schema`` for a
     resource), the keys necessary for identifying the resource have to be present.
