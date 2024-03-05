@@ -287,34 +287,23 @@ def _validate_observer_schema_dict(partial_schema, first_level=False):
             then be performed
 
     Raises:
-        AssertionError: If the partial observer_schema is not valid
+        KeyError: If the partial observer_schema is not valid
+        TypeError: If the partial observer_schema is not valid (value of key metadata is not of type dictionary)
 
     In case of ``first_level`` dictionary (i.e. complete ``observer_schema`` for a
     resource), the keys necessary for identifying the resource have to be present.
 
     """
     if first_level:
-        try:
-            partial_schema.pop("apiVersion")
-        except KeyError:
-            raise AssertionError("apiVersion is not defined")
+        for key_name in ["apiVersion", "kind", "metadata", "name"]:
+            if partial_schema.pop(key_name, None) is None:
+                raise KeyError(f"{key_name} is not defined")
 
-        try:
-            partial_schema.pop("kind")
-        except KeyError:
-            raise AssertionError("kind is not defined")
-
-        try:
-            metadata = partial_schema.pop("metadata")
-            if not isinstance(metadata, dict):
-                raise TypeError("metadata must be a dictionary")
-        except (KeyError):
-            raise AssertionError("metadata dictionary is not defined")
-
-        try:
-            metadata.pop("name")
-        except KeyError:
-            raise AssertionError("name is not defined in the metadata dictionary")
+        metadata = partial_schema.pop("metadata", None)
+        if metadata is None:
+            raise KeyError("metadata dictionary is not defined")
+        if not isinstance(metadata, dict):
+            raise TypeError("metadata must be a dictionary")
 
         _validate_observer_schema_dict(metadata)
 

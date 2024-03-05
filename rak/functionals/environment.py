@@ -213,7 +213,7 @@ class Environment(object):
                 If kind == ResourceKind.APPLICATION: ApplicationDefinition
 
         Raises:
-            AssertionError if not exactly one resource was found.
+            RuntimeError if not exactly one resource was found.
 
         """
         found = [r for r in self.resources[kind] if r.name == name]
@@ -224,7 +224,7 @@ class Environment(object):
             )
             if len(found) != 0:
                 msg += f" They were: {', '.join(str(rd) for rd in found)}"
-            raise AssertionError(msg)
+            raise RuntimeError(msg)
         return found[0]
 
 

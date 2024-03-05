@@ -574,7 +574,7 @@ async def test_influx_query_metrics_provider_error():
             # The exception is raised, so the test passes
             pass
         else:
-            raise AssertionError("MetricsProviderError not raised")
+            raise RuntimeError("MetricsProviderError not raised")
 
 
 async def test_query_metric_not_found():
@@ -613,4 +613,4 @@ async def test_query_metric_not_found():
             # The exception is raised, so the test passes
             pass
         else:
-            raise AssertionError("MetricError not raised")
+            raise RuntimeError("MetricError not raised")
