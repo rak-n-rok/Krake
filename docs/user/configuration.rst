@@ -122,7 +122,7 @@ command-line options. The arguments and available options are:
     controllers.. Default: ``8080``.
 
 ``--etcd-version <etcd_version>`` (string)
-    The etcd database version. Default: ``v3.3.13``.
+    The etcd database version. Default: ``v3.5.12``.
 
 ``--etcd-host <etcd_host>`` (Address)
     Host for the API to use to connect to the etcd database. Default:
