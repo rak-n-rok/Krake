@@ -157,10 +157,12 @@ async def unregister_observer(controller, resource, **kwargs):
 
     logger.debug(f"Stop observer for {resource.kind} {resource.metadata.name}")
     _, task = controller.observers.pop(resource.metadata.uid)
-    task.cancel()
 
-    try:
-        with suppress(asyncio.CancelledError):
-            await task
-    except asyncio.TimeoutError:
-        logger.debug("Observer timed out before being unregistered")
+    if task is not None:
+        task.cancel()
+
+        try:
+            with suppress(asyncio.CancelledError):
+                await task
+        except asyncio.TimeoutError:
+            logger.debug("Observer timed out before being unregistered")
