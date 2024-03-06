@@ -290,30 +290,30 @@ e2e-test-apps:
     - ansible-playbook ansible/integration_tests.yml --tags "krake_with_clusters" --limit krake-$CI_PIPELINE_ID-app
 
 
-#e2e-test-im:
-#  stage: e2e
-#  image: registry.gitlab.com/rak-n-rok/krake/ansible_image:latest
-#  artifacts:
-#    when: on_failure
-#    paths:
-#      - ansible/E2E_logs/krake_logs.tar.gz
-#  cache: []
-#  only:
-#    - master
-#    - merge_requests
-#    - schedules
-#  variables:
-#    ANSIBLE_CONFIG: ansible/ansible.cfg
-#    ANSIBLE_INVENTORY: ansible/hosts-CI
-#  script:
-#    # Configure host-CI template with the CI Pipeline ID
-#    - sed -i "s/\$CI_PIPELINE_ID/$CI_PIPELINE_ID/g" ansible/hosts-CI
-#    # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
-#    - chmod -v 700 ansible/
-#    #########################
-#    ### Integration tests ###
-#    #########################
-#    - time ansible-playbook ansible/integration_tests.yml --tags "krake_im" --limit krake-$CI_PIPELINE_ID-im
+e2e-test-im:
+  stage: e2e
+  image: registry.gitlab.com/rak-n-rok/krake/ansible_image:latest
+  artifacts:
+    when: on_failure
+    paths:
+      - ansible/E2E_logs/krake_logs.tar.gz
+  cache: []
+  only:
+    - master
+    - merge_requests
+    - schedules
+  variables:
+    ANSIBLE_CONFIG: ansible/ansible.cfg
+    ANSIBLE_INVENTORY: ansible/hosts-CI
+  script:
+    # Configure host-CI template with the CI Pipeline ID
+    - sed -i "s/\$CI_PIPELINE_ID/$CI_PIPELINE_ID/g" ansible/hosts-CI
+    # Ansible refuses to read from a world-writeable folder, see https://github.com/webdevops/Dockerfile/issues/266#issuecomment-417291633
+    - chmod -v 700 ansible/
+    #########################
+    ### Integration tests ###
+    #########################
+    - time ansible-playbook ansible/integration_tests.yml --tags "krake_im" --limit krake-$CI_PIPELINE_ID-im
 
 
 e2e-cleanup:
