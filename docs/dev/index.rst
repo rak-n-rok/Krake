@@ -22,6 +22,7 @@ API reference of all modules is provided.
     dependencies
     principles
     scheduling
+    controllers
     hooks
     statefulness
     kubernetes-application-controller
