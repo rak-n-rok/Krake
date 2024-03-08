@@ -42,7 +42,7 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["krake"]
+packages = ["krake", "krake.data"]
 
 [tool.setuptools.dynamic]
 version = {attr = "krake.__about__.__version__"}
