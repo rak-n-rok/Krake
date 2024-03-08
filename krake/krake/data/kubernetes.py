@@ -297,15 +297,15 @@ def _validate_observer_schema_dict(partial_schema, first_level=False):
     """
     if first_level:
         for key_name in ["apiVersion", "kind"]:
-            if partial_schema.pop(key_name, None) is None:
+            if not key in partial_schema:
                 raise ValueError(f"{key_name} is not defined")
 
-        metadata = partial_schema.pop("metadata", None)
+        metadata = partial_schema.get("metadata", None)
         if metadata is None:
             raise ValueError("metadata dictionary is not defined")
         if not isinstance(metadata, dict):
             raise TypeError("metadata must be a dictionary")
-        if metadata.pop("name", None) is None:
+        if "name" not in metadata:
             raise ValueError("name is not defined in the metadata dictionary")
 
         _validate_observer_schema_dict(metadata)
@@ -350,9 +350,9 @@ def _validate_observer_schema_list(partial_schema):
     ]
 
     if not isinstance(observer_schema_list_min_length, int):
-        raise ValueError("observer_schema_list_min_length should be an integer")
+        raise TypeError("observer_schema_list_min_length should be an integer")
     if not isinstance(observer_schema_list_max_length, int):
-        raise ValueError("observer_schema_list_max_length should be an integer")
+        raise TypeError("observer_schema_list_max_length should be an integer")
 
     if observer_schema_list_min_length < 0:
         raise ValueError("Invalid value for observer_schema_list_min_length")
@@ -361,8 +361,10 @@ def _validate_observer_schema_list(partial_schema):
 
     if observer_schema_list_max_length != 0:
         if observer_schema_list_max_length < observer_schema_list_min_length:
-            raise ValueError("observer_schema_list_max_length is inferior to "
-                  "observer_schema_list_min_length")
+            raise ValueError(
+                "observer_schema_list_max_length is inferior to "
+                "observer_schema_list_min_length"
+                )
 
         if observer_schema_list_max_length < len(partial_schema[:-1]):
             raise ValueError(
