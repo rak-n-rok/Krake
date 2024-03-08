@@ -1,4 +1,5 @@
 """This module comprises TOSCA parser and translator."""
+
 import logging
 
 import yaml

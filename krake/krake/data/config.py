@@ -109,13 +109,13 @@ class AutomaticClusterCreationConfiguration(Serializable):
         default="examples/automation/cluster.yaml",
         metadata={
             "help": "Location of the tosca file to automatically create a cluster"
-        }
+        },
     )
     deletion_retention: int = field(
         default=600,
         metadata={
             "help": "Time until the deletion of an empty generated cluster is started."
-        }
+        },
     )
 
 
@@ -298,18 +298,17 @@ class MigrationRetryConfiguration(Serializable):
                 "Maximum number of retries for the transfer of "
                 "a single file of an application"
             )
-        }
+        },
     )
     timeout: int = field(
         default=60,
-        metadata={
-            "help": "Timeout after a failed migration for the next rescheduling"
-        },
+        metadata={"help": "Timeout after a failed migration for the next rescheduling"},
     )
 
 
 class MigrationConfiguration(Serializable):
     retry: MigrationRetryConfiguration
+
 
 ###################################
 #    Components configurations    #
@@ -382,7 +381,7 @@ class InfrastructureConfiguration(ControllerConfiguration):
 class ApiConfiguration(Serializable):
     host: str = field(
         default="localhost",
-        metadata={"help": "Host IP address or 'localhost' to expose the Krake API at."}
+        metadata={"help": "Host IP address or 'localhost' to expose the Krake API at."},
     )
     port: int = field(
         default=8080, metadata={"help": "Port to which the Krake API listens to."}

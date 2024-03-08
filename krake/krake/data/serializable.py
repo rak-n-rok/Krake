@@ -1,6 +1,7 @@
 """This module defines a declarative API for defining data models that are
 JSON-serializable and JSON-deserializable.
 """
+
 import sys
 import dataclasses
 from enum import Enum

@@ -3,6 +3,7 @@ executing hooks. Hook Dispatcher emits hooks based on :class:`Hook` attributes w
 define when the hook will be executed.
 
 """
+
 import asyncio
 import logging
 import random
@@ -440,10 +441,10 @@ def update_last_observed_manifest_from_resp(app, response, **kwargs):
         app.status.last_observed_manifest.append({})
 
     # Overwrite the last_observed_manifest for this resource
-    app.status.last_observed_manifest[
-        idx_last_observed
-    ] = update_last_observed_manifest_dict(
-        app.status.mangled_observer_schema[idx_observed], resp
+    app.status.last_observed_manifest[idx_last_observed] = (
+        update_last_observed_manifest_dict(
+            app.status.mangled_observer_schema[idx_observed], resp
+        )
     )
 
 
@@ -751,7 +752,7 @@ class KubernetesApplicationObserver(Observer):
         if status.container_health is None:
             status.container_health = ContainerHealth()
 
-        if hasattr(resource, 'status') and resource.status is not None:
+        if hasattr(resource, "status") and resource.status is not None:
             if resource.kind == "Pod":
                 container_state = resource.status.container_statuses[0].state
                 status.container_health.desired_pods = 1
@@ -770,30 +771,35 @@ class KubernetesApplicationObserver(Observer):
                     status.container_health.running_pods = 1
 
             elif (
-                resource.kind == "Deployment" or
-                resource.kind == "StatefulSet" or
-                resource.kind == "ReplicaSet" or
-                resource.kind == "DaemonSet"
+                resource.kind == "Deployment"
+                or resource.kind == "StatefulSet"
+                or resource.kind == "ReplicaSet"
+                or resource.kind == "DaemonSet"
             ):
 
                 if resource.kind == "DaemonSet":
-                    status.container_health.desired_pods = \
+                    status.container_health.desired_pods = (
                         resource.status.current_number_scheduled
+                    )
                     if isinstance(resource.status.desired_number_scheduled, int):
-                        status.container_health.running_pods = \
+                        status.container_health.running_pods = (
                             resource.status.desired_number_scheduled
+                        )
                     else:
                         status.container_health.running_pods = 0
                 else:
                     status.container_health.desired_pods = resource.status.replicas
                     if isinstance(resource.status.ready_replicas, int):
-                        status.container_health.running_pods = \
+                        status.container_health.running_pods = (
                             resource.status.ready_replicas
+                        )
                     else:
                         status.container_health.running_pods = 0
 
-                if status.container_health.running_pods != \
-                   status.container_health.desired_pods:
+                if (
+                    status.container_health.running_pods
+                    != status.container_health.desired_pods
+                ):
                     status.state = ApplicationState.DEGRADED
                 else:
                     status.state = ApplicationState.RUNNING

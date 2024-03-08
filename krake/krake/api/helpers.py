@@ -1,4 +1,5 @@
 """Simple helper functions that are used by the HTTP endpoints."""
+
 import asyncio
 import json
 import time

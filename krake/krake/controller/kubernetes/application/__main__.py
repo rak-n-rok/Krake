@@ -44,6 +44,7 @@ Configuration is loaded from the ``controllers.kubernetes.application`` section:
       ...
 
 """
+
 import logging
 import pprint
 from argparse import ArgumentParser

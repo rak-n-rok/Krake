@@ -31,7 +31,7 @@ from krake.data.core import (
     Role,
     RoleBinding,
     RoleBindingList,
-    RoleList
+    RoleList,
 )
 
 logger = logging.getLogger(__name__)
@@ -44,15 +44,9 @@ class CoreApi(object):
 
     routes = web.RouteTableDef()
 
-    @routes.route(
-        "POST", "/core/globalmetrics"
-    )
-    @protected(
-        api="core", resource="globalmetrics", verb="create"
-    )
-    @use_schema(
-        "body", schema=make_create_request_schema(GlobalMetric)
-    )
+    @routes.route("POST", "/core/globalmetrics")
+    @protected(api="core", resource="globalmetrics", verb="create")
+    @use_schema("body", schema=make_create_request_schema(GlobalMetric))
     async def create_global_metric(request, body):
 
         now = utils.now()
@@ -64,25 +58,22 @@ class CoreApi(object):
         try:
             await session(request).put(body)
             logger.info(
-                "Created %s %r (%s)", "GlobalMetric",
+                "Created %s %r (%s)",
+                "GlobalMetric",
                 body.metadata.name,
-                body.metadata.uid
+                body.metadata.uid,
             )
         except TransactionError:
             problem = HttpProblem(
                 detail=f"GlobalMetric {body.metadata.name!r} already exists",
-                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
+                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS,
             )
             raise HttpProblemError(web.HTTPConflict, problem)
 
         return web.json_response(body.serialize())
 
-    @routes.route(
-        "DELETE", "/core/globalmetrics/{name}"
-    )
-    @protected(
-        api="core", resource="globalmetrics", verb="delete"
-    )
+    @routes.route("DELETE", "/core/globalmetrics/{name}")
+    @protected(api="core", resource="globalmetrics", verb="delete")
     @load("entity", GlobalMetric)
     async def delete_global_metric(request, entity):
         # Resource is already deleting
@@ -96,18 +87,16 @@ class CoreApi(object):
 
         await session(request).put(entity)
         logger.info(
-            "Deleting %s %r (%s)", "GlobalMetric", entity.metadata.name,
-            entity.metadata.uid
+            "Deleting %s %r (%s)",
+            "GlobalMetric",
+            entity.metadata.name,
+            entity.metadata.uid,
         )
 
         return web.json_response(entity.serialize())
 
-    @routes.route(
-        "GET", "/core/globalmetrics"
-    )
-    @protected(
-        api="core", resource="globalmetrics", verb="list"
-    )
+    @routes.route("GET", "/core/globalmetrics")
+    @protected(api="core", resource="globalmetrics", verb="list")
     @use_kwargs(ListQuery.query, location="query")
     async def list_or_watch_global_metrics(request, heartbeat, watch, **query):
         resource_class = GlobalMetric
@@ -116,9 +105,7 @@ class CoreApi(object):
         if not watch:
             objs = [obj async for obj in session(request).all(resource_class)]
 
-            body = GlobalMetricList(
-                metadata=ListMetadata(), items=objs
-            )
+            body = GlobalMetricList(metadata=ListMetadata(), items=objs)
             return web.json_response(body.serialize())
 
         # Watching resources
@@ -149,25 +136,15 @@ class CoreApi(object):
                     await resp.write(json.dumps(watch_event.serialize()).encode())
                     await resp.write(b"\n")
 
-    @routes.route(
-        "GET", "/core/globalmetrics/{name}"
-    )
-    @protected(
-        api="core", resource="globalmetrics", verb="get"
-    )
+    @routes.route("GET", "/core/globalmetrics/{name}")
+    @protected(api="core", resource="globalmetrics", verb="get")
     @load("entity", GlobalMetric)
     async def read_global_metric(request, entity):
         return web.json_response(entity.serialize())
 
-    @routes.route(
-        "PUT", "/core/globalmetrics/{name}"
-    )
-    @protected(
-        api="core", resource="globalmetrics", verb="update"
-    )
-    @use_schema(
-        "body", schema=GlobalMetric.Schema
-    )
+    @routes.route("PUT", "/core/globalmetrics/{name}")
+    @protected(api="core", resource="globalmetrics", verb="update")
+    @use_schema("body", schema=GlobalMetric.Schema)
     @load("entity", GlobalMetric)
     async def update_global_metric(request, body, entity):
         # Once a resource is in the "deletion in progress" state, finalizers
@@ -176,15 +153,15 @@ class CoreApi(object):
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 problem = HttpProblem(
                     detail="Finalizers can only be removed"
-                           " if a deletion is in progress.",
-                    title=HttpProblemTitle.UPDATE_ERROR
+                    " if a deletion is in progress.",
+                    title=HttpProblemTitle.UPDATE_ERROR,
                 )
                 raise HttpProblemError(web.HTTPConflict, problem)
 
         if body == entity:
             problem = HttpProblem(
                 detail="The body contained no update.",
-                title=HttpProblemTitle.UPDATE_ERROR
+                title=HttpProblemTitle.UPDATE_ERROR,
             )
             raise HttpProblemError(web.HTTPBadRequest, problem)
 
@@ -201,27 +178,25 @@ class CoreApi(object):
         if entity.metadata.deleted and not entity.metadata.finalizers:
             await session(request).delete(entity)
             logger.info(
-                "Delete %s %r (%s)", "GlobalMetric", entity.metadata.name,
-                entity.metadata.uid
+                "Delete %s %r (%s)",
+                "GlobalMetric",
+                entity.metadata.name,
+                entity.metadata.uid,
             )
         else:
             await session(request).put(entity)
             logger.info(
-                "Update %s %r (%s)", "GlobalMetric", entity.metadata.name,
-                entity.metadata.uid
+                "Update %s %r (%s)",
+                "GlobalMetric",
+                entity.metadata.name,
+                entity.metadata.uid,
             )
 
         return web.json_response(entity.serialize())
 
-    @routes.route(
-        "POST", "/core/globalmetricsproviders"
-    )
-    @protected(
-        api="core", resource="globalmetricsproviders", verb="create"
-    )
-    @use_schema(
-        "body", schema=make_create_request_schema(GlobalMetricsProvider)
-    )
+    @routes.route("POST", "/core/globalmetricsproviders")
+    @protected(api="core", resource="globalmetricsproviders", verb="create")
+    @use_schema("body", schema=make_create_request_schema(GlobalMetricsProvider))
     async def create_global_metrics_provider(request, body):
 
         now = utils.now()
@@ -233,24 +208,22 @@ class CoreApi(object):
         try:
             await session(request).put(body)
             logger.info(
-                "Created %s %r (%s)", "GlobalMetricsProvider", body.metadata.name,
-                body.metadata.uid
+                "Created %s %r (%s)",
+                "GlobalMetricsProvider",
+                body.metadata.name,
+                body.metadata.uid,
             )
         except TransactionError:
             problem = HttpProblem(
                 detail=f"GlobalMetricsProvider {body.metadata.name!r} already exists",
-                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
+                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS,
             )
             raise HttpProblemError(web.HTTPConflict, problem)
 
         return web.json_response(body.serialize())
 
-    @routes.route(
-        "DELETE", "/core/globalmetricsproviders/{name}"
-    )
-    @protected(
-        api="core", resource="globalmetricsproviders", verb="delete"
-    )
+    @routes.route("DELETE", "/core/globalmetricsproviders/{name}")
+    @protected(api="core", resource="globalmetricsproviders", verb="delete")
     @load("entity", GlobalMetricsProvider)
     async def delete_global_metrics_provider(request, entity):
         # Resource is already deleting
@@ -264,30 +237,27 @@ class CoreApi(object):
 
         await session(request).put(entity)
         logger.info(
-            "Deleting %s %r (%s)", "GlobalMetricsProvider", entity.metadata.name,
-            entity.metadata.uid
+            "Deleting %s %r (%s)",
+            "GlobalMetricsProvider",
+            entity.metadata.name,
+            entity.metadata.uid,
         )
 
         return web.json_response(entity.serialize())
 
-    @routes.route(
-        "GET", "/core/globalmetricsproviders"
-    )
-    @protected(
-        api="core", resource="globalmetricsproviders", verb="list"
-    )
+    @routes.route("GET", "/core/globalmetricsproviders")
+    @protected(api="core", resource="globalmetricsproviders", verb="list")
     @use_kwargs(ListQuery.query, location="query")
-    async def list_or_watch_global_metrics_providers(request, heartbeat, watch,
-                                                     **query):
+    async def list_or_watch_global_metrics_providers(
+        request, heartbeat, watch, **query
+    ):
         resource_class = GlobalMetricsProvider
 
         # Return the list of resources
         if not watch:
             objs = [obj async for obj in session(request).all(resource_class)]
 
-            body = GlobalMetricsProviderList(
-                metadata=ListMetadata(), items=objs
-            )
+            body = GlobalMetricsProviderList(metadata=ListMetadata(), items=objs)
             return web.json_response(body.serialize())
 
         # Watching resources
@@ -318,25 +288,15 @@ class CoreApi(object):
                     await resp.write(json.dumps(watch_event.serialize()).encode())
                     await resp.write(b"\n")
 
-    @routes.route(
-        "GET", "/core/globalmetricsproviders/{name}"
-    )
-    @protected(
-        api="core", resource="globalmetricsproviders", verb="get"
-    )
+    @routes.route("GET", "/core/globalmetricsproviders/{name}")
+    @protected(api="core", resource="globalmetricsproviders", verb="get")
     @load("entity", GlobalMetricsProvider)
     async def read_global_metrics_provider(request, entity):
         return web.json_response(entity.serialize())
 
-    @routes.route(
-        "PUT", "/core/globalmetricsproviders/{name}"
-    )
-    @protected(
-        api="core", resource="globalmetricsproviders", verb="update"
-    )
-    @use_schema(
-        "body", schema=GlobalMetricsProvider.Schema
-    )
+    @routes.route("PUT", "/core/globalmetricsproviders/{name}")
+    @protected(api="core", resource="globalmetricsproviders", verb="update")
+    @use_schema("body", schema=GlobalMetricsProvider.Schema)
     @load("entity", GlobalMetricsProvider)
     async def update_global_metrics_provider(request, body, entity):
         # Once a resource is in the "deletion in progress" state, finalizers
@@ -345,8 +305,8 @@ class CoreApi(object):
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 problem = HttpProblem(
                     detail="Finalizers can only be removed"
-                           " if a deletion is in progress.",
-                    title=HttpProblemTitle.UPDATE_ERROR
+                    " if a deletion is in progress.",
+                    title=HttpProblemTitle.UPDATE_ERROR,
                 )
                 raise HttpProblemError(web.HTTPConflict, problem)
 
@@ -366,27 +326,25 @@ class CoreApi(object):
         if entity.metadata.deleted and not entity.metadata.finalizers:
             await session(request).delete(entity)
             logger.info(
-                "Delete %s %r (%s)", "GlobalMetricsProvider", entity.metadata.name,
-                entity.metadata.uid
+                "Delete %s %r (%s)",
+                "GlobalMetricsProvider",
+                entity.metadata.name,
+                entity.metadata.uid,
             )
         else:
             await session(request).put(entity)
             logger.info(
-                "Update %s %r (%s)", "GlobalMetricsProvider", entity.metadata.name,
-                entity.metadata.uid
+                "Update %s %r (%s)",
+                "GlobalMetricsProvider",
+                entity.metadata.name,
+                entity.metadata.uid,
             )
 
         return web.json_response(entity.serialize())
 
-    @routes.route(
-        "POST", "/core/roles"
-    )
-    @protected(
-        api="core", resource="roles", verb="create"
-    )
-    @use_schema(
-        "body", schema=make_create_request_schema(Role)
-    )
+    @routes.route("POST", "/core/roles")
+    @protected(api="core", resource="roles", verb="create")
+    @use_schema("body", schema=make_create_request_schema(Role))
     async def create_role(request, body):
 
         now = utils.now()
@@ -403,18 +361,14 @@ class CoreApi(object):
         except TransactionError:
             problem = HttpProblem(
                 detail=f"Role {body.metadata.name!r} already exists",
-                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
+                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS,
             )
             raise HttpProblemError(web.HTTPConflict, problem)
 
         return web.json_response(body.serialize())
 
-    @routes.route(
-        "DELETE", "/core/roles/{name}"
-    )
-    @protected(
-        api="core", resource="roles", verb="delete"
-    )
+    @routes.route("DELETE", "/core/roles/{name}")
+    @protected(api="core", resource="roles", verb="delete")
     @load("entity", Role)
     async def delete_role(request, entity):
         # Resource is already deleting
@@ -433,12 +387,8 @@ class CoreApi(object):
 
         return web.json_response(entity.serialize())
 
-    @routes.route(
-        "GET", "/core/roles"
-    )
-    @protected(
-        api="core", resource="roles", verb="list"
-    )
+    @routes.route("GET", "/core/roles")
+    @protected(api="core", resource="roles", verb="list")
     @use_kwargs(ListQuery.query, location="query")
     async def list_or_watch_roles(request, heartbeat, watch, **query):
         resource_class = Role
@@ -447,9 +397,7 @@ class CoreApi(object):
         if not watch:
             objs = [obj async for obj in session(request).all(resource_class)]
 
-            body = RoleList(
-                metadata=ListMetadata(), items=objs
-            )
+            body = RoleList(metadata=ListMetadata(), items=objs)
             return web.json_response(body.serialize())
 
         # Watching resources
@@ -480,25 +428,15 @@ class CoreApi(object):
                     await resp.write(json.dumps(watch_event.serialize()).encode())
                     await resp.write(b"\n")
 
-    @routes.route(
-        "GET", "/core/roles/{name}"
-    )
-    @protected(
-        api="core", resource="roles", verb="get"
-    )
+    @routes.route("GET", "/core/roles/{name}")
+    @protected(api="core", resource="roles", verb="get")
     @load("entity", Role)
     async def read_role(request, entity):
         return web.json_response(entity.serialize())
 
-    @routes.route(
-        "PUT", "/core/roles/{name}"
-    )
-    @protected(
-        api="core", resource="roles", verb="update"
-    )
-    @use_schema(
-        "body", schema=Role.Schema
-    )
+    @routes.route("PUT", "/core/roles/{name}")
+    @protected(api="core", resource="roles", verb="update")
+    @use_schema("body", schema=Role.Schema)
     @load("entity", Role)
     async def update_role(request, body, entity):
         # Once a resource is in the "deletion in progress" state, finalizers
@@ -507,15 +445,15 @@ class CoreApi(object):
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 problem = HttpProblem(
                     detail="Finalizers can only be removed"
-                           " if a deletion is in progress.",
-                    title=HttpProblemTitle.UPDATE_ERROR
+                    " if a deletion is in progress.",
+                    title=HttpProblemTitle.UPDATE_ERROR,
                 )
                 raise HttpProblemError(web.HTTPConflict, problem)
 
         if body == entity:
             problem = HttpProblem(
                 detail="The body contained no update.",
-                title=HttpProblemTitle.UPDATE_ERROR
+                title=HttpProblemTitle.UPDATE_ERROR,
             )
             raise HttpProblemError(web.HTTPBadRequest, problem)
 
@@ -542,15 +480,9 @@ class CoreApi(object):
 
         return web.json_response(entity.serialize())
 
-    @routes.route(
-        "POST", "/core/rolebindings"
-    )
-    @protected(
-        api="core", resource="rolebindings", verb="create"
-    )
-    @use_schema(
-        "body", schema=make_create_request_schema(RoleBinding)
-    )
+    @routes.route("POST", "/core/rolebindings")
+    @protected(api="core", resource="rolebindings", verb="create")
+    @use_schema("body", schema=make_create_request_schema(RoleBinding))
     async def create_role_binding(request, body):
 
         now = utils.now()
@@ -562,25 +494,22 @@ class CoreApi(object):
         try:
             await session(request).put(body)
             logger.info(
-                "Created %s %r (%s)", "RoleBinding",
+                "Created %s %r (%s)",
+                "RoleBinding",
                 body.metadata.name,
-                body.metadata.uid
+                body.metadata.uid,
             )
         except TransactionError:
             problem = HttpProblem(
                 detail=f"RoleBinding {body.metadata.name!r} already exists",
-                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
+                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS,
             )
             raise HttpProblemError(web.HTTPConflict, problem)
 
         return web.json_response(body.serialize())
 
-    @routes.route(
-        "DELETE", "/core/rolebindings/{name}"
-    )
-    @protected(
-        api="core", resource="rolebindings", verb="delete"
-    )
+    @routes.route("DELETE", "/core/rolebindings/{name}")
+    @protected(api="core", resource="rolebindings", verb="delete")
     @load("entity", RoleBinding)
     async def delete_role_binding(request, entity):
         # Resource is already deleting
@@ -594,18 +523,16 @@ class CoreApi(object):
 
         await session(request).put(entity)
         logger.info(
-            "Deleting %s %r (%s)", "RoleBinding", entity.metadata.name,
-            entity.metadata.uid
+            "Deleting %s %r (%s)",
+            "RoleBinding",
+            entity.metadata.name,
+            entity.metadata.uid,
         )
 
         return web.json_response(entity.serialize())
 
-    @routes.route(
-        "GET", "/core/rolebindings"
-    )
-    @protected(
-        api="core", resource="rolebindings", verb="list"
-    )
+    @routes.route("GET", "/core/rolebindings")
+    @protected(api="core", resource="rolebindings", verb="list")
     @use_kwargs(ListQuery.query, location="query")
     async def list_or_watch_role_bindings(request, heartbeat, watch, **query):
         resource_class = RoleBinding
@@ -614,9 +541,7 @@ class CoreApi(object):
         if not watch:
             objs = [obj async for obj in session(request).all(resource_class)]
 
-            body = RoleBindingList(
-                metadata=ListMetadata(), items=objs
-            )
+            body = RoleBindingList(metadata=ListMetadata(), items=objs)
             return web.json_response(body.serialize())
 
         # Watching resources
@@ -647,25 +572,15 @@ class CoreApi(object):
                     await resp.write(json.dumps(watch_event.serialize()).encode())
                     await resp.write(b"\n")
 
-    @routes.route(
-        "GET", "/core/rolebindings/{name}"
-    )
-    @protected(
-        api="core", resource="rolebindings", verb="get"
-    )
+    @routes.route("GET", "/core/rolebindings/{name}")
+    @protected(api="core", resource="rolebindings", verb="get")
     @load("entity", RoleBinding)
     async def read_role_binding(request, entity):
         return web.json_response(entity.serialize())
 
-    @routes.route(
-        "PUT", "/core/rolebindings/{name}"
-    )
-    @protected(
-        api="core", resource="rolebindings", verb="update"
-    )
-    @use_schema(
-        "body", schema=RoleBinding.Schema
-    )
+    @routes.route("PUT", "/core/rolebindings/{name}")
+    @protected(api="core", resource="rolebindings", verb="update")
+    @use_schema("body", schema=RoleBinding.Schema)
     @load("entity", RoleBinding)
     async def update_role_binding(request, body, entity):
         # Once a resource is in the "deletion in progress" state, finalizers
@@ -674,15 +589,15 @@ class CoreApi(object):
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 problem = HttpProblem(
                     detail="Finalizers can only be removed"
-                           " if a deletion is in progress.",
-                    title=HttpProblemTitle.UPDATE_ERROR
+                    " if a deletion is in progress.",
+                    title=HttpProblemTitle.UPDATE_ERROR,
                 )
                 raise HttpProblemError(web.HTTPConflict, problem)
 
         if body == entity:
             problem = HttpProblem(
                 detail="The body contained no update.",
-                title=HttpProblemTitle.UPDATE_ERROR
+                title=HttpProblemTitle.UPDATE_ERROR,
             )
             raise HttpProblemError(web.HTTPBadRequest, problem)
 
@@ -699,27 +614,25 @@ class CoreApi(object):
         if entity.metadata.deleted and not entity.metadata.finalizers:
             await session(request).delete(entity)
             logger.info(
-                "Delete %s %r (%s)", "RoleBinding", entity.metadata.name,
-                entity.metadata.uid
+                "Delete %s %r (%s)",
+                "RoleBinding",
+                entity.metadata.name,
+                entity.metadata.uid,
             )
         else:
             await session(request).put(entity)
             logger.info(
-                "Update %s %r (%s)", "RoleBinding", entity.metadata.name,
-                entity.metadata.uid
+                "Update %s %r (%s)",
+                "RoleBinding",
+                entity.metadata.name,
+                entity.metadata.uid,
             )
 
         return web.json_response(entity.serialize())
 
-    @routes.route(
-        "POST", "/core/namespaces/{namespace}/metrics"
-    )
-    @protected(
-        api="core", resource="metrics", verb="create"
-    )
-    @use_schema(
-        "body", schema=make_create_request_schema(Metric)
-    )
+    @routes.route("POST", "/core/namespaces/{namespace}/metrics")
+    @protected(api="core", resource="metrics", verb="create")
+    @use_schema("body", schema=make_create_request_schema(Metric))
     async def create_metric(request, body):
         kwargs = {"name": body.metadata.name}
 
@@ -750,12 +663,8 @@ class CoreApi(object):
 
         return web.json_response(body.serialize())
 
-    @routes.route(
-        "DELETE", "/core/namespaces/{namespace}/metrics/{name}"
-    )
-    @protected(
-        api="core", resource="metrics", verb="delete"
-    )
+    @routes.route("DELETE", "/core/namespaces/{namespace}/metrics/{name}")
+    @protected(api="core", resource="metrics", verb="delete")
     @load("entity", Metric)
     async def delete_metric(request, entity):
         # Resource is already deleting
@@ -774,15 +683,9 @@ class CoreApi(object):
 
         return web.json_response(entity.serialize())
 
-    @routes.route(
-        "GET", "/core/metrics"
-    )
-    @routes.route(
-        "GET", "/core/namespaces/{namespace}/metrics"
-    )
-    @protected(
-        api="core", resource="metrics", verb="list"
-    )
+    @routes.route("GET", "/core/metrics")
+    @routes.route("GET", "/core/namespaces/{namespace}/metrics")
+    @protected(api="core", resource="metrics", verb="list")
     @use_kwargs(ListQuery.query, location="query")
     async def list_or_watch_metrics(request, heartbeat, watch, **query):
         resource_class = Metric
@@ -802,9 +705,7 @@ class CoreApi(object):
                     )
                 ]
 
-            body = MetricList(
-                metadata=ListMetadata(), items=objs
-            )
+            body = MetricList(metadata=ListMetadata(), items=objs)
             return web.json_response(body.serialize())
 
         # Watching resources
@@ -837,25 +738,15 @@ class CoreApi(object):
                     await resp.write(json.dumps(watch_event.serialize()).encode())
                     await resp.write(b"\n")
 
-    @routes.route(
-        "GET", "/core/namespaces/{namespace}/metrics/{name}"
-    )
-    @protected(
-        api="core", resource="metrics", verb="get"
-    )
+    @routes.route("GET", "/core/namespaces/{namespace}/metrics/{name}")
+    @protected(api="core", resource="metrics", verb="get")
     @load("entity", Metric)
     async def read_metric(request, entity):
         return web.json_response(entity.serialize())
 
-    @routes.route(
-        "PUT", "/core/namespaces/{namespace}/metrics/{name}"
-    )
-    @protected(
-        api="core", resource="metrics", verb="update"
-    )
-    @use_schema(
-        "body", schema=Metric.Schema
-    )
+    @routes.route("PUT", "/core/namespaces/{namespace}/metrics/{name}")
+    @protected(api="core", resource="metrics", verb="update")
+    @use_schema("body", schema=Metric.Schema)
     @load("entity", Metric)
     async def update_metric(request, body, entity):
         # Once a resource is in the "deletion in progress" state, finalizers
@@ -864,24 +755,22 @@ class CoreApi(object):
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 problem = HttpProblem(
                     detail="Finalizers can only be removed"
-                           " if a deletion is in progress.",
-                    title=HttpProblemTitle.UPDATE_ERROR
+                    " if a deletion is in progress.",
+                    title=HttpProblemTitle.UPDATE_ERROR,
                 )
                 raise HttpProblemError(web.HTTPConflict, problem)
 
         if body == entity:
             problem = HttpProblem(
                 detail="The body contained no update.",
-                title=HttpProblemTitle.UPDATE_ERROR
+                title=HttpProblemTitle.UPDATE_ERROR,
             )
             raise HttpProblemError(web.HTTPBadRequest, problem)
 
         try:
             entity.update(body)
         except ValueError as e:
-            problem = HttpProblem(
-                detail=str(e), title=HttpProblemTitle.UPDATE_ERROR
-            )
+            problem = HttpProblem(detail=str(e), title=HttpProblemTitle.UPDATE_ERROR)
             raise HttpProblemError(web.HTTPBadRequest, problem)
 
         entity.metadata.modified = utils.now()
@@ -901,15 +790,9 @@ class CoreApi(object):
 
         return web.json_response(entity.serialize())
 
-    @routes.route(
-        "POST", "/core/namespaces/{namespace}/metricsproviders"
-    )
-    @protected(
-        api="core", resource="metricsproviders", verb="create"
-    )
-    @use_schema(
-        "body", schema=make_create_request_schema(MetricsProvider)
-    )
+    @routes.route("POST", "/core/namespaces/{namespace}/metricsproviders")
+    @protected(api="core", resource="metricsproviders", verb="create")
+    @use_schema("body", schema=make_create_request_schema(MetricsProvider))
     async def create_metrics_provider(request, body):
         kwargs = {"name": body.metadata.name}
 
@@ -926,8 +809,10 @@ class CoreApi(object):
         try:
             await session(request).put(body)
             logger.info(
-                "Created %s %r (%s)", "MetricsProvider", body.metadata.name,
-                body.metadata.uid
+                "Created %s %r (%s)",
+                "MetricsProvider",
+                body.metadata.name,
+                body.metadata.uid,
             )
         except TransactionError:
             message = (
@@ -941,12 +826,8 @@ class CoreApi(object):
 
         return web.json_response(body.serialize())
 
-    @routes.route(
-        "DELETE", "/core/namespaces/{namespace}/metricsproviders/{name}"
-    )
-    @protected(
-        api="core", resource="metricsproviders", verb="delete"
-    )
+    @routes.route("DELETE", "/core/namespaces/{namespace}/metricsproviders/{name}")
+    @protected(api="core", resource="metricsproviders", verb="delete")
     @load("entity", MetricsProvider)
     async def delete_metrics_provider(request, entity):
         # Resource is already deleting
@@ -960,21 +841,17 @@ class CoreApi(object):
 
         await session(request).put(entity)
         logger.info(
-            "Deleting %s %r (%s)", "MetricsProvider", entity.metadata.name,
-            entity.metadata.uid
+            "Deleting %s %r (%s)",
+            "MetricsProvider",
+            entity.metadata.name,
+            entity.metadata.uid,
         )
 
         return web.json_response(entity.serialize())
 
-    @routes.route(
-        "GET", "/core/metricsproviders"
-    )
-    @routes.route(
-        "GET", "/core/namespaces/{namespace}/metricsproviders"
-    )
-    @protected(
-        api="core", resource="metricsproviders", verb="list"
-    )
+    @routes.route("GET", "/core/metricsproviders")
+    @routes.route("GET", "/core/namespaces/{namespace}/metricsproviders")
+    @protected(api="core", resource="metricsproviders", verb="list")
     @use_kwargs(ListQuery.query, location="query")
     async def list_or_watch_metrics_providers(request, heartbeat, watch, **query):
         resource_class = MetricsProvider
@@ -994,9 +871,7 @@ class CoreApi(object):
                     )
                 ]
 
-            body = MetricsProviderList(
-                metadata=ListMetadata(), items=objs
-            )
+            body = MetricsProviderList(metadata=ListMetadata(), items=objs)
             return web.json_response(body.serialize())
 
         # Watching resources
@@ -1029,25 +904,15 @@ class CoreApi(object):
                     await resp.write(json.dumps(watch_event.serialize()).encode())
                     await resp.write(b"\n")
 
-    @routes.route(
-        "GET", "/core/namespaces/{namespace}/metricsproviders/{name}"
-    )
-    @protected(
-        api="core", resource="metricsproviders", verb="get"
-    )
+    @routes.route("GET", "/core/namespaces/{namespace}/metricsproviders/{name}")
+    @protected(api="core", resource="metricsproviders", verb="get")
     @load("entity", MetricsProvider)
     async def read_metrics_provider(request, entity):
         return web.json_response(entity.serialize())
 
-    @routes.route(
-        "PUT", "/core/namespaces/{namespace}/metricsproviders/{name}"
-    )
-    @protected(
-        api="core", resource="metricsproviders", verb="update"
-    )
-    @use_schema(
-        "body", schema=MetricsProvider.Schema
-    )
+    @routes.route("PUT", "/core/namespaces/{namespace}/metricsproviders/{name}")
+    @protected(api="core", resource="metricsproviders", verb="update")
+    @use_schema("body", schema=MetricsProvider.Schema)
     @load("entity", MetricsProvider)
     async def update_metrics_provider(request, body, entity):
         # Once a resource is in the "deletion in progress" state, finalizers
@@ -1056,24 +921,22 @@ class CoreApi(object):
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 problem = HttpProblem(
                     detail="Finalizers can only be removed"
-                           " if a deletion is in progress.",
-                    title=HttpProblemTitle.UPDATE_ERROR
+                    " if a deletion is in progress.",
+                    title=HttpProblemTitle.UPDATE_ERROR,
                 )
                 raise HttpProblemError(web.HTTPConflict, problem)
 
         if body == entity:
             problem = HttpProblem(
                 detail="The body contained no update.",
-                title=HttpProblemTitle.UPDATE_ERROR
+                title=HttpProblemTitle.UPDATE_ERROR,
             )
             raise HttpProblemError(web.HTTPBadRequest, problem)
 
         try:
             entity.update(body)
         except ValueError as e:
-            problem = HttpProblem(
-                detail=str(e), title=HttpProblemTitle.UPDATE_ERROR
-            )
+            problem = HttpProblem(detail=str(e), title=HttpProblemTitle.UPDATE_ERROR)
             raise HttpProblemError(web.HTTPBadRequest, problem)
 
         entity.metadata.modified = utils.now()
@@ -1083,14 +946,18 @@ class CoreApi(object):
         if entity.metadata.deleted and not entity.metadata.finalizers:
             await session(request).delete(entity)
             logger.info(
-                "Delete %s %r (%s)", "MetricsProvider", entity.metadata.name,
-                entity.metadata.uid
+                "Delete %s %r (%s)",
+                "MetricsProvider",
+                entity.metadata.name,
+                entity.metadata.uid,
             )
         else:
             await session(request).put(entity)
             logger.info(
-                "Update %s %r (%s)", "MetricsProvider", entity.metadata.name,
-                entity.metadata.uid
+                "Update %s %r (%s)",
+                "MetricsProvider",
+                entity.metadata.name,
+                entity.metadata.uid,
             )
 
         return web.json_response(entity.serialize())

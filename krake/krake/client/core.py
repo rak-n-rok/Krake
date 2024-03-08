@@ -37,7 +37,7 @@ class CoreApi(ApiClient):
         "GlobalMetric": "GlobalMetrics",
         "GlobalMetricsProvider": "GlobalMetricsProviders",
         "Metric": "Metrics",
-        "MetricsProvider": "MetricsProviders"
+        "MetricsProvider": "MetricsProviders",
     }
 
     async def create_global_metric(self, body):
@@ -282,8 +282,9 @@ class CoreApi(ApiClient):
             Metric: Body of the HTTP response.
 
         """
-        path = "/core/namespaces/{namespace}/metrics/{name}"\
-            .format(name=name, namespace=namespace)
+        path = "/core/namespaces/{namespace}/metrics/{name}".format(
+            name=name, namespace=namespace
+        )
         url = self.client.url.with_path(path)
 
         resp = await self.client.session.request("DELETE", url)
@@ -350,8 +351,9 @@ class CoreApi(ApiClient):
             Metric: Body of the HTTP response.
 
         """
-        path = "/core/namespaces/{namespace}/metrics/{name}"\
-            .format(name=name, namespace=namespace)
+        path = "/core/namespaces/{namespace}/metrics/{name}".format(
+            name=name, namespace=namespace
+        )
         url = self.client.url.with_path(path)
 
         resp = await self.client.session.request("GET", url)
@@ -370,8 +372,9 @@ class CoreApi(ApiClient):
             GlobalMetric: Body of the HTTP response.
 
         """
-        path = "/core/namespaces/{namespace}/metrics/{name}"\
-            .format(name=name, namespace=namespace)
+        path = "/core/namespaces/{namespace}/metrics/{name}".format(
+            name=name, namespace=namespace
+        )
         url = self.client.url.with_path(path)
 
         resp = await self.client.session.request("PUT", url, json=body.serialize())
@@ -389,8 +392,9 @@ class CoreApi(ApiClient):
             MetricsProvider: Body of the HTTP response.
 
         """
-        path = "/core/namespaces/{namespace}/metricsproviders"\
-            .format(namespace=namespace)
+        path = "/core/namespaces/{namespace}/metricsproviders".format(
+            namespace=namespace
+        )
         url = self.client.url.with_path(path)
 
         resp = await self.client.session.request("POST", url, json=body.serialize())
@@ -408,8 +412,9 @@ class CoreApi(ApiClient):
             MetricsProvider: Body of the HTTP response.
 
         """
-        path = "/core/namespaces/{namespace}/metricsproviders/{name}"\
-            .format(name=name, namespace=namespace)
+        path = "/core/namespaces/{namespace}/metricsproviders/{name}".format(
+            name=name, namespace=namespace
+        )
         url = self.client.url.with_path(path)
 
         resp = await self.client.session.request("DELETE", url)
@@ -429,8 +434,9 @@ class CoreApi(ApiClient):
 
         """
         if namespace:
-            path = "/core/namespaces/{namespace}/metricsproviders"\
-                .format(namespace=namespace)
+            path = "/core/namespaces/{namespace}/metricsproviders".format(
+                namespace=namespace
+            )
         else:
             path = "/core/metricsproviders".format()
 
@@ -453,8 +459,9 @@ class CoreApi(ApiClient):
 
         """
         if namespace:
-            path = "/core/namespaces/{namespace}/metricsproviders"\
-                .format(namespace=namespace)
+            path = "/core/namespaces/{namespace}/metricsproviders".format(
+                namespace=namespace
+            )
         else:
             path = "/core/metricsproviders".format()
 
@@ -477,8 +484,9 @@ class CoreApi(ApiClient):
             MetricsProvider: Body of the HTTP response.
 
         """
-        path = "/core/namespaces/{namespace}/metricsproviders/{name}"\
-            .format(name=name, namespace=namespace)
+        path = "/core/namespaces/{namespace}/metricsproviders/{name}".format(
+            name=name, namespace=namespace
+        )
         url = self.client.url.with_path(path)
 
         resp = await self.client.session.request("GET", url)
@@ -497,8 +505,9 @@ class CoreApi(ApiClient):
             MetricsProvider: Body of the HTTP response.
 
         """
-        path = "/core/namespaces/{namespace}/metricsproviders/{name}"\
-            .format(name=name, namespace=namespace)
+        path = "/core/namespaces/{namespace}/metricsproviders/{name}".format(
+            name=name, namespace=namespace
+        )
         url = self.client.url.with_path(path)
 
         resp = await self.client.session.request("PUT", url, json=body.serialize())

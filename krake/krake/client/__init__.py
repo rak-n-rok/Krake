@@ -1,6 +1,7 @@
 """This module provides a simple Python client to the Krake HTTP API. It
 leverages the same data models as the API server from :mod:`krake.data`.
 """
+
 import json
 
 from aiohttp import ClientSession, TCPConnector, ClientTimeout, ClientPayloadError

@@ -204,9 +204,7 @@ class KubernetesClusterController(Controller):
         if cluster.state.backoff_limit > 0:
             cluster.status.retries -= 1
 
-        delay = timedelta(
-            seconds=cluster.spec.backoff_delay * cluster.spec.backoff
-        )
+        delay = timedelta(seconds=cluster.spec.backoff_delay * cluster.spec.backoff)
         cluster.status.scheduled_retry = now() + delay
         logger.debug(
             f"{cluster.metadata.name} scheduled retry to "
@@ -235,8 +233,10 @@ class KubernetesClusterController(Controller):
                         f"{cluster.metadata.name} retry counter set to "
                         f"{cluster.status.retries}"
                     )
-                if cluster.status.state is not ClusterState.DEGRADED or \
-                        now() >= cluster.status.scheduled_retry:
+                if (
+                    cluster.status.state is not ClusterState.DEGRADED
+                    or now() >= cluster.status.scheduled_retry
+                ):
                     await self.resource_received(cluster)
                     cluster.status.retries = cluster.spec.backoff_limit
                     logger.debug(
@@ -245,7 +245,8 @@ class KubernetesClusterController(Controller):
                     )
             except ApiException as error:
                 cluster.status.reason = Reason(
-                    code=ReasonCode.KUBERNETES_ERROR, message=str(error))
+                    code=ReasonCode.KUBERNETES_ERROR, message=str(error)
+                )
 
                 if cluster.status.retries > 0:
                     cluster.status.state = ClusterState.DEGRADED

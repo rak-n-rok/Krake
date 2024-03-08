@@ -29,6 +29,7 @@ Abstraction is provided by :class:`Provider`.
     assert isinstance(provider, Prometheus)
 
 """
+
 import asyncio
 from typing import NamedTuple
 from aiohttp import ClientError, ClientTimeout
@@ -355,19 +356,19 @@ class Influx(Provider):
         client = InfluxDBClient(url=url, token=token, org=org)
         query_api = client.query_api()
 
-        query = f'''
+        query = f"""
         from(bucket:"{bucket_name}")
         |> range(start: -1h)
         |> filter(fn: (r) => r._measurement == "{metric_name}")
         |> last()
-        '''
+        """
 
         try:
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(None, query_api.query, query)
             for table in result:
                 for record in table.records:
-                    response = record.values['_value']
+                    response = record.values["_value"]
                     return float(response)
 
         except Exception as err:

@@ -9,6 +9,7 @@ deserializing functionality.
 Domain-specific models are defined in corresponding submodules, e.g.
 Kubernetes-related data models are defined in :mod:`.kubernetes`.
 """
+
 import re
 from operator import itemgetter
 
@@ -41,7 +42,7 @@ class Key(object):
 
         # For each parameter, only accepts ASCII, ":", "." and "-".
         template_re = self._params_re.sub("[.a-zA-Z0-9_:-]+?", template)
-        self.pattern = re.compile(fr"^{template_re}$")
+        self.pattern = re.compile(rf"^{template_re}$")
 
     def matches(self, key):
         """Check if a given key matches the template

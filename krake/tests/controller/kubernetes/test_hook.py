@@ -20,7 +20,7 @@ from krake.data.kubernetes import (
     Application,
     ApplicationState,
     ApplicationComplete,
-    ApplicationShutdown
+    ApplicationShutdown,
 )
 from krake.controller.kubernetes.application import KubernetesApplicationController
 from krake.client import Client
@@ -174,7 +174,9 @@ async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
     for resource in stored.status.last_applied_manifest:
         if resource["kind"] == "Deployment":
             for container in resource["spec"]["template"]["spec"]["containers"]:
-                assert "KRAKE_COMPLETE_TOKEN" in [env["name"] for env in container["env"]]
+                assert "KRAKE_COMPLETE_TOKEN" in [
+                    env["name"] for env in container["env"]
+                ]
                 assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
 
         if resource["kind"] == "Secret":
@@ -188,7 +190,9 @@ async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
         if resource["kind"] == "Deployment":
             # Loop over observed containers, but exclude special control list
             for container in resource["spec"]["template"]["spec"]["containers"][:-1]:
-                assert "KRAKE_COMPLETE_TOKEN" in [env["name"] for env in container["env"][:-1]]
+                assert "KRAKE_COMPLETE_TOKEN" in [
+                    env["name"] for env in container["env"][:-1]
+                ]
                 assert "KRAKE_COMPLETE_URL" in [
                     env["name"] for env in container["env"][:-1]
                 ]
@@ -619,7 +623,9 @@ async def test_complete_hook_default_namespace(
     for resource in stored.status.last_applied_manifest:
         if resource["kind"] == "Deployment":
             for container in resource["spec"]["template"]["spec"]["containers"]:
-                assert "KRAKE_COMPLETE_TOKEN" in [env["name"] for env in container["env"]]
+                assert "KRAKE_COMPLETE_TOKEN" in [
+                    env["name"] for env in container["env"]
+                ]
                 assert "KRAKE_COMPLETE_URL" in [env["name"] for env in container["env"]]
 
         if resource["kind"] == "Secret":
@@ -633,7 +639,9 @@ async def test_complete_hook_default_namespace(
         if resource["kind"] == "Deployment":
             # Loop over observed containers, but exclude special control list
             for container in resource["spec"]["template"]["spec"]["containers"][:-1]:
-                assert "KRAKE_COMPLETE_TOKEN" in [env["name"] for env in container["env"][:-1]]
+                assert "KRAKE_COMPLETE_TOKEN" in [
+                    env["name"] for env in container["env"][:-1]
+                ]
                 assert "KRAKE_COMPLETE_URL" in [
                     env["name"] for env in container["env"][:-1]
                 ]
@@ -1507,7 +1515,9 @@ async def test_shutdown_hook(aiohttp_server, config, db, loop, hooks_config):
     # Mangled `env` dictionary should be observed
     for observer_schema in stored.status.mangled_observer_schema:
         if observer_schema["kind"] == "Deployment":
-            for container in observer_schema["spec"]["template"]["spec"]["containers"][:-1]:
+            for container in observer_schema["spec"]["template"]["spec"]["containers"][
+                :-1
+            ]:
                 assert container["env"] == [
                     {
                         "name": None,
@@ -1523,36 +1533,53 @@ async def test_shutdown_hook(aiohttp_server, config, db, loop, hooks_config):
                     },
                 ]
         if observer_schema["kind"] == "Secret":
-            assert observer_schema["metadata"]["name"] == secret_mangled_response["metadata"]["name"]
-            assert observer_schema["data"].keys() == secret_mangled_response["data"].keys()
+            assert (
+                observer_schema["metadata"]["name"]
+                == secret_mangled_response["metadata"]["name"]
+            )
+            assert (
+                observer_schema["data"].keys() == secret_mangled_response["data"].keys()
+            )
 
     # Mangled `env` dictionary should be present in last_applied_manifest and
     # last_observed_manifest
     for resource in stored.status.last_applied_manifest:
         if resource["kind"] == "Deployment":
             for container in resource["spec"]["template"]["spec"]["containers"]:
-                assert "KRAKE_SHUTDOWN_TOKEN" in [env["name"] for env in container["env"]]
+                assert "KRAKE_SHUTDOWN_TOKEN" in [
+                    env["name"] for env in container["env"]
+                ]
                 assert "KRAKE_SHUTDOWN_URL" in [env["name"] for env in container["env"]]
 
         if resource["kind"] == "Secret":
-            assert resource["metadata"]["name"] == secret_mangled_response["metadata"]["name"]
+            assert (
+                resource["metadata"]["name"]
+                == secret_mangled_response["metadata"]["name"]
+            )
             assert resource["data"] == secret_mangled_response["data"]
 
     for resource in stored.status.last_observed_manifest:
         if resource["kind"] == "Deployment":
             # Loop over observed containers, but exclude special control list
             for container in resource["spec"]["template"]["spec"]["containers"][:-1]:
-                assert "KRAKE_SHUTDOWN_TOKEN" in [env["name"] for env in container["env"][:-1]]
+                assert "KRAKE_SHUTDOWN_TOKEN" in [
+                    env["name"] for env in container["env"][:-1]
+                ]
                 assert "KRAKE_SHUTDOWN_URL" in [
                     env["name"] for env in container["env"][:-1]
                 ]
 
                 # Check special control dictionary
                 assert len(container["env"]) == 3
-                assert container["env"][-1] == {"observer_schema_list_current_length": 2}
+                assert container["env"][-1] == {
+                    "observer_schema_list_current_length": 2
+                }
 
         if resource["kind"] == "Secret":
-            assert resource["metadata"]["name"] == secret_mangled_response["metadata"]["name"]
+            assert (
+                resource["metadata"]["name"]
+                == secret_mangled_response["metadata"]["name"]
+            )
             assert resource["data"] == secret_mangled_response["data"]
 
     assert stored.status.state == ApplicationState.RUNNING
@@ -1710,8 +1737,9 @@ async def test_shutdown_hook_tls(
         resp_first_container["env"] = app_first_container["env"]
         resp_first_container["volumeMounts"] = app_first_container["volumeMounts"]
 
-        deploy_mangled_response["spec"]["template"]["spec"]["volumes"] = \
-            app["spec"]["template"]["spec"]["volumes"]
+        deploy_mangled_response["spec"]["template"]["spec"]["volumes"] = app["spec"][
+            "template"
+        ]["spec"]["volumes"]
 
         return web.json_response(deploy_mangled_response)
 
@@ -1967,28 +1995,40 @@ async def test_shutdown_hook_default_namespace(
     for resource in stored.status.last_applied_manifest:
         if resource["kind"] == "Deployment":
             for container in resource["spec"]["template"]["spec"]["containers"]:
-                assert "KRAKE_SHUTDOWN_TOKEN" in [env["name"] for env in container["env"]]
+                assert "KRAKE_SHUTDOWN_TOKEN" in [
+                    env["name"] for env in container["env"]
+                ]
                 assert "KRAKE_SHUTDOWN_URL" in [env["name"] for env in container["env"]]
 
         if resource["kind"] == "Secret":
-            assert resource["metadata"]["name"] == secret_mangled_response["metadata"]["name"]
+            assert (
+                resource["metadata"]["name"]
+                == secret_mangled_response["metadata"]["name"]
+            )
             assert resource["data"] == secret_mangled_response["data"]
 
     for resource in stored.status.last_observed_manifest:
         if resource["kind"] == "Deployment":
             # Loop over observed containers, but exclude special control list
             for container in resource["spec"]["template"]["spec"]["containers"][:-1]:
-                assert "KRAKE_SHUTDOWN_TOKEN" in [env["name"] for env in container["env"][:-1]]
+                assert "KRAKE_SHUTDOWN_TOKEN" in [
+                    env["name"] for env in container["env"][:-1]
+                ]
                 assert "KRAKE_SHUTDOWN_URL" in [
                     env["name"] for env in container["env"][:-1]
                 ]
 
                 # Check special control dictionary
                 assert len(container["env"]) == 3
-                assert container["env"][-1] == {"observer_schema_list_current_length": 2}
+                assert container["env"][-1] == {
+                    "observer_schema_list_current_length": 2
+                }
 
         if resource["kind"] == "Secret":
-            assert resource["metadata"]["name"] == secret_mangled_response["metadata"]["name"]
+            assert (
+                resource["metadata"]["name"]
+                == secret_mangled_response["metadata"]["name"]
+            )
             assert resource["data"] == secret_mangled_response["data"]
 
     assert stored.status.state == ApplicationState.RUNNING
@@ -2241,11 +2281,13 @@ async def test_shutdown_hook_sending(aiohttp_server, config, db, loop, hooks_con
         resp = await client.session.delete(url[:-9])
         assert resp.status == 200
 
-        app_status = Application(metadata=stored.metadata,
-                                 spec=stored.spec,
-                                 status=stored.status)
+        app_status = Application(
+            metadata=stored.metadata, spec=stored.spec, status=stored.status
+        )
         app_status.status.state = ApplicationState.WAITING_FOR_CLEANING
-        resp = await client.session.put(url[:-8] + "status", json=app_status.serialize())
+        resp = await client.session.put(
+            url[:-8] + "status", json=app_status.serialize()
+        )
         assert resp.status == 200
 
     stored = await db.get(
@@ -2427,11 +2469,13 @@ async def test_shutdown_hook_sending_tls(
         resp = await client.session.delete(url[:-9])
         assert resp.status == 200
 
-        app_status = Application(metadata=stored.metadata,
-                                 spec=stored.spec,
-                                 status=stored.status)
+        app_status = Application(
+            metadata=stored.metadata, spec=stored.spec, status=stored.status
+        )
         app_status.status.state = ApplicationState.WAITING_FOR_CLEANING
-        resp = await client.session.put(url[:-8] + "status", json=app_status.serialize())
+        resp = await client.session.put(
+            url[:-8] + "status", json=app_status.serialize()
+        )
         assert resp.status == 200
 
     stored = await db.get(
@@ -2532,8 +2576,9 @@ async def test_shutdown_hook_sending_tls_rbac(
         resp_first_container["env"] = app_first_container["env"]
         resp_first_container["volumeMounts"] = app_first_container["volumeMounts"]
 
-        deploy_mangled_response["spec"]["template"]["spec"]["volumes"] = \
-            app["spec"]["template"]["spec"]["volumes"]
+        deploy_mangled_response["spec"]["template"]["spec"]["volumes"] = app["spec"][
+            "template"
+        ]["spec"]["volumes"]
 
         return web.json_response(deploy_mangled_response)
 
@@ -2624,9 +2669,7 @@ async def test_shutdown_hook_sending_tls_rbac(
         )
 
     async with Client(
-        url=server_endpoint(api_server),
-        loop=loop,
-        ssl_context=controller_ssl_context
+        url=server_endpoint(api_server), loop=loop, ssl_context=controller_ssl_context
     ) as client:
         async with rbac_allow(
             "kubernetes", "applications", "delete", override_user=client_user
@@ -2637,11 +2680,13 @@ async def test_shutdown_hook_sending_tls_rbac(
         async with rbac_allow(
             "kubernetes", "applications/status", "update", override_user=client_user
         ):
-            app_status = Application(metadata=stored.metadata,
-                                     spec=stored.spec,
-                                     status=stored.status)
+            app_status = Application(
+                metadata=stored.metadata, spec=stored.spec, status=stored.status
+            )
             app_status.status.state = ApplicationState.WAITING_FOR_CLEANING
-            resp = await client.session.put(url[:-8] + "status", json=app_status.serialize())
+            resp = await client.session.put(
+                url[:-8] + "status", json=app_status.serialize()
+            )
             assert resp.status == 200
 
     stored = await db.get(
@@ -2752,8 +2797,9 @@ async def test_shutdown_hook_reschedule(
         resp_first_container["env"] = app_first_container["env"]
         resp_first_container["volumeMounts"] = app_first_container["volumeMounts"]
 
-        deploy_mangled_response["spec"]["template"]["spec"]["volumes"] = \
-            app["spec"]["template"]["spec"]["volumes"]
+        deploy_mangled_response["spec"]["template"]["spec"]["volumes"] = app["spec"][
+            "template"
+        ]["spec"]["volumes"]
 
         return web.json_response(deploy_mangled_response)
 

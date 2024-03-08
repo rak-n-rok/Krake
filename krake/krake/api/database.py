@@ -28,6 +28,7 @@ Example:
 .. _etcd: https://etcd.io/
 
 """
+
 import json
 from typing import NamedTuple
 from enum import Enum, auto

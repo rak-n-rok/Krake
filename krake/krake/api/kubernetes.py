@@ -7,10 +7,7 @@ from webargs.aiohttpparser import use_kwargs
 
 from krake import utils
 from krake.api.auth import protected
-from krake.api.database import (
-    EventType,
-    TransactionError
-)
+from krake.api.database import EventType, TransactionError
 from krake.api.helpers import (
     load,
     blocking,
@@ -97,13 +94,13 @@ class KubernetesApi(object):
     async def delete_application(request, entity, **query):
 
         # Application is marked as force delete and will be removed from the Database
-        if 'force' in request.query and request.query["force"] == "True":
+        if "force" in request.query and request.query["force"] == "True":
             await session(request).delete(entity)
             logger.info(
                 "Force deleting %s %r (%s)",
                 "Application",
                 entity.metadata.name,
-                entity.metadata.uid
+                entity.metadata.uid,
             )
             entity.metadata.deleted = utils.now()
             return web.json_response(entity.serialize())
@@ -126,7 +123,7 @@ class KubernetesApi(object):
             "Application",
             entity.metadata.name,
             entity.metadata.uid,
-            )
+        )
 
         return web.json_response(entity.serialize())
 
@@ -435,13 +432,13 @@ class KubernetesApi(object):
     async def delete_cluster(request, entity, **query):
 
         # Resource is marked as force delete and will be removed from the Database
-        if 'force' in request.query and request.query["force"] == "True":
+        if "force" in request.query and request.query["force"] == "True":
             await session(request).delete(entity)
             logger.info(
                 "Force deleting %s %r (%s)",
                 "Cluster",
                 entity.metadata.name,
-                entity.metadata.uid
+                entity.metadata.uid,
             )
             entity.metadata.deleted = utils.now()
             return web.json_response(entity.serialize())
@@ -457,7 +454,7 @@ class KubernetesApi(object):
 
         await session(request).put(entity)
         logger.info(
-          "Deleting %s %r (%s)", "Cluster", entity.metadata.name, entity.metadata.uid
+            "Deleting %s %r (%s)", "Cluster", entity.metadata.name, entity.metadata.uid
         )
 
         return web.json_response(entity.serialize())

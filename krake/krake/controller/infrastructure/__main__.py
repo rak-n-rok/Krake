@@ -26,6 +26,7 @@ The configuration should have the following structure:
       ...
 
 """
+
 import logging
 import pprint
 from argparse import ArgumentParser

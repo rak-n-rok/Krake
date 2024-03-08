@@ -186,9 +186,7 @@ async def test_main_help(loop):
     """
     command = "python -m krake.api -h"
     # The loop parameter is mandatory otherwise the test fails if started with others.
-    process = await asyncio.create_subprocess_shell(
-        command, stdout=PIPE, stderr=STDOUT
-    )
+    process = await asyncio.create_subprocess_shell(command, stdout=PIPE, stderr=STDOUT)
     stdout, _ = await process.communicate()
     output = stdout.decode()
 

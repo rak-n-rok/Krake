@@ -1,4 +1,5 @@
 """This modules defines aiohttp middlewares for the Krake HTTP API"""
+
 import asyncio
 import json
 
@@ -23,6 +24,7 @@ def retry_transaction(retry=1):
         coroutine: aiohttp middleware handling transaction errors.
 
     """
+
     # TODO: Maybe we can share the TCP connection pool across all HTTP
     #     handlers (like for SQLAlchemy engines)
     @web.middleware
@@ -77,15 +79,13 @@ def problem_response(problem_base_url=None):
         (RFC 7807 Problem representation of failure) and reraising the exception.
 
     """
+
     @web.middleware
     async def problem_middleware(request, handler):
         try:
             return await handler(request)
         except web.HTTPException as e:
-            problem = HttpProblem(
-                status=e.status_code,
-                detail=e.text
-            )
+            problem = HttpProblem(status=e.status_code, detail=e.text)
             e.text = json.dumps(problem.serialize())
             e.content_type = "application/problem+json"
             raise
@@ -108,7 +108,7 @@ def problem_response(problem_base_url=None):
 
             raise e.exc(
                 text=json.dumps(e.problem.serialize()),
-                content_type="application/problem+json"
+                content_type="application/problem+json",
             )
 
     return problem_middleware

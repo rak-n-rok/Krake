@@ -1,4 +1,5 @@
 """Data model definitions for Kubernetes-related resources"""
+
 import logging
 from copy import deepcopy
 from enum import Enum, auto
@@ -676,6 +677,7 @@ class ClusterSpec(Serializable):
         auto_generated (boolean, optional): flag to show if the cluster was
             automatically generated
     """
+
     kubeconfig: dict = field(
         metadata={"validate": _validate_kubeconfig}, default_factory=dict
     )

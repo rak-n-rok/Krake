@@ -374,8 +374,8 @@ class MetricConstraint(object):
 
     grammar = Lark(
         """
-        start: key (equal | notequal | greaterthan | greaterthanorequal | lesserthan | lesserthanorequal)""" +  # noqa: E501
-        """
+        start: key (equal | notequal | greaterthan | greaterthanorequal | lesserthan | lesserthanorequal)"""  # noqa: E501
+        + """
         // Accept any kind of string, no validation is performed on the key here
         key: /[^ ,()=!]+/
 
@@ -396,7 +396,7 @@ class MetricConstraint(object):
 
         %ignore " "
         %ignore "\t"
-        """
+        """  # noqa: E501
     )
 
     def __init__(self, parsed=None):

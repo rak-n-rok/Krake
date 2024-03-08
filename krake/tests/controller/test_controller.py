@@ -214,7 +214,7 @@ async def test_queue_cancel_simple(loop):
     queue = WorkQueue(loop=loop, debounce=0)
 
     # Add a large value to be sure it will not be removed during the test
-    await queue.put("key", 1, delay=10 ** 10)
+    await queue.put("key", 1, delay=10**10)
 
     assert queue.empty()
     assert queue.size() == 0
@@ -232,8 +232,8 @@ async def test_queue_cancel_multiple_keys(loop):
     queue = WorkQueue(loop=loop, debounce=0)
 
     # Add a large value to be sure it will not be removed during the test
-    await queue.put("key_1", 1, delay=10 ** 10)
-    await queue.put("key_2", 2, delay=10 ** 10)
+    await queue.put("key_1", 1, delay=10**10)
+    await queue.put("key_2", 2, delay=10**10)
 
     assert queue.empty()
     assert queue.size() == 0
@@ -255,10 +255,10 @@ async def test_queue_cancel_multiple_keys(loop):
 async def test_queue_cancel_workflow(loop):
     """Attempt adding a key, updating it, canceling it, then add a new value."""
     queue = WorkQueue(loop=loop, debounce=0)
-    await queue.put("key", 1, delay=10 ** 10)
+    await queue.put("key", 1, delay=10**10)
     assert len(queue.timers) == 1
 
-    await queue.put("key", 2, delay=10 ** 10)
+    await queue.put("key", 2, delay=10**10)
     assert len(queue.timers) == 1
 
     await queue.cancel("key")
@@ -297,8 +297,8 @@ async def test_queue_cancel_non_existent_key(loop):
 async def test_queue_close(loop):
     """Test the close() method of the WorkQueue, which cancel all its timers."""
     queue = WorkQueue(loop=loop, debounce=0)
-    await queue.put("key_1", 1, delay=10 ** 10)
-    await queue.put("key_2", 2, delay=10 ** 11)
+    await queue.put("key_1", 1, delay=10**10)
+    await queue.put("key_2", 2, delay=10**11)
     assert len(queue.timers) == 2
     assert queue.empty()
 

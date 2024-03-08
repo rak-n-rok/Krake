@@ -3,6 +3,7 @@ Only clusters that fulfills all application constraints could be considered by s
 algorithm as a potential clusters for application deployment.
 
 """
+
 import logging
 from typing import NamedTuple, Callable
 
@@ -115,9 +116,7 @@ def match_application_constraints(app, cluster, fetched_metrics=None):
 
     constraints = [
         AppClusterConstraint(
-            "label",
-            app.spec.constraints.cluster.labels,
-            _condition_label
+            "label", app.spec.constraints.cluster.labels, _condition_label
         ),
         AppClusterConstraint(
             "custom resource",

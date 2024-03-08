@@ -28,7 +28,7 @@ from krake.data.kubernetes import (
     ApplicationState,
     ContainerHealth,
     ClusterState,
-    Cluster
+    Cluster,
 )
 from krake.controller.kubernetes.application import KubernetesApplicationController
 from krake.controller.kubernetes.hooks import (

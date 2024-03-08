@@ -1,4 +1,5 @@
 """Some utilities for testing Krake components"""
+
 import asyncio
 import re
 import json

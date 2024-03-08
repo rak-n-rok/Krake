@@ -33,7 +33,7 @@ from krake.data.kubernetes import (
     ClusterStatus,
     ClusterCloudConstraints,
     CloudConstraints,
-    ResourceRef
+    ResourceRef,
 )
 
 from .constraints import (
@@ -176,7 +176,7 @@ class Scheduler(Controller):
         debounce=0,
         loop=None,
         cluster_creation_tosca_file=None,
-        cluster_creation_deletion_retention=600
+        cluster_creation_deletion_retention=600,
     ):
         super().__init__(
             api_endpoint, loop=loop, ssl_context=ssl_context, debounce=debounce
@@ -230,7 +230,7 @@ class Scheduler(Controller):
             self.infrastructure_api,
             self.kubernetes_api,
             self.core_api,
-            self.cluster_creation_deletion_retention
+            self.cluster_creation_deletion_retention,
         )
         for i in range(self.worker_count):
             self.register_task(
@@ -539,8 +539,10 @@ class Handler(object):
                     logger.error(error)
             return
         else:
-            if resource.kind == Cluster.kind and \
-               resource.status.state == ClusterState.FAILING_METRICS:
+            if (
+                resource.kind == Cluster.kind
+                and resource.status.state == ClusterState.FAILING_METRICS
+            ):
                 resource.status.state = ClusterState.ONLINE
                 resource.status.reason = None
                 await self.api.update_cluster_status(
@@ -549,8 +551,11 @@ class Handler(object):
                     body=resource,
                 )
 
-            if resource.kind == Cloud.kind or resource.kind == GlobalCloud.kind and \
-               resource.status.state == CloudState.FAILING_METRICS:
+            if (
+                resource.kind == Cloud.kind
+                or resource.kind == GlobalCloud.kind
+                and resource.status.state == CloudState.FAILING_METRICS
+            ):
                 resource.status.state = CloudState.ONLINE
                 resource.status.reason = None
                 if resource.kind == Cloud.kind:
@@ -574,8 +579,17 @@ class Handler(object):
 
 
 class KubernetesApplicationHandler(Handler):
-    def __init__(self, client, queue, api, core_api, infrastructure_api,
-                 stickiness, reschedule_after, cluster_creation_tosca_file):
+    def __init__(
+        self,
+        client,
+        queue,
+        api,
+        core_api,
+        infrastructure_api,
+        stickiness,
+        reschedule_after,
+        cluster_creation_tosca_file,
+    ):
 
         super(KubernetesApplicationHandler, self).__init__(
             client, queue, api, core_api, infrastructure_api
@@ -615,18 +629,19 @@ class KubernetesApplicationHandler(Handler):
 
     @staticmethod
     async def _update_retry_fields(app):
-        logger.info(f"{app.metadata.name}: transition to "
-                    f"DEGRADED, remaining retries: {app.status.retries}")
+        logger.info(
+            f"{app.metadata.name}: transition to "
+            f"DEGRADED, remaining retries: {app.status.retries}"
+        )
 
         if app.spec.backoff_limit > 0:
             app.status.retries -= 1
 
-        delay = timedelta(
-            seconds=app.spec.backoff_delay * app.spec.backoff
-        )
+        delay = timedelta(seconds=app.spec.backoff_delay * app.spec.backoff)
         app.status.scheduled_retry = utils.now() + delay
-        logger.debug(f"{app.metadata.name}: scheduled retry to "
-                     f"{app.status.scheduled_retry}")
+        logger.debug(
+            f"{app.metadata.name}: scheduled retry to " f"{app.status.scheduled_retry}"
+        )
 
     async def handle_kubernetes_applications(self, run_once=False):
         """Infinite loop which fetches and hands over the Kubernetes Application
@@ -671,9 +686,7 @@ class KubernetesApplicationHandler(Handler):
                     logger.info(f"{app.metadata.name}: transition to FAILED")
 
                 await self.api.update_application_status(
-                    namespace=app.metadata.namespace,
-                    name=app.metadata.name,
-                    body=app
+                    namespace=app.metadata.namespace, name=app.metadata.name, body=app
                 )
             finally:
                 await self.queue.done(key)
@@ -688,8 +701,9 @@ class KubernetesApplicationHandler(Handler):
             app (krake.data.kubernetes.Application): the Application to process.
 
         """
-        if app.status.state is not ApplicationState.DEGRADED or \
-           (app.status.scheduled_retry and utils.now() >= app.status.scheduled_retry):
+        if app.status.state is not ApplicationState.DEGRADED or (
+            app.status.scheduled_retry and utils.now() >= app.status.scheduled_retry
+        ):
             await self.schedule_kubernetes_application(app)
             await self.reschedule_kubernetes_application(app)
 
@@ -713,8 +727,7 @@ class KubernetesApplicationHandler(Handler):
 
         if app.status.migration_timeout > int(time.time()):
             logger.debug(
-                f"Not scheduling, since {app.metadata.name} "
-                f"just failed a migration"
+                f"Not scheduling, since {app.metadata.name} " f"just failed a migration"
             )
             return
 
@@ -734,8 +747,10 @@ class KubernetesApplicationHandler(Handler):
                 if cluster.metadata.deleted is None
                 and cluster.metadata.name == app.status.auto_cluster_create_started
             ]
-            if created_clusters and \
-               created_clusters[0].status.state == ClusterState.ONLINE:
+            if (
+                created_clusters
+                and created_clusters[0].status.state == ClusterState.ONLINE
+            ):
                 app.status.auto_cluster_create_started = None
                 cluster = created_clusters[0]
             else:
@@ -749,9 +764,11 @@ class KubernetesApplicationHandler(Handler):
                 app, clusters.items, clouds.items + global_clouds.items
             )
 
-            if (isinstance(maximum, (Cloud, GlobalCloud))) and \
-               app.spec.auto_cluster_create and \
-               app.status.auto_cluster_create_started is None:
+            if (
+                (isinstance(maximum, (Cloud, GlobalCloud)))
+                and app.spec.auto_cluster_create
+                and app.status.auto_cluster_create_started is None
+            ):
 
                 max_retries = 3
 
@@ -759,18 +776,23 @@ class KubernetesApplicationHandler(Handler):
 
                     cluster_name = self.auto_generate_cluster_name()
 
-                    with open(self.cluster_creation_tosca_file, 'r') as file:
+                    with open(self.cluster_creation_tosca_file, "r") as file:
                         tosca = yaml.safe_load(file)
 
                     to_create = Cluster(
                         metadata=Metadata(
-                            name=cluster_name, namespace=app.metadata.namespace,
-                            uid=None, created=None, modified=None,
+                            name=cluster_name,
+                            namespace=app.metadata.namespace,
+                            uid=None,
+                            created=None,
+                            modified=None,
                             inherit_labels=True,
                         ),
                         spec=ClusterSpec(
                             tosca=tosca,
-                            backoff=1, backoff_delay=1, backoff_limit="-1",
+                            backoff=1,
+                            backoff_delay=1,
+                            backoff_limit="-1",
                             inherit_metrics=True,
                             constraints=ClusterCloudConstraints(
                                 cloud=CloudConstraints(
@@ -792,15 +814,16 @@ class KubernetesApplicationHandler(Handler):
 
                     try:
                         resp = await self.api.create_cluster(
-                            namespace=app.metadata.namespace,
-                            body=to_create
+                            namespace=app.metadata.namespace, body=to_create
                         )
                         if isinstance(resp, Cluster):
                             app.status.auto_cluster_create_started = cluster_name
                             break
                     except Exception as e:
-                        logger.error(f"An error occurred when calling the client "
-                                     f"for cluster creation: {e}")
+                        logger.error(
+                            f"An error occurred when calling the client "
+                            f"for cluster creation: {e}"
+                        )
 
                 if app.status.auto_cluster_create_started:
                     app.status.state = ApplicationState.WAITING_FOR_CLUSTER_CREATION
@@ -808,14 +831,18 @@ class KubernetesApplicationHandler(Handler):
                     _ = await self.api.update_application_status(
                         namespace=app.metadata.namespace,
                         name=app.metadata.name,
-                        body=app
+                        body=app,
                     )
-                    raise WaitingOnCluster(f"Application {app.metadata.name} is "
-                                           f"waiting for a cluster to spawn")
+                    raise WaitingOnCluster(
+                        f"Application {app.metadata.name} is "
+                        f"waiting for a cluster to spawn"
+                    )
                 else:
-                    raise ControllerError(f"The cluster on "
-                                          f"{maximum.cloud.metadata.name} "
-                                          f"couldn't be created")
+                    raise ControllerError(
+                        f"The cluster on "
+                        f"{maximum.cloud.metadata.name} "
+                        f"couldn't be created"
+                    )
             elif isinstance(maximum, Cluster):
                 cluster = maximum
             else:
@@ -851,8 +878,7 @@ class KubernetesApplicationHandler(Handler):
             )
         else:
             logger.info(
-                f"App {app.metadata.name}: scheduled to "
-                f"{cluster.metadata.name}"
+                f"App {app.metadata.name}: scheduled to " f"{cluster.metadata.name}"
             )
 
         await self.api.update_application_binding(
@@ -871,8 +897,10 @@ class KubernetesApplicationHandler(Handler):
 
         """
         if not app.spec.constraints.migration:
-            logger.debug(f"App {app.metadata.name}: not rescheduling, since migration "
-                         f"of the application is disabled.")
+            logger.debug(
+                f"App {app.metadata.name}: not rescheduling, since migration "
+                f"of the application is disabled."
+            )
             return
 
         # Put the application into the work queue with a certain delay. This
@@ -881,8 +909,10 @@ class KubernetesApplicationHandler(Handler):
         # is needed to ensure that we do not overwrite state changes with the
         # current one which might be outdated.
         if app.metadata.uid not in self.queue.dirty:
-            logger.debug(f"App {app.metadata.name}: reschedule in "
-                         f"{self.reschedule_after} secs")
+            logger.debug(
+                f"App {app.metadata.name}: reschedule in "
+                f"{self.reschedule_after} secs"
+            )
             await self.queue.put(app.metadata.uid, app, delay=self.reschedule_after)
 
     @staticmethod
@@ -912,8 +942,7 @@ class KubernetesApplicationHandler(Handler):
         scores = []
         cluster_scores = None
         try:
-            cluster_scores = \
-                await self.fetch_kubernetes_cluster_scores(app, clusters)
+            cluster_scores = await self.fetch_kubernetes_cluster_scores(app, clusters)
             scores += cluster_scores
             if app.spec.auto_cluster_create:
                 scores += await self.fetch_cloud_scores(app, clouds)
@@ -924,9 +953,9 @@ class KubernetesApplicationHandler(Handler):
                 raise e
 
         maximum = self.select_maximum(scores)
-        if hasattr(maximum, 'cloud'):
+        if hasattr(maximum, "cloud"):
             return maximum.cloud
-        if hasattr(maximum, 'cluster'):
+        if hasattr(maximum, "cluster"):
             return maximum.cluster
         raise NoClusterFound("No matching Kubernetes cluster found")
 
@@ -949,28 +978,27 @@ class KubernetesApplicationHandler(Handler):
                     cloud, cloud.spec.openstack.metrics
                 ):
                     fetched_cloud_metrics[cloud.metadata.name] = metrics
-                logger.debug(f"App {app.metadata.name}: fetched cloud metrics: "
-                             f"{fetched_cloud_metrics}")
+                logger.debug(
+                    f"App {app.metadata.name}: fetched cloud metrics: "
+                    f"{fetched_cloud_metrics}"
+                )
 
         matching_clouds = [
-            cloud for cloud in clouds
-            if match_application_constraints(
-                app,
-                cloud,
-                fetched_cloud_metrics
-            )
+            cloud
+            for cloud in clouds
+            if match_application_constraints(app, cloud, fetched_cloud_metrics)
         ]
         logger.debug(f"App {app.metadata.name}: matching cloud: {matching_clouds}")
 
-        clouds_with_metrics = [cloud for cloud in matching_clouds
-                               if cloud.spec.openstack.metrics]
+        clouds_with_metrics = [
+            cloud for cloud in matching_clouds if cloud.spec.openstack.metrics
+        ]
 
         if clouds_with_metrics:
             scores = await self.rank_clouds(app, clouds_with_metrics)
         else:
             scores = [
-                self.calculate_cloud_score((), cloud, app)
-                for cloud in matching_clouds
+                self.calculate_cloud_score((), cloud, app) for cloud in matching_clouds
             ]
         return scores
 
@@ -993,9 +1021,7 @@ class KubernetesApplicationHandler(Handler):
             async for metrics in self.fetch_metrics(
                 cloud, cloud.spec.openstack.metrics
             ):
-                scores.append(
-                    self.calculate_cloud_score(metrics, cloud, app)
-                )
+                scores.append(self.calculate_cloud_score(metrics, cloud, app))
 
         return scores
 
@@ -1040,9 +1066,10 @@ class KubernetesApplicationHandler(Handler):
         """
         # Reject clusters marked as deleted and clusters that are not online
         existing_clusters = (
-            cluster for cluster in clusters
-            if cluster.metadata.deleted is None and
-            cluster.status.state is ClusterState.ONLINE
+            cluster
+            for cluster in clusters
+            if cluster.metadata.deleted is None
+            and cluster.status.state is ClusterState.ONLINE
         )
         # Check cluster_copy and cluster again
         filtered_clusters = dict()
@@ -1060,17 +1087,18 @@ class KubernetesApplicationHandler(Handler):
                     fetched_metrics[cluster.metadata.name] = metrics
             filtered_clusters[cluster.metadata.name] = cluster_copy
 
-        logger.debug(f"App {app.metadata.name}: "
-                     f"possible clusters: {filtered_clusters}")
-        logger.debug(f"App {app.metadata.name}: "
-                     f"fetched cluster metrics: {fetched_metrics}")
+        logger.debug(
+            f"App {app.metadata.name}: " f"possible clusters: {filtered_clusters}"
+        )
+        logger.debug(
+            f"App {app.metadata.name}: " f"fetched cluster metrics: {fetched_metrics}"
+        )
 
         matching_clusters = [
-            cluster for cluster in existing_clusters
+            cluster
+            for cluster in existing_clusters
             if match_application_constraints(
-                app,
-                filtered_clusters[cluster.metadata.name],
-                fetched_metrics
+                app, filtered_clusters[cluster.metadata.name], fetched_metrics
             )
         ]
 
@@ -1096,8 +1124,11 @@ class KubernetesApplicationHandler(Handler):
         if app.status.scheduled_to:
             # get current cluster as first cluster in matching to which app is scheduled
             current = next(
-                (c for c in matching_clusters
-                    if resource_ref(c) == app.status.scheduled_to),
+                (
+                    c
+                    for c in matching_clusters
+                    if resource_ref(c) == app.status.scheduled_to
+                ),
                 None,
             )
             # if current cluster is still matching
@@ -1117,16 +1148,20 @@ class KubernetesApplicationHandler(Handler):
         # Partition list of matching clusters into a list of clusters with
         # metrics and without metrics. Clusters with metrics are preferred
         # over clusters without metrics.
-        clusters_with_metrics = [cluster for cluster in matching_clusters
-                                 if cluster.metadata.name in fetched_metrics.keys()]
+        clusters_with_metrics = [
+            cluster
+            for cluster in matching_clusters
+            if cluster.metadata.name in fetched_metrics.keys()
+        ]
 
         # Only use clusters without metrics when there are no clusters with
         # metrics.
         scores = []
         if clusters_with_metrics:
             # Compute the score of all clusters based on their metric
-            cluster_scores = \
-                await self.rank_kubernetes_clusters(app, clusters_with_metrics)
+            cluster_scores = await self.rank_kubernetes_clusters(
+                app, clusters_with_metrics
+            )
             scores += cluster_scores
 
         if not scores:
@@ -1157,9 +1192,9 @@ class KubernetesApplicationHandler(Handler):
 
         for cluster in clusters:
             cluster_metrics = cluster.spec.metrics
-            if (cluster.spec.inherit_metrics or
-                cluster.spec.constraints.cloud.metrics) and \
-               cluster.status.scheduled_to:
+            if (
+                cluster.spec.inherit_metrics or cluster.spec.constraints.cloud.metrics
+            ) and cluster.status.scheduled_to:
                 if cluster.status.scheduled_to.namespace:
                     cloud = await self.infrastructure_api.read_cloud(
                         name=cluster.status.scheduled_to.name,
@@ -1172,8 +1207,11 @@ class KubernetesApplicationHandler(Handler):
 
                 if cluster.spec.inherit_metrics:
                     for metric in cloud.spec.__getattribute__(cloud.spec.type).metrics:
-                        cluster_metrics.append(metric) \
-                            if metric not in cluster_metrics else None
+                        (
+                            cluster_metrics.append(metric)
+                            if metric not in cluster_metrics
+                            else None
+                        )
 
                 if cluster.spec.constraints.cloud.metrics:
                     metric_list = list()
@@ -1184,8 +1222,11 @@ class KubernetesApplicationHandler(Handler):
                             if constraint.value == metric.name:
                                 metric_list.append(metric)
                     for metric in metric_list:
-                        cluster_metrics.append(metric) \
-                            if metric not in cluster_metrics else None
+                        (
+                            cluster_metrics.append(metric)
+                            if metric not in cluster_metrics
+                            else None
+                        )
             async for metrics in self.fetch_metrics(cluster, cluster_metrics):
                 scores.append(
                     self.calculate_kubernetes_cluster_score(metrics, cluster, app)
@@ -1209,8 +1250,9 @@ class KubernetesApplicationHandler(Handler):
         sticky = self.calculate_kubernetes_cluster_stickiness(cluster, app)
 
         if not metrics:
-            cluster_score = ClusterScore(score=sticky.weight * sticky.value,
-                                         cluster=cluster)
+            cluster_score = ClusterScore(
+                score=sticky.weight * sticky.value, cluster=cluster
+            )
             logger.debug(f"{app.metadata.name}: cluster score: {cluster_score}")
             return cluster_score
 
@@ -1218,7 +1260,7 @@ class KubernetesApplicationHandler(Handler):
         score = (
             sum(metric.value * metric.weight for metric in metrics)
             + (sticky.value * sticky.weight)
-            ) / norm
+        ) / norm
 
         cluster_score = ClusterScore(score=score, cluster=cluster)
         logger.debug(f"{app.metadata.name}: cluster score: {cluster_score}")
@@ -1259,9 +1301,12 @@ class KubernetesApplicationHandler(Handler):
             Cluster: The cluster object with its updated metrics and labels
         """
 
-        if (cluster.spec.inherit_metrics or cluster.spec.constraints.cloud.metrics or
-            cluster.metadata.inherit_labels or cluster.spec.constraints.cloud.labels) \
-                and cluster.status.scheduled_to:
+        if (
+            cluster.spec.inherit_metrics
+            or cluster.spec.constraints.cloud.metrics
+            or cluster.metadata.inherit_labels
+            or cluster.spec.constraints.cloud.labels
+        ) and cluster.status.scheduled_to:
 
             if cluster.status.scheduled_to.namespace:
                 cloud = await self.infrastructure_api.read_cloud(
@@ -1274,34 +1319,33 @@ class KubernetesApplicationHandler(Handler):
                 )
 
             if cluster.metadata.inherit_labels:
-                cluster.metadata.labels = \
-                    {**cluster.metadata.labels, **cloud.metadata.labels}
+                cluster.metadata.labels = {
+                    **cluster.metadata.labels,
+                    **cloud.metadata.labels,
+                }
             if cluster.spec.constraints.cloud.labels:
                 label_dict = dict()
                 for constraint in cluster.spec.constraints.cloud.metrics:
                     for label in cloud.metadata.labels:
                         if constraint.value == label:
-                            label_dict = {**label_dict,
-                                          **{label: cloud.metadata.labels[label]}}
-                cluster.metadata.labels = \
-                    {**cluster.metadata.labels, **label_dict}
+                            label_dict = {
+                                **label_dict,
+                                **{label: cloud.metadata.labels[label]},
+                            }
+                cluster.metadata.labels = {**cluster.metadata.labels, **label_dict}
 
             metrics = []
             if cluster.spec.inherit_metrics:
                 for metric in cloud.spec.__getattribute__(cloud.spec.type).metrics:
-                    metrics.append(metric) \
-                        if metric not in metrics else None
+                    metrics.append(metric) if metric not in metrics else None
             if cluster.spec.constraints.cloud.metrics:
                 metric_list = list()
                 for constraint in cluster.spec.constraints.cloud.metrics:
-                    for metric in cloud.spec.__getattribute__(
-                            cloud.spec.type
-                    ).metrics:
+                    for metric in cloud.spec.__getattribute__(cloud.spec.type).metrics:
                         if constraint.value == metric.name:
                             metric_list.append(metric)
                 for metric in metric_list:
-                    metrics.append(metric) \
-                        if metric not in metrics else None
+                    metrics.append(metric) if metric not in metrics else None
 
             cluster.spec.metrics += metrics
         return cluster
@@ -1313,8 +1357,13 @@ class KubernetesApplicationHandler(Handler):
 
 class KubernetesClusterHandler(Handler):
     def __init__(
-        self, client, queue, infrastructure_api, kubernetes_api, core_api,
-        cluster_creation_deletion_retention
+        self,
+        client,
+        queue,
+        infrastructure_api,
+        kubernetes_api,
+        core_api,
+        cluster_creation_deletion_retention,
     ):
         super(KubernetesClusterHandler, self).__init__(
             client, queue, kubernetes_api, core_api, infrastructure_api
@@ -1366,11 +1415,15 @@ class KubernetesClusterHandler(Handler):
                 await self.schedule_kubernetes_cluster(cluster)
 
                 if cluster.spec.auto_generated and not cluster.metadata.deleted:
-                    logger.debug("Requeueing %r in %r seconds.",
-                                 cluster, self.cluster_creation_deletion_retention)
+                    logger.debug(
+                        "Requeueing %r in %r seconds.",
+                        cluster,
+                        self.cluster_creation_deletion_retention,
+                    )
                     await self.queue.put(
-                        cluster.metadata.uid, cluster,
-                        delay=self.cluster_creation_deletion_retention
+                        cluster.metadata.uid,
+                        cluster,
+                        delay=self.cluster_creation_deletion_retention,
                     )
             except ControllerError as error:
                 cluster.status.reason = Reason(code=error.code, message=error.message)
@@ -1402,17 +1455,19 @@ class KubernetesClusterHandler(Handler):
         cluster_has_apps = False
         apps = await self.kubernetes_api.list_all_applications()
         for app in apps.items:
-            if (app.status.scheduled_to and
-               app.status.scheduled_to.name == cluster.metadata.name) or \
-               cluster.status.state != ClusterState.ONLINE:
+            if (
+                app.status.scheduled_to
+                and app.status.scheduled_to.name == cluster.metadata.name
+            ) or cluster.status.state != ClusterState.ONLINE:
                 cluster_has_apps = True
             break
-        if not cluster_has_apps and \
-           cluster.spec.auto_generated and \
-           not cluster.metadata.deleted:
+        if (
+            not cluster_has_apps
+            and cluster.spec.auto_generated
+            and not cluster.metadata.deleted
+        ):
             await self.kubernetes_api.delete_cluster(
-                name=cluster.metadata.name,
-                namespace=cluster.metadata.namespace
+                name=cluster.metadata.name, namespace=cluster.metadata.namespace
             )
             logging.info("Marked %r to be deleted.", cluster)
 
