@@ -150,9 +150,11 @@ def cache_non_hashable(maxsize=1024):
             """
             _args = tuple(
                 [
-                    json.dumps(arg, sort_keys=True)
-                    if type(arg) in (list, dict)
-                    else arg
+                    (
+                        json.dumps(arg, sort_keys=True)
+                        if type(arg) in (list, dict)
+                        else arg
+                    )
                     for arg in args
                 ]
             )

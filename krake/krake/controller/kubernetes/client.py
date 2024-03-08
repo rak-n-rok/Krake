@@ -63,9 +63,9 @@ class ApiAdapter(object):
             )(name=name, namespace=namespace)
 
         if hasattr(self.api, f"read_{camel_to_snake_case(kind)}"):
-            return await getattr(
-                self.api, f"read_{camel_to_snake_case(kind)}"
-            )(name=name)
+            return await getattr(self.api, f"read_{camel_to_snake_case(kind)}")(
+                name=name
+            )
 
         raise UnsupportedResourceError(f"{kind} resources are not supported.")
 
@@ -76,9 +76,9 @@ class ApiAdapter(object):
             )(body=body, namespace=namespace)
 
         if hasattr(self.api, f"create_{camel_to_snake_case(kind)}"):
-            return await getattr(
-                self.api, f"create_{camel_to_snake_case(kind)}"
-            )(body=body)
+            return await getattr(self.api, f"create_{camel_to_snake_case(kind)}")(
+                body=body
+            )
 
         raise UnsupportedResourceError(f"{kind} resources are not supported.")
 
@@ -89,9 +89,9 @@ class ApiAdapter(object):
             )(name=name, body=body, namespace=namespace)
 
         if hasattr(self.api, f"patch_{camel_to_snake_case(kind)}"):
-            return await getattr(
-                self.api, f"patch_{camel_to_snake_case(kind)}"
-            )(name=name, body=body)
+            return await getattr(self.api, f"patch_{camel_to_snake_case(kind)}")(
+                name=name, body=body
+            )
 
         raise UnsupportedResourceError(f"{kind} resources are not supported.")
 
@@ -102,9 +102,9 @@ class ApiAdapter(object):
             )(name=name, namespace=namespace)
 
         if hasattr(self.api, f"delete_{camel_to_snake_case(kind)}"):
-            return await getattr(
-                self.api, f"delete_{camel_to_snake_case(kind)}"
-            )(name=name)
+            return await getattr(self.api, f"delete_{camel_to_snake_case(kind)}")(
+                name=name
+            )
 
         raise UnsupportedResourceError(f"{kind} resources are not supported.")
 

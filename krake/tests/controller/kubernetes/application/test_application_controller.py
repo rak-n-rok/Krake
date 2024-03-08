@@ -3433,9 +3433,9 @@ async def test_resource_delta_list_in_last_observed_manifest(loop):
     app.status.mangled_observer_schema[1]["spec"]["ports"][-1][
         "observer_schema_list_min_length"
     ] = 1
-    app.status.last_observed_manifest[1]["spec"][
-        "ports"
-    ] = app.status.last_observed_manifest[1]["spec"]["ports"][-1:]
+    app.status.last_observed_manifest[1]["spec"]["ports"] = (
+        app.status.last_observed_manifest[1]["spec"]["ports"][-1:]
+    )
     app.status.last_observed_manifest[1]["spec"]["ports"][-1][
         "observer_schema_list_current_length"
     ] = 0

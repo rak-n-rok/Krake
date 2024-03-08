@@ -110,8 +110,10 @@ async def test_add_finalizer_in_deleted_magnum_cluster(aiohttp_client, config, d
     )
     assert resp.status == 409
     body = await resp.json()
-    assert body["detail"] == "Finalizers can only be removed" \
-                             " if a deletion is in progress."
+    assert (
+        body["detail"] == "Finalizers can only be removed"
+        " if a deletion is in progress."
+    )
 
 
 async def test_delete_magnum_cluster_rbac(rbac_allow, config, aiohttp_client):
@@ -635,8 +637,10 @@ async def test_add_finalizer_in_deleted_project(aiohttp_client, config, db):
     )
     assert resp.status == 409
     body = await resp.json()
-    assert body["detail"] == "Finalizers can only be removed" \
-                             " if a deletion is in progress."
+    assert (
+        body["detail"] == "Finalizers can only be removed"
+        " if a deletion is in progress."
+    )
 
 
 async def test_delete_project_rbac(rbac_allow, config, aiohttp_client):
