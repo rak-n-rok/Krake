@@ -25,3 +25,6 @@ Repository = "https://gitlab.com/rak-n-rok/krake"
 
 [project.scripts]
 rok = "rok.__main__:main"
+
+[tool.setuptools]
+packages = ["rok"]
