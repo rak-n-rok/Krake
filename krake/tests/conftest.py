@@ -437,12 +437,7 @@ def kube_app_config(tls_client_config):
             },
         },
         "log": {},
-        "migration": {
-            "retry": {
-                "max": 10,
-                "timeout": 60
-            }
-        }
+        "migration": {"retry": {"max": 10, "timeout": 60}},
     }
     return KubernetesApplicationConfiguration.deserialize(config, creation_ignored=True)
 
@@ -485,7 +480,7 @@ def scheduler_config(tls_client_config, automatic_cluster_creation_config):
     config = {
         "tls": tls_client_config.serialize(),
         "log": {},
-        "automatic_cluster_creation": automatic_cluster_creation_config.serialize()
+        "automatic_cluster_creation": automatic_cluster_creation_config.serialize(),
     }
     return SchedulerConfiguration.deserialize(config, creation_ignored=True)
 

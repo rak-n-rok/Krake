@@ -1,5 +1,6 @@
 """Module comprises Krake infrastructure providers abstraction.
 """
+
 import enum
 from typing import NamedTuple
 

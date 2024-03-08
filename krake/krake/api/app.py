@@ -19,6 +19,7 @@ Example:
         web.run_app(app)
 
 """
+
 import aiohttp_cors
 import logging
 import ssl
