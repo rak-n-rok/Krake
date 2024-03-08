@@ -206,7 +206,7 @@ class Scheduler(Controller):
     async def prepare(self, client):
         if client is None:
             raise ValueError("client is None")
-        
+
         self.client = client
         self.kubernetes_api = KubernetesApi(self.client)
         self.openstack_api = OpenStackApi(self.client)
@@ -388,7 +388,8 @@ class Handler(object):
                 failing, or None if it did not fail.
 
         Raises:
-            ValueError: if the resource kind is not supported or length of metrics and reasons don't match up
+            ValueError: if the resource kind is not supported or length of metrics and
+                reasons don't match up
 
         """
         global_resource = False
@@ -1402,7 +1403,7 @@ class KubernetesClusterHandler(Handler):
 
         Raises:
             RuntimeError: if cluster is already bound
-        
+
         """
         if cluster.status.scheduled_to is not None:
             raise RuntimeError("Cluster is already bound")
