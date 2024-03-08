@@ -203,8 +203,8 @@ def check_app_state(state, error_message, reason=None):
             assert app_details["status"]["state"] == state, error_message
             if reason:
                 assert app_details["status"]["reason"]["code"] == reason, error_message
-        except (KeyError, json.JSONDecodeError):
-            raise ValueError(error_message)
+        except (KeyError, json.JSONDecodeError) as e:
+            raise ValueError(error_message) from e
 
     return validate
 
@@ -488,8 +488,8 @@ def check_empty_list(error_message):
             assert (
                 response.json == []
             ), f"{error_message}\nList items: {str(response.json)}"
-        except json.JSONDecodeError:
-            raise ValueError(error_message)
+        except json.JSONDecodeError as e:
+            raise ValueError(error_message) from e
 
     return validate
 
@@ -586,8 +586,8 @@ def check_spec_container_image(expected_image, error_message):
         try:
             image = response.json["spec"]["template"]["spec"]["containers"][0]["image"]
             assert image == expected_image, error_message
-        except json.JSONDecodeError:
-            raise ValueError(error_message)
+        except json.JSONDecodeError as e:
+            raise ValueError(error_message) from e
 
     return validate
 
@@ -618,8 +618,8 @@ def check_spec_replicas(expected_replicas, error_message):
         try:
             replicas = response.json["spec"]["replicas"]
             assert replicas == expected_replicas, error_message
-        except json.JSONDecodeError:
-            raise ValueError(error_message)
+        except json.JSONDecodeError as e:
+            raise ValueError(error_message) from e
 
     return validate
 
@@ -660,8 +660,8 @@ def check_app_running_on(expected_cluster, error_message):
                 f"App running_on: {running_on}"
             )
             assert running_on == expected_cluster, msg
-        except (KeyError, json.JSONDecodeError):
-            raise ValueError(error_message)
+        except (KeyError, json.JSONDecodeError) as e:
+            raise ValueError(error_message) from e
 
     return validate
 

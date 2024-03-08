@@ -297,7 +297,7 @@ def _validate_observer_schema_dict(partial_schema, first_level=False):
     """
     if first_level:
         for key_name in ["apiVersion", "kind"]:
-            if not key in partial_schema:
+            if not key_name in partial_schema:
                 raise ValueError(f"{key_name} is not defined")
 
         metadata = partial_schema.get("metadata", None)

@@ -449,8 +449,9 @@ class Handler(object):
                 that should be fetched.
 
         Raises:
-            AssertionError: raised if no metrics list is provided or the error iteration
-                is stopped, because no iteration on the reasons list was possible
+            ValueError: raised if no metrics list is provided
+            RuntimeError: raised if the error iteration is stopped, because no
+                iteration on the reasons list was possible
 
         Yields:
             list[krake.controller.scheduler.metrics.QueryResult]: List of fetched
