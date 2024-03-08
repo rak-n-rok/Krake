@@ -41,8 +41,8 @@ dependencies = [
     "yarl==1.8.*",
 ]
 
-[tool.setuptools]
-packages = ["krake", "krake.data"]
+[tool.setuptools.packages.find]
+exclude = ["cluster_certs", "logs"]
 
 [tool.setuptools.dynamic]
 version = {attr = "krake.__about__.__version__"}
