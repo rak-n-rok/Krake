@@ -1,6 +1,7 @@
 """This module defines a declarative API for Python's standard :mod:`argparse`
 module.
 """
+
 from argparse import ArgumentParser, ArgumentError, Action
 import copy
 
