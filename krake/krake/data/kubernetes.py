@@ -276,7 +276,7 @@ class ObserverSchemaError(Exception):
     """Custom exception raised if the validation of the observer_schema fails"""
 
 
-def _validate_observer_schema_dict(partial_schema, first_level=False):
+def _validate_observer_schema_dict(partial_schema, first_level=False, is_metadata=False):
     """Together with :func:`_validate_observer_schema_list``, this function is
     called recursively to validate a partial ``observer_schema``.
 
@@ -297,20 +297,24 @@ def _validate_observer_schema_dict(partial_schema, first_level=False):
     """
     if first_level:
         for key_name in ["apiVersion", "kind"]:
-            if partial_schema.pop(key_name, None) is None:
+            if partial_schema.get(key_name, None) is None:
                 raise ValueError(f"{key_name} is not defined")
 
-        metadata = partial_schema.pop("metadata", None)
+        metadata = partial_schema.get("metadata", None)
         if metadata is None:
             raise ValueError("metadata dictionary is not defined")
         if not isinstance(metadata, dict):
             raise TypeError("metadata must be a dictionary")
-        if metadata.pop("name", None) is None:
+        if metadata.get("name", None) is None:
             raise ValueError("name is not defined in the metadata dictionary")
 
-        _validate_observer_schema_dict(metadata)
+        _validate_observer_schema_dict(metadata, is_metadata=True)
 
     for key, value in partial_schema.items():
+        # skip already validated items
+        if first_level and key in ["apiVersion", "kind", "metadata"] \
+            or is_metadata and key == "name":
+                continue
 
         if isinstance(value, dict):
             _validate_observer_schema_dict(value)
@@ -399,7 +403,7 @@ def _validate_observer_schema(observer_schema, manifest):
 
         try:
             _validate_observer_schema_dict(
-                deepcopy(resource_observer_schema), first_level=True
+                resource_observer_schema, first_level=True
             )
         except (ValueError, TypeError) as e:
             raise ObserverSchemaError(e)
