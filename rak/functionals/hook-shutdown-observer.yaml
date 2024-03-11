@@ -64,4 +64,4 @@ kind: ConfigMap
 metadata:
   name: sd-service-configmap
 data:
-  hook-script-shutdown-service.py: null
+  hook-shutdown-script.py: null
