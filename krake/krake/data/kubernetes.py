@@ -1,6 +1,5 @@
 """Data model definitions for Kubernetes-related resources"""
 import logging
-from copy import deepcopy
 from enum import Enum, auto
 from dataclasses import field
 from typing import List, Dict, Union
@@ -276,9 +275,11 @@ class ObserverSchemaError(Exception):
     """Custom exception raised if the validation of the observer_schema fails"""
 
 
-def _validate_observer_schema_dict(partial_schema, first_level=False, is_metadata=False):
-    """Together with :func:`_validate_observer_schema_list``, this function is
-    called recursively to validate a partial ``observer_schema``.
+def _validate_observer_schema_dict(partial_schema,
+                                   first_level=False,
+                                   is_metadata=False):
+    """Together with :func:`_validate_observer_schema_list``, this function
+    is called recursively to validate a partial ``observer_schema``.
 
     Args:
         partial_schema (dict): Partial observer_schema to validate
@@ -313,8 +314,8 @@ def _validate_observer_schema_dict(partial_schema, first_level=False, is_metadat
     for key, value in partial_schema.items():
         # skip already validated items
         if first_level and key in ["apiVersion", "kind", "metadata"] \
-            or is_metadata and key == "name":
-                continue
+                or is_metadata and key == "name":
+            continue
 
         if isinstance(value, dict):
             _validate_observer_schema_dict(value)

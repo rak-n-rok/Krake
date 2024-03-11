@@ -2564,7 +2564,7 @@ async def test_openstack_score_with_metrics_only(aiohttp_server, config, loop):
     cluster = MagnumClusterFactory(status__is_scheduled=False)
     projects = [ProjectFactory(spec__metrics=[]), ProjectFactory(spec__metrics=[])]
 
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         scheduler = Scheduler("http://localhost:8080", worker_count=0)
         server = await aiohttp_server(create_app(config))
 
