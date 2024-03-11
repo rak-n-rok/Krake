@@ -396,7 +396,7 @@ class MetricConstraint(object):
 
         %ignore " "
         %ignore "\t"
-        """  # noqa: E501
+        """
     )
 
     def __init__(self, parsed=None):

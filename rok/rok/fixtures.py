@@ -5,6 +5,7 @@ mark functions as fixtures. Functions using these fixtures can declare their
 dependency with the :func:`use` decorator. Finally, :class:`Resolver` is used
 to wire fixtures and dependencies.
 """
+
 import os
 import sys
 from collections import deque

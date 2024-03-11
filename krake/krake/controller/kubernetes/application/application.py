@@ -1045,7 +1045,7 @@ class KubernetesApplicationController(Controller):
                     "-cvf",
                     "-",
                     file,
-                ],  # noqa: E501
+                ],
                 check=True,
                 capture_output=True,
             )
@@ -1061,7 +1061,7 @@ class KubernetesApplicationController(Controller):
                     "tar",
                     "-xvf",
                     "-",
-                ],  # noqa: E501
+                ],
                 input=snd.stdout,
                 capture_output=True,
             )
@@ -1141,7 +1141,7 @@ class KubernetesApplicationController(Controller):
                                             volume_mount["mountPath"],
                                             "-type",
                                             "f",
-                                        ],  # noqa: E501
+                                        ],
                                         stderr=True,
                                         stdin=False,
                                         stdout=True,
@@ -1157,7 +1157,7 @@ class KubernetesApplicationController(Controller):
                                     await self.transfer_file(
                                         src.name,
                                         trg.name,
-                                        manifest["metadata"]["name"],  # noqa: E501
+                                        manifest["metadata"]["name"],
                                         namespace,
                                         file,
                                     )

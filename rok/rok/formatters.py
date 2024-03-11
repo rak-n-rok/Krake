@@ -4,6 +4,7 @@ The API of this module is a decorator factory function :func:`printer` that
 can be used to annotate functions and print their return value in a format-
 specific way.
 """
+
 import sys
 import json
 import yaml
@@ -227,12 +228,16 @@ def pods_formatter(attr):
         return str(None)
 
     if attr["completed_pods"] is not None:
-        return "{0} active / {1} failed / {2} succeeded / {3} desired".\
-            format(attr["running_pods"], attr["failed_pods"],
-                   attr["completed_pods"], attr["desired_pods"])
+        return "{0} active / {1} failed / {2} succeeded / {3} desired".format(
+            attr["running_pods"],
+            attr["failed_pods"],
+            attr["completed_pods"],
+            attr["desired_pods"],
+        )
     elif attr["desired_pods"] is not None:
-        return "{0} active / {1} desired".\
-            format(attr["running_pods"], attr["desired_pods"])
+        return "{0} active / {1} desired".format(
+            attr["running_pods"], attr["desired_pods"]
+        )
 
 
 def dict_formatter(attr):
