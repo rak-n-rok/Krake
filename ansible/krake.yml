@@ -58,10 +58,23 @@
       gather_timeout: 60
   tasks:
 
-    - name: Wait for Krake VM to show up
-      wait_for_connection:
+#    - name: Wait for Krake VM to show up
+#      wait_for_connection:
+#        timeout: 600
+#        connect_timeout: 15
+
+    - name: Wait for ssh on the Krake VM to become available
+      delegate_to: localhost
+      become: false
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host | default(inventory_hostname) }}"
+        port: 22
+        sleep: 10
         timeout: 600
-        connect_timeout: 15
+        state: started
+      check_mode: false
+      tags:
+      - detect-user
 
     - name: Gathering facts
       setup:
@@ -99,6 +112,7 @@
 
     - name: Add GPG key for kubectl
       ansible.builtin.shell: curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+      ignore_errors: true
 
     - name: Add APT repository for kubectl
       ansible.builtin.shell: echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list

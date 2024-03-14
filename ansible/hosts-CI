@@ -45,7 +45,7 @@ all:
           vpn_cidr: 10.9.0.0/24
           wireguard_peers: []
 
-    microk8s_clusters:
+    minikube_clusters:
       hosts:
         k8s-cluster-$CI_PIPELINE_ID-1:
           name: k8s-cluster-$CI_PIPELINE_ID-1

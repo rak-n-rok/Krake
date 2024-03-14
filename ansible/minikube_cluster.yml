@@ -64,10 +64,23 @@
     authorized_user: ubuntu
   tasks:
 
-    - name: Wait for Minikube VM to show up
-      wait_for_connection:
+#    - name: Wait for Minikube VM to show up
+#      wait_for_connection:
+#        timeout: 600
+#        connect_timeout: 15
+
+    - name: Wait for ssh on the Minikube VM to become available
+      delegate_to: localhost
+      become: false
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host | default(inventory_hostname) }}"
+        port: 22
+        sleep: 10
         timeout: 600
-        connect_timeout: 15
+        state: started
+      check_mode: false
+      tags:
+      - detect-user
 
     - name: Gathering facts
       setup:
@@ -90,12 +103,12 @@
 
     # FIXME: we shouldn't override the system wide pip and setuptools
     - name: Upgrade pip and setuptools to latest version
-      pip:
+      ansible.builtin.pip:
         name:
           - pip
           - setuptools
-      executable: pip3
-      state: latest
+        executable: pip3
+        state: latest
 
     # TODO: Remove once issue is resolved
     #   C&H infra currently suffers from "MTU bug" when typical value of 1500 causes connectivity
@@ -248,11 +261,20 @@
 
     - name: Ensure Minikube cluster is running
       assert:
-        that: "'{{ item }}: Running' in minikube_status.stdout_lines"
-      with_items:
-        - "host"
-        - "kubelet"
-        - "apiserver"
+        that: "'host: Running' in minikube_status.stdout_lines"
+
+    - name: Ensure Minikube cluster is running 2
+      assert:
+        that: "'kubelet: Running' in minikube_status.stdout_lines"
+
+    - name: Ensure Minikube cluster is running 3
+      assert:
+        that: "'apiserver: Running' in minikube_status.stdout_lines"
+
+#      with_items:
+#        - "host"
+#        - "kubelet"
+#        - "apiserver"
 
     - name: Ensure kubectl is configured correctly
       assert:

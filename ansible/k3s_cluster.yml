@@ -61,10 +61,23 @@
     authorized_user: ubuntu
   tasks:
 
-    - name: Wait for k3s VM to show up
-      wait_for_connection:
+#    - name: Wait for k3s VM to show up
+#      wait_for_connection:
+#        timeout: 600
+#        connect_timeout: 15
+
+    - name: Wait for ssh on the k3s VM to become available
+      delegate_to: localhost
+      become: false
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host | default(inventory_hostname) }}"
+        port: 22
+        sleep: 10
         timeout: 600
-        connect_timeout: 15
+        state: started
+      check_mode: false
+      tags:
+      - detect-user
 
     - name: Gathering facts
       setup:
