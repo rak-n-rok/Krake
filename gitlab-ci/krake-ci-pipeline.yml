@@ -253,7 +253,7 @@ e2e-provisioning:
     # - ansible-playbook  ansible/site.yml
     - ansible-playbook  ansible/network.yml
     - ansible-playbook  ansible/gateway.yml
-    - ansible-playbook  ansible/microk8s_cluster.yml
+    - ansible-playbook  ansible/k3s_cluster.yml
     - ansible-playbook  ansible/krake.yml
     - ansible-playbook  ansible/krake_handle_certs.yml
 
