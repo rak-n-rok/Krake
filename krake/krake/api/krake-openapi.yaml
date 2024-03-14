@@ -1,0 +1,1676 @@
+openapi: 3.0.3
+info:
+  title: proposed krake api
+  description:
+    The krake api
+  version: 0.1.0
+servers:
+  - url: https://localhost:8080
+
+paths:
+
+  ################################################
+  #               core api paths                 #
+  ################################################
+  # --- global metrics ---
+  /core/metrics:
+    get:
+      tags:
+      - metrics
+      description: list global metrics
+      responses:
+        "200":
+          $ref: '#/components/responses/MetricList'
+  # --- namespaced metrics ---
+  /core/namespaces/{namespace}/metrics:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    post:
+      tags:
+      - metrics
+      description: create a namespaced metric
+      requestBody:
+        $ref: '#/components/requestBodies/Metric'
+      responses:
+        "200":
+          $ref: '#/components/responses/Metric'
+    get:
+      tags:
+      - metrics
+      description: list namespaced metrics
+      responses:
+        "200":
+          $ref: '#/components/responses/MetricList'
+  /core/namespaces/{namespace}/metrics/{name}:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    - $ref: '#/components/parameters/Name'
+    get:
+      tags:
+        - metrics
+      description: get a namespaced metric
+      responses:
+        "200":
+          $ref: '#/components/responses/Metric'
+    put:
+      tags:
+        - metrics
+      description: update a namespaced metric
+      requestBody:
+        $ref: '#/components/requestBodies/Metric'
+      responses:
+        "200":
+          $ref: '#/components/responses/Metric'
+    delete:
+      tags:
+        - metrics
+      description: delete a namespaced metric
+      responses:
+        "200":
+          $ref: '#/components/responses/Metric'
+  # --- global metrics providers ---
+  /core/metricsproviders:
+    get:
+      tags:
+      - metrics provider
+      description: list global metrics providers
+      responses:
+        "200":
+          $ref: '#/components/responses/MetricsProviderList'
+  # --- namespaced metrcis providers ---
+  /core/namespaces/{namespace}/metricsproviders:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    get:
+      tags:
+      - metrics provider
+      description: list namespaced metrics providers
+      responses:
+        "200":
+          $ref: '#/components/responses/MetricsProviderList'
+    post:
+      tags:
+      - metrics provider
+      description: create a namespaced metrics provider
+      requestBody:
+        $ref: '#/components/requestBodies/MetricsProvider'
+      responses:
+        "200":
+          $ref: '#/components/responses/MetricsProvider'
+  /core/namespaces/{namespace}/metricsproviders/{name}:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    - $ref: '#/components/parameters/Name'
+    get:
+      tags:
+      - metrics provider
+      description: get a namespaced metrics proivder
+      responses:
+        "200":
+          $ref: '#/components/responses/MetricsProvider'
+    put:
+      tags:
+      - metrics provider
+      description: update a namespaced metrics provider
+      requestBody:
+        $ref: '#/components/requestBodies/MetricsProvider'
+      responses:
+        "200":
+          $ref: '#/components/responses/MetricsProvider'
+    delete:
+      tags:
+      - metrics provider
+      description: delete a namespaced metrics provider
+      responses:
+        "200":
+          $ref: '#/components/responses/MetricsProvider'
+  # --- global roles ---
+  /core/roles:
+    get:
+      tags:
+      - roles
+      description: list global roles
+      responses:
+        "200":
+          $ref: '#/components/responses/RoleList'
+  # --- namespaced roles ---
+  /core/namespaces/{namespace}/roles:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    post:
+      tags:
+        - roles
+      description: create a namespaced role
+      requestBody:
+        $ref: '#/components/requestBodies/Role'
+      responses:
+        "200":
+          $ref: '#/components/responses/Role'
+    get:
+      tags:
+      - roles
+      description: list namespaced roles
+      responses:
+        "200":
+          $ref: '#/components/responses/RoleList'
+  /core/namespaces/{namespace}/roles/{name}:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    - $ref: '#/components/parameters/Name'
+    get:
+      tags:
+      - roles
+      description: get a namespaced role
+      responses:
+        "200":
+          $ref: '#/components/responses/Role'
+    put:
+      tags:
+      - roles
+      description: update a namespaced role
+      requestBody:
+        $ref: '#/components/requestBodies/Role'
+      responses:
+        "200":
+          $ref: '#/components/responses/Role'
+    delete:
+      description: delete a namespaced role
+      tags:
+      - roles
+      responses:
+        "200":
+          $ref: '#/components/responses/Role'
+  # --- global role bindings ---
+  /core/rolebindings:
+    get:
+      tags:
+      - role bindings
+      responses:
+        "200":
+          $ref: '#/components/responses/RoleBindingList'
+  # --- namespaced role bindings ---
+  /core/namespaces/{namespace}/rolebindings:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    get:
+      tags:
+      - role bindings
+      description: list namespaced role bindings
+      responses:
+        "200":
+          $ref: '#/components/responses/RoleBindingList'
+    post:
+      tags:
+        - role bindings
+      description: create a namespaced role binding
+      requestBody:
+        $ref: '#/components/requestBodies/RoleBinding'
+      responses:
+        "200":
+          $ref: '#/components/responses/RoleBinding'
+  /core/namespaces/{namespace}/rolebindings/{name}:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    - $ref: '#/components/parameters/Name'
+    get:
+      tags:
+      - role bindings
+      description: get a namespaced role binding
+      responses:
+        "200":
+          $ref: '#/components/responses/RoleBinding'
+    put:
+      tags:
+      - role bindings
+      description: update a namespaced role binding
+      requestBody:
+        $ref: '#/components/requestBodies/RoleBinding'
+      responses:
+        "200":
+          $ref: '#/components/responses/RoleBinding'
+    delete:
+      tags:
+      - role bindings
+      description: delete a namespaced role binding
+      responses:
+        "200":
+          $ref: '#/components/responses/RoleBinding'
+
+  ################################################
+  #       infrastructure api paths               #
+  ################################################
+  
+  # --- global infrastructure providers ---
+  /infrastructure/globalinfrastructureproviders:
+    post:
+      description: creates a global infrastructure provider
+      tags:
+      - infrastructure providers
+      requestBody:
+        $ref: '#/components/requestBodies/InfrastructureProvider'
+      responses:
+        "200":
+          $ref: '#/components/responses/InfrastructureProvider'
+    get:
+      description: list global infrastructure providers
+      tags:
+      - infrastructure providers
+      responses:
+        "200":
+          $ref: '#/components/responses/InfrastructureProviderList'
+  /infrastructure/globalinfrastructureproviders/{name}:
+    parameters:
+    - $ref: '#/components/parameters/Name'
+    delete:
+      description: delete a global infrastructure provider
+      tags:
+      - infrastructure providers
+      responses:
+        "200":
+          $ref: '#/components/responses/InfrastructureProvider'
+    get:
+      description: get a global infrastructure provider
+      tags:
+      - infrastructure providers
+      responses:
+        "200":
+          $ref: '#/components/responses/InfrastructureProvider'
+    put:
+      description: update a global infrastructure provider
+      tags:
+      - infrastructure providers
+      requestBody:
+        $ref: '#/components/requestBodies/InfrastructureProvider'
+      responses:
+        "200":
+          $ref: '#/components/responses/InfrastructureProvider'
+  # --- namespaced infrastructure providers ---
+  /infrastructure/namespaces/{namespace}/infrastructureproviders:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    post:
+      tags:
+      - infrastructure providers
+      description: create a namespaced infrastructure provider
+      requestBody:
+        $ref: '#/components/requestBodies/InfrastructureProvider'
+      responses:
+        "200":
+          $ref: '#/components/responses/InfrastructureProvider'
+    get:
+      tags:
+      - infrastructure providers
+      description: list infrastructure providers
+      responses:
+        "200":
+          $ref: '#/components/responses/InfrastructureProviderList'
+  /infrastructure/namespaces/{namespace}/infrastructureproviders/{name}:
+    parameters:
+    - $ref: '#/components/parameters/Name'
+    - $ref: '#/components/parameters/Namespace'
+    delete:
+      tags:
+      - infrastructure providers
+      description: delete a namespaced infrastructure provider
+      responses:
+        "200":
+          $ref: '#/components/responses/InfrastructureProvider'
+    get:
+      tags:
+      - infrastructure providers
+      description: get a namespaced infrastructure provider
+      responses:
+        "200":
+          $ref: '#/components/responses/InfrastructureProvider'
+    put:
+      tags:
+      - infrastructure providers
+      description: update a namespaced infrastructure provider
+      requestBody:
+        $ref: '#/components/requestBodies/InfrastructureProvider'
+      responses:
+        "200":
+          $ref: '#/components/responses/InfrastructureProvider'
+  # --- global clouds ---
+  /infrastructure/globalcloud:
+    post:
+      tags:
+      - cloud
+      description: create a global cloud
+      requestBody:
+        $ref: '#/components/requestBodies/CloudRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/Cloud'
+    get:
+      tags:
+      - cloud
+      description: list global clouds
+      responses:
+        "200":
+          $ref: '#/components/responses/Cloud'
+  /infrastructure/globalclouds/{name}:
+    parameters:
+    - $ref: '#/components/parameters/Name'
+    delete:
+      tags:
+      - cloud
+      description: delete a global cloud
+      responses:
+        "200":
+          $ref: '#/components/responses/Cloud'
+    get:
+      tags:
+      - cloud
+      description: get a global cloud
+      responses:
+        "200":
+          $ref: '#/components/responses/Cloud'
+    put:
+      tags:
+      - cloud
+      description: update a global cloud
+      requestBody:
+        $ref: '#/components/requestBodies/Cloud'
+      responses:
+        "200":
+          $ref: '#/components/responses/Cloud'
+  # --- namespaced clouds ---
+  /infrastructure/namespaces/{namespace}/cloud:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    post:
+      tags:
+      - cloud
+      description: create a namespaced cloud
+      requestBody:
+        $ref: '#/components/requestBodies/CloudRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/Cloud'
+    get:
+      description: list namespaced clouds
+      tags:
+      - cloud
+      responses:
+        "200":
+          $ref: '#/components/responses/Cloud'
+  /infrastructure/namespaces/{namespace}/clouds/{name}:
+    parameters:
+    - $ref: '#/components/parameters/Name'
+    - $ref: '#/components/parameters/Namespace'
+    delete:
+      tags:
+      - cloud
+      description: delete a namespaced cloud
+      responses:
+        "200":
+          $ref: '#/components/responses/Cloud'
+    get:
+      tags:
+      - cloud
+      description: get a namespaced cloud
+      responses:
+        "200":
+          $ref: '#/components/responses/Cloud'
+    put:
+      tags:
+      - cloud
+      description: update a namespaced cloud
+      requestBody:
+        $ref: '#/components/requestBodies/CloudRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/Cloud'
+  # --- update status of global cloud ---
+  /infrastructure/globalclouds/{name}/status:
+    parameters:
+    - $ref: '#/components/parameters/Name'
+    put:
+      tags:
+      - cloud
+      description: update the status of a global cloud
+      requestBody:
+        $ref: '#/components/requestBodies/Cloud'
+      responses:
+        "200":
+          $ref: '#/components/responses/Cloud'
+  # --- update status of namespaced cloud ---
+  /infrastructure/namespaces/{namespace}/clouds/{name}/status:
+  # TODO taking the status object as request would suffice
+    parameters:
+    - $ref: '#/components/parameters/Name'
+    - $ref: '#/components/parameters/Namespace'
+    put:
+      tags:
+      - cloud
+      description: update the status of a namespaced cloud
+      requestBody:
+        $ref: '#/components/requestBodies/Cloud'
+      responses:
+        "200":
+          $ref: '#/components/responses/Cloud'
+
+  ################################################
+  #           kubernetes api paths               #
+  ################################################
+
+  # --- kubernetes applications ---
+  /kubernetes/namespaces/{namespace}/applications:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    post:
+      tags:
+      - applications
+      description: create a kubernetes application
+      requestBody:
+        $ref: '#/components/requestBodies/Application'
+      responses:
+        "200":
+          $ref: '#/components/responses/Application'
+    get:
+      tags:
+      - applications
+      description: list kubernetes applications
+      responses:
+        "200":
+          $ref: '#/components/responses/ApplicationList'
+  /kubernetes/namespaces/{namespace}/applications/{name}:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    - $ref: '#/components/parameters/Name'
+    delete:
+      tags:
+      - applications
+      description: delete a kubernetes application
+      responses:
+        "200":
+          $ref: '#/components/responses/Application'
+    get:
+      tags:
+      - applications
+      description: get a kubernetes application
+      responses:
+        "200":
+          $ref: '#/components/responses/Application'
+    put:
+      tags:
+      - applications
+      description: update a kubernetes application
+      requestBody:
+        $ref: '#/components/requestBodies/Application'
+      responses:
+        "200":
+          $ref: '#/components/responses/Application'
+  # --- bind a kubernetes application to a cluster ---
+  /kubernetes/namespaces/{namespace}/applications/{name}/binding:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    - $ref: '#/components/parameters/Name'
+    put:
+      tags:
+      - application
+      description: bind a kubernetes application to a cluster
+      requestBody:
+        $ref: '#/components/requestBodies/ClusterBinding'
+      responses:
+        "200":
+          $ref: '#/components/responses/Application'
+  # --- kubernetes set application completed ---
+  /kubernetes/namespaces/{namespace}/applications/{name}/complete:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    - $ref: '#/components/parameters/Name'
+    put:
+      tags:
+      - applications
+      description: set a kubernetes application completed
+      requestBody:
+        $ref: '#/components/requestBodies/ApplicationStateChange'
+      responses:
+        "200":
+          $ref: '#/components/responses/Application'
+  # --- kubernetes schedule application shutdown --- 
+  /kubernetes/namespaces/{namespace}/applications/{name}/shutdown:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    - $ref: '#/components/parameters/Name'
+    put:
+      tags:
+      - applications
+      description: schedule kubernetes application shutdown
+      requestBody:
+        $ref: '#/components/requestBodies/ApplicationStateChange'
+      responses:
+        "200":
+          $ref: '#/components/responses/Application'
+  # --- kubernetes retry application shutdown ---
+  /kubernetes/namespaces/{namespace}/applications/{name}/retry:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    - $ref: '#/components/parameters/Name'
+    put:
+      tags:
+      - applications
+      description: retry kubernetes application shutdown
+      requestBody:
+        $ref: '#/components/requestBodies/ApplicationStateChange'
+      responses:
+        "200":
+          $ref: '#/components/responses/Application'
+  # --- kubernetes update application status ---
+  /kubernetes/namespaces/{namespace}/applications/{name}/status:
+    # TODO taking the status object as request would suffice
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    - $ref: '#/components/parameters/Name'
+    put:
+      tags:
+      - applications
+      description: update status of a kubernetes application
+      requestBody:
+        $ref: '#/components/requestBodies/Application'
+      responses:
+        "200":
+          $ref: '#/components/responses/Application'
+  # --- kubernetes cluster ---
+  /kubernetes/namespaces/{namespace}/clusters:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    post:
+      tags:
+      - cluster
+      description: create a kubernetes cluster
+      requestBody:
+        $ref: '#/components/requestBodies/ClusterRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/Cluster'
+    get:
+      tags:
+      - cluster
+      description: list kubernetes clusters
+      responses:
+        "200":
+          $ref: '#/components/responses/ClusterList'
+  /kubernetes/namespaces/{namespace}/clusters/{name}:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    - $ref: '#/components/parameters/Name'
+    delete:
+      tags:
+      - cluster
+      description: delete a kubernetes cluster
+      responses:
+        "200":
+          $ref: '#/components/responses/Cluster'
+    get:
+      tags:
+      - cluster
+      description: get a kubernetes cluster
+      responses:
+        "200":
+          $ref: '#/components/responses/Cluster'
+    put:
+      tags:
+      - cluster
+      description: update a kubernetes cluster
+      requestBody:
+        $ref: '#/components/requestBodies/ClusterRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/Cluster'
+  # --- bind cloud to cluster ---
+  /kubernetes/namespaces/{namespace}/clusters/{name}/binding:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    - $ref: '#/components/parameters/Name'
+    put:
+      tags:
+      - cluster
+      description: bind a kubernetes cluster to a cloud
+      requestBody:
+        $ref: '#/components/requestBodies/CloudBinding'
+      responses:
+        "200":
+          $ref: '#/components/responses/Cluster'
+  # --- update cluster status ---
+  /kubernetes/namespaces/{namespace}/clusters/{name}/status:
+    parameters:
+    - $ref: '#/components/parameters/Namespace'
+    - $ref: '#/components/parameters/Name'
+    put:
+      tags:
+      - cluster
+      description: update the status of a kubernetes cluster
+      requestBody:
+        $ref: '#/components/requestBodies/Cluster'
+      responses:
+        "200":
+          $ref: '#/components/responses/Cluster'
+components:
+  parameters:
+    Namespace:
+      in: path
+      name: namespace
+      schema:
+        type: string
+      required: true
+      description: The namespace the command/query is performed in
+    Name:
+      in: path
+      name: name
+      schema:
+        type: string
+      required: true
+      description: The name of the resource to perform the command/query on
+
+  requestBodies:
+    Metric:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Metric'
+    MetricsProvider:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MetricsProvider'
+    Role:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Role'
+    RoleBinding:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RoleBinding'
+    InfrastructureProvider:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InfrastructureProvider'
+    CloudRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CloudRequest'
+    Cloud:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Cloud'
+    Application:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Application'
+    ClusterBinding:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ClusterBinding'
+    ApplicationStateChange:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApplicationStateChange'
+    Cluster:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Cluster'
+    ClusterRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ClusterRequest'
+    CloudBinding:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CloudBinding'
+
+  responses:
+    MetricList:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MetricList'
+    Metric:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Metric'
+    MetricsProviderList:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MetricsProviderList'
+    MetricsProvider:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MetricsProvider'
+    RoleList:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RoleList'
+    Role:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Role'
+    RoleBindingList:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RoleBindingList'
+    RoleBinding:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RoleBinding'
+    InfrastructureProvider:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InfrastructureProvider'
+    InfrastructureProviderList:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InfrastructureProviderList'
+    Cloud:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Cloud'
+    Application:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Application'
+    ApplicationList:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApplicationList'
+    Cluster:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Cluster'
+    ClusterList:
+      description: ok
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ClusterList'
+    
+
+  schemas:
+    # common abstractions
+    ResourceRef:
+      type: object
+      properties:
+        api:
+          type: string
+        namespace: 
+          type: string 
+          description: non-namespaced is represented with null
+        kind: 
+          type: string
+        name: 
+          type: string
+    BaseResourceList:
+      type: object
+      required:
+      - api
+      - kind
+      properties:
+        api:
+          type: string
+        kind:
+          type: string
+    BaseResource:
+      type: object
+      required:
+      - api
+      - kind
+      - metadata
+      properties:
+        api:
+          type: string
+        kind:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+    Metadata:
+      type: object
+      required:
+      - name
+      - namespace
+      - uid
+      - finalizers
+      - created
+      - modified
+      - deletionState
+      - metadata
+      - inherit_labels
+      properties:
+        uid:
+          type: string
+          format: uuid
+        name:
+          type: string
+        namespace:
+          type: string
+          description:
+            global is reserved for global resources
+        created:
+          type: string
+          format: date-time
+        modified:
+          type: string
+          format: date-time
+        deletionState:
+          type: object
+          oneOf:
+          - $ref: '#/components/schemas/DeletionState'
+          - $ref: '#/components/schemas/DeletionStateDeleted'
+          discriminator:
+            propertyName: deleted
+        owners:
+          type: array
+          items:
+            type: string
+        labels:
+          type: array
+          items:
+            $ref: '#/components/schemas/Label'
+        inherit_labels:
+          type: boolean
+          example: false
+        finalizers:
+          type: array
+          items:
+            type: string
+    Label:
+      type: object
+      required:
+      - key
+      - value
+      properties:
+        key:
+          type: string
+        value:
+          type: string
+    # metrics
+    MetricList:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResourceList'
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Metric'
+    Metric:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResource'
+      required:
+      - spec
+      properties:
+        spec:
+          $ref: '#/components/schemas/MetricSpec'
+    MetricSpec:
+      type: object
+      required:
+      -  allowed_values
+      -  min
+      -  max
+      -  provider
+      properties:
+        allowed_values:
+          type: array
+          items:
+            type: integer
+        min:
+          type: number
+          format: float
+        max:
+          type: number
+          format: float
+        provider:
+          $ref: '#/components/schemas/MetricSpecProvider'
+    MetricSpecProvider:
+      type: object
+      properties:
+        name:
+          type: string
+        metric:
+          type: string
+    # metric providers
+    MetricsProviderList:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResourceList'
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricsProvider'
+    MetricsProvider:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResource'
+      required:
+      - spec
+      properties:
+        spec:
+          $ref: '#/components/schemas/MetricProviderSpec'
+    MetricProviderSpec:
+      type: object
+      oneOf:
+      - $ref: '#/components/schemas/PrometheusMetricProviderSpec'
+      - $ref: '#/components/schemas/InfluxDBMetricProviderSpec'
+      - $ref: '#/components/schemas/StaticMetricProviderSpec'
+      - $ref: '#/components/schemas/KafkaMetricProviderSpec'
+    PrometheusMetricProviderSpec:
+      type: object
+      required:
+      - type
+      - prometheus
+      properties:
+        type:
+          type: string
+          example: "prometheus"
+        prometheus:
+          type: object
+          required:
+          - url
+          properties:
+            url:
+              type: string
+              format: url
+              example: "http://localhost:1234"
+    InfluxDBMetricProviderSpec:
+      type: object
+      required:
+      - type
+      properties:
+        type:
+          type: string
+          example: influx
+        influx:
+          type: object
+          required:
+          - url
+          - token
+          - org
+          - bucket
+          properties:
+            url:
+              type: string
+              format: url
+            token:
+              type: string
+              format: password
+            org:
+              type: string
+            bucket:
+              type: string
+    StaticMetricProviderSpec:
+      type: object
+      required:
+      - type
+      - static
+      properties:
+        type:
+          type: string
+          example: "static"
+        metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaticMetric'
+    StaticMetric:
+      type: object
+      required:
+      - name
+      - value
+      properties:
+        name:
+          type: string
+        value:
+          type: number
+          format: float
+    KafkaMetricProviderSpec:
+      type: object
+      required:
+      - type
+      properties:
+        type:
+          type: string
+          example: "kafka"
+        kafka:
+          type: object
+          required:
+          - url
+          - table
+          - comparison_column
+          - value_column
+          properties:
+            url:
+              type: string
+              format: url
+            table:
+              type: string
+            comparison_column:
+              type: string
+            value_column:
+              type: string
+    # roles and role bindings
+    RoleList:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResourceList'
+      properties:
+        rules:
+          type: array
+          items:
+              $ref: '#/components/schemas/Role'
+    Role:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResource'
+      properties:
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/Rule'
+    Rule:
+      type: object
+      required:
+      - api
+      - resources
+      - namespaces
+      - verbs
+      properties:
+        api:
+          type: string
+        resources:
+          type: array
+          items:
+            type: string
+        namespaces:
+          type: array
+          items:
+            type: string
+        verbs:
+          type: array
+          items:
+            type: string
+    RoleBindingList:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResourceList'
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleBinding'
+    RoleBinding:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResource'
+      properties:
+        users:
+          type: array
+          items:
+            type: string
+        roles:
+          type: array
+          items:
+            type: string
+    DeletionState:
+      type: object
+      required:
+      - deleted
+      properties:
+        deleted:
+          type: boolean
+    DeletionStateDeleted:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/DeletionState'
+      required:
+      - deletionTime
+      properties:
+        deletionTime:
+          type: string
+          format: date-time
+    # infrastructure provider
+    InfrastructureProviderSpec:
+      type: object
+      oneOf:
+      - $ref: '#/components/schemas/IMInfrastructureProviderSpec'
+      discriminator:  
+        propertyName: type
+    IMInfrastructureProviderSpec:
+      type: object
+      properties:
+        type:
+          type: string
+          example: im
+        im:
+          type: object
+          required:
+          - url
+          - username
+          - password
+          properties:
+            url: 
+              type: string
+              format: url
+              example: localhost:12345
+            username:
+              type: string
+              example: user
+              description: must be supplied with a password, if token is not
+            password: 
+              type: string
+              example: password
+              description: must be supplied with a username, if token is no
+            token:
+              type: string
+              format: byte
+              description: must be supplied, if username/password are not
+    InfrastructureProvider:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResource'
+      properties:
+        infrastructureProviderSpec:
+          $ref: '#/components/schemas/InfrastructureProviderSpec'
+    InfrastructureProviderList:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResourceList'
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InfrastructureProvider'
+    CloudRequest:
+      type: object
+      description: When registering a cloud (cloud request) the state is not defined
+      allOf:
+      - $ref: '#/components/schemas/BaseResource'
+      properties:
+        spec:
+          $ref: '#/components/schemas/CloudSpec'
+    Cloud:
+      type: object
+      description: After registration of a cloud (cloud request), the state is defined 
+      allOf:
+      - $ref: '#/components/schemas/CloudRequest'
+      properties:
+        status:
+          $ref: '#/components/schemas/CloudStatus'
+    CloudStatus:
+      type: object
+      properties:
+        metrics_reasons:
+          # TODO this should be an array, see class CloudStatus
+          type: object
+        state:
+          type: string
+          enum:
+          - ONLINE
+          - FAILING_METRICS
+    CloudSpec:
+      type: object
+      oneOf:
+      - $ref: '#/components/schemas/OpenstackCloudSpec'
+      discriminator:
+        propertyName: type
+    OpenstackCloudSpec:
+      type: object
+      properties:
+        type:
+          type: string
+          example: openstack
+        openstack:
+          type: object
+          properties:
+            auth:
+              $ref: '#/components/schemas/CloudAuth'
+            infrastructure_provider:
+              $ref: '#/components/schemas/InfrastructureProviderRef'
+        metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/Metric'
+        url:
+          type: string
+          format: url
+          example: localhost:12345
+    InfrastructureProviderRef:
+      type: object
+      properties:
+        name:
+          type: string
+        namespaced:
+          type: boolean
+    CloudAuth:
+      type: object
+      oneOf:
+      - $ref: '#/components/schemas/PasswordCloudAuth'
+      discriminator:
+        propertyName: type
+    PasswordCloudAuth:
+      type: object
+      properties:
+        type:
+          type: string
+          example: password
+        password:
+          type: object
+          properties:
+            project:
+              $ref: '#/components/schemas/ProjectRef'
+            user:
+              $ref: '#/components/schemas/UserRef'
+            version:
+              type: string
+              example: "3"
+    UserRef:
+      type: object
+      required:
+      - username
+      - password
+      - domain_name
+      properties:
+        username:
+          type: string
+          example: user
+        password:
+          type: string
+          example: pass
+        domain_name:
+          type: string
+          example: Default
+        comment:
+         type: string
+    ProjectRef:
+      type: object
+      required:
+      - name
+      - domain_id
+      properties:
+        name:
+          type: string
+        domain_id:
+          type: string
+        comment:
+          type: string
+    # kubernetes application
+    Application:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResource'
+      properties:
+        spec:
+          $ref: '#/components/schemas/ApplicationSpec'
+        status:
+          type: object
+    ApplicationSpec:
+      type: object
+      required:
+      - auto_cluster_create # boolean
+      - backoff
+      - backoff_delay
+      - backoff_limit
+      description: one of manifest, tosca, csar must be supplied
+      properties:
+        manifest:
+          type: object
+        tosca:
+          oneOf:
+          - type: string
+            format: url
+            example: localhost:12345/tosca.yaml
+            description: file extension must be yml/yaml
+          - type: object
+            description: tosca configuration schema
+        csar:
+          type: object
+        observer_schema:
+          type: object
+        constraints:
+          $ref: '#/components/schemas/ApplicationConstraints'
+        hooks:
+          type: array
+          items:
+            type: string
+        shutdown_grace_time:
+          type: integer
+          example: 30
+          description: seconds, default 30
+        backoff:
+          type: integer
+          example: 1
+          description: default 1
+        backoff_delay:
+          type: integer
+          example: 1
+          description: seconds, default 1
+        backoff_limit:
+          type: integer
+          example: -1
+          description: seconds, default -1
+        storage_migration:
+          type: string
+          example: none
+        auto_cluster_create:
+          type: boolean
+          example: false
+          description: default false
+    ApplicationConstraints:
+      type: object
+      required:
+      - migration # boolean
+      - cluster
+      properties:
+        migration:
+          type: boolean
+          example: true
+          description: default true
+        cluster:
+          $ref: '#/components/schemas/ClusterConstraints'
+    ClusterConstraints:
+      type: object
+      properties:
+        custom_resources:
+          type: array
+          items:
+            type: string
+        labels:
+          type: array
+          items:
+            $ref: '#/components/schemas/LabelConstraint'
+        metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricConstraint'
+    LabelConstraint:
+      type: object
+      properties:
+        label:
+          type: string
+        value:
+          type: string
+    MetricConstraint:
+      type: object
+      properties:
+        metric:
+          type: string
+        value:
+          type: number
+    ### TODO ###
+    # ApplicationStatus
+    ApplicationList:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResourceList'
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Application'
+    # kubernetes application cluster binding
+    ClusterBinding:
+      type: object
+      required:
+      - api
+      - kind
+      - cluster
+      properties:
+        api:
+          type: string
+        kind:
+          type: string
+        cluster:
+          $ref: '#/components/schemas/ResourceRef'
+    # kubernetes application completeness/shutdown
+    ApplicationStateChange:
+      type: object
+      required:
+      - api
+      - kind
+      properties:
+        api:
+          type: string
+          example: kubernetes
+        kind:
+          type: string
+          enum:
+          - Complete
+          - Shutdown
+          example: Complete
+        token:
+          type: string
+          format: byte
+    # kubernetes cluster
+    ClusterRequest:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResource'
+      required:
+      - spec
+      properties:
+        spec:
+          type: object
+    Cluster:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/ClusterRequest'
+      required:
+      - status
+      properties:
+        status:
+          $ref: '#/components/schemas/ClusterStatus'
+    ClusterSpec:
+      type: object
+      properties:
+        kubeconfig:
+          type: object
+        tosca:
+          oneOf:
+          - type: string
+            format: url
+            example: localhost:12345/tosca.yaml
+            description: file extension must be yml/yaml
+          - type: object
+            description: tosca configuration schema
+        constraints:
+            $ref: '#/components/schemas/ClusterCloudConstraints'
+        custom_resources:
+          type: array
+          items:
+            type: string
+        metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/Metric'
+        inherit_metrics:
+          type: boolean
+          example: false
+          description: default false
+        backoff:
+          type: integer
+          example: 1
+          description: default 1
+        backoff_delay:
+          type: integer
+          example: 1
+          description: seconds, default 1
+        backoff_limit:
+          type: integer
+          example: -1
+          description: default -1
+        auto_generated:
+          type: boolean
+          example: false
+          description: default false
+    CloudConstraints:
+      type: object
+      properties:
+        labels: 
+          type: array
+          items: 
+            $ref: '#/components/schemas/LabelConstraint'
+        metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricConstraint'
+    ClusterCloudConstraints:
+      properties:
+        cloud:
+          $ref: '#/components/schemas/CloudConstraints'
+    ClusterStatus:
+      type: object
+      properties:
+        kube_controller_triggered:
+          type: string
+          format: date-time
+        state:
+          type: string
+          enum:
+          - PENDING
+          - ONLINE
+          - CONNECTING
+          - OFFLINE
+          - UNHEALTHY
+          - NOTREADY
+          - FAILING_METRICS
+          - CREATING
+          - RECONCILING
+          - DELETING
+          - FAILING_RECONCILIATION
+          - FAILED
+          - DEGRADED
+        metrics_reason:
+          # TODO should be array
+          type: object
+        last_applied_tosca:
+          oneOf:
+          - type: string
+            format: url
+            example: localhost:12345/tosca.yaml
+            description: file extension must be yml/yaml
+          - type: object
+            description: tosca configuration schema
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClusterNode'
+        cluster_id:
+          type: string
+        scheduled:
+          type: string
+          format: date-time
+        scheduled_to:
+          $ref: '#/components/schemas/ResourceRef'
+        running_on:
+          $ref: '#/components/schemas/ResourceRef'
+        retries:
+          type: integer
+    ClusterNode:
+      type: object
+      required:
+      - api
+      - kind
+      - metadata
+      - status
+      properties:
+        api: 
+          type: string
+          example: kubernetes
+        kind: 
+          type: string
+          example: CluserNode
+        metadata: 
+          type: object
+          required:
+          - name
+          properties:
+            name:
+              type: string #ClusterNodeMetadata
+        status: 
+          $ref: '#/components/schemas/ClusterNodeStatus'
+    ClusterNodeStatus:
+      type: object
+      properties:
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClusterNodeCondition'
+    ClusterNodeCondition:
+      type: object
+      required:
+      - message
+      - reason
+      - status
+      - type
+      properties:
+        message: 
+          type: string
+        reason: 
+          type: string
+        status: 
+          type: string
+        type: 
+          type: string
+    ClusterList:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/BaseResourceList'
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Cluster'
+    CloudBinding:
+      type: object
+      properties:
+        api: 
+          type: string
+          example: kubernetes
+        kind: 
+          type: string 
+          example: CloudBinding
+        cloud: 
+          $ref: '#/components/schemas/ResourceRef'
