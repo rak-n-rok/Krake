@@ -1,7 +1,7 @@
-"""This module defines the Hook Dispatcher and listeners for registering and
-executing hooks. Hook Dispatcher emits hooks based on :class:`Hook` attributes which
-define when the hook will be executed.
+"""This module defines the Hook Dispatcher and listeners for registering and executing hooks.
 
+Hook Dispatcher emits hooks based on :class:`Hook` attributes which define when the hook
+will be executed.
 """
 import asyncio
 import logging
@@ -1578,6 +1578,118 @@ class Hook(object):
             is_sub_resource=True,
         )
 
+    def _inject(
+            self,
+            sub_resource,
+            sub_resource_to_mangle,
+            observed_resource_to_mangle):
+        """Inject a hooks defined sub-resource into a Kubernetes sub-resource.
+
+        Args:
+            sub_resource (SubResource): Hook sub-resource that needs to be injected
+                into :attr:`last_applied_manifest`
+            sub_resource_to_mangle (object): Kubernetes sub-resources from
+                :attr:`last_applied_manifest` which need to be processed
+            observed_resource_to_mangle (dict): partial mangled_observer_schema
+                corresponding to the Kubernetes sub-resource.
+
+        Raises:
+            InvalidManifestError: if the sub-resource which will be mangled is not a
+                list or a dict.
+
+        """
+
+        # Create sub-resource group if not present in the Kubernetes sub-resource
+        if sub_resource.group not in sub_resource_to_mangle:
+            # FIXME: This assumes the subresource group contains a list
+            sub_resource_to_mangle.update({sub_resource.group: []})
+
+        # Create sub-resource group if not present in the observed fields
+        if sub_resource.group not in observed_resource_to_mangle:
+            observed_resource_to_mangle.update(
+                {
+                    sub_resource.group: [
+                        {
+                            "observer_schema_list_min_length": 0,
+                            "observer_schema_list_max_length": 0,
+                        }
+                    ]
+                }
+            )
+
+        # Inject sub-resource
+        # If sub-resource name is already there update it, if not, append it
+        if sub_resource.name in [
+            g["name"] for g in sub_resource_to_mangle[sub_resource.group]
+        ]:
+            # FIXME: Assuming we are dealing with a list
+            for idx, item in enumerate(sub_resource_to_mangle[sub_resource.group]):
+                if item["name"]:
+                    if hasattr(item, "body"):
+                        sub_resource_to_mangle[item.group][idx] = item["body"]
+        else:
+            sub_resource_to_mangle[sub_resource.group].append(sub_resource.body)
+
+        # Make sure the value is observed
+        if sub_resource.name not in [
+            g["name"] for g in observed_resource_to_mangle[sub_resource.group][:-1]
+        ]:
+            observed_resource_to_mangle[sub_resource.group].insert(
+                -1, generate_default_observer_schema_dict(sub_resource.body)
+            )
+            observed_resource_to_mangle[sub_resource.group][-1][
+                "observer_schema_list_min_length"
+            ] += 1
+            observed_resource_to_mangle[sub_resource.group][-1][
+                "observer_schema_list_max_length"
+            ] += 1
+        return sub_resource_to_mangle, observed_resource_to_mangle
+
+    def _inject_list(
+            self,
+            sub_resource,
+            sub_resources_to_mangle,
+            observed_sub_resources):
+        for idx, sub_resource_to_mangle in enumerate(
+            sub_resources_to_mangle
+        ):
+
+            # Ensure that each element of the list is observed.
+            idx_observed = idx
+            if idx >= len(observed_sub_resources[:-1]):
+                idx_observed = len(observed_sub_resources[:-1])
+                # FIXME: Assuming each element of the list contains a
+                # dictionary, therefore initializing new elements with an
+                # empty dict
+                observed_sub_resources.insert(-1, {})
+            observed_sub_resource = observed_sub_resources[idx_observed]
+
+            # FIXME: This is assuming a list always contains dict
+            sub_resource_to_mangle, observed_sub_resource = self._inject(
+                sub_resource, sub_resource_to_mangle, observed_sub_resource
+            )
+        return sub_resource_to_mangle, observed_sub_resource
+
+    def _path_of_observed_sub_resource(self, mangled_observer_schema, resource, keys):
+        """
+        Create the path to the observed sub-resource, if it doesn't yet exist.
+        """
+        idx_observed = get_kubernetes_resource_idx(
+            mangled_observer_schema, resource
+        )
+        try:
+            observed_sub_resources = reduce(
+                getitem, keys, mangled_observer_schema[idx_observed]
+            )
+        except KeyError:
+            Complete.create_path(
+                mangled_observer_schema[idx_observed], list(keys)
+            )
+            observed_sub_resources = reduce(
+                getitem, keys, mangled_observer_schema[idx_observed]
+            )
+        return observed_sub_resources
+
     def mangle(
         self,
         items,
@@ -1716,68 +1828,6 @@ class Hook(object):
                 )
             return
 
-        def inject(sub_resource, sub_resource_to_mangle, observed_resource_to_mangle):
-            """Inject a hooks defined sub-resource into a Kubernetes sub-resource.
-
-            Args:
-                sub_resource (SubResource): Hook sub-resource that needs to be injected
-                    into :attr:`last_applied_manifest`
-                sub_resource_to_mangle (object): Kubernetes sub-resources from
-                    :attr:`last_applied_manifest` which need to be processed
-                observed_resource_to_mangle (dict): partial mangled_observer_schema
-                    corresponding to the Kubernetes sub-resource.
-
-            Raises:
-                InvalidManifestError: if the sub-resource which will be mangled is not a
-                    list or a dict.
-
-            """
-
-            # Create sub-resource group if not present in the Kubernetes sub-resource
-            if sub_resource.group not in sub_resource_to_mangle:
-                # FIXME: This assumes the subresource group contains a list
-                sub_resource_to_mangle.update({sub_resource.group: []})
-
-            # Create sub-resource group if not present in the observed fields
-            if sub_resource.group not in observed_resource_to_mangle:
-                observed_resource_to_mangle.update(
-                    {
-                        sub_resource.group: [
-                            {
-                                "observer_schema_list_min_length": 0,
-                                "observer_schema_list_max_length": 0,
-                            }
-                        ]
-                    }
-                )
-
-            # Inject sub-resource
-            # If sub-resource name is already there update it, if not, append it
-            if sub_resource.name in [
-                g["name"] for g in sub_resource_to_mangle[sub_resource.group]
-            ]:
-                # FIXME: Assuming we are dealing with a list
-                for idx, item in enumerate(sub_resource_to_mangle[sub_resource.group]):
-                    if item["name"]:
-                        if hasattr(item, "body"):
-                            sub_resource_to_mangle[item.group][idx] = item["body"]
-            else:
-                sub_resource_to_mangle[sub_resource.group].append(sub_resource.body)
-
-            # Make sure the value is observed
-            if sub_resource.name not in [
-                g["name"] for g in observed_resource_to_mangle[sub_resource.group][:-1]
-            ]:
-                observed_resource_to_mangle[sub_resource.group].insert(
-                    -1, generate_default_observer_schema_dict(sub_resource.body)
-                )
-                observed_resource_to_mangle[sub_resource.group][-1][
-                    "observer_schema_list_min_length"
-                ] += 1
-                observed_resource_to_mangle[sub_resource.group][-1][
-                    "observer_schema_list_max_length"
-                ] += 1
-
         for resource in last_applied_manifest:
             # Complete hook is applied only on defined Kubernetes resources
             if resource["kind"] not in self.hook_resources:
@@ -1785,9 +1835,6 @@ class Hook(object):
 
             for sub_resource in items:
                 sub_resources_to_mangle = None
-                idx_observed = get_kubernetes_resource_idx(
-                    mangled_observer_schema, resource
-                )
                 for keys in sub_resource.path:
                     try:
                         sub_resources_to_mangle = reduce(getitem, keys, resource)
@@ -1797,40 +1844,17 @@ class Hook(object):
                     break
 
                 # Create the path to the observed sub-resource, if it doesn't yet exist
-                try:
-                    observed_sub_resources = reduce(
-                        getitem, keys, mangled_observer_schema[idx_observed]
-                    )
-                except KeyError:
-                    Complete.create_path(
-                        mangled_observer_schema[idx_observed], list(keys)
-                    )
-                    observed_sub_resources = reduce(
-                        getitem, keys, mangled_observer_schema[idx_observed]
-                    )
+                observed_sub_resources = self._path_of_observed_sub_resource(
+                    mangled_observer_schema, resource, keys
+                )
 
                 if isinstance(sub_resources_to_mangle, list):
-                    for idx, sub_resource_to_mangle in enumerate(
-                        sub_resources_to_mangle
-                    ):
-
-                        # Ensure that each element of the list is observed.
-                        idx_observed = idx
-                        if idx >= len(observed_sub_resources[:-1]):
-                            idx_observed = len(observed_sub_resources[:-1])
-                            # FIXME: Assuming each element of the list contains a
-                            # dictionary, therefore initializing new elements with an
-                            # empty dict
-                            observed_sub_resources.insert(-1, {})
-                        observed_sub_resource = observed_sub_resources[idx_observed]
-
-                        # FIXME: This is assuming a list always contains dict
-                        inject(
-                            sub_resource, sub_resource_to_mangle, observed_sub_resource
-                        )
+                    sub_resources_to_mangle, observed_sub_resources = self._inject_list(
+                        sub_resource, sub_resources_to_mangle, observed_sub_resources
+                    )
 
                 elif isinstance(sub_resources_to_mangle, dict):
-                    inject(
+                    sub_resources_to_mangle, observed_sub_resources = self._inject(
                         sub_resource, sub_resources_to_mangle, observed_sub_resources
                     )
 
