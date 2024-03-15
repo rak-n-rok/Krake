@@ -426,6 +426,76 @@ class Handler(object):
                 body=resource,
             )
 
+# TODO very unsure about the "asyncness" and readability of this,
+# maybe verschlimmbessert
+    async def _convert_reasons(self, fetched, reasons, errors, metrics, resource):
+        """
+        Convert errors which occurred when fetching the values of remaining metrics into
+        Reason instances.
+
+        For this, the next occurrence of "None" inside the "reasons" list is used.
+        Each one of this occurrence corresponds to a task for fetching the metric. So
+        if for example the 3rd element in "fetched" is an error, the 3rd "None" in
+        "reasons" must be replaced.
+        """
+        none_reason_iter = (i for i, reason in enumerate(reasons) if reason is None)
+        for result in fetched:
+            # Get the index of the next "None" inside "reasons".
+            index_of_none = next(none_reason_iter)
+            if isinstance(result, Exception):
+                reasons[index_of_none] = self.metrics_reason_from_err(result)
+                errors.append(result)
+
+        stopped = False
+        try:
+            next(none_reason_iter)
+        except StopIteration:
+            stopped = True
+        assert stopped
+
+        if any(reasons):
+            # If there is any issue with a metric, skip stop the generator.
+            await self.update_resource_status(resource, metrics, reasons)
+            for error in errors:
+                if error:
+                    logger.error(error)
+            logger.info("Stopping reasons conversion at %r %r",
+                        resource.kind, resource.name
+                        )
+            raise Exception()
+        else:
+            if resource.kind == Cluster.kind and \
+               resource.status.state == ClusterState.FAILING_METRICS:
+                resource.status.state = ClusterState.ONLINE
+                resource.status.reason = None
+                await self.api.update_cluster_status(
+                    namespace=resource.metadata.namespace,
+                    name=resource.metadata.name,
+                    body=resource,
+                )
+
+            if resource.kind == Cloud.kind or resource.kind == GlobalCloud.kind and \
+               resource.status.state == CloudState.FAILING_METRICS:
+                resource.status.state = CloudState.ONLINE
+                resource.status.reason = None
+                if resource.kind == Cloud.kind:
+                    await self.infrastructure_api.update_cloud_status(
+                        namespace=resource.metadata.namespace,
+                        name=resource.metadata.name,
+                        body=resource,
+                    )
+                if resource.kind == GlobalCloud.kind:
+                    await self.infrastructure_api.update_global_cloud_status(
+                        name=resource.metadata.name,
+                        body=resource,
+                    )
+
+        for metric, weight, value in fetched:
+            logger.debug(
+                "Received metric %r with value %r for %r", metric, value, resource
+            )
+        return fetched
+
     async def fetch_metrics(self, resource, metrics):
         """Async generator for fetching metrics by the given list of metric
         references.
@@ -509,68 +579,12 @@ class Handler(object):
                 errors.append(err)
 
         fetched = await asyncio.gather(*fetching, return_exceptions=True)
-
-        # Convert the errors which occurred when fetching the value of the remaining
-        # metrics into Reason instances.
-        # For this, the next occurrence of "None" inside the "reasons" list is used.
-        # Each one of this occurrence corresponds to a task for fetching the metric. So
-        # if for example the 3rd element in "fetched" is an error, the 3rd "None" in
-        # "reasons" must be replaced.
-        none_reason_iter = (i for i, reason in enumerate(reasons) if reason is None)
-        for result in fetched:
-            # Get the index of the next "None" inside "reasons".
-            index_of_none = next(none_reason_iter)
-            if isinstance(result, Exception):
-                reasons[index_of_none] = self.metrics_reason_from_err(result)
-                errors.append(result)
-
-        stopped = False
         try:
-            next(none_reason_iter)
-        except StopIteration:
-            stopped = True
-        assert stopped
-
-        if any(reasons):
-            # If there is any issue with a metric, skip stop the generator.
-            await self.update_resource_status(resource, metrics, reasons)
-            for error in errors:
-                if error:
-                    logger.error(error)
-            return
-        else:
-            if resource.kind == Cluster.kind and \
-               resource.status.state == ClusterState.FAILING_METRICS:
-                resource.status.state = ClusterState.ONLINE
-                resource.status.reason = None
-                await self.api.update_cluster_status(
-                    namespace=resource.metadata.namespace,
-                    name=resource.metadata.name,
-                    body=resource,
-                )
-
-            if resource.kind == Cloud.kind or resource.kind == GlobalCloud.kind and \
-               resource.status.state == CloudState.FAILING_METRICS:
-                resource.status.state = CloudState.ONLINE
-                resource.status.reason = None
-                if resource.kind == Cloud.kind:
-                    await self.infrastructure_api.update_cloud_status(
-                        namespace=resource.metadata.namespace,
-                        name=resource.metadata.name,
-                        body=resource,
-                    )
-                if resource.kind == GlobalCloud.kind:
-                    await self.infrastructure_api.update_global_cloud_status(
-                        name=resource.metadata.name,
-                        body=resource,
-                    )
-
-        for metric, weight, value in fetched:
-            logger.debug(
-                "Received metric %r with value %r for %r", metric, value, resource
+            yield await self._convert_reasons(
+                fetched, reasons, errors, metrics, resource
             )
-
-        yield fetched
+        except Exception:
+            return
 
 
 class KubernetesApplicationHandler(Handler):
