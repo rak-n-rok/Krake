@@ -415,6 +415,11 @@ class Serializable(metaclass=SerializableMeta):
                 value = field.default_factory()
             else:
                 raise TypeError(f"Missing keyword argument {field.name!r}")
+            
+            validate_fn = field.metadata.get("validate", False)
+            if validate_fn:
+                validate_fn(value)
+
             setattr(self, field.name, value)
         if kwargs:
             key, _ = kwargs.popitem()
