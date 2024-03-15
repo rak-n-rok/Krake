@@ -708,6 +708,14 @@ def update_last_applied_manifest_from_spec(app):
     app.status.last_applied_manifest = new_last_applied_manifest
 
 
+def manages_pods(resource):
+    """Returns true if the resource kind manages at least on pod."""
+    return (resource.kind == "Deployment"
+            or resource.kind == "StatefulSet"
+            or resource.kind == "ReplicaSet"
+            or resource.kind == "DaemonSet")
+
+
 class KubernetesApplicationObserver(Observer):
     """Observer specific for Kubernetes Applications. One observer is created for each
     Application managed by the Controller, but not one per Kubernetes resource
@@ -747,79 +755,90 @@ class KubernetesApplicationObserver(Observer):
         self.kubernetes_api = None
 
     @staticmethod
+    def _apply_pod(resource, status):
+        container_state = resource.status.container_statuses[0].state
+        status.container_health.desired_pods = 1
+        if container_state.terminated is not None:
+            if resource.spec.restart_policy == "Never":
+                status.state = ApplicationState.COMPLETED
+            else:
+                status.state = ApplicationState.RESTARTING
+                status.container_health.running_pods = 0
+        elif container_state.waiting is not None:
+            if container_state.waiting.reason == "CrashLoopBackOff":
+                status.state = ApplicationState.DEGRADED
+                status.container_health.running_pods = 0
+            else:
+                status.state = ApplicationState.RUNNING
+                status.container_health.running_pods = 1
+        return status
+
+    @staticmethod
+    def _apply_pod_managing_resource(resource, status):
+        if resource.kind == "DaemonSet":
+            status.container_health.desired_pods = \
+                resource.status.current_number_scheduled
+            if isinstance(resource.status.desired_number_scheduled, int):
+                status.container_health.running_pods = \
+                    resource.status.desired_number_scheduled
+            else:
+                status.container_health.running_pods = 0
+        else:
+            status.container_health.desired_pods = resource.status.replicas
+            if isinstance(resource.status.ready_replicas, int):
+                status.container_health.running_pods = \
+                    resource.status.ready_replicas
+            else:
+                status.container_health.running_pods = 0
+
+            if status.container_health.running_pods != \
+               status.container_health.desired_pods:
+                status.state = ApplicationState.DEGRADED
+            else:
+                status.state = ApplicationState.RUNNING
+        return status
+
+    @staticmethod
+    def _apply_job(resource, status):
+        if isinstance(resource.spec.completions, int):
+            status.container_health.desired_pods = resource.spec.completions
+        else:
+            status.container_health.desired_pods = 1
+
+            if isinstance(resource.status.active, int):
+                status.container_health.running_pods = resource.status.active
+            else:
+                status.container_health.running_pods = 0
+
+        if isinstance(resource.status.succeeded, int):
+            status.container_health.completed_pods = resource.status.succeeded
+        if resource.status.succeeded == resource.spec.completions:
+            status.state = ApplicationState.COMPLETED
+        else:
+            status.container_health.completed_pods = 0
+
+        if isinstance(resource.status.failed, int):
+            status.container_health.failed_pods = resource.status.failed
+        else:
+            status.container_health.failed_pods = 0
+        return status
+
+    @staticmethod
     def _set_container_health(resource, status):
         if status.container_health is None:
             status.container_health = ContainerHealth()
 
         if hasattr(resource, 'status') and resource.status is not None:
             if resource.kind == "Pod":
-                container_state = resource.status.container_statuses[0].state
-                status.container_health.desired_pods = 1
-                if container_state.terminated is not None:
-                    if resource.spec.restart_policy == "Never":
-                        status.state = ApplicationState.COMPLETED
-                    else:
-                        status.state = ApplicationState.RESTARTING
-                    status.container_health.running_pods = 0
-                elif container_state.waiting is not None:
-                    if container_state.waiting.reason == "CrashLoopBackOff":
-                        status.state = ApplicationState.DEGRADED
-                        status.container_health.running_pods = 0
-                else:
-                    status.state = ApplicationState.RUNNING
-                    status.container_health.running_pods = 1
+                status = KubernetesApplicationObserver._apply_pod(resource, status)
 
-            elif (
-                resource.kind == "Deployment" or
-                resource.kind == "StatefulSet" or
-                resource.kind == "ReplicaSet" or
-                resource.kind == "DaemonSet"
-            ):
-
-                if resource.kind == "DaemonSet":
-                    status.container_health.desired_pods = \
-                        resource.status.current_number_scheduled
-                    if isinstance(resource.status.desired_number_scheduled, int):
-                        status.container_health.running_pods = \
-                            resource.status.desired_number_scheduled
-                    else:
-                        status.container_health.running_pods = 0
-                else:
-                    status.container_health.desired_pods = resource.status.replicas
-                    if isinstance(resource.status.ready_replicas, int):
-                        status.container_health.running_pods = \
-                            resource.status.ready_replicas
-                    else:
-                        status.container_health.running_pods = 0
-
-                if status.container_health.running_pods != \
-                   status.container_health.desired_pods:
-                    status.state = ApplicationState.DEGRADED
-                else:
-                    status.state = ApplicationState.RUNNING
+            elif (manages_pods(resource)):
+                status = KubernetesApplicationObserver._apply_pod_managing_resource(
+                    resource, status
+                )
 
             elif resource.kind == "Job":
-                if isinstance(resource.spec.completions, int):
-                    status.container_health.desired_pods = resource.spec.completions
-                else:
-                    status.container_health.desired_pods = 1
-
-                if isinstance(resource.status.active, int):
-                    status.container_health.running_pods = resource.status.active
-                else:
-                    status.container_health.running_pods = 0
-
-                if isinstance(resource.status.succeeded, int):
-                    status.container_health.completed_pods = resource.status.succeeded
-                    if resource.status.succeeded == resource.spec.completions:
-                        status.state = ApplicationState.COMPLETED
-                else:
-                    status.container_health.completed_pods = 0
-
-                if isinstance(resource.status.failed, int):
-                    status.container_health.failed_pods = resource.status.failed
-                else:
-                    status.container_health.failed_pods = 0
+                status = KubernetesApplicationObserver._apply_job(resource, status)
 
     async def poll_resource(self):
         """Fetch the current status of the Application monitored by the Observer.
