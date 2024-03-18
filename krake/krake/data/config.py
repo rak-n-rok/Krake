@@ -6,6 +6,9 @@ from krake.data.serializable import Serializable
 from marshmallow import ValidationError
 from yarl import URL
 
+from krake.data.hooks.enums import ShutdownHookFailureStrategy
+from krake.validation import validate_positive_int
+
 
 class TlsConfiguration(Serializable):
     enabled: bool = field(
@@ -154,7 +157,7 @@ def _validate_endpoint(endpoint):
 
     return True
 
-
+#region Hooks
 class CompleteHookConfiguration(Serializable):
     hook_user: str = field(
         default="system:complete-hook",
@@ -219,7 +222,6 @@ class CompleteHookConfiguration(Serializable):
         },
     )
 
-
 class ShutdownHookConfiguration(Serializable):
     hook_user: str = field(
         default="system:shutdown-hook",
@@ -280,7 +282,43 @@ class ShutdownHookConfiguration(Serializable):
                 " endpoint of the Krake API will be used. It should be set if the"
                 " KubernetesController is connected to the API with a private IP."
             ),
-            "validate": _validate_endpoint,
+            "validate": _validate_endpoint
+        },
+    )
+    timeout: int = field(
+        default=30,
+        metadata={
+            "help": (
+                "Timeout after calling the shutdown of the application until the"
+                " application requests a shutdown from the Krake API. If a timeout"
+                " occurs, the given failure strategy will be exectued."
+            ),
+            "validate": validate_positive_int
+        },
+    )
+    failure_strategy: str = field(
+        default=ShutdownHookFailureStrategy.DELETE.value,
+        metadata={
+            "help": (
+                "Strategy to execute after a shutdown timeout occured"
+                "Supported values:"
+                "'delete': Remove the application"
+                "'retry': Retry shutting down the application using the shutdown"
+                " until the shutdown succeeds or the shutdown failed failure_retry_count"
+                " times"
+                "'give_up': Do nothing and let the user manually shut down the application"
+            ),
+            "validate": ShutdownHookFailureStrategy.enusure_supported_value
+        },
+    )
+    failure_retry_count: int = field(
+        default=2,
+        metadata={
+            "help": (
+                "Number of retries to shutdown the application using its"
+                " shutdown endpoint. Only used if 'retry' is specified as failure strategy"
+            ),
+            "validate": validate_positive_int
         },
     )
 
@@ -304,7 +342,7 @@ class MigrationRetryConfiguration(Serializable):
         default=60,
         metadata={"help": "Timeout after a failed migration for the next rescheduling"},
     )
-
+#endregion
 
 class MigrationConfiguration(Serializable):
     retry: MigrationRetryConfiguration

@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import re
 import dataclasses
 import functools
@@ -233,3 +234,22 @@ def get_kubernetes_resource_idx(manifest, resource, check_namespace=False):
             return idx
 
     raise IndexError
+
+
+def nameof(var) -> str:
+    """Get identifier of variable
+
+    Args:
+        var (Any): variable to get the identifier of
+
+    Returns:
+        Identifier of the variable
+
+    """
+    current_frame = inspect.currentframe()
+    caller_frame = inspect.getouterframes(current_frame)[1]
+    local_vars = caller_frame.frame.f_locals
+ 
+    for name, value in local_vars.items():
+        if value is var:
+            return name
