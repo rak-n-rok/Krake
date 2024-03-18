@@ -248,11 +248,20 @@
 
     - name: Ensure Minikube cluster is running
       assert:
-        that: "'{{ item }}: Running' in minikube_status.stdout_lines"
-      with_items:
-        - "host"
-        - "kubelet"
-        - "apiserver"
+        that: "'host: Running' in minikube_status.stdout_lines"
+
+    - name: Ensure Minikube cluster is running 2
+      assert:
+        that: "'kubelet: Running' in minikube_status.stdout_lines"
+
+    - name: Ensure Minikube cluster is running 3
+      assert:
+        that: "'apiserver: Running' in minikube_status.stdout_lines"
+
+#      with_items:
+#        - "host"
+#        - "kubelet"
+#        - "apiserver"
 
     - name: Ensure kubectl is configured correctly
       assert:
