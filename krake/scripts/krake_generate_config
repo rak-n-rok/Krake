@@ -324,7 +324,7 @@ if __name__ == "__main__":
         parser, "--api-port", "API endpoint port for the controllers.", default=8080
     )
     add_option(
-        parser, "--etcd-version", "The etcd database version.", default="v3.3.13"
+        parser, "--etcd-version", "The etcd database version.", default="v3.5.12"
     )
     add_option(
         parser, "--etcd-host", "Host for the etcd endpoint.", default="127.0.0.1"
