@@ -462,7 +462,7 @@ class KubernetesClient(object):
 
         return resp
 
-    async def delete(self, resource):
+    async def delete_async(self, resource):
         """Delete the given resource on the cluster using its internal data
         as reference.
 
