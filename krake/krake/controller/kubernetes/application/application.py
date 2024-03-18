@@ -21,6 +21,9 @@ from typing import NamedTuple, Tuple
 
 from yarl import URL
 
+from krake.data.config import HooksConfiguration, ShutdownHookConfiguration
+from krake.data.hooks.enums import ShutdownHookFailureStrategy
+
 from ..hooks import listen, HookType
 from krake.client.kubernetes import KubernetesApi
 from krake.controller import Controller, Reflector, ControllerError
@@ -32,7 +35,7 @@ from krake.controller.kubernetes.hooks import (
 )
 from krake.utils import now, get_kubernetes_resource_idx
 from krake.data.core import ReasonCode, resource_ref, Reason
-from krake.data.kubernetes import ApplicationState
+from krake.data.kubernetes import Application, ApplicationState
 from ..tosca import ToscaParserException
 
 logger = logging.getLogger(__name__)
@@ -378,7 +381,7 @@ class KubernetesApplicationController(Controller):
         self.application_reflector = None
 
         self.worker_count = worker_count
-        self.hooks = hooks
+        self.hooks: HooksConfiguration = hooks
         self.check_external_endpoint()
 
         self.observer_time_step = time_step
@@ -624,10 +627,11 @@ class KubernetesApplicationController(Controller):
             if run_once:
                 break  # TODO: should we keep this? Only useful for tests
 
-    async def resource_received(self, app, start_observer=True):
+    # TODO unit test this function
+    async def resource_received(self, app: Application, start_observer=True):
         logger.debug(f"received {app}")
 
-        copy = deepcopy(app)
+        copy: Application = deepcopy(app)
         if copy.metadata.deleted:
             # Delete the Application
             try:
@@ -636,7 +640,7 @@ class KubernetesApplicationController(Controller):
                     and copy.status.state is ApplicationState.WAITING_FOR_CLEANING
                 ):
                     logging.debug(f"{app.metadata.name} shut down")
-                    await self._shutdown_application(copy)
+                    await self._shutdown_application_async(copy)
 
                 elif (
                     # Don't need to check for shutdown hook here, since the state
@@ -687,7 +691,7 @@ class KubernetesApplicationController(Controller):
                     )
 
                 if copy.status.state is ApplicationState.WAITING_FOR_CLEANING:
-                    await self._shutdown_application(copy)
+                    await self._shutdown_application_async(copy)
 
             # elif copy.status.state is ApplicationState.FAILED:
             #     logger.debug("No migration possible since the app is in %r",
@@ -808,7 +812,8 @@ class KubernetesApplicationController(Controller):
         # Clear manifest in status
         app.status.running_on = None
 
-    async def _shutdown_application(self, app):
+
+    async def _shutdown_application_async(self, app: Application):
 
         cluster = await self.kubernetes_api.read_cluster(
             namespace=app.status.running_on.namespace,
@@ -831,36 +836,67 @@ class KubernetesApplicationController(Controller):
                         body=app,
                     )
 
-                    await kube.shutdown(app)
-
-                    async def grace_period_job(app, callback):
-                        await asyncio.sleep(app.spec.shutdown_grace_time)
-                        await callback(app)
-
-                    asyncio.ensure_future(
-                        grace_period_job(app, self._check_grace_period)
-                    )
+                    asyncio.create_task(self._run_application_shutdown_strategy_async(kube, app))
 
         return
 
-    async def _check_grace_period(self, app):
+
+    async def _run_application_shutdown_strategy_async(self, kube: KubernetesClient, app: Application):
+        def app_has_shutdown_strategy(app: Application, strategy: ShutdownHookFailureStrategy) -> bool:
+            return app.shutdown_hook_config.failure_strategy == strategy.value
+
+        # run shutdown only once unless retry is specified as shutdown strategy
+        max_shutdown_count = 1
+        if app_has_shutdown_strategy(app, ShutdownHookFailureStrategy.RETRY):
+            shutdown_hook_config: ShutdownHookConfiguration = self.hooks.shutdown
+            max_shutdown_count = shutdown_hook_config.failure_retry_count + 1
+
+        executed_shutdowns_count = 0
+
+        try:
+            while executed_shutdowns_count < max_shutdown_count:
+                await kube.shutdown_async(app)
+                executed_shutdowns_count += 1
+
+                await asyncio.sleep(app.spec.shutdown_grace_time)
+                if await self._check_grace_period_async(app):
+                    logger.info(f"Application {app.metadata.name!r} was successfully shutdown")
+                    return
+
+                # handle degraded app state
+                if app_has_shutdown_strategy(app, ShutdownHookFailureStrategy.DELETE):
+                    # TODO force delete application
+                    # send request to kubernetes API and update db
+                    return
+        except Exception as e:
+            logger.error(f"Exception occured during graceful shutdown of application {app.metadata.name!r}")
+            logger.error(str(e))
+        finally:
+            logger.error(f"Graceful shutdown of application {app.metadata.name!r} failed")
+
+
+    async def _check_grace_period_async(self, app: Application) -> bool:
+        # TODO documentation
         app_update = await self.kubernetes_api.read_application(
             namespace=app.metadata.namespace,
             name=app.metadata.name,
         )
-        if app_update.status.state is ApplicationState.WAITING_FOR_CLEANING:
-            app.status.state = ApplicationState.DEGRADED
-            logger.debug(
-                f"{app.metadata.name} to ApplicationState.DEGRADED "
-                f"because of previous state "
-                f"ApplicationState.WAITING_FOR_CLEANING"
-            )
-            await self.kubernetes_api.update_application_status(
-                namespace=app.metadata.namespace,
-                name=app.metadata.name,
-                body=app,
-            )
-        return
+
+        if app_update.status.state is not ApplicationState.WAITING_FOR_CLEANING:
+            return True
+
+        # else failed to delete application
+        app.status.state = ApplicationState.DEGRADED
+        logger.debug(f"{app.metadata.name} to ApplicationState.DEGRADED "
+                        f"because of previous state "
+                        f"ApplicationState.WAITING_FOR_CLEANING")
+        await self.kubernetes_api.update_application_status(
+            namespace=app.metadata.namespace,
+            name=app.metadata.name,
+            body=app,
+        )
+
+        return False
 
     async def _reconcile_application(self, app):
         if not app.status.scheduled_to:
