@@ -157,7 +157,8 @@ def _validate_endpoint(endpoint):
 
     return True
 
-#region Hooks
+
+# region Hooks
 class CompleteHookConfiguration(Serializable):
     hook_user: str = field(
         default="system:complete-hook",
@@ -221,6 +222,7 @@ class CompleteHookConfiguration(Serializable):
             "validate": _validate_endpoint,
         },
     )
+
 
 class ShutdownHookConfiguration(Serializable):
     hook_user: str = field(
@@ -304,9 +306,10 @@ class ShutdownHookConfiguration(Serializable):
                 "Supported values:"
                 "'delete': Remove the application"
                 "'retry': Retry shutting down the application using the shutdown"
-                " until the shutdown succeeds or the shutdown failed failure_retry_count"
-                " times"
-                "'give_up': Do nothing and let the user manually shut down the application"
+                " until the shutdown succeeds or the shutdown failed"
+                " failure_retry_count times"
+                "'give_up': Do nothing and let the user manually shut down the"
+                " application"
             ),
             "validate": ShutdownHookFailureStrategy.enusure_supported_value
         },
@@ -315,8 +318,8 @@ class ShutdownHookConfiguration(Serializable):
         default=2,
         metadata={
             "help": (
-                "Number of retries to shutdown the application using its"
-                " shutdown endpoint. Only used if 'retry' is specified as failure strategy"
+                "Number of retries to shutdown the application using its shutdown"
+                " endpoint. Only used if 'retry' is specified as failure strategy"
             ),
             "validate": validate_positive_int
         },
@@ -342,7 +345,8 @@ class MigrationRetryConfiguration(Serializable):
         default=60,
         metadata={"help": "Timeout after a failed migration for the next rescheduling"},
     )
-#endregion
+# endregion
+
 
 class MigrationConfiguration(Serializable):
     retry: MigrationRetryConfiguration
