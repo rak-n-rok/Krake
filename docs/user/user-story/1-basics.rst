@@ -20,10 +20,11 @@ Introduction to the ``rok`` CLI
 Integrate shell completion
 ==========================
 
-Shell completion is a feature that lets help users type commands faster.
+Shell completion is a feature that supports users in receiving the desired
+command faster, with less errors and that aids discovery of arguments.
 ``rok`` outputs completion scripts for bash, zsh or tcsh.
 
-- Following commands generate and activate the bash shell completion:
+- The following commands generate and activate the bash shell completion:
 
 .. prompt:: bash $ auto
 
