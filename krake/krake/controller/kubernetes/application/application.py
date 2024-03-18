@@ -812,7 +812,6 @@ class KubernetesApplicationController(Controller):
         # Clear manifest in status
         app.status.running_on = None
 
-
     async def _shutdown_application_async(self, app: Application):
 
         cluster = await self.kubernetes_api.read_cluster(
@@ -836,13 +835,18 @@ class KubernetesApplicationController(Controller):
                         body=app,
                     )
 
-                    asyncio.create_task(self._run_application_shutdown_strategy_async(kube, app))
-
+                    asyncio.create_task(
+                        self._run_application_shutdown_strategy_async(kube, app)
+                        )
         return
 
 
-    async def _run_application_shutdown_strategy_async(self, kube: KubernetesClient, app: Application):
-        def app_has_shutdown_strategy(app: Application, strategy: ShutdownHookFailureStrategy) -> bool:
+    async def _run_application_shutdown_strategy_async(self,
+                                                       kube: KubernetesClient,
+                                                       app: Application):
+        def app_has_shutdown_strategy(
+                app: Application,
+                strategy: ShutdownHookFailureStrategy) -> bool:
             return app.shutdown_hook_config.failure_strategy == strategy.value
 
         # run shutdown only once unless retry is specified as shutdown strategy
@@ -860,7 +864,8 @@ class KubernetesApplicationController(Controller):
 
                 await asyncio.sleep(app.spec.shutdown_grace_time)
                 if await self._check_grace_period_async(app):
-                    logger.info(f"Application {app.metadata.name!r} was successfully shutdown")
+                    logger.info(f"Application {app.metadata.name!r} was successfully"
+                                " shutdown")
                     return
 
                 # handle degraded app state
@@ -869,11 +874,12 @@ class KubernetesApplicationController(Controller):
                     # send request to kubernetes API and update db
                     return
         except Exception as e:
-            logger.error(f"Exception occured during graceful shutdown of application {app.metadata.name!r}")
+            logger.error("Exception occured during graceful shutdown of"
+                         f"application {app.metadata.name!r}")
             logger.error(str(e))
         finally:
-            logger.error(f"Graceful shutdown of application {app.metadata.name!r} failed")
-
+            logger.error("Graceful shutdown of application"
+                         f" {app.metadata.name!r} failed")
 
     async def _check_grace_period_async(self, app: Application) -> bool:
         # TODO documentation
@@ -888,8 +894,8 @@ class KubernetesApplicationController(Controller):
         # else failed to delete application
         app.status.state = ApplicationState.DEGRADED
         logger.debug(f"{app.metadata.name} to ApplicationState.DEGRADED "
-                        f"because of previous state "
-                        f"ApplicationState.WAITING_FOR_CLEANING")
+                     f"because of previous state "
+                     f"ApplicationState.WAITING_FOR_CLEANING")
         await self.kubernetes_api.update_application_status(
             namespace=app.metadata.namespace,
             name=app.metadata.name,
