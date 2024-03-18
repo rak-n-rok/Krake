@@ -1,24 +1,21 @@
-import json
 import logging
 from aiohttp import web
-from uuid import uuid4
 from webargs.aiohttpparser import use_kwargs
-
-from krake import utils
 from krake.api.auth import protected
-from krake.api.database import EventType, TransactionError
 from krake.api.helpers import (
     load,
     session,
-    Heartbeat,
     use_schema,
-    HttpProblem,
-    HttpProblemTitle,
     make_create_request_schema,
-    HttpProblemError,
     ListQuery,
+ )
+from krake.api.base import (
+    must_create_resource_async,
+    delete_resource_async,
+    update_resource_async,
+    list_resources_async,
+    watch_resource_async,
 )
-from krake.data.core import WatchEvent, WatchEventType, ListMetadata
 from krake.data.core import (
     GlobalMetric,
     GlobalMetricList,
@@ -54,28 +51,7 @@ class CoreApi(object):
         "body", schema=make_create_request_schema(GlobalMetric)
     )
     async def create_global_metric(request, body):
-
-        now = utils.now()
-
-        body.metadata.uid = str(uuid4())
-        body.metadata.created = now
-        body.metadata.modified = now
-
-        try:
-            await session(request).put(body)
-            logger.info(
-                "Created %s %r (%s)", "GlobalMetric",
-                body.metadata.name,
-                body.metadata.uid
-            )
-        except TransactionError:
-            problem = HttpProblem(
-                detail=f"GlobalMetric {body.metadata.name!r} already exists",
-                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
-            )
-            raise HttpProblemError(web.HTTPConflict, problem)
-
-        return web.json_response(body.serialize())
+        return await must_create_resource_async(request, body, None)
 
     @routes.route(
         "DELETE", "/core/globalmetrics/{name}"
@@ -85,22 +61,7 @@ class CoreApi(object):
     )
     @load("entity", GlobalMetric)
     async def delete_global_metric(request, entity):
-        # Resource is already deleting
-        if entity.metadata.deleted:
-            return web.json_response(entity.serialize())
-
-        # TODO: Should be update "modified" here?
-        # Resource marked as deletion, to be deleted by the Garbage Collector
-        entity.metadata.deleted = utils.now()
-        entity.metadata.finalizers.append("cascade_deletion")
-
-        await session(request).put(entity)
-        logger.info(
-            "Deleting %s %r (%s)", "GlobalMetric", entity.metadata.name,
-            entity.metadata.uid
-        )
-
-        return web.json_response(entity.serialize())
+        return await delete_resource_async(request, entity)
 
     @routes.route(
         "GET", "/core/globalmetrics"
@@ -111,43 +72,15 @@ class CoreApi(object):
     @use_kwargs(ListQuery.query, location="query")
     async def list_or_watch_global_metrics(request, heartbeat, watch, **query):
         resource_class = GlobalMetric
-
         # Return the list of resources
         if not watch:
-            objs = [obj async for obj in session(request).all(resource_class)]
-
-            body = GlobalMetricList(
-                metadata=ListMetadata(), items=objs
-            )
-            return web.json_response(body.serialize())
+            return await list_resources_async(
+                resource_class, GlobalMetricList, request, None)
 
         # Watching resources
         kwargs = {}
-
         async with session(request).watch(resource_class, **kwargs) as watcher:
-            resp = web.StreamResponse(headers={"Content-Type": "application/x-ndjson"})
-            resp.enable_chunked_encoding()
-
-            await resp.prepare(request)
-
-            async with Heartbeat(resp, interval=heartbeat):
-                async for event, obj, rev in watcher:
-                    # Key was deleted. Stop update stream
-                    if event == EventType.PUT:
-                        if rev.created == rev.modified:
-                            event_type = WatchEventType.ADDED
-                        else:
-                            event_type = WatchEventType.MODIFIED
-                    else:
-                        event_type = WatchEventType.DELETED
-                        obj = await session(request).get_by_key(
-                            resource_class, key=rev.key, revision=rev.modified - 1
-                        )
-
-                    watch_event = WatchEvent(type=event_type, object=obj.serialize())
-
-                    await resp.write(json.dumps(watch_event.serialize()).encode())
-                    await resp.write(b"\n")
+            await watch_resource_async(request, heartbeat, watcher, resource_class)
 
     @routes.route(
         "GET", "/core/globalmetrics/{name}"
@@ -170,48 +103,7 @@ class CoreApi(object):
     )
     @load("entity", GlobalMetric)
     async def update_global_metric(request, body, entity):
-        # Once a resource is in the "deletion in progress" state, finalizers
-        # can only be removed.
-        if entity.metadata.deleted:
-            if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
-                problem = HttpProblem(
-                    detail="Finalizers can only be removed"
-                           " if a deletion is in progress.",
-                    title=HttpProblemTitle.UPDATE_ERROR
-                )
-                raise HttpProblemError(web.HTTPConflict, problem)
-
-        if body == entity:
-            problem = HttpProblem(
-                detail="The body contained no update.",
-                title=HttpProblemTitle.UPDATE_ERROR
-            )
-            raise HttpProblemError(web.HTTPBadRequest, problem)
-
-        try:
-            entity.update(body)
-        except ValueError as e:
-            problem = HttpProblem(detail=str(e), title=HttpProblemTitle.UPDATE_ERROR)
-            raise HttpProblemError(web.HTTPBadRequest, problem)
-
-        entity.metadata.modified = utils.now()
-
-        # Resource is in "deletion in progress" state and all finalizers have
-        # been removed. Delete the resource from database.
-        if entity.metadata.deleted and not entity.metadata.finalizers:
-            await session(request).delete(entity)
-            logger.info(
-                "Delete %s %r (%s)", "GlobalMetric", entity.metadata.name,
-                entity.metadata.uid
-            )
-        else:
-            await session(request).put(entity)
-            logger.info(
-                "Update %s %r (%s)", "GlobalMetric", entity.metadata.name,
-                entity.metadata.uid
-            )
-
-        return web.json_response(entity.serialize())
+        return await update_resource_async(request, entity, body)
 
     @routes.route(
         "POST", "/core/globalmetricsproviders"
@@ -223,27 +115,7 @@ class CoreApi(object):
         "body", schema=make_create_request_schema(GlobalMetricsProvider)
     )
     async def create_global_metrics_provider(request, body):
-
-        now = utils.now()
-
-        body.metadata.uid = str(uuid4())
-        body.metadata.created = now
-        body.metadata.modified = now
-
-        try:
-            await session(request).put(body)
-            logger.info(
-                "Created %s %r (%s)", "GlobalMetricsProvider", body.metadata.name,
-                body.metadata.uid
-            )
-        except TransactionError:
-            problem = HttpProblem(
-                detail=f"GlobalMetricsProvider {body.metadata.name!r} already exists",
-                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
-            )
-            raise HttpProblemError(web.HTTPConflict, problem)
-
-        return web.json_response(body.serialize())
+        return await must_create_resource_async(request, body, None)
 
     @routes.route(
         "DELETE", "/core/globalmetricsproviders/{name}"
@@ -253,22 +125,7 @@ class CoreApi(object):
     )
     @load("entity", GlobalMetricsProvider)
     async def delete_global_metrics_provider(request, entity):
-        # Resource is already deleting
-        if entity.metadata.deleted:
-            return web.json_response(entity.serialize())
-
-        # TODO: Should be update "modified" here?
-        # Resource marked as deletion, to be deleted by the Garbage Collector
-        entity.metadata.deleted = utils.now()
-        entity.metadata.finalizers.append("cascade_deletion")
-
-        await session(request).put(entity)
-        logger.info(
-            "Deleting %s %r (%s)", "GlobalMetricsProvider", entity.metadata.name,
-            entity.metadata.uid
-        )
-
-        return web.json_response(entity.serialize())
+        return await delete_resource_async(request, entity)
 
     @routes.route(
         "GET", "/core/globalmetricsproviders"
@@ -283,40 +140,13 @@ class CoreApi(object):
 
         # Return the list of resources
         if not watch:
-            objs = [obj async for obj in session(request).all(resource_class)]
-
-            body = GlobalMetricsProviderList(
-                metadata=ListMetadata(), items=objs
-            )
-            return web.json_response(body.serialize())
+            return await list_resources_async(
+                resource_class, GlobalMetricsProviderList, request, None)
 
         # Watching resources
         kwargs = {}
-
         async with session(request).watch(resource_class, **kwargs) as watcher:
-            resp = web.StreamResponse(headers={"Content-Type": "application/x-ndjson"})
-            resp.enable_chunked_encoding()
-
-            await resp.prepare(request)
-
-            async with Heartbeat(resp, interval=heartbeat):
-                async for event, obj, rev in watcher:
-                    # Key was deleted. Stop update stream
-                    if event == EventType.PUT:
-                        if rev.created == rev.modified:
-                            event_type = WatchEventType.ADDED
-                        else:
-                            event_type = WatchEventType.MODIFIED
-                    else:
-                        event_type = WatchEventType.DELETED
-                        obj = await session(request).get_by_key(
-                            resource_class, key=rev.key, revision=rev.modified - 1
-                        )
-
-                    watch_event = WatchEvent(type=event_type, object=obj.serialize())
-
-                    await resp.write(json.dumps(watch_event.serialize()).encode())
-                    await resp.write(b"\n")
+            await watch_resource_async(request, heartbeat, watcher, resource_class)
 
     @routes.route(
         "GET", "/core/globalmetricsproviders/{name}"
@@ -339,44 +169,7 @@ class CoreApi(object):
     )
     @load("entity", GlobalMetricsProvider)
     async def update_global_metrics_provider(request, body, entity):
-        # Once a resource is in the "deletion in progress" state, finalizers
-        # can only be removed.
-        if entity.metadata.deleted:
-            if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
-                problem = HttpProblem(
-                    detail="Finalizers can only be removed"
-                           " if a deletion is in progress.",
-                    title=HttpProblemTitle.UPDATE_ERROR
-                )
-                raise HttpProblemError(web.HTTPConflict, problem)
-
-        if body == entity:
-            return web.json_response(entity.serialize())
-
-        try:
-            entity.update(body)
-        except ValueError as e:
-            problem = HttpProblem(detail=str(e), title=HttpProblemTitle.UPDATE_ERROR)
-            raise HttpProblemError(web.HTTPBadRequest, problem)
-
-        entity.metadata.modified = utils.now()
-
-        # Resource is in "deletion in progress" state and all finalizers have
-        # been removed. Delete the resource from database.
-        if entity.metadata.deleted and not entity.metadata.finalizers:
-            await session(request).delete(entity)
-            logger.info(
-                "Delete %s %r (%s)", "GlobalMetricsProvider", entity.metadata.name,
-                entity.metadata.uid
-            )
-        else:
-            await session(request).put(entity)
-            logger.info(
-                "Update %s %r (%s)", "GlobalMetricsProvider", entity.metadata.name,
-                entity.metadata.uid
-            )
-
-        return web.json_response(entity.serialize())
+        return await update_resource_async(request, entity, body)
 
     @routes.route(
         "POST", "/core/roles"
@@ -388,26 +181,7 @@ class CoreApi(object):
         "body", schema=make_create_request_schema(Role)
     )
     async def create_role(request, body):
-
-        now = utils.now()
-
-        body.metadata.uid = str(uuid4())
-        body.metadata.created = now
-        body.metadata.modified = now
-
-        try:
-            await session(request).put(body)
-            logger.info(
-                "Created %s %r (%s)", "Role", body.metadata.name, body.metadata.uid
-            )
-        except TransactionError:
-            problem = HttpProblem(
-                detail=f"Role {body.metadata.name!r} already exists",
-                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
-            )
-            raise HttpProblemError(web.HTTPConflict, problem)
-
-        return web.json_response(body.serialize())
+        return await must_create_resource_async(request, body, None)
 
     @routes.route(
         "DELETE", "/core/roles/{name}"
@@ -417,21 +191,7 @@ class CoreApi(object):
     )
     @load("entity", Role)
     async def delete_role(request, entity):
-        # Resource is already deleting
-        if entity.metadata.deleted:
-            return web.json_response(entity.serialize())
-
-        # TODO: Should be update "modified" here?
-        # Resource marked as deletion, to be deleted by the Garbage Collector
-        entity.metadata.deleted = utils.now()
-        entity.metadata.finalizers.append("cascade_deletion")
-
-        await session(request).put(entity)
-        logger.info(
-            "Deleting %s %r (%s)", "Role", entity.metadata.name, entity.metadata.uid
-        )
-
-        return web.json_response(entity.serialize())
+        return await delete_resource_async(request, entity)
 
     @routes.route(
         "GET", "/core/roles"
@@ -445,40 +205,12 @@ class CoreApi(object):
 
         # Return the list of resources
         if not watch:
-            objs = [obj async for obj in session(request).all(resource_class)]
-
-            body = RoleList(
-                metadata=ListMetadata(), items=objs
-            )
-            return web.json_response(body.serialize())
+            return await list_resources_async(resource_class, RoleList, request, None)
 
         # Watching resources
         kwargs = {}
-
         async with session(request).watch(resource_class, **kwargs) as watcher:
-            resp = web.StreamResponse(headers={"Content-Type": "application/x-ndjson"})
-            resp.enable_chunked_encoding()
-
-            await resp.prepare(request)
-
-            async with Heartbeat(resp, interval=heartbeat):
-                async for event, obj, rev in watcher:
-                    # Key was deleted. Stop update stream
-                    if event == EventType.PUT:
-                        if rev.created == rev.modified:
-                            event_type = WatchEventType.ADDED
-                        else:
-                            event_type = WatchEventType.MODIFIED
-                    else:
-                        event_type = WatchEventType.DELETED
-                        obj = await session(request).get_by_key(
-                            resource_class, key=rev.key, revision=rev.modified - 1
-                        )
-
-                    watch_event = WatchEvent(type=event_type, object=obj.serialize())
-
-                    await resp.write(json.dumps(watch_event.serialize()).encode())
-                    await resp.write(b"\n")
+            await watch_resource_async(request, heartbeat, watcher, resource_class)
 
     @routes.route(
         "GET", "/core/roles/{name}"
@@ -501,46 +233,7 @@ class CoreApi(object):
     )
     @load("entity", Role)
     async def update_role(request, body, entity):
-        # Once a resource is in the "deletion in progress" state, finalizers
-        # can only be removed.
-        if entity.metadata.deleted:
-            if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
-                problem = HttpProblem(
-                    detail="Finalizers can only be removed"
-                           " if a deletion is in progress.",
-                    title=HttpProblemTitle.UPDATE_ERROR
-                )
-                raise HttpProblemError(web.HTTPConflict, problem)
-
-        if body == entity:
-            problem = HttpProblem(
-                detail="The body contained no update.",
-                title=HttpProblemTitle.UPDATE_ERROR
-            )
-            raise HttpProblemError(web.HTTPBadRequest, problem)
-
-        try:
-            entity.update(body)
-        except ValueError as e:
-            problem = HttpProblem(detail=str(e), title=HttpProblemTitle.UPDATE_ERROR)
-            raise HttpProblemError(web.HTTPBadRequest, problem)
-
-        entity.metadata.modified = utils.now()
-
-        # Resource is in "deletion in progress" state and all finalizers have
-        # been removed. Delete the resource from database.
-        if entity.metadata.deleted and not entity.metadata.finalizers:
-            await session(request).delete(entity)
-            logger.info(
-                "Delete %s %r (%s)", "Role", entity.metadata.name, entity.metadata.uid
-            )
-        else:
-            await session(request).put(entity)
-            logger.info(
-                "Update %s %r (%s)", "Role", entity.metadata.name, entity.metadata.uid
-            )
-
-        return web.json_response(entity.serialize())
+        return await update_resource_async(request, entity, body)
 
     @routes.route(
         "POST", "/core/rolebindings"
@@ -552,28 +245,7 @@ class CoreApi(object):
         "body", schema=make_create_request_schema(RoleBinding)
     )
     async def create_role_binding(request, body):
-
-        now = utils.now()
-
-        body.metadata.uid = str(uuid4())
-        body.metadata.created = now
-        body.metadata.modified = now
-
-        try:
-            await session(request).put(body)
-            logger.info(
-                "Created %s %r (%s)", "RoleBinding",
-                body.metadata.name,
-                body.metadata.uid
-            )
-        except TransactionError:
-            problem = HttpProblem(
-                detail=f"RoleBinding {body.metadata.name!r} already exists",
-                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
-            )
-            raise HttpProblemError(web.HTTPConflict, problem)
-
-        return web.json_response(body.serialize())
+        return await must_create_resource_async(request, body, None)
 
     @routes.route(
         "DELETE", "/core/rolebindings/{name}"
@@ -583,22 +255,7 @@ class CoreApi(object):
     )
     @load("entity", RoleBinding)
     async def delete_role_binding(request, entity):
-        # Resource is already deleting
-        if entity.metadata.deleted:
-            return web.json_response(entity.serialize())
-
-        # TODO: Should be update "modified" here?
-        # Resource marked as deletion, to be deleted by the Garbage Collector
-        entity.metadata.deleted = utils.now()
-        entity.metadata.finalizers.append("cascade_deletion")
-
-        await session(request).put(entity)
-        logger.info(
-            "Deleting %s %r (%s)", "RoleBinding", entity.metadata.name,
-            entity.metadata.uid
-        )
-
-        return web.json_response(entity.serialize())
+        return await delete_resource_async(request, entity)
 
     @routes.route(
         "GET", "/core/rolebindings"
@@ -612,40 +269,13 @@ class CoreApi(object):
 
         # Return the list of resources
         if not watch:
-            objs = [obj async for obj in session(request).all(resource_class)]
-
-            body = RoleBindingList(
-                metadata=ListMetadata(), items=objs
-            )
-            return web.json_response(body.serialize())
+            return await list_resources_async(
+                resource_class, RoleBindingList, request, None)
 
         # Watching resources
         kwargs = {}
-
         async with session(request).watch(resource_class, **kwargs) as watcher:
-            resp = web.StreamResponse(headers={"Content-Type": "application/x-ndjson"})
-            resp.enable_chunked_encoding()
-
-            await resp.prepare(request)
-
-            async with Heartbeat(resp, interval=heartbeat):
-                async for event, obj, rev in watcher:
-                    # Key was deleted. Stop update stream
-                    if event == EventType.PUT:
-                        if rev.created == rev.modified:
-                            event_type = WatchEventType.ADDED
-                        else:
-                            event_type = WatchEventType.MODIFIED
-                    else:
-                        event_type = WatchEventType.DELETED
-                        obj = await session(request).get_by_key(
-                            resource_class, key=rev.key, revision=rev.modified - 1
-                        )
-
-                    watch_event = WatchEvent(type=event_type, object=obj.serialize())
-
-                    await resp.write(json.dumps(watch_event.serialize()).encode())
-                    await resp.write(b"\n")
+            await watch_resource_async(request, heartbeat, watcher, resource_class)
 
     @routes.route(
         "GET", "/core/rolebindings/{name}"
@@ -668,48 +298,7 @@ class CoreApi(object):
     )
     @load("entity", RoleBinding)
     async def update_role_binding(request, body, entity):
-        # Once a resource is in the "deletion in progress" state, finalizers
-        # can only be removed.
-        if entity.metadata.deleted:
-            if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
-                problem = HttpProblem(
-                    detail="Finalizers can only be removed"
-                           " if a deletion is in progress.",
-                    title=HttpProblemTitle.UPDATE_ERROR
-                )
-                raise HttpProblemError(web.HTTPConflict, problem)
-
-        if body == entity:
-            problem = HttpProblem(
-                detail="The body contained no update.",
-                title=HttpProblemTitle.UPDATE_ERROR
-            )
-            raise HttpProblemError(web.HTTPBadRequest, problem)
-
-        try:
-            entity.update(body)
-        except ValueError as e:
-            problem = HttpProblem(detail=str(e), title=HttpProblemTitle.UPDATE_ERROR)
-            raise HttpProblemError(web.HTTPBadRequest, problem)
-
-        entity.metadata.modified = utils.now()
-
-        # Resource is in "deletion in progress" state and all finalizers have
-        # been removed. Delete the resource from database.
-        if entity.metadata.deleted and not entity.metadata.finalizers:
-            await session(request).delete(entity)
-            logger.info(
-                "Delete %s %r (%s)", "RoleBinding", entity.metadata.name,
-                entity.metadata.uid
-            )
-        else:
-            await session(request).put(entity)
-            logger.info(
-                "Update %s %r (%s)", "RoleBinding", entity.metadata.name,
-                entity.metadata.uid
-            )
-
-        return web.json_response(entity.serialize())
+        return await update_resource_async(request, entity, body)
 
     @routes.route(
         "POST", "/core/namespaces/{namespace}/metrics"
@@ -721,34 +310,8 @@ class CoreApi(object):
         "body", schema=make_create_request_schema(Metric)
     )
     async def create_metric(request, body):
-        kwargs = {"name": body.metadata.name}
-
         namespace = request.match_info.get("namespace")
-        kwargs["namespace"] = namespace
-
-        now = utils.now()
-
-        body.metadata.namespace = namespace
-        body.metadata.uid = str(uuid4())
-        body.metadata.created = now
-        body.metadata.modified = now
-
-        try:
-            await session(request).put(body)
-            logger.info(
-                "Created %s %r (%s)", "Metric", body.metadata.name, body.metadata.uid
-            )
-        except TransactionError:
-            message = (
-                f"Metric {body.metadata.name!r} already "
-                f"exists in namespace {namespace!r}"
-            )
-            problem = HttpProblem(
-                detail=message, title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
-            )
-            raise HttpProblemError(web.HTTPConflict, problem)
-
-        return web.json_response(body.serialize())
+        return await must_create_resource_async(request, body, namespace)
 
     @routes.route(
         "DELETE", "/core/namespaces/{namespace}/metrics/{name}"
@@ -758,21 +321,7 @@ class CoreApi(object):
     )
     @load("entity", Metric)
     async def delete_metric(request, entity):
-        # Resource is already deleting
-        if entity.metadata.deleted:
-            return web.json_response(entity.serialize())
-
-        # TODO: Should be update "modified" here?
-        # Resource marked as deletion, to be deleted by the Garbage Collector
-        entity.metadata.deleted = utils.now()
-        entity.metadata.finalizers.append("cascade_deletion")
-
-        await session(request).put(entity)
-        logger.info(
-            "Deleting %s %r (%s)", "Metric", entity.metadata.name, entity.metadata.uid
-        )
-
-        return web.json_response(entity.serialize())
+        return await delete_resource_async(request, entity)
 
     @routes.route(
         "GET", "/core/metrics"
@@ -792,20 +341,8 @@ class CoreApi(object):
 
         # Return the list of resources
         if not watch:
-            if namespace is None:
-                objs = [obj async for obj in session(request).all(resource_class)]
-            else:
-                objs = [
-                    obj
-                    async for obj in session(request).all(
-                        resource_class, namespace=namespace
-                    )
-                ]
-
-            body = MetricList(
-                metadata=ListMetadata(), items=objs
-            )
-            return web.json_response(body.serialize())
+            return await list_resources_async(
+                resource_class, MetricList, request, namespace)
 
         # Watching resources
         kwargs = {}
@@ -813,29 +350,7 @@ class CoreApi(object):
             kwargs["namespace"] = namespace
 
         async with session(request).watch(resource_class, **kwargs) as watcher:
-            resp = web.StreamResponse(headers={"Content-Type": "application/x-ndjson"})
-            resp.enable_chunked_encoding()
-
-            await resp.prepare(request)
-
-            async with Heartbeat(resp, interval=heartbeat):
-                async for event, obj, rev in watcher:
-                    # Key was deleted. Stop update stream
-                    if event == EventType.PUT:
-                        if rev.created == rev.modified:
-                            event_type = WatchEventType.ADDED
-                        else:
-                            event_type = WatchEventType.MODIFIED
-                    else:
-                        event_type = WatchEventType.DELETED
-                        obj = await session(request).get_by_key(
-                            resource_class, key=rev.key, revision=rev.modified - 1
-                        )
-
-                    watch_event = WatchEvent(type=event_type, object=obj.serialize())
-
-                    await resp.write(json.dumps(watch_event.serialize()).encode())
-                    await resp.write(b"\n")
+            await watch_resource_async(request, heartbeat, watcher, resource_class)
 
     @routes.route(
         "GET", "/core/namespaces/{namespace}/metrics/{name}"
@@ -858,48 +373,7 @@ class CoreApi(object):
     )
     @load("entity", Metric)
     async def update_metric(request, body, entity):
-        # Once a resource is in the "deletion in progress" state, finalizers
-        # can only be removed.
-        if entity.metadata.deleted:
-            if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
-                problem = HttpProblem(
-                    detail="Finalizers can only be removed"
-                           " if a deletion is in progress.",
-                    title=HttpProblemTitle.UPDATE_ERROR
-                )
-                raise HttpProblemError(web.HTTPConflict, problem)
-
-        if body == entity:
-            problem = HttpProblem(
-                detail="The body contained no update.",
-                title=HttpProblemTitle.UPDATE_ERROR
-            )
-            raise HttpProblemError(web.HTTPBadRequest, problem)
-
-        try:
-            entity.update(body)
-        except ValueError as e:
-            problem = HttpProblem(
-                detail=str(e), title=HttpProblemTitle.UPDATE_ERROR
-            )
-            raise HttpProblemError(web.HTTPBadRequest, problem)
-
-        entity.metadata.modified = utils.now()
-
-        # Resource is in "deletion in progress" state and all finalizers have
-        # been removed. Delete the resource from database.
-        if entity.metadata.deleted and not entity.metadata.finalizers:
-            await session(request).delete(entity)
-            logger.info(
-                "Delete %s %r (%s)", "Metric", entity.metadata.name, entity.metadata.uid
-            )
-        else:
-            await session(request).put(entity)
-            logger.info(
-                "Update %s %r (%s)", "Metric", entity.metadata.name, entity.metadata.uid
-            )
-
-        return web.json_response(entity.serialize())
+        return await update_resource_async(request, entity, body)
 
     @routes.route(
         "POST", "/core/namespaces/{namespace}/metricsproviders"
@@ -911,35 +385,8 @@ class CoreApi(object):
         "body", schema=make_create_request_schema(MetricsProvider)
     )
     async def create_metrics_provider(request, body):
-        kwargs = {"name": body.metadata.name}
-
         namespace = request.match_info.get("namespace")
-        kwargs["namespace"] = namespace
-
-        now = utils.now()
-
-        body.metadata.namespace = namespace
-        body.metadata.uid = str(uuid4())
-        body.metadata.created = now
-        body.metadata.modified = now
-
-        try:
-            await session(request).put(body)
-            logger.info(
-                "Created %s %r (%s)", "MetricsProvider", body.metadata.name,
-                body.metadata.uid
-            )
-        except TransactionError:
-            message = (
-                f"MetricsProvider {body.metadata.name!r} already "
-                f"exists in namespace {namespace!r}"
-            )
-            problem = HttpProblem(
-                detail=message, title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
-            )
-            raise HttpProblemError(web.HTTPConflict, problem)
-
-        return web.json_response(body.serialize())
+        return await must_create_resource_async(request, body, namespace)
 
     @routes.route(
         "DELETE", "/core/namespaces/{namespace}/metricsproviders/{name}"
@@ -949,22 +396,7 @@ class CoreApi(object):
     )
     @load("entity", MetricsProvider)
     async def delete_metrics_provider(request, entity):
-        # Resource is already deleting
-        if entity.metadata.deleted:
-            return web.json_response(entity.serialize())
-
-        # TODO: Should be update "modified" here?
-        # Resource marked as deletion, to be deleted by the Garbage Collector
-        entity.metadata.deleted = utils.now()
-        entity.metadata.finalizers.append("cascade_deletion")
-
-        await session(request).put(entity)
-        logger.info(
-            "Deleting %s %r (%s)", "MetricsProvider", entity.metadata.name,
-            entity.metadata.uid
-        )
-
-        return web.json_response(entity.serialize())
+        return await delete_resource_async(request, entity)
 
     @routes.route(
         "GET", "/core/metricsproviders"
@@ -984,20 +416,8 @@ class CoreApi(object):
 
         # Return the list of resources
         if not watch:
-            if namespace is None:
-                objs = [obj async for obj in session(request).all(resource_class)]
-            else:
-                objs = [
-                    obj
-                    async for obj in session(request).all(
-                        resource_class, namespace=namespace
-                    )
-                ]
-
-            body = MetricsProviderList(
-                metadata=ListMetadata(), items=objs
-            )
-            return web.json_response(body.serialize())
+            return await list_resources_async(
+                resource_class, MetricsProviderList, request, namespace)
 
         # Watching resources
         kwargs = {}
@@ -1005,29 +425,7 @@ class CoreApi(object):
             kwargs["namespace"] = namespace
 
         async with session(request).watch(resource_class, **kwargs) as watcher:
-            resp = web.StreamResponse(headers={"Content-Type": "application/x-ndjson"})
-            resp.enable_chunked_encoding()
-
-            await resp.prepare(request)
-
-            async with Heartbeat(resp, interval=heartbeat):
-                async for event, obj, rev in watcher:
-                    # Key was deleted. Stop update stream
-                    if event == EventType.PUT:
-                        if rev.created == rev.modified:
-                            event_type = WatchEventType.ADDED
-                        else:
-                            event_type = WatchEventType.MODIFIED
-                    else:
-                        event_type = WatchEventType.DELETED
-                        obj = await session(request).get_by_key(
-                            resource_class, key=rev.key, revision=rev.modified - 1
-                        )
-
-                    watch_event = WatchEvent(type=event_type, object=obj.serialize())
-
-                    await resp.write(json.dumps(watch_event.serialize()).encode())
-                    await resp.write(b"\n")
+            await watch_resource_async(request, heartbeat, watcher, resource_class)
 
     @routes.route(
         "GET", "/core/namespaces/{namespace}/metricsproviders/{name}"
@@ -1050,47 +448,4 @@ class CoreApi(object):
     )
     @load("entity", MetricsProvider)
     async def update_metrics_provider(request, body, entity):
-        # Once a resource is in the "deletion in progress" state, finalizers
-        # can only be removed.
-        if entity.metadata.deleted:
-            if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
-                problem = HttpProblem(
-                    detail="Finalizers can only be removed"
-                           " if a deletion is in progress.",
-                    title=HttpProblemTitle.UPDATE_ERROR
-                )
-                raise HttpProblemError(web.HTTPConflict, problem)
-
-        if body == entity:
-            problem = HttpProblem(
-                detail="The body contained no update.",
-                title=HttpProblemTitle.UPDATE_ERROR
-            )
-            raise HttpProblemError(web.HTTPBadRequest, problem)
-
-        try:
-            entity.update(body)
-        except ValueError as e:
-            problem = HttpProblem(
-                detail=str(e), title=HttpProblemTitle.UPDATE_ERROR
-            )
-            raise HttpProblemError(web.HTTPBadRequest, problem)
-
-        entity.metadata.modified = utils.now()
-
-        # Resource is in "deletion in progress" state and all finalizers have
-        # been removed. Delete the resource from database.
-        if entity.metadata.deleted and not entity.metadata.finalizers:
-            await session(request).delete(entity)
-            logger.info(
-                "Delete %s %r (%s)", "MetricsProvider", entity.metadata.name,
-                entity.metadata.uid
-            )
-        else:
-            await session(request).put(entity)
-            logger.info(
-                "Update %s %r (%s)", "MetricsProvider", entity.metadata.name,
-                entity.metadata.uid
-            )
-
-        return web.json_response(entity.serialize())
+        return await update_resource_async(request, entity, body)

@@ -1,21 +1,13 @@
-import dataclasses
-import json
 import logging
 from aiohttp import web
-from uuid import uuid4
 from webargs.aiohttpparser import use_kwargs
 
 from krake import utils
 from krake.api.auth import protected
-from krake.api.database import (
-    EventType,
-    TransactionError
-)
 from krake.api.helpers import (
     load,
     blocking,
     session,
-    Heartbeat,
     use_schema,
     HttpProblem,
     HttpProblemTitle,
@@ -23,7 +15,15 @@ from krake.api.helpers import (
     make_create_request_schema,
     ListQuery,
 )
-from krake.data.core import WatchEvent, WatchEventType, ListMetadata
+from krake.api.base import (
+    must_create_resource_async,
+    initialize_subresource_fields,
+    delete_resource_async,
+    update_resource_async,
+    list_resources_async,
+    watch_resource_async,
+    update_property_async,
+)
 from krake.data.infrastructure import CloudBinding
 from krake.data.kubernetes import (
     ApplicationList,
@@ -52,43 +52,9 @@ class KubernetesApi(object):
     @use_schema("body", schema=make_create_request_schema(Application))
     @blocking()
     async def create_application(request, body):
-        kwargs = {"name": body.metadata.name}
-
+        body = initialize_subresource_fields(body)
         namespace = request.match_info.get("namespace")
-        kwargs["namespace"] = namespace
-
-        now = utils.now()
-
-        body.metadata.namespace = namespace
-        body.metadata.uid = str(uuid4())
-        body.metadata.created = now
-        body.metadata.modified = now
-
-        # Initialize subresource fields
-        for field in dataclasses.fields(body):
-            if field.metadata.get("subresource", False):
-                value = field.type()
-                setattr(body, field.name, value)
-
-        try:
-            await session(request).put(body)
-            logger.info(
-                "Created %s %r (%s)",
-                "Application",
-                body.metadata.name,
-                body.metadata.uid,
-            )
-        except TransactionError:
-            problem = HttpProblem(
-                detail=(
-                    f"Application {body.metadata.name!r} already "
-                    f"exists in namespace {namespace!r}"
-                ),
-                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS,
-            )
-            raise HttpProblemError(web.HTTPConflict, problem)
-
-        return web.json_response(body.serialize())
+        return await must_create_resource_async(request, body, namespace)
 
     @routes.route("DELETE", "/kubernetes/namespaces/{namespace}/applications/{name}")
     @protected(api="kubernetes", resource="applications", verb="delete")
@@ -107,28 +73,7 @@ class KubernetesApi(object):
             )
             entity.metadata.deleted = utils.now()
             return web.json_response(entity.serialize())
-
-        # Resource is already deleting
-        if entity.metadata.deleted:
-            return web.json_response(entity.serialize())
-
-        if "shutdown" in entity.spec.hooks:
-            entity.status.state = ApplicationState.WAITING_FOR_CLEANING
-
-        # TODO: Should be update "modified" here?
-        # Resource marked as deletion, to be deleted by the Garbage Collector
-        entity.metadata.deleted = utils.now()
-        entity.metadata.finalizers.append("cascade_deletion")
-
-        await session(request).put(entity)
-        logger.info(
-            "Deleting %s %r (%s)",
-            "Application",
-            entity.metadata.name,
-            entity.metadata.uid,
-            )
-
-        return web.json_response(entity.serialize())
+        return await delete_resource_async(request, entity)
 
     @routes.route("GET", "/kubernetes/applications")
     @routes.route("GET", "/kubernetes/namespaces/{namespace}/applications")
@@ -142,18 +87,8 @@ class KubernetesApi(object):
 
         # Return the list of resources
         if not watch:
-            if namespace is None:
-                objs = [obj async for obj in session(request).all(resource_class)]
-            else:
-                objs = [
-                    obj
-                    async for obj in session(request).all(
-                        resource_class, namespace=namespace
-                    )
-                ]
-
-            body = ApplicationList(metadata=ListMetadata(), items=objs)
-            return web.json_response(body.serialize())
+            return await list_resources_async(
+                resource_class, ApplicationList, request, namespace)
 
         # Watching resources
         kwargs = {}
@@ -161,29 +96,7 @@ class KubernetesApi(object):
             kwargs["namespace"] = namespace
 
         async with session(request).watch(resource_class, **kwargs) as watcher:
-            resp = web.StreamResponse(headers={"Content-Type": "application/x-ndjson"})
-            resp.enable_chunked_encoding()
-
-            await resp.prepare(request)
-
-            async with Heartbeat(resp, interval=heartbeat):
-                async for event, obj, rev in watcher:
-                    # Key was deleted. Stop update stream
-                    if event == EventType.PUT:
-                        if rev.created == rev.modified:
-                            event_type = WatchEventType.ADDED
-                        else:
-                            event_type = WatchEventType.MODIFIED
-                    else:
-                        event_type = WatchEventType.DELETED
-                        obj = await session(request).get_by_key(
-                            resource_class, key=rev.key, revision=rev.modified - 1
-                        )
-
-                    watch_event = WatchEvent(type=event_type, object=obj.serialize())
-
-                    await resp.write(json.dumps(watch_event.serialize()).encode())
-                    await resp.write(b"\n")
+            await watch_resource_async(request, heartbeat, watcher, resource_class)
 
     @routes.route("GET", "/kubernetes/namespaces/{namespace}/applications/{name}")
     @protected(api="kubernetes", resource="applications", verb="get")
@@ -196,52 +109,7 @@ class KubernetesApi(object):
     @use_schema("body", schema=Application.Schema)
     @load("entity", Application)
     async def update_application(request, body, entity):
-        # Once a resource is in the "deletion in progress" state, finalizers
-        # can only be removed.
-        if entity.metadata.deleted:
-            if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
-                problem = HttpProblem(
-                    detail="Finalizers can only be removed"
-                    " if a deletion is in progress.",
-                    title=HttpProblemTitle.UPDATE_ERROR,
-                )
-                raise HttpProblemError(web.HTTPConflict, problem)
-
-        if body == entity:
-            problem = HttpProblem(
-                detail="The body contained no update.",
-                title=HttpProblemTitle.UPDATE_ERROR,
-            )
-            raise HttpProblemError(web.HTTPBadRequest, problem)
-
-        try:
-            entity.update(body)
-        except ValueError as e:
-            problem = HttpProblem(detail=str(e), title=HttpProblemTitle.UPDATE_ERROR)
-            raise HttpProblemError(web.HTTPBadRequest, problem)
-
-        entity.metadata.modified = utils.now()
-
-        # Resource is in "deletion in progress" state and all finalizers have
-        # been removed. Delete the resource from database.
-        if entity.metadata.deleted and not entity.metadata.finalizers:
-            await session(request).delete(entity)
-            logger.info(
-                "Delete %s %r (%s)",
-                "Application",
-                entity.metadata.name,
-                entity.metadata.uid,
-            )
-        else:
-            await session(request).put(entity)
-            logger.info(
-                "Update %s %r (%s)",
-                "Application",
-                entity.metadata.name,
-                entity.metadata.uid,
-            )
-
-        return web.json_response(entity.serialize())
+        return await update_resource_async(request, entity, body)
 
     @routes.route(
         "PUT", "/kubernetes/namespaces/{namespace}/applications/{name}/binding"
@@ -337,25 +205,7 @@ class KubernetesApi(object):
     @use_schema("body", Application.Schema)
     @load("entity", Application)
     async def update_application_status(request, body, entity):
-        source = getattr(body, "status")
-        dest = getattr(entity, "status")
-
-        try:
-            dest.update(source)
-        except ValueError as e:
-            problem = HttpProblem(detail=str(e), title=HttpProblemTitle.UPDATE_ERROR)
-            raise HttpProblemError(web.HTTPBadRequest, problem)
-
-        await session(request).put(entity)
-        logger.info(
-            "Update %s of %s %r (%s)",
-            "Status",
-            "Application",
-            entity.metadata.name,
-            entity.metadata.uid,
-        )
-
-        return web.json_response(entity.serialize())
+        return await update_property_async("status", request, body, entity)
 
     @routes.route("PUT", "/kubernetes/namespaces/{namespace}/applications/{name}/retry")
     @protected(api="kubernetes", resource="applications/status", verb="update")
@@ -393,40 +243,9 @@ class KubernetesApi(object):
     @use_schema("body", schema=make_create_request_schema(Cluster))
     @blocking()
     async def create_cluster(request, body):
-        kwargs = {"name": body.metadata.name}
-
+        body = initialize_subresource_fields(body)
         namespace = request.match_info.get("namespace")
-        kwargs["namespace"] = namespace
-
-        now = utils.now()
-
-        body.metadata.namespace = namespace
-        body.metadata.uid = str(uuid4())
-        body.metadata.created = now
-        body.metadata.modified = now
-
-        # Initialize subresource fields
-        for field in dataclasses.fields(body):
-            if field.metadata.get("subresource", False):
-                value = field.type()
-                setattr(body, field.name, value)
-
-        try:
-            await session(request).put(body)
-            logger.info(
-                "Created %s %r (%s)", "Cluster", body.metadata.name, body.metadata.uid
-            )
-        except TransactionError:
-            problem = HttpProblem(
-                detail=(
-                    f"Cluster {body.metadata.name!r} already "
-                    f"exists in namespace {namespace!r}"
-                ),
-                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS,
-            )
-            raise HttpProblemError(web.HTTPConflict, problem)
-
-        return web.json_response(body.serialize())
+        return await must_create_resource_async(request, body, namespace)
 
     @routes.route("DELETE", "/kubernetes/namespaces/{namespace}/clusters/{name}")
     @protected(api="kubernetes", resource="clusters", verb="delete")
@@ -445,22 +264,7 @@ class KubernetesApi(object):
             )
             entity.metadata.deleted = utils.now()
             return web.json_response(entity.serialize())
-
-        # Resource is already deleting
-        if entity.metadata.deleted:
-            return web.json_response(entity.serialize())
-
-        # TODO: Should be update "modified" here?
-        # Resource marked as deletion, to be deleted by the Garbage Collector
-        entity.metadata.deleted = utils.now()
-        entity.metadata.finalizers.append("cascade_deletion")
-
-        await session(request).put(entity)
-        logger.info(
-          "Deleting %s %r (%s)", "Cluster", entity.metadata.name, entity.metadata.uid
-        )
-
-        return web.json_response(entity.serialize())
+        return await delete_resource_async(request, entity)
 
     @routes.route("GET", "/kubernetes/clusters")
     @routes.route("GET", "/kubernetes/namespaces/{namespace}/clusters")
@@ -474,18 +278,8 @@ class KubernetesApi(object):
 
         # Return the list of resources
         if not watch:
-            if namespace is None:
-                objs = [obj async for obj in session(request).all(resource_class)]
-            else:
-                objs = [
-                    obj
-                    async for obj in session(request).all(
-                        resource_class, namespace=namespace
-                    )
-                ]
-
-            body = ClusterList(metadata=ListMetadata(), items=objs)
-            return web.json_response(body.serialize())
+            return await list_resources_async(
+                resource_class, ClusterList, request, namespace)
 
         # Watching resources
         kwargs = {}
@@ -493,29 +287,7 @@ class KubernetesApi(object):
             kwargs["namespace"] = namespace
 
         async with session(request).watch(resource_class, **kwargs) as watcher:
-            resp = web.StreamResponse(headers={"Content-Type": "application/x-ndjson"})
-            resp.enable_chunked_encoding()
-
-            await resp.prepare(request)
-
-            async with Heartbeat(resp, interval=heartbeat):
-                async for event, obj, rev in watcher:
-                    # Key was deleted. Stop update stream
-                    if event == EventType.PUT:
-                        if rev.created == rev.modified:
-                            event_type = WatchEventType.ADDED
-                        else:
-                            event_type = WatchEventType.MODIFIED
-                    else:
-                        event_type = WatchEventType.DELETED
-                        obj = await session(request).get_by_key(
-                            resource_class, key=rev.key, revision=rev.modified - 1
-                        )
-
-                    watch_event = WatchEvent(type=event_type, object=obj.serialize())
-
-                    await resp.write(json.dumps(watch_event.serialize()).encode())
-                    await resp.write(b"\n")
+            await watch_resource_async(request, heartbeat, watcher, resource_class)
 
     @routes.route("GET", "/kubernetes/namespaces/{namespace}/clusters/{name}")
     @protected(api="kubernetes", resource="clusters", verb="get")
@@ -528,52 +300,7 @@ class KubernetesApi(object):
     @use_schema("body", schema=Cluster.Schema)
     @load("entity", Cluster)
     async def update_cluster(request, body, entity):
-        # Once a resource is in the "deletion in progress" state, finalizers
-        # can only be removed.
-        if entity.metadata.deleted:
-            if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
-                problem = HttpProblem(
-                    detail="Finalizers can only be removed"
-                    " if a deletion is in progress.",
-                    title=HttpProblemTitle.UPDATE_ERROR,
-                )
-                raise HttpProblemError(web.HTTPConflict, problem)
-
-        if body == entity:
-            problem = HttpProblem(
-                detail="The body contained no update.",
-                title=HttpProblemTitle.UPDATE_ERROR,
-            )
-            raise HttpProblemError(web.HTTPBadRequest, problem)
-
-        try:
-            entity.update(body)
-        except ValueError as e:
-            problem = HttpProblem(detail=str(e), title=HttpProblemTitle.UPDATE_ERROR)
-            raise HttpProblemError(web.HTTPBadRequest, problem)
-
-        entity.metadata.modified = utils.now()
-
-        # Resource is in "deletion in progress" state and all finalizers have
-        # been removed. Delete the resource from database.
-        if entity.metadata.deleted and not entity.metadata.finalizers:
-            await session(request).delete(entity)
-            logger.info(
-                "Delete %s %r (%s)",
-                "Cluster",
-                entity.metadata.name,
-                entity.metadata.uid,
-            )
-        else:
-            await session(request).put(entity)
-            logger.info(
-                "Update %s %r (%s)",
-                "Cluster",
-                entity.metadata.name,
-                entity.metadata.uid,
-            )
-
-        return web.json_response(entity.serialize())
+        return await update_resource_async(request, entity, body)
 
     @routes.route("PUT", "/kubernetes/namespaces/{namespace}/clusters/{name}/binding")
     @protected(api="kubernetes", resource="clusters/binding", verb="update")
@@ -603,22 +330,4 @@ class KubernetesApi(object):
     @use_schema("body", Cluster.Schema)
     @load("entity", Cluster)
     async def update_cluster_status(request, body, entity):
-        source = getattr(body, "status")
-        dest = getattr(entity, "status")
-
-        try:
-            dest.update(source)
-        except ValueError as e:
-            problem = HttpProblem(detail=str(e), title=HttpProblemTitle.UPDATE_ERROR)
-            raise HttpProblemError(web.HTTPBadRequest, problem)
-
-        await session(request).put(entity)
-        logger.info(
-            "Update %s of %s %r (%s)",
-            "Status",
-            "Cluster",
-            entity.metadata.name,
-            entity.metadata.uid,
-        )
-
-        return web.json_response(entity.serialize())
+        return await update_property_async("status", request, body, entity)

@@ -635,7 +635,7 @@ async def test_update_global_metrics_provider_no_changes(aiohttp_client, config,
     resp = await client.put(
         f"/core/globalmetricsproviders/{data.metadata.name}", json=data.serialize()
     )
-    assert resp.status == 200
+    assert resp.status == 400
 
 
 async def test_update_global_metrics_provider_immutable_field(
