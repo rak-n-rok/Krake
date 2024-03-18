@@ -404,7 +404,6 @@ class Serializable(metaclass=SerializableMeta):
         Schema (ModelizedSchema): Schema for this dataclass
 
     """
-
     def __init__(self, **kwargs):
         for field in dataclasses.fields(self):
             if field.name in kwargs:
@@ -415,10 +414,6 @@ class Serializable(metaclass=SerializableMeta):
                 value = field.default_factory()
             else:
                 raise TypeError(f"Missing keyword argument {field.name!r}")
-            
-            validate_fn = field.metadata.get("validate", False)
-            if validate_fn:
-                validate_fn(value)
 
             setattr(self, field.name, value)
         if kwargs:

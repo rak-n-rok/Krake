@@ -1317,7 +1317,7 @@ async def complete(app, api_endpoint, ssl_context, config):
     if "complete" not in app.spec.hooks:
         return
 
-    # Use the endpoint of the API only if the external endpoint has not been set.
+    # Use the endpoint of the API only if the external endpoint has been set.
     if config.complete.external_endpoint:
         api_endpoint = config.complete.external_endpoint
 
