@@ -11,6 +11,7 @@ from kubernetes_asyncio.config import ConfigException
 from toscaparser.tosca_template import ToscaTemplate, log
 from toscaparser.common.exception import TOSCAException
 
+from krake.data.hooks.enums import ShutdownHookFailureStrategy
 from krake.utils import get_kubernetes_resource_idx, cache_non_hashable
 from . import persistent
 from .serializable import Serializable, ApiObject
@@ -599,6 +600,7 @@ class ApplicationStatus(Status):
     shutdown_cert: str = None
     shutdown_key: str = None
     shutdown_grace_period: datetime = None
+    shutdown_failure_strategy: str = ShutdownHookFailureStrategy.GIVE_UP.value
     auto_cluster_create_started: str = None
     migration_retries: int = 0
     migration_timeout: int = 0

@@ -655,7 +655,7 @@ class KubernetesApplicationController(Controller):
                         start=start_observer,
                     )
                     logging.debug(f"{app.metadata.name} delete")
-                    await self._delete_application(copy)
+                    await self._delete_application_async(copy)
                     await listen.hook(
                         HookType.ApplicationPostDelete,
                         controller=self,
@@ -737,7 +737,7 @@ class KubernetesApplicationController(Controller):
                 start=start_observer,
             )
 
-    async def _delete_application(self, app):
+    async def _delete_application_async(self, app: Application):
         # FIXME: during its deletion, an Application is updated, and thus put into the
         #  queue again on the controller to be deleted. After deletion, the Application
         #  is released from the active resources of the queue, and the updated resource
@@ -759,7 +759,7 @@ class KubernetesApplicationController(Controller):
 
         logger.info(f"{app.metadata.name} delete")
 
-        await self._delete_manifest(app)
+        await self._delete_manifest_async(app)
 
         # Remove finalizer
         finalizer = app.metadata.finalizers.pop(-1)
@@ -775,7 +775,7 @@ class KubernetesApplicationController(Controller):
             namespace=app.metadata.namespace, name=app.metadata.name, body=app
         )
 
-    async def _delete_manifest(self, app):
+    async def _delete_manifest_async(self, app: Application):
         # Delete Kubernetes resources if the application was bound to a
         # cluster and there were Kubernetes resources created.
         if app.status.running_on and app.status.last_observed_manifest:
@@ -797,7 +797,7 @@ class KubernetesApplicationController(Controller):
                         resource=resource,
                         controller=self,
                     )
-                    resp = await kube.delete(resource)
+                    resp = await kube.delete_async(resource)
                     await listen.hook(
                         HookType.ResourcePostDelete,
                         app=app,
@@ -812,6 +812,7 @@ class KubernetesApplicationController(Controller):
         # Clear manifest in status
         app.status.running_on = None
 
+# region Application shutdown
     async def _shutdown_application_async(self, app: Application):
 
         cluster = await self.kubernetes_api.read_cluster(
@@ -844,65 +845,72 @@ class KubernetesApplicationController(Controller):
     async def _run_application_shutdown_strategy_async(self,
                                                        kube: KubernetesClient,
                                                        app: Application):
-        def app_has_shutdown_strategy(
-                app: Application,
-                strategy: ShutdownHookFailureStrategy) -> bool:
-            return app.shutdown_hook_config.failure_strategy == strategy.value
 
         # run shutdown only once unless retry is specified as shutdown strategy
-        max_shutdown_count = 1
-        if app_has_shutdown_strategy(app, ShutdownHookFailureStrategy.RETRY):
-            shutdown_hook_config: ShutdownHookConfiguration = self.hooks.shutdown
-            max_shutdown_count = shutdown_hook_config.failure_retry_count + 1
+        shutdown_hook_config: ShutdownHookConfiguration = self.hooks.shutdown
+        max_shutdown_count = shutdown_hook_config.failure_retry_count + 1
 
         executed_shutdowns_count = 0
 
-        try:
-            while executed_shutdowns_count < max_shutdown_count:
+        while executed_shutdowns_count < max_shutdown_count:
+            try:
+                logger.info(f"Attempting shutdown of application {app.metadata.name!r})"
+                            f"{executed_shutdowns_count}/{max_shutdown_count}")
                 await kube.shutdown_async(app)
                 executed_shutdowns_count += 1
 
                 await asyncio.sleep(app.spec.shutdown_grace_time)
-                if await self._check_grace_period_async(app):
-                    logger.info(f"Application {app.metadata.name!r} was successfully"
-                                " shutdown")
+                if await self._check_shutdown_success_async(app):
+                    logger.info(f"Successful graceful shutdown of application"
+                                f" {app.metadata.name!r}")
                     return
 
-                # handle degraded app state
-                if app_has_shutdown_strategy(app, ShutdownHookFailureStrategy.DELETE):
-                    # TODO force delete application
-                    # send request to kubernetes API and update db
-                    return
-        except Exception as e:
-            logger.error("Exception occured during graceful shutdown of"
-                         f"application {app.metadata.name!r}")
-            logger.error(str(e))
-        finally:
-            logger.error("Graceful shutdown of application"
-                         f" {app.metadata.name!r} failed")
+            except Exception as e:
+                logger.error("Exception occured during graceful shutdown of"
+                             f"application {app.metadata.name!r}")
+                logger.error(str(e))
 
-    async def _check_grace_period_async(self, app: Application) -> bool:
+        if self._has_shutdown_strategy(app, ShutdownHookFailureStrategy.DELETE):
+            await self._delete_application_async(app)
+            logger.info("Graceful shutdown of application"
+                        f"{app.metadata.name!r} failed. Deleting application.")
+            return
+
+        logger.error("Graceful shutdown of application"
+                     f" {app.metadata.name!r} failed")
+
+    async def _check_shutdown_success_async(self, app: Application) -> bool:
         # TODO documentation
         app_update = await self.kubernetes_api.read_application(
             namespace=app.metadata.namespace,
             name=app.metadata.name,
         )
 
-        if app_update.status.state is not ApplicationState.WAITING_FOR_CLEANING:
-            return True
+        if app_update.status.state is ApplicationState.DEGRADED:
+            return False
 
-        # else failed to delete application
-        app.status.state = ApplicationState.DEGRADED
-        logger.debug(f"{app.metadata.name} to ApplicationState.DEGRADED "
-                     f"because of previous state "
-                     f"ApplicationState.WAITING_FOR_CLEANING")
-        await self.kubernetes_api.update_application_status(
-            namespace=app.metadata.namespace,
-            name=app.metadata.name,
-            body=app,
-        )
+        if app_update.status.state is ApplicationState.WAITING_FOR_CLEANING:
+            app.status.state = ApplicationState.DEGRADED
+            logger.debug(f"{app.metadata.name} to ApplicationState.DEGRADED "
+                         f"because of previous state "
+                         f"ApplicationState.WAITING_FOR_CLEANING")
+            await self.kubernetes_api.update_application_status(
+                namespace=app.metadata.namespace,
+                name=app.metadata.name,
+                body=app,
+            )
+            return False
 
-        return False
+        return True
+
+    def _has_shutdown_strategy(
+            self,
+            app: Application,
+            strategy: ShutdownHookFailureStrategy) -> bool:
+        # TODO check if app has different failure strategy
+        return self.hooks.shutdown.failure_strategy == strategy.value
+
+# endregion
 
     async def _reconcile_application(self, app):
         if not app.status.scheduled_to:
@@ -1007,7 +1015,7 @@ class KubernetesApplicationController(Controller):
                     resource=deleted,
                     controller=self,
                 )
-                resp = await kube.delete(deleted)
+                resp = await kube.delete_async(deleted)
                 await listen.hook(
                     HookType.ResourcePostDelete,
                     app=app,
@@ -1260,7 +1268,7 @@ class KubernetesApplicationController(Controller):
             logger.error("Couldn't migrate %r, resetting to old location", app)
 
             # Delete all resources currently running on the new cluster
-            await self._delete_manifest(app)
+            await self._delete_manifest_async(app)
             app = old_app
             app.status.scheduled_to = app.status.running_on
             app.status.migration_retries += 1
@@ -1269,7 +1277,7 @@ class KubernetesApplicationController(Controller):
             )
         else:
             # Delete all resources currently running on the old cluster
-            await self._delete_manifest(old_app)
+            await self._delete_manifest_async(old_app)
             app.status.migration_retries = 0
             app.status.migration_timeout = 0
 
@@ -1299,7 +1307,7 @@ class KubernetesApplicationController(Controller):
         )
 
         # Delete all resources currently running on the old cluster
-        await self._delete_manifest(app)
+        await self._delete_manifest_async(app)
 
         # Mangle desired spec resource by Mangling hook
         await self.kubernetes_api.read_cluster(

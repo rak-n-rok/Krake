@@ -305,8 +305,6 @@ class ShutdownHookConfiguration(Serializable):
                 "Strategy to execute after a shutdown timeout occured"
                 "Supported values:"
                 "'delete': Remove the application"
-                "'retry': Retry shutting down the application using the shutdown"
-                " until the shutdown succeeds or the shutdown failed"
                 " failure_retry_count times"
                 "'give_up': Do nothing and let the user manually shut down the"
                 " application"
@@ -315,11 +313,11 @@ class ShutdownHookConfiguration(Serializable):
         },
     )
     failure_retry_count: int = field(
-        default=2,
+        default=0,
         metadata={
             "help": (
-                "Number of retries to shutdown the application using its shutdown"
-                " endpoint. Only used if 'retry' is specified as failure strategy"
+                "Maximum number of retries to gracefully shutdown the application until"
+                "the specified failure strategy is executed"
             ),
             "validate": validate_positive_int
         },
