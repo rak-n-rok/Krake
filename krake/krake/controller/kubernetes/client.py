@@ -13,6 +13,7 @@ from kubernetes_asyncio.client.rest import ApiException
 
 from krake.controller import ControllerError
 from krake.data.core import ReasonCode
+from krake.data.kubernetes import Application
 from krake.utils import camel_to_snake_case, cached_property
 
 logger = logging.getLogger(__name__)
@@ -494,7 +495,7 @@ class KubernetesClient(object):
 
         return resp
 
-    async def shutdown(self, app):
+    async def shutdown_async(self, app: Application):
         """Gracefully shutdown the given application on the cluster by calling the apps
         exposed shutdown address.
 
