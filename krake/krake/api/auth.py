@@ -86,7 +86,7 @@ from functools import wraps
 from typing import NamedTuple, Optional
 from aiohttp import web
 
-from krake.data.core import Verb, Role, RoleBinding
+from krake.data.core import Verb, Role, RoleBinding, RoleRule
 from yarl import URL
 
 from .helpers import session, HttpProblemError, HttpProblem, HttpProblemTitle
@@ -283,7 +283,7 @@ async def rbac(request, auth_request):
             the incoming HTTP request.
 
     Returns:
-        krake.data.core.Role: The role allowing access.
+        krake.data.core.Role: One role allowing access.
 
     Raises:
         aiohttp.web.HTTPForbidden: If no role allows access.
@@ -298,23 +298,45 @@ async def rbac(request, auth_request):
     # Check if any role grants access
     async for role in roles:
         for rule in role.rules:
-            # Check if the API group matches
-            if rule.api == auth_request.api or rule.api == "":
-                # Check if the requested verb is allowed
-                if auth_request.verb in rule.verbs:
-                    # Check if the requested resource is allowed
-                    if auth_request.resource in rule.resources or "" in rule.resources:
-                        # If the resource is not namespaced, grant access
-                        if auth_request.namespace is None:
-                            return role
+            if check_auth_request(rule, auth_request):
+                return role
 
-                        if (
-                            auth_request.namespace in rule.namespaces
-                            or "" in rule.namespaces
-                        ):
-                            return role
+    raise web.HTTPForbidden
 
-    raise web.HTTPForbidden()
+
+def check_auth_request(rule: RoleRule,
+                       auth_request: AuthorizationRequest) -> bool:
+    """Check an auth request against a rule and a role.
+
+    1. Check if the requested verb is allowed by the rule.
+    2. Check if the requested api component is allowed by the rule.
+    3. Check if the requested resource is allowed by the rule.
+    4. If the rule allows access to the requested namespace or a global resource is
+    requested, grant access.
+
+    Args:
+        rule (krake.data.core.RoleRule): Rule to check against
+        auth_request (AuthorizationRequest): Authorization request to check
+
+    Returns:
+        bool: True if access is granted, False otherwise
+    """
+    if auth_request.verb not in rule.verbs:
+        return False
+
+    if rule.api != auth_request.api and rule.api != "":
+        return False
+
+    if auth_request.resource not in rule.resources and "" not in rule.resources:
+        return False
+
+    if (auth_request.namespace in rule.namespaces or "" in rule.namespaces):
+        return True
+
+    if auth_request.namespace is None:
+        return True
+
+    return False
 
 
 def protected(api, resource, verb):
