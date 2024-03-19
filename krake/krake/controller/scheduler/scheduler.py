@@ -394,7 +394,7 @@ class Handler(object):
         """
         global_resource = False
         if len(metrics) != len(reasons):
-            raise ValueError("length of metrics and reasons don't match up")
+            raise ValueError("Length of metrics and reasons don't match up")
 
         if resource.kind == Cluster.kind:
             resource.status.state = ClusterState.FAILING_METRICS
@@ -1811,7 +1811,7 @@ class OpenstackHandler(Handler):
 
         """
         if len(metrics) != len(reasons):
-            raise ValueError("length of metrics and reasons don't match up")
+            raise ValueError("Length of metrics and reasons don't match up")
 
         if resource.kind == "Cluster":
             resource.status.state = ClusterState.FAILING_METRICS
