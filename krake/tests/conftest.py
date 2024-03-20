@@ -1069,6 +1069,8 @@ def hooks_config(pki):
                     "cert_dest": "/etc/krake_shutdown_certs",
                     "env_token": "KRAKE_SHUTDOWN_TOKEN",
                     "env_url": "KRAKE_SHUTDOWN_URL",
+                    "failure_strategy": "give_up",
+                    "failure_retry_count": 0,
                 },
             }
         )

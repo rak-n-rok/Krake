@@ -18,7 +18,6 @@ class ShutdownHookFailureStrategy(Enum):
 
     GIVE_UP = 'give_up'
     DELETE = 'delete'
-    RETRY = 'retry'
 
     @staticmethod
     def list_supported_values() -> str:
