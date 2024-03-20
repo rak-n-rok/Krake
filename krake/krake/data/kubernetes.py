@@ -366,14 +366,16 @@ def _validate_observer_schema_list(partial_schema):
 
     if observer_schema_list_max_length != 0:
         if observer_schema_list_max_length < observer_schema_list_min_length:
-            raise ValueError("observer_schema_list_max_length is inferior to "
-                  "observer_schema_list_min_length")
+            raise ValueError(
+                "observer_schema_list_max_length is inferior to "
+                "observer_schema_list_min_length"
+            )
 
         if observer_schema_list_max_length < len(partial_schema[:-1]):
             raise ValueError(
                 "observer_schema_list_max_length is inferior to the number of observed "
                 "elements"
-                )
+            )
 
     for value in partial_schema[:-1]:
 
@@ -403,9 +405,7 @@ def _validate_observer_schema(observer_schema, manifest):
     for resource_observer_schema in observer_schema:
 
         try:
-            _validate_observer_schema_dict(
-                resource_observer_schema, first_level=True
-            )
+            _validate_observer_schema_dict(resource_observer_schema, first_level=True)
         except (ValueError, TypeError) as e:
             raise ObserverSchemaError(e)
         try:

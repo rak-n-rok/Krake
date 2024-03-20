@@ -1807,7 +1807,7 @@ class OpenstackHandler(Handler):
 
         Raises:
             ValueError: if length of metrics and reasons don't match up or resource is
-                unsupported kind
+                of unsupported kind
 
         """
         if len(metrics) != len(reasons):
