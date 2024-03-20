@@ -13,7 +13,7 @@ from kubernetes_asyncio.client.rest import ApiException
 
 from krake.controller import ControllerError
 from krake.data.core import ReasonCode
-from krake.data.kubernetes import Application
+from krake.data.kubernetes import Application, Cluster
 from krake.utils import camel_to_snake_case, cached_property
 
 logger = logging.getLogger(__name__)
@@ -215,6 +215,10 @@ class KubernetesClient(object):
         self.custom_resources = custom_resources
         self.resource_apis = None
         self.api_client = None
+
+    @classmethod
+    def for_cluster(cls, cluster: Cluster):
+        return cls(cluster.spec.kubeconfig, cluster.spec.custom_resources)
 
     @staticmethod
     def log_response(response, kind, action=None):
