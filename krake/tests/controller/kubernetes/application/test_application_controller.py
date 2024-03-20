@@ -2333,7 +2333,7 @@ async def test_app_deletion_with_shutdown_hook_app_not_found(
 
 @pytest.mark.slow
 async def test_app_deletion_with_shutdown_hook_timeout(
-    aiohttp_server, config, db, loop, httpserver
+    aiohttp_server, config, db, loop, httpserver, hooks_config: HooksConfiguration
 ):
     """Test the deletion of an application with a shutdown hook
 
@@ -2393,10 +2393,9 @@ async def test_app_deletion_with_shutdown_hook_timeout(
     server = await aiohttp_server(create_app(config))
 
     httpserver.expect_request("/shutdown").respond_with_json({})
-
     async with Client(url=server_endpoint(server), loop=loop) as client:
         controller = KubernetesApplicationController(
-            server_endpoint(server), worker_count=0
+            server_endpoint(server), worker_count=0, hooks=hooks_config
         )
         await controller.prepare(client)
 
@@ -2417,7 +2416,6 @@ async def test_app_deletion_with_shutdown_hook_timeout(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
 
-    # TODO find a way to await the coroutine
     assert stored.status.state == ApplicationState.DEGRADED
 
 
