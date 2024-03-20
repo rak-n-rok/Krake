@@ -17,7 +17,7 @@ from kubernetes import config
 from kubernetes.client.api import core_v1_api
 from kubernetes.stream import stream
 from kubernetes_asyncio.client.rest import ApiException
-from typing import NamedTuple, Tuple
+from typing import Any, Callable, NamedTuple, Tuple
 
 from yarl import URL
 
@@ -377,7 +377,7 @@ class KubernetesApplicationController(Controller):
         super().__init__(
             api_endpoint, loop=loop, ssl_context=ssl_context, debounce=debounce
         )
-        self.kubernetes_api = None
+        self.kubernetes_api: KubernetesApi = None
         self.application_reflector = None
 
         self.worker_count = worker_count
@@ -837,7 +837,7 @@ class KubernetesApplicationController(Controller):
                     )
 
                     asyncio.create_task(
-                        self._run_application_shutdown_strategy_async(kube, app)
+                        self._run_app_shutdown_strategy_async(kube, app)
                         )
         return
 
@@ -846,7 +846,6 @@ class KubernetesApplicationController(Controller):
                                                        kube: KubernetesClient,
                                                        app: Application):
 
-        # run shutdown only once unless retry is specified as shutdown strategy
         shutdown_hook_config: ShutdownHookConfiguration = self.hooks.shutdown
         max_shutdown_count = shutdown_hook_config.failure_retry_count + 1
 
@@ -857,7 +856,6 @@ class KubernetesApplicationController(Controller):
                 logger.info(f"Attempting shutdown of application {app.metadata.name!r})"
                             f"{executed_shutdowns_count}/{max_shutdown_count}")
                 await kube.shutdown_async(app)
-                executed_shutdowns_count += 1
 
                 await asyncio.sleep(app.spec.shutdown_grace_time)
                 if await self._check_shutdown_success_async(app):
@@ -869,7 +867,11 @@ class KubernetesApplicationController(Controller):
                 logger.error("Exception occured during graceful shutdown of"
                              f"application {app.metadata.name!r}")
                 logger.error(str(e))
+            finally:
+                executed_shutdowns_count += 1
 
+        # TODO add to separate method
+        # handle shutdown failure after specified retries
         if self._has_shutdown_strategy(app, ShutdownHookFailureStrategy.DELETE):
             await self._delete_application_async(app)
             logger.info("Graceful shutdown of application"
@@ -886,7 +888,8 @@ class KubernetesApplicationController(Controller):
             name=app.metadata.name,
         )
 
-        if app_update.status.state is ApplicationState.DEGRADED:
+        if app_update.status.state in [ApplicationState.DEGRADED,
+                                       ApplicationState.FAILED]:
             return False
 
         if app_update.status.state is ApplicationState.WAITING_FOR_CLEANING:

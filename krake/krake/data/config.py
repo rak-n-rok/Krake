@@ -7,7 +7,7 @@ from marshmallow import ValidationError
 from yarl import URL
 
 from krake.data.hooks.enums import ShutdownHookFailureStrategy
-from krake.validation import validate_positive_int
+from krake.validation import validate_non_negative_int, validate_positive_int
 
 
 class TlsConfiguration(Serializable):
@@ -319,7 +319,7 @@ class ShutdownHookConfiguration(Serializable):
                 "Maximum number of retries to gracefully shutdown the application until"
                 "the specified failure strategy is executed"
             ),
-            "validate": validate_positive_int
+            "validate": validate_non_negative_int
         },
     )
 

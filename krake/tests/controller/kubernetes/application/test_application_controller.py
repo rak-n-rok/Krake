@@ -2331,6 +2331,7 @@ async def test_app_deletion_with_shutdown_hook_app_not_found(
         assert controller.queue.size() == 0
 
 
+@pytest.mark.slow
 async def test_app_deletion_with_shutdown_hook_timeout(
     aiohttp_server, config, db, loop, httpserver
 ):
@@ -2415,6 +2416,8 @@ async def test_app_deletion_with_shutdown_hook_timeout(
     stored = await db.get(
         Application, namespace=app.metadata.namespace, name=app.metadata.name
     )
+
+    # TODO find a way to await the coroutine
     assert stored.status.state == ApplicationState.DEGRADED
 
 
@@ -3044,11 +3047,11 @@ async def test_client_app_delete_error_handling(
         current_state = 1
 
         with pytest.raises(ApiException):
-            await kube.delete(copy_deployment_manifest[0])
+            await kube.delete_async(copy_deployment_manifest[0])
 
         # State (2): Return a 404
         current_state = 2
-        resp = await kube.delete(copy_deployment_manifest[0])
+        resp = await kube.delete_async(copy_deployment_manifest[0])
         assert resp is None
 
     already_deleted = 0
