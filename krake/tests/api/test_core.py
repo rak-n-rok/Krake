@@ -9,6 +9,7 @@ from krake.api.helpers import HttpProblem, HttpProblemTitle
 
 from krake.data.core import WatchEventType, WatchEvent, resource_ref
 from krake.data.core import (
+    Metadata,
     GlobalMetric,
     GlobalMetricsProvider,
     Metric,
@@ -38,6 +39,13 @@ from tests.factories.core import (
 from tests.factories.fake import fake
 
 
+def assert_valid_metadata(received_metadata: Metadata, expected_namespace: str):
+    assert received_metadata.created
+    assert received_metadata.modified
+    assert received_metadata.namespace == expected_namespace
+    assert received_metadata.uid
+
+
 async def test_create_global_metric(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
     data = GlobalMetricFactory()
@@ -46,10 +54,7 @@ async def test_create_global_metric(aiohttp_client, config, db):
     assert resp.status == 200
     received = GlobalMetric.deserialize(await resp.json())
 
-    assert received.metadata.created
-    assert received.metadata.modified
-    assert received.metadata.namespace is None
-    assert received.metadata.uid
+    assert_valid_metadata(received.metadata, None)
 
     stored = await db.get(GlobalMetric, name=data.metadata.name)
     assert stored == received
@@ -349,10 +354,7 @@ async def test_create_global_metrics_provider(aiohttp_client, config, db):
     assert resp.status == 200
     received = GlobalMetricsProvider.deserialize(await resp.json())
 
-    assert received.metadata.created
-    assert received.metadata.modified
-    assert received.metadata.namespace is None
-    assert received.metadata.uid
+    assert_valid_metadata(received.metadata, None)
     assert received.spec == data.spec
 
     stored = await db.get(GlobalMetricsProvider, name=data.metadata.name)
@@ -698,10 +700,7 @@ async def test_create_metric(aiohttp_client, config, db):
     assert resp.status == 200
     received = Metric.deserialize(await resp.json())
 
-    assert received.metadata.created
-    assert received.metadata.modified
-    assert received.metadata.namespace == "testing"
-    assert received.metadata.uid
+    assert_valid_metadata(received.metadata, "testing")
 
     stored = await db.get(
         Metric, name=data.metadata.name, namespace=data.metadata.namespace
@@ -1034,10 +1033,7 @@ async def test_create_metrics_provider(aiohttp_client, config, db):
     assert resp.status == 200
     received = MetricsProvider.deserialize(await resp.json())
 
-    assert received.metadata.created
-    assert received.metadata.modified
-    assert received.metadata.namespace
-    assert received.metadata.uid
+    assert_valid_metadata(received.metadata, "testing")
     assert received.spec == data.spec
 
     stored = await db.get(
@@ -1413,10 +1409,7 @@ async def test_create_role(aiohttp_client, config, db):
     assert resp.status == 200
     received = Role.deserialize(await resp.json())
 
-    assert received.metadata.created
-    assert received.metadata.modified
-    assert received.metadata.namespace is None
-    assert received.metadata.uid
+    assert_valid_metadata(received.metadata, None)
 
     stored = await db.get(Role, name=data.metadata.name)
     assert stored == received
@@ -1710,10 +1703,7 @@ async def test_create_role_binding(aiohttp_client, config, db):
     assert resp.status == 200
     received = RoleBinding.deserialize(await resp.json())
 
-    assert received.metadata.created
-    assert received.metadata.modified
-    assert received.metadata.namespace is None
-    assert received.metadata.uid
+    assert_valid_metadata(received.metadata, None)
 
     stored = await db.get(RoleBinding, name=data.metadata.name)
     assert stored == received

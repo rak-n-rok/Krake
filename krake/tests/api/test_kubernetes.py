@@ -38,7 +38,7 @@ from tests.controller.kubernetes.test_tosca import (
     create_tosca_from_resources,
     CSAR_META,
 )
-
+from tests.api.test_core import assert_valid_metadata
 
 async def test_create_application(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
@@ -51,10 +51,7 @@ async def test_create_application(aiohttp_client, config, db):
     assert resp.status == 200
     received = Application.deserialize(await resp.json())
 
-    assert received.metadata.created
-    assert received.metadata.modified
-    assert received.metadata.namespace == "testing"
-    assert received.metadata.uid
+    assert_valid_metadata(received.metadata, "testing")
     assert received.spec == data.spec
     assert received.status.state == ApplicationState.PENDING
 
@@ -574,10 +571,7 @@ async def test_create_application_tosca_from_dict(aiohttp_client, config, db):
     assert resp.status == 200
     received = Application.deserialize(await resp.json())
 
-    assert received.metadata.created
-    assert received.metadata.modified
-    assert received.metadata.namespace == "testing"
-    assert received.metadata.uid
+    assert_valid_metadata(received.metadata, "testing")
     assert received.status.state == ApplicationState.PENDING
     assert received.spec == data.spec
 
@@ -603,10 +597,7 @@ async def test_create_application_tosca_from_url(
     assert resp.status == 200
     received = Application.deserialize(await resp.json())
 
-    assert received.metadata.created
-    assert received.metadata.modified
-    assert received.metadata.namespace == "testing"
-    assert received.metadata.uid
+    assert_valid_metadata(received.metadata, "testing")
     assert received.status.state == ApplicationState.PENDING
     assert received.spec == data.spec
 
@@ -643,10 +634,7 @@ async def test_create_application_csar_from_url(
     assert resp.status == 200
     received = Application.deserialize(await resp.json())
 
-    assert received.metadata.created
-    assert received.metadata.modified
-    assert received.metadata.namespace == "testing"
-    assert received.metadata.uid
+    assert_valid_metadata(received.metadata, "testing")
     assert received.status.state == ApplicationState.PENDING
     assert received.spec == data.spec
 
@@ -1048,10 +1036,7 @@ async def test_create_cluster(aiohttp_client, config, db):
     assert resp.status == 200
     received = Cluster.deserialize(await resp.json())
 
-    assert received.metadata.created
-    assert received.metadata.modified
-    assert received.metadata.namespace == "testing"
-    assert received.metadata.uid
+    assert_valid_metadata(received.metadata, "testing")
     assert received.spec == data.spec
 
     stored = await db.get(Cluster, namespace="testing", name=data.metadata.name)

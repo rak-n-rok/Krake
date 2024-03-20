@@ -29,7 +29,7 @@ from tests.factories.infrastructure import (
 )
 
 from tests.factories.fake import fake
-
+from tests.api.test_core import assert_valid_metadata
 
 async def test_create_global_infrastructure_provider(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
@@ -42,10 +42,7 @@ async def test_create_global_infrastructure_provider(aiohttp_client, config, db)
     assert resp.status == 200
     received = GlobalInfrastructureProvider.deserialize(await resp.json())
 
-    assert received.metadata.created
-    assert received.metadata.modified
-    assert received.metadata.namespace is None
-    assert received.metadata.uid
+    assert_valid_metadata(received.metadata, None)
     assert received.spec == data.spec
 
     stored = await db.get(GlobalInfrastructureProvider, name=data.metadata.name)
@@ -405,10 +402,7 @@ async def test_create_infrastructure_provider(aiohttp_client, config, db):
     assert resp.status == 200
     received = InfrastructureProvider.deserialize(await resp.json())
 
-    assert received.metadata.created
-    assert received.metadata.modified
-    assert received.metadata.namespace == "testing"
-    assert received.metadata.uid
+    assert_valid_metadata(received.metadata, "testing")
     assert received.spec == data.spec
 
     stored = await db.get(
@@ -887,10 +881,7 @@ async def test_create_global_cloud(aiohttp_client, config, db):
     assert resp.status == 200
     received = GlobalCloud.deserialize(await resp.json())
 
-    assert received.metadata.created
-    assert received.metadata.modified
-    assert received.metadata.namespace is None
-    assert received.metadata.uid
+    assert_valid_metadata(received.metadata, None)
     assert received.spec == data.spec
     assert received.status.state == CloudState.ONLINE
 
@@ -1243,10 +1234,7 @@ async def test_create_cloud(aiohttp_client, config, db):
     assert resp.status == 200
     received = Cloud.deserialize(await resp.json())
 
-    assert received.metadata.created
-    assert received.metadata.modified
-    assert received.metadata.namespace == "testing"
-    assert received.metadata.uid
+    assert_valid_metadata(received.metadata, "testing")
     assert received.status.state == CloudState.ONLINE
 
     stored = await db.get(Cloud, namespace="testing", name=data.metadata.name)
