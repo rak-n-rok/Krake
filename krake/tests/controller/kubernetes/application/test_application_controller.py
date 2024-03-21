@@ -2051,7 +2051,7 @@ async def test_app_deletion_temporarily_unreachable_cluster(
 
 
 async def test_app_deletion_with_shutdown_hook(
-    aiohttp_server, config, db, loop, httpserver
+    aiohttp_server, config, db, loop, httpserver, hooks_config
 ):
     """Test the deletion of an application with a shutdown hook
 
@@ -2114,7 +2114,7 @@ async def test_app_deletion_with_shutdown_hook(
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         controller = KubernetesApplicationController(
-            server_endpoint(server), worker_count=0
+            server_endpoint(server), worker_count=0, hooks=hooks_config
         )
         await controller.prepare(client)
 
@@ -2258,7 +2258,7 @@ async def test_app_deletion_with_shutdown_hook_running_state(
 
 
 async def test_app_deletion_with_shutdown_hook_app_not_found(
-    aiohttp_server, config, db, loop, httpserver
+    aiohttp_server, config, db, loop, httpserver, hooks_config
 ):
     """For the shutdown() method of the KubernetesClient, test the handling of response
     with a 404 error and with an error with another status.
@@ -2324,7 +2324,7 @@ async def test_app_deletion_with_shutdown_hook_app_not_found(
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         controller = KubernetesApplicationController(
-            server_endpoint(server), worker_count=0
+            server_endpoint(server), worker_count=0, hooks=hooks_config
         )
         await controller.prepare(client)
 
@@ -2334,7 +2334,7 @@ async def test_app_deletion_with_shutdown_hook_app_not_found(
         assert controller.queue.size() == 0
 
 
-@pytest.mark.slow
+# @pytest.mark.slow
 async def test_app_deletion_with_shutdown_hook_timeout(
     aiohttp_server, config, db, loop, httpserver, hooks_config: HooksConfiguration
 ):
@@ -2344,6 +2344,7 @@ async def test_app_deletion_with_shutdown_hook_timeout(
     the shutdown hook was executed.
 
     """
+
     kubernetes_app = web.Application()
     routes = web.RouteTableDef()
     deleted = set()
