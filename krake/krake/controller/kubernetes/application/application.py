@@ -812,23 +812,23 @@ class KubernetesApplicationController(Controller):
 
 # region Application shutdown
     async def _trigger_application_shutdown_async(self, app: Application):
-        # Loop over a copy of the `last_observed_manifest` as we modify delete
-        # resources from the dictionary in the ResourcePostDelete hook
-        last_observed_manifest_copy = deepcopy(app.status.last_observed_manifest)
-        for _ in last_observed_manifest_copy:
-            if app.status.shutdown_grace_period is None:
-                app.status.shutdown_grace_period = now() + timedelta(
-                    seconds=app.spec.shutdown_grace_time
-                )
-                await self.kubernetes_api.update_application_status(
-                    namespace=app.metadata.namespace,
-                    name=app.metadata.name,
-                    body=app,
-                )
+        # Mark aplication as shutting down and run application shutdown
+        # inside coroutine
 
-                asyncio.create_task(
-                    self._shutdown_task_async(app)
-                    )
+        # Application is already shutting down
+        if app.status.shutdown_grace_period is not None:
+            return
+
+        app.status.shutdown_grace_period = now() + timedelta(
+            seconds=app.spec.shutdown_grace_time
+        )
+        await self.kubernetes_api.update_application_status(
+            namespace=app.metadata.namespace,
+            name=app.metadata.name,
+            body=app,
+        )
+
+        asyncio.create_task(self._shutdown_task_async(app))
 
     async def _shutdown_task_async(self, app: Application):
         """ Calls the application shutdown route, checks for success and executes the
@@ -847,6 +847,8 @@ class KubernetesApplicationController(Controller):
                 await self._handle_shutdown_failure_async(app)
         except Exception:
             logger.error(traceback.format_exc())
+        finally:
+            app.status.shutdown_grace_period = None
 
     async def _run_app_shutdown_async(
         self,
