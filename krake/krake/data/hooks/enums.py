@@ -1,6 +1,6 @@
 from enum import Enum
 
-INVALID_SHUTDOWN_FAILURE_STRATEGY_ERROR = 'Invalid shutdown hook failure strategy'
+INVALID_SHUTDOWN_FAILURE_STRATEGY_ERROR = 'invalid shutdown hook failure strategy'
 
 
 class ShutdownHookFailureStrategy(Enum):
@@ -20,13 +20,13 @@ class ShutdownHookFailureStrategy(Enum):
     DELETE = 'delete'
 
     @staticmethod
-    def list_supported_values() -> str:
+    def _list_supported_values() -> str:
         return list(map(lambda c: c.value, ShutdownHookFailureStrategy))
 
-    # check if given string name can be used to instantiate enum
     @staticmethod
     def enusure_supported_value(strategy: str):
-
+        """ check if given string name can be used to instantiate enum
+        """
         if strategy not in ShutdownHookFailureStrategy._value2member_map_:
             raise ValueError(f"{strategy!r} is"
                              f"{INVALID_SHUTDOWN_FAILURE_STRATEGY_ERROR}. "
