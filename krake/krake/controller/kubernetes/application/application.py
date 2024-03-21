@@ -820,7 +820,9 @@ class KubernetesApplicationController(Controller):
             return
 
         app.status.shutdown_grace_period = now() + timedelta(
-            seconds=app.spec.shutdown_grace_time
+            seconds=app.spec.shutdown_grace_time if
+            app.spec.shutdown_grace_time is not None
+            else self.hooks.shutdown.timeout
         )
         await self.kubernetes_api.update_application_status(
             namespace=app.metadata.namespace,
@@ -922,7 +924,11 @@ class KubernetesApplicationController(Controller):
             name=app.metadata.name,
         )
 
-        await asyncio.sleep(app.spec.shutdown_grace_time)
+        await asyncio.sleep(
+            app.spec.shutdown_grace_time
+            if app.spec.shutdown_grace_time is not None
+            else self.hooks.shutdown.timeout
+        )
 
         return app_update.status.state is not ApplicationState.WAITING_FOR_CLEANING
 

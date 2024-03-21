@@ -1,4 +1,5 @@
 from asyncio import AbstractEventLoop
+import asyncio
 from copy import deepcopy
 from mock import AsyncMock, patch
 import pytest
@@ -20,7 +21,7 @@ from tests.controller.kubernetes import (
 
 
 # region Arrangement
-@pytest.fixture(scope='function')
+@pytest.fixture
 def controller(loop: AbstractEventLoop) -> KubernetesApplicationController:
     cluster = ClusterFactory()
 
@@ -50,7 +51,6 @@ def app_shutdown_hook() -> Application:
         spec__hooks=["shutdown"],
         spec__manifest=deepcopy(nginx_manifest),
         spec__observer_schema=[custom_deployment_observer_schema],
-        spec__shutdown_grace_time=0
     )
 
 
@@ -59,8 +59,10 @@ def get_delete_async_patch():
 # endregion Arrangement
 
 
-@patch.object(KubernetesClient, 'delete_async')
-@patch.object(KubernetesClient, 'shutdown_async')
+# region Unit tests
+# region Shutdown strategies
+@patch.object(KubernetesClient, KubernetesClient.delete_async.__name__)
+@patch.object(KubernetesClient, KubernetesClient.shutdown_async.__name__)
 async def test_shutdown_failure_give_up(
     shutdown_async: AsyncMock,
     delete_async: AsyncMock,
@@ -82,8 +84,8 @@ async def test_shutdown_failure_give_up(
     shutdown_async.assert_called_once()
 
 
-@patch.object(KubernetesClient, 'delete_async')
-@patch.object(KubernetesClient, 'shutdown_async')
+@patch.object(KubernetesClient, KubernetesClient.delete_async.__name__)
+@patch.object(KubernetesClient, KubernetesClient.shutdown_async.__name__)
 async def test_shutdown_failure_delete(
     shutdown_async: AsyncMock,
     delete_async: AsyncMock,
@@ -112,8 +114,8 @@ async def test_shutdown_failure_delete(
     assert app_shutdown_hook.status.state == ApplicationState.DELETING
 
 
-@patch.object(KubernetesClient, 'delete_async')
-@patch.object(KubernetesClient, 'shutdown_async')
+@patch.object(KubernetesClient, KubernetesClient.delete_async.__name__)
+@patch.object(KubernetesClient, KubernetesClient.shutdown_async.__name__)
 async def test_shutdown_failure_retries(
     shutdown_async: AsyncMock,
     delete_async: AsyncMock,
@@ -137,13 +139,16 @@ async def test_shutdown_failure_retries(
     assert shutdown_async.call_count == retry_count + 1
 
 
-@patch.object(KubernetesClient, 'shutdown_async')
-@pytest.mark.parametrize("app_state", [ApplicationState.FAILED, ApplicationState.DEGRADED])
+@patch.object(KubernetesClient, KubernetesClient.shutdown_async.__name__)
+@pytest.mark.parametrize(
+    "app_state",
+    [ApplicationState.FAILED, ApplicationState.DEGRADED]
+)
 async def test_shutdown_failed_state(
     shutdown_async: AsyncMock,
-    app_state,
-    app_shutdown_hook,
-    hooks_config,
+    app_state: ApplicationState,
+    app_shutdown_hook: Application,
+    hooks_config: HooksConfiguration,
     controller: KubernetesApplicationController
 ):
     """ Ensure no shutdown request is sent to application if has failed or degraded as
@@ -156,5 +161,54 @@ async def test_shutdown_failed_state(
     await controller._shutdown_task_async(app_shutdown_hook)
 
     shutdown_async.assert_not_called()
+# endregion
+
+
+# region Configuration
+@patch.object(asyncio, asyncio.sleep.__name__)
+async def test_global_timeout_configuration(
+    asnycio_sleep: AsyncMock,
+    app_shutdown_hook: Application,
+    hooks_config: HooksConfiguration,
+    controller: KubernetesApplicationController,
+):
+    """ Ensure shutdown uses the global timeout configuration to wait
+    until the check for success is executed in case no timeout for the
+    app was specified
+    """
+    expected_sleep_duration = 42
+
+    app_shutdown_hook.spec.shutdown_grace_time = None
+    hooks_config.shutdown.timeout = expected_sleep_duration
+    controller.hooks = hooks_config
+
+    with patch.object(KubernetesClient, KubernetesClient.shutdown_async.__name__):
+        await controller._shutdown_task_async(app_shutdown_hook)
+
+    asnycio_sleep.assert_called_once_with(expected_sleep_duration)
+
+
+@patch.object(asyncio, asyncio.sleep.__name__)
+async def test_shutdown_with_app_timeout_configuration(
+    asnycio_sleep: AsyncMock,
+    app_shutdown_hook: Application,
+    hooks_config: HooksConfiguration,
+    controller: KubernetesApplicationController,
+):
+    """ Ensure shutdown uses the apps local configuration to wait
+    until the check for success is done
+    """
+    expected_sleep_duration = 42
+
+    app_shutdown_hook.spec.shutdown_grace_time = expected_sleep_duration
+    hooks_config.shutdown.timeout = expected_sleep_duration - 10
+    controller.hooks = hooks_config
+
+    with patch.object(KubernetesClient, KubernetesClient.shutdown_async.__name__):
+        await controller._shutdown_task_async(app_shutdown_hook)
+
+    asnycio_sleep.assert_called_once_with(expected_sleep_duration)
+
+# endregion Configuration
 
 # endregion Unit tests
