@@ -11,9 +11,6 @@ class ShutdownHookFailureStrategy(Enum):
         GIVE_UP: Do nothing and let the user manually remove the application
         DELETE: Force delete application from the kubernetes cluster and the database.
             Warning: This is a destructive action
-        RETRY:
-            Retry shutting down the application up to the specified number of maximum
-            retries
     """
 
     GIVE_UP = 'give_up'

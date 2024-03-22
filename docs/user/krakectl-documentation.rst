@@ -259,7 +259,13 @@ create
         The complete hook, which allows an Application to send a completion signal to the API.
 
     ``--hook-shutdown`` (optional):
-        The shutdown hook, which allows the graceful shutdown of the Application. Can have an additional timeout value after the argument.
+        The shutdown hook, which allows the graceful shutdown of the Application. Can have an additional values after the argument:
+
+        timeout [s]
+
+        failure_strategy ('give_up' | 'delete')
+
+        failure_retry_count
 
     ``-l | --label`` (optional):
         The key and the value of a cluster label in the form: ``<key>=<value>``. Can be specified multiple times. Previous labels will be kept by default.
@@ -340,8 +346,14 @@ update
         The complete hook, which allows an Application to send a completion signal to the API.
 
     ``--hook-shutdown`` (optional):
-        The shutdown hook, which allows the graceful shutdown of the Application. Can have an additional timeout value after the argument.
+        The shutdown hook, which allows the graceful shutdown of the Application. Can have an additional values after the argument:
 
+        timeout [s]
+
+        failure_strategy ('give_up' | 'delete')
+
+        failure_retry_count
+        
     ``-R | --cluster-resource-constraint`` (optional):
         The name of custom resources definition constraint in form: ``<plural>.<group>``. The application will be deployed only on the clusters with given custom definition support. Can be specified multiple times.
 
