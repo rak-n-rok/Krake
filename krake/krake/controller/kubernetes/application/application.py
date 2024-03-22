@@ -812,8 +812,13 @@ class KubernetesApplicationController(Controller):
 
 # region Application shutdown
     async def _trigger_application_shutdown_async(self, app: Application):
-        # Mark aplication as shutting down and run application shutdown
-        # inside coroutine
+        """ Mark application as shutting down and run application shutdown
+        inside coroutine without awaiting
+
+        Args:
+            app (Application): application to shutdown
+
+        """
 
         # Application is already shutting down
         if app.status.shutdown_grace_period is not None:
@@ -833,12 +838,8 @@ class KubernetesApplicationController(Controller):
         asyncio.create_task(self._shutdown_task_async(app))
 
     async def _shutdown_task_async(self, app: Application):
-        """ Calls the application shutdown route, checks for success and executes the
-        configured failure strategy if the app was not shutdown after the given grace
-        period and number of retries.
-        If the application is in state failed or degraded, the shutdown route will not
-        be called and the configured failure strategy be executed instead.
-        Should be run as a task.
+        """ Excecutes the application shutdown and the configured failure strategy
+        in case of failure
 
         Args:
             app (Application): application to shutdown
@@ -856,10 +857,26 @@ class KubernetesApplicationController(Controller):
         self,
         app: Application
     ) -> bool:
+        """ Calls the application shutdown route and checks for success. This process
+        is repeated until the app was sucessfully shutdown or the specified number of
+        maximum retries was reached.
+
+        Args:
+            app (Application): application to shutdown
+
+        Returns:
+            bool: True if the Application was shutdown, False otherwise.
+        """
 
         shutdown_hook_config: ShutdownHookConfiguration = self.hooks.shutdown
 
-        max_shutdown_count = shutdown_hook_config.failure_retry_count + 1
+        # use global configuration if no local failure_retry_count for app was set
+        failure_retry_count = \
+            shutdown_hook_config.failure_retry_count \
+            if app.spec.shutdown_retry_count is None \
+            else app.spec.shutdown_retry_count
+
+        max_shutdown_count = failure_retry_count + 1
         executed_shutdowns_count = 0
 
         while executed_shutdowns_count < max_shutdown_count:
@@ -905,38 +922,54 @@ class KubernetesApplicationController(Controller):
             logger.info("Deleting application {app.metadata.name!r}.")
             return
 
-        # else give up
+        # else strategy 'give_up'
         app.status.state = ApplicationState.DEGRADED
-        logger.debug(
-            f"{app.metadata.name} to ApplicationState.DEGRADED because of previous"
-            f"state ApplicationState.WAITING_FOR_CLEANING"
-        )
-
         await self.kubernetes_api.update_application_status(
             namespace=app.metadata.namespace,
             name=app.metadata.name,
             body=app,
         )
 
-    async def _check_shutdown_success_async(self, app: Application) -> bool:
-        app_update = await self.kubernetes_api.read_application(
-            namespace=app.metadata.namespace,
-            name=app.metadata.name,
+        logger.debug(
+            f"{app.metadata.name} to ApplicationState.DEGRADED because of previous"
+            f"state ApplicationState.WAITING_FOR_CLEANING"
         )
 
+    async def _check_shutdown_success_async(self, app: Application) -> bool:
         await asyncio.sleep(
             app.spec.shutdown_grace_time
             if app.spec.shutdown_grace_time is not None
             else self.hooks.shutdown.timeout
         )
 
-        return app_update.status.state is not ApplicationState.WAITING_FOR_CLEANING
+        app_update = await self.kubernetes_api.read_application(
+            namespace=app.metadata.namespace,
+            name=app.metadata.name,
+        )
+
+        return app_update.status.state not in [
+            ApplicationState.WAITING_FOR_CLEANING,
+            ApplicationState.FAILED,
+            ApplicationState.DEGRADED
+        ]
 
     def _has_shutdown_strategy(
             self,
             app: Application,
             strategy: ShutdownHookFailureStrategy) -> bool:
-        # TODO check if app has different failure strategy
+        """ Checks wether the given strategy is configured to be used by the app. If no
+        strategy is configured within the app, the global configuration is used
+
+        Args:
+            app (Application): application to shutdown
+            strategy (ShutdownHookFailureStrategy): shutdown failure strategy to check
+
+        Returns:
+            bool: True if strategy is being used as failure strategy
+        """
+        if app.spec.shutdown_failure_strategy is not None:
+            return app.spec.shutdown_failure_strategy == strategy.value
+
         return self.hooks.shutdown.failure_strategy == strategy.value
 
 # endregion
