@@ -2331,7 +2331,7 @@ async def test_app_deletion_with_shutdown_hook_app_not_found(
         assert controller.queue.size() == 0
 
 
-# @pytest.mark.slow
+@pytest.mark.slow
 async def test_app_deletion_with_shutdown_hook_timeout(
     aiohttp_server, config, db, loop, httpserver, hooks_config: HooksConfiguration
 ):
@@ -2341,6 +2341,8 @@ async def test_app_deletion_with_shutdown_hook_timeout(
     the shutdown hook was executed.
 
     """
+
+    hooks_config.shutdown.timeout = 3
 
     kubernetes_app = web.Application()
     routes = web.RouteTableDef()
