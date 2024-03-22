@@ -143,11 +143,13 @@ arg_hook_shutdown = argument(
     "--hook-shutdown",
     dest="hooks",
     metavar=("timeout-period"),
-    nargs="*",
+    nargs="+",
     action=ShutdownAction,
     help=(
         f"Enables the application shutdown hook. Additional arguments are possible:"
         f" timeout-period [{TIMEOUT_PERIOD}]s"
+        f" failure-strategy [give_up| delete]"
+        f" failure-retry-count"
     ),
 )
 
@@ -530,6 +532,10 @@ def create_application(
             app["spec"]["hooks"].append(hook[0])
             if isinstance(hook, list) and len(hook) > 1 and hook[0] == "shutdown":
                 app["spec"]["shutdown_grace_time"] = hook[1]
+                if len(hook) > 2:
+                    app["spec"]["shutdown_failure_strategy"] = hook[2]
+                if len(hook) > 3:
+                    app["spec"]["shutdown_retry_count"] = hook[3]
 
     if not url:  # skip warning handling when the app is defined by URL (TOSCA, CSAR)
         handle_warning(app)

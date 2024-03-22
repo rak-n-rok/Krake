@@ -11,7 +11,6 @@ from kubernetes_asyncio.config import ConfigException
 from toscaparser.tosca_template import ToscaTemplate, log
 from toscaparser.common.exception import TOSCAException
 
-from krake.data.hooks.enums import ShutdownHookFailureStrategy
 from krake.utils import get_kubernetes_resource_idx, cache_non_hashable
 from . import persistent
 from .serializable import Serializable, ApiObject
@@ -444,7 +443,8 @@ class ApplicationSpec(Serializable):
         hooks (list[str], optional): List of enabled hooks
         shutdown_grace_time (int): timeout in seconds for the shutdown hook
         shutdown_failure_strategy(str): strategy to execute when the shutdown hook fails
-            Supports 'give_up' and 'delete'. If no value is set, the global configuration is used
+            Supports 'give_up' and 'delete'. If no value is set, the global
+            configuration is used
         backoff (field, optional): multiplier applied to backoff_delay between attempts.
             default: 1 (no backoff)
         backoff_delay (field, optional): delay [s] between attempts. default: 1
@@ -464,6 +464,7 @@ class ApplicationSpec(Serializable):
     hooks: List[str] = field(default_factory=list)
     shutdown_grace_time: int = None
     shutdown_failure_strategy: str = None
+    shutdown_retry_count: int = None
     backoff: int = field(default=1)
     backoff_delay: int = field(default=1)
     backoff_limit: int = field(default=-1)

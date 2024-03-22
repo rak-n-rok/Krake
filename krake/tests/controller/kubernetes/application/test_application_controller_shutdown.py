@@ -1,6 +1,7 @@
 from asyncio import AbstractEventLoop
 import asyncio
 from copy import deepcopy
+from typing import List
 from mock import AsyncMock, patch
 import pytest
 
@@ -52,11 +53,25 @@ def app_shutdown_hook() -> Application:
         spec__manifest=deepcopy(nginx_manifest),
         spec__observer_schema=[custom_deployment_observer_schema],
     )
-
-
-def get_delete_async_patch():
-    return patch("krake.controller.kubernetes.client.KubernetesClient.delete_async")
 # endregion Arrangement
+
+
+# region Helper methods
+def assert_application_deletion(delete_async: AsyncMock, manifest: List[dict]):
+    """ Asserts that all ressources of the manifest were deleted
+
+        Args:
+            delete_async (AsyncMock): Patched method of the deletion
+                method of the KubernetesClient
+            manifest (List[dict]): List of manifests that are part of the
+                application
+    """
+    assert delete_async.call_count == len(manifest)
+
+    for call_args in delete_async.call_args_list:
+        call_args.args[0] in manifest
+
+# endregion Helper methods
 
 
 # region Unit tests
@@ -104,13 +119,11 @@ async def test_shutdown_failure_delete(
 
     await controller._shutdown_task_async(app_shutdown_hook)
 
-    # check that all manifests of the application were deleted
-    assert delete_async.call_count == len(nginx_manifest)
-
-    for call_args in delete_async.call_args_list:
-        call_args.args[0] in nginx_manifest
-
     shutdown_async.assert_called_once()
+
+    # check that all manifests of the application were deleted
+    assert_application_deletion(delete_async, app_shutdown_hook.spec.manifest)
+
     assert app_shutdown_hook.status.state == ApplicationState.DELETING
 
 
@@ -128,6 +141,7 @@ async def test_shutdown_failure_retries(
     """
 
     retry_count = 3
+    hooks_config.shutdown.timeout = 0
     hooks_config.shutdown.failure_strategy = ShutdownHookFailureStrategy.GIVE_UP.value
     hooks_config.shutdown.failure_retry_count = retry_count
 
@@ -188,6 +202,7 @@ async def test_global_timeout_configuration(
     asnycio_sleep.assert_called_once_with(expected_sleep_duration)
 
 
+@patch.object(KubernetesClient, KubernetesClient.shutdown_async.__name__, AsyncMock())
 @patch.object(asyncio, asyncio.sleep.__name__)
 async def test_shutdown_with_app_timeout_configuration(
     asnycio_sleep: AsyncMock,
@@ -204,11 +219,57 @@ async def test_shutdown_with_app_timeout_configuration(
     hooks_config.shutdown.timeout = expected_sleep_duration - 10
     controller.hooks = hooks_config
 
-    with patch.object(KubernetesClient, KubernetesClient.shutdown_async.__name__):
-        await controller._shutdown_task_async(app_shutdown_hook)
+    await controller._shutdown_task_async(app_shutdown_hook)
 
     asnycio_sleep.assert_called_once_with(expected_sleep_duration)
 
+
+@patch.object(asyncio, asyncio.sleep.__name__, AsyncMock())
+@patch.object(KubernetesClient, KubernetesClient.shutdown_async.__name__, AsyncMock())
+@patch.object(KubernetesClient, KubernetesClient.delete_async.__name__)
+async def test_app_overwrites_failure_strategy(
+    delete_async: AsyncMock,
+    controller: KubernetesApplicationController,
+    app_shutdown_hook: Application,
+    hooks_config: HooksConfiguration,
+):
+    """ Ensure shutdown uses the apps local failure strategy configuration if set
+    """
+    app_shutdown_hook.spec.shutdown_failure_strategy \
+        = ShutdownHookFailureStrategy.DELETE.value
+
+    hooks_config.shutdown.timeout = 0
+    hooks_config.shutdown.failure_retry_count = 0
+
+    controller.hooks = hooks_config
+    await controller._shutdown_task_async(app_shutdown_hook)
+
+    assert_application_deletion(delete_async, app_shutdown_hook.spec.manifest)
+
+
+@patch.object(KubernetesClient, KubernetesClient.delete_async.__name__)
+@patch.object(KubernetesClient, KubernetesClient.shutdown_async.__name__)
+async def test_app_overwrites_failure_retry_count(
+    shutdown_async: AsyncMock,
+    app_shutdown_hook: Application,
+    hooks_config: HooksConfiguration,
+    controller: KubernetesApplicationController
+):
+    """ Enusure strategy shutdown is attempted as often as specified in the retry
+    count of the app instead of the global configuration
+    """
+    retry_count = 3
+
+    app_shutdown_hook.spec.shutdown_retry_count = retry_count
+
+    hooks_config.shutdown.timeout = 0
+    hooks_config.shutdown.failure_strategy = ShutdownHookFailureStrategy.GIVE_UP.value
+    hooks_config.shutdown.failure_retry_count = retry_count + 1
+
+    controller.hooks = hooks_config
+
+    await controller._shutdown_task_async(app_shutdown_hook)
+    assert shutdown_async.call_count == retry_count + 1
 # endregion Configuration
 
 # endregion Unit tests
