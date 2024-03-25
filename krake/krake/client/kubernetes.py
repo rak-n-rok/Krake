@@ -144,7 +144,7 @@ class KubernetesApi(ApiClient):
 
         return Watcher(self.client.session, url, Application)
 
-    async def read_application(self, namespace, name):
+    async def read_application_async(self, namespace, name):
         """Reads the specified Application.
 
         Args:
