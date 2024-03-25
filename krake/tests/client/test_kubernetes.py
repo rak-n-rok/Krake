@@ -203,7 +203,7 @@ async def test_read_application(aiohttp_server, config, db, loop):
 
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         kubernetes_api = KubernetesApi(client)
-        received = await kubernetes_api.read_application(
+        received = await kubernetes_api.read_application_async(
             namespace=data.metadata.namespace, name=data.metadata.name
         )
         assert received == data

@@ -2,7 +2,8 @@ from asyncio import AbstractEventLoop
 import asyncio
 from copy import deepcopy
 from typing import List
-from mock import AsyncMock, patch
+from aiohttp import ClientResponseError
+from mock import AsyncMock, MagicMock, patch
 import pytest
 
 from krake.controller.kubernetes.application.application \
@@ -12,7 +13,7 @@ from krake.data.config import HooksConfiguration
 from krake.data.kubernetes import Application, ApplicationState
 from krake import utils
 from krake.data.hooks.enums import ShutdownHookFailureStrategy
-from krake.api.kubernetes import KubernetesApi
+from krake.client.kubernetes import KubernetesApi
 from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
 
 from tests.controller.kubernetes import (
@@ -23,7 +24,10 @@ from tests.controller.kubernetes import (
 
 # region Arrangement
 @pytest.fixture
-def controller(loop: AbstractEventLoop) -> KubernetesApplicationController:
+def controller(
+    loop: AbstractEventLoop,
+    hooks_config: HooksConfiguration
+) -> KubernetesApplicationController:
     cluster = ClusterFactory()
 
     kubernetes_api_mock: KubernetesApi = AsyncMock()
@@ -37,6 +41,12 @@ def controller(loop: AbstractEventLoop) -> KubernetesApplicationController:
     )
 
     controller.kubernetes_api = kubernetes_api_mock
+
+    hooks_config.shutdown.timeout = 0
+    hooks_config.shutdown.failure_strategy = ShutdownHookFailureStrategy.GIVE_UP.value
+    hooks_config.shutdown.failure_retry_count = 0
+
+    controller.hooks = hooks_config
     return controller
 
 
@@ -82,16 +92,10 @@ async def test_shutdown_failure_give_up(
     shutdown_async: AsyncMock,
     delete_async: AsyncMock,
     app_shutdown_hook: Application,
-    hooks_config: HooksConfiguration,
     controller: KubernetesApplicationController
 ):
     """ Enusure strategy 'give_up' calls shutdown and does not delete any ressources
     """
-
-    hooks_config.shutdown.failure_strategy = ShutdownHookFailureStrategy.GIVE_UP.value
-    hooks_config.shutdown.failure_retry_count = 0
-
-    controller.hooks = hooks_config
 
     await controller._shutdown_task_async(app_shutdown_hook)
     delete_async.assert_not_called()
@@ -105,25 +109,19 @@ async def test_shutdown_failure_delete(
     shutdown_async: AsyncMock,
     delete_async: AsyncMock,
     app_shutdown_hook: Application,
-    hooks_config: HooksConfiguration,
     controller: KubernetesApplicationController
 ):
     """ Enusure strategy delete calls shutdown and deletes all ressources of the
       application
       """
 
-    hooks_config.shutdown.failure_strategy = ShutdownHookFailureStrategy.DELETE.value
-    hooks_config.shutdown.failure_retry_count = 0
-
-    controller.hooks = hooks_config
+    controller.hooks.shutdown.failure_strategy = ShutdownHookFailureStrategy.DELETE.value
 
     await controller._shutdown_task_async(app_shutdown_hook)
 
     shutdown_async.assert_called_once()
-
     # check that all manifests of the application were deleted
     assert_application_deletion(delete_async, app_shutdown_hook.spec.manifest)
-
     assert app_shutdown_hook.status.state == ApplicationState.DELETING
 
 
@@ -133,7 +131,6 @@ async def test_shutdown_failure_retries(
     shutdown_async: AsyncMock,
     delete_async: AsyncMock,
     app_shutdown_hook: Application,
-    hooks_config: HooksConfiguration,
     controller: KubernetesApplicationController
 ):
     """ Enusure strategy shutdown is shutdown is attempted as often as specified retry
@@ -141,11 +138,7 @@ async def test_shutdown_failure_retries(
     """
 
     retry_count = 3
-    hooks_config.shutdown.timeout = 0
-    hooks_config.shutdown.failure_strategy = ShutdownHookFailureStrategy.GIVE_UP.value
-    hooks_config.shutdown.failure_retry_count = retry_count
-
-    controller.hooks = hooks_config
+    controller.hooks.shutdown.failure_retry_count = retry_count
 
     await controller._shutdown_task_async(app_shutdown_hook)
     delete_async.assert_not_called()
@@ -162,7 +155,6 @@ async def test_shutdown_failed_state(
     shutdown_async: AsyncMock,
     app_state: ApplicationState,
     app_shutdown_hook: Application,
-    hooks_config: HooksConfiguration,
     controller: KubernetesApplicationController
 ):
     """ Ensure no shutdown request is sent to application if has failed or degraded as
@@ -170,7 +162,6 @@ async def test_shutdown_failed_state(
     """
 
     app_shutdown_hook.status.state = app_state
-    controller.hooks = hooks_config
 
     await controller._shutdown_task_async(app_shutdown_hook)
 
@@ -183,7 +174,6 @@ async def test_shutdown_failed_state(
 async def test_global_timeout_configuration(
     asnycio_sleep: AsyncMock,
     app_shutdown_hook: Application,
-    hooks_config: HooksConfiguration,
     controller: KubernetesApplicationController,
 ):
     """ Ensure shutdown uses the global timeout configuration to wait
@@ -193,8 +183,7 @@ async def test_global_timeout_configuration(
     expected_sleep_duration = 42
 
     app_shutdown_hook.spec.shutdown_grace_time = None
-    hooks_config.shutdown.timeout = expected_sleep_duration
-    controller.hooks = hooks_config
+    controller.hooks.shutdown.timeout = expected_sleep_duration
 
     with patch.object(KubernetesClient, KubernetesClient.shutdown_async.__name__):
         await controller._shutdown_task_async(app_shutdown_hook)
@@ -207,7 +196,6 @@ async def test_global_timeout_configuration(
 async def test_shutdown_with_app_timeout_configuration(
     asnycio_sleep: AsyncMock,
     app_shutdown_hook: Application,
-    hooks_config: HooksConfiguration,
     controller: KubernetesApplicationController,
 ):
     """ Ensure shutdown uses the apps local configuration to wait
@@ -216,8 +204,7 @@ async def test_shutdown_with_app_timeout_configuration(
     expected_sleep_duration = 42
 
     app_shutdown_hook.spec.shutdown_grace_time = expected_sleep_duration
-    hooks_config.shutdown.timeout = expected_sleep_duration - 10
-    controller.hooks = hooks_config
+    controller.hooks.shutdown.timeout = expected_sleep_duration - 10
 
     await controller._shutdown_task_async(app_shutdown_hook)
 
@@ -231,17 +218,12 @@ async def test_app_overwrites_failure_strategy(
     delete_async: AsyncMock,
     controller: KubernetesApplicationController,
     app_shutdown_hook: Application,
-    hooks_config: HooksConfiguration,
 ):
     """ Ensure shutdown uses the apps local failure strategy configuration if set
     """
     app_shutdown_hook.spec.shutdown_failure_strategy \
         = ShutdownHookFailureStrategy.DELETE.value
 
-    hooks_config.shutdown.timeout = 0
-    hooks_config.shutdown.failure_retry_count = 0
-
-    controller.hooks = hooks_config
     await controller._shutdown_task_async(app_shutdown_hook)
 
     assert_application_deletion(delete_async, app_shutdown_hook.spec.manifest)
@@ -252,7 +234,6 @@ async def test_app_overwrites_failure_strategy(
 async def test_app_overwrites_failure_retry_count(
     shutdown_async: AsyncMock,
     app_shutdown_hook: Application,
-    hooks_config: HooksConfiguration,
     controller: KubernetesApplicationController
 ):
     """ Enusure strategy shutdown is attempted as often as specified in the retry
@@ -261,15 +242,30 @@ async def test_app_overwrites_failure_retry_count(
     retry_count = 3
 
     app_shutdown_hook.spec.shutdown_retry_count = retry_count
-
-    hooks_config.shutdown.timeout = 0
-    hooks_config.shutdown.failure_strategy = ShutdownHookFailureStrategy.GIVE_UP.value
-    hooks_config.shutdown.failure_retry_count = retry_count + 1
-
-    controller.hooks = hooks_config
+    controller.hooks.shutdown.failure_retry_count = retry_count + 1
 
     await controller._shutdown_task_async(app_shutdown_hook)
     assert shutdown_async.call_count == retry_count + 1
 # endregion Configuration
+
+
+# region Check shutdown success
+@patch.object(KubernetesClient, KubernetesClient.shutdown_async.__name__, AsyncMock())
+async def test_shutdown_success_check_success(
+    app_shutdown_hook: Application,
+    controller: KubernetesApplicationController
+):
+    """ Ensures that no failure strategy is executed if the graceful shutdown succeeded
+    """
+    controller._handle_shutdown_failure_async = MagicMock()
+
+    controller.kubernetes_api.read_application_async = AsyncMock()
+    controller.kubernetes_api.read_application_async.side_effect \
+        = ClientResponseError(status=404, request_info=None, history=None)
+    await controller._shutdown_task_async(app_shutdown_hook)
+
+    controller.kubernetes_api.read_application_async.assert_called_once()
+    controller._handle_shutdown_failure_async.assert_not_called()
+# endregion Check shutdown success
 
 # endregion Unit tests
