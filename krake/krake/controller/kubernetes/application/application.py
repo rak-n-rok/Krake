@@ -883,7 +883,7 @@ class KubernetesApplicationController(Controller):
             try:
                 logger.info(
                     f"Attempting shutdown of application {app.metadata.name!r}"
-                    f" ({executed_shutdowns_count}/{max_shutdown_count})"
+                    f" ({executed_shutdowns_count + 1}/{max_shutdown_count})"
                 )
 
                 if app.status.state in [
@@ -914,8 +914,8 @@ class KubernetesApplicationController(Controller):
         return False
 
     async def _handle_shutdown_failure_async(self, app: Application):
-        logger.error("Graceful shutdown of application"
-                     f" {app.metadata.name!r} failed")
+        logger.error("Graceful shutdown of application {app.metadata.name!r} failed."
+                     " View the logs of the application for more information.")
 
         if self._has_shutdown_strategy(app, ShutdownHookFailureStrategy.DELETE):
             await self._delete_application_async(app)
@@ -942,16 +942,18 @@ class KubernetesApplicationController(Controller):
             else self.hooks.shutdown.timeout
         )
 
-        app_update = await self.kubernetes_api.read_application(
-            namespace=app.metadata.namespace,
-            name=app.metadata.name,
-        )
+        # check if application still exists
+        try:
+            await self.kubernetes_api.read_application(
+                namespace=app.metadata.namespace,
+                name=app.metadata.name,
+            )
+        except ClientResponseError as e:
+            if e.status == 404:
+                return True
+            raise
 
-        return app_update.status.state not in [
-            ApplicationState.WAITING_FOR_CLEANING,
-            ApplicationState.FAILED,
-            ApplicationState.DEGRADED
-        ]
+        return False
 
     def _has_shutdown_strategy(
             self,
