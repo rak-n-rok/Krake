@@ -938,7 +938,7 @@ class KubernetesApplicationController(Controller):
 
         # check if application still exists
         try:
-            await self.kubernetes_api.read_application(
+            await self.kubernetes_api.read_application_async(
                 namespace=app.metadata.namespace,
                 name=app.metadata.name,
             )
@@ -1223,7 +1223,7 @@ class KubernetesApplicationController(Controller):
                                                              file)
 
     async def _migrate_application_with_volumes(self, app):
-        app = await self.kubernetes_api.read_application(
+        app = await self.kubernetes_api.read_application_async(
             namespace=app.metadata.namespace, name=app.metadata.name
         )
         if app.status.scheduled_to == app.status.running_on:
