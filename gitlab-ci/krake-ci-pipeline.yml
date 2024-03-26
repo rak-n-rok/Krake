@@ -9,6 +9,7 @@ variables:
   PROMETHEUS_VER: 2.12.0
   CFSSL_VER: 1.4.1
   CONFLUENT_VER: "7.0"
+  KUBECONFORM_VER: 0.6.4
 
   # Change pip's cache directory to be inside the project directory since we
   # can only cache local items.
@@ -177,6 +178,18 @@ unittests-krake-3.11:
     TOXENV: py311
     COVERAGE_FILE: krake/.coverage.py311
 
+lint-kubeconform:
+  stage: test
+  image:
+    name: ghcr.io/yannh/kubeconform:v${KUBECONFORM_VER}-alpine
+    entrypoint: [""]
+  only:
+    - tags
+    - branches
+    - merge_requests
+    - schedules
+  script:
+  - /kubeconform -summary -output json ./rak/functionals/templates/k8s/*.yaml
 
 flake8-krake:
   stage: test
