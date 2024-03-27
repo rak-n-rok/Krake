@@ -103,7 +103,7 @@ for i in {1..3}; do
   echo "Iteration: " $i
   kubectl get pods
   sleep 4
-  rok kube app create -f rak/functionals/echo-demo.yaml echo-demo
+  rok kube app create -f rak/functionals/templates/k8s/echo-demo.yaml echo-demo
   sleep 2
   rok kube app list
   rok kube cluster list

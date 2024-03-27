@@ -40,7 +40,9 @@ from functionals.resource_definitions import ApplicationDefinition, ResourceKind
 
 KRAKE_HOMEDIR = "/home/krake"
 CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
-OBSERVER_SCHEMA_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals"
+OBSERVER_SCHEMA_PATH = (
+    f"{KRAKE_HOMEDIR}/git/krake/rak/functionals/templates/" "observer-schemas"
+)
 
 
 def test_kubernetes_observer_deletion(k8s_clusters):
@@ -328,7 +330,9 @@ def test_kubernetes_observer_additional_resource(k8s_clusters):
             app_before["status"]["kube_controller_triggered"] = app_after["status"][
                 "kube_controller_triggered"
             ]
-            app_before["status"]["container_health"] = app_after["status"]["container_health"]
+            app_before["status"]["container_health"] = app_after["status"][
+                "container_health"
+            ]
             # handle weird behaviour of scheduler ("retries" only set sometimes)
             app_before["status"]["retries"] = app_after["status"]["retries"]
             assert app_before == app_after
@@ -543,15 +547,13 @@ def test_kubernetes_observe_container_health(k8s_clusters):
     kubeconfig_path = get_default_kubeconfig_path(k8s_cluster)
 
     environment = create_default_environment([k8s_cluster])
-    with Environment(environment) as env:
+    with Environment(environment):
 
         # 1. Check if the pod health information are correct
         pd = ContainerHealth()
         pd.desired_pods = 1
         pd.running_pods = 1
-        error_message = (
-            "The observed pod healths don't match the required pod healths."
-        )
+        error_message = "The observed pod healths don't match the required pod healths."
         run(
             f"{kubectl_cmd(kubeconfig_path)} get deployment echo-demo -o json",
             condition=check_resource_container_health(pd, error_message),
@@ -564,9 +566,7 @@ def test_kubernetes_observe_container_health(k8s_clusters):
         # the updated manifest
         pd.desired_pods = 2
         pd.running_pods = 2
-        error_message = (
-            "The observed pod healths don't match the required pod healths."
-        )
+        error_message = "The observed pod healths don't match the required pod healths."
         run(
             f"{kubectl_cmd(kubeconfig_path)} get deployment echo-demo -o json",
             condition=check_resource_container_health(pd, error_message),
