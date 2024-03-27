@@ -217,7 +217,7 @@ TOSCA template examples are located in the ``rak/functionals`` directory. View t
 
 .. code:: bash
 
-    $ cat rak/functionals/echo-demo-tosca.yaml
+    $ cat rak/functionals/templates/tosca/echo-demo-tosca.yaml
     $ cat rak/functionals/echo-demo-update-tosca.yaml
 
 If you want to expose a created TOSCA template via some URL, you can use a simple python HTTP server as follows:
@@ -253,7 +253,7 @@ using the rok CLI, see :ref:`user/rok-documentation:Rok documentation`.
 
 .. code:: bash
 
-    rok kube app create --file rak/functionals/echo-demo-tosca.yaml echo-demo
+    rok kube app create --file rak/functionals/templates/tosca/echo-demo-tosca.yaml echo-demo
 
 - Update an application described by a TOSCA template:
 

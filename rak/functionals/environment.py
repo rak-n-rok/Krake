@@ -1,7 +1,7 @@
 import os
 
 from collections import defaultdict
-from functionals.utils import KRAKE_HOMEDIR, run
+from functionals.utils import KRAKE_HOMEDIR
 from functionals.resource_definitions import (
     ResourceKind,
     ClusterDefinition,
@@ -12,7 +12,7 @@ from functionals.resource_definitions import (
 GIT_DIR = "git/krake"
 TEST_DIR = "rak/functionals"
 CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
-MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}"
+MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}/templates/k8s"
 DEFAULT_MANIFEST = "echo-demo.yaml"
 DEFAULT_KUBE_APP_NAME = "echo-demo"
 
@@ -116,7 +116,7 @@ class Environment(object):
         cluster_expected_state=None,
         app_expected_state=None,
         ignore_check=False,
-        ignore_verification=False
+        ignore_verification=False,
     ):
         # Dictionary: "priority: list of resources to create or register"
         self.res_to_apply = resources
@@ -164,7 +164,7 @@ class Environment(object):
                         else:
                             resource.check_created(
                                 delay=self.creation_delay,
-                                expected_state=self.cluster_expected_state
+                                expected_state=self.cluster_expected_state,
                             )
                     elif resource.kind == ResourceKind.APPLICATION:
                         if hasattr(resource, "register") and resource.register:
@@ -172,7 +172,7 @@ class Environment(object):
                         else:
                             resource.check_created(
                                 delay=self.creation_delay,
-                                expected_state=self.app_expected_state
+                                expected_state=self.app_expected_state,
                             )
                     else:
                         if hasattr(resource, "register") and resource.register:
@@ -326,11 +326,13 @@ def create_multiple_cluster_environment(
             for the Application to create.
         app_migration (bool, optional): migration flag indicating whether the
             application should be able to migrate.
-        app_backoff (int, optional): multiplier applied to backoff_delay between attempts.
-            default: 1 (no backoff)
+        app_backoff (int, optional): multiplier applied to backoff_delay between
+            attempts. default: 1 (no backoff)
         app_backoff_delay (int, optional): delay [s] between attempts. default: 1
-        app_backoff_limit (int, optional): a maximal number of attempts, default: -1 (infinite)
-        auto_cluster_create (bool, optional): flag for the creation of new clusters with clouds
+        app_backoff_limit (int, optional): a maximal number of attempts,
+            default: -1 (infinite)
+        auto_cluster_create (bool, optional): flag for the creation of new clusters
+            with clouds
 
     Returns:
         dict[int, list[ResourceDefinition]]: an environment definition to use to create
@@ -429,10 +431,11 @@ def create_default_environment(
         app_migration (bool, optional): migration flag indicating whether the
             application should be able to migrate. If not provided, none is
             provided when creating the application.
-        app_backoff (int, optional): multiplier applied to backoff_delay between attempts.
-            default: 1 (no backoff)
+        app_backoff (int, optional): multiplier applied to backoff_delay between
+            attempts. default: 1 (no backoff)
         app_backoff_delay (int, optional): delay [s] between attempts. default: 1
-        app_backoff_limit (int, optional): a maximal number of attempts, default: -1 (infinite)
+        app_backoff_limit (int, optional): a maximal number of attempts, default: -1
+            (infinite)
 
     Returns:
         dict: an environment definition to use to create a test environment.
