@@ -304,7 +304,7 @@ $ rok kube cluster list
 +-----------+--------------+--------+---------------------+---------------------+---------+--------+
 
 # Run an application on Krake
-$ rok kube app create -f ../rak/functionals/echo-demo.yaml echo-demo
+$ rok kube app create -f ../rak/functionals/templates/k8s/echo-demo.yaml echo-demo
 +-----------------------+---------------------+
 | name                  | echo-demo           |
 | namespace             | system:admin        |

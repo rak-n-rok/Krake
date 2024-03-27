@@ -1,6 +1,5 @@
 import os.path
 import random
-import time
 
 from functionals.utils import run, check_return_code, kubectl_cmd
 from functionals.environment import Environment
@@ -8,12 +7,14 @@ from functionals.resource_definitions import ClusterDefinition, ApplicationDefin
 
 KRAKE_HOMEDIR = "/home/krake"
 CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
-MANIFEST_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals"
+MANIFEST_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals/templates/k8s"
+OBSERVER_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals/templates/observer-schema"
 
 
 RESCHEDULING_INTERVAL = 10
 APP_CREATION_TIME = 10
 APP_DELETION_TIME = 20
+
 
 def test_complete_hook(k8s_clusters):
     """Test the functionality of the "complete" hook.
@@ -42,7 +43,9 @@ def test_complete_hook(k8s_clusters):
     }
 
     application_name = "test-hook-complete"
-    manifest_path = os.path.join(MANIFEST_PATH, "hook-deploy.yaml")
+    manifest_path = os.path.join(
+        MANIFEST_PATH, "hook-deploy.yaml"
+    )  # TODO doesn't exist anymore?
     app_def = ApplicationDefinition(
         name=application_name, manifest_path=manifest_path, hooks=["complete"]
     )
@@ -66,7 +69,7 @@ def test_complete_hook(k8s_clusters):
 
         # 3. Check that after some time, the Application has been deleted on the Krake
         # API.
-        app_def.check_deleted(delay=(RESCHEDULING_INTERVAL+APP_CREATION_TIME))
+        app_def.check_deleted(delay=(RESCHEDULING_INTERVAL + APP_CREATION_TIME))
 
         # 4. Delete the added configmap
         error_message = f"The configmap {configmap_name} could not be deleted."
@@ -105,12 +108,12 @@ def test_shutdown_hook(k8s_clusters):
 
     application_name = "test-hook-shutdown"
     manifest_path = os.path.join(MANIFEST_PATH, "hook-shutdown.yaml")
-    observer_schema_path = os.path.join(MANIFEST_PATH, "hook-shutdown-observer.yaml")
+    observer_schema_path = os.path.join(OBSERVER_PATH, "hook-shutdown-observer.yaml")
     app_def = ApplicationDefinition(
         name=application_name,
         manifest_path=manifest_path,
         observer_schema_path=observer_schema_path,
-        hooks=["shutdown"]
+        hooks=["shutdown"],
     )
 
     with Environment(environment):
@@ -128,14 +131,14 @@ def test_shutdown_hook(k8s_clusters):
 
         # 2. Start a deployment that uses the script for the Krake hook
         app_def.create_resource()
-        app_def.check_created(delay=RESCHEDULING_INTERVAL+APP_CREATION_TIME)
+        app_def.check_created(delay=RESCHEDULING_INTERVAL + APP_CREATION_TIME)
 
         # 3. Tell the application to shut down.
         app_def.delete_resource()
 
         # 4. Wait for the script to send the request to the API, that the shutdown
         # is finished
-        app_def.check_deleted(delay=RESCHEDULING_INTERVAL+APP_DELETION_TIME)
+        app_def.check_deleted(delay=RESCHEDULING_INTERVAL + APP_DELETION_TIME)
 
         # 5. Delete the added configmap
         error_message = f"The configmap {configmap_name} could not be deleted."

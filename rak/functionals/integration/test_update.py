@@ -30,7 +30,9 @@ from functionals.resource_definitions import ClusterDefinition, ResourceKind
 
 KRAKE_HOMEDIR = "/home/krake"
 CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
-MANIFEST_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals"
+MANIFEST_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals/templates/k8s"
+TOSCA_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals/templates/tosca"
+# TODO only define manifest path once
 
 
 def test_update_application_manifest(k8s_clusters):
@@ -137,7 +139,9 @@ def test_update_application_labels(k8s_clusters):
 
         # 1. Update the Application
         first_labels = {"location": "DE", "lbl": "first"}
-        app.update_resource(labels=first_labels, update_behavior = ["--remove-existing-labels"])
+        app.update_resource(
+            labels=first_labels, update_behavior=["--remove-existing-labels"]
+        )
 
         # 2. Check that the label has been changed on the API
         expected_labels = app.get_labels()
@@ -174,9 +178,7 @@ def test_update_cluster_kubeconfig(k8s_clusters):
         k8s_clusters (list[PathLike]): a list of paths to kubeconfig files.
 
     """
-    k8s_cluster, other_cluster = random.sample(
-        k8s_clusters, len(k8s_clusters)
-    )
+    k8s_cluster, other_cluster = random.sample(k8s_clusters, len(k8s_clusters))
 
     kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
     environment = {
@@ -345,11 +347,11 @@ def test_update_no_changes_tosca(k8s_clusters, tosca_from, file_server):
     kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
     is_url = False
     if tosca_from == "dict":
-        tosca = f"{MANIFEST_PATH}/echo-demo-tosca.yaml"
+        tosca = f"{TOSCA_PATH}/echo-demo-tosca.yaml"
     elif tosca_from == "url":
         is_url = True
         tosca = file_server(
-            f"{MANIFEST_PATH}/echo-demo-tosca.yaml",
+            f"{TOSCA_PATH}/echo-demo-tosca.yaml",
             file_name="echo-demo-tosca.yaml",
         )
     else:
@@ -392,7 +394,7 @@ def test_update_no_changes_csar(k8s_clusters, archive_files, file_server):
     k8s_cluster = random.choice(k8s_clusters)
 
     kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
-    tosca = f"{MANIFEST_PATH}/echo-demo-tosca.yaml"
+    tosca = f"{TOSCA_PATH}/echo-demo-tosca.yaml"
     tosca_meta = f"{MANIFEST_PATH}/TOSCA-Metadata/TOSCA.meta"
 
     csar_path = archive_files(
@@ -454,16 +456,16 @@ def test_update_application_tosca(k8s_clusters, tosca_from, file_server):
 
     is_url = False
     if tosca_from == "dict":
-        tosca = f"{MANIFEST_PATH}/echo-demo-tosca.yaml"
-        tosca_updated = f"{MANIFEST_PATH}/echo-demo-update-tosca.yaml"
+        tosca = f"{TOSCA_PATH}/echo-demo-tosca.yaml"
+        tosca_updated = f"{TOSCA_PATH}/echo-demo-update-tosca.yaml"
     elif tosca_from == "url":
         is_url = True
         tosca = file_server(
-            f"{MANIFEST_PATH}/echo-demo-tosca.yaml",
+            f"{TOSCA_PATH}/echo-demo-tosca.yaml",
             file_name="echo-demo-tosca.yaml",
         )
         tosca_updated = file_server(
-            f"{MANIFEST_PATH}/echo-demo-update-tosca.yaml",
+            f"{TOSCA_PATH}/echo-demo-update-tosca.yaml",
             file_name="echo-demo-update-tosca.yaml",
         )
     else:
@@ -628,9 +630,7 @@ def test_update_application_csar(k8s_clusters, archive_files, file_server):
 
 @pytest.mark.skip(reason="Doesn't work now")
 @pytest.mark.parametrize("tosca_from", ["dict", "url"])
-def test_update_manifest_application_by_tosca(
-    k8s_clusters, tosca_from, file_server
-):
+def test_update_manifest_application_by_tosca(k8s_clusters, tosca_from, file_server):
     """In the test environment (where the application is created by the manifest file),
     update the Application with a new TOSCA template. The previous manifest file
     has an echo server image with a version 1.10. The TOSCA template reverts
@@ -729,9 +729,7 @@ def test_update_manifest_application_by_tosca(
 
 
 @pytest.mark.skip(reason="Doesnt work now")
-def test_update_manifest_application_by_csar(
-    k8s_clusters, archive_files, file_server
-):
+def test_update_manifest_application_by_csar(k8s_clusters, archive_files, file_server):
     """In the test environment (where the application is created by the manifest file),
     update the Application with a new CSAR file. The previous manifest file
     has an echo server image with a version 1.10. The CSAR file reverts
