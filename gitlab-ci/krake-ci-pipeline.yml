@@ -175,8 +175,9 @@ lint-kubeconform:
   rules:
     - changes:
       - ${TEMPLATE_DIR}/k8s/*.yaml
+      - ${TEMPLATE_DIR}/k8s/*.yml
   script:
-  - /kubeconform -summary -output json ${TEMPLATE_DIR}/k8s/*.yaml
+  - /kubeconform -summary -output json ${TEMPLATE_DIR}/k8s/*.yaml ${TEMPLATE_DIR}/k8s/*.yml
 
 lint-tosca-templates:
   stage: lint
@@ -184,9 +185,10 @@ lint-tosca-templates:
   rules:
     - changes:
       - ${TEMPLATE_DIR}/tosca/*.yaml
+      - ${TEMPLATE_DIR}/tosca/*.yml
   script:
     - pip install tosca-parser==${TOSCA_PARSER_VER}
-    - ls ${TEMPLATE_DIR}/tosca/*.yaml | xargs -i tosca-parser --template-file {}
+    - ls ${TEMPLATE_DIR}/tosca/*.yaml ${TEMPLATE_DIR}/tosca/*.yml | xargs -i tosca-parser --template-file {}
 
 flake8-krake:
   stage: lint
