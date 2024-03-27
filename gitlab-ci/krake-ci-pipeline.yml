@@ -1,5 +1,6 @@
 stages:
   - pre
+  - lint
   - test
   - e2e
   - release
@@ -10,6 +11,7 @@ variables:
   CFSSL_VER: 1.4.1
   CONFLUENT_VER: "7.0"
   KUBECONFORM_VER: 0.6.4
+  TOSCA_PARSER_VER: 2.10.0
 
   # Change pip's cache directory to be inside the project directory since we
   # can only cache local items.
@@ -121,6 +123,7 @@ check-fixup-commits:
 
 .unittests-krake-template: &unittests-krake
   stage: test
+  needs: []
   artifacts:
     paths:
       - krake/.coverage.*
@@ -179,7 +182,7 @@ unittests-krake-3.11:
     COVERAGE_FILE: krake/.coverage.py311
 
 lint-kubeconform:
-  stage: test
+  stage: lint
   image:
     name: ghcr.io/yannh/kubeconform:v${KUBECONFORM_VER}-alpine
     entrypoint: [""]
@@ -188,11 +191,27 @@ lint-kubeconform:
     - branches
     - merge_requests
     - schedules
+    # changes:
+    #   - /rak/functionals/templates/tosca/*.yaml
   script:
   - /kubeconform -summary -output json ./rak/functionals/templates/k8s/*.yaml
 
+lint-tosca-templates:
+  stage: lint
+  image: python:3.10
+  only:
+    - tags
+    - branches
+    - merge_requests
+    - schedules
+    # changes:
+    #   - /rak/functionals/templates/tosca/*.yaml
+  script:
+    - pip install tosca-parser==${TOSCA_PARSER_VER}
+    - ls ./rak/functionals/templates/tosca/*.yaml | xargs -i tosca-parser --template-file {}
+
 flake8-krake:
-  stage: test
+  stage: lint
   image: python:3.10
   only:
     - tags
@@ -205,7 +224,7 @@ flake8-krake:
 
 
 flake8-rok:
-  stage: test
+  stage: lint
   image: python:3.10
   only:
     - tags
@@ -219,6 +238,7 @@ flake8-rok:
 
 test-build-docs:
   stage: test
+  needs: []
   image: python:3.10
   only:
     - tags
@@ -274,6 +294,7 @@ coverage-krake-visualization:
 # master branch, on merge requests, and on scheduled pipeline (night runs)
 e2e-provisioning:
   stage: test
+  needs: []
   image: registry.gitlab.com/rak-n-rok/krake/ansible_image:latest
   only:
     - master
