@@ -173,7 +173,7 @@ lint-kubeconform:
     name: ghcr.io/yannh/kubeconform:v${KUBECONFORM_VER}-alpine
     entrypoint: [""]
   rules:
-    changes:
+    - changes:
       - ${TEMPLATE_DIR}/k8s/*.yaml
   script:
   - /kubeconform -summary -output json ${TEMPLATE_DIR}/k8s/*.yaml
@@ -182,7 +182,7 @@ lint-tosca-templates:
   stage: lint
   image: python:3.10
   rules:
-    changes:
+    - changes:
       - ${TEMPLATE_DIR}/tosca/*.yaml
   script:
     - pip install tosca-parser==${TOSCA_PARSER_VER}
