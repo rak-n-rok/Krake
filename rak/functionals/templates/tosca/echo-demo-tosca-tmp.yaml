@@ -62,7 +62,7 @@ topology_template:
                 selector:
                   app: echo
                 ports:
-                - port: 8081
+                - port: 8080
                   protocol: TCP
                   targetPort:
             - get_input: echo_demo_port
