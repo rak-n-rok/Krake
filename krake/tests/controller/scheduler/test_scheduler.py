@@ -634,7 +634,7 @@ async def test_kubernetes_score_with_metrics_only(aiohttp_server, config, loop):
         ClusterFactory(spec__metrics=[], status__state=ClusterState.ONLINE),
     ]
 
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         scheduler = Scheduler("http://localhost:8080", worker_count=0)
         server = await aiohttp_server(create_app(config))
 
@@ -2564,7 +2564,7 @@ async def test_openstack_score_with_metrics_only(aiohttp_server, config, loop):
     cluster = MagnumClusterFactory(status__is_scheduled=False)
     projects = [ProjectFactory(spec__metrics=[]), ProjectFactory(spec__metrics=[])]
 
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         scheduler = Scheduler("http://localhost:8080", worker_count=0)
         server = await aiohttp_server(create_app(config))
 
@@ -3422,7 +3422,7 @@ async def test_cloud_score_empty_metrics(
     server = await aiohttp_server(create_app(config))
     async with Client(url=server_endpoint(server), loop=loop) as client:
         await scheduler.prepare(client)
-        with pytest.raises(AssertionError, match="Got empty list of metric references"):
+        with pytest.raises(ValueError, match="List of metric references is None or empty"):
             await scheduler.kubernetes_cluster.rank_clouds(cluster, clouds)
 
 

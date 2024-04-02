@@ -187,7 +187,10 @@ class Resolver(object):
 
                 self.resolving.append(name)
                 value = self(self.fixtures[name])
-                assert self.resolving.pop() == name
+                if self.resolving.pop() != name:
+                    raise RuntimeError(
+                        f"Result of self.resolving.pop() did not equal {name}"
+                    )
 
                 if isgeneratorfunction(self.fixtures[name]):
                     self.generators[name] = value

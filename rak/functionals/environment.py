@@ -202,7 +202,7 @@ class Environment(object):
     def get_resource_definition(self, kind, name):
         """
         If there exists exactly one resource in 'resources' of kind 'kind'
-        with name 'name', return it. Otherwise, raise an AssertionError.
+        with name 'name', return it. Otherwise, raise an RuntimeError.
         Args:
             kind (ResourceKind): the kind of resource which is sought.
             name (str): the name of the resource that is sought.
@@ -213,7 +213,7 @@ class Environment(object):
                 If kind == ResourceKind.APPLICATION: ApplicationDefinition
 
         Raises:
-            AssertionError if not exactly one resource was found.
+            RuntimeError: if not exactly one resource was found.
 
         """
         found = [r for r in self.resources[kind] if r.name == name]
@@ -224,7 +224,7 @@ class Environment(object):
             )
             if len(found) != 0:
                 msg += f" They were: {', '.join(str(rd) for rd in found)}"
-            raise AssertionError(msg)
+            raise RuntimeError(msg)
         return found[0]
 
 

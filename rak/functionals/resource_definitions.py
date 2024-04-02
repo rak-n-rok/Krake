@@ -1046,14 +1046,14 @@ class ClusterDefinition(ResourceDefinition):
              list[str]: the command to update the application, as a list of its parts.
 
         Raises:
-            AssertionError: if the labels or metrics are not present
+            RuntimeError: if the labels or metrics are not present
         """
         if not (labels or metrics):
             msg = (
                 "Either labels or metrics must be present in a "
                 "cluster update command."
             )
-            raise AssertionError(msg)
+            raise RuntimeError(msg)
         cmd = f"rok kube cluster update {self.name}".split()
         cmd += self._get_label_options(labels)
         cmd += self._get_metrics_options(metrics)

@@ -204,7 +204,9 @@ class Scheduler(Controller):
         self.openstack = None
 
     async def prepare(self, client):
-        assert client is not None
+        if client is None:
+            raise ValueError("client is None")
+
         self.client = client
         self.kubernetes_api = KubernetesApi(self.client)
         self.openstack_api = OpenStackApi(self.client)
@@ -386,11 +388,13 @@ class Handler(object):
                 failing, or None if it did not fail.
 
         Raises:
-            AssertionError: if length of metrics and reasons don't match up
-            ValueError: if the resource kind is not supported
+            ValueError: if the resource kind is not supported or length of metrics and
+                reasons don't match up
+
         """
         global_resource = False
-        assert len(metrics) == len(reasons)
+        if len(metrics) != len(reasons):
+            raise ValueError("Length of metrics and reasons don't match up")
 
         if resource.kind == Cluster.kind:
             resource.status.state = ClusterState.FAILING_METRICS
@@ -449,14 +453,16 @@ class Handler(object):
                 that should be fetched.
 
         Raises:
-            AssertionError: raised if no metrics list is provided or the error iteration
-                is stopped, because no iteration on the reasons list was possible
+            ValueError: raised if no metrics list is provided
+            RuntimeError: raised if the error iteration is stopped, because no
+                iteration on the reasons list was possible
 
         Yields:
             list[krake.controller.scheduler.metrics.QueryResult]: List of fetched
                 metrics with their value and weight.
         """
-        assert metrics, "Got empty list of metric references"
+        if not metrics:
+            raise ValueError("List of metric references is None or empty")
 
         errors = []
         reasons = []
@@ -529,7 +535,8 @@ class Handler(object):
             next(none_reason_iter)
         except StopIteration:
             stopped = True
-        assert stopped
+        if not stopped:
+            raise RuntimeError("No StopIteration signaled")
 
         if any(reasons):
             # If there is any issue with a metric, skip stop the generator.
@@ -1394,8 +1401,12 @@ class KubernetesClusterHandler(Handler):
             cluster (krake.data.kubernetes.Cluster): the Cluster that needs to be
                 scheduled to a Cloud.
 
+        Raises:
+            RuntimeError: if cluster is already bound
+
         """
-        assert cluster.status.scheduled_to is None, "Cluster is already bound"
+        if cluster.status.scheduled_to is not None:
+            raise RuntimeError("Cluster is already bound")
 
         logger.info("Schedule %r", cluster)
 
@@ -1635,8 +1646,13 @@ class OpenstackHandler(Handler):
         Args:
             cluster (krake.data.openstack.MagnumCluster): the MagnumCluster that needs
                 to be scheduled to a Project.
+
+        Raises:
+            RuntimeError: if magnum cluster is already bound
+
         """
-        assert cluster.status.project is None, "Magnum cluster is already bound"
+        if cluster.status.project is not None:
+            raise RuntimeError("Magnum cluster is already bound")
 
         logger.info("Schedule %r", cluster)
 
@@ -1789,8 +1805,13 @@ class OpenstackHandler(Handler):
                 should be one element in this argument: the reason for the metric
                 failing, or None if it did not fail.
 
+        Raises:
+            ValueError: if length of metrics and reasons don't match up or resource is
+                of unsupported kind
+
         """
-        assert len(metrics) == len(reasons)
+        if len(metrics) != len(reasons):
+            raise ValueError("Length of metrics and reasons don't match up")
 
         if resource.kind == "Cluster":
             resource.status.state = ClusterState.FAILING_METRICS
@@ -1835,12 +1856,18 @@ class OpenstackHandler(Handler):
             metrics (list[krake.data.core.MetricRef]): References to metrics
                 that should be fetched.
 
+        Raises:
+            ValueError: if metrics is None or empty
+            RuntimeError: raised if the error iteration is stopped, because no
+                iteration on the reasons list was possible
+
         Yields:
             list[krake.controller.scheduler.metrics.QueryResult]: List of fetched
                 metrics with their value and weight.
 
         """
-        assert metrics, "Got empty list of metric references"
+        if not metrics:
+            raise ValueError("List of metric references is None or empty")
 
         errors = []
         reasons = []
@@ -1897,7 +1924,8 @@ class OpenstackHandler(Handler):
             next(none_reason_iter)
         except StopIteration:
             stopped = True
-        assert stopped
+        if not stopped:
+            raise RuntimeError("No StopIteration signaled")
 
         if any(reasons):
             # If there is any issue with a metric, skip stop the generator.
