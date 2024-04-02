@@ -192,8 +192,7 @@ lint-kubeconform:
       - ${TEMPLATE_DIR}/k8s/*.yaml
       - ${TEMPLATE_DIR}/k8s/*.yml
   script:
-  - shopt -s nullglob
-  - ls ${TEMPLATE_DIR}/k8s/*.{yaml,yml} | xargs -i /kubeconform -summary -output json {}
+  - ls ${TEMPLATE_DIR}/k8s/*.yaml ls ${TEMPLATE_DIR}/k8s/*.yml | xargs -i /kubeconform -summary -output json {}
 
 lint-tosca-templates:
   stage: lint
