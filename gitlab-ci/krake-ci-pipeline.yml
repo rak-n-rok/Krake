@@ -177,7 +177,8 @@ lint-kubeconform:
       - ${TEMPLATE_DIR}/k8s/*.yaml
       - ${TEMPLATE_DIR}/k8s/*.yml
   script:
-  - ls ${TEMPLATE_DIR}/k8s/*.yaml ${TEMPLATE_DIR}/k8s/*.yml 2> /dev/null | xargs -i /kubeconform -summary -output json {}
+  - shopt -s nullglob
+  - ls ${TEMPLATE_DIR}/k8s/*.{yaml,yml} | xargs -i /kubeconform -summary -output json {}
 
 lint-tosca-templates:
   stage: lint
@@ -187,8 +188,9 @@ lint-tosca-templates:
       - ${TEMPLATE_DIR}/tosca/*.yaml
       - ${TEMPLATE_DIR}/tosca/*.yml
   script:
+    - shopt -s nullglob
     - pip install tosca-parser==${TOSCA_PARSER_VER}
-    - ls ${TEMPLATE_DIR}/tosca/*.yaml ${TEMPLATE_DIR}/tosca/*.yml 2> /dev/null | xargs -i tosca-parser --template-file {}
+    - ls ${TEMPLATE_DIR}/tosca/*.{yaml,yml} | xargs -i tosca-parser --template-file {}
 
 flake8-krake:
   stage: lint
