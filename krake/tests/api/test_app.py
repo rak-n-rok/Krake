@@ -3,6 +3,7 @@ import multiprocessing
 import ssl
 import sys
 import time
+from typing import Callable
 
 from aiohttp import web
 from asyncio.subprocess import PIPE, STDOUT
@@ -10,19 +11,21 @@ import pytest
 
 from krake.api import __version__ as version
 from krake.api.__main__ import main
-from krake.api.app import create_app
+from krake.api.app import UNKNOWN_AUTHORIZATION_STRATEGY_ERROR, create_app
 from krake.api.helpers import session, HttpProblem, HttpProblemTitle
-from krake.api.database import revision, TransactionError
+from krake.api.database import Session, revision, TransactionError
+from tests.conftest import PublicKeyRepository
 from krake.data import Key
 from krake.data.config import AuthenticationConfiguration, TlsServerConfiguration
 from krake.data.serializable import Serializable
 from krake.test_utils import with_timeout
+from krake.data.config import ApiConfiguration
 
 from tests.factories.core import RoleFactory, RoleBindingFactory
 
 
-@pytest.mark.slow
-def test_main(config, tmp_path):
+# @pytest.mark.slow
+def test_main(config: ApiConfiguration, tmp_path):
     """Test the main function of the API, and verify that it starts, display the right
     output and stops without issue.
     """
@@ -36,7 +39,7 @@ def test_main(config, tmp_path):
         sys.stdout = open(file_path, "w")
         main(configuration)
 
-    # Start the process and let it time to initialize
+    # Start the process and give it time to initialize
     process = multiprocessing.Process(target=wrapper, args=(config,))
     process.start()
     time.sleep(2)
@@ -54,7 +57,10 @@ def test_main(config, tmp_path):
     assert "Running on http://localhost:1234" in output
 
 
-async def test_index(aiohttp_client, no_db_config):
+async def test_index(aiohttp_client: Callable, no_db_config: ApiConfiguration):
+    """Ensures that route "/" is responsive after app is created using a config without
+    database
+    """
     client = await aiohttp_client(create_app(config=no_db_config))
     resp = await client.get("/")
     assert resp.status == 200
@@ -62,7 +68,9 @@ async def test_index(aiohttp_client, no_db_config):
     assert data["version"] == version
 
 
-async def test_me_route(aiohttp_client, db, config):
+async def test_me_route(
+    aiohttp_client: Callable, db: Session, config: ApiConfiguration
+):
     """Ensures that the user given by the `/me` endpoint is the right one, and that it
     is sent along with the corresponding :class:`krake.data.core.Role` instance names.
     """
@@ -104,7 +112,12 @@ async def test_me_route(aiohttp_client, db, config):
     assert data["roles"] == sorted([role.metadata.name for role in roles[:8]])
 
 
-async def test_transaction_retry(aiohttp_client, db, config, loop):
+async def test_transaction_retry(
+    aiohttp_client: Callable,
+    db: Session,
+    config: ApiConfiguration,
+    loop: asyncio.AbstractEventLoop,
+):
     """Test retry after transaction errors in :func:`krake.api.middlewares.database`.
 
     Create a custom HTTP endpoint "PUT /books/{isbn}" where the handler waits
@@ -179,16 +192,13 @@ async def test_transaction_retry(aiohttp_client, db, config, loop):
 
 
 @with_timeout(3)
-async def test_main_help(loop):
+async def test_main_help():
     """Verify that the help for the Krake API main is displayed, and contains the
     elements added by the argparse formatters (default value and expected types of the
     parameters).
     """
     command = "python -m krake.api -h"
-    # The loop parameter is mandatory otherwise the test fails if started with others.
-    process = await asyncio.create_subprocess_shell(
-        command, stdout=PIPE, stderr=STDOUT
-    )
+    process = await asyncio.create_subprocess_shell(command, stdout=PIPE, stderr=STDOUT)
     stdout, _ = await process.communicate()
     output = stdout.decode()
 
@@ -210,7 +220,10 @@ async def test_main_help(loop):
         assert expression in output
 
 
-async def test_transaction_error(aiohttp_client, db, config, loop):
+async def test_transaction_error(
+    aiohttp_client: Callable,
+    config: ApiConfiguration,
+):
     async def raise_transaction_error(request):
         raise TransactionError("Transaction failed")
 
@@ -226,7 +239,7 @@ async def test_transaction_error(aiohttp_client, db, config, loop):
     assert problem.title == HttpProblemTitle.TRANSACTION_ERROR
 
 
-async def test_cors_setup(aiohttp_client, db, config, loop):
+async def test_cors_setup(aiohttp_client: Callable, config: ApiConfiguration):
     config.authentication.cors_origin = "http://valid.com"
     app = create_app(config=config)
     client = await aiohttp_client(app)
@@ -271,7 +284,9 @@ async def test_cors_setup(aiohttp_client, db, config, loop):
     assert "http://invalid-website.com" in data
 
 
-async def test_cors_setup_rbac(aiohttp_client, db, config, loop, pki):
+async def test_cors_setup_rbac(
+    aiohttp_client: Callable, config: ApiConfiguration, pki: PublicKeyRepository
+):
     """Ensure that even with TLS and RBAC enabled, and no authentication method that
     matches, the CORS mechanism is still accessible.
     """
@@ -358,17 +373,19 @@ async def test_cors_setup_rbac(aiohttp_client, db, config, loop, pki):
     assert resp.status == 403
 
 
-async def test_unknown_auth_strategy(aiohttp_client, config):
+async def test_unknown_auth_strategy(config: ApiConfiguration):
     """Ensure that setting an authorization mode that is not supported raises an
     exception.
     """
     config.authorization = "invalid"
 
-    with pytest.raises(ValueError, match="Unknown authorization strategy 'invalid'"):
+    with pytest.raises(ValueError, match=rf"{UNKNOWN_AUTHORIZATION_STRATEGY_ERROR}"):
         create_app(config=config)
 
 
-async def test_error_logging(aiohttp_client, config, caplog):
+async def test_error_logging(
+    aiohttp_client: Callable, config: ApiConfiguration, caplog: pytest.LogCaptureFixture
+):
     """Ensure that an exception occurring inside the API is properly logged."""
     # Get an additional WARNING otherwise
     config.authentication.cors_origin = "http://example.com"

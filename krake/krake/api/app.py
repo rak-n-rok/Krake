@@ -28,6 +28,7 @@ from functools import partial
 from krake.api.database import Session
 
 from krake.data.core import RoleBinding
+from krake.data.config import ApiConfiguration
 from . import __version__ as version
 from . import middlewares
 from . import auth
@@ -37,19 +38,18 @@ from .openstack import OpenStackApi
 from .kubernetes import KubernetesApi
 from .infrastructure import InfrastructureApi
 
-
 routes = web.RouteTableDef()
 
 
 @routes.get("/")
-async def index(request):
+async def index_async(request):
     return web.json_response({"version": version})
 
 
 @routes.get("/me")
-async def me(request):
+async def me_async(request):
     roles = set()
-    user = request["user"]
+    user: str = request["user"]
 
     async for binding in session(request).all(RoleBinding):
         if user in binding.users:
@@ -59,11 +59,11 @@ async def me(request):
 
 
 @routes.get("/release")
-async def release(request):
+async def release_async(request):
     return web.json_response("You released the Krake.", status=202)
 
 
-def create_app(config):
+def create_app(config: ApiConfiguration):
     """Create aiohttp application instance providing the Krake HTTP API
 
     Args:
@@ -104,9 +104,9 @@ def create_app(config):
     app["ssl_context"] = ssl_context
 
     # Cleanup contexts
-    app.cleanup_ctx.append(partial(http_session, ssl_context=ssl_context))
+    app.cleanup_ctx.append(partial(http_session_async, ssl_context=ssl_context))
     app.cleanup_ctx.append(
-        partial(db_session, host=config.etcd.host, port=config.etcd.port)
+        partial(db_session_async, host=config.etcd.host, port=config.etcd.port)
     )
 
     # Routes
@@ -120,12 +120,12 @@ def create_app(config):
     return app
 
 
-def cors_setup(app):
+def cors_setup(app: web.Application):
     """Set the default CORS (Cross-Origin Resource Sharing) rules for all routes of the
     given web application.
 
     Args:
-        app (web.Application): Web application
+        app (aiohttp.web.Application): Web application
 
     """
     cors_origin = app["config"].authentication.cors_origin
@@ -152,7 +152,7 @@ def cors_setup(app):
         cors.add(route)
 
 
-async def db_session(app, host, port):
+async def db_session_async(app: web.Application, host: str, port: int):
     """Async generator creating a database :class:`krake.api.database.Session` that can
     be used by other components (middleware, route handlers) or by the requests
     handlers. The database session is available under the ``db`` key of the application.
@@ -162,6 +162,8 @@ async def db_session(app, host, port):
 
     Args:
         app (aiohttp.web.Application): Web application
+        host (str): host name the application listens to
+        port (int): port the application listens to
 
     """
     async with Session(host=host, port=port) as session:
@@ -169,7 +171,7 @@ async def db_session(app, host, port):
         yield
 
 
-async def http_session(app, ssl_context=None):
+async def http_session_async(app: web.Application, ssl_context: ssl.SSLContext = None):
     """Async generator creating an :class:`aiohttp.ClientSession` HTTP(S) session
     that can be used by other components (middleware, route handlers). The HTTP(S)
     client session is available under the ``http`` key of the application.
@@ -179,7 +181,7 @@ async def http_session(app, ssl_context=None):
 
     Args:
         app (aiohttp.web.Application): Web application
-
+        ssl_context (ssl.SSLContext): SSL Context (optional)
     """
     connector = None
     if ssl_context:
@@ -190,7 +192,7 @@ async def http_session(app, ssl_context=None):
         yield
 
 
-def load_authentication(config):
+def load_authentication(config: ApiConfiguration):
     """Create the authentication middleware :func:`.middlewares.authentication`.
 
     The authenticators are loaded from the "authentication" configuration key.
@@ -232,7 +234,10 @@ def load_authentication(config):
     return middlewares.authentication(authenticators, allow_anonymous)
 
 
-def load_authorizer(config):
+UNKNOWN_AUTHORIZATION_STRATEGY_ERROR = "Unknown authorization strategy"
+
+
+def load_authorizer(config: ApiConfiguration):
     """Load authorization function from configuration.
 
     Args:
@@ -254,4 +259,4 @@ def load_authorizer(config):
     if config.authorization == "RBAC":
         return auth.rbac
 
-    raise ValueError(f"Unknown authorization strategy {config.authorization!r}")
+    raise ValueError(f"{UNKNOWN_AUTHORIZATION_STRATEGY_ERROR} {config.authorization!r}")

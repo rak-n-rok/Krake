@@ -28,7 +28,7 @@ mapper = ConfigurationOptionMapper(ApiConfiguration)
 mapper.add_arguments(parser)
 
 
-def main(config):
+def main(config: ApiConfiguration):
     """Starts the API using the provided configuration.
 
     Args:
