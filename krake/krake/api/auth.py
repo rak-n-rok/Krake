@@ -86,13 +86,14 @@ from functools import wraps
 from typing import NamedTuple, Optional
 from aiohttp import web
 
+from krake.api.database import Session
 from krake.data.core import Verb, Role, RoleBinding, RoleRule
 from yarl import URL
 
 from .helpers import session, HttpProblemError, HttpProblem, HttpProblemTitle
 
 
-def static_authentication(name):
+def static_authentication(name: str):
     """Authenticator factory for authenticating every request with the given
     name.
 
@@ -174,7 +175,7 @@ def keystone_authentication(endpoint):
         if resp.status != 200:
             problem = HttpProblem(
                 detail=f"Invalid Keystone token (HTTP {resp.status} {resp.reason})",
-                title=HttpProblemTitle.INVALID_KEYSTONE_TOKEN
+                title=HttpProblemTitle.INVALID_KEYSTONE_TOKEN,
             )
             raise HttpProblemError(web.HTTPUnauthorized, problem)
 
@@ -214,7 +215,7 @@ def keycloak_authentication(endpoint, realm):
         if resp.status != 200:
             problem = HttpProblem(
                 detail=f"Invalid Keycloak token " f"(HTTP {resp.status} {resp.reason})",
-                title=HttpProblemTitle.INVALID_KEYCLOAK_TOKEN
+                title=HttpProblemTitle.INVALID_KEYCLOAK_TOKEN,
             )
             raise HttpProblemError(web.HTTPUnauthorized, problem)
 
@@ -304,8 +305,7 @@ async def rbac(request, auth_request):
     raise web.HTTPForbidden
 
 
-def check_auth_request(rule: RoleRule,
-                       auth_request: AuthorizationRequest) -> bool:
+def check_auth_request(rule: RoleRule, auth_request: AuthorizationRequest) -> bool:
     """Check an auth request against a rule and a role.
 
     1. Check if the requested verb is allowed by the rule.
@@ -330,7 +330,7 @@ def check_auth_request(rule: RoleRule,
     if auth_request.resource not in rule.resources and "" not in rule.resources:
         return False
 
-    if (auth_request.namespace in rule.namespaces or "" in rule.namespaces):
+    if auth_request.namespace in rule.namespaces or "" in rule.namespaces:
         return True
 
     if auth_request.namespace is None:
@@ -339,7 +339,7 @@ def check_auth_request(rule: RoleRule,
     return False
 
 
-def protected(api, resource, verb):
+def protected(api: str, resource: str, verb: str):
     """Decorator function for aiohttp request handlers performing authorization.
 
     The returned decorator can be used to wrap a given aiohttp handler and
@@ -387,7 +387,7 @@ def protected(api, resource, verb):
     return decorator
 
 
-async def _fetch_roles(db, username):
+async def _fetch_roles(db: Session, username: str):
     """Async generator for all roles associated with the given user.
 
     Args:
@@ -403,11 +403,15 @@ async def _fetch_roles(db, username):
 
     # FIXME: Use a cache
     async for binding in bindings:
-        if username in binding.users:
-            for name in binding.roles:
-                if name not in roles:
-                    roles.add(name)
+        if username not in binding.users:
+            continue
 
-                    role = await db.get(Role, name=name)
-                    if role is not None:
-                        yield role
+        for name in binding.roles:
+            if name in roles:
+                continue
+
+            roles.add(name)
+
+            role = await db.get(Role, name=name)
+            if role is not None:
+                yield role

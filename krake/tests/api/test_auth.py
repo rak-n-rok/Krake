@@ -1,20 +1,39 @@
+from asyncio import AbstractEventLoop
 import ssl
+from typing import Callable
 
 import pytest
 from aiohttp import ClientSession
 from aiohttp.test_utils import TestServer as Server
 from krake.api.app import create_app
 from krake.api.helpers import HttpProblemTitle
+from tests.conftest import PublicKeyRepository
+from tests.conftest import KeycloakInfo
+from tests.conftest import KeystoneInfo
 from krake.client import Client
 from krake.controller import create_ssl_context
 from krake.data.config import (
+    ApiConfiguration,
     AuthenticationConfiguration,
     TlsServerConfiguration,
     TlsClientConfiguration,
 )
 
+# region Constants
+AUTH_CONFIG_ANONYMOUS_ENABLED_ONLY = {
+    "allow_anonymous": True,
+    "strategy": {
+        "keystone": {"enabled": False, "endpoint": "localhost"},
+        "keycloak": {"enabled": False, "endpoint": "endpoint", "realm": "krake"},
+        "static": {"enabled": False, "name": "test-user"},
+    },
+}
 
-async def test_static_auth(aiohttp_client, config):
+# endregion Constants
+
+
+# region Static Authentication
+async def test_static_auth(aiohttp_client: Callable, config: ApiConfiguration):
     authentication = {
         "allow_anonymous": True,
         "strategy": {
@@ -33,33 +52,14 @@ async def test_static_auth(aiohttp_client, config):
     assert data["user"] == "test-user"
 
 
+# endregion Static Authentication
+
+
+# region Keystone
 @pytest.mark.slow
-async def test_keystone(keystone):
+async def test_keystone(keystone: KeystoneInfo):
     async with ClientSession() as session:
-        # Create a new authentication token
-        resp = await session.post(
-            f"{keystone.auth_url}/auth/tokens",
-            json={
-                "auth": {
-                    "identity": {
-                        "methods": ["password"],
-                        "password": {
-                            "user": {
-                                "name": keystone.username,
-                                "domain": {"name": keystone.user_domain_name},
-                                "password": keystone.password,
-                            }
-                        },
-                    },
-                    "scope": {
-                        "project": {
-                            "name": keystone.project_name,
-                            "domain": {"name": keystone.project_domain_name},
-                        }
-                    },
-                }
-            },
-        )
+        resp = await _create_keystone_token_async(session, keystone)
         assert resp.status == 201
         token = resp.headers.get("X-Subject-Token")
         data = await resp.json()
@@ -82,32 +82,11 @@ async def test_keystone(keystone):
 
 
 @pytest.mark.slow
-async def test_keystone_auth(keystone, aiohttp_client, config):
+async def test_keystone_auth(
+    keystone: KeystoneInfo, aiohttp_client: Callable, config: ApiConfiguration
+):
     async with ClientSession() as session:
-        # Issue Keystone token
-        resp = await session.post(
-            f"{keystone.auth_url}/auth/tokens",
-            json={
-                "auth": {
-                    "identity": {
-                        "methods": ["password"],
-                        "password": {
-                            "user": {
-                                "name": keystone.username,
-                                "domain": {"name": keystone.user_domain_name},
-                                "password": keystone.password,
-                            }
-                        },
-                    },
-                    "scope": {
-                        "project": {
-                            "name": keystone.project_name,
-                            "domain": {"name": keystone.project_domain_name},
-                        }
-                    },
-                }
-            },
-        )
+        resp = await _create_keystone_token_async(session, keystone)
         assert resp.status == 201
         token = resp.headers.get("X-Subject-Token")
 
@@ -131,7 +110,9 @@ async def test_keystone_auth(keystone, aiohttp_client, config):
 
 
 @pytest.mark.slow
-async def test_keystone_auth_invalid_token(keystone, aiohttp_client, config):
+async def test_keystone_auth_invalid_token(
+    keystone: KeystoneInfo, aiohttp_client: Callable, config: ApiConfiguration
+):
     """Verify with keystone authentication enabled, an invalid token does not allow to
     be authenticated.
     """
@@ -153,7 +134,9 @@ async def test_keystone_auth_invalid_token(keystone, aiohttp_client, config):
     assert data["title"] == HttpProblemTitle.INVALID_KEYSTONE_TOKEN.name
 
 
-async def test_keystone_auth_no_token(aiohttp_client, config):
+async def test_keystone_auth_no_token(
+    aiohttp_client: Callable, config: ApiConfiguration
+):
     """Verify that even with keystone authentication enabled, a user does not get
     authenticated if no token has been provided.
     """
@@ -175,29 +158,42 @@ async def test_keystone_auth_no_token(aiohttp_client, config):
     assert data["user"] == "system:anonymous"
 
 
+async def _create_keystone_token_async(session: ClientSession, keystone: KeystoneInfo):
+    return await session.post(
+        f"{keystone.auth_url}/auth/tokens",
+        json={
+            "auth": {
+                "identity": {
+                    "methods": ["password"],
+                    "password": {
+                        "user": {
+                            "name": keystone.username,
+                            "domain": {"name": keystone.user_domain_name},
+                            "password": keystone.password,
+                        }
+                    },
+                },
+                "scope": {
+                    "project": {
+                        "name": keystone.project_name,
+                        "domain": {"name": keystone.project_domain_name},
+                    }
+                },
+            }
+        },
+    )
+
+
+# endregion Keystone
+
+
+# region Keycloak
 @pytest.mark.slow
-async def test_keycloak(keycloak):
+async def test_keycloak(keycloak: KeycloakInfo):
     """Test the Keycloak fixture."""
     async with ClientSession() as session:
         # Create a new authentication token
-        url = (
-            f"{keycloak.auth_url}/auth/realms/{keycloak.realm}"
-            f"/protocol/openid-connect/token"
-        )
-        resp = await session.post(
-            url,
-            data={
-                "grant_type": "password",
-                "username": keycloak.username,
-                "password": keycloak.password,
-                "client_id": keycloak.client_id,
-                "client_secret": keycloak.client_secret,
-            },
-        )
-        assert resp.status == 200
-        data = await resp.json()
-        token = data["access_token"]
-
+        token = await _create_keycloak_token_async(session, keycloak)
         url = (
             f"{keycloak.auth_url}/auth/realms/{keycloak.realm}"
             f"/protocol/openid-connect/userinfo"
@@ -208,27 +204,12 @@ async def test_keycloak(keycloak):
 
 
 @pytest.mark.slow
-async def test_keycloak_auth(keycloak, aiohttp_client, config):
+async def test_keycloak_auth(
+    keycloak: KeycloakInfo, aiohttp_client: Callable, config: ApiConfiguration
+):
     """Using the keycloak fixture, test the API's Keycloak authentication."""
     async with ClientSession() as session:
-        # Create a new authentication token
-        url = (
-            f"{keycloak.auth_url}/auth/realms/{keycloak.realm}"
-            f"/protocol/openid-connect/token"
-        )
-        resp = await session.post(
-            url,
-            data={
-                "grant_type": "password",
-                "username": keycloak.username,
-                "password": keycloak.password,
-                "client_id": keycloak.client_id,
-                "client_secret": keycloak.client_secret,
-            },
-        )
-        assert resp.status == 200
-        data = await resp.json()
-        token = data["access_token"]
+        token = _create_keycloak_token_async(keycloak, session)
 
     # Use the issued token to access Krake API
     authentication = {
@@ -259,7 +240,9 @@ async def test_keycloak_auth(keycloak, aiohttp_client, config):
     assert resp.status == 401
 
 
-async def test_keycloak_auth_no_token(aiohttp_client, config):
+async def test_keycloak_auth_no_token(
+    aiohttp_client: Callable, config: ApiConfiguration
+):
     """Verify that even with keycloak authentication enabled, a user does not get
     authenticated if no token has been provided.
     """
@@ -282,7 +265,39 @@ async def test_keycloak_auth_no_token(aiohttp_client, config):
     assert data["user"] == "system:anonymous"
 
 
-async def test_deny_anonymous_requests(aiohttp_client, config):
+async def _create_keycloak_token_async(
+    session: ClientSession, keycloak: KeycloakInfo
+) -> str:
+    # Create a new authentication token
+    url = (
+        f"{keycloak.auth_url}/auth/realms/{keycloak.realm}"
+        f"/protocol/openid-connect/token"
+    )
+    resp = await session.post(
+        url,
+        data={
+            "grant_type": "password",
+            "username": keycloak.username,
+            "password": keycloak.password,
+            "client_id": keycloak.client_id,
+            "client_secret": keycloak.client_secret,
+        },
+    )
+    assert resp.status == 200
+    data = await resp.json()
+    token = data["access_token"]
+    return token
+
+
+# endregion Keycloak
+
+
+# region Anonymous requests
+
+
+async def test_deny_anonymous_requests(
+    aiohttp_client: Callable, config: ApiConfiguration
+):
     authentication = {
         "allow_anonymous": False,
         "strategy": {
@@ -298,33 +313,16 @@ async def test_deny_anonymous_requests(aiohttp_client, config):
     assert resp.status == 401
 
 
-async def test_client_connect_ssl(config, loop, pki):
-    server_cert = pki.gencert("api-server")
+# endregion Anonymous requests
+
+
+# region Certificates
+async def test_client_connect_ssl(
+    config: ApiConfiguration, loop: AbstractEventLoop, pki: PublicKeyRepository
+):
+    server = await _create_ssl_server_async(config, pki)
+
     client_cert = pki.gencert("client")
-
-    authentication = {
-        "allow_anonymous": True,
-        "strategy": {
-            "keystone": {"enabled": False, "endpoint": "localhost"},
-            "keycloak": {"enabled": False, "endpoint": "endpoint", "realm": "krake"},
-            "static": {"enabled": False, "name": "test-user"},
-        },
-    }
-    config.authentication = AuthenticationConfiguration.deserialize(authentication)
-
-    tls_config = {
-        "enabled": True,
-        "client_ca": pki.ca.cert,
-        "cert": server_cert.cert,
-        "key": server_cert.key,
-    }
-    config.tls = TlsServerConfiguration.deserialize(tls_config)
-    app = create_app(config=config)
-
-    server = Server(app)
-    await server.start_server(ssl=app["ssl_context"])
-    assert server.scheme == "https"
-
     client_tls = {
         "enabled": True,
         "client_ca": pki.ca.cert,
@@ -340,33 +338,12 @@ async def test_client_connect_ssl(config, loop, pki):
         assert data["user"] == "client"
 
 
-async def test_client_anonymous_cert_auth(aiohttp_client, config, pki):
-    server_cert = pki.gencert("api-server")
+async def test_client_anonymous_cert_auth(
+    aiohttp_client: Callable, config: ApiConfiguration, pki: PublicKeyRepository
+):
+    server = await _create_ssl_server_async(config, pki)
 
-    authentication = {
-        "allow_anonymous": True,
-        "strategy": {
-            "keystone": {"enabled": False, "endpoint": "localhost"},
-            "keycloak": {"enabled": False, "endpoint": "endpoint", "realm": "krake"},
-            "static": {"enabled": False, "name": "test-user"},
-        },
-    }
-    config.authentication = AuthenticationConfiguration.deserialize(authentication)
-
-    tls_config = {
-        "enabled": True,
-        "client_ca": pki.ca.cert,
-        "cert": server_cert.cert,
-        "key": server_cert.key,
-    }
-    config.tls = TlsServerConfiguration.deserialize(tls_config)
-
-    app = create_app(config=config)
-    server = Server(app)
     try:
-        await server.start_server(ssl=app["ssl_context"])
-        assert server.scheme == "https"
-
         client = await aiohttp_client(server)
         context = ssl.create_default_context(cafile=pki.ca.cert)
         resp = await client.get("/me", ssl=context)
@@ -376,33 +353,13 @@ async def test_client_anonymous_cert_auth(aiohttp_client, config, pki):
         await server.close()
 
 
-async def test_client_cert_auth(aiohttp_client, config, pki):
-    server_cert = pki.gencert("api-server")
+async def test_client_cert_auth(
+    aiohttp_client: Callable, config: ApiConfiguration, pki: PublicKeyRepository
+):
     client_cert = pki.gencert("test-user")
-    authentication = {
-        "allow_anonymous": True,
-        "strategy": {
-            "keystone": {"enabled": False, "endpoint": "localhost"},
-            "keycloak": {"enabled": False, "endpoint": "endpoint", "realm": "krake"},
-            "static": {"enabled": False, "name": "test-user"},
-        },
-    }
-    config.authentication = AuthenticationConfiguration.deserialize(authentication)
+    server = await _create_ssl_server_async(config, pki)
 
-    tls_config = {
-        "enabled": True,
-        "client_ca": pki.ca.cert,
-        "cert": server_cert.cert,
-        "key": server_cert.key,
-    }
-    config.tls = TlsServerConfiguration.deserialize(tls_config)
-
-    app = create_app(config=config)
-    server = Server(app)
     try:
-        await server.start_server(ssl=app["ssl_context"])
-        assert server.scheme == "https"
-
         client = await aiohttp_client(server)
         context = ssl.create_default_context(
             purpose=ssl.Purpose.SERVER_AUTH, cafile=pki.ca.cert
@@ -415,19 +372,42 @@ async def test_client_cert_auth(aiohttp_client, config, pki):
         await server.close()
 
 
-async def test_allow_anonymous_rbac(aiohttp_client, config):
+async def _create_ssl_server_async(
+    config: ApiConfiguration, pki: PublicKeyRepository
+) -> Server:
+    server_cert = pki.gencert("api-server")
+
+    config.authentication = AuthenticationConfiguration.deserialize(
+        AUTH_CONFIG_ANONYMOUS_ENABLED_ONLY
+    )
+
+    tls_config = {
+        "enabled": True,
+        "client_ca": pki.ca.cert,
+        "cert": server_cert.cert,
+        "key": server_cert.key,
+    }
+    config.tls = TlsServerConfiguration.deserialize(tls_config)
+    app = create_app(config=config)
+
+    server = Server(app)
+    await server.start_server(ssl=app["ssl_context"])
+    assert server.scheme == "https"
+
+    return server
+
+
+# endregion Certificates
+
+
+# region RBAC
+async def test_allow_anonymous_rbac(aiohttp_client: Callable, config: ApiConfiguration):
     """Ensure that with RBAC enabled, an anonymous user is not considered authenticated
     when he/she sends requests for resources.
     """
-    authentication = {
-        "allow_anonymous": True,
-        "strategy": {
-            "keystone": {"enabled": False, "endpoint": "localhost"},
-            "keycloak": {"enabled": False, "endpoint": "endpoint", "realm": "krake"},
-            "static": {"enabled": False, "name": "test-user"},
-        },
-    }
-    config.authentication = AuthenticationConfiguration.deserialize(authentication)
+    config.authentication = AuthenticationConfiguration.deserialize(
+        AUTH_CONFIG_ANONYMOUS_ENABLED_ONLY
+    )
     config.authorization = "RBAC"
 
     client = await aiohttp_client(create_app(config=config))
@@ -435,21 +415,22 @@ async def test_allow_anonymous_rbac(aiohttp_client, config):
     assert resp.status == 401
 
 
-async def test_always_deny(aiohttp_client, config):
+# endregion RBAC
+
+
+# region Always Deny
+async def test_always_deny(aiohttp_client: Callable, config: ApiConfiguration):
     """Ensure that the "always-deny" authorization mode prevents accessing resources
     even if anonymous users are allowed.
     """
-    authentication = {
-        "allow_anonymous": True,
-        "strategy": {
-            "keystone": {"enabled": False, "endpoint": "localhost"},
-            "keycloak": {"enabled": False, "endpoint": "endpoint", "realm": "krake"},
-            "static": {"enabled": False, "name": "test-user"},
-        },
-    }
-    config.authentication = AuthenticationConfiguration.deserialize(authentication)
+    config.authentication = AuthenticationConfiguration.deserialize(
+        AUTH_CONFIG_ANONYMOUS_ENABLED_ONLY
+    )
     config.authorization = "always-deny"
 
     client = await aiohttp_client(create_app(config=config))
     resp = await client.get("/core/roles")
     assert resp.status == 403
+
+
+# endregion Always Deny
