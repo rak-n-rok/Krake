@@ -40,4 +40,4 @@ A simple manifest file will be used as a demo application. It can be found at th
 
 .. prompt:: bash $ auto
 
-    $ cat git/krake/rak/functionals/templates/k8s/echo-demo.yaml
+    $ cat git/krake/examples/templates/k8s/echo-demo.yaml

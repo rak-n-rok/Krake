@@ -15,7 +15,7 @@ from functionals.utils import (
 
 KRAKE_HOMEDIR = "/home/krake"
 MANIFEST_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals"
-TOSCA_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals/templates/tosca"
+TOSCA_PATH = f"{KRAKE_HOMEDIR}/git/krake/examples/templates/tosca"
 
 
 def test_cluster_crud(

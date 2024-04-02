@@ -7,8 +7,8 @@ from functionals.resource_definitions import ClusterDefinition, ApplicationDefin
 
 KRAKE_HOMEDIR = "/home/krake"
 CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
-MANIFEST_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals/templates/k8s"
-OBSERVER_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals/templates/observer-schema"
+MANIFEST_PATH = f"{KRAKE_HOMEDIR}/git/krake/examples/templates/k8s"
+OBSERVER_PATH = f"{KRAKE_HOMEDIR}/git/krake/examples/templates/observer-schema"
 
 
 RESCHEDULING_INTERVAL = 10

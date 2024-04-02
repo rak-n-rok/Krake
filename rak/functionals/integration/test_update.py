@@ -30,8 +30,8 @@ from functionals.resource_definitions import ClusterDefinition, ResourceKind
 
 KRAKE_HOMEDIR = "/home/krake"
 CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
-MANIFEST_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals/templates/k8s"
-TOSCA_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals/templates/tosca"
+MANIFEST_PATH = f"{KRAKE_HOMEDIR}/git/krake/examples/templates/k8s"
+TOSCA_PATH = f"{KRAKE_HOMEDIR}/git/krake/examples/templates/tosca"
 # TODO only define manifest path once
 
 

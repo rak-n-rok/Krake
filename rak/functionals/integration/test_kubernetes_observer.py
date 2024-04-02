@@ -41,7 +41,7 @@ from functionals.resource_definitions import ApplicationDefinition, ResourceKind
 KRAKE_HOMEDIR = "/home/krake"
 CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
 OBSERVER_SCHEMA_PATH = (
-    f"{KRAKE_HOMEDIR}/git/krake/rak/functionals/templates/" "observer-schemas"
+    f"{KRAKE_HOMEDIR}/git/krake/examples/templates/" "observer-schemas"
 )
 
 
