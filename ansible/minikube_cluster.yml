@@ -66,7 +66,8 @@
 
     - name: Wait for Minikube VM to show up
       wait_for_connection:
-        timeout: 300
+        timeout: 600
+        connect_timeout: 15
 
     - name: Gathering facts
       setup:

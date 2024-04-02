@@ -262,6 +262,8 @@ python3 -m krake.controller.infrastructure
 
 There is also a [script](https://gitlab.com/rak-n-rok/krake/-/snippets/2042674) (see snippets section on git) provided in the git repository to start all parts of Krake using „tmux“.
 
+For both options, these commands as well as the following rok commands must be run inside the `./krake` subdirectory.
+
 #### Using the Krake CLI
 
 Finally we can:
@@ -302,7 +304,7 @@ $ rok kube cluster list
 +-----------+--------------+--------+---------------------+---------------------+---------+--------+
 
 # Run an application on Krake
-$ rok kube app create -f rak/functionals/echo-demo.yaml echo-demo
+$ rok kube app create -f ../rak/functionals/echo-demo.yaml echo-demo
 +-----------------------+---------------------+
 | name                  | echo-demo           |
 | namespace             | system:admin        |
