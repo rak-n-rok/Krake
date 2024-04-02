@@ -174,7 +174,9 @@ lint-kubeconform:
     entrypoint: [""]
   rules:
     - changes:
-      - ${TEMPLATE_DIR}/k8s/*.{yaml,yml}
+        compare_to: 'refs/heads/master'
+        paths:
+          - ${TEMPLATE_DIR}/k8s/*.{yaml,yml}
   script:
   - find rak/functionals/templates/k8s/ -name "*.yaml" -o -name "*.yml" | xargs -i /kubeconform -summary -output json {}
 
@@ -183,7 +185,9 @@ lint-tosca-templates:
   image: python:3.10
   rules:
     - changes:
-      - ${TEMPLATE_DIR}/tosca/*.{yaml,yml}
+        compare_to: 'refs/heads/master'
+        paths:
+          - ${TEMPLATE_DIR}/tosca/*.{yaml,yml}
   script:
     - shopt -s nullglob
     - pip install tosca-parser==${TOSCA_PARSER_VER}
