@@ -54,7 +54,7 @@ Spawn the demo application
 
 .. prompt:: bash $ auto
 
-    $ rok kube app create -f git/krake/rak/functionals/templates/k8s/echo-demo.yaml echo-demo -L location=DE
+    $ rok kube app create -f git/krake/examples/templates/k8s/echo-demo.yaml echo-demo -L location=DE
     $ rok kube app get echo-demo -o json | jq .status.running_on
 
 Observe a migration

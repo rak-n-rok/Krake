@@ -16,7 +16,7 @@ variables:
   # Change pip's cache directory to be inside the project directory since we
   # can only cache local items.
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-  TEMPLATE_DIR: "rak/functionals/templates"
+  TEMPLATE_DIR: "examples/templates"
 
 workflow:
   rules:
@@ -178,7 +178,7 @@ lint-kubeconform:
         paths:
           - ${TEMPLATE_DIR}/k8s/*.{yaml,yml}
   script:
-  - find rak/functionals/templates/k8s/ -name "*.yaml" -o -name "*.yml" | xargs -i /kubeconform -summary -output json {}
+  - find examples/templates/k8s/ -name "*.yaml" -o -name "*.yml" | xargs -i /kubeconform -summary -output json {}
 
 lint-tosca-templates:
   stage: lint
