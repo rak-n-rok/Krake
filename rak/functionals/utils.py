@@ -194,7 +194,7 @@ def check_app_state(state, error_message, reason=None):
             of the current function.
 
     Raises:
-        AssertionError: if a KeyError or JSONDecodeError is caught
+        ValueError: if a KeyError or JSONDecodeError is caught
     """
 
     def validate(response):
@@ -203,8 +203,8 @@ def check_app_state(state, error_message, reason=None):
             assert app_details["status"]["state"] == state, error_message
             if reason:
                 assert app_details["status"]["reason"]["code"] == reason, error_message
-        except (KeyError, json.JSONDecodeError):
-            raise AssertionError(error_message)
+        except (KeyError, json.JSONDecodeError) as e:
+            raise ValueError(error_message) from e
 
     return validate
 
@@ -228,7 +228,7 @@ def check_cluster_created_and_up(error_message="", expected_state="ONLINE"):
                 err_msg_fmt.format(details=details) + "| " + json.dumps(cluster_details)
 
         except (KeyError, json.JSONDecodeError) as e:
-            raise AssertionError(err_msg_fmt % {"details": str(e)})
+            raise RuntimeError(err_msg_fmt % {"details": str(e)})
 
     return validate
 
@@ -267,7 +267,7 @@ def check_app_created_and_up(error_message="", expected_state="RUNNING"):
                 assert observed_scheduled_to, err_msg_fmt % {"details": details}
 
         except (KeyError, json.JSONDecodeError) as e:
-            raise AssertionError(err_msg_fmt % {"details": str(e)})
+            raise ValueError(err_msg_fmt % {"details": str(e)})
 
     return validate
 
@@ -480,7 +480,7 @@ def check_empty_list(error_message):
             of the current function.
 
     Raises:
-        AssertionError: if a JSONDecodeError is caught
+        ValueError: if a JSONDecodeError is caught
     """
 
     def validate(response):
@@ -488,8 +488,8 @@ def check_empty_list(error_message):
             assert (
                 response.json == []
             ), f"{error_message}\nList items: {str(response.json)}"
-        except json.JSONDecodeError:
-            raise AssertionError(error_message)
+        except json.JSONDecodeError as e:
+            raise ValueError(error_message) from e
 
     return validate
 
@@ -578,7 +578,7 @@ def check_spec_container_image(expected_image, error_message):
             of the current function.
 
     Raises:
-        AssertionError: if a JSONDecodeError is caught or the image doesn't equal the
+        ValueError: if a JSONDecodeError is caught or the image doesn't equal the
             expected image
     """
 
@@ -586,8 +586,8 @@ def check_spec_container_image(expected_image, error_message):
         try:
             image = response.json["spec"]["template"]["spec"]["containers"][0]["image"]
             assert image == expected_image, error_message
-        except json.JSONDecodeError:
-            raise AssertionError(error_message)
+        except json.JSONDecodeError as e:
+            raise ValueError(error_message) from e
 
     return validate
 
@@ -610,7 +610,7 @@ def check_spec_replicas(expected_replicas, error_message):
             of the current function.
 
     Raises:
-        AssertionError: if a JSONDecodeError is caught or the replica doesn't equal the
+        ValueError: if a JSONDecodeError is caught or the replica doesn't equal the
             expected replica
     """
 
@@ -618,8 +618,8 @@ def check_spec_replicas(expected_replicas, error_message):
         try:
             replicas = response.json["spec"]["replicas"]
             assert replicas == expected_replicas, error_message
-        except json.JSONDecodeError:
-            raise AssertionError(error_message)
+        except json.JSONDecodeError as e:
+            raise ValueError(error_message) from e
 
     return validate
 
@@ -643,7 +643,7 @@ def check_app_running_on(expected_cluster, error_message):
             the parameters of the current function.
 
     Raises:
-        AssertionError: if a KeyError or JSONDecodeError is caught or
+        ValueError: if a KeyError or JSONDecodeError is caught or
             the cluster the app is running on doesn't equal the expected cluster
     """
 
@@ -660,8 +660,8 @@ def check_app_running_on(expected_cluster, error_message):
                 f"App running_on: {running_on}"
             )
             assert running_on == expected_cluster, msg
-        except (KeyError, json.JSONDecodeError):
-            raise AssertionError(error_message)
+        except (KeyError, json.JSONDecodeError) as e:
+            raise ValueError(error_message) from e
 
     return validate
 
@@ -809,7 +809,7 @@ def check_static_metrics(expected_metrics, error_message=""):
             the parameters of the current function.
 
     Raises:
-        AssertionError: if the observed metrics don't equal the expected metrics or
+        ValueError: if the observed metrics don't equal the expected metrics or
             another exception is caught
     """
     if not error_message:
@@ -825,7 +825,7 @@ def check_static_metrics(expected_metrics, error_message=""):
             for m, val in expected_metrics.items():
                 assert val == observed_metrics.get(m), msg
         except Exception as e:
-            raise AssertionError(error_message + f"Error: {e}")
+            raise ValueError(error_message + f"Error: {e}")
 
     return validate
 

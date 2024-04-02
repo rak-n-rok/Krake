@@ -1,6 +1,5 @@
 """Data model definitions for Kubernetes-related resources"""
 import logging
-from copy import deepcopy
 from enum import Enum, auto
 from dataclasses import field
 from typing import List, Dict, Union
@@ -276,9 +275,11 @@ class ObserverSchemaError(Exception):
     """Custom exception raised if the validation of the observer_schema fails"""
 
 
-def _validate_observer_schema_dict(partial_schema, first_level=False):
-    """Together with :func:`_validate_observer_schema_list``, this function is
-    called recursively to validate a partial ``observer_schema``.
+def _validate_observer_schema_dict(partial_schema,
+                                   first_level=False,
+                                   is_metadata=False):
+    """Together with :func:`_validate_observer_schema_list``, this function
+    is called recursively to validate a partial ``observer_schema``.
 
     Args:
         partial_schema (dict): Partial observer_schema to validate
@@ -287,37 +288,34 @@ def _validate_observer_schema_dict(partial_schema, first_level=False):
             then be performed
 
     Raises:
-        AssertionError: If the partial observer_schema is not valid
+        ValueError: If the partial observer_schema is not valid
+        TypeError: If the partial observer_schema is not valid
+            (value of key metadata is not of type dictionary)
 
     In case of ``first_level`` dictionary (i.e. complete ``observer_schema`` for a
     resource), the keys necessary for identifying the resource have to be present.
 
     """
     if first_level:
-        try:
-            partial_schema.pop("apiVersion")
-        except KeyError:
-            raise AssertionError("apiVersion is not defined")
+        for key_name in ["apiVersion", "kind"]:
+            if partial_schema.get(key_name, None) is None:
+                raise ValueError(f"{key_name} is not defined")
 
-        try:
-            partial_schema.pop("kind")
-        except KeyError:
-            raise AssertionError("kind is not defined")
+        metadata = partial_schema.get("metadata", None)
+        if metadata is None:
+            raise ValueError("metadata dictionary is not defined")
+        if not isinstance(metadata, dict):
+            raise TypeError("metadata must be a dictionary")
+        if metadata.get("name", None) is None:
+            raise ValueError("name is not defined in the metadata dictionary")
 
-        try:
-            metadata = partial_schema.pop("metadata")
-            assert isinstance(metadata, dict)
-        except (KeyError, AssertionError):
-            raise AssertionError("metadata dictionary is not defined")
-
-        try:
-            metadata.pop("name")
-        except KeyError:
-            raise AssertionError("name is not defined in the metadata dictionary")
-
-        _validate_observer_schema_dict(metadata)
+        _validate_observer_schema_dict(metadata, is_metadata=True)
 
     for key, value in partial_schema.items():
+        # skip already validated items
+        if first_level and key in ["apiVersion", "kind", "metadata"] \
+                or is_metadata and key == "name":
+            continue
 
         if isinstance(value, dict):
             _validate_observer_schema_dict(value)
@@ -325,8 +323,8 @@ def _validate_observer_schema_dict(partial_schema, first_level=False):
         elif isinstance(value, list):
             _validate_observer_schema_list(value)
 
-        else:
-            assert value is None, f"Value of '{key}' is not 'None'"
+        elif value is not None:
+            raise ValueError(f"Value of '{key}' is not 'None'")
 
 
 def _validate_observer_schema_list(partial_schema):
@@ -337,19 +335,17 @@ def _validate_observer_schema_list(partial_schema):
         partial_schema (list): Partial observer_schema to validate
 
     Raises:
-        AssertionError: If the partial observer_schema is not valid
+        ValueError: If the partial observer_schema is not valid
 
     Especially, this function checks that the list control dictionary is present and
     well-formed.
 
     """
-    assert isinstance(
-        partial_schema[-1], dict
-    ), "Special list control dictionary not found"
-    assert (
-        "observer_schema_list_min_length" in partial_schema[-1]
-        and "observer_schema_list_max_length" in partial_schema[-1]
-    ), "Special list control dictionary malformed"
+    if not isinstance(partial_schema[-1], dict):
+        raise ValueError("Special list control dictionary not found")
+    if "observer_schema_list_min_length" not in partial_schema[-1] \
+            or "observer_schema_list_max_length" not in partial_schema[-1]:
+        raise ValueError("Special list control dictionary malformed")
 
     observer_schema_list_min_length = partial_schema[-1][
         "observer_schema_list_min_length"
@@ -358,29 +354,28 @@ def _validate_observer_schema_list(partial_schema):
         "observer_schema_list_max_length"
     ]
 
-    assert isinstance(
-        observer_schema_list_min_length, int
-    ), "observer_schema_list_min_length should be an integer"
-    assert isinstance(
-        observer_schema_list_max_length, int
-    ), "observer_schema_list_max_length should be an integer"
+    if not isinstance(observer_schema_list_min_length, int):
+        raise ValueError("observer_schema_list_min_length should be an integer")
+    if not isinstance(observer_schema_list_max_length, int):
+        raise ValueError("observer_schema_list_max_length should be an integer")
 
-    assert (
-        observer_schema_list_min_length >= 0
-    ), "Invalid value for observer_schema_list_min_length"
-    assert (
-        observer_schema_list_max_length >= 0
-    ), "Invalid value for observer_schema_list_max_length"
+    if observer_schema_list_min_length < 0:
+        raise ValueError("Invalid value for observer_schema_list_min_length")
+    if observer_schema_list_max_length < 0:
+        raise ValueError("Invalid value for observer_schema_list_max_length")
 
     if observer_schema_list_max_length != 0:
-        assert observer_schema_list_max_length >= observer_schema_list_min_length, (
-            "observer_schema_list_max_length is inferior to "
-            "observer_schema_list_min_length"
-        )
-        assert observer_schema_list_max_length >= len(partial_schema[:-1]), (
-            "observer_schema_list_max_length is inferior to the number of observed "
-            "elements"
-        )
+        if observer_schema_list_max_length < observer_schema_list_min_length:
+            raise ValueError(
+                "observer_schema_list_max_length is inferior to "
+                "observer_schema_list_min_length"
+            )
+
+        if observer_schema_list_max_length < len(partial_schema[:-1]):
+            raise ValueError(
+                "observer_schema_list_max_length is inferior to the number of observed "
+                "elements"
+            )
 
     for value in partial_schema[:-1]:
 
@@ -391,7 +386,8 @@ def _validate_observer_schema_list(partial_schema):
             _validate_observer_schema_list(value)
 
         else:
-            assert value is None, "Element of a list is not 'None'"
+            if value is not None:
+                raise ValueError("Element of a list is not 'None'")
 
 
 def _validate_observer_schema(observer_schema, manifest):
@@ -409,12 +405,9 @@ def _validate_observer_schema(observer_schema, manifest):
     for resource_observer_schema in observer_schema:
 
         try:
-            _validate_observer_schema_dict(
-                deepcopy(resource_observer_schema), first_level=True
-            )
-        except AssertionError as e:
+            _validate_observer_schema_dict(resource_observer_schema, first_level=True)
+        except (ValueError, TypeError) as e:
             raise ObserverSchemaError(e)
-
         try:
             get_kubernetes_resource_idx(manifest, resource_observer_schema)
         except IndexError:

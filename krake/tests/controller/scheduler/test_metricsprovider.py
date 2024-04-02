@@ -568,13 +568,8 @@ async def test_influx_query_metrics_provider_error():
         influx = Influx(mock.MagicMock(), metrics_provider=mock_metrics_provider)
 
         # Assert that the MetricsProviderError exception is raised
-        try:
+        with pytest.raises(MetricsProviderError):
             await influx.query(mock_metric)
-        except MetricsProviderError:
-            # The exception is raised, so the test passes
-            pass
-        else:
-            raise AssertionError("MetricsProviderError not raised")
 
 
 async def test_query_metric_not_found():
@@ -607,10 +602,6 @@ async def test_query_metric_not_found():
         influx = Influx(mock.MagicMock(), metrics_provider=mock_metrics_provider)
 
         # Assert that the MetricError exception is raised
-        try:
+        with pytest.raises(MetricError):
             await influx.query(mock_metric)
-        except MetricError:
-            # The exception is raised, so the test passes
-            pass
-        else:
-            raise AssertionError("MetricError not raised")
+
