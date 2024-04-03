@@ -10,9 +10,8 @@ from functionals.resource_definitions import (
 )
 
 GIT_DIR = "git/krake"
-TEST_DIR = "rak/functionals"
 CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
-MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}/templates/k8s"
+MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/examples/templates/k8s"
 DEFAULT_MANIFEST = "echo-demo.yaml"
 DEFAULT_KUBE_APP_NAME = "echo-demo"
 
