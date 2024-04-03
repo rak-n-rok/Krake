@@ -3,7 +3,7 @@ import logging
 import dataclasses
 import json
 
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Callable, Type
 from uuid import uuid4
 from aiohttp import web
 
@@ -22,10 +22,9 @@ from krake.data.core import ListMetadata, WatchEvent, WatchEventType, ApiObject
 logger = logging.getLogger(__name__)
 
 
-async def update_property_async(prop: str,
-                                request: web.Request,
-                                body: ApiObject,
-                                entity: ApiObject) -> web.json_response:
+async def update_property_async(
+    prop: str, request: web.Request, body: ApiObject, entity: ApiObject
+) -> web.json_response:
     """Update a property of a resource.
 
     Args:
@@ -60,10 +59,12 @@ async def update_property_async(prop: str,
     return web.json_response(entity.serialize())
 
 
-async def watch_resource_async(request: web.Request,
-                               heartbeat: float,
-                               watcher: AsyncGenerator,
-                               resource_class: ApiObject):
+async def watch_resource_async(
+    request: web.Request,
+    heartbeat: float,
+    watcher: AsyncGenerator,
+    resource_class: ApiObject,
+):
     """Create update stream for a resource class.
 
     Args:
@@ -97,10 +98,12 @@ async def watch_resource_async(request: web.Request,
             await resp.write(b"\n")
 
 
-async def list_resources_async(resource_class: ApiObject,
-                               list_class: ApiObject,
-                               request: web.Request,
-                               namespace: str) -> web.json_response:
+async def list_resources_async(
+    resource_class: ApiObject,
+    list_class: ApiObject,
+    request: web.Request,
+    namespace: str,
+) -> web.json_response:
     """List all entities of a resource class.
 
     Args:
@@ -116,19 +119,51 @@ async def list_resources_async(resource_class: ApiObject,
     else:
         objs = [
             obj
-            async for obj in session(request).all(
-                resource_class, namespace=namespace
-            )
+            async for obj in session(request).all(resource_class, namespace=namespace)
         ]
-    body = list_class(
-        metadata=ListMetadata(), items=objs
-    )
+    body = list_class(metadata=ListMetadata(), items=objs)
     return web.json_response(body.serialize())
 
 
-async def update_resource_async(request: web.Request,
-                                entity: ApiObject,
-                                body: ApiObject) -> web.json_response:
+async def list_or_watch_resources_async(
+    resource_class: Type,
+    list_class: Type,
+    request: web.Request,
+    watch: Callable,
+    heartbeat: float,
+    namespace: str = None,
+):
+    """List or watch all entities of a resource class.
+
+    Args:
+        resource_class: a type of resource
+        list_class: a type of list to create
+        request: the http request
+        watch: watch method
+        heartbeat: the update interval
+        namespace: namespace the resources reside in (optional)
+
+    Returns:
+        json response containing a list of all entities in resource_class
+    """
+    # Return the list of resources
+    if not watch:
+        return await list_resources_async(
+            resource_class, list_class, request, namespace
+        )
+
+    kwargs = {}
+    if namespace is not None:
+        kwargs["namespace"] = namespace
+
+    # Watching resources
+    async with session(request).watch(resource_class, **kwargs) as watcher:
+        await watch_resource_async(request, heartbeat, watcher, resource_class)
+
+
+async def update_resource_async(
+    request: web.Request, entity: ApiObject, body: ApiObject
+) -> web.json_response:
     """Update an entity.
 
     Args:
@@ -151,15 +186,14 @@ async def update_resource_async(request: web.Request,
         if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
             problem = HttpProblem(
                 detail="Finalizers can only be removed"
-                       " if a deletion is in progress.",
-                title=HttpProblemTitle.UPDATE_ERROR
+                " if a deletion is in progress.",
+                title=HttpProblemTitle.UPDATE_ERROR,
             )
             raise HttpProblemError(web.HTTPConflict, problem)
 
     if body == entity:
         problem = HttpProblem(
-            detail="The body contained no update.",
-            title=HttpProblemTitle.UPDATE_ERROR
+            detail="The body contained no update.", title=HttpProblemTitle.UPDATE_ERROR
         )
         raise HttpProblemError(web.HTTPBadRequest, problem)
 
@@ -176,25 +210,20 @@ async def update_resource_async(request: web.Request,
     if entity.metadata.deleted and not entity.metadata.finalizers:
         await session(request).delete(entity)
         logger.info(
-            "Delete %s %r (%s)",
-            entity.kind,
-            entity.metadata.name,
-            entity.metadata.uid
+            "Delete %s %r (%s)", entity.kind, entity.metadata.name, entity.metadata.uid
         )
     else:
         await session(request).put(entity)
         logger.info(
-            "Update %s %r (%s)",
-            entity.kind,
-            entity.metadata.name,
-            entity.metadata.uid
+            "Update %s %r (%s)", entity.kind, entity.metadata.name, entity.metadata.uid
         )
 
     return web.json_response(entity.serialize())
 
 
-async def delete_resource_async(request: ApiObject,
-                                entity: ApiObject) -> web.json_response:
+async def delete_resource_async(
+    request: ApiObject, entity: ApiObject
+) -> web.json_response:
     """Delete an entity.
 
     Args:
@@ -215,10 +244,7 @@ async def delete_resource_async(request: ApiObject,
 
     await session(request).put(entity)
     logger.info(
-        "Deleting %s %r (%s)",
-        entity.kind,
-        entity.metadata.name,
-        entity.metadata.uid
+        "Deleting %s %r (%s)", entity.kind, entity.metadata.name, entity.metadata.uid
     )
 
     return web.json_response(entity.serialize())
@@ -240,9 +266,9 @@ def initialize_subresource_fields(body: ApiObject) -> ApiObject:
     return body
 
 
-async def must_create_resource_async(request: web.Request,
-                                     body: ApiObject,
-                                     namespace: str) -> web.json_response:
+async def must_create_resource_async(
+    request: web.Request, body: ApiObject, namespace: str
+) -> web.json_response:
     """Create the resource defined by body or raises if it already exists.
 
     Args:
@@ -268,10 +294,7 @@ async def must_create_resource_async(request: web.Request,
     try:
         await session(request).put(body)
         logger.info(
-            "Created %s %r (%s)",
-            body.kind,
-            body.metadata.name,
-            body.metadata.uid
+            "Created %s %r (%s)", body.kind, body.metadata.name, body.metadata.uid
         )
     except TransactionError:
         message = f"""
@@ -279,8 +302,7 @@ async def must_create_resource_async(request: web.Request,
             {"in namespace " + namespace + "." if namespace else "."}
         """
         problem = HttpProblem(
-            detail=message,
-            title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
+            detail=message, title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
         )
         raise HttpProblemError(web.HTTPConflict, problem)
 
