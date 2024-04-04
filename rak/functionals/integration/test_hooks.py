@@ -2,13 +2,13 @@ import os.path
 import random
 
 from functionals.utils import run, check_return_code, kubectl_cmd
-from functionals.environment import Environment
+from functionals.environment import (
+    CLUSTERS_CONFIGS,
+    MANIFEST_PATH,
+    OBSERVER_PATH,
+    Environment,
+)
 from functionals.resource_definitions import ClusterDefinition, ApplicationDefinition
-
-KRAKE_HOMEDIR = "/home/krake"
-CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
-MANIFEST_PATH = f"{KRAKE_HOMEDIR}/git/krake/examples/templates/k8s"
-OBSERVER_PATH = f"{KRAKE_HOMEDIR}/git/krake/examples/templates/observer-schema"
 
 
 RESCHEDULING_INTERVAL = 10

@@ -10,6 +10,8 @@ from functionals.utils import (
 
 from functionals.utils import run, check_return_code, kubectl_cmd
 from functionals.environment import (
+    EXAMPLES_PATH,
+    CLUSTERS_CONFIGS,
     Environment,
     create_default_environment,
 )
@@ -20,14 +22,6 @@ from functionals.resource_provider import provider, WeightedMetric
 
 from minio import Minio
 
-
-KRAKE_HOMEDIR = "/home/krake"
-GIT_DIR = "git/krake"
-TEST_DIR = "rak/functionals"
-EXAMPLES_DIR = "examples"
-CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
-MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}"
-APP_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{EXAMPLES_DIR}"
 
 RESCHEDULING_INTERVAL = 10
 
@@ -101,8 +95,10 @@ def test_mnist_application(k8s_clusters):
     }
     assert score_cluster_1 < score_cluster_2, f"debug_info: {debug_info}"
 
-    manifest_path = os.path.join(APP_PATH, "mnist/k8s/mnist.yaml")
-    observer_schema_path = os.path.join(APP_PATH, "mnist/mnist-observer-schema.yaml")
+    manifest_path = os.path.join(EXAMPLES_PATH, "mnist/k8s/mnist.yaml")
+    observer_schema_path = os.path.join(
+        EXAMPLES_PATH, "mnist/mnist-observer-schema.yaml"
+    )
     app_def = ApplicationDefinition(
         name="mnist",
         manifest_path=manifest_path,
@@ -119,7 +115,7 @@ def test_mnist_application(k8s_clusters):
         # 4. Add a configmap for the shutdown hook script on both clusters
         configmap_name = "mnist-shutdown"
         error_message = f"The configmap {configmap_name} could not be created."
-        script_path = os.path.join(APP_PATH, "mnist/mnist-shutdown.py")
+        script_path = os.path.join(EXAMPLES_PATH, "mnist/mnist-shutdown.py")
         for i in [0, 1]:
             run(
                 (

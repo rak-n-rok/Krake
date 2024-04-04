@@ -11,11 +11,7 @@ from functionals.utils import (
     check_cluster_created_and_up,
     check_resource_deleted,
 )
-
-
-KRAKE_HOMEDIR = "/home/krake"
-MANIFEST_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals"
-TOSCA_PATH = f"{KRAKE_HOMEDIR}/git/krake/examples/templates/tosca"
+from rak.functionals.environment import TOSCA_PATH
 
 
 def test_cluster_crud(
