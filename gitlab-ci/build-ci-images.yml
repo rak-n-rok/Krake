@@ -30,3 +30,7 @@ build-ci-images:
       --build-arg PYTHON_VER=3.11
       --dockerfile "./gitlab-ci/docker/test-image/Dockerfile"
       --destination "registry.gitlab.com/rak-n-rok/krake/test_image:3.11"
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "./gitlab-ci/Dockerfile_pre_commit"
+      --destination "registry.gitlab.com/rak-n-rok/krake/pre_commit_image:latest"
