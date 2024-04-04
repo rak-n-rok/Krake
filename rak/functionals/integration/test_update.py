@@ -24,15 +24,14 @@ from functionals.utils import (
     check_spec_replicas,
     check_http_code_in_output,
 )
-from functionals.environment import Environment, create_simple_environment
+from functionals.environment import (
+    CLUSTERS_CONFIGS,
+    MANIFEST_PATH,
+    TOSCA_PATH,
+    Environment,
+    create_simple_environment,
+)
 from functionals.resource_definitions import ClusterDefinition, ResourceKind
-
-
-KRAKE_HOMEDIR = "/home/krake"
-CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
-MANIFEST_PATH = f"{KRAKE_HOMEDIR}/git/krake/examples/templates/k8s"
-TOSCA_PATH = f"{KRAKE_HOMEDIR}/git/krake/examples/templates/tosca"
-# TODO only define manifest path once
 
 
 def test_update_application_manifest(k8s_clusters):
@@ -395,7 +394,7 @@ def test_update_no_changes_csar(k8s_clusters, archive_files, file_server):
 
     kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
     tosca = f"{TOSCA_PATH}/echo-demo-tosca.yaml"
-    tosca_meta = f"{MANIFEST_PATH}/TOSCA-Metadata/TOSCA.meta"
+    tosca_meta = f"{TOSCA_PATH}/TOSCA-Metadata/TOSCA.meta"
 
     csar_path = archive_files(
         archive_name="archive.csar",

@@ -19,17 +19,10 @@ from functionals.utils import (
 )
 from functionals.environment import (
     Environment,
-    create_simple_environment,
     create_default_environment,
-    CLUSTERS_CONFIGS,
-    MANIFEST_PATH,
 )
 from functionals.resource_definitions import ResourceKind
-from functionals.resource_provider import (
-    provider,
-    WeightedMetric,
-    NonExistentMetric
-)
+from functionals.resource_provider import provider
 
 
 @pytest.mark.parametrize(
@@ -363,7 +356,8 @@ def test_scheduler_with_cloud(k8s_clusters):
         1. Create a cluster with specific metrics
         2. Create a cloud with a higher metric value
         3. Create an application with the 'automatic_cluster_creation' flag
-        4. Ensure that the application is scheduled to a newly created cluster on the cloud.
+        4. Ensure that the application is scheduled to a newly created cluster on the
+           cloud.
 
     Args:
         k8s_clusters (list): Names of the Kubernetes backend.
@@ -443,27 +437,27 @@ def test_scheduler_with_cloud(k8s_clusters):
         app = env.resources[ResourceKind.APPLICATION][0]
 
         cluster_details = run(
-            f"rok kube cluster get kind-cluster-1",
+            "rok kube cluster get kind-cluster-1",
             retry=90,
             interval=10,
         )
         print(cluster_details.output)
 
         cluster_details = run(
-            f"rok kube cluster get kind-cluster-2",
+            "rok kube cluster get kind-cluster-2",
             retry=90,
             interval=10,
         )
         print(cluster_details.output)
 
         ip_list = run(
-            f"rok infra ip list",
+            "rok infra ip list",
             retry=90,
             interval=10,
         )
         print(ip_list.output)
         gc_list = run(
-            f"rok infra gc list",
+            "rok infra gc list",
             retry=90,
             interval=10,
         )
@@ -472,13 +466,13 @@ def test_scheduler_with_cloud(k8s_clusters):
         app.check_running_on(cluster, after_delay=100)
 
         app_list = run(
-            f"rok kube app list",
+            "rok kube app list",
             retry=90,
             interval=10,
         )
         print(app_list.output)
         app_details = run(
-            f"rok kube app get echo-demo",
+            "rok kube app get echo-demo",
             retry=90,
             interval=10,
         )

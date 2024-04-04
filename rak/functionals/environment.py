@@ -11,7 +11,10 @@ from functionals.resource_definitions import (
 
 GIT_DIR = "git/krake"
 CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
-MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/examples/templates/k8s"
+EXAMPLES_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/examples"
+MANIFEST_PATH = f"{EXAMPLES_PATH}/templates/k8s"
+TOSCA_PATH = f"{EXAMPLES_PATH}/templates/tosca"
+OBSERVER_PATH = f"{EXAMPLES_PATH}/templates/observer-schemas"
 DEFAULT_MANIFEST = "echo-demo.yaml"
 DEFAULT_KUBE_APP_NAME = "echo-demo"
 

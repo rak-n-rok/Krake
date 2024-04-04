@@ -30,6 +30,8 @@ from functionals.utils import (
     kubectl_cmd,
 )
 from functionals.environment import (
+    CLUSTERS_CONFIGS,
+    OBSERVER_PATH,
     Environment,
     MANIFEST_PATH,
     create_default_environment,
@@ -37,12 +39,6 @@ from functionals.environment import (
     create_simple_environment,
 )
 from functionals.resource_definitions import ApplicationDefinition, ResourceKind
-
-KRAKE_HOMEDIR = "/home/krake"
-CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
-OBSERVER_SCHEMA_PATH = (
-    f"{KRAKE_HOMEDIR}/git/krake/examples/templates/" "observer-schemas"
-)
 
 
 def test_kubernetes_observer_deletion(k8s_clusters):
@@ -149,9 +145,7 @@ def test_kubernetes_observer_update_on_cluster_nonobserved(k8s_clusters):
     kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
 
     manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
-    observer_schema_path = (
-        f"{OBSERVER_SCHEMA_PATH}/echo-demo-observer-schema-custom-1.yaml"
-    )
+    observer_schema_path = f"{OBSERVER_PATH}/echo-demo-observer-schema-custom-1.yaml"
     environment = create_simple_environment(
         k8s_cluster,
         kubeconfig_path,
@@ -210,9 +204,7 @@ def test_kubernetes_observer_update_on_cluster_noninitialized(k8s_clusters):
     kubeconfig_path = f"{CLUSTERS_CONFIGS}/{k8s_cluster}"
 
     manifest_path = f"{MANIFEST_PATH}/echo-demo.yaml"
-    observer_schema_path = (
-        f"{OBSERVER_SCHEMA_PATH}/echo-demo-observer-schema-custom-1.yaml"
-    )
+    observer_schema_path = f"{OBSERVER_PATH}/echo-demo-observer-schema-custom-1.yaml"
     environment = create_simple_environment(
         k8s_cluster,
         kubeconfig_path,
