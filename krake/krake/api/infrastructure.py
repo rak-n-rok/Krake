@@ -49,7 +49,7 @@ class InfrastructureApi(object):
     async def list_or_watch_global_infrastructure_providers(
         request, heartbeat, watch, **query
     ):
-        await list_or_watch_resources_async(
+        return await list_or_watch_resources_async(
             GlobalInfrastructureProvider,
             GlobalInfrastructureProviderList,
             request,
@@ -104,7 +104,7 @@ class InfrastructureApi(object):
     ):
         namespace = request.match_info.get("namespace", None)
 
-        await list_or_watch_resources_async(
+        return await list_or_watch_resources_async(
             InfrastructureProvider,
             InfrastructureProviderList,
             request,
@@ -155,7 +155,7 @@ class InfrastructureApi(object):
     @protected(api="infrastructure", resource="globalclouds", verb="list")
     @use_kwargs(ListQuery.query, location="query")
     async def list_or_watch_global_clouds(request, heartbeat, watch, **query):
-        await list_or_watch_resources_async(
+        return await list_or_watch_resources_async(
             GlobalCloud, GlobalCloudList, request, watch, heartbeat
         )
 
@@ -203,7 +203,7 @@ class InfrastructureApi(object):
         # If the ListAll operation
         namespace = request.match_info.get("namespace", None)
 
-        await list_or_watch_resources_async(
+        return await list_or_watch_resources_async(
             Cloud, CloudList, request, watch, heartbeat, namespace
         )
 
