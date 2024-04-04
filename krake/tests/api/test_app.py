@@ -24,7 +24,7 @@ from krake.data.config import ApiConfiguration
 from tests.factories.core import RoleFactory, RoleBindingFactory
 
 
-# @pytest.mark.slow
+@pytest.mark.slow
 def test_main(config: ApiConfiguration, tmp_path):
     """Test the main function of the API, and verify that it starts, display the right
     output and stops without issue.

@@ -41,6 +41,14 @@ class InfrastructureApi(object):
     routes = web.RouteTableDef()
 
     # region GlobalInfrastructureProvider
+    @routes.route("POST", "/infrastructure/globalinfrastructureproviders")
+    @protected(
+        api="infrastructure", resource="globalinfrastructureproviders", verb="create"
+    )
+    @use_schema("body", schema=make_create_request_schema(GlobalInfrastructureProvider))
+    async def create_global_infrastructure_provider(request, body):
+        return await must_create_resource_async(request, body, None)
+
     @routes.route("GET", "/infrastructure/globalinfrastructureproviders")
     @protected(
         api="infrastructure", resource="globalinfrastructureproviders", verb="list"
@@ -65,14 +73,6 @@ class InfrastructureApi(object):
     async def read_global_infrastructure_provider(request, entity):
         return web.json_response(entity.serialize())
 
-    @routes.route("POST", "/infrastructure/globalinfrastructureproviders")
-    @protected(
-        api="infrastructure", resource="globalinfrastructureproviders", verb="create"
-    )
-    @use_schema("body", schema=make_create_request_schema(GlobalInfrastructureProvider))
-    async def create_global_infrastructure_provider(request, body):
-        return await must_create_resource_async(request, body, None)
-
     @routes.route("PUT", "/infrastructure/globalinfrastructureproviders/{name}")
     @protected(
         api="infrastructure", resource="globalinfrastructureproviders", verb="update"
@@ -93,6 +93,15 @@ class InfrastructureApi(object):
     # endregion GlobalInfrastructureProvider
 
     # region InfrastructureProvider
+    @routes.route(
+        "POST", "/infrastructure/namespaces/{namespace}/infrastructureproviders"
+    )
+    @protected(api="infrastructure", resource="infrastructureproviders", verb="create")
+    @use_schema("body", schema=make_create_request_schema(InfrastructureProvider))
+    async def create_infrastructure_provider(request, body):
+        namespace = request.match_info.get("namespace")
+        return await must_create_resource_async(request, body, namespace)
+
     @routes.route("GET", "/infrastructure/infrastructureproviders")
     @routes.route(
         "GET", "/infrastructure/namespaces/{namespace}/infrastructureproviders"
@@ -122,15 +131,6 @@ class InfrastructureApi(object):
         return web.json_response(entity.serialize())
 
     @routes.route(
-        "POST", "/infrastructure/namespaces/{namespace}/infrastructureproviders"
-    )
-    @protected(api="infrastructure", resource="infrastructureproviders", verb="create")
-    @use_schema("body", schema=make_create_request_schema(InfrastructureProvider))
-    async def create_infrastructure_provider(request, body):
-        namespace = request.match_info.get("namespace")
-        return await must_create_resource_async(request, body, namespace)
-
-    @routes.route(
         "PUT", "/infrastructure/namespaces/{namespace}/infrastructureproviders/{name}"
     )
     @protected(api="infrastructure", resource="infrastructureproviders", verb="update")
@@ -151,6 +151,13 @@ class InfrastructureApi(object):
     # endregion InfrastructureProvider
 
     # region GlobalClouds
+    @routes.route("POST", "/infrastructure/globalclouds")
+    @protected(api="infrastructure", resource="globalclouds", verb="create")
+    @use_schema("body", schema=make_create_request_schema(GlobalCloud))
+    async def create_global_cloud(request, body):
+        body = initialize_subresource_fields(body)
+        return await must_create_resource_async(request, body, None)
+
     @routes.route("GET", "/infrastructure/globalclouds")
     @protected(api="infrastructure", resource="globalclouds", verb="list")
     @use_kwargs(ListQuery.query, location="query")
@@ -164,13 +171,6 @@ class InfrastructureApi(object):
     @load("entity", GlobalCloud)
     async def read_global_cloud(request, entity):
         return web.json_response(entity.serialize())
-
-    @routes.route("POST", "/infrastructure/globalclouds")
-    @protected(api="infrastructure", resource="globalclouds", verb="create")
-    @use_schema("body", schema=make_create_request_schema(GlobalCloud))
-    async def create_global_cloud(request, body):
-        body = initialize_subresource_fields(body)
-        return await must_create_resource_async(request, body, None)
 
     @routes.route("PUT", "/infrastructure/globalclouds/{name}")
     @protected(api="infrastructure", resource="globalclouds", verb="update")
@@ -195,6 +195,14 @@ class InfrastructureApi(object):
     # endregion GlobalClouds
 
     # region Clouds
+    @routes.route("POST", "/infrastructure/namespaces/{namespace}/clouds")
+    @protected(api="infrastructure", resource="clouds", verb="create")
+    @use_schema("body", schema=make_create_request_schema(Cloud))
+    async def create_cloud(request, body):
+        body = initialize_subresource_fields(body)
+        namespace = request.match_info.get("namespace")
+        return await must_create_resource_async(request, body, namespace)
+
     @routes.route("GET", "/infrastructure/clouds")
     @routes.route("GET", "/infrastructure/namespaces/{namespace}/clouds")
     @protected(api="infrastructure", resource="clouds", verb="list")
@@ -212,14 +220,6 @@ class InfrastructureApi(object):
     @load("entity", Cloud)
     async def read_cloud(request, entity):
         return web.json_response(entity.serialize())
-
-    @routes.route("POST", "/infrastructure/namespaces/{namespace}/clouds")
-    @protected(api="infrastructure", resource="clouds", verb="create")
-    @use_schema("body", schema=make_create_request_schema(Cloud))
-    async def create_cloud(request, body):
-        body = initialize_subresource_fields(body)
-        namespace = request.match_info.get("namespace")
-        return await must_create_resource_async(request, body, namespace)
 
     @routes.route("PUT", "/infrastructure/namespaces/{namespace}/clouds/{name}")
     @protected(api="infrastructure", resource="clouds", verb="update")

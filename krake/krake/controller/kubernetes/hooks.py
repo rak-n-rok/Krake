@@ -1,4 +1,5 @@
-"""This module defines the Hook Dispatcher and listeners for registering and executing hooks.
+"""This module defines the Hook Dispatcher and listeners for registering and executing
+hooks.
 
 Hook Dispatcher emits hooks based on :class:`Hook` attributes which define when the hook
 will be executed.
@@ -710,10 +711,12 @@ def update_last_applied_manifest_from_spec(app):
 
 def manages_pods(resource):
     """Returns true if the resource kind manages at least on pod."""
-    return (resource.kind == "Deployment"
-            or resource.kind == "StatefulSet"
-            or resource.kind == "ReplicaSet"
-            or resource.kind == "DaemonSet")
+    return (
+        resource.kind == "Deployment"
+        or resource.kind == "StatefulSet"
+        or resource.kind == "ReplicaSet"
+        or resource.kind == "DaemonSet"
+    )
 
 
 class KubernetesApplicationObserver(Observer):
@@ -776,23 +779,26 @@ class KubernetesApplicationObserver(Observer):
     @staticmethod
     def _apply_pod_managing_resource(resource, status):
         if resource.kind == "DaemonSet":
-            status.container_health.desired_pods = \
+            status.container_health.desired_pods = (
                 resource.status.current_number_scheduled
+            )
             if isinstance(resource.status.desired_number_scheduled, int):
-                status.container_health.running_pods = \
+                status.container_health.running_pods = (
                     resource.status.desired_number_scheduled
+                )
             else:
                 status.container_health.running_pods = 0
         else:
             status.container_health.desired_pods = resource.status.replicas
             if isinstance(resource.status.ready_replicas, int):
-                status.container_health.running_pods = \
-                    resource.status.ready_replicas
+                status.container_health.running_pods = resource.status.ready_replicas
             else:
                 status.container_health.running_pods = 0
 
-            if status.container_health.running_pods != \
-               status.container_health.desired_pods:
+            if (
+                status.container_health.running_pods
+                != status.container_health.desired_pods
+            ):
                 status.state = ApplicationState.DEGRADED
             else:
                 status.state = ApplicationState.RUNNING
@@ -828,11 +834,11 @@ class KubernetesApplicationObserver(Observer):
         if status.container_health is None:
             status.container_health = ContainerHealth()
 
-        if hasattr(resource, 'status') and resource.status is not None:
+        if hasattr(resource, "status") and resource.status is not None:
             if resource.kind == "Pod":
                 status = KubernetesApplicationObserver._apply_pod(resource, status)
 
-            elif (manages_pods(resource)):
+            elif manages_pods(resource):
                 status = KubernetesApplicationObserver._apply_pod_managing_resource(
                     resource, status
                 )
@@ -1579,10 +1585,8 @@ class Hook(object):
         )
 
     def _inject(
-            self,
-            sub_resource,
-            sub_resource_to_mangle,
-            observed_resource_to_mangle):
+        self, sub_resource, sub_resource_to_mangle, observed_resource_to_mangle
+    ):
         """Inject a hooks defined sub-resource into a Kubernetes sub-resource.
 
         Args:
@@ -1646,13 +1650,9 @@ class Hook(object):
         return sub_resource_to_mangle, observed_resource_to_mangle
 
     def _inject_list(
-            self,
-            sub_resource,
-            sub_resources_to_mangle,
-            observed_sub_resources):
-        for idx, sub_resource_to_mangle in enumerate(
-            sub_resources_to_mangle
-        ):
+        self, sub_resource, sub_resources_to_mangle, observed_sub_resources
+    ):
+        for idx, sub_resource_to_mangle in enumerate(sub_resources_to_mangle):
 
             # Ensure that each element of the list is observed.
             idx_observed = idx
@@ -1674,17 +1674,13 @@ class Hook(object):
         """
         Create the path to the observed sub-resource, if it doesn't yet exist.
         """
-        idx_observed = get_kubernetes_resource_idx(
-            mangled_observer_schema, resource
-        )
+        idx_observed = get_kubernetes_resource_idx(mangled_observer_schema, resource)
         try:
             observed_sub_resources = reduce(
                 getitem, keys, mangled_observer_schema[idx_observed]
             )
         except KeyError:
-            Complete.create_path(
-                mangled_observer_schema[idx_observed], list(keys)
-            )
+            Complete.create_path(mangled_observer_schema[idx_observed], list(keys))
             observed_sub_resources = reduce(
                 getitem, keys, mangled_observer_schema[idx_observed]
             )

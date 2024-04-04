@@ -31,6 +31,7 @@ from tests.factories.infrastructure import (
 from tests.factories.fake import fake
 from tests.api.test_core import assert_valid_metadata
 
+
 async def test_create_global_infrastructure_provider(aiohttp_client, config, db):
     client = await aiohttp_client(create_app(config=config))
 

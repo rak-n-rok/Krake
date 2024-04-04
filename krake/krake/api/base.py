@@ -222,17 +222,30 @@ async def update_resource_async(
 
 
 async def delete_resource_async(
-    request: ApiObject, entity: ApiObject
+    request: ApiObject, entity: ApiObject, force: bool = False
 ) -> web.json_response:
     """Delete an entity.
 
     Args:
-        request: the http request
-        entity: the entity to delete
+        request(ApiObject): The http request
+        entity(ApiObject): The entity to delete
+        force(bool): Flag to specify wether the resource should be force deleted
+            (optional). default=False
 
     Returns:
         json response containing the deleted resource
     """
+    if force:
+        await session(request).delete(entity)
+        logger.info(
+            "Force deleting %s %r (%s)",
+            f"{type(entity)}",  # TODO check this
+            entity.metadata.name,
+            entity.metadata.uid,
+        )
+        entity.metadata.deleted = utils.now()
+        return web.json_response(entity.serialize())
+
     # Resource is already deleting
     if entity.metadata.deleted:
         return web.json_response(entity.serialize())

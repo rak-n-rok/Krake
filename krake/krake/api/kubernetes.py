@@ -37,7 +37,7 @@ from krake.data.kubernetes import (
 )
 
 
-logger = logging.getLogger("krake.api.kubernetes")
+logger = logging.getLogger(__name__)
 
 
 class KubernetesApi(object):
@@ -47,6 +47,8 @@ class KubernetesApi(object):
 
     routes = web.RouteTableDef()
 
+    # region Applications
+    # region Applications CRUD
     @routes.route("POST", "/kubernetes/namespaces/{namespace}/applications")
     @protected(api="kubernetes", resource="applications", verb="create")
     @use_schema("body", schema=make_create_request_schema(Application))
@@ -55,25 +57,6 @@ class KubernetesApi(object):
         body = initialize_subresource_fields(body)
         namespace = request.match_info.get("namespace")
         return await must_create_resource_async(request, body, namespace)
-
-    @routes.route("DELETE", "/kubernetes/namespaces/{namespace}/applications/{name}")
-    @protected(api="kubernetes", resource="applications", verb="delete")
-    @load("entity", Application)
-    @blocking()
-    async def delete_application(request, entity, **query):
-
-        # Application is marked as force delete and will be removed from the Database
-        if 'force' in request.query and request.query["force"] == "True":
-            await session(request).delete(entity)
-            logger.info(
-                "Force deleting %s %r (%s)",
-                "Application",
-                entity.metadata.name,
-                entity.metadata.uid
-            )
-            entity.metadata.deleted = utils.now()
-            return web.json_response(entity.serialize())
-        return await delete_resource_async(request, entity)
 
     @routes.route("GET", "/kubernetes/applications")
     @routes.route("GET", "/kubernetes/namespaces/{namespace}/applications")
@@ -88,7 +71,8 @@ class KubernetesApi(object):
         # Return the list of resources
         if not watch:
             return await list_resources_async(
-                resource_class, ApplicationList, request, namespace)
+                resource_class, ApplicationList, request, namespace
+            )
 
         # Watching resources
         kwargs = {}
@@ -111,6 +95,19 @@ class KubernetesApi(object):
     async def update_application(request, body, entity):
         return await update_resource_async(request, entity, body)
 
+    @routes.route("DELETE", "/kubernetes/namespaces/{namespace}/applications/{name}")
+    @protected(api="kubernetes", resource="applications", verb="delete")
+    @load("entity", Application)
+    @blocking()
+    async def delete_application(request, entity, **query):
+
+        # Application is marked as force delete and will be removed from the Database
+        force_deletion = "force" in request.query and request.query["force"] == "True"
+        return await delete_resource_async(request, entity, force_deletion)
+
+    # endregion Applicions CRUD
+
+    # region Applications subroutes
     @routes.route(
         "PUT", "/kubernetes/namespaces/{namespace}/applications/{name}/binding"
     )
@@ -192,7 +189,7 @@ class KubernetesApi(object):
                 app.status.shutdown_grace_period = None
         await session(request).put(app)
         logger.info(
-            "Deleting of application %r (%s) by calling shutdown hook",
+            "Deleting application %r (%s) by calling shutdown hook",
             app.metadata.name,
             app.metadata.uid,
         )
@@ -238,6 +235,10 @@ class KubernetesApi(object):
 
         return web.json_response(entity.serialize())
 
+    # endregion Applications subroutes
+    # endregion Applications
+
+    # region Clusters CRUD
     @routes.route("POST", "/kubernetes/namespaces/{namespace}/clusters")
     @protected(api="kubernetes", resource="clusters", verb="create")
     @use_schema("body", schema=make_create_request_schema(Cluster))
@@ -246,25 +247,6 @@ class KubernetesApi(object):
         body = initialize_subresource_fields(body)
         namespace = request.match_info.get("namespace")
         return await must_create_resource_async(request, body, namespace)
-
-    @routes.route("DELETE", "/kubernetes/namespaces/{namespace}/clusters/{name}")
-    @protected(api="kubernetes", resource="clusters", verb="delete")
-    @load("entity", Cluster)
-    @blocking()
-    async def delete_cluster(request, entity, **query):
-
-        # Resource is marked as force delete and will be removed from the Database
-        if 'force' in request.query and request.query["force"] == "True":
-            await session(request).delete(entity)
-            logger.info(
-                "Force deleting %s %r (%s)",
-                "Cluster",
-                entity.metadata.name,
-                entity.metadata.uid
-            )
-            entity.metadata.deleted = utils.now()
-            return web.json_response(entity.serialize())
-        return await delete_resource_async(request, entity)
 
     @routes.route("GET", "/kubernetes/clusters")
     @routes.route("GET", "/kubernetes/namespaces/{namespace}/clusters")
@@ -279,7 +261,8 @@ class KubernetesApi(object):
         # Return the list of resources
         if not watch:
             return await list_resources_async(
-                resource_class, ClusterList, request, namespace)
+                resource_class, ClusterList, request, namespace
+            )
 
         # Watching resources
         kwargs = {}
@@ -331,3 +314,15 @@ class KubernetesApi(object):
     @load("entity", Cluster)
     async def update_cluster_status(request, body, entity):
         return await update_property_async("status", request, body, entity)
+
+    @routes.route("DELETE", "/kubernetes/namespaces/{namespace}/clusters/{name}")
+    @protected(api="kubernetes", resource="clusters", verb="delete")
+    @load("entity", Cluster)
+    @blocking()
+    async def delete_cluster(request, entity, **query):
+
+        # Resource is marked as force delete and will be removed from the Database
+        force_deletion = "force" in request.query and request.query["force"] == "True"
+        return await delete_resource_async(request, entity, force_deletion)
+
+    # endregion Clusters

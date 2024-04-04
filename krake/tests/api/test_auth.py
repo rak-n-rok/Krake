@@ -209,7 +209,7 @@ async def test_keycloak_auth(
 ):
     """Using the keycloak fixture, test the API's Keycloak authentication."""
     async with ClientSession() as session:
-        token = await _create_keycloak_token_async(keycloak, session)
+        token = await _create_keycloak_token_async(session, keycloak)
 
     # Use the issued token to access Krake API
     authentication = {
