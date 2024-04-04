@@ -43,9 +43,7 @@ def test_complete_hook(k8s_clusters):
     }
 
     application_name = "test-hook-complete"
-    manifest_path = os.path.join(
-        MANIFEST_PATH, "hook-deploy.yaml"
-    )  # TODO doesn't exist anymore?
+    manifest_path = os.path.join(MANIFEST_PATH, "hook-complete.yaml")
     app_def = ApplicationDefinition(
         name=application_name, manifest_path=manifest_path, hooks=["complete"]
     )
