@@ -54,7 +54,7 @@ all:
 
 
     # Kubernetes cluster
-    # 
+    #
     # Configure the type and number of kubernetes clusters to use with krake here.
     # Currently you can chose betwenn 'k3s' and 'minikube'
     minikube_clusters:

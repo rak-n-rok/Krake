@@ -6,12 +6,11 @@ flavor: M.mem+
 # k3s and configuration parameters
 k3s_install_dir: /home/ubuntu
 
-# set specific k3s version here. 
+# set specific k3s version here.
 # If unset latest stable version is used
-#k3s_version: v1.25.8+k3s1 
+#k3s_version: v1.25.8+k3s1
 
 # Keystone configuration parameters
 kube_api_config: /etc/kubernetes/manifests/kube-apiserver.yaml
 user_role: _member_
 user_project: demo
-

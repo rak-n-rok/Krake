@@ -22,8 +22,8 @@ Version update workflow
 -----------------------
 
 If a new version update shall be pushed out, should be decided by a majority of the active Krake team, and
-not only a singular person. Whether to release a new version update should be decided by a majority of the 
-active Krake team, not just a single person; but a new version should still follow the SemVer recommendations 
+not only a singular person. Whether to release a new version update should be decided by a majority of the
+active Krake team, not just a single person; but a new version should still follow the SemVer recommendations
 with respect to the previous version. The general workflow is shown in the following figure.
 
 .. figure:: /img/version-update-workflow.drawio.png
