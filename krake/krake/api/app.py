@@ -19,7 +19,6 @@ Example:
         web.run_app(app)
 
 """
-from typing import Callable
 import aiohttp_cors
 import logging
 import ssl
@@ -193,7 +192,7 @@ async def http_session_async(app: web.Application, ssl_context: ssl.SSLContext =
         yield
 
 
-def load_authentication(config: ApiConfiguration) -> Callable:
+def load_authentication(config: ApiConfiguration) -> callable:
     """Create the authentication middleware :func:`.middlewares.authentication`.
 
     The authenticators are loaded from the "authentication" configuration key.
@@ -238,7 +237,7 @@ def load_authentication(config: ApiConfiguration) -> Callable:
 UNKNOWN_AUTHORIZATION_STRATEGY_ERROR = "Unknown authorization strategy"
 
 
-def load_authorizer(config: ApiConfiguration) -> Callable:
+def load_authorizer(config: ApiConfiguration) -> callable:
     """Load authorization function from configuration.
 
     Args:

@@ -3,7 +3,6 @@ import multiprocessing
 import ssl
 import sys
 import time
-from typing import Callable
 
 from aiohttp import web
 from asyncio.subprocess import PIPE, STDOUT
@@ -57,7 +56,7 @@ def test_main(config: ApiConfiguration, tmp_path):
     assert "Running on http://localhost:1234" in output
 
 
-async def test_index(aiohttp_client: Callable, no_db_config: ApiConfiguration):
+async def test_index(aiohttp_client: callable, no_db_config: ApiConfiguration):
     """Ensures that route "/" is responsive after app is created using a config without
     database
     """
@@ -69,7 +68,7 @@ async def test_index(aiohttp_client: Callable, no_db_config: ApiConfiguration):
 
 
 async def test_me_route(
-    aiohttp_client: Callable, db: Session, config: ApiConfiguration
+    aiohttp_client: callable, db: Session, config: ApiConfiguration
 ):
     """Ensures that the user given by the `/me` endpoint is the right one, and that it
     is sent along with the corresponding :class:`krake.data.core.Role` instance names.
@@ -113,7 +112,7 @@ async def test_me_route(
 
 
 async def test_transaction_retry(
-    aiohttp_client: Callable,
+    aiohttp_client: callable,
     db: Session,
     config: ApiConfiguration,
     loop: asyncio.AbstractEventLoop,
@@ -221,7 +220,7 @@ async def test_main_help():
 
 
 async def test_transaction_error(
-    aiohttp_client: Callable,
+    aiohttp_client: callable,
     config: ApiConfiguration,
 ):
     async def raise_transaction_error(request):
@@ -239,7 +238,7 @@ async def test_transaction_error(
     assert problem.title == HttpProblemTitle.TRANSACTION_ERROR
 
 
-async def test_cors_setup(aiohttp_client: Callable, config: ApiConfiguration):
+async def test_cors_setup(aiohttp_client: callable, config: ApiConfiguration):
     config.authentication.cors_origin = "http://valid.com"
     app = create_app(config=config)
     client = await aiohttp_client(app)
@@ -285,7 +284,7 @@ async def test_cors_setup(aiohttp_client: Callable, config: ApiConfiguration):
 
 
 async def test_cors_setup_rbac(
-    aiohttp_client: Callable, config: ApiConfiguration, pki: PublicKeyRepository
+    aiohttp_client: callable, config: ApiConfiguration, pki: PublicKeyRepository
 ):
     """Ensure that even with TLS and RBAC enabled, and no authentication method that
     matches, the CORS mechanism is still accessible.
@@ -384,7 +383,7 @@ async def test_unknown_auth_strategy(config: ApiConfiguration):
 
 
 async def test_error_logging(
-    aiohttp_client: Callable, config: ApiConfiguration, caplog: pytest.LogCaptureFixture
+    aiohttp_client: callable, config: ApiConfiguration, caplog: pytest.LogCaptureFixture
 ):
     """Ensure that an exception occurring inside the API is properly logged."""
     # Get an additional WARNING otherwise

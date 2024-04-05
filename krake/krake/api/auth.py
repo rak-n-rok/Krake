@@ -83,7 +83,7 @@ Currently, there are three authorization implementations available:
 
 """
 from functools import wraps
-from typing import callable, NamedTuple, Optional
+from typing import NamedTuple, Optional
 from aiohttp import web
 
 from krake.api.database import Session

@@ -1,6 +1,5 @@
 from asyncio import AbstractEventLoop
 import ssl
-from typing import Callable
 
 import pytest
 from aiohttp import ClientSession
@@ -33,7 +32,7 @@ AUTH_CONFIG_ANONYMOUS_ENABLED_ONLY = {
 
 
 # region Static Authentication
-async def test_static_auth(aiohttp_client: Callable, config: ApiConfiguration):
+async def test_static_auth(aiohttp_client: callable, config: ApiConfiguration):
     authentication = {
         "allow_anonymous": True,
         "strategy": {
@@ -83,7 +82,7 @@ async def test_keystone(keystone: KeystoneInfo):
 
 @pytest.mark.slow
 async def test_keystone_auth(
-    keystone: KeystoneInfo, aiohttp_client: Callable, config: ApiConfiguration
+    keystone: KeystoneInfo, aiohttp_client: callable, config: ApiConfiguration
 ):
     async with ClientSession() as session:
         resp = await _create_keystone_token_async(session, keystone)
@@ -111,7 +110,7 @@ async def test_keystone_auth(
 
 @pytest.mark.slow
 async def test_keystone_auth_invalid_token(
-    keystone: KeystoneInfo, aiohttp_client: Callable, config: ApiConfiguration
+    keystone: KeystoneInfo, aiohttp_client: callable, config: ApiConfiguration
 ):
     """Verify with keystone authentication enabled, an invalid token does not allow to
     be authenticated.
@@ -135,7 +134,7 @@ async def test_keystone_auth_invalid_token(
 
 
 async def test_keystone_auth_no_token(
-    aiohttp_client: Callable, config: ApiConfiguration
+    aiohttp_client: callable, config: ApiConfiguration
 ):
     """Verify that even with keystone authentication enabled, a user does not get
     authenticated if no token has been provided.
@@ -205,7 +204,7 @@ async def test_keycloak(keycloak: KeycloakInfo):
 
 @pytest.mark.slow
 async def test_keycloak_auth(
-    keycloak: KeycloakInfo, aiohttp_client: Callable, config: ApiConfiguration
+    keycloak: KeycloakInfo, aiohttp_client: callable, config: ApiConfiguration
 ):
     """Using the keycloak fixture, test the API's Keycloak authentication."""
     async with ClientSession() as session:
@@ -241,7 +240,7 @@ async def test_keycloak_auth(
 
 
 async def test_keycloak_auth_no_token(
-    aiohttp_client: Callable, config: ApiConfiguration
+    aiohttp_client: callable, config: ApiConfiguration
 ):
     """Verify that even with keycloak authentication enabled, a user does not get
     authenticated if no token has been provided.
@@ -296,7 +295,7 @@ async def _create_keycloak_token_async(
 
 
 async def test_deny_anonymous_requests(
-    aiohttp_client: Callable, config: ApiConfiguration
+    aiohttp_client: callable, config: ApiConfiguration
 ):
     authentication = {
         "allow_anonymous": False,
@@ -339,7 +338,7 @@ async def test_client_connect_ssl(
 
 
 async def test_client_anonymous_cert_auth(
-    aiohttp_client: Callable, config: ApiConfiguration, pki: PublicKeyRepository
+    aiohttp_client: callable, config: ApiConfiguration, pki: PublicKeyRepository
 ):
     server = await _create_ssl_server_async(config, pki)
 
@@ -354,7 +353,7 @@ async def test_client_anonymous_cert_auth(
 
 
 async def test_client_cert_auth(
-    aiohttp_client: Callable, config: ApiConfiguration, pki: PublicKeyRepository
+    aiohttp_client: callable, config: ApiConfiguration, pki: PublicKeyRepository
 ):
     client_cert = pki.gencert("test-user")
     server = await _create_ssl_server_async(config, pki)
@@ -401,7 +400,7 @@ async def _create_ssl_server_async(
 
 
 # region RBAC
-async def test_allow_anonymous_rbac(aiohttp_client: Callable, config: ApiConfiguration):
+async def test_allow_anonymous_rbac(aiohttp_client: callable, config: ApiConfiguration):
     """Ensure that with RBAC enabled, an anonymous user is not considered authenticated
     when he/she sends requests for resources.
     """
@@ -419,7 +418,7 @@ async def test_allow_anonymous_rbac(aiohttp_client: Callable, config: ApiConfigu
 
 
 # region Always Deny
-async def test_always_deny(aiohttp_client: Callable, config: ApiConfiguration):
+async def test_always_deny(aiohttp_client: callable, config: ApiConfiguration):
     """Ensure that the "always-deny" authorization mode prevents accessing resources
     even if anonymous users are allowed.
     """

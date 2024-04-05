@@ -1,7 +1,6 @@
 """This modules defines aiohttp middlewares for the Krake HTTP API"""
 import asyncio
 import json
-from typing import Callable
 
 from aiohttp import web, hdrs
 from aiohttp.web_request import Request
@@ -54,7 +53,7 @@ def error_log():
     """
 
     @web.middleware
-    async def logging_middleware(request: Request, handler: Callable):
+    async def logging_middleware(request: Request, handler: callable):
         try:
             return await handler(request)
         except (web.HTTPException, asyncio.CancelledError):
@@ -81,7 +80,7 @@ def problem_response(problem_base_url: str = None):
     """
 
     @web.middleware
-    async def problem_middleware(request: Request, handler: Callable):
+    async def problem_middleware(request: Request, handler: callable):
         try:
             return await handler(request)
         except web.HTTPException as e:
@@ -114,7 +113,7 @@ def problem_response(problem_base_url: str = None):
     return problem_middleware
 
 
-def authentication(authenticators: list[Callable], allow_anonymous: bool):
+def authentication(authenticators: list[callable], allow_anonymous: bool):
     """Middleware factory authenticating every request.
 
     The concrete implementation is delegated to the passed asynchronous
@@ -142,7 +141,7 @@ def authentication(authenticators: list[Callable], allow_anonymous: bool):
     """
 
     @web.middleware
-    async def auth_middleware(request: Request, handler: Callable):
+    async def auth_middleware(request: Request, handler: callable):
         user = None
 
         for authenticator in authenticators:

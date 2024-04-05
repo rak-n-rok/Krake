@@ -17,7 +17,7 @@ from krake.data.infrastructure import (
     InfrastructureProvider,
     InfrastructureProviderList,
 )
-from krake.krake.api.crud_api import CrudApi, crud_api
+from krake.api.crud_api import CrudApi, crud_api
 
 
 INFRASTRUCTURE_API_PREFIX = "infrastructure"
