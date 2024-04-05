@@ -136,27 +136,3 @@ class CrudApi(metaclass=ABCMeta):
     @abstractmethod
     def resoure_list_type(self) -> type:
         pass
-
-    # @abstractmethod
-    # def b(self):
-    #     pass
-
-    # routes = web.RouteTableDef()
-
-
-# class B(CrudApi):
-#     api = "infrastructure"
-#     resource = "globalinfrastructureproviders"
-#     resoure_type = Role
-#     resoure_list_type = RoleList
-
-#     # def b(self):
-#     #     pass
-
-
-# # x = B()
-
-# routes = web.RouteTableDef()
-# routes2 = web.RouteTableDef()
-
-# routes.update(routes2)
