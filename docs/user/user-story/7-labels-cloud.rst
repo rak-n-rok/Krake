@@ -73,7 +73,7 @@ LabelConstraints should be used by the cluster, which would automatically mean, 
 .. prompt:: bash $ auto
 
     rok kube cluster create -f git/krake/rak/functionals/im-cluster.yaml my-cluster --inherit-labels
-    
+
 If this cluster is now observed, the inherited labels should be visible in the output. These labels are considered during scheduling like normal labels, which are directly attached to a cluster.
 Inherited labels are marked accordingly.
 
