@@ -2,6 +2,13 @@
 Kubernetes Application Controller
 =====================
 
+.. toctree::
+    :hidden:
+
+    kubernetes-application-controller
+    kubernetes-application-observer
+
+
 Reconciliation loop
 ===================
 

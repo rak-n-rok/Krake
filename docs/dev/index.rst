@@ -18,17 +18,13 @@ API reference of all modules is provided.
     architecture
     concepts
     packages
+    controllers/index
     versioning
     dependencies
     principles
     scheduling
     hooks
     statefulness
-    kubernetes-application-controller
-    kubernetes-application-observer
-    kubernetes-cluster-controller
-    kubernetes-cluster-observer
-    infrastructure-controller
     garbage-collection
     api-generation
     tosca
