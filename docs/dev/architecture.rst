@@ -35,8 +35,8 @@ Control Plane
 
 The control plane is responsible for bringing the declarative API to life: it
 synchronizes the declared desired state of a API resource with the managed
-real world object (see also :ref:`dev/concepts:Control Plane` on the concepts
-chapter).
+real world object (see also :ref:`dev/concepts:Control Plane` in the concepts
+chapter and :ref:`dev/controllers/index:General Architecture` in the controllers chapter).
 
 The control plane consists of a set of *controllers*. Normally, one controller
 is responsible for one kind of resource, e.g. the Kubernetes Application

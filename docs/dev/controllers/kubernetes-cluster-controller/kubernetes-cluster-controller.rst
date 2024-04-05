@@ -16,6 +16,12 @@ The Kubernetes Cluster Controller is launched separately.
   Cluster Controller will certainly be extended by
   additional features and functionalities in the future.
 
+.. toctree::
+    :hidden:
+
+    kubernetes-application-controller
+    kubernetes-application-observer
+
 For more information on what the Kubernetes Cluster Observer
 does and what features it offers, see
 :ref:`dev/kubernetes-cluster-observer:Kubernetes Cluster Observer`.

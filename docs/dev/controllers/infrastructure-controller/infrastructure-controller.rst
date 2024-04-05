@@ -5,6 +5,12 @@ Infrastructure Controller
 This part of the documentation presents the Infrastructure Controller control plane component, and
 how the life-cycle management of real-world Kubernetes clusters is handled.
 
+.. note::
+
+   For a description of the architecture and work flow of a controller refer to
+   :ref:`dev/controllers`.
+
+
 The Infrastructure Controller should process Clusters that are bound (scheduled) to
 any Cloud or GlobalCloud resource. It should also process Clusters that were deleted and contain
 an Infrastructure Controller specific deletion finalizer: `infrastructure_resources_deletion`.
@@ -30,6 +36,11 @@ Krake currently supports only IM_ (Infrastructure Manager) as an infrastructure 
     resource. For example, the GlobalCloud resource could be used by any Cluster
     which needs to be scheduled to some cloud.
 
+.. toctree::
+    :hidden:
+
+    infrastructure-controller
+    infrastructure-provider-cluster-observer
 
 Reconciliation loop
 ===================
