@@ -31,7 +31,6 @@ from krake.data.kubernetes import (
     ClusterNodeStatus,
     ClusterNodeCondition,
     ClusterNodeMetadata,
-    ClusterState,
     ClusterCloudConstraints,
     CloudConstraints,
 )

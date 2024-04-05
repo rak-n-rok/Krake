@@ -157,8 +157,8 @@ async def test_main_help(loop):
 
 @pytest.mark.slow
 def test_main(kube_app_config, log_to_file_config):
-    """Test the main function of the Kubernetes Application Controller, and verify that it starts,
-    display the right output and stops without issue.
+    """Test the main function of the Kubernetes Application Controller,
+    and verify that it starts, display the right output and stops without issue.
     """
     log_config, file_path = log_to_file_config()
 
