@@ -1,15 +1,17 @@
 """This modules defines aiohttp middlewares for the Krake HTTP API"""
 import asyncio
 import json
+from typing import Callable
 
 from aiohttp import web, hdrs
+from aiohttp.web_request import Request
 
 from krake.api.helpers import HttpProblemError, HttpProblem, HttpProblemTitle
 
 from .database import TransactionError
 
 
-def retry_transaction(retry=1):
+def retry_transaction(retry: int = 1):
     """Middleware factory for transaction error handling.
 
     If a :class:`.database.TransactionError` occurs, the request handler is retried for
@@ -52,7 +54,7 @@ def error_log():
     """
 
     @web.middleware
-    async def logging_middleware(request, handler):
+    async def logging_middleware(request: Request, handler: Callable):
         try:
             return await handler(request)
         except (web.HTTPException, asyncio.CancelledError):
@@ -64,7 +66,7 @@ def error_log():
     return logging_middleware
 
 
-def problem_response(problem_base_url=None):
+def problem_response(problem_base_url: str = None):
     """Middleware factory for HTTP exceptions in request handlers
 
     Args:
@@ -77,15 +79,13 @@ def problem_response(problem_base_url=None):
         (RFC 7807 Problem representation of failure) and reraising the exception.
 
     """
+
     @web.middleware
-    async def problem_middleware(request, handler):
+    async def problem_middleware(request: Request, handler: Callable):
         try:
             return await handler(request)
         except web.HTTPException as e:
-            problem = HttpProblem(
-                status=e.status_code,
-                detail=e.text
-            )
+            problem = HttpProblem(status=e.status_code, detail=e.text)
             e.text = json.dumps(problem.serialize())
             e.content_type = "application/problem+json"
             raise
@@ -108,13 +108,13 @@ def problem_response(problem_base_url=None):
 
             raise e.exc(
                 text=json.dumps(e.problem.serialize()),
-                content_type="application/problem+json"
+                content_type="application/problem+json",
             )
 
     return problem_middleware
 
 
-def authentication(authenticators, allow_anonymous):
+def authentication(authenticators: list[Callable], allow_anonymous: bool):
     """Middleware factory authenticating every request.
 
     The concrete implementation is delegated to the passed asynchronous
@@ -142,7 +142,7 @@ def authentication(authenticators, allow_anonymous):
     """
 
     @web.middleware
-    async def auth_middleware(request, handler):
+    async def auth_middleware(request: Request, handler: Callable):
         user = None
 
         for authenticator in authenticators:

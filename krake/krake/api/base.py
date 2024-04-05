@@ -131,8 +131,7 @@ async def list_or_watch_resources_async(
     request: web.Request,
     watch: Callable,
     heartbeat: float,
-    namespace: str = None,
-):
+) -> web.Response:
     """List or watch all entities of a resource class.
 
     Args:
@@ -146,6 +145,8 @@ async def list_or_watch_resources_async(
     Returns:
         json response containing a list of all entities in resource_class
     """
+    namespace = request.match_info.get("namespace", None)
+
     # Return the list of resources
     if not watch:
         return await list_resources_async(
@@ -163,7 +164,7 @@ async def list_or_watch_resources_async(
 
 async def update_resource_async(
     request: web.Request, entity: ApiObject, body: ApiObject
-) -> web.json_response:
+) -> web.Response:
     """Update an entity.
 
     Args:
@@ -223,7 +224,7 @@ async def update_resource_async(
 
 async def delete_resource_async(
     request: ApiObject, entity: ApiObject, force: bool = False
-) -> web.json_response:
+) -> web.Response:
     """Delete an entity.
 
     Args:
@@ -281,7 +282,7 @@ def initialize_subresource_fields(body: ApiObject) -> ApiObject:
 
 async def must_create_resource_async(
     request: web.Request, body: ApiObject, namespace: str
-) -> web.json_response:
+) -> web.Response:
     """Create the resource defined by body or raises if it already exists.
 
     Args:

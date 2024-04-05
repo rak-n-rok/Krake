@@ -19,11 +19,12 @@ Example:
         web.run_app(app)
 
 """
+from typing import Callable
 import aiohttp_cors
 import logging
 import ssl
 
-from aiohttp import web, ClientSession, TCPConnector
+from aiohttp import ClientSession, TCPConnector, web
 from functools import partial
 from krake.api.database import Session
 
@@ -42,12 +43,12 @@ routes = web.RouteTableDef()
 
 
 @routes.get("/")
-async def index_async(request):
+async def index_async(request) -> web.Response:
     return web.json_response({"version": version})
 
 
 @routes.get("/me")
-async def me_async(request):
+async def me_async(request) -> web.Response:
     roles = set()
     user: str = request["user"]
 
@@ -59,11 +60,11 @@ async def me_async(request):
 
 
 @routes.get("/release")
-async def release_async(request):
+async def release_async(request) -> web.Response:
     return web.json_response("You released the Krake.", status=202)
 
 
-def create_app(config: ApiConfiguration):
+def create_app(config: ApiConfiguration) -> web.Application:
     """Create aiohttp application instance providing the Krake HTTP API
 
     Args:
@@ -114,7 +115,7 @@ def create_app(config: ApiConfiguration):
     app.add_routes(CoreApi.routes)
     app.add_routes(OpenStackApi.routes)
     app.add_routes(KubernetesApi.routes)
-    app.add_routes(InfrastructureApi.routes)
+    app.add_routes(InfrastructureApi.routes._items)
 
     cors_setup(app)
     return app
@@ -192,7 +193,7 @@ async def http_session_async(app: web.Application, ssl_context: ssl.SSLContext =
         yield
 
 
-def load_authentication(config: ApiConfiguration):
+def load_authentication(config: ApiConfiguration) -> Callable:
     """Create the authentication middleware :func:`.middlewares.authentication`.
 
     The authenticators are loaded from the "authentication" configuration key.
@@ -237,7 +238,7 @@ def load_authentication(config: ApiConfiguration):
 UNKNOWN_AUTHORIZATION_STRATEGY_ERROR = "Unknown authorization strategy"
 
 
-def load_authorizer(config: ApiConfiguration):
+def load_authorizer(config: ApiConfiguration) -> Callable:
     """Load authorization function from configuration.
 
     Args:

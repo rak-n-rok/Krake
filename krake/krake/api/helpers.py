@@ -7,6 +7,7 @@ from enum import Enum
 from functools import wraps
 from aiohttp import web
 from aiohttp.web_exceptions import HTTPException
+import marshmallow
 
 from krake.data.serializable import Serializable
 from krake.data.kubernetes import ApplicationState
@@ -93,7 +94,7 @@ class HttpProblemError(Exception):
         self.kwargs = kwargs
 
 
-def session(request):
+def session(request: web.Request):
     """Load the database session for a given aiohttp request
 
     Internally, it just returns the value that was given as cleanup context by
@@ -145,7 +146,7 @@ class Heartbeat(object):
 
     """
 
-    def __init__(self, response, interval=None):
+    def __init__(self, response: web.StreamResponse, interval: int | float = None):
 
         if interval is None:
             interval = 10
@@ -185,7 +186,7 @@ class Heartbeat(object):
             await self.response.write(b"\n")
 
 
-def load(argname, cls):
+def load(argname: str, cls: type):
     """Decorator function for loading database models from URL parameters.
 
     The wrapper loads the ``name`` parameter from the requests ``match_info``
@@ -213,7 +214,7 @@ def load(argname, cls):
         callable: Decorator for aiohttp request handlers
     """
 
-    def decorator(handler):
+    def decorator(handler: callable):
         @wraps(handler)
         async def wrapper(request, *args, **kwargs):
             key_params = {"name": request.match_info["name"]}
@@ -243,7 +244,7 @@ def load(argname, cls):
     return decorator
 
 
-def use_schema(argname, schema):
+def use_schema(argname: str, schema: marshmallow.Schema):
     """Decorator function for loading a :class:`marshmallow.Schema` from the
     request body.
 
@@ -298,7 +299,7 @@ def blocking():
         Response: JSON style response coming from the handler
     """
 
-    def decorator(handler):
+    def decorator(handler: callable):
         @wraps(handler)
         async def wrapper(request, *args, **kwargs):
             resp = await handler(request, *args, **kwargs)
@@ -338,7 +339,7 @@ def blocking():
     return decorator
 
 
-def make_create_request_schema(cls):
+def make_create_request_schema(cls: type):
     """Create a :class:`marshmallow.Schema` excluding subresources and read-only.
 
     Args:

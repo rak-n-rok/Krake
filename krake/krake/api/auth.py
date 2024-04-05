@@ -83,7 +83,7 @@ Currently, there are three authorization implementations available:
 
 """
 from functools import wraps
-from typing import NamedTuple, Optional
+from typing import callable, NamedTuple, Optional
 from aiohttp import web
 
 from krake.api.database import Session
@@ -93,7 +93,7 @@ from yarl import URL
 from .helpers import session, HttpProblemError, HttpProblem, HttpProblemTitle
 
 
-def static_authentication(name: str):
+def static_authentication(name: str) -> callable:
     """Authenticator factory for authenticating every request with the given
     name.
 
@@ -111,7 +111,7 @@ def static_authentication(name: str):
     return authenticator
 
 
-def client_certificate_authentication():
+def client_certificate_authentication() -> callable:
     """Authenticator factory for authenticating requests with client
     certificates.
 
@@ -146,7 +146,7 @@ def _get_common_name(subject):
     raise ValueError("'commonName' not found")
 
 
-def keystone_authentication(endpoint):
+def keystone_authentication(endpoint: str) -> callable:
     """Authenticator factory for OpenStack Keystone authentication.
 
     The token in the ``Authorization`` header of a request will be used as
@@ -157,13 +157,13 @@ def keystone_authentication(endpoint):
     ``http`` key of the application.
 
     Args:
-        endpoint (str): Keystone HTTP endpoint
+        request (str): Keystone HTTP endpoint
 
     Returns:
         callable: Authenticator for the given Keystone endpoint.
     """
 
-    async def authenticator(request):
+    async def authenticator(request: web.Request) -> callable:
         token = request.headers.get("Authorization")
         if not token:
             return None
@@ -185,7 +185,7 @@ def keystone_authentication(endpoint):
     return authenticator
 
 
-def keycloak_authentication(endpoint, realm):
+def keycloak_authentication(endpoint: str, realm: str):
     """Authenticator factory for Keycloak authentication.
 
     The token in the ``Authorization`` header of a request sent to Krake will be sent as
@@ -204,7 +204,7 @@ def keycloak_authentication(endpoint, realm):
 
     """
 
-    async def authenticator(request):
+    async def authenticator(request: web.Request):
         token = request.headers.get("Authorization")
         if not token:
             return None
@@ -244,7 +244,7 @@ class AuthorizationRequest(NamedTuple):
     verb: Verb
 
 
-async def always_allow(request, auth_request):
+async def always_allow(request: web.Request, auth_request: AuthorizationRequest):
     """Authorizer allowing every request.
 
     Args:
@@ -256,7 +256,7 @@ async def always_allow(request, auth_request):
     pass
 
 
-async def always_deny(request, auth_request):
+async def always_deny(request: web.Request, auth_request: AuthorizationRequest):
     """Authorizer denying every request.
 
     Args:
@@ -271,7 +271,7 @@ async def always_deny(request, auth_request):
     raise web.HTTPForbidden()
 
 
-async def rbac(request, auth_request):
+async def rbac(request: web.Request, auth_request: AuthorizationRequest) -> Role:
     """Role-based access control authorizer.
 
     The roles of a user are loaded from the database. It checks if any role
@@ -339,7 +339,7 @@ def check_auth_request(rule: RoleRule, auth_request: AuthorizationRequest) -> bo
     return False
 
 
-def protected(api: str, resource: str, verb: str):
+def protected(api: str, resource: str, verb: str) -> callable:
     """Decorator function for aiohttp request handlers performing authorization.
 
     The returned decorator can be used to wrap a given aiohttp handler and

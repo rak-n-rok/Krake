@@ -28,6 +28,7 @@ Example:
 .. _etcd: https://etcd.io/
 
 """
+from asyncio import AbstractEventLoop
 import json
 from typing import NamedTuple
 from enum import Enum, auto
@@ -35,6 +36,8 @@ from etcd3 import Txn
 from etcd3.aio_client import AioClient
 from semantic_version import Version
 import requests
+
+from krake.data import serializable
 
 
 class DatabaseError(Exception):
@@ -172,7 +175,7 @@ class Session(object):
 
     """
 
-    def __init__(self, host, port=2379, loop=None):
+    def __init__(self, host: str, port: int = 2379, loop: AbstractEventLoop = None):
         self.host = host
         self.port = port
         self.loop = loop
@@ -210,7 +213,7 @@ class Session(object):
 
         return self._client
 
-    async def get(self, cls, **kwargs):
+    async def get(self, cls: type, **kwargs):
         """Fetch an serializable object from the etcd server specified by its
         identity attribute.
 
@@ -226,7 +229,7 @@ class Session(object):
         key = cls.__etcd_key__.format_kwargs(**kwargs)
         return await self.get_by_key(cls, key)
 
-    async def get_by_key(self, cls, key, revision=None):
+    async def get_by_key(self, cls: type, key: str | bytes, revision=None):
         resp = await self.client.range(key, revision=revision)
 
         if resp.kvs is None:
@@ -234,7 +237,7 @@ class Session(object):
 
         return self.load_instance(cls, resp.kvs[0])
 
-    async def all(self, cls, **kwargs):
+    async def all(self, cls: type, **kwargs):
         """Fetch all instances of a given type
 
         The instances can be filtered by partial identities. Every identity can
@@ -286,7 +289,7 @@ class Session(object):
             if cls.__etcd_key__.matches(kv.key.decode()):
                 yield self.load_instance(cls, kv)
 
-    async def put(self, instance):
+    async def put(self, instance: serializable.Serializable):
         """Store new revision of a serializable object on etcd server.
 
         If the instances does not have an attached :class:`Revision` (see
@@ -345,7 +348,7 @@ class Session(object):
                 modified=resp.header.revision, version=rev.version + 1
             )
 
-    async def delete(self, instance):
+    async def delete(self, instance: serializable.Serializable):
         """Delete a given instance from etcd.
 
         A transaction is used ensuring the etcd key was not modified
@@ -378,7 +381,7 @@ class Session(object):
 
         instance.__revision__ = rev._replace(modified=resp.header.revision, version=0)
 
-    def watch(self, cls, **kwargs):
+    def watch(self, cls: type, **kwargs):
         """Watch the namespace of a given serializable type and yield
         every change in this namespace.
 
@@ -396,7 +399,7 @@ class Session(object):
         """
         return Watcher(self, cls, **kwargs)
 
-    def load_instance(self, cls, kv):
+    def load_instance(self, cls: type, kv):
         """Load an instance and its revision by an etcd key-value pair
 
         Args:
@@ -413,7 +416,7 @@ class Session(object):
         return model
 
 
-def revision(instance):
+def revision(instance: object):
     """Returns the etcd :class:`Revision` of an object used with a
     :class:`Session`. If the object is currently *unattached* -- which means it
     was not retrieved from the database with :meth:`Session.get` -- this function
@@ -445,7 +448,7 @@ class Watcher(object):
 
     """
 
-    def __init__(self, session, model, **kwargs):
+    def __init__(self, session: Session, model: type, **kwargs):
         self.session = session
         self.model = model
         self.prefix = model.__etcd_key__.prefix(**kwargs)
