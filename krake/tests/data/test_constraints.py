@@ -478,7 +478,7 @@ def test_parse_equal_metric_constraint(expression):
 
 
 @pytest.mark.parametrize("expression", ["load != 5", "load!=5", "load is not 5"])
-def test_parse_notequal_constraint(expression):
+def test_parse_nonequal_constraint(expression):
     constraint = MetricConstraint.parse(expression)
 
     assert constraint.metric == "load"
