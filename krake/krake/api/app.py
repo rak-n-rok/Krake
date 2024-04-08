@@ -114,7 +114,7 @@ def create_app(config: ApiConfiguration) -> web.Application:
     app.add_routes(CoreApi.routes)
     app.add_routes(OpenStackApi.routes)
     app.add_routes(KubernetesApi.routes)
-    app.add_routes(InfrastructureApi.routes._items)
+    app.add_routes(InfrastructureApi.routes)
 
     cors_setup(app)
     return app

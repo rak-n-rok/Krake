@@ -76,8 +76,8 @@ class OpenStackApi(object):
         "PUT", "/openstack/namespaces/{namespace}/magnumclusters/{name}/binding"
     )
     @protected(api="openstack", resource="magnumclusters/binding", verb="update")
-    @use_schema("body", MagnumClusterBinding.Schema)
     @load("cluster", MagnumCluster)
+    @use_schema("body", MagnumClusterBinding.Schema)
     async def update_magnum_cluster_binding_async(
         request: Request, body: MagnumCluster, cluster: MagnumCluster
     ):
