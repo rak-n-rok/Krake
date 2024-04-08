@@ -56,11 +56,7 @@ class CrudApi(metaclass=ABCMeta):
                 request: web.Request, heartbeat: int, watch: bool
             ):
                 return await base.list_or_watch_resources_async(
-                    cls.resource_type,
-                    cls.resoure_list_type,
-                    request,
-                    watch,
-                    heartbeat,
+                    cls.resource_type, cls.resoure_list_type, request, heartbeat, watch
                 )
 
         else:
@@ -72,11 +68,7 @@ class CrudApi(metaclass=ABCMeta):
                 request: web.Request, heartbeat: int, watch: bool
             ):
                 return await base.list_or_watch_resources_async(
-                    cls.resource_type,
-                    cls.resoure_list_type,
-                    request,
-                    watch,
-                    heartbeat,
+                    cls.resource_type, cls.resoure_list_type, request, heartbeat, watch
                 )
 
         @cls.routes.route("GET", f"{api_route}/{{name}}")

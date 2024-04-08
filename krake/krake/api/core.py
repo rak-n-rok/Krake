@@ -140,7 +140,9 @@ class CoreApi(object):
     async def list_or_watch_roles_async(
         request: web.Request, heartbeat: int, watch: bool
     ):
-        return list_or_watch_resources_async(Role, RoleList, request, heartbeat, watch)
+        return await list_or_watch_resources_async(
+            Role, RoleList, request, heartbeat, watch
+        )
 
     @routes.route("GET", "/core/roles/{name}")
     @protected(api="core", resource="roles", verb="get")
@@ -176,7 +178,7 @@ class CoreApi(object):
     async def list_or_watch_role_bindings_async(
         request: web.Request, heartbeat: int, watch: bool
     ):
-        return list_or_watch_resources_async(
+        return await list_or_watch_resources_async(
             RoleBinding, RoleBindingList, request, heartbeat, watch
         )
 
@@ -266,7 +268,7 @@ class CoreApi(object):
     @protected(api="core", resource="metricsproviders", verb="list")
     @use_kwargs(ListQuery.query, location="query")
     async def list_or_watch_metrics_providers_async(
-        request: web.Request, heartbeat: int, watch
+        request: web.Request, heartbeat: int, watch: bool
     ):
         return await list_or_watch_resources_async(
             MetricsProvider, MetricsProviderList, request, heartbeat, watch

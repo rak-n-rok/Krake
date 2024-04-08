@@ -54,7 +54,7 @@ class OpenStackApi(object):
         request: Request, heartbeat: int, watch: bool
     ):
         return await list_or_watch_resources_async(
-            MagnumCluster, MagnumClusterList, request, watch, heartbeat
+            MagnumCluster, MagnumClusterList, request, heartbeat, watch
         )
 
     @routes.route("GET", "/openstack/namespaces/{namespace}/magnumclusters/{name}")
@@ -124,10 +124,10 @@ class OpenStackApi(object):
     @protected(api="openstack", resource="projects", verb="list")
     @use_kwargs(ListQuery.query, location="query")
     async def list_or_watch_projects_async(
-        request: Request, heartbeat: int, watch, bool
+        request: Request, heartbeat: int, watch: bool
     ):
         return await list_or_watch_resources_async(
-            Project, ProjectList, request, watch, heartbeat
+            Project, ProjectList, request, heartbeat, watch
         )
 
     @routes.route("GET", "/openstack/namespaces/{namespace}/projects/{name}")

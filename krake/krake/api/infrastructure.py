@@ -96,7 +96,7 @@ class InfrastructureApi(object):
     These handlers will be added to the Krake API components.
     """
 
-    # TODO solution iwhtout accessing private attribute _items
+    # TODO solution without accessing private attribute _items
     routes = GlobalInfrastructureProviderApi.routes
     routes._items += InfrastructureProviderApi.routes
     routes._items += GlobalCloudsApi.routes

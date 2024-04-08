@@ -3,7 +3,7 @@ import logging
 import dataclasses
 import json
 
-from typing import AsyncGenerator, Callable, Type
+from typing import AsyncGenerator, Type
 from uuid import uuid4
 from aiohttp import web
 
@@ -129,18 +129,18 @@ async def list_or_watch_resources_async(
     resource_class: Type,
     list_class: Type,
     request: web.Request,
-    watch: Callable,
-    heartbeat: float,
+    heartbeat: int,
+    watch: bool,
 ) -> web.Response:
     """List or watch all entities of a resource class.
 
     Args:
-        resource_class: a type of resource
-        list_class: a type of list to create
-        request: the http request
-        watch: watch method
-        heartbeat: the update interval
-        namespace: namespace the resources reside in (optional)
+        resource_class (Type): a type of resource
+        list_class (Type): a type of list to create
+        request (web.Request): the http request
+        heartbeat (int): the update interval
+        watch (bool): flag that specifies wether the resources should be
+            watched instead of listed
 
     Returns:
         json response containing a list of all entities in resource_class
