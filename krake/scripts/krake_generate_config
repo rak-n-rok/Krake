@@ -351,12 +351,7 @@ if __name__ == "__main__":
         "URL of the problem documentation.",
         default="https://rak-n-rok.readthedocs.io/projects/krake/en/latest/user/problem.html",  # noqa: E501
     )
-    add_option(
-        parser,
-        "--docker-daemon-mtu",
-        "The Docker daemon MTU.",
-        default=1450
-    )
+    add_option(parser, "--docker-daemon-mtu", "The Docker daemon MTU.", default=1450)
     add_option(
         parser,
         "--worker-count",
