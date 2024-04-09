@@ -68,7 +68,7 @@ pre-commit:
 
     git config --global user.email "krake@cloudandheat.com"
     git config --global user.name "Krake"
-    
+
     # Proceed with auto-fix
     if [[ -z "$PRE_COMMIT_ACCESS_TOKEN" ]]; then
         echo "Auto-fix is enabled, but no pre-commit access token found." >> /dev/stderr
