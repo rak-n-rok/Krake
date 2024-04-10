@@ -610,4 +610,3 @@ async def test_query_metric_not_found():
         # Assert that the MetricError exception is raised
         with pytest.raises(MetricError):
             await influx.query(mock_metric)
-
