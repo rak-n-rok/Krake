@@ -276,9 +276,9 @@ class ObserverSchemaError(Exception):
     """Custom exception raised if the validation of the observer_schema fails"""
 
 
-def _validate_observer_schema_dict(partial_schema,
-                                   first_level=False,
-                                   is_metadata=False):
+def _validate_observer_schema_dict(
+    partial_schema, first_level=False, is_metadata=False
+):
     """Together with :func:`_validate_observer_schema_list``, this function
     is called recursively to validate a partial ``observer_schema``.
 
@@ -314,8 +314,12 @@ def _validate_observer_schema_dict(partial_schema,
 
     for key, value in partial_schema.items():
         # skip already validated items
-        if first_level and key in ["apiVersion", "kind", "metadata"] \
-                or is_metadata and key == "name":
+        if (
+            first_level
+            and key in ["apiVersion", "kind", "metadata"]
+            or is_metadata
+            and key == "name"
+        ):
             continue
 
         if isinstance(value, dict):
@@ -344,8 +348,10 @@ def _validate_observer_schema_list(partial_schema):
     """
     if not isinstance(partial_schema[-1], dict):
         raise ValueError("Special list control dictionary not found")
-    if "observer_schema_list_min_length" not in partial_schema[-1] \
-            or "observer_schema_list_max_length" not in partial_schema[-1]:
+    if (
+        "observer_schema_list_min_length" not in partial_schema[-1]
+        or "observer_schema_list_max_length" not in partial_schema[-1]
+    ):
         raise ValueError("Special list control dictionary malformed")
 
     observer_schema_list_min_length = partial_schema[-1][

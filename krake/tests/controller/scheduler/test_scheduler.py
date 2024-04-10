@@ -3426,7 +3426,9 @@ async def test_cloud_score_empty_metrics(
     server = await aiohttp_server(create_app(config))
     async with Client(url=server_endpoint(server), loop=loop) as client:
         await scheduler.prepare(client)
-        with pytest.raises(ValueError, match="List of metric references is None or empty"):
+        with pytest.raises(
+            ValueError, match="List of metric references is None or empty"
+        ):
             await scheduler.kubernetes_cluster.rank_clouds(cluster, clouds)
 
 
