@@ -1,4 +1,5 @@
 stages:
+  - pre
   - test
   - e2e
   - release
@@ -27,6 +28,69 @@ workflow:
 cache:
   paths:
     - .cache/pip
+
+# Pre-commit hooks are checked here, because not everybody activates them
+# in a public, open source project. This stage is only run on branches, because
+# all problems should already be fixed when a merge is started.
+
+pre-commit:
+  stage: pre
+  only:
+    - branches
+    - merge_requests
+  variables:
+    PRE_COMMIT_AUTO_FIX: "1"
+    PRE_COMMIT_DEDUPLICATE_MR_AND_BRANCH: "true"
+
+  image: registry.gitlab.com/yesolutions/docker-pre-commit
+  script: |
+    status=0
+    pre-commit run --all-files || status=$?
+    if [[ $status -ne 0 ]]; then
+        if [[ -n "$CI_COMMIT_BRANCH" ]]; then
+            git remote set-url origin "https://gitlab-ci-token:${PRE_COMMIT_ACCESS_TOKEN:-$CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+            git fetch origin
+            git checkout $CI_COMMIT_BRANCH
+        fi
+        if [[ -n "$CI_MERGE_REQUEST_IID" ]]; then
+            git remote set-url origin "https://gitlab-ci-token:${PRE_COMMIT_ACCESS_TOKEN:-$CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_MERGE_REQUEST_SOURCE_PROJECT_PATH}.git"
+            git fetch origin
+        fi
+        pre-commit run --all-files  # check the status passes now with autofix otherwise, it'll stop here
+    else
+        exit 0
+    fi
+
+    if [[ -z "$PRE_COMMIT_AUTO_FIX" ]]; then
+        echo "No auto-fix enabled."
+        exit 1 # Job will fail
+    fi
+
+    git config --global user.email "krake@cloudandheat.com"
+    git config --global user.name "Krake"
+
+    # Proceed with auto-fix
+    if [[ -z "$PRE_COMMIT_ACCESS_TOKEN" ]]; then
+        echo "Auto-fix is enabled, but no pre-commit access token found." >> /dev/stderr
+        echo "To enable automatic fixes, please create a project access token with repository write scope and set the PRE_COMMIT_ACCESS_TOKEN variable" > /dev/stderr
+        exit 1
+    fi
+
+    if [[ -n "$CI_COMMIT_BRANCH" ]]; then
+        git add -u .
+        git commit -m "Automatic fixes from pre-commit CI job" -m "job url: $CI_JOB_URL" -m "Signed-off-by: Krake <krake@cloudandheat.com>"
+        git push
+        exit 1
+    elif [[ -n "$CI_MERGE_REQUEST_IID" ]]; then
+        git add -u .
+        git commit -m "Automatic fixes from pre-commit CI job" -m "job url: $CI_JOB_URL" -m "Signed-off-by: Krake <krake@cloudandheat.com>"
+        git push origin HEAD:"$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME"
+        exit 1
+    else
+       echo "Auto fix is not supported in this context" > /dev/stderr
+       echo "Auto fix is only available in branch and merge request pipelines" > /dev/stderr
+       exit 1
+    fi
 
 # Unit tests and flake8 are run on commits on branches which are not yet in a
 # merge requests (including master), on merge requests, and on scheduled
@@ -138,10 +202,6 @@ test-build-docs:
     - pip install -r requirements.txt
     - make html
 
-
-
-
-
 # Combine code coverage reports from previous tox runs for all different
 # Python environments. Report code coverage for Krake Python package and exit
 # with non-zero if the code coverage ratio is under 85%.
@@ -154,6 +214,7 @@ coverage-krake:
     - coverage report --fail-under 85
     - coverage html
     - tar -czvf coverage.tar.gz htmlcov
+  coverage: '/^TOTAL.*\s+(\d+\%)$/'
   only:
     - tags
     - branches
@@ -162,8 +223,22 @@ coverage-krake:
   artifacts:
     paths:
       - coverage.tar.gz
-  coverage: '/^TOTAL.*\s+(\d+\%)$/'
 
+coverage-krake-visualization:
+  stage: e2e
+  image: python:3.10
+  script:
+    - pip install -r gitlab-ci/requirements_coverage.txt
+    - coverage combine krake/.coverage.*
+    - coverage xml
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+  only:
+    - merge_requests
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
 
 # Following job are for end-to-end testing. We're provisioning the staging
 # infrastructure in the e2e-provisioning job before and run the end-to-end

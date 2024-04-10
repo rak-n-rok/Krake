@@ -55,9 +55,10 @@ class DummyServer(NamedTuple):
 
 @with_timeout(3)
 async def test_main_help(loop):
-    """Verify that the help for the Infrastructure Controller is displayed, and contains the
-    elements added by the argparse formatters (default value and expected types of the
-    parameters).
+    """
+    Verify that the help for the Infrastructure Controller is displayed, and contains
+    the elements added by the argparse formatters (default value and expected types of
+    the parameters).
     """
     command = "python -m krake.controller.infrastructure -h"
     # The loop parameter is mandatory otherwise the test fails if started with others.
@@ -86,7 +87,8 @@ async def test_main_help(loop):
 
 @pytest.mark.slow
 def test_main(infrastructure_config, log_to_file_config):
-    """Test the main function of the Infrastructure Controller, and verify that it starts,
+    """
+    Test the main function of the Infrastructure Controller, and verify that it starts,
     display the right output and stops without issue.
     """
     log_config, file_path = log_to_file_config()

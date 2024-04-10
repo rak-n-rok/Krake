@@ -382,10 +382,7 @@ if __name__ == "__main__":
     add_option(
         parser,
         "--cluster_creation_tosca_file",
-        (
-            '"Path to the tosca file used for automatic'
-            ' cluster creation on request"'
-        ),
+        ('"Path to the tosca file used for automatic' ' cluster creation on request"'),
         default="examples/automation/cluster.yaml",
     )
     add_option(
@@ -497,10 +494,7 @@ if __name__ == "__main__":
     add_option(
         parser,
         "--logging-level",
-        (
-            "To set the logging level of all controllers"
-            " The default level is 'INFO'"
-        ),
+        ("To set the logging level of all controllers" " The default level is 'INFO'"),
         default="INFO",
     )
     add_option(
@@ -509,7 +503,6 @@ if __name__ == "__main__":
         (
             "To set the handler to use for logging."
             " Options are 'console', 'file' and 'timed_rotating'"
-
         ),
         default="console",
     )

@@ -57,7 +57,7 @@ class OpenStackApi(object):
                     f"MagnumCluster {body.metadata.name!r} already "
                     f"exists in namespace {namespace!r}"
                 ),
-                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
+                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS,
             )
             raise HttpProblemError(web.HTTPConflict, problem)
 
@@ -176,15 +176,15 @@ class OpenStackApi(object):
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 problem = HttpProblem(
                     detail="Finalizers can only be removed"
-                           " if a deletion is in progress.",
-                    title=HttpProblemTitle.UPDATE_ERROR
+                    " if a deletion is in progress.",
+                    title=HttpProblemTitle.UPDATE_ERROR,
                 )
                 raise HttpProblemError(web.HTTPConflict, problem)
 
         if body == entity:
             problem = HttpProblem(
                 detail="The body contained no update.",
-                title=HttpProblemTitle.UPDATE_ERROR
+                title=HttpProblemTitle.UPDATE_ERROR,
             )
             raise HttpProblemError(web.HTTPBadRequest, problem)
 
@@ -280,7 +280,7 @@ class OpenStackApi(object):
                     f"Project {body.metadata.name!r} already "
                     f"exists in namespace {namespace!r}"
                 ),
-                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS
+                title=HttpProblemTitle.RESOURCE_ALREADY_EXISTS,
             )
             raise HttpProblemError(web.HTTPConflict, problem)
 
@@ -396,15 +396,15 @@ class OpenStackApi(object):
             if not set(body.metadata.finalizers) <= set(entity.metadata.finalizers):
                 problem = HttpProblem(
                     detail="Finalizers can only be removed"
-                           " if a deletion is in progress.",
-                    title=HttpProblemTitle.UPDATE_ERROR
+                    " if a deletion is in progress.",
+                    title=HttpProblemTitle.UPDATE_ERROR,
                 )
                 raise HttpProblemError(web.HTTPConflict, problem)
 
         if body == entity:
             problem = HttpProblem(
                 detail="The body contained no update.",
-                title=HttpProblemTitle.UPDATE_ERROR
+                title=HttpProblemTitle.UPDATE_ERROR,
             )
             raise HttpProblemError(web.HTTPBadRequest, problem)
 

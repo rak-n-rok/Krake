@@ -82,6 +82,7 @@ Currently, there are three authorization implementations available:
  - Role-based access control / RBAC (:func:`rbac`)
 
 """
+
 from functools import wraps
 from typing import NamedTuple, Optional
 from aiohttp import web
@@ -174,7 +175,7 @@ def keystone_authentication(endpoint):
         if resp.status != 200:
             problem = HttpProblem(
                 detail=f"Invalid Keystone token (HTTP {resp.status} {resp.reason})",
-                title=HttpProblemTitle.INVALID_KEYSTONE_TOKEN
+                title=HttpProblemTitle.INVALID_KEYSTONE_TOKEN,
             )
             raise HttpProblemError(web.HTTPUnauthorized, problem)
 
@@ -214,7 +215,7 @@ def keycloak_authentication(endpoint, realm):
         if resp.status != 200:
             problem = HttpProblem(
                 detail=f"Invalid Keycloak token " f"(HTTP {resp.status} {resp.reason})",
-                title=HttpProblemTitle.INVALID_KEYCLOAK_TOKEN
+                title=HttpProblemTitle.INVALID_KEYCLOAK_TOKEN,
             )
             raise HttpProblemError(web.HTTPUnauthorized, problem)
 

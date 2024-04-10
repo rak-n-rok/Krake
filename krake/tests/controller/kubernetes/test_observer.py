@@ -1,7 +1,6 @@
 import asyncio
 import json
 import datetime
-import time
 from contextlib import suppress
 
 import pytest
@@ -28,7 +27,7 @@ from krake.data.kubernetes import (
     ApplicationState,
     ContainerHealth,
     ClusterState,
-    Cluster
+    Cluster,
 )
 from krake.controller.kubernetes.application import KubernetesApplicationController
 from krake.controller.kubernetes.hooks import (
@@ -2684,7 +2683,9 @@ async def test_create_kubernetes_cluster_observer_offline(
 async def test_create_kubernetes_cluster_observer_offline_non2xx_response(
     aiohttp_server, config, reason, db, loop
 ):
-    """Test the cluster status change when the cluster API responds with non 2xx HTTP code.
+    """
+    Test the cluster status change when the cluster API responds
+    with non 2xx HTTP code.
 
     A Kubernetes cluster API could respond with non 2xx HTTP code
     for any reason. If the cluster API responds with non 2xx

@@ -1,11 +1,11 @@
 # Krake Kubernetes Setup
 
-To set up Krake on a Proof of Concept (PoC) system, you will need a Kubernetes cluster to serve as a backend for the components. 
+To set up Krake on a Proof of Concept (PoC) system, you will need a Kubernetes cluster to serve as a backend for the components.
 For more detailed usage guidelines, explanations, and examples, please refer to the user documentation.
 
 ## System requirements
 
-This quickstart requires you to have the following software components installed on your workstation: 
+This quickstart requires you to have the following software components installed on your workstation:
 
 - Python > 3.8.x
 - kubectl
@@ -100,7 +100,7 @@ Using Krake CLI to execute demo test cases on your Kubernetes cluster:
 ``` shell
 for i in {1..3}; do
   echo
-  echo "Iteration: " $i 
+  echo "Iteration: " $i
   kubectl get pods
   sleep 4
   rok kube app create -f rak/functionals/echo-demo.yaml echo-demo

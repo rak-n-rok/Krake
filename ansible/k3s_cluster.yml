@@ -156,7 +156,7 @@
         cmd: ./k3s
         chdir: "{{ k3s_install_dir }}"
       when: k3s_version is not defined
-  
+
     - name: Change binaries ownership, group and permissions
       become: yes
       file:
@@ -265,5 +265,3 @@
         cluster_name: "{{ inventory_hostname }}"
         cluster_ip: "{{ public_ip|default(private_ip, true) }}"
         cluster_api_port: "{{ api_port }}"
-
-

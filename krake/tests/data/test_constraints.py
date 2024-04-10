@@ -12,7 +12,7 @@ from krake.data.constraints import (
     LesserThanMetricConstraint,
     LesserThanOrEqualMetricConstraint,
     GreaterThanMetricConstraint,
-    GreaterThanOrEqualMetricConstraint
+    GreaterThanOrEqualMetricConstraint,
 )
 from krake.data.kubernetes import ClusterConstraints
 from krake.data.core import MetricRef
@@ -410,14 +410,18 @@ def test_metric_constraint_class_methods():
     mc_lt_five = MetricConstraint.parse("load < 5")
     assert repr(mc_lt_five) == "<LesserThanMetricConstraint 'load lesser than 5'>"
     mc_lte_five = MetricConstraint.parse("load <= 5")
-    assert repr(mc_lte_five) == \
-           "<LesserThanOrEqualMetricConstraint 'load lesser than or equal 5'>"
+    assert (
+        repr(mc_lte_five)
+        == "<LesserThanOrEqualMetricConstraint 'load lesser than or equal 5'>"
+    )
 
     mc_gt_five = MetricConstraint.parse("load > 5")
     assert repr(mc_gt_five) == "<GreaterThanMetricConstraint 'load greater than 5'>"
     mc_gte_five = MetricConstraint.parse("load >= 5")
-    assert repr(mc_gte_five) == \
-           "<GreaterThanOrEqualMetricConstraint 'load greater than or equal 5'>"
+    assert (
+        repr(mc_gte_five)
+        == "<GreaterThanOrEqualMetricConstraint 'load greater than or equal 5'>"
+    )
 
 
 def test_metric_constraint_deserialization():
@@ -427,9 +431,7 @@ def test_metric_constraint_deserialization():
     serialized_constraints = {
         "labels": [],
         "custom_resources": [],
-        "metrics": [
-            "load is over 9000"
-        ]
+        "metrics": ["load is over 9000"],
     }
     with pytest.raises(ValidationError, match="Invalid metric constraint"):
         ClusterConstraints.deserialize(serialized_constraints)
@@ -475,15 +477,8 @@ def test_parse_equal_metric_constraint(expression):
     assert constraint.value == "5"
 
 
-@pytest.mark.parametrize(
-    "expression",
-    [
-        "load != 5",
-        "load!=5",
-        "load is not 5"
-    ]
-)
-def test_parse_notequal_constraint(expression):
+@pytest.mark.parametrize("expression", ["load != 5", "load!=5", "load is not 5"])
+def test_parse_nonequal_constraint(expression):
     constraint = MetricConstraint.parse(expression)
 
     assert constraint.metric == "load"
