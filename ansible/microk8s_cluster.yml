@@ -92,7 +92,7 @@
       group:
         name: wheel
         state: present
-      
+
     - name: Allow members of 'wheel' group to have passwordless sudo
       lineinfile:
         dest: /etc/sudoers
@@ -191,7 +191,7 @@
           become: true
           ansible.builtin.shell: "microk8s config"
           register: microk8s_config_result
-  
+
         - name: Parse microk8s config yaml into variable
           set_fact:
             microk8s_config_file: "{{ microk8s_config_result.stdout | from_yaml }}"
@@ -214,12 +214,12 @@
             state: directory
 
         - name: Generate microk8s ca.cert
-          copy: 
+          copy:
             content: "{{ cluster_authority_data }}"
             dest: .microk8s/ca.crt
 
         - name: Generate microk8s token
-          copy: 
+          copy:
             content: "{{ microk8s_client_token }}"
             dest: .microk8s/token
 
@@ -251,7 +251,7 @@
     - name: Generate kube config template file
       delegate_to: localhost
       template:
-        variable_start_string: "&%" 
+        variable_start_string: "&%"
         variable_end_string: "%&"
         src: files/krake/kube_microk8s_config.j2
         dest: "cluster_certs/{{ inventory_hostname }}/mk8s_config.j2"

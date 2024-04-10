@@ -78,6 +78,9 @@ ansible = [
     "python-openstackclient",
 ]
 api_generator = [
-    "black==21.11b1",
+    "black==24.2.0",
     "jinja2==3.*",
 ]
+
+[tool.black]
+line-length = 88

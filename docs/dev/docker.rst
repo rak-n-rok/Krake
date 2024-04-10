@@ -7,7 +7,7 @@ a separation layer for Krake, which helps locate problems and separate component
 It also enables the usage of `docker-compose`, which enable rapid deployment and teardown
 of a complete Krake infrastructure on the spot.
 The `docker` directory is used to host a bundle to create various docker infrastructures.
-The Docker infrastructure bundle can be found inside the Krake project directory, and is organized in separate 
+The Docker infrastructure bundle can be found inside the Krake project directory, and is organized in separate
 subdirectories containing several templates, which have to be configured before use.
 
 Currently, the following infrastructure bundles are supported besides Krake:
@@ -19,23 +19,23 @@ Currently, the following infrastructure bundles are supported besides Krake:
 Use an online Docker image
 ==========================
 
-Krake already provides prebuilt docker images, which can be downloaded in order to run 
+Krake already provides prebuilt docker images, which can be downloaded in order to run
 a Krake instance or if it is not necessary to built a local image.
 These docker images can be found in the following registries:
 
 * registry.gitlab.com
 
-Images are named `krake:<TAG>`, whereas `<TAG>` can be either `latest` or some version number, which should correspond to a version tag inside the Gitlab repository. 
+Images are named `krake:<TAG>`, whereas `<TAG>` can be either `latest` or some version number, which should correspond to a version tag inside the Gitlab repository.
 
 Create a local Docker image
 ===========================
 
-If there is either no Krake docker image on the local machine, or if changes were made to the code base, 
+If there is either no Krake docker image on the local machine, or if changes were made to the code base,
 it would be necessary to create a new docker image.
 The necessary `Dockerfile` for this task can be found in the krake subdirectory of the docker directory.
 
-The Dockerfile is defined as a multi-stage build, where the first stage builds the Krake project 
-and all its dependencies into the virtualenv. After that, the second stage copies the Krake build 
+The Dockerfile is defined as a multi-stage build, where the first stage builds the Krake project
+and all its dependencies into the virtualenv. After that, the second stage copies the Krake build
 into the final docker image.
 The image can be created with
 
@@ -43,7 +43,7 @@ The image can be created with
 
      docker build --tag krake:latest --file docker/krake/Dockerfile .
 
-The Dockerfile doesn't set the default command and parameters, that Krake components need to run. 
+The Dockerfile doesn't set the default command and parameters, that Krake components need to run.
 These parameters should be set in command line during the start of the Docker container,
 or via the docker-compose ``command`` directive.
 An example for the Krake API can be found below
@@ -95,7 +95,7 @@ You can generate the minimal recommended configuration as follows:
     krake/scripts/krake_generate_config --dst docker docker/docker.yaml.template --api-host krake-api --etcd-host krake-db
 
 The above command generates the `docker/docker.yaml` configuration file.
-By applying it with the following command, the docker bundle for the target infrastructure will 
+By applying it with the following command, the docker bundle for the target infrastructure will
 be generated:
 
 .. code:: bash
@@ -117,7 +117,7 @@ In order to launch the previously created infrastructure bundles, the following 
 Krake
 -----
 
-The provided Krake infrastructure bundle launches the Krake DB and Krake API as well as all actively 
+The provided Krake infrastructure bundle launches the Krake DB and Krake API as well as all actively
 maintained controllers. If you want to use any other controllers or don't want to actively use specific ones,
 it is necessary to edit to previously created `docker-compose.yaml`.
 
@@ -170,8 +170,8 @@ In order to test the new deployment, the Krake API should be tested.
 Prometheus
 ----------
 
-The Prometheus server is deployed in a minimal configuration suitable mostly for end-to-end testing 
-with the Krake infrastructure. The simple metrics exporter server exposes example heat demand metrics 
+The Prometheus server is deployed in a minimal configuration suitable mostly for end-to-end testing
+with the Krake infrastructure. The simple metrics exporter server exposes example heat demand metrics
 in a minimal configuration, which can easily be incorporated into the Krake infrastructure.
 
 The Metrics exporter generates random heat demand metrics for multiple zones;
@@ -187,7 +187,7 @@ The Prometheus infrastructure can be launched as follows:
 
     docker-compose --file docker/prometheus/docker-compose.yaml up --detach
 
-In order to test the new Prometheus server, a random provided value can be 
+In order to test the new Prometheus server, a random provided value can be
 queried. In this example, we go with `heat_demand_zone_3`:
 
 .. code:: bash
@@ -199,7 +199,7 @@ queried. In this example, we go with `heat_demand_zone_3`:
 Infrastructure Manager
 ======================
 
-The Infrastructure Manager server is deployed in a minimal configuration suitable mostly for 
+The Infrastructure Manager server is deployed in a minimal configuration suitable mostly for
 end-to-end testing with the Krake infrastructure.
 
 Launch the Infrastructure Manager server

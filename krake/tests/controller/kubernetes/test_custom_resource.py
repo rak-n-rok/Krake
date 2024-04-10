@@ -8,9 +8,7 @@ import pytz
 import yaml
 
 from krake.api.app import create_app
-from krake.controller.kubernetes.client import InvalidCustomResourceDefinitionError
 from krake.controller.kubernetes.application.application import ResourceDelta
-from krake.data.core import resource_ref
 from krake.data.core import resource_ref, ReasonCode
 from krake.data.kubernetes import Application, ApplicationState
 from krake.controller.kubernetes.application import KubernetesApplicationController
@@ -138,7 +136,9 @@ async def test_custom_resource_cached_property_called_once(
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = KubernetesApplicationController(server_endpoint(api_server), worker_count=0)
+        controller = KubernetesApplicationController(
+            server_endpoint(api_server), worker_count=0
+        )
         await controller.prepare(client)
 
         # The resource is received by the controller, which starts the reconciliation
@@ -304,7 +304,9 @@ async def test_app_custom_resource_creation(aiohttp_server, config, db, loop):
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = KubernetesApplicationController(server_endpoint(api_server), worker_count=0)
+        controller = KubernetesApplicationController(
+            server_endpoint(api_server), worker_count=0
+        )
         await controller.prepare(client)
 
         # The resource is received by the controller, which starts the reconciliation
@@ -413,7 +415,9 @@ async def test_app_custom_resource_update(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(
+            server_endpoint(server), worker_count=0
+        )
         await controller.prepare(client)
 
         # The resource is received by the controller, which starts the reconciliation
@@ -525,7 +529,9 @@ async def test_app_custom_resource_migration(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(
+            server_endpoint(server), worker_count=0
+        )
         await controller.prepare(client)
 
         # The resource is received by the controller, which starts the reconciliation
@@ -593,7 +599,9 @@ async def test_app_custom_resource_deletion(aiohttp_server, config, db, loop):
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(
+            server_endpoint(server), worker_count=0
+        )
         await controller.prepare(client)
 
         await controller.resource_received(app, start_observer=False)
@@ -652,7 +660,9 @@ async def test_app_custom_resource_creation_non_ns(aiohttp_server, config, db, l
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = KubernetesApplicationController(server_endpoint(api_server), worker_count=0)
+        controller = KubernetesApplicationController(
+            server_endpoint(api_server), worker_count=0
+        )
         await controller.prepare(client)
 
         # The resource is received by the controller, which starts the reconciliation
@@ -761,7 +771,9 @@ async def test_app_custom_resource_update_non_ns(aiohttp_server, config, db, loo
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(
+            server_endpoint(server), worker_count=0
+        )
         await controller.prepare(client)
 
         # The resource is received by the controller, which starts the reconciliation
@@ -873,7 +885,9 @@ async def test_app_custom_resource_migration_non_ns(aiohttp_server, config, db, 
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(
+            server_endpoint(server), worker_count=0
+        )
         await controller.prepare(client)
 
         # The resource is received by the controller, which starts the reconciliation
@@ -941,7 +955,9 @@ async def test_app_custom_resource_deletion_non_ns(aiohttp_server, config, db, l
     server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        controller = KubernetesApplicationController(server_endpoint(server), worker_count=0)
+        controller = KubernetesApplicationController(
+            server_endpoint(server), worker_count=0
+        )
         await controller.prepare(client)
 
         await controller.resource_received(app, start_observer=False)
@@ -955,8 +971,9 @@ async def test_app_custom_resource_deletion_non_ns(aiohttp_server, config, db, l
 async def test_app_invalid_custom_resource_error_handling(
     aiohttp_server, config, db, loop
 ):
-    """Test the behavior of the Controller in case of forbidden (HTTP 403) custom resource
-    apis in given cluster
+    """
+    Test the behavior of the Controller in case of forbidden (HTTP 403)
+    custom resource apis in given cluster
     """
     routes = web.RouteTableDef()
 
@@ -988,7 +1005,9 @@ async def test_app_invalid_custom_resource_error_handling(
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = KubernetesApplicationController(server_endpoint(api_server), worker_count=0)
+        controller = KubernetesApplicationController(
+            server_endpoint(api_server), worker_count=0
+        )
         await controller.prepare(client)
 
         await controller.queue.put(app.metadata.uid, app)
@@ -1044,7 +1063,9 @@ async def test_app_unknown_custom_resource_error_handling(
     api_server = await aiohttp_server(create_app(config))
 
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        controller = KubernetesApplicationController(server_endpoint(api_server), worker_count=0)
+        controller = KubernetesApplicationController(
+            server_endpoint(api_server), worker_count=0
+        )
         await controller.prepare(client)
 
         await controller.queue.put(app.metadata.uid, app)

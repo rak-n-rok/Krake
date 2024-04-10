@@ -4,10 +4,10 @@
 
 - name: Show resources currently present in krake
   block:
-    
+
     - name: Get apps
       command: "rok kube app list -o json"
-      register: rok_response        
+      register: rok_response
     - name: Exctract app names from rok response
       ansible.builtin.set_fact:
         app_list: "{{ (rok_response.stdout | from_json ) }}"
@@ -15,10 +15,10 @@
       command: "rok kube app delete {{ item.metadata.name }}"
       with_items: "{{ app_list }}"
 
-    
+
     - name: Get clusters
       command: "rok kube cluster list -o json"
-      register: rok_response        
+      register: rok_response
     - name: Exctract cluster names from rok response
       ansible.builtin.set_fact:
         cluster_list: "{{ (rok_response.stdout | from_json ) }}"
@@ -29,7 +29,7 @@
 
     - name: Get GlobalMetrics
       command: "rok core gm list -o json"
-      register: rok_response        
+      register: rok_response
     - name: Exctract gm names from rok response
       ansible.builtin.set_fact:
         gm_list: "{{ (rok_response.stdout | from_json ) }}"
@@ -40,7 +40,7 @@
 
     - name: Get GlobalMetricsProviders
       command: "rok core gmp list -o json"
-      register: rok_response        
+      register: rok_response
     - name: Exctract gmp names from rok response
       ansible.builtin.set_fact:
         gmp_list: "{{ (rok_response.stdout | from_json ) }}"
@@ -51,7 +51,7 @@
 
     - name: Get Metrics
       command: "rok core metric list -o json"
-      register: rok_response        
+      register: rok_response
     - name: Exctract metric namesfrom rok response
       ansible.builtin.set_fact:
         m_list: "{{ (rok_response.stdout | from_json ) }}"
@@ -62,7 +62,7 @@
 
     - name: Get MetricProviders
       command: "rok core mp list -o json"
-      register: rok_response        
+      register: rok_response
     - name: Exctract mp infos from rok response
       ansible.builtin.set_fact:
         mp_list: "{{ (rok_response.stdout | from_json ) }}"

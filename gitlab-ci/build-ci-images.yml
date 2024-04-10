@@ -10,3 +10,27 @@ build-ci-images:
       --context "${CI_PROJECT_DIR}"
       --dockerfile "./gitlab-ci/Dockerfile_ansible_runner"
       --destination "registry.gitlab.com/rak-n-rok/krake/ansible_image:latest"
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --build-arg PYTHON_VER=3.8
+      --dockerfile "./gitlab-ci/docker/test-image/Dockerfile"
+      --destination "registry.gitlab.com/rak-n-rok/krake/test_image:3.8"
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --build-arg PYTHON_VER=3.9
+      --dockerfile "./gitlab-ci/docker/test-image/Dockerfile"
+      --destination "registry.gitlab.com/rak-n-rok/krake/test_image:3.9"
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --build-arg PYTHON_VER=3.10
+      --dockerfile "./gitlab-ci/docker/test-image/Dockerfile"
+      --destination "registry.gitlab.com/rak-n-rok/krake/test_image:3.10"
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --build-arg PYTHON_VER=3.11
+      --dockerfile "./gitlab-ci/docker/test-image/Dockerfile"
+      --destination "registry.gitlab.com/rak-n-rok/krake/test_image:3.11"
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "./gitlab-ci/Dockerfile_pre_commit"
+      --destination "registry.gitlab.com/rak-n-rok/krake/pre_commit_image:latest"

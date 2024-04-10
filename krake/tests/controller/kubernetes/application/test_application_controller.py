@@ -157,8 +157,8 @@ async def test_main_help(loop):
 
 @pytest.mark.slow
 def test_main(kube_app_config, log_to_file_config):
-    """Test the main function of the Kubernetes Application Controller, and verify that it starts,
-    display the right output and stops without issue.
+    """Test the main function of the Kubernetes Application Controller,
+    and verify that it starts, display the right output and stops without issue.
     """
     log_config, file_path = log_to_file_config()
 
@@ -3433,9 +3433,9 @@ async def test_resource_delta_list_in_last_observed_manifest(loop):
     app.status.mangled_observer_schema[1]["spec"]["ports"][-1][
         "observer_schema_list_min_length"
     ] = 1
-    app.status.last_observed_manifest[1]["spec"][
-        "ports"
-    ] = app.status.last_observed_manifest[1]["spec"]["ports"][-1:]
+    app.status.last_observed_manifest[1]["spec"]["ports"] = (
+        app.status.last_observed_manifest[1]["spec"]["ports"][-1:]
+    )
     app.status.last_observed_manifest[1]["spec"]["ports"][-1][
         "observer_schema_list_current_length"
     ] = 0

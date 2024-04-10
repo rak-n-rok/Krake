@@ -324,7 +324,7 @@ if __name__ == "__main__":
         parser, "--api-port", "API endpoint port for the controllers.", default=8080
     )
     add_option(
-        parser, "--etcd-version", "The etcd database version.", default="v3.3.13"
+        parser, "--etcd-version", "The etcd database version.", default="v3.5.12"
     )
     add_option(
         parser, "--etcd-host", "Host for the etcd endpoint.", default="127.0.0.1"
@@ -382,10 +382,7 @@ if __name__ == "__main__":
     add_option(
         parser,
         "--cluster_creation_tosca_file",
-        (
-            '"Path to the tosca file used for automatic'
-            ' cluster creation on request"'
-        ),
+        ('"Path to the tosca file used for automatic' ' cluster creation on request"'),
         default="examples/automation/cluster.yaml",
     )
     add_option(
@@ -497,10 +494,7 @@ if __name__ == "__main__":
     add_option(
         parser,
         "--logging-level",
-        (
-            "To set the logging level of all controllers"
-            " The default level is 'INFO'"
-        ),
+        ("To set the logging level of all controllers" " The default level is 'INFO'"),
         default="INFO",
     )
     add_option(
@@ -509,7 +503,6 @@ if __name__ == "__main__":
         (
             "To set the handler to use for logging."
             " Options are 'console', 'file' and 'timed_rotating'"
-
         ),
         default="console",
     )

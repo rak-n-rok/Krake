@@ -92,8 +92,8 @@ The sign-off is a simple line at the end of the explanation for the patch. The
 text of the [DCO](DCO.md) is fairly simple. It is also available on
 developercertificate.org.
 
-If you are willing to agree to these terms, you just add a line to every git
-commit message:
+Krake requires to agree to these terms, so it is required to add this line
+to every git commit message:
 
 `Signed-off-by: Joe Smith <joe.smith@email.com>`
 

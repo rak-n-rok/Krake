@@ -113,7 +113,7 @@ updated (“bumped”). This can be triggered by passing an extra argument:
 .. note::
 
    The above ``tox`` call requires the respective ``pythonX.Y``
-   interpreters to be installed, for example from the `deadsnakes 
+   interpreters to be installed, for example from the `deadsnakes
    PPA`_ for Ubuntu or via pyenv_.
 
 .. note::
