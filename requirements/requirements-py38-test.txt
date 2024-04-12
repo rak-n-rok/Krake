@@ -140,7 +140,7 @@ greenlet==3.0.3
     #   eventlet
     #   oslo-service
     #   sqlalchemy
-idna==3.6
+idna==3.7
     # via
     #   etcd3-py
     #   requests
