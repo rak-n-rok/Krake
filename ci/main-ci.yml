@@ -248,6 +248,12 @@ test-build-docs:
     - cd ./docs
     - pip install -r requirements.txt
     - make html
+  artifacts:
+    when: always  # always expose artifacts for review
+    expire_in: 3d
+    expose_as: 'rendered HTML documentation'
+    paths:
+      - ./docs/_build/html/
 
 # Combine code coverage reports from previous tox runs for all different
 # Python environments. Report code coverage for Krake Python package and exit
