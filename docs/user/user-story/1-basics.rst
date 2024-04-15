@@ -21,7 +21,7 @@ Integrate shell completion
 ==========================
 
 Shell completion is a feature that supports users in receiving the desired
-command faster, with less errors and that aids discovery of arguments.
+command faster and with less errors while aiding discovery of arguments.
 ``rok`` outputs completion scripts for bash, zsh or tcsh.
 
 - The following commands generate and activate the bash shell completion:
