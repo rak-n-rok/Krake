@@ -17,6 +17,20 @@ Introduction to the ``rok`` CLI
     $ rok kube cluster --help
     $ rok infrastructure --help  # Similar to "rok infra --help"
 
+Integrate shell completion
+==========================
+
+Shell completion is a feature that supports users in receiving the desired
+command faster and with less errors while aiding discovery of arguments.
+``rok`` outputs completion scripts for bash, zsh or tcsh.
+
+- The following commands generate and activate the bash shell completion:
+
+.. prompt:: bash $ auto
+
+    $ rok --print-completion bash > rok-completion.bash
+    $ source rok-completion.bash
+
 Register a cluster
 ==================
 

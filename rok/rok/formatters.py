@@ -81,7 +81,7 @@ def printer(file=sys.stdout, **formatters):
 
     def decorator(func):
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args, print_completion=None, **kwargs):
             format_type = kwargs.pop("output", "yaml")
 
             try:
