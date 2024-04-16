@@ -168,7 +168,7 @@ jsonschema==4.21.1
     # via keystone
 jsonschema-specifications==2023.12.1
     # via jsonschema
-keystone==20.0.1
+keystone==24.0.0
     # via krake (krake/pyproject.toml)
 keystoneauth1==4.6.0
     # via
