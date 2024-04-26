@@ -1,6 +1,0 @@
-{
-  "enabledManagers": [
-    "pip_setup",
-    "dockerfile"
-  ]
-}
