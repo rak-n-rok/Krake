@@ -88,10 +88,13 @@ For direct definition use the following (minimal) data type:
 The ``spec`` of ``tosca.nodes.indigo.KubernetesObject`` custom type should contain
 Kubernetes manifest as a string. It is possible to applied subset of supported `TOSCA functions`_
 like:
+
   - get_property
   - get_input
+
 The ``spec`` of the ``tosca.nodes.indigo.KubernetesObject`` custom type should contain a Kubernetes
 manifest as a string. It is possible to apply a subset of supported `TOSCA functions`_ like:
+
   - get_property
   - get_input
   - concat
@@ -155,7 +158,7 @@ which should be used by a TOSCA orchestrator as an entrypoint for parsing the co
 
 .. note::
 
-  The Krake API can process CSAR files **only**, if they're defined as **URL**s.
+  The Krake API can process CSAR files **only**, if they're defined as an **URL**.
   It means, that CSAR should be created and then exposed in some remote location.
   Then, the underlying tosca-parser_ library is able to (synchronously)
   download the CSAR archive from the defined URL and afterwards parse and validate it.
@@ -179,7 +182,7 @@ which should be used by a TOSCA orchestrator as an entrypoint for parsing the co
   python3 -m http.server 8000
 
 
-TOSCA/CSAR Workflow
+TOSCA Workflow
 ==============
 
 The TOSCA template or CSAR archive should be composed on the client side. Then the client sends the request
@@ -244,7 +247,7 @@ If you are interested in CSAR, use the pre-defined ``TOSCA.meta`` file and creat
 
 
 Rok
-~~~~
+~~~
 
 A TOSCA template YAML file should be applied the same way as a Kubernetes manifest file
 using the rok CLI, see :ref:`user/rok-documentation:Rok documentation`.

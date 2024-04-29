@@ -5,9 +5,8 @@ Versioning
 In this chapter, the versioning schema for the Krake project will be explained.
 Krake mainly tries to follow the Semantic Versioning in order to maintain a consistent scheme.
 
--------------
 Single Source
--------------
+=============
 
 In order to have consistent versioning across all parts of the Krake project, a single source for
 the version was introduced. This version will be retrieved by all modules, that need to access this
@@ -17,9 +16,8 @@ The version can be found in the ``__about__.py`` inside of the krake module, whi
 other constant, global variables. This version can then be loaded into other (sub)modules by
 importing this file.
 
------------------------
 Version update workflow
------------------------
+=======================
 
 If a new version update shall be pushed out, should be decided by a majority of the active Krake team, and
 not only a singular person. Whether to release a new version update should be decided by a majority of the
