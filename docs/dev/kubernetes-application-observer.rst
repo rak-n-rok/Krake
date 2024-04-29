@@ -7,8 +7,6 @@ done on each resource whose status deviates from its specifications. This can ha
 a resource has been modified manually, attacked, or if any anomaly occurred on the
 actual resource that the Krake resource describes.
 
-
-
 Reconciliation
 ==============
 
@@ -82,17 +80,14 @@ The workflow is as follows:
    reconciliation, by applying the desired state on the actual resource;
 #. The workflow starts again from step **3**.
 
-
-
 .. warning::
 
     For the moment, Krake only implements reconciliation loop for the Krake
     ``Application`` resources of the ``Kubernetes`` API.
 
 
-
-Kubernetes Application Observer
-===============================
+KubernetesApplicationObserver
+=============================
 
 The Krake applications of the ``Kubernetes`` API have a dedicated
 KubernetesApplicationObserver. For each application which has some actual resources on a

@@ -51,8 +51,6 @@ The workflow is as follows:
 #. The Observer notifies the Krake API, by updating the ``status`` field of the cluster;
 #. The workflow starts again from step **3**.
 
-
-
 States
 ======
 

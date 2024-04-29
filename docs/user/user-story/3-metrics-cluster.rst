@@ -1,5 +1,5 @@
 =======================================
-Scheduling an Application Using Metrics
+Scheduling an Application using Metrics
 =======================================
 
 Goal: Explore the metrics mechanisms and schedule an application based on cluster metrics.
@@ -30,8 +30,8 @@ the computed score is then used in the ``Application`` scheduling process.
 
 ``Metrics`` and ``GlobalMetrics`` are provided with a minimum and maximum value, which define the
 range in which the final values will be. Alternatively, specific allowed values
-(either via command line paramater, e.g. ``--allowed-values 1 2 3`` or as a list in a bootstrap file,
-see :ref:`support/prometheus_metrics.yaml``) can be set.
+(either via command line paramater, e.g. ``--allowed-values 1 2 3`` or as a list in a bootstrap file)
+can be set.
 
 For Krake to fetch the current value of a metric, a user needs to define where and how
 it can be requested. ``GlobalMetricsProvider`` resources can be created for this
