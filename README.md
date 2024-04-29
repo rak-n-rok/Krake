@@ -98,9 +98,9 @@ then be modified at will.
 
 ```bash
 # First, start the generate script to have initial config files
-krake/scripts/krake_generate_config config/*.template rok.yaml.template
+krake/scripts/krake_generate_config templates/config/*.template templates/config/rok.yaml.template
 
-krake/scripts/krake_generate_config --allow-anonymous --static-authentication-enabled config/api.yaml.template
+krake/scripts/krake_generate_config --allow-anonymous --static-authentication-enabled templates/config/api.yaml.template
 
 # You can then modify each file at your preference.
 # afterwards create that folder which is expected:
@@ -111,7 +111,7 @@ sudo cp *.yaml /etc/krake
 
 # Optional: you can use the rok configuration template as you prefer. It can also be generated.
 # Otherwise rok will use the default configuration
-krake/scripts/krake_generate_config rok.yaml.template
+krake/scripts/krake_generate_config templates/config/rok.yaml.template
 ```
 
 The `--allow-anonymous` and `--static-authentication-enabled` options set the API with
@@ -129,7 +129,7 @@ starting Krake:
 # NOTE: Make sure `etcd` is in your $PATH
 support/etcd
 # Create roles for the RBAC authorization mode.
-krake_bootstrap_db bootstrapping/base_roles.yaml
+krake_bootstrap_db templates/bootstrapping/base_roles.yaml
 
 # Create metrics and metrics providers, for development purposes.
 krake_bootstrap_db support/prometheus_metrics.yaml support/static_metrics.yaml
@@ -304,7 +304,7 @@ $ rok kube cluster list
 +-----------+--------------+--------+---------------------+---------------------+---------+--------+
 
 # Run an application on Krake
-$ rok kube app create -f ../examples/templates/k8s/echo-demo.yaml echo-demo
+$ rok kube app create -f ../examples/templates/applications/echo-demo.yaml echo-demo
 +-----------------------+---------------------+
 | name                  | echo-demo           |
 | namespace             | system:admin        |

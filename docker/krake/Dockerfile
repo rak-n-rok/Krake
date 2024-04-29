@@ -37,7 +37,7 @@ RUN pip install --upgrade pip setuptools
 
 # Generate the default configuration files
 COPY ./krake/scripts/krake_generate_config /opt/krake/bin
-COPY ./config /tmp/config
+COPY ./templates/config /tmp/config
 RUN mkdir -p /etc/krake && krake_generate_config --dst /etc/krake /tmp/config/*.template
 
 # Install the pinned requirements, which must match the python version of the

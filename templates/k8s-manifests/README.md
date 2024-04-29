@@ -25,10 +25,10 @@ cd krake
 Prepare your Kubernetes environment based on some manifests:
 
 ``` shell
-kubectl apply -f manifests/namespace.yaml # Create namespace in k8s
-kubectl apply -f manifests/database/      # Create database components in k8s
-kubectl apply -f manifests/backend/       # Create backend components in k8s
-kubectl apply -f manifests/frontend/      # Create frontend components in k8s
+kubectl apply -f examples/manifests/namespace.yaml # Create namespace in k8s
+kubectl apply -f examples/manifests/database/      # Create database components in k8s
+kubectl apply -f examples/manifests/backend/       # Create backend components in k8s
+kubectl apply -f examples/manifests/frontend/      # Create frontend components in k8s
 ```
 
 ### Setup
@@ -59,14 +59,14 @@ Bootstrapping and configuring Krake amd the database in Kubernetes:
 
 ./.env/bin/krake_bootstrap_db --db-host=172.30.154.217 --db-port=30071 bootstrapping/base_roles.yaml
 
-krake_generate_config --allow-anonymous --static-authentication-enabled config/api.yaml.template
+krake_generate_config --allow-anonymous --static-authentication-enabled templates/config/api.yaml.template
 
 # edit api.yaml
 # etcd:
   # host: 172.30.154.217
   # port: 30071
 
-krake_generate_config rok.yaml.template
+krake_generate_config templates/config/rok.yaml.template
 
 # using "kubectl get nodes -o jsonpath='{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}'"
 # to find a valid endpoint and replace db-host
@@ -103,7 +103,7 @@ for i in {1..3}; do
   echo "Iteration: " $i
   kubectl get pods
   sleep 4
-  rok kube app create -f examples/templates/k8s/echo-demo.yaml echo-demo
+  rok kube app create -f templates/applications/k8s/echo-demo.yaml echo-demo
   sleep 2
   rok kube app list
   rok kube cluster list
@@ -124,8 +124,8 @@ kubectl get pods
 To remove the Krake components from Kubernetes, the following steps must be completed:
 
 ``` shell
-kubectl delete -f manifests/frontend/        # Delete the frontend components
-kubectl delete -f manifests/backend/         # Delete the backend components
-kubectl delete -f manifests/database/        # Delete the database components
-kubectl delete -f manifests/namespace.yaml   # Delete the namespace
+kubectl delete -f examples/manifests/frontend/        # Delete the frontend components
+kubectl delete -f examples/manifests/backend/         # Delete the backend components
+kubectl delete -f examples/manifests/database/        # Delete the database components
+kubectl delete -f examples/manifests/namespace.yaml   # Delete the namespace
 ```

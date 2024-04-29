@@ -8,29 +8,29 @@ build-ci-images:
     - echo "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(echo -n ${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD} | base64)\"}}}" > /kaniko/.docker/config.json
     - /kaniko/executor
       --context "${CI_PROJECT_DIR}"
-      --dockerfile "./gitlab-ci/Dockerfile_ansible_runner"
+      --dockerfile "./ci/docker/ansible_runner/Dockerfile"
       --destination "registry.gitlab.com/rak-n-rok/krake/ansible_image:latest"
     - /kaniko/executor
       --context "${CI_PROJECT_DIR}"
       --build-arg PYTHON_VER=3.8
-      --dockerfile "./gitlab-ci/docker/test-image/Dockerfile"
+      --dockerfile "./ci/docker/test_image/Dockerfile"
       --destination "registry.gitlab.com/rak-n-rok/krake/test_image:3.8"
     - /kaniko/executor
       --context "${CI_PROJECT_DIR}"
       --build-arg PYTHON_VER=3.9
-      --dockerfile "./gitlab-ci/docker/test-image/Dockerfile"
+      --dockerfile "./ci/docker/test_image/Dockerfile"
       --destination "registry.gitlab.com/rak-n-rok/krake/test_image:3.9"
     - /kaniko/executor
       --context "${CI_PROJECT_DIR}"
       --build-arg PYTHON_VER=3.10
-      --dockerfile "./gitlab-ci/docker/test-image/Dockerfile"
+      --dockerfile "./ci/docker/test_image/Dockerfile"
       --destination "registry.gitlab.com/rak-n-rok/krake/test_image:3.10"
     - /kaniko/executor
       --context "${CI_PROJECT_DIR}"
       --build-arg PYTHON_VER=3.11
-      --dockerfile "./gitlab-ci/docker/test-image/Dockerfile"
+      --dockerfile "./ci/docker/test_image/Dockerfile"
       --destination "registry.gitlab.com/rak-n-rok/krake/test_image:3.11"
     - /kaniko/executor
       --context "${CI_PROJECT_DIR}"
-      --dockerfile "./gitlab-ci/Dockerfile_pre_commit"
+      --dockerfile "./ci/docker/pre_commit/Dockerfile"
       --destination "registry.gitlab.com/rak-n-rok/krake/pre_commit_image:latest"

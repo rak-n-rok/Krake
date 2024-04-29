@@ -191,9 +191,9 @@ lint-kubeconform:
     - changes:
         compare_to: 'refs/heads/master'
         paths:
-          - examples/**/k8s/*.{yaml,yml}
+          - templates/**/k8s/*.{yaml,yml}
   script:
-  - find examples -wholename "*/k8s/*.yaml" -o -wholename "*/k8s/*.yml" | xargs -i /kubeconform -summary -output json {}
+  - find templates -wholename "*/k8s/*.yaml" -o -wholename "*/k8s/*.yml" | xargs -i /kubeconform -summary -output json {}
 
 lint-tosca-templates:
   stage: lint
@@ -205,7 +205,7 @@ lint-tosca-templates:
           - examples/**/tosca/*.{yaml,yml}
   script:
     - pip install tosca-parser==${TOSCA_PARSER_VER}
-    - find examples -wholename "*/tosca/*.yaml" -o -wholename "*/tosca/*.yml" | xargs -i tosca-parser --template-file {}
+    - find templates -wholename "*/tosca/*.yaml" -o -wholename "*/tosca/*.yml" | xargs -i tosca-parser --template-file {}
 
 flake8-krake:
   stage: lint
@@ -216,7 +216,7 @@ flake8-krake:
     - merge_requests
     - schedules
   script:
-    - pip install -r gitlab-ci/requirements_lint.txt
+    - pip install -r ci/requirements_lint.txt
     - flake8 krake/krake
 
 
@@ -229,7 +229,7 @@ flake8-rok:
     - merge_requests
     - schedules
   script:
-    - pip install -r gitlab-ci/requirements_lint.txt
+    - pip install -r ci/requirements_lint.txt
     - flake8 rok/rok
 
 
@@ -254,7 +254,7 @@ coverage-krake:
   stage: e2e
   image: python:3.10
   script:
-    - pip install -r gitlab-ci/requirements_coverage.txt
+    - pip install -r ci/requirements_coverage.txt
     - coverage combine krake/.coverage.*
     - coverage report --fail-under 85
     - coverage html
@@ -273,7 +273,7 @@ coverage-krake-visualization:
   stage: e2e
   image: python:3.10
   script:
-    - pip install -r gitlab-ci/requirements_coverage.txt
+    - pip install -r ci/requirements_coverage.txt
     - coverage combine krake/.coverage.*
     - coverage xml
   coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'

@@ -57,7 +57,7 @@ Spawn the demo application
 
 .. prompt:: bash $ auto
 
-    $ rok kube app create -f git/krake/examples/templates/k8s/echo-demo.yaml echo-demo
+    $ rok kube app create -f git/krake/templates/applications/k8s/echo-demo.yaml echo-demo
     $ rok kube app get echo-demo  # See "running_on"
 
 Cleanup

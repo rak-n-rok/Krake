@@ -38,7 +38,7 @@ dependencies = [
     "semantic-version>=2.10",
     "tosca-parser==2.6.*",
     "webargs==8.*",
-    "yarl==1.8.*",
+    "yarl==1.9.*",
 ]
 
 [tool.setuptools.packages.find]
@@ -76,6 +76,7 @@ ansible = [
     "ansible>=2.9",
     "openstacksdk",
     "python-openstackclient",
+    "python-heatclient"
 ]
 api_generator = [
     "black==24.2.0",

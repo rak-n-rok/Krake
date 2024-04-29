@@ -99,9 +99,11 @@
 
     - name: Add GPG key for kubectl
       ansible.builtin.shell: curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+      ignore_errors: true
 
     - name: Add APT repository for kubectl
       ansible.builtin.shell: echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list
+      ignore_errors: true
 
     - name: Update apt packages
       apt:
@@ -232,15 +234,12 @@
             delete: yes
             use_ssh_args: true
           loop:
-            - bootstrapping
-            - config
             - docker
             - krake
-            - examples
             - rak
             - rok
-            - rok.yaml.template
             - requirements
+            - templates
             - support
 
         # rsync does not honour become_user
@@ -346,9 +345,9 @@
             - system:shutdown-signing
           when: enable_tls is defined and enable_tls
 
-        - name: Get a list of all Krake components's configuration files
+        - name: Get a list of all Krake components' configuration files
           find:
-            paths: "{{ git_dir }}/config"
+            paths: "{{ git_dir }}/templates/config"
             patterns: "*.template"
           register: template_files
 
@@ -427,12 +426,13 @@
             - DOCKER_BUILDKIT: 1
 
         - name: Start Krake infrastructure
-          community.general.docker_compose:
+          community.docker.docker_compose:
             project_src: "{{ git_dir }}/docker"
             files:
               - "{{ git_dir }}/docker/krake/docker-compose.yaml"
             state: present
             build: no
+            debug: true
 
         - name: Bootstrap etcd database
           shell : >
@@ -441,7 +441,7 @@
             {% if etcd_port is defined %}--db-port {{ etcd_port }} {% endif %}
             < {{ git_dir }}/{{ item }}
           loop:
-            - "bootstrapping/base_roles.yaml"
+            - "templates/bootstrapping/base_roles.yaml"
 
     - name: Krake rok deployment
       tags:
@@ -507,7 +507,7 @@
             --cert-dir {{ rok_configuration_dir }}/certs {% endif %}
             --api-host localhost
             {% if api_port is defined %} --api-port {{ api_port }} {% endif %}
-            {{ git_dir }}/rok.yaml.template
+            {{ git_dir }}/templates/config/rok.yaml.template
 
     - name: Local rok deployment
       tags:
@@ -549,7 +549,7 @@
             --cert-dir certs {% endif %}
             --api-host {{ private_ip }}
             {% if api_port is defined %} --api-port {{ api_port }} {% endif %}
-            ../rok.yaml.template
+            ../templates/config/rok.yaml.template
 
 
 - name: Generate cluster config

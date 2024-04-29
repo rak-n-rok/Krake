@@ -137,7 +137,7 @@ generation in the CI pipelines:
    ├── docs/
    │   ├── requirements.in
    │   └── requirements.txt
-   └── gitlab-ci/
+   └── ci/
        ├── requirements_coverage.in
        ├── requirements_coverage.txt
        ├── requirements_lint.in

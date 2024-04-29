@@ -119,7 +119,7 @@ You can generate the minimal recommended configuration as follows:
 ```bash
 sudo mkdir /etc/krake
 sudo $(id -u):$(id -g) /etc/krake/
-krake/scripts/krake_generate_config --dst /etc/krake config/*.template rok.yaml.template \
+krake/scripts/krake_generate_config --dst /etc/krake templates/config/*.template templates/config/rok.yaml.template \
     --api-host krake-api --etcd-host krake-db --allow-anonymous \
     --static-authentication-enabled
 ```

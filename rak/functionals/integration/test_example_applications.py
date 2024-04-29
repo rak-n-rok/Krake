@@ -10,7 +10,7 @@ from functionals.utils import (
 
 from functionals.utils import run, check_return_code, kubectl_cmd
 from functionals.environment import (
-    EXAMPLES_PATH,
+    TEMPLATES_PATH,
     CLUSTERS_CONFIGS,
     Environment,
     create_default_environment,
@@ -95,9 +95,9 @@ def test_mnist_application(k8s_clusters):
     }
     assert score_cluster_1 < score_cluster_2, f"debug_info: {debug_info}"
 
-    manifest_path = os.path.join(EXAMPLES_PATH, "mnist/k8s/mnist.yaml")
+    manifest_path = os.path.join(TEMPLATES_PATH, "mnist/k8s/mnist.yaml")
     observer_schema_path = os.path.join(
-        EXAMPLES_PATH, "mnist/mnist-observer-schema.yaml"
+        TEMPLATES_PATH, "mnist/mnist-observer-schema.yaml"
     )
     app_def = ApplicationDefinition(
         name="mnist",
@@ -115,7 +115,7 @@ def test_mnist_application(k8s_clusters):
         # 4. Add a configmap for the shutdown hook script on both clusters
         configmap_name = "mnist-shutdown"
         error_message = f"The configmap {configmap_name} could not be created."
-        script_path = os.path.join(EXAMPLES_PATH, "mnist/mnist-shutdown.py")
+        script_path = os.path.join(TEMPLATES_PATH, "mnist/mnist-shutdown.py")
         for i in [0, 1]:
             run(
                 (

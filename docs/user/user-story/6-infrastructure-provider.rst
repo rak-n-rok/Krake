@@ -112,7 +112,7 @@ Create the demo Kubernetes Application and observe the resource status.
 
 .. prompt:: bash $ auto
 
-    rok kube app create -f examples/templates/k8s/echo-demo.yaml echo-demo
+    rok kube app create -f templates/applications/k8s/echo-demo.yaml echo-demo
     rok kube app get echo-demo  # See "running_on"
 
 Cleanup

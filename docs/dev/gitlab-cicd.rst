@@ -16,16 +16,16 @@ Therefore, the relationship between all files involved in the process is describ
     * - `.gitlab-ci.yml  <https://gitlab.com/rak-n-rok/krake/-/blob/master/.gitlab-ci.yml?ref_type=heads>`_
       - Entry point for gitlab CI/CD to select the setup associated with a pipeline
 
-    * - `gitlab-ci/krake-ci-pipeline.yml <https://gitlab.com/rak-n-rok/krake/-/blob/master/gitlab-ci/krake-ci-pipeline.yml?ref_type=heads>`_
+    * - `ci/krake-ci-pipeline.yml <https://gitlab.com/rak-n-rok/krake/-/blob/master/ci/krake-ci-pipeline.yml?ref_type=heads>`_
       - Main setup of the pipeline used to invoke the test and release processes
 
-    * - `gitlab-ci/Dockerfile_ansible_runner <https://gitlab.com/rak-n-rok/krake/-/blob/master/gitlab-ci/Dockerfile_ansible_runner?ref_type=heads>`_
+    * - `ci/Dockerfile_ansible_runner <https://gitlab.com/rak-n-rok/krake/-/blob/master/ci/Dockerfile_ansible_runner?ref_type=heads>`_
       - Dockerfile used for building the custom CI/CD images
 
-    * - `gitlab-ci/cleanup_krake_os_project.yml <https://gitlab.com/rak-n-rok/krake/-/blob/master/gitlab-ci/cleanup_krake_os_project.yml?ref_type=heads>`_
+    * - `ci/cleanup_krake_os_project.yml <https://gitlab.com/rak-n-rok/krake/-/blob/master/ci/cleanup_krake_os_project.yml?ref_type=heads>`_
       - Scheduled pipeline that runs once a week to clean up the Openstack infrastructure
 
-    * - `gitlab-ci/build-ci-images.yml <https://gitlab.com/rak-n-rok/krake/-/blob/master/gitlab-ci/build-ci-images.yml?ref_type=heads>`_
+    * - `ci/build-ci-images.yml <https://gitlab.com/rak-n-rok/krake/-/blob/master/ci/build-ci-images.yml?ref_type=heads>`_
       - Setup for the scheduled build of the custom CI/CD images required by krake-ci-pipeline.yml
 
 
@@ -338,4 +338,4 @@ to do it manually and upload them to the container registers.
 However, remember that the images are overwritten daily by the schedule
 *ci-images-build** pipeline.
 In order to update and modify the software tools used in the CI pipeline, you
-can modify the following file: `gitlab-ci/Dockerfile_ansible_runner <https://gitlab.com/rak-n-rok/krake/-/blob/master/gitlab-ci/Dockerfile_ansible_runner?ref_type=heads>`_
+can modify the following file: `ci/Dockerfile_ansible_runner <https://gitlab.com/rak-n-rok/krake/-/blob/master/ci/Dockerfile_ansible_runner?ref_type=heads>`_
