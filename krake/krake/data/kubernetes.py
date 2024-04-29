@@ -660,7 +660,8 @@ def _validate_kubeconfig(kubeconfig):
 
 
 class ClusterSpec(Serializable):
-    """Spec subresource of :class:`Cluster`
+    """
+    Spec subresource of :class:`Cluster`
 
     Attributes:
         kubeconfig (dict): path to the kubeconfig file for the cluster to
@@ -668,7 +669,8 @@ class ClusterSpec(Serializable):
         custom_resources (list): name of all custom resources that are available on
             the current cluster.
         metrics (list): metrics used on the cluster.
-        backoff (field, optional): multiplier applied to backoff_delay between attempts.
+        backoff (field, optional):
+            multiplier applied to backoff_delay between attempts.
             default: 1 (no backoff)
         backoff_delay (field, optional): delay [s] between attempts. default: 1
         backoff_limit (field, optional):  a maximal number of attempts,
@@ -695,18 +697,9 @@ class ClusterSpec(Serializable):
     auto_generated: bool = False
 
     def __post_init__(self):
-        """Method automatically ran at the end of the :meth:`__init__` method, used to
+        """
+        Method automatically ran at the end of the :meth:`__init__` method, used to
         validate dependent attributes.
-
-        Validations:
-        - At least one of the attributes from the following should be defined:
-          - :attr:`kubeconfig`
-          - :attr:`tosca`
-
-        Note: This validation cannot be achieved directly using the ``validate``
-         metadata, since ``validate`` must be a zero-argument callable, with
-         no access to the other attributes of the dataclass.
-
         """
         if not any([self.kubeconfig, self.tosca]):
             raise ValidationError(

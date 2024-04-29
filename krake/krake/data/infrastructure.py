@@ -16,7 +16,8 @@ class InfrastructureProviderSpec(PolymorphicContainer):
 
 @InfrastructureProviderSpec.register("im")
 class ImSpec(Serializable):
-    """IMSpec should contain access data to the IM provider instance.
+    """
+    IMSpec should contain access data to the IM provider instance.
 
     Attributes:
         url (str): endpoint of the IM provider instance.
@@ -31,13 +32,9 @@ class ImSpec(Serializable):
     token: str = None
 
     def __post_init__(self):
-        """Method automatically ran at the end of the :meth:`__init__` method, used to
+        """
+        Method automatically ran at the end of the :meth:`__init__` method, used to
         validate dependent attributes.
-
-        Validations:
-        - At least one of the attributes from the following should be defined:
-          - :attr:`username` and :attr:`password`
-          - :attr:`token`
         """
         if self.token is None and (self.username is None or self.password is None):
             raise ValidationError(
@@ -166,13 +163,13 @@ class CloudState(Enum):
 
 
 class CloudStatus(Serializable):
-    """Status subresource of :class:`GlobalCloud` and :class:`Cloud`.
+    """
+    Status subresource of :class:`GlobalCloud` and :class:`Cloud`.
 
     Attributes:
         state (CloudState): Current state of the cloud.
         metrics_reasons (dict[str, Reason]): Mapping of the name of the metrics for
             which an error occurred to the reason for which it occurred.
-
     """
 
     state: CloudState = CloudState.ONLINE
@@ -188,19 +185,9 @@ class GlobalCloud(ApiObject):
     status: CloudStatus = field(metadata={"subresource": True})
 
     def __post_init__(self):
-        """Method automatically ran at the end of the :meth:`__init__` method, used to
+        """
+        Method automatically ran at the end of the :meth:`__init__` method, used to
         validate dependent attributes.
-
-        Validations:
-         1. A non-namespaced `GlobalCloud` resource cannot reference the namespaced
-           `InfrastructureProvider` resource, see #499 for details
-         2. A non-namespaced `GlobalCloud` resource cannot reference the namespaced
-           `Metric` resource, see #499 for details
-
-        Note: This validation cannot be achieved directly using the ``validate``
-         metadata, since ``validate`` must be a zero-argument callable, with
-         no access to the other attributes of the dataclass.
-
         """
         if self.spec.openstack.infrastructure_provider.namespaced:
             raise ValidationError(

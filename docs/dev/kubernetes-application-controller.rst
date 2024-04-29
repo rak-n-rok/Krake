@@ -1,13 +1,12 @@
-=====================
+=================================
 Kubernetes Application Controller
-=====================
+=================================
 
 Reconciliation loop
 ===================
 
 In the following section, we describe what happens in the Kubernetes Application
-controller when receiving a resource, and highlight the role of the observer
-schema.
+controller when receiving a resource, and highlight the role of the observer schema.
 
 In this example, the user provides:
 
@@ -26,7 +25,7 @@ special case of mangled resources.
 
 
 Step 0 (Optional)
-------
+-----------------
 
 If the resource is defined by the TOSCA template file, an URL or a CSAR
 archive URL, the controller translates the given TOSCA or CSAR file to the Kubernetes manifest
@@ -98,6 +97,7 @@ The controller compares the **desired** state
 (``status.last_applied_manifest``) and the **current** state (represented in
 ``status.last_observed_manifest``). It creates a set of ``new``, ``updated``
 and ``deleted`` resource, to be used in the next step:
+
 - ``new`` resources are present in the **desired** state but not in
   the **current** state; they need to be created on the cluster.
 - ``updated`` resources have a different definition in the **desired** and in
@@ -114,6 +114,7 @@ This steps occurs in ``ResourceDelta.calculate()`` function.
 
   In order to calculate the "diff" between the desired state and the current
   state of a resource, the controller:
+
   - compares the value of the observed fields only. By definition, the
     controller should not act if a non-observed fields value changes.
   - checks if the lengths of lists are valid using the list control
@@ -135,6 +136,7 @@ patching, or deleting resources on the cluster. In particular:
 
 In other words, the non-observed initialized fields (i.e. set by the user in
 ``spec.manifest``, however not in ``spec.observer_schema``):
+
 - are used for the creation of the resource.
 - are not used for patching the resource.
 
