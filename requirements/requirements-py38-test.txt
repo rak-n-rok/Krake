@@ -60,6 +60,8 @@ charset-normalizer==3.3.2
     # via requests
 click==8.1.7
     # via flask
+click-default-group==1.2.4
+    # via towncrier
 cliff==4.5.0
     # via
     #   osc-lib
@@ -138,6 +140,8 @@ greenlet==3.0.3
     #   eventlet
     #   oslo-service
     #   sqlalchemy
+incremental==22.10.0
+    # via towncrier
 idna==3.6
     # via
     #   etcd3-py
@@ -609,6 +613,8 @@ tomli==2.0.1
     # via coverage
 tosca-parser==2.6.0
     # via krake (krake/pyproject.toml)
+towncrier==23.6.0
+    # via krake (krake/pyproject.toml)
 typing-extensions==4.9.0
     # via
     #   alembic
@@ -659,7 +665,7 @@ xmlschema==3.0.1
     # via pysaml2
 yappi==1.6.0
     # via oslo-service
-yarl==1.8.2
+yarl==1.9.4
     # via
     #   aiohttp
     #   krake (krake/pyproject.toml)
