@@ -472,9 +472,9 @@ transformed to an open source project in September 2019.
 [prometheus]: https://prometheus.io/download/
 [python]: https://www.python.org/downloads/
 [rtfd]: https://rak-n-rok.readthedocs.io/
-[dev-docs]: https://rak-n-rok.readthedocs.io/projects/krake/en/latest/dev/index.html
-[admin-docs]: https://rak-n-rok.readthedocs.io/projects/krake/en/latest/admin/index.html
-[user-docs]: https://rak-n-rok.readthedocs.io/projects/krake/en/latest/user/index.html
+[dev-docs]: https://rak-n-rok.gitlab.io/krake/dev/index.html
+[admin-docs]: https://rak-n-rok.gitlab.io/krake/admin/index.html
+[user-docs]: https://rak-n-rok.gitlab.io/krake/user/index.html
 [sphinx]: http://www.sphinx-doc.org/
 [krake-matrix]: https://app.element.io/#/room/#krake:matrix.org
 [virtualenv]: https://virtualenv.pypa.io/en/stable
@@ -483,6 +483,6 @@ transformed to an open source project in September 2019.
 [kind]: https://kind.sigs.k8s.io/
 [docker]: https://www.docker.com/
 [pypi]: https://pypi.org/project/krake/
-[metrics-docu-section]: https://rak-n-rok.readthedocs.io/projects/krake/en/latest/dev/scheduling.html#metrics-and-metrics-providers
-[metrics-user-story]: https://rak-n-rok.readthedocs.io/projects/krake/en/latest/user/user-story/3-metrics-cluster.html
-[labels-user-story]: https://rak-n-rok.readthedocs.io/projects/krake/en/latest/user/user-story/2-labels-cluster.html
+[metrics-docu-section]: https://rak-n-rok.gitlab.io/krake/dev/scheduling.html#metrics-and-metrics-providers
+[metrics-user-story]: https://rak-n-rok.gitlab.io/krake/user/user-story/3-metrics-cluster.html
+[labels-user-story]: https://rak-n-rok.gitlab.io/krake/user/user-story/2-labels-cluster.html

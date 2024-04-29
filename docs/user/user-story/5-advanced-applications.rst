@@ -5,7 +5,8 @@ Creation and deployment of a stateful application
 Goal: Create and deploy a stateful application to Krake.
 
 Introduction to statefulness
-=============================
+============================
+
 Statefulness with regard to an application means, that this application stores information about the changes since its
 start and possible adapts according to these changes. A restart without these information would put the application
 in a different state.
@@ -27,6 +28,7 @@ A possible example file can be found under `rak/functionals/pvc-pod.yaml`. If th
 add its observer schema file found under `rak/functionals/pvc-pod-observer-schema.yaml`.
 
 .. prompt:: bash $ auto
+
     $ rok kube app create pvc -f pvc-pod.yaml -O pvc-pod-observer-schema.yaml
 
 This should create an application, that generates a log entry with the
@@ -36,7 +38,8 @@ Migrating a stateful application
 ================================
 
 A migration of the application can be triggered exactly as described in
-:ref:`user/user-story/2-labels-cluster` and :ref:`user/user-story/3-metrics-cluster`.
+:ref:`user/user-story/2-labels-cluster:Introduction to Scheduling mechanisms`
+and :ref:`user/user-story/3-metrics-cluster:Scheduling an Application using Metrics`.
 In this case, a migration will be triggered by changing the metrics weights.
 
 .. prompt:: bash $ auto

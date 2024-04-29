@@ -169,23 +169,54 @@ flake8-rok:
     - pip install -r gitlab-ci/requirements_lint.txt
     - flake8 rok/rok
 
-
-test-build-docs:
+pages:
   stage: test
   image: python:3.10
-  only:
-    - tags
-    - branches
-    - merge_requests
-    - schedules
+  before_script:
+    - pip install -r docs/requirements.txt
+    - cd rok
+    - pip install .
+    - cd ..
   script:
-    - cd ./docs
-    - pip install -r requirements.txt
-    - make html
+    - sphinx-build --keep-going docs _build/html
+    - mv _build/html public/krake/development
+  artifacts:
+    paths:
+      - public
+  rules:
+    # run only on MR when changes were made
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event' &&
+          $CI_MERGE_REQUEST_EVENT_TYPE == 'merge_train' &&
+          $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'development'
+      changes:
+      - 'docs/[!_]*/**/*'
+      - 'docs/[!_]*'  # the above does not include files directly in docs/
+      when: on_success
+    - when: never
 
-
-
-
+pages-master:
+  stage: test
+  image: python:3.10
+  before_script:
+    - pip install -r docs/requirements.txt
+    - cd rok
+    - pip install .
+    - cd ..
+  script:
+    - sphinx-build --keep-going docs _build/html
+    - cp _build/html public/krake/latest
+    - mv _build/html public/krake/{{ $CI_COMMIT_TAG }}
+  artifacts:
+    paths:
+      - public
+  rules:
+    # run only on MR when changes were made
+    - if: $CI_COMMIT_TAG != '' && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+      - 'docs/[!_]*/**/*'
+      - 'docs/[!_]*'  # the above does not include files directly in docs/
+      when: on_success
+    - when: never
 
 # Combine code coverage reports from previous tox runs for all different
 # Python environments. Report code coverage for Krake Python package and exit

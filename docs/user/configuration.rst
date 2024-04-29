@@ -401,13 +401,13 @@ hooks (string)
         env_token (string)
             Name of the environment variable, which stores Krake authentication token. Example: ``KRAKE_COMPLETE_TOKEN``
         env_url (string)
-            .. _env_url:
+            .. _complete_hook_env_url:
 
             Name of the environment variable, which stores Krake ``complete`` hook URL. Example: ``KRAKE_COMPLETE_URL``
         external_endpoint (URL, optional)
             If set, replaces the host and port in the value of environment variable in
             the Krake ``complete`` hook URL (the name of this variable is given by
-            env_url_). By default, the value stored in the variable is the
+            complete_hook_env_url_). By default, the value stored in the variable is the
             api_endpoint_. Example: ``https://krake.external.host:1234``.
 
     shutdown (string)
@@ -430,13 +430,13 @@ hooks (string)
         env_token (string)
             Name of the environment variable, which stores Krake authentication token. Example: ``KRAKE_SHUTDOWN_TOKEN``
         env_url (string)
-            .. _env_url:
+            .. _shutdown_hook_env_url:
 
             Name of the environment variable, which stores Krake ``shutdown`` hook URL. Example: ``KRAKE_SHUTDOWN_URL``
         external_endpoint (URL, optional)
             If set, replaces the host and port in the value of environment variable in
             the Krake ``shutdown`` hook URL (the name of this variable is given by
-            env_url_). By default, the value stored in the variable is the
+            shutdown_hook_env_url_). By default, the value stored in the variable is the
             api_endpoint_. Example: ``https://krake.external.host:1234``.
 
 hooks (string)
