@@ -37,6 +37,7 @@ dependencies = [
     "requests<=2.31.0",
     "semantic-version>=2.10",
     "tosca-parser==2.6.*",
+    "towncrier==23.6.*",
     "webargs==8.*",
     "yarl==1.9.*",
 ]

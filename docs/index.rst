@@ -15,6 +15,7 @@ Welcome to Krake's documentation!
    user/index
    admin/index
    dev/index
+   releasenotes
 
 
 
