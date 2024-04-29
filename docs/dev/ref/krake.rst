@@ -98,6 +98,7 @@ Authentication and Authorization
 .. automodule:: krake.api.auth
     :members:
     :show-inheritance:
+    :noindex:
 
 Database Abstraction
 ~~~~~~~~~~~~~~~~~~~~
@@ -105,6 +106,7 @@ Database Abstraction
 .. automodule:: krake.api.database
     :members:
     :show-inheritance:
+    :noindex:
 
 Helpers
 ~~~~~~~
@@ -159,6 +161,7 @@ Controller Kubernetes Application
 .. automodule:: krake.controller.kubernetes.application
     :members:
     :show-inheritance:
+    :noindex:
 
 Controller Kubernetes Cluster
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -198,6 +201,7 @@ Data Abstraction
 .. automodule:: krake.data.serializable
     :members:
     :show-inheritance:
+    :noindex:
 
 .. automodule:: krake.data.core
     :members:
@@ -210,3 +214,4 @@ Data Abstraction
 .. automodule:: krake.data.kubernetes
     :members:
     :show-inheritance:
+    :noindex:

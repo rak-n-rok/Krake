@@ -7,8 +7,8 @@ Purpose
 
 When a user creates Kubernetes resources on a Kubernetes cluster via Krake, those
 resources are managed by Krake and should be "observed". That's the role of the
-Kubernetes Observer (see the :ref:`dev/observers:Observers` documentation). But what
-parts of the Kubernetes resources should be "observed" by Krake? The purpose of the
+Kubernetes Observer (e.g. see the :ref:`dev/kubernetes-application-observer:Kubernetes Application Observer` documentation).
+But what parts of the Kubernetes resources should be "observed" by Krake? The purpose of the
 Observer Schema is to provide a flexible mean for the Krake users to define which fields
 of the Kubernetes resources should be "observed" and which shouldn't.
 

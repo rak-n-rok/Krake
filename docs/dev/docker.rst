@@ -14,7 +14,7 @@ Currently, the following infrastructure bundles are supported besides Krake:
 
 - Krake
 - Prometheus_
-- IM_ (IM)
+- InfrastructureManager_ (IM)
 
 Use an online Docker image
 ==========================
@@ -149,7 +149,6 @@ Note: This documentation wants to be in sync with an Ansible playbook (see ansib
 can be used for launching the Krake infrastructure as well. Therefore, the `/etc` directory is
 used here, and if you use the standard Linux distro, you have to set the correct permissions.
 
-
 Launch the Krake infrastructure
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -203,7 +202,7 @@ The Infrastructure Manager server is deployed in a minimal configuration suitabl
 end-to-end testing with the Krake infrastructure.
 
 Launch the Infrastructure Manager server
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+----------------------------------------
 
 The Infrastructure Manager can be launched as follows:
 
@@ -227,13 +226,11 @@ instance using the `localhost` network.
 All infrastructures can be launched as follows:
 
 .. code:: bash
-    docker-compose --file docker/krake/docker-compose.yaml \
-       --file docker/prometheus/docker-compose.yaml up \
-       --file docker/im/docker-compose.yaml up \
-       --detach
+
+    docker-compose --file docker/krake/docker-compose.yaml --file docker/prometheus/docker-compose.yaml up --file docker/im/docker-compose.yaml up --detach
 
 .. _JINJA2: https://pypi.org/project/Jinja2/
 .. _Prometheus: https://prometheus.io/
-.. _Infrastructure Manager: https://github.com/grycap/im
+.. _InfrastructureManager: https://github.com/grycap/im
 .. _docker: https://www.docker.com/
 .. _dockercompose: https://docs.docker.com/compose/

@@ -1,6 +1,6 @@
-=================
+============
 Statefulness
-=================
+============
 
 Statefulness is a *property* of an application, if it creates, uses, controls and / or manages
 some persistent data. We also talk about a *stateful application* in this context.
