@@ -433,9 +433,7 @@ def _validate_cascade_policy_aggainst_constrains(manifest_list, constrains_obj):
         constrains_dict (dict): holding the flag for constrains
 
     Raises:
-        ValueError: If the partial observer_schema is not valid
-        TypeError: If the partial observer_schema is not valid
-            (value of key metadata is not of type dictionary)
+        ValueError: If the partial manifest containing a cascade_policy is not valid
 
     """
     _cascade_policy_list = []
@@ -443,15 +441,18 @@ def _validate_cascade_policy_aggainst_constrains(manifest_list, constrains_obj):
 
     # search for 'cascade_policy'
     for manifest_dict in manifest_list:
-        # ~ print("DEBUG:[manifest_dict]",manifest_dict)
 
         if "cascade_policy" in manifest_dict["spec"]:
             _cascade_policy_list.append(manifest_dict["spec"]["cascade_policy"])
 
-    _constraints_migration = constrains_obj.migration
-
     # check if 'cascade_policy' is set
     if len(_cascade_policy_list) == 0:
+        return 0
+
+    _constraints_migration = constrains_obj.migration
+
+    # check if 'constraints.migration' is set
+    if _constraints_migration.migration is None:
         return 0
 
     # check if 'cascade_policy' is consistent
