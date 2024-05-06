@@ -425,6 +425,12 @@ class CascadePolicyError(Exception):
     """Custom exception raised if the validation of the cascade_policy fails"""
 
 
+def _validate_cascade_policy_spelling(cascade_policy):
+    """Validate ``cascade_policy`` flag is not misspelled."""
+    if cascade_policy != "MIGRATE" and cascade_policy != "DELETE":
+        raise ValueError(f"cascade_policy '{cascade_policy}' does not excist")
+
+
 def _validate_cascade_policy_aggainst_constrains(manifest_list, constrains_obj):
     """Validate ``cascade_policy`` aggainst ``constrains``.
 
@@ -447,30 +453,22 @@ def _validate_cascade_policy_aggainst_constrains(manifest_list, constrains_obj):
             if "cascade_policy" in manifest_dict["spec"]:
                 _cascade_policy_list.append(manifest_dict["spec"]["cascade_policy"])
 
-    # check if 'cascade_policy' is set
-    if len(_cascade_policy_list) == 0:
+    if constrains_obj is None:
+        return 0
+    else:
+        _constraints_migration = constrains_obj.migration
+
+    if len(_cascade_policy_list) == 0:  # check if any 'cascade_policy' is set
         return 0
 
-    _constraints_migration = constrains_obj.migration
-
-    # check if 'constraints.migration' is set
-    if _constraints_migration.migration is None:
-        return 0
-
-    # check if 'cascade_policy' is consistent
-    if len(_cascade_policy_list) > 1:
-        _first_cascade_policy = _cascade_policy_list[0]
+    else:  # check if 'cascade_policy' is consistent
         for policy in _cascade_policy_list:
-            if _first_cascade_policy == policy:
-                _first_cascade_policy = policy
-            else:
+            if policy != _cascade_policy_list[0]:
                 raise ValueError(
                     "cascade_policies are not consistent between manifests"
                 )
-
-            # check if 'cascade_policy' is rigth value
-            if policy != "MIGRATE" and policy != "DELETE":
-                raise ValueError("cascade_policy does not excist")
+            # check if 'cascade_policy' flag is missspelled
+            _validate_cascade_policy_spelling(policy)
 
     # COMPARE 'cascade_policy' with 'constraints.migration'
     if _cascade_policy_list[0] == "MIGRATE" and _constraints_migration is False:
@@ -481,7 +479,7 @@ def _validate_cascade_policy(constraints, manifest):
     """Validation method for cascade_policy against restrictions
 
     Args:
-        constraints (list[dict]): List of dictionaries of constraints.
+        constraints (list[dict]): List of constraints.
 
     Raises:
         CascadePolicyError: If the cascade_policy is not valid
