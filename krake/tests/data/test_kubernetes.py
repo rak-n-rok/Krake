@@ -533,6 +533,6 @@ def test_observer_schema_init_invalid_custom_not_in_manifest():
     )
 
     with pytest.raises(
-        ObserverSchemaError, match="Observed resource must be in manifest"
+        ValidationError, match="Observed resource must be in manifest"
     ):
         ApplicationFactory(spec__observer_schema=invalid_custom_schema)
