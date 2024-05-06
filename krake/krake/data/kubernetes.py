@@ -442,8 +442,10 @@ def _validate_cascade_policy_aggainst_constrains(manifest_list, constrains_obj):
     # search for 'cascade_policy'
     for manifest_dict in manifest_list:
 
-        if "cascade_policy" in manifest_dict["spec"]:
-            _cascade_policy_list.append(manifest_dict["spec"]["cascade_policy"])
+        # check if manifest has 'spec' defined
+        if "spec" in manifest_dict:
+            if "cascade_policy" in manifest_dict["spec"]:
+                _cascade_policy_list.append(manifest_dict["spec"]["cascade_policy"])
 
     # check if 'cascade_policy' is set
     if len(_cascade_policy_list) == 0:
