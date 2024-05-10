@@ -16,13 +16,13 @@ Therefore, the relationship between all files involved in the process is describ
     * - `.gitlab-ci.yml  <https://gitlab.com/rak-n-rok/krake/-/blob/master/.gitlab-ci.yml?ref_type=heads>`_
       - Entry point for gitlab CI/CD to select the setup associated with a pipeline
 
-    * - `ci/krake-ci-pipeline.yml <https://gitlab.com/rak-n-rok/krake/-/blob/master/ci/krake-ci-pipeline.yml?ref_type=heads>`_
+    * - `ci/main-ci.yml <https://gitlab.com/rak-n-rok/krake/-/blob/master/ci/main-ci.yml?ref_type=heads>`_
       - Main setup of the pipeline used to invoke the test and release processes
 
-    * - `ci/Dockerfile_ansible_runner <https://gitlab.com/rak-n-rok/krake/-/blob/master/ci/Dockerfile_ansible_runner?ref_type=heads>`_
+    * - `ci/docker/ansible_runner/Dockerfile <https://gitlab.com/rak-n-rok/krake/-/blob/master/ci/docker/ansible_runner/Dockerfile?ref_type=heads>`_
       - Dockerfile used for building the custom CI/CD images
 
-    * - `ci/cleanup_krake_os_project.yml <https://gitlab.com/rak-n-rok/krake/-/blob/master/ci/cleanup_krake_os_project.yml?ref_type=heads>`_
+    * - `ci/cleanup-project.yml <https://gitlab.com/rak-n-rok/krake/-/blob/master/ci/cleanup-project.yml?ref_type=heads>`_
       - Scheduled pipeline that runs once a week to clean up the Openstack infrastructure
 
     * - `ci/build-ci-images.yml <https://gitlab.com/rak-n-rok/krake/-/blob/master/ci/build-ci-images.yml?ref_type=heads>`_
@@ -338,4 +338,4 @@ to do it manually and upload them to the container registers.
 However, remember that the images are overwritten daily by the schedule
 *ci-images-build** pipeline.
 In order to update and modify the software tools used in the CI pipeline, you
-can modify the following file: `ci/Dockerfile_ansible_runner <https://gitlab.com/rak-n-rok/krake/-/blob/master/ci/Dockerfile_ansible_runner?ref_type=heads>`_
+can modify the following file: `ci/docker/ansible_runner/Dockerfile <https://gitlab.com/rak-n-rok/krake/-/blob/master/ci/docker/ansible_runner/Dockerfile?ref_type=heads>`_

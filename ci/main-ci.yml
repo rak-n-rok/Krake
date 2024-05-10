@@ -33,9 +33,9 @@ cache:
   paths:
     - .cache/pip
 
-# Pre-commit hooks are checked here, because not everybody activates them
-# in a public, open source project. This stage is only run on branches, because
-# all problems should already be fixed when a merge is started.
+# This job is excluded from the scheduled master pipeline, because it
+# should only check and automatically adjust new commits after getting pushed.
+# Existing code on the master branch MUST not be altered by a scheduled pipeline.
 
 pre-commit:
   stage: pre
@@ -102,8 +102,8 @@ check-fixup-commits:
     git remote set-url origin "https://gitlab-ci-token:${PRE_COMMIT_ACCESS_TOKEN:-$CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
     git fetch origin
     git checkout $CI_COMMIT_BRANCH
-    
-    if [[ -n "git log HEAD --not master --not origin/master --format=%B | grep '!fixup'" ]]; then
+
+    if [[ "git log HEAD --not master --not origin/master --format=%B | grep '!fixup'" ]]; then
       exit 1
     fi
   rules:
@@ -438,7 +438,7 @@ pypi:
 docker:
   stage: release
   image:
-    name: gcr.io/kaniko-project/executor:v1.9.0-debug
+    name: gcr.io/kaniko-project/executor:latest
     entrypoint: [""]
   script:
     - echo "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(echo -n ${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD} | base64)\"}}}" > /kaniko/.docker/config.json

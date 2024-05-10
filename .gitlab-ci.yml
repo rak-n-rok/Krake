@@ -6,8 +6,9 @@ include:
       - if: $CI_PIPELINE_SOURCE == "merge_request_event"
         changes:
           - ./ci/build-ci-images.yml
-          - ./ci/Dockerfile_ansible_runner
-          - ./ci/docker/test-image/Dockerfile
+          - ./ci/docker/ansible_runner/Dockerfile
+          - ./ci/docker/pre_commit/Dockerfile
+          - ./ci/docker/test_image/Dockerfile
 
   - local: ci/main-ci.yml
     rules:
