@@ -379,7 +379,7 @@ def test_kubernetes_observer_update_on_api(k8s_clusters):
     environment = create_default_environment([k8s_cluster])
     with Environment(environment):
         # 1. Update the Application on the API
-        run(f"rok kube app update echo-demo -f {MANIFEST_PATH}/echo-demo-update.yaml")
+        run(f"krakectl kube app update echo-demo -f {MANIFEST_PATH}/echo-demo-update.yaml")
 
         # 2. Check if the resource has been updated on the cluster
         expected_image = "registry.k8s.io/echoserver:1.9"
@@ -475,7 +475,7 @@ def test_kubernetes_observer_recreated(k8s_clusters):
     environment = create_default_environment([k8s_cluster])
     with Environment(environment):
         # 1. Update a resource on the API
-        run(f"rok kube app update echo-demo -f {MANIFEST_PATH}/echo-demo-update.yaml")
+        run(f"krakectl kube app update echo-demo -f {MANIFEST_PATH}/echo-demo-update.yaml")
 
         # Ensure that the resource has been updated on the cluster
         expected_image = "registry.k8s.io/echoserver:1.9"
@@ -552,7 +552,7 @@ def test_kubernetes_observe_container_health(k8s_clusters):
         )
 
         # 2. Update a resource with the API
-        run(f"rok kube app update echo-demo -f {MANIFEST_PATH}/echo-demo-update.yaml")
+        run(f"krakectl kube app update echo-demo -f {MANIFEST_PATH}/echo-demo-update.yaml")
 
         # 3. Check if the pod health information changed according to
         # the updated manifest

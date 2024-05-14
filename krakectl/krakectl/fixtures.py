@@ -1,4 +1,4 @@
-r"""Simple dependency injection module for rok inspired by pytest's fixtures.
+r"""Simple dependency injection module for krakectl inspired by pytest's fixtures.
 
 There is a simple registration decorator :func:`fixture` that can be used to
 mark functions as fixtures. Functions using these fixtures can declare their
@@ -59,7 +59,7 @@ def depends(*dependencies):
     Example:
         .. code:: python
 
-            from rok.fixtures import fixture, depends
+            from krakectl.fixtures import fixture, depends
 
             @depends("engine")
             def fetch_records(engine):
@@ -237,9 +237,9 @@ def config(**kwargs):
 
     config_paths = [
         custom_path,
-        "rok.yaml",
-        os.path.join(XDG_CONFIG_HOME, "rok.yaml"),
-        "/etc/rok/rok.yaml",
+        "krakectl.yaml",
+        os.path.join(XDG_CONFIG_HOME, "krakectl.yaml"),
+        "/etc/krakectl/krakectl.yaml",
     ]
 
     for path in config_paths:

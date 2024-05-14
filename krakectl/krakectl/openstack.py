@@ -2,7 +2,7 @@
 
 .. code:: bash
 
-    python -m rok openstack --help
+    python -m krakectl openstack --help
 
 """
 

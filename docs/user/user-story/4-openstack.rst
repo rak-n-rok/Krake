@@ -29,16 +29,16 @@ Register an existing OpenStack project to Krake
 
 .. prompt:: bash $ auto
 
-    $ rok os project create --template 728f024e-8a88-4971-b79f-151da123f363 --project-id 5bc3bab620bd48b0b9b425ee492050ea --password "password" --user-id 737bbcd2ce264d2fa32fa306ac84e97d --auth-url https://identity.myopenstack.com:5000/v3 myproject
+    $ krakectl os project create --template 728f024e-8a88-4971-b79f-151da123f363 --project-id 5bc3bab620bd48b0b9b425ee492050ea --password "password" --user-id 737bbcd2ce264d2fa32fa306ac84e97d --auth-url https://identity.myopenstack.com:5000/v3 myproject
 
 Create a ``MagnumCluster``
 ==========================
 
 .. prompt:: bash $ auto
 
-    $ rok os cluster list  # No Cluster resource is present
-    $ rok os cluster create mycluster
-    $ rok os cluster list  # One Cluster resource with name "mycluster"
+    $ krakectl os cluster list  # No Cluster resource is present
+    $ krakectl os cluster create mycluster
+    $ krakectl os cluster list  # One Cluster resource with name "mycluster"
 
 .. note::
 
@@ -48,7 +48,7 @@ Create a ``MagnumCluster``
 
 .. prompt:: bash $ auto
 
-    $ rok kube cluster list
+    $ krakectl kube cluster list
 
 Spawn the demo application
 ==========================
@@ -57,8 +57,8 @@ Spawn the demo application
 
 .. prompt:: bash $ auto
 
-    $ rok kube app create -f git/krake/templates/applications/k8s/echo-demo.yaml echo-demo
-    $ rok kube app get echo-demo  # See "running_on"
+    $ krakectl kube app create -f git/krake/templates/applications/k8s/echo-demo.yaml echo-demo
+    $ krakectl kube app get echo-demo  # See "running_on"
 
 Cleanup
 =======

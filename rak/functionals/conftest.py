@@ -7,19 +7,19 @@ import sys
 import werkzeug
 import yaml
 
-# FIXME: Change with a rok implementation of Role and RoleBinding
+# FIXME: Change with a krakectl implementation of Role and RoleBinding
 # This is 1) not the best code, since we make a try.. except.. clause around an
-# import statement and 2) it creates a dependency between the rak and rok modules,
+# import statement and 2) it creates a dependency between the rak and krakectl modules,
 # which is not really desired.
 # But to have End-to-end-tests in place for roles and rolebindings, we need it like this
 # for now (or have a whole lot of code duplication).
-# The whole implementation can be rewritten in the future, if rok has support for
+# The whole implementation can be rewritten in the future, if krakectl has support for
 # roles and rolebindings in its cli.
 #
 # Other changes need to be done for the tests in
 # rak/functionals/integration/test_core.py
 try:
-    from rok.fixtures import config as rok_config, session as rok_session
+    from krakectl.fixtures import config as krakectl_config, session as krakectl_session
 except ImportError:
     pass
 
@@ -145,7 +145,7 @@ def os_password(request):
 
 @pytest.fixture
 def session():
-    yield from rok_session(rok_config())
+    yield from krakectl_session(krakectl_config())
 
 
 @pytest.fixture

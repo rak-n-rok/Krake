@@ -15,7 +15,7 @@ Introduction to Scheduling mechanisms
 
 .. prompt:: bash $ auto
 
-    $ watch "rok kube app get echo-demo -o json | jq .status.running_on"
+    $ watch "krakectl kube app get echo-demo -o json | jq .status.running_on"
 
 - Watch Scheduler logs:
 

@@ -15,7 +15,7 @@
       environment:
         PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
 
-    # pytest and rok are installed locally in /home/krake/.local/bin which
+    # pytest and krakectl are installed locally in /home/krake/.local/bin which
     # isn't in the default PATH
     - name: Run smoke test for krake client
       command: "pytest {{ git_dir }}/{{ test_dir }}/test_krake_cli.py"
@@ -47,7 +47,7 @@
           environment:
             PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
 
-        # pytest and rok are installed locally in /home/ubuntu/.local/bin which
+        # pytest and krakectl are installed locally in /home/ubuntu/.local/bin which
         # isn't in the default PATH
         - name: Run smoke test for Minikube
           command: "pytest {{ home_dir }}/{{ test_dir }}/test_kubectl_cli.py"
@@ -83,7 +83,7 @@
           environment:
             PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
 
-        # pytest and rok are installed locally in /home/ubuntu/.local/bin which
+        # pytest and krakectl are installed locally in /home/ubuntu/.local/bin which
         # isn't in the default PATH
         - name: Run smoke test for k3s
           command:

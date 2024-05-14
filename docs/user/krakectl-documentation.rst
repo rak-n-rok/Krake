@@ -6,7 +6,7 @@ The Rok utility has a command line interface with a few specific commands, that 
 
 .. code:: bash
 
-    rok <api> <resource> <operation> <parameters>
+    krakectl <api> <resource> <operation> <parameters>
 
 
 The separate elements are:
@@ -28,15 +28,15 @@ A few examples:
 
 .. code:: bash
 
-    $ rok kube <...>  # handle the kubernetes API resources
+    $ krakectl kube <...>  # handle the kubernetes API resources
 
-    $ rok kube app <...>  # handle the Application resources of the Kubernetes API
+    $ krakectl kube app <...>  # handle the Application resources of the Kubernetes API
 
     # Register a cluster with the Kubernetes API using the minikube.yaml kubeconfig
-    $ rok kube cluster register --kubeconfig ../minikube.yaml
+    $ krakectl kube cluster register --kubeconfig ../minikube.yaml
 
     # Create a cluster with the Kubernetes API using the tosca.yaml manifest
-    $ rok kube cluster create --file ../tosca.yaml test-cluster
+    $ krakectl kube cluster create --file ../tosca.yaml test-cluster
 
 
 The ``kube`` API
@@ -44,7 +44,7 @@ The ``kube`` API
 
 This API can be used to manage Kubernetes clusters and start, update and delete applications on them, through Krake.
 
-Base command: ``rok kube <...>``
+Base command: ``krakectl kube <...>``
 
 
 
@@ -54,14 +54,14 @@ The Cluster resource: ``cluster``
 This resource manages Krake **Cluster** resources, which needs to be registered or created on Krake to be used.
 It corresponds to a cluster on Kubernetes.
 
-Base command: ``rok kube cluster <...>``
+Base command: ``krakectl kube cluster <...>``
 
 register
     Add an existing cluster to the Kubernetes clusters registered in Krake on a specified namespace. Example:
 
     .. code:: bash
 
-        rok kube cluster register -k <path_to_kubeconfig_file>
+        krakectl kube cluster register -k <path_to_kubeconfig_file>
 
 
     ``-k | --kubeconfig``: the path to the kubeconfig file that refers to the cluster to register.
@@ -95,7 +95,7 @@ create
 
     .. code:: bash
 
-        rok kube cluster create <cluster_name> -f <path_to_tosca_template>
+        krakectl kube cluster create <cluster_name> -f <path_to_tosca_template>
 
     ``name``:
         The name of the new Cluster, as stored by Krake (can be arbitrary). The same name cannot be used twice in the same namespace.
@@ -230,7 +230,7 @@ This resource manages Krake **Applications** resources, which need to be registe
   Krake is able to manage applications that are described by Kubernetes manifests files as well as by TOSCA templates or CSAR archives, see :ref:`dev/tosca:TOSCA`.
 
 
-Base command: ``rok kube app <...>``
+Base command: ``krakectl kube app <...>``
 
 
 create
@@ -238,7 +238,7 @@ create
 
     .. code:: bash
 
-        rok kube app create <application_name> -f <path_to_manifest_or_path_to_tosca_template>
+        krakectl kube app create <application_name> -f <path_to_manifest_or_path_to_tosca_template>
 
     ``name``:
         The name of the new Application, as stored by Krake (can be arbitrary). The same name cannot be used twice in the same namespace.
@@ -379,7 +379,7 @@ This API can be used to manage the following infrastructure resources:
 - GlobalCloud
 - Cloud
 
-Base command: ``rok infra <...>``
+Base command: ``krakectl infra <...>``
 
 
 The GlobalInfrastructureProvider resource: ``globalinfrastructureprovider``
@@ -394,10 +394,10 @@ Krake currently supports the following GlobalInfrastructureProvider software (ty
 
 - IM_ (Infrastructure Manager) tool developed by the GRyCAP research group
 
-Base command: ``rok infra globalinfrastructureprovider  <...>``
+Base command: ``krakectl infra globalinfrastructureprovider  <...>``
 Available aliases:
-- ``rok infra gprovider  <...>``
-- ``rok infra gip  <...>``
+- ``krakectl infra gprovider  <...>``
+- ``krakectl infra gip  <...>``
 
 .. note::
 
@@ -411,7 +411,7 @@ register
 
     .. code:: bash
 
-        rok infra gprovider register <provider_name> \
+        krakectl infra gprovider register <provider_name> \
           --type <provider_type> \
           --url <provider_api_url> \
           --username <provider_api_username> \
@@ -483,12 +483,12 @@ Krake currently supports the following InfrastructureProvider software (types):
 
 - IM_ (Infrastructure Manager) tool developed by the GRyCAP research group
 
-Base command: ``rok infra infrastructureprovider  <...>``
+Base command: ``krakectl infra infrastructureprovider  <...>``
 
 Available aliases:
 
-- ``rok infra provider  <...>``
-- ``rok infra ip  <...>``
+- ``krakectl infra provider  <...>``
+- ``krakectl infra ip  <...>``
 
 .. note::
 
@@ -502,7 +502,7 @@ register
 
     .. code:: bash
 
-        rok infra provider register <provider_name> \
+        krakectl infra provider register <provider_name> \
           --type <provider_type> \
           --url <provider_api_url> \
           --username <provider_api_username> \
@@ -594,12 +594,12 @@ Krake currently supports the following GlobalCloud cloud software (types):
 
 - OpenStack_
 
-Base command: ``rok infra globalcloud  <...>``
+Base command: ``krakectl infra globalcloud  <...>``
 
 Available aliases:
 
-- ``rok infra gcloud  <...>``
-- ``rok infra gc  <...>``
+- ``krakectl infra gcloud  <...>``
+- ``krakectl infra gc  <...>``
 
 .. note::
 
@@ -612,7 +612,7 @@ register
 
     .. code:: bash
 
-        rok infra gcloud register <cloud_name> \
+        krakectl infra gcloud register <cloud_name> \
           --type <cloud_type> \
           --url <cloud_identity_service_url> \
           --username <cloud_username> \
@@ -721,7 +721,7 @@ Krake currently supports the following GlobalCloud cloud software (types):
 
 - OpenStack_
 
-Base command: ``rok infra cloud  <...>``
+Base command: ``krakectl infra cloud  <...>``
 
 .. note::
 
@@ -735,7 +735,7 @@ register
 
     .. code:: bash
 
-        rok infra cloud register <cloud_name> \
+        krakectl infra cloud register <cloud_name> \
           --type <cloud_type> \
           --url <cloud_identity_service_url> \
           --username <cloud_username> \
@@ -885,7 +885,7 @@ An example to disable all warnings:
 
 .. code:: bash
 
-    $ PYTHONWARNINGS=ignore rok kube app create <...>
+    $ PYTHONWARNINGS=ignore krakectl kube app create <...>
 
 
 .. _Warnings: https://docs.python.org/3/library/warnings.html

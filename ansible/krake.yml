@@ -215,7 +215,7 @@
     # Directory on the VM for the bind mount, to store the configuration files of Krake
     configuration_dir: /etc/krake
     authorized_user: krake
-    rok_configuration_dir: /etc/rok
+    krakectl_configuration_dir: /etc/krakectl
     scheme: "{% if enable_tls is defined and enable_tls %}https{% else %}http{% endif %}"
     api_endpoint: "{{ scheme }}://{{ private_ip }}:{{ api_port }}"
     # Host or IP from which the Krake API is accessible externally.
@@ -279,7 +279,7 @@
               - docker
               - docker-compose
             executable: pip3
-            extra_args: --user
+            extra_args: --user --no-build-isolation
 
     - name: Krake infrastructure deployment
       tags:
@@ -458,27 +458,27 @@
           loop:
             - "templates/bootstrapping/base_roles.yaml"
 
-    - name: Krake rok deployment
+    - name: Krake krakectl deployment
       tags:
-        - krake-rok-deployment
+        - krake-krakectl-deployment
       block:
 
         - name: Create configuration certificates sub-directory
           become_user: root
           file:
-            path: "{{ rok_configuration_dir }}/certs"
+            path: "{{ krakectl_configuration_dir }}/certs"
             state: directory
             owner: krake
             group: krake
           when: enable_tls is defined and enable_tls
 
-        # The creation of certificates for rok needs the ca used by Krake. Thus the
+        # The creation of certificates for krakectl needs the ca used by Krake. Thus the
         # creation of the certificate is done in the Krake deployment.
-        - name: Copy the rok certificates
+        - name: Copy the krakectl certificates
           become_user: root
           copy:
             src: "{{ configuration_dir }}/certs/{{ item.src }}"
-            dest: "{{ rok_configuration_dir }}/certs"
+            dest: "{{ krakectl_configuration_dir }}/certs"
             owner: krake
             group: krake
             mode: "{{ item.mode }}"
@@ -489,63 +489,63 @@
             - { src: "system:admin-key.pem", mode: '0600' }
           when: enable_tls is defined and enable_tls
 
-        - name: Generate certificates for rok
+        - name: Generate certificates for krakectl
           command: >
             {{ git_dir }}/support/pki system:admin
-            --dest-dir {{ rok_configuration_dir }}/certs
+            --dest-dir {{ krakectl_configuration_dir }}/certs
             --host {{ api_host }} --ignore
           when: enable_tls is defined and enable_tls
 
-        - name: Create configuration directory for rok
+        - name: Create configuration directory for krakectl
           become_user: root
           file:
-            path: "{{ rok_configuration_dir }}"
+            path: "{{ krakectl_configuration_dir }}"
             state: directory
             owner: krake
             group: krake
 
-        - name: Install Krake rok
+        - name: Install Krake krakectl
           tags:
             - synchronize
             - pip
           pip:
-            name: "{{ git_dir }}/rok"
+            name: "{{ git_dir }}/krakectl"
             executable: pip3
             extra_args: --user
 
-        - name: Create Krake rok configuration file
+        - name: Create Krake krakectl configuration file
           script: >
             {{ repo_dir }}/krake/scripts/krake_generate_config
-            --dst {{ rok_configuration_dir }}
+            --dst {{ krakectl_configuration_dir }}
             {% if enable_tls is defined and enable_tls %} --tls-enabled {% endif %}
             {% if enable_tls is defined and enable_tls %}
-            --cert-dir {{ rok_configuration_dir }}/certs {% endif %}
+            --cert-dir {{ krakectl_configuration_dir }}/certs {% endif %}
             --api-host localhost
             {% if api_port is defined %} --api-port {{ api_port }} {% endif %}
             {{ git_dir }}/templates/config/krakectl.yaml.template
 
-    - name: Local rok deployment
+    - name: Local krakectl deployment
       tags:
-        - local-rok-access
+        - local-krakectl-access
       vars:
-        local_rok_conf: "rok_configurations/{{ inventory_hostname }}"
-        local_rok_certs: "{{ local_rok_conf }}/certs"
+        local_krakectl_conf: "krakectl_configurations/{{ inventory_hostname }}"
+        local_krakectl_certs: "{{ local_krakectl_conf }}/certs"
       block:
 
-        - name: Create rok configuration directory
+        - name: Create krakectl configuration directory
           delegate_to: localhost
           become: no
           file:
             path: "{{ item }}"
             state: directory
           loop:
-            - "{{ local_rok_conf }}"
-            - "{{ local_rok_certs }}"
+            - "{{ local_krakectl_conf }}"
+            - "{{ local_krakectl_certs }}"
 
-        - name: Download rok certificates
+        - name: Download krakectl certificates
           fetch:
-            src: "{{ rok_configuration_dir }}/certs/{{ item }}"
-            dest: "{{ local_rok_certs }}/"
+            src: "{{ krakectl_configuration_dir }}/certs/{{ item }}"
+            dest: "{{ local_krakectl_certs }}/"
             flat: yes
           with_items:
             - "ca.pem"
@@ -553,18 +553,18 @@
             - "system:admin-key.pem"
           when: enable_tls is defined and enable_tls
 
-        - name: Create Krake rok configuration file
+        - name: Create Krake krakectl configuration file
           delegate_to: localhost
           become: no
           script: >
             ../krake/scripts/krake_generate_config
-            --dst {{ local_rok_conf }}
+            --dst {{ local_krakectl_conf }}
             {% if enable_tls is defined and enable_tls %} --tls-enabled {% endif %}
             {% if enable_tls is defined and enable_tls %}
             --cert-dir certs {% endif %}
             --api-host {{ private_ip }}
             {% if api_port is defined %} --api-port {{ api_port }} {% endif %}
-            ../templates/config/rok.yaml.template
+            ../templates/config/krakectl.yaml.template
 
 
 - name: Generate cluster config

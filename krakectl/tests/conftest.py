@@ -12,6 +12,6 @@ logging.config.dictConfig(
     {
         "version": 1,
         "handlers": {"console": {"class": "logging.StreamHandler", "level": "DEBUG"}},
-        "loggers": {"rok": {"handlers": ["console"]}},
+        "loggers": {"krakectl": {"handlers": ["console"]}},
     }
 )

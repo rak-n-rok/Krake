@@ -93,7 +93,7 @@
   tags:
     - run-tests
   environment:
-    # pytest and rok are installed locally in /home/krake/.local/bin which isn't in the
+    # pytest and krakectl are installed locally in /home/krake/.local/bin which isn't in the
     # default PATH
     PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
     PYTEST_TIMEOUT: 1000

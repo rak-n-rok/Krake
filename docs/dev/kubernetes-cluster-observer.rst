@@ -128,7 +128,7 @@ These information can be found by calling:
 
 .. prompt:: bash $ auto
 
-    $ rok kube cluster get X
+    $ krakectl kube cluster get X
     +-----------------------+---------------------+
     | ...                   | ...                 |
     | nodes                 | 3/3                 |

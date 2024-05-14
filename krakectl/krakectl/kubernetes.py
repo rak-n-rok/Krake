@@ -2,7 +2,7 @@
 
 .. code:: bash
 
-    python -m rok kubernetes --help
+    python -m krakectl kubernetes --help
 
 """
 
@@ -303,7 +303,7 @@ def handle_warning(app):
 
     .. code:: bash
 
-        PYTHONWARNINGS=ignore rok kube app create -f example.yaml example
+        PYTHONWARNINGS=ignore krakectl kube app create -f example.yaml example
 
     Args:
         app (dict): Application to evaluate

@@ -5,7 +5,7 @@ User Documentation
 .. toctree::
     :maxdepth: 1
 
-    rok-documentation
+    krakectl-documentation
     configuration
     observer-schema
     user-stories
