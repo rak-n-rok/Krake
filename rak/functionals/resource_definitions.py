@@ -32,7 +32,7 @@ class ResourceKind(Enum):
 class ResourceDefinition(ABC):
     """Definition of a resource for the test environment :class:`Environment`.
 
-    Describes how to create, update and delete a resource with the rok utility.
+    Describes how to create, update and delete a resource with the krakectl utility.
     Also defines checks to perform to test whether these actions were successful.
 
     Attributes:
@@ -219,7 +219,7 @@ class ResourceDefinition(ABC):
         return check_resource_deleted(error_message=error_message)
 
     def get_resource(self):
-        """Get the resource by executing the rok cli command.
+        """Get the resource by executing the krakectl cli command.
 
         Returns:
             dict: the resource as a dict built from the output of the
@@ -398,14 +398,14 @@ class ResourceDefinition(ABC):
     @staticmethod
     def _get_label_options(labels):
         """
-        Convenience method for generating label lists for rok cli commands.
+        Convenience method for generating label lists for krakectl cli commands.
 
         Example:
             If provided the argument labels={"label1": "value1", "label2": "value2"},
             this method will return the list
             ["-l", "label1=value1", "-l", "label2=value2"],
             which can be used when constructing a cli command like
-            "rok kube app create -l label1=value1 -l label2=value2 ..."
+            "krakectl kube app create -l label1=value1 -l label2=value2 ..."
 
         Args:
             labels (dict[str, str]): dict of resource labels and their values
@@ -466,7 +466,7 @@ class ResourceDefinition(ABC):
             values=["location is not DE", "foo=bar"], this method will return
             the list ["-L", "location is not DE", "-L", "foo=bar"],
             which can be used when constructing a cli command like
-            "rok kube app create -L 'location is not DE' -L foo=bar ..."
+            "krakectl kube app create -L 'location is not DE' -L foo=bar ..."
 
         Args:
             flag (str): The cli argument flag. The same flag is used for all values.
@@ -595,13 +595,13 @@ class ApplicationDefinition(ResourceDefinition):
         )
         if wait:
             cmd = (
-                f"rok kube app create {'--url' if is_url else '--file'}"
+                f"krakectl kube app create {'--url' if is_url else '--file'}"
                 f" {app_definition} {self.name} --wait"
                 f" --namespace {self.namespace}".split()
             )
         else:
             cmd = (
-                f"rok kube app create {'--url' if is_url else '--file'}"
+                f"krakectl kube app create {'--url' if is_url else '--file'}"
                 f" {app_definition} {self.name}"
                 f" --namespace {self.namespace}".split()
             )
@@ -627,8 +627,8 @@ class ApplicationDefinition(ResourceDefinition):
     @staticmethod
     def _get_migration_flag(migration):
         """
-        Determines the migration cli option for a 'rok kube app create'
-        or 'rok kube app update' command, based on the value of the flag 'migration'.
+        Determines the migration cli option for a 'krakectl kube app create'
+        or 'krakectl kube app update' command, based on the value of the flag 'migration'.
 
         Depending on the value of 'migration', the cli option is determined as such:
             True: "--enable-migration"
@@ -657,8 +657,8 @@ class ApplicationDefinition(ResourceDefinition):
     @staticmethod
     def _get_hook_params(hooks):
         """
-        Determines the hook cli options for a 'rok kube app create'
-        or 'rok kube app update' command, based on the value of the 'hooks' list.
+        Determines the hook cli options for a 'krakectl kube app create'
+        or 'krakectl kube app update' command, based on the value of the 'hooks' list.
 
         Args:
             hooks (list): list containing all hooks
@@ -684,18 +684,18 @@ class ApplicationDefinition(ResourceDefinition):
     def delete_command(self, wait):
         if wait:
             return (
-                f"rok kube app delete {self.name}"
+                f"krakectl kube app delete {self.name}"
                 f" --namespace {self.namespace} --wait".split()
             )
         else:
             return (
-                f"rok kube app delete {self.name}"
+                f"krakectl kube app delete {self.name}"
                 f" --namespace {self.namespace} ".split()
             )
 
     def delete_command_wait(self):
         return (
-            f"rok kube app delete {self.name}"
+            f"krakectl kube app delete {self.name}"
             f" --namespace {self.namespace}  --wait".split()
         )
 
@@ -723,7 +723,7 @@ class ApplicationDefinition(ResourceDefinition):
         Returns:
             list[str]: the command to update the application, as a list of its parts.
         """
-        cmd = f"rok kube app update {self.name}".split()
+        cmd = f"krakectl kube app update {self.name}".split()
         cmd += self._get_cluster_label_constraint_options(cluster_label_constraints)
         cmd += self._get_label_options(labels)
         if migration is not None:
@@ -737,13 +737,13 @@ class ApplicationDefinition(ResourceDefinition):
     def _get_cluster_label_constraint_options(self, cluster_label_constraints):
         """
         Convenience method for generating cluster label constraints lists for
-        rok cli commands.
+        krakectl cli commands.
 
         Example:
             If provided the argument labels=["constraint1", "constraint2"},
             this method will return the list ["-L", "constraint1", "-L", "constraint2"],
             which can be used when constructing a cli command like
-            "rok kube app create -L constraint1 -L constraint2 ..."
+            "krakectl kube app create -L constraint1 -L constraint2 ..."
 
         Args:
             cluster_label_constraints (list[str]): list of cluster label constraints
@@ -793,7 +793,7 @@ class ApplicationDefinition(ResourceDefinition):
         )
 
     def get_command(self):
-        return f"rok kube app get {self.name} -o json -n {self.namespace}".split()
+        return f"krakectl kube app get {self.name} -o json -n {self.namespace}".split()
 
     def get_running_on(self, strict=False):
         """Run the command for getting the application and return the name of
@@ -971,7 +971,7 @@ class ClusterDefinition(ResourceDefinition):
         )
 
     def register_command(self, wait):
-        cmd = "rok kube cluster register".split()
+        cmd = "krakectl kube cluster register".split()
         cmd += self._get_label_options(self.labels)
         cmd += self._get_metrics_options(self.metrics)
         cmd += self._get_backoff_options(self.backoff)
@@ -985,7 +985,7 @@ class ClusterDefinition(ResourceDefinition):
 
     @staticmethod
     def _get_metrics_options(metrics):
-        """Convenience method for generating metric lists for rok cli commands.
+        """Convenience method for generating metric lists for krakectl cli commands.
 
         Example:
             If provided the argument metrics=
@@ -994,7 +994,7 @@ class ClusterDefinition(ResourceDefinition):
             this method will return the list
             ["-m", "metric_name1", "1.0", "-gm", "metric_name2", "2.0"],
             which can be used when constructing a cli command like
-            rok kube cluster register -m metric_name1 1.0 -gm metric_name2 2.0 ...
+            krakectl kube cluster register -m metric_name1 1.0 -gm metric_name2 2.0 ...
 
         Args:
             metrics (list[WeightedMetric], optional): list of metrics with values.
@@ -1010,11 +1010,11 @@ class ClusterDefinition(ResourceDefinition):
         if metrics is None:
             metrics = []
         for weighted_metric in metrics:
-            rok_cli_flag = "--global-metric"
+            krakectl_cli_flag = "--global-metric"
             if weighted_metric.metric.kind.is_namespaced():
-                rok_cli_flag = "--metric"
+                krakectl_cli_flag = "--metric"
             metrics_options += [
-                rok_cli_flag,
+                krakectl_cli_flag,
                 weighted_metric.metric.name,
                 str(weighted_metric.weight),
             ]
@@ -1029,7 +1029,7 @@ class ClusterDefinition(ResourceDefinition):
                                             expected_state=expected_state)
 
     def delete_command(self, wait):
-        return f"rok kube cluster delete {self.name}".split()
+        return f"krakectl kube cluster delete {self.name}".split()
 
     def update_command(self, labels=None, metrics=None, update_behavior=None):
         """Get a command for updating the cluster.
@@ -1054,7 +1054,7 @@ class ClusterDefinition(ResourceDefinition):
                 "cluster update command."
             )
             raise RuntimeError(msg)
-        cmd = f"rok kube cluster update {self.name}".split()
+        cmd = f"krakectl kube cluster update {self.name}".split()
         cmd += self._get_label_options(labels)
         cmd += self._get_metrics_options(metrics)
         if update_behavior:
@@ -1062,7 +1062,7 @@ class ClusterDefinition(ResourceDefinition):
         return cmd
 
     def get_command(self):
-        return f"rok kube cluster get {self.name} -o json".split()
+        return f"krakectl kube cluster get {self.name} -o json".split()
 
     def get_state(self):
         """Run the command for getting the cluster and return its state.

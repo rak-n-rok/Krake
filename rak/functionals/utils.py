@@ -503,7 +503,7 @@ def check_resource_exists(error_message=""):
     The stdout using kubectl CLI against the kubernetes cluster contains
     `NotFound` string when the resource does not exist in kubernetes cluster.
     Krake API uses RFC7807 Problem representation of failures on the HTTP layer.
-    The stdout using rok CLI against the krake API contains
+    The stdout using krakectl CLI against the krake API contains
     `NOT_FOUND_ERROR` string when the resource does not exist in krake.
 
     Args:
@@ -537,7 +537,7 @@ def check_resource_deleted(error_message):
     The stdout using kubectl CLI against the kubernetes cluster contains
     `NotFound` string when the resource does not exist in kubernetes cluster.
     Krake API uses RFC7807 Problem representation of failures on the HTTP layer.
-    The stdout using rok CLI against the krake API contains
+    The stdout using krakectl CLI against the krake API contains
     `NOT_FOUND_ERROR` string when the resource does not exist in krake.
 
     Args:

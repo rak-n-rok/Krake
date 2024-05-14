@@ -2,4 +2,4 @@
 assert_used:
   skips: ['*_test.py', 'test_*.py']
 
-exclude: ['/krake/tests', '/rok/tests']
+exclude: ['/krake/tests', '/krakectl/tests']

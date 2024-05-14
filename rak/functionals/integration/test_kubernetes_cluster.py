@@ -22,7 +22,7 @@ def test_cluster_crud(
     os_username,
     os_password,
 ):
-    """Test Cluster CRUD operations over the rok CLI.
+    """Test Cluster CRUD operations over the krakectl CLI.
 
     The test method performs the following tests:
 
@@ -59,7 +59,7 @@ def test_cluster_crud(
         f"The Infrastructure Provider {provider_name} could not be registered."
     )
     run(
-        f"rok infra provider register --type im"
+        f"krakectl infra provider register --type im"
         f" --url http://{im_container}:{im_container_port}"
         f" --username test --password test {provider_name}",
         condition=check_return_code(error_message),
@@ -70,7 +70,7 @@ def test_cluster_crud(
     os_auth = URL(os_auth_url).origin()
     error_message = f"The Cloud {cloud_name} could not be registered."
     run(
-        f"rok infra cloud register --type openstack --url {os_auth}"
+        f"krakectl infra cloud register --type openstack --url {os_auth}"
         f" --project {os_project_name} --username {os_username}"
         f" --password {os_password} --infra-provider {provider_name}"
         f" {cloud_name}",
@@ -79,7 +79,7 @@ def test_cluster_crud(
     # 3. Create a Cluster
     error_message = f"The Cluster {cluster_name} could not be created."
     run(
-        f"rok kube cluster create -f {cluster_manifest_path} {cluster_name}",
+        f"krakectl kube cluster create -f {cluster_manifest_path} {cluster_name}",
         condition=check_return_code(error_message),
     )
     # 4. Wait for the actual Kubernetes cluster to be created and healthy
@@ -88,7 +88,7 @@ def test_cluster_crud(
     # Wait up to 90 retries with 10s delay = 900s = 15min
     error_message = f"The Cluster {cluster_name} has not been created after 15min."
     cluster_details = run(
-        f"rok kube cluster get {cluster_name} -o json",
+        f"krakectl kube cluster get {cluster_name} -o json",
         retry=90,
         interval=10,
         condition=check_cluster_created_and_up(error_message, expected_state="ONLINE"),
@@ -99,7 +99,7 @@ def test_cluster_crud(
     # 6. Update a Cluster
     error_message = f"The Cluster {cluster_name} could not be updated."
     run(
-        f"rok kube cluster update -f {cluster_manifest_update_path} {cluster_name}",
+        f"krakectl kube cluster update -f {cluster_manifest_update_path} {cluster_name}",
         condition=check_return_code(error_message),
     )
     time.sleep(10)  # Wait for Cluster state transition from `ONLINE` to `RECONCILING`
@@ -109,7 +109,7 @@ def test_cluster_crud(
     # Wait up to 48 retries with 10s delay = 480s = 8min
     error_message = f"The Cluster {cluster_name} has not been updated after 8min."
     cluster_details = run(
-        f"rok kube cluster get {cluster_name} -o json",
+        f"krakectl kube cluster get {cluster_name} -o json",
         retry=48,
         interval=10,
         condition=check_cluster_created_and_up(error_message, expected_state="ONLINE"),
@@ -120,7 +120,7 @@ def test_cluster_crud(
     # 9. Delete a Cluster
     error_message = f"The Cluster {cluster_name} could not be deleted."
     run(
-        f"rok kube cluster delete {cluster_name}",
+        f"krakectl kube cluster delete {cluster_name}",
         condition=check_return_code(error_message),
     )
     # 10. Wait for the actual Kubernetes cluster to be deleted
@@ -129,7 +129,7 @@ def test_cluster_crud(
     # Wait up to 36 retries with 5s delay = 180s = 3min
     error_message = f"The Cluster {cluster_name} has not been deleted after 3min."
     run(
-        f"rok kube cluster get {cluster_name}",
+        f"krakectl kube cluster get {cluster_name}",
         retry=36,
         interval=5,
         condition=check_resource_deleted(error_message),
@@ -137,12 +137,12 @@ def test_cluster_crud(
     # 11. Delete Infrastructure Provider
     error_message = f"The Infrastructure Provider {provider_name} could not be deleted."
     run(
-        f"rok infra provider delete {provider_name}",
+        f"krakectl infra provider delete {provider_name}",
         condition=check_return_code(error_message),
     )
     # 12. Delete Cloud
     error_message = f"The Cloud {cloud_name} could not be deleted."
     run(
-        f"rok infra cloud delete {cloud_name}",
+        f"krakectl infra cloud delete {cloud_name}",
         condition=check_return_code(error_message),
     )

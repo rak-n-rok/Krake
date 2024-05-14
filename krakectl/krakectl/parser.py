@@ -15,7 +15,7 @@ class ParserSpec(object):
     Example:
         .. code:: python
 
-            from rok.parser import ParserSpec, argument
+            from krakectl.parser import ParserSpec, argument
 
             spec = ParserSpec(prog="spam", description="Spam command line interface")
 

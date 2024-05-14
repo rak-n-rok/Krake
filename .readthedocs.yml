@@ -17,4 +17,4 @@ python:
     - method: pip
       path: krake/
     - method: pip
-      path: rok/
+      path: krakectl/

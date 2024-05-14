@@ -122,10 +122,10 @@ class BaseMetricsProviderDefinition(ResourceDefinition, ABC):
         return check_resource_exists(error_message=error_message)
 
     def delete_command(self, wait):
-        return f"rok core {self.kind.value} delete {self.name}".split()
+        return f"krakectl core {self.kind.value} delete {self.name}".split()
 
     def get_command(self):
-        return f"rok core {self.kind.value} get {self.name} -o json".split()
+        return f"krakectl core {self.kind.value} get {self.name} -o json".split()
 
     @abstractmethod
     def update_command(self, **kwargs):
@@ -231,7 +231,7 @@ class BaseKafkaMetricsProviderDefinition(BaseMetricsProviderDefinition):
 
     def creation_command(self, wait):
         return (
-            f"rok core {self.kind.value} create --type {self.type.value} "
+            f"krakectl core {self.kind.value} create --type {self.type.value} "
             f"--url {self.url} --comparison-column {self.comparison_column} "
             f"--value-column {self.value_column} --table {self.table} "
             f"{self.name}".split()
@@ -240,7 +240,7 @@ class BaseKafkaMetricsProviderDefinition(BaseMetricsProviderDefinition):
     def update_command(
         self, url=None, table=None, comparison_column=None, value_column=None
     ):
-        cmd = f"rok core {self.kind.value} update {self.name}".split()
+        cmd = f"krakectl core {self.kind.value} update {self.name}".split()
         if url:
             cmd += ["--url", url]
         if table:
@@ -279,12 +279,12 @@ class BasePrometheusMetricsProviderDefinition(BaseMetricsProviderDefinition):
 
     def creation_command(self, wait):
         return (
-            f"rok core {self.kind.value} create --type {self.type.value} "
+            f"krakectl core {self.kind.value} create --type {self.type.value} "
             f"--url {self.url} {self.name}".split()
         )
 
     def update_command(self, url=None):
-        return f"rok core {self.kind.value} update --url {url} {self.name}".split()
+        return f"krakectl core {self.kind.value} update --url {url} {self.name}".split()
 
     def read_metrics(self):
         raise NotImplementedError()
@@ -317,20 +317,20 @@ class BaseStaticMetricsProviderDefinition(BaseMetricsProviderDefinition):
 
     def creation_command(self, wait):
         cmd = (
-            f"rok core {self.kind.value} create --type {self.type.value} "
+            f"krakectl core {self.kind.value} create --type {self.type.value} "
             f"{self.name}".split()
         )
         cmd += self._get_metrics_options(self.metrics)
         return cmd
 
     def update_command(self, metrics=None):
-        cmd = f"rok core {self.kind.value} update {self.name}".split()
+        cmd = f"krakectl core {self.kind.value} update {self.name}".split()
         cmd += self._get_metrics_options(metrics)
         return cmd
 
     @staticmethod
     def _get_metrics_options(metrics):
-        """Convenience method for generating metric lists for rok cli commands.
+        """Convenience method for generating metric lists for krakectl cli commands.
 
         Example:
             If provided the argument metrics=
@@ -339,7 +339,7 @@ class BaseStaticMetricsProviderDefinition(BaseMetricsProviderDefinition):
             this method will return the list
             ["-m", "metric_name1", "1.0", "-m", "metric_name2", "2.0"],
             which can be used when constructing a cli command like
-            rok kube cluster register -m metric_name1 1.0 -m metric_name2 2.0 ...
+            krakectl kube cluster register -m metric_name1 1.0 -m metric_name2 2.0 ...
 
         Args:
             metrics (list[StaticMetric], optional): list of metrics with values.
@@ -450,7 +450,7 @@ class BaseMetricDefinition(ResourceDefinition, ABC):
 
     def creation_command(self, wait):
         cmd = (
-            f"rok core {self.kind.value} create --min {self.min} --max {self.max} "
+            f"krakectl core {self.kind.value} create --min {self.min} --max {self.max} "
             f"{self._mp_name_param} {self.mp_name} --metric-name {self.mp_metric_name} "
             f"{self.name}".split()
         )
@@ -470,15 +470,15 @@ class BaseMetricDefinition(ResourceDefinition, ABC):
         return check_resource_exists(error_message=error_message)
 
     def delete_command(self, wait):
-        return f"rok core {self.kind.value} delete {self.name}".split()
+        return f"krakectl core {self.kind.value} delete {self.name}".split()
 
     def get_command(self):
-        return f"rok core {self.kind.value} get {self.name} -o json".split()
+        return f"krakectl core {self.kind.value} get {self.name} -o json".split()
 
     def update_command(
         self, allowed_values=None, min=None, max=None, mp_name=None, mp_metric_name=None
     ):
-        cmd = f"rok core {self.kind.value} update {self.name}".split()
+        cmd = f"krakectl core {self.kind.value} update {self.name}".split()
         if allowed_values:
             cmd += ["allowed-values", allowed_values]
         if min:
