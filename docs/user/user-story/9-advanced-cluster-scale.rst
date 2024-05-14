@@ -29,7 +29,7 @@ and register an infrastructure provider. Validate the infrastructure provider re
 
 .. prompt:: bash $ auto
 
-    $ rok infra provider list
+    $ krakectl infra provider list
     +-------------+--------------+--------+---------------------+---------------------+---------+------+-----------------------+
     |    name     |  namespace   | labels |       created       |      modified       | deleted | type |          url          |
     +=============+==============+========+=====================+=====================+=========+======+=======================+
@@ -42,7 +42,7 @@ and register an existing OpenStack cloud to Krake. Validate the cloud registrati
 
 .. prompt:: bash $ auto
 
-    $ rok infra cloud list
+    $ krakectl infra cloud list
     +----------+--------------+--------+---------------------+---------------------+---------+-----------+---------+----------------+--------+
     |   name   |  namespace   | labels |       created       |      modified       | deleted |   type    | metrics | infra_provider | state  |
     +==========+==============+========+=====================+=====================+=========+===========+=========+================+========+
@@ -58,7 +58,7 @@ This TOSCA template should create a Kubernetes cluster with one control plane no
 
 .. prompt:: bash $ auto
 
-    rok kube cluster create -f rak/functionals/im-cluster.yaml my-cluster
+    krakectl kube cluster create -f rak/functionals/im-cluster.yaml my-cluster
 
 The creation of the cluster can take up to 15 minutes to complete. The fully created and configured cluster
 should be in the `ONLINE` state. You should also see that 2 from 2 nodes total are healthy (nodes: 2/2).
@@ -66,7 +66,7 @@ Validate them as follows:
 
 .. prompt:: bash $ auto
 
-    $ rok kube cluster get my-cluster
+    $ krakectl kube cluster get my-cluster
     +-----------------------+---------------------------------------------------------------------------------------------+
     | name                  | my-cluster                                                                                  |
     | namespace             | system:admin                                                                                |
@@ -97,7 +97,7 @@ directly by the kubectl_ CLI. You can do this as follows (with the help of jq_ c
 
 .. prompt:: bash $ auto
 
-    rok kube cluster get my-cluster -o json | jq .spec.kubeconfig > kubeconfig.json
+    krakectl kube cluster get my-cluster -o json | jq .spec.kubeconfig > kubeconfig.json
 
 Access the  ``my-cluster`` cluster:
 
@@ -132,7 +132,7 @@ Scale up the cluster:
 
 .. prompt:: bash $ auto
 
-    rok kube cluster update -f examples/templates/tosca/im-cluster-scale-up.yaml my-cluster
+    krakectl kube cluster update -f examples/templates/tosca/im-cluster-scale-up.yaml my-cluster
 
 
 The scaling of the cluster can take up to 5 minutes to complete. The fully scaled and configured cluster
@@ -142,7 +142,7 @@ Validate them as follows:
 
 .. prompt:: bash $ auto
 
-    $ rok kube cluster get my-cluster
+    $ krakectl kube cluster get my-cluster
     +-----------------------+---------------------------------------------------------------------------------------------+
     | name                  | my-cluster                                                                                  |
     | namespace             | system:admin                                                                                |
@@ -213,7 +213,7 @@ This TOSCA template should remove one worker node.
 
   .. prompt:: bash $ auto
 
-      $ rok kube cluster get my-cluster -o json | jq .status.nodes[].metadata.name
+      $ krakectl kube cluster get my-cluster -o json | jq .status.nodes[].metadata.name
       "kubeserver.localdomain"
       "vnode-1.localdomain"
       "vnode-2.localdomain"
@@ -225,7 +225,7 @@ Scale down the cluster:
 
 .. prompt:: bash $ auto
 
-    rok kube cluster update -f examples/templates/tosca/im-cluster-scale-down.yaml my-cluster
+    krakectl kube cluster update -f examples/templates/tosca/im-cluster-scale-down.yaml my-cluster
 
 
 The scaling of the cluster can take up to 5 minutes to complete. The fully scaled and configured cluster
@@ -235,7 +235,7 @@ Validate them as follows:
 
 .. prompt:: bash $ auto
 
-    $ rok kube cluster get my-cluster
+    $ krakectl kube cluster get my-cluster
     +-----------------------+---------------------------------------------------------------------------------------------+
     | name                  | my-cluster                                                                                  |
     | namespace             | system:admin                                                                                |
@@ -278,9 +278,9 @@ Delete the Cluster, Cloud and the InfrastructureProvider.
 
 .. code:: bash
 
-    rok kube cluster delete my-cluster
-    rok infra cloud delete os-cloud
-    rok infra provider delete im-provider
+    krakectl kube cluster delete my-cluster
+    krakectl infra cloud delete os-cloud
+    krakectl infra provider delete im-provider
 
 Automatic Cluster scaling
 =========================
@@ -295,7 +295,7 @@ the status of the app.
 
 .. prompt:: bash $ auto
 
-    $ rok kube app get my-app
+    $ krakectl kube app get my-app
     +-----------------------+-----------------------------------------------+
     | name                  | my-app                                        |
     | namespace             | system:admin                                  |
@@ -316,7 +316,7 @@ When viewing the created cluster, the inherited values should be visible, since 
 
 .. prompt:: bash $ auto
 
-    $ rok kube cluster get auto-created-cluster
+    $ krakectl kube cluster get auto-created-cluster
     +-----------------------+---------------------------------------------------------------------------------------------+
     | name                  | auto-created-cluster                                                                        |
     | namespace             | system:admin                                                                                |

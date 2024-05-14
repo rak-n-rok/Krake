@@ -222,7 +222,7 @@ flake8-krake:
     - flake8 krake/krake
 
 
-flake8-rok:
+flake8-krakectl:
   stage: lint
   image: python:3.10
   only:
@@ -232,7 +232,7 @@ flake8-rok:
     - schedules
   script:
     - pip install -r ci/requirements_lint.txt
-    - flake8 rok/rok
+    - flake8 krakectl/krakectl
 
 
 test-build-docs:
@@ -301,7 +301,7 @@ e2e-provisioning:
     - schedules
   needs:
     - flake8-krake
-    - flake8-rok
+    - flake8-krakectl
   artifacts:
     public: false #To not expose private ssh key
     paths:

@@ -7,7 +7,7 @@ from .core import core
 from .infrastructure import infrastructure
 
 
-spec = ParserSpec(prog="rok", description="Command line interface for Krake")
+spec = ParserSpec(prog="krakectl", description="Command line interface for Krake")
 spec.add_spec(kubernetes)
 spec.add_spec(infrastructure)
 spec.add_spec(openstack)

@@ -72,12 +72,12 @@ source .venv/bin/activate
 pip install -U pip setuptools
 ```
 
-Use `pip` to install Krake, `rok` and their dependencies into the virtualenv. Note that we install
+Use `pip` to install Krake, `krakectl` and their dependencies into the virtualenv. Note that we install
 from a local path and not from PyPI, which is important!
 
 ```bash
 pip install --editable ./krake
-pip install --editable ./rok
+pip install --editable ./krakectl
 ```
 
 For development, Krake can also be installed with additional test and development dependencies:
@@ -98,7 +98,7 @@ then be modified at will.
 
 ```bash
 # First, start the generate script to have initial config files
-krake/scripts/krake_generate_config templates/config/*.template templates/config/rok.yaml.template
+krake/scripts/krake_generate_config templates/config/*.template templates/config/krakectl.yaml.template
 
 krake/scripts/krake_generate_config --allow-anonymous --static-authentication-enabled templates/config/api.yaml.template
 
@@ -111,7 +111,7 @@ sudo cp *.yaml /etc/krake
 
 # Optional: you can use the rok configuration template as you prefer. It can also be generated.
 # Otherwise rok will use the default configuration
-krake/scripts/krake_generate_config templates/config/rok.yaml.template
+krake/scripts/krake_generate_config templates/config/krakectl.yaml.template
 ```
 
 The `--allow-anonymous` and `--static-authentication-enabled` options set the API with
@@ -262,7 +262,7 @@ python3 -m krake.controller.infrastructure
 
 There is also a [script](https://gitlab.com/rak-n-rok/krake/-/snippets/2042674) (see snippets section on git) provided in the git repository to start all parts of Krake using „tmux“.
 
-For both options, these commands as well as the following rok commands must be run inside the `./krake` subdirectory.
+For both options, these commands as well as the following krakectl commands must be run inside the `./krake` subdirectory.
 
 #### Using the Krake CLI
 
@@ -274,14 +274,14 @@ The following example shows these basics:
 
 ```console
 # List current clusters; there should be none
-$ rok kube cluster list
+$ krakectl kube cluster list
 +------+-----------+--------+---------+----------+---------+-------+
 | name | namespace | labels | created | modified | deleted | state |
 +======+===========+========+=========+==========+=========+=======+
 +------+-----------+--------+---------+----------+---------+-------+
 
 # Register your minikube instance
-$ rok kube cluster register -k cluster_certs/config/minikube_conf.yaml
+$ krakectl kube cluster register -k cluster_certs/config/minikube_conf.yaml
 +------------------+---------------------+
 | name             | minikube2           |
 | namespace        | system:admin        |
@@ -296,7 +296,7 @@ $ rok kube cluster register -k cluster_certs/config/minikube_conf.yaml
 +------------------+---------------------+
 
 # Now there is a cluster named minikube2
-$ rok kube cluster list
+$ krakectl kube cluster list
 +-----------+--------------+--------+---------------------+---------------------+---------+--------+
 |   name    |  namespace   | labels |       created       |      modified       | deleted | state  |
 +===========+==============+========+=====================+=====================+=========+========+
@@ -304,7 +304,7 @@ $ rok kube cluster list
 +-----------+--------------+--------+---------------------+---------------------+---------+--------+
 
 # Run an application on Krake
-$ rok kube app create -f ../examples/templates/applications/echo-demo.yaml echo-demo
+$ krakectl kube app create -f ../examples/templates/applications/echo-demo.yaml echo-demo
 +-----------------------+---------------------+
 | name                  | echo-demo           |
 | namespace             | system:admin        |
@@ -325,7 +325,7 @@ $ rok kube app create -f ../examples/templates/applications/echo-demo.yaml echo-
 +-----------------------+---------------------+
 
 # Check the status of the application
-$ rok kube app get echo-demo
+$ krakectl kube app get echo-demo
 +-----------------------+-------------------------------------------------------------------------------------------+
 | name                  | echo-demo                                                                                 |
 | namespace             | system:admin                                                                              |
@@ -374,7 +374,7 @@ Request Body:
   -no body in request-
 
 # Delete the application
-$ rok kube app delete echo-demo
+$ krakectl kube app delete echo-demo
 +-----------------------+-----------------------------------------------+
 | name                  | echo-demo                                     |
 | namespace             | system:admin                                  |
@@ -396,7 +396,7 @@ $ rok kube app delete echo-demo
 +-----------------------+-----------------------------------------------+
 
 # Delete the cluster
-$ rok kube cluster delete minikube2
+$ krakectl kube cluster delete minikube2
 +------------------+---------------------+
 | name             | minikube2           |
 | namespace        | system:admin        |
@@ -411,7 +411,7 @@ $ rok kube cluster delete minikube2
 +------------------+---------------------+
 
 # Check that cluster is deleted
-$ rok kube cluster list
+$ krakectl kube cluster list
 +------+-----------+--------+---------+----------+---------+-------+
 | name | namespace | labels | created | modified | deleted | state |
 +======+===========+========+=========+==========+=========+=======+
@@ -440,8 +440,8 @@ dependency)
 # Run tests of the "krake" package
 pytest krake/tests
 
-# Run tests of the "rok" package
-pytest rok/tests
+# Run tests of the "krakectl" package
+pytest krakectl/tests
 ```
 
 ## Documentation

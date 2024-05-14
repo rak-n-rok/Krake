@@ -1,4 +1,4 @@
-"""rok output formatters.
+"""krakectl output formatters.
 
 The API of this module is a decorator factory function :func:`printer` that
 can be used to annotate functions and print their return value in a format-
@@ -56,7 +56,7 @@ def printer(file=sys.stdout, **formatters):
     Examples:
         .. code:: python
 
-            from rok.formatters import printer
+            from krakectl.formatters import printer
 
             def print_to_table(value, out):
                 ...
@@ -352,7 +352,7 @@ class Table(object):
     Examples:
         .. code:: python
 
-            from rok,formatters import Table, Cell
+            from krakectl,formatters import Table, Cell
 
             class BookTable(Table):
                 isbn = Cell("isbn")
@@ -440,7 +440,7 @@ class Table(object):
 
         .. code:: bash
 
-            # stdout of rok is not the interactive terminal
+            # stdout of krakectl is not the interactive terminal
             $ python3 program.py | cat -
 
             # stdin is not the interactive terminal

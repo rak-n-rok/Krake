@@ -20,7 +20,7 @@ infra
 krake
     Contains the source code and the unit tests for the Krake application. More details are given in the Krake Reference.
 
-rok
+krakectl
     Contains the source code and the unit tests for the Rok command. More details are given in the Rok Reference.
 
 support

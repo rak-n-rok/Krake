@@ -2,7 +2,7 @@
 
 .. code:: bash
 
-    python -m rok infrastructure --help
+    python -m krakectl infrastructure --help
 
 """
 

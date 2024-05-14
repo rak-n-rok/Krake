@@ -1,7 +1,7 @@
 Client Reference
 ================
 
-.. automodule:: rok
+.. automodule:: krakectl
     :members:
     :undoc-members:
     :show-inheritance:
@@ -9,7 +9,7 @@ Client Reference
 Fixtures
 ~~~~~~~~
 
-.. automodule:: rok.fixtures
+.. automodule:: krakectl.fixtures
     :members:
     :undoc-members:
     :show-inheritance:
@@ -17,7 +17,7 @@ Fixtures
 Command Line Parser
 ~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: rok.parser
+.. automodule:: krakectl.parser
     :members:
     :undoc-members:
     :show-inheritance:

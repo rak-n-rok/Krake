@@ -33,6 +33,6 @@ API reference of all modules is provided.
     api-generation
     tosca
     ref/krake
-    ref/rok
+    ref/krakectl
     docker
     gitlab-cicd

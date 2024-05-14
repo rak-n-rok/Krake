@@ -177,7 +177,7 @@ def test_create_on_other_namespace(k8s_clusters):
         # 3. Delete the Application
         app.delete_resource()
         run(
-            "rok kube app list -o json",
+            "krakectl kube app list -o json",
             condition=check_empty_list(
                 "Unable to observe the empty list of applications"
             ),
@@ -271,19 +271,19 @@ def test_scheduler_clusters_with_metrics(k8s_clusters):
     """
     # The two clusters and metrics used in this test
 
-    _gm_cmd = run(("rok core gm list -o json"))
+    _gm_cmd = run(("krakectl core gm list -o json"))
     _gm_cmd = _gm_cmd.output
     _gm_cmd = _gm_cmd.replace("null", '""')
     gm_list = json.loads(_gm_cmd)
     for gm in gm_list:
-        run(("rok core gm delete " + gm["metadata"]["name"]))
+        run(("krakectl core gm delete " + gm["metadata"]["name"]))
 
-    _gmp_cmd = run(("rok core gmp list -o json"))
+    _gmp_cmd = run(("krakectl core gmp list -o json"))
     _gmp_cmd = _gmp_cmd.output
     _gmp_cmd = _gmp_cmd.replace("null", '""')
     gmp_list = json.loads(_gmp_cmd)
     for gmp in gmp_list:
-        run(("rok core gmp delete " + gmp["metadata"]["name"]))
+        run(("krakectl core gmp delete " + gmp["metadata"]["name"]))
 
     # -------------------------------------------------------------------
     num_clusters = 2
@@ -355,19 +355,19 @@ def test_scheduler_clusters_with_global_metrics(k8s_clusters):
         k8s_clusters (list): Names of the Kubernetes backend.
 
     """
-    _gm_cmd = run(("rok core gm list -o json"))
+    _gm_cmd = run(("krakectl core gm list -o json"))
     _gm_cmd = _gm_cmd.output
     _gm_cmd = _gm_cmd.replace("null", '""')
     gm_list = json.loads(_gm_cmd)
     for gm in gm_list:
-        run(("rok core gm delete " + gm["metadata"]["name"]))
+        run(("krakectl core gm delete " + gm["metadata"]["name"]))
 
-    _gmp_cmd = run(("rok core gmp list -o json"))
+    _gmp_cmd = run(("krakectl core gmp list -o json"))
     _gmp_cmd = _gmp_cmd.output
     _gmp_cmd = _gmp_cmd.replace("null", '""')
     gmp_list = json.loads(_gmp_cmd)
     for gmp in gmp_list:
-        run(("rok core gmp delete " + gmp["metadata"]["name"]))
+        run(("krakectl core gmp delete " + gmp["metadata"]["name"]))
 
     # -------------------------------------------------------------------
     for i in range(3):
@@ -440,19 +440,19 @@ def test_scheduler_clusters_with_one_metric(k8s_clusters):
         k8s_clusters (list): Names of the Kubernetes backend.
 
     """
-    _gm_cmd = run(("rok core gm list -o json"))
+    _gm_cmd = run(("krakectl core gm list -o json"))
     _gm_cmd = _gm_cmd.output
     _gm_cmd = _gm_cmd.replace("null", '""')
     gm_list = json.loads(_gm_cmd)
     for gm in gm_list:
-        run(("rok core gm delete " + gm["metadata"]["name"]))
+        run(("krakectl core gm delete " + gm["metadata"]["name"]))
 
-    _gmp_cmd = run(("rok core gmp list -o json"))
+    _gmp_cmd = run(("krakectl core gmp list -o json"))
     _gmp_cmd = _gmp_cmd.output
     _gmp_cmd = _gmp_cmd.replace("null", '""')
     gmp_list = json.loads(_gmp_cmd)
     for gmp in gmp_list:
-        run(("rok core gmp delete " + gmp["metadata"]["name"]))
+        run(("krakectl core gmp delete " + gmp["metadata"]["name"]))
 
     # -------------------------------------------------------------------
     mps = [
@@ -682,19 +682,19 @@ def test_all_unreachable_metrics_provider(k8s_clusters):
         k8s_clusters (list): Names of the Kubernetes backend.
 
     """
-    _gm_cmd = run(("rok core gm list -o json"))
+    _gm_cmd = run(("krakectl core gm list -o json"))
     _gm_cmd = _gm_cmd.output
     _gm_cmd = _gm_cmd.replace("null", '""')
     gm_list = json.loads(_gm_cmd)
     for gm in gm_list:
-        run(("rok core gm delete " + gm["metadata"]["name"]))
+        run(("krakectl core gm delete " + gm["metadata"]["name"]))
 
-    _gmp_cmd = run(("rok core gmp list -o json"))
+    _gmp_cmd = run(("krakectl core gmp list -o json"))
     _gmp_cmd = _gmp_cmd.output
     _gmp_cmd = _gmp_cmd.replace("null", '""')
     gmp_list = json.loads(_gmp_cmd)
     for gmp in gmp_list:
-        run(("rok core gmp delete " + gmp["metadata"]["name"]))
+        run(("krakectl core gmp delete " + gmp["metadata"]["name"]))
 
     # -------------------------------------------------------------------
     # The two clusters and metrics used in this test (randomly ordered)
@@ -831,7 +831,7 @@ def test_cluster_not_online(k8s_clusters):
         assert app.get_state() == "FAILED"
 
         # 3. Ensure that the cluster is offline
-        cluster_json = run("rok kube cluster list -o json")
+        cluster_json = run("krakectl kube cluster list -o json")
         cluster_list = json.loads(cluster_json.output)
         assert cluster_list[0]["status"]["state"] == "OFFLINE"
 
@@ -892,7 +892,7 @@ def test_tenant_separation(k8s_clusters):
         # 2. Delete the Application
         app.delete_resource()
         run(
-            "rok kube app list -n secondary -o json",
+            "krakectl kube app list -n secondary -o json",
             condition=check_empty_list(
                 "Unable to observe the empty list of applications"
             ),

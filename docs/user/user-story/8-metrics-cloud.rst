@@ -41,14 +41,14 @@ Check that the GlobalMetricsProvider and GlobalMetrics objects have been success
 
 .. prompt:: bash $ auto
 
-    $ rok core globalmetricsprovider list
+    $ krakectl core globalmetricsprovider list
     +-----------------+-----------+--------+---------------------+---------------------+---------+---------+
     |      name       | namespace | labels |       created       |      modified       | deleted | mp_type |
     +=================+===========+========+=====================+=====================+=========+=========+
     | static_provider | None      | None   | 2000-01-01 08:00:00 | 2000-01-01 08:00:00 | None    | static  |
     +-----------------+-----------+--------+---------------------+---------------------+---------+---------+
 
-    $ rok core globalmetric list
+    $ krakectl core globalmetric list
     +----------------------+-----------+--------+---------------------+---------------------+---------+-----------------+-----+-----+
     |         name         | namespace | labels |       created       |      modified       | deleted |    provider     | min | max |
     +======================+===========+========+=====================+=====================+=========+=================+=====+=====+
@@ -63,7 +63,7 @@ and register an infrastructure provider. Validate the infrastructure provider re
 
 .. prompt:: bash $ auto
 
-    $ rok infra provider list
+    $ krakectl infra provider list
     +-------------+--------------+--------+---------------------+---------------------+---------+------+-----------------------+
     |    name     |  namespace   | labels |       created       |      modified       | deleted | type |          url          |
     +=============+==============+========+=====================+=====================+=========+======+=======================+

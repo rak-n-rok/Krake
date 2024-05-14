@@ -32,7 +32,7 @@ There are 7 different configuration files:
 *  ``infrastructure.yaml`` for the Infrastructure controller;
 *  ``krakectl.yaml`` for the krakectl utility.
 
-For each one of them except ``rok.yaml``, a template is present in the
+For each one of them except ``krakectl.yaml``, a template is present in the
 ``config`` directory. They end with the ``.template`` extension. For Rok, the
 template configuration file is in the main directory of Krake.
 
@@ -41,10 +41,10 @@ By default, the configurations for Krake modules are searched in the following d
 * current working directory
 * location `/etc/krake/`
 
-`rok` searches these locations:
+`krakectl` searches these locations:
 * current working directory
 * the current home directory defined by `XDG_CONFIG_HOME`
-* location `/etc/rok/`
+* location `/etc/krakectl/`
 
 If the necessary configuration file is not found in these locations, an error is thrown and the module doesn't start. In order to use a different location, the `--config` option in the module start command can be used.
 
@@ -220,7 +220,7 @@ used in the main directory:
 
 .. code:: bash
 
-    krake/scripts/krake_generate_config templates/config/rok.yaml.template
+    krake/scripts/krake_generate_config templates/config/krakectl.yaml.template
 
 This will create the Rok configuration file in the main directory of Krake.
 
@@ -229,7 +229,7 @@ Krake configuration files at the same time:
 
 .. code:: bash
 
-    krake/scripts/krake_generate_config templates/config/*template templates/config/rok.yaml.template
+    krake/scripts/krake_generate_config templates/config/*template templates/config/krakectl.yaml.template
 
 This will create Krake and Rok configuration files in the main directory of
 Krake.
