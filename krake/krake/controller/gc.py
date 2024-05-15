@@ -297,6 +297,7 @@ class GarbageCollector(Controller):
 
         for i in range(self.worker_count):
             self.register_task(self.handle_resource, name=f"worker_{i}")
+            logger.debug(f"registered worker_{i}")
 
         # Create one reflector for each kind of resource managed by the GC.
         for api_cls, kind_list in self.resources.items():
@@ -333,6 +334,7 @@ class GarbageCollector(Controller):
 
                 name = f"{kind.api}_{kind.kind}_Reflector"
                 self.register_task(reflector, name=name)
+                logger.debug(f"created {kind.api}_{kind.kind}_Reflector")
 
     @staticmethod
     def is_in_deletion(resource):
@@ -350,8 +352,10 @@ class GarbageCollector(Controller):
             and resource.metadata.finalizers
             and resource.metadata.finalizers[-1] == "cascade_deletion"
         ):
+            logger.debug(f"resource is in deletion: {resource_ref(resource).name}")
             return True
 
+        logger.debug(f"resource is not in deletion: {resource_ref(resource).name}")
         return False
 
     async def on_received_new(self, resource):
@@ -366,6 +370,8 @@ class GarbageCollector(Controller):
             resource (krake.data.serializable.ApiObject): the newly added resource.
 
         """
+        logger.debug(f"on_receive_new({resource_ref(resource).name})")
+
         try:
             self.graph.add_resource(resource_ref(resource), resource.metadata.owners)
             await self.simple_on_receive(resource, condition=self.is_in_deletion)
@@ -383,6 +389,7 @@ class GarbageCollector(Controller):
             resource (krake.data.serializable.ApiObject): the updated resource.
 
         """
+        logger.debug(f"on_receive_update({resource_ref(resource).name})")
         try:
             self.graph.update_resource(resource_ref(resource), resource.metadata.owners)
             await self.simple_on_receive(resource, condition=self.is_in_deletion)
@@ -397,12 +404,17 @@ class GarbageCollector(Controller):
             resource (krake.data.serializable.ApiObject): the deleted resource.
 
         """
+        logger.debug(f"on_receive_deleted({resource_ref(resource).name})")
         for dependency_ref in resource.metadata.owners:
             get_resource = self.get_api_method(dependency_ref, "read")
 
             kwargs = get_namespace_as_kwargs(dependency_ref.namespace)
             dependency = await get_resource(name=dependency_ref.name, **kwargs)
+
             if self.is_in_deletion(dependency):
+                logger.debug(
+                    f"add its dependencies to the Worker queue: ({dependency_ref.name})"
+                )
                 await self.queue.put(dependency.metadata.uid, dependency)
 
         try:
@@ -436,6 +448,8 @@ class GarbageCollector(Controller):
                 (through its client).
 
         """
+        # ~ logger.debug("get_api:method( %r )", reference)
+        logger.debug(f"get_api:method ({reference.kind}-->{reference.api}-->{verb})")
         api = self.apis[(reference.api, reference.kind)]
         kind = camel_to_snake_case(reference.kind)
         return getattr(api, f"{verb}_{kind}")
@@ -457,9 +471,11 @@ class GarbageCollector(Controller):
         """
         while True:
             key, resource = await self.queue.get()
+            logger.debug(f"Current queue size: {self.queue.size()}")
             try:
                 logger.debug("Handling resource %s", resource)
                 await self.resource_received(resource)
+
             finally:
                 await self.queue.done(key)
 
@@ -474,35 +490,101 @@ class GarbageCollector(Controller):
         Args:
             resource (krake.data.serializable.ApiObject): a resource in deletion
                 state.
-
         """
         res_ref = resource_ref(resource)
         logger.debug("Received %r", res_ref)
-
         dependents = self.graph.get_direct_dependents(res_ref)
+
         if dependents:
             await self._mark_dependents(dependents)
         else:
             logger.debug("Resource has no dependent anymore: %s", resource)
-            await self._remove_cascade_deletion_finalizer(resource)
+            await self._remove_cascade_finalizer(resource)
+
+    def _find_application_cascade_policy(self, resource):
+        """Search for cascade policy of the resource.
+        In order to decide oppon getting deleted or migrated
+        """
+        first_manifest_spec = resource.spec.manifest[0]["spec"]
+        if "cascade_policy" in first_manifest_spec:
+            cascade_policy = first_manifest_spec["cascade_policy"]
+            return cascade_policy
+        return None
 
     async def _mark_dependents(self, dependents):
         """Request the deletion of a list of resources.
-
         Args:
             dependents (list[krake.data.core.ResourceRef]): the list of resources to
                 delete.
+        """
+        logger.debug("_mark_dependents")
+
+        for dependent in dependents:
+            cascade_policy = None
+
+            if dependent.kind == "Application":
+                # GET THE DEPENDENT BODY IN ORDER TO INTERPRETE THE NEXT STEPS !!!
+                get_resource = self.get_api_method(dependent, "read")
+                kwargs = get_namespace_as_kwargs(dependent.namespace)
+                dependent_resource = await get_resource(name=dependent.name, **kwargs)
+                cascade_policy = self._find_application_cascade_policy(
+                    dependent_resource
+                )
+
+            if cascade_policy == "MIGRATE":
+                logger.info("Migrate dependent: %s", dependent)
+                dependent_resource.status.scheduled = None
+                dependent_resource.metadata.finalizers.append("cascade_migration")
+                update_resource = self.get_api_method(dependent, "update")
+                kwargs = get_namespace_as_kwargs(dependent.namespace)
+                await update_resource(
+                    name=dependent.name, body=dependent_resource, **kwargs
+                )
+                await self.rework_dependent(dependent_resource)
+
+            else:
+                logger.info("Mark dependent as deleted: %s", dependent)
+                delete_resource = self.get_api_method(dependent, "delete")
+                kwargs = get_namespace_as_kwargs(dependent.namespace)
+                await delete_resource(name=dependent.name, **kwargs)
+
+    async def rework_dependent(self, dependent_resource):
+        """To be called when a resource is migrated. Remove the resource
+        add its dependencies to the Worker queue.
+
+        Args:
+            resource (krake.data.serializable.ApiObject): the updated dependent.
 
         """
-        for dependent in dependents:
-            delete_resource = self.get_api_method(dependent, "delete")
+        logger.debug(f"rework_dependent({resource_ref(dependent_resource).name})")
+        for dependency_ref in dependent_resource.metadata.owners:
+            get_resource = self.get_api_method(dependency_ref, "read")
+            kwargs = get_namespace_as_kwargs(dependency_ref.namespace)
+            dependency = await get_resource(name=dependency_ref.name, **kwargs)
 
-            logger.info("Mark dependent as deleted: %s", dependent)
+            if self.is_in_deletion(dependency):
+                logger.debug(
+                    f"add its dependencies to the Worker queue: ({dependency_ref.name})"
+                )
+                await self.queue.put(dependency.metadata.uid, dependency)
 
-            kwargs = get_namespace_as_kwargs(dependent.namespace)
-            await delete_resource(name=dependent.name, **kwargs)
+        # ~ try:
+        # ~ self.graph.remove_resource(resource_ref(dependent_resource))
+        # ~ except ResourceWithDependentsException as err:
+        # ~ # This case can only happen if a resource with dependent has been deleted on
+        # ~ # the database, but its dependent where not handled by the Garbage
+        # ~ # Collector, and are thus potentially still present on the API database or
+        # ~ # have actual corresponding resources on a machine.
+        # ~ logger.warning(
+        # ~ (
+        # ~ "Resource %s has been deleted by the API,"
+        # ~ " but it still holds several dependents: %r"
+        # ~ ),
+        # ~ resource_ref(resource),
+        # ~ ",".join(map(str, err.dependents)),
+        # ~ )
 
-    async def _remove_cascade_deletion_finalizer(self, resource):
+    async def _remove_cascade_finalizer(self, resource):
         """Update the given resource to remove its garbage-collector-specific
         finalizer.
 
@@ -511,14 +593,27 @@ class GarbageCollector(Controller):
                 removed from this resource.
 
         """
+        logger.debug("Remove cascade finalizer for: %s", resource_ref(resource))
         update_resource = self.get_api_method(resource, "update")
 
         finalizer = resource.metadata.finalizers.pop(-1)
-        assert finalizer == "cascade_deletion"
-        logger.info("Resource ready for deletion: %s", resource_ref(resource))
 
-        kwargs = get_namespace_as_kwargs(resource.metadata.namespace)
-        await update_resource(name=resource.metadata.name, body=resource, **kwargs)
+        logger.debug(f"Remove finalizer: '{finalizer}' ")
+
+        if finalizer != "cascade_deletion" and finalizer != "cascade_migration":
+            raise AssertionError(
+                "finalizer is not 'cascade_deletion' and 'cascade_migration'"
+            )
+
+        if finalizer == "cascade_migration":
+            logger.info("??? Resource is migrated ???: %s", resource_ref(resource))
+            kwargs = get_namespace_as_kwargs(resource.metadata.namespace)
+            await update_resource(name=resource.metadata.name, body=resource, **kwargs)
+
+        if finalizer == "cascade_deletion":
+            logger.info("Resource ready for deletion: %s", resource_ref(resource))
+            kwargs = get_namespace_as_kwargs(resource.metadata.namespace)
+            await update_resource(name=resource.metadata.name, body=resource, **kwargs)
 
     def _clean_cycle(self, cycle):
         """Remove all resources that belong to a dependency cycle from the dependency

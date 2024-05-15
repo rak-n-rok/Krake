@@ -4,6 +4,7 @@ kind: Deployment
 metadata:
   name: echo-demo
 spec:
+  #~ cascade_policy: DELETE
   cascade_policy: MIGRATE
   selector:
     matchLabels:
