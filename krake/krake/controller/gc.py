@@ -504,7 +504,8 @@ class GarbageCollector(Controller):
         first_manifest_spec = resource.spec.manifest[0]["spec"]
         if "cascade_policy" in first_manifest_spec:
             cascade_policy = first_manifest_spec["cascade_policy"]
-        return cascade_policy
+            return cascade_policy
+        return None
 
     async def _mark_dependents(self, dependents):
         """Request the deletion of a list of resources.
