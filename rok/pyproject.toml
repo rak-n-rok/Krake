@@ -3,8 +3,8 @@ requires = ["setuptools>=69.0.3"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "rok"
-version = "1.0.0"
+name = "krakectl"
+version = "0.0.1"
 authors = [
     {name = "Krake Development Team", email = "krake@cloudandheat.com"},
 ]
