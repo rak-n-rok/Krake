@@ -14,6 +14,7 @@ from .parser import (
     arg_labels,
     arg_namespace,
     arg_metric,
+    arg_config
 )
 from .fixtures import depends
 from .formatters import BaseTable, Cell, printer, dict_formatter
@@ -62,6 +63,7 @@ def list_projects(config, session, namespace, all):
 @argument("--template", help="UUID of Magnum cluster template", required=True)
 @argument("name", help="Name of the project")
 @arg_formatting
+@arg_config
 @arg_namespace
 @arg_labels
 @arg_metric
@@ -132,6 +134,7 @@ def create_project(
 @argument("name", help="OpenStack project name")
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=ProjectTable())
 def get_project(config, session, namespace, name):
@@ -159,6 +162,7 @@ def get_project(config, session, namespace, name):
 @arg_namespace
 @arg_labels
 @arg_metric
+@arg_config
 @depends("config", "session")
 @printer(table=ProjectTable())
 def update_project(
@@ -233,6 +237,7 @@ def update_project(
 @project.command("delete", help="Delete OpenStack project")
 @argument("name", help="OpenStack project name")
 @arg_formatting
+@arg_config
 @arg_namespace
 @depends("config", "session")
 @printer(table=ProjectTable())
@@ -288,6 +293,7 @@ class ClusterTable(ClusterListTable):
 @cluster.command("create", help="Create Magnum cluster")
 @argument("name", help="Name of the project")
 @arg_formatting
+@arg_config
 @arg_namespace
 @arg_labels
 @arg_metric
@@ -335,6 +341,7 @@ def create_cluster(
 )
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=ClusterListTable(many=True))
 def list_clusters(config, session, namespace, all):
@@ -353,6 +360,7 @@ def list_clusters(config, session, namespace, all):
 @argument("name", help="Magnum cluster name")
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=ClusterTable())
 def get_cluster(config, session, namespace, name):
@@ -372,6 +380,7 @@ def get_cluster(config, session, namespace, name):
 @arg_metric
 @arg_project_label_constraints
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=ClusterTable())
 def update_cluster(
@@ -408,6 +417,7 @@ def update_cluster(
 @argument("name", help="Magnum cluster name")
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=ClusterTable())
 def delete_cluster(config, session, namespace, name):

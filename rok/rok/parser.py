@@ -236,6 +236,14 @@ class StoreDict(Action):
         items[key] = value
 
 
+arg_config = argument(
+    "--config",
+    action="store",
+    type=str,
+    dest="path",
+    default="rok.yaml",
+    help="Path to the config file",
+)
 arg_formatting = argument(
     "-o",
     "--output",

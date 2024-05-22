@@ -36,7 +36,7 @@ def fixture(func):
         func: Function that should be registered as fixture
 
     Raises:
-        RuntimeError: If the a fixtures with the same name is already
+        RuntimeError: If the fixtures with the same name is already
             registered.
 
     """
@@ -96,7 +96,7 @@ class Resolver(object):
 
     Dependencies of a function are loaded from the ``depends`` attribute of
     the function. If a fixture is not available, the resolver checks if there
-    is a default argument. Otherwise a :class:`RuntimeError` is raised.
+    is a default argument. Otherwise, a :class:`RuntimeError` is raised.
 
     All fixtures can be overwritten by passing a corresponding keyword
     argument to the resolver call.
@@ -187,7 +187,10 @@ class Resolver(object):
                     )
 
                 self.resolving.append(name)
-                value = self(self.fixtures[name])
+                if name == "config":
+                    value = self(self.fixtures[name], **kwargs)
+                else:
+                    value = self(self.fixtures[name])
                 if self.resolving.pop() != name:
                     raise RuntimeError(
                         f"Result of self.resolving.pop() did not equal {name}"
@@ -218,13 +221,20 @@ class Resolver(object):
 # -----------------------------------------------------------------------------
 
 @fixture
-def config():
+def config(**kwargs):
     try:
         XDG_CONFIG_HOME = os.environ["XDG_CONFIG_HOME"]
     except KeyError:
         XDG_CONFIG_HOME = os.path.join(os.environ["HOME"], ".config")
 
+    custom_path = ""
+    try:
+        custom_path = kwargs["path"]
+    except KeyError:
+        pass
+
     config_paths = [
+        custom_path,
         "rok.yaml",
         os.path.join(XDG_CONFIG_HOME, "rok.yaml"),
         "/etc/rok/rok.yaml",
@@ -247,7 +257,7 @@ class BaseUrlSession(requests.Session):
     Args:
         base_url (str, optional): Base URL that should be used as prefix for
             every request.
-        raise_for_status (bool, optional): Automatically raise an exception of
+        raise_for_status (bool, optional): Automatically raise an exception
             for error response codes. Default: True
 
     """

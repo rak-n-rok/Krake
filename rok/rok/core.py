@@ -12,6 +12,7 @@ from .parser import (
     argument,
     arg_namespace,
     arg_formatting,
+    arg_config,
     MetricAction,
 )
 from .fixtures import depends
@@ -528,6 +529,7 @@ def _delete_base_metrics_provider(
 )
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=BaseMetricsProviderListTable(many=True))
 def list_metricsproviders(config, session, namespace, all):
@@ -593,6 +595,7 @@ def list_metricsproviders(config, session, namespace, all):
 @argument("name", help="Name of the metrics provider")
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=BaseMetricsProviderTable())
 def create_metricsprovider(
@@ -633,6 +636,7 @@ def create_metricsprovider(
 @argument("name", help="Metrics provider name")
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=BaseMetricsProviderTable())
 def get_metricsprovider(config, session, namespace, name):
@@ -739,6 +743,7 @@ def update_metricsprovider(
 @argument("name", help="Metrics provider name")
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=BaseMetricsProviderTable())
 def delete_metricsprovider(config, session, namespace, name):
@@ -757,6 +762,7 @@ def delete_metricsprovider(config, session, namespace, name):
 
 @global_metrics_provider.command("list", help="List global metrics providers")
 @arg_formatting
+@arg_config
 @depends("session")
 @printer(table=BaseMetricsProviderListTable(many=True))
 def list_globalmetricsproviders(session):
@@ -818,6 +824,7 @@ def list_globalmetricsproviders(session):
 )
 @argument("name", help="Name of the global metrics provider")
 @arg_formatting
+@arg_config
 @depends("session")
 @printer(table=BaseMetricsProviderTable())
 def create_globalmetricsprovider(
@@ -853,6 +860,7 @@ def create_globalmetricsprovider(
 @global_metrics_provider.command("get", help="Get a global metrics provider")
 @argument("name", help="Global metrics provider name")
 @arg_formatting
+@arg_config
 @depends("session")
 @printer(table=BaseMetricsProviderTable())
 def get_globalmetricsprovider(session, name):
@@ -915,6 +923,7 @@ def get_globalmetricsprovider(session, name):
     f"Only valid together with --type {_MetricsProviderType.INFLUX.value}.",
 )
 @arg_formatting
+@arg_config
 @depends("session")
 @printer(table=BaseMetricsProviderTable())
 def update_globalmetricsprovider(
@@ -948,6 +957,7 @@ def update_globalmetricsprovider(
 @global_metrics_provider.command("delete", help="Delete global metrics provider")
 @argument("name", help="Global metrics provider name")
 @arg_formatting
+@arg_config
 @depends("session")
 @printer(table=BaseMetricsProviderTable())
 def delete_globalmetricsprovider(session, name):
@@ -1093,6 +1103,7 @@ def _delete_base_metric(session, base_url, kind, name, config=None, namespace=No
 @argument("-a", "--all", action="store_true", help="Show metrics in all namespaces")
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=BaseMetricListTable(many=True))
 def list_metrics(config, session, namespace, all):
@@ -1118,6 +1129,7 @@ def list_metrics(config, session, namespace, all):
 @argument("name", help="Name of the metric")
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=BaseMetricTable())
 def create_metric(
@@ -1160,6 +1172,7 @@ def create_metric(
 @argument("name", help="Metric name")
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=BaseMetricTable())
 def get_metric(config, session, namespace, name):
@@ -1185,6 +1198,7 @@ def get_metric(config, session, namespace, name):
 )
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=BaseMetricTable())
 def update_metric(
@@ -1225,6 +1239,7 @@ def update_metric(
 @argument("name", help="Metric name")
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=BaseMetricTable())
 def delete_metric(config, session, namespace, name):
@@ -1238,6 +1253,7 @@ def delete_metric(config, session, namespace, name):
 
 @global_metric.command("list", help="List global metrics")
 @arg_formatting
+@arg_config
 @depends("session")
 @printer(table=BaseMetricListTable(many=True))
 def list_globalmetrics(session):
@@ -1261,6 +1277,7 @@ def list_globalmetrics(session):
 )
 @argument("name", help="Name of the global metric")
 @arg_formatting
+@arg_config
 @depends("session")
 @printer(table=BaseMetricTable())
 def create_globalmetric(
@@ -1296,6 +1313,7 @@ def create_globalmetric(
 @global_metric.command("get", help="Get a global metric")
 @argument("name", help="Global metric name")
 @arg_formatting
+@arg_config
 @depends("session")
 @printer(table=BaseMetricTable())
 def get_globalmetric(session, name):
@@ -1318,6 +1336,7 @@ def get_globalmetric(session, name):
     help="Name of the global metric which the global metrics provider provides.",
 )
 @arg_formatting
+@arg_config
 @depends("session")
 @printer(table=BaseMetricTable())
 def update_globalmetric(session, name, max, min, allowed_values, gmp_name, metric_name):
@@ -1351,6 +1370,7 @@ def update_globalmetric(session, name, max, min, allowed_values, gmp_name, metri
 @global_metric.command("delete", help="Delete global metric")
 @argument("name", help="Global metric name")
 @arg_formatting
+@arg_config
 @depends("session")
 @printer(table=BaseMetricTable())
 def delete_globalmetric(session, name):

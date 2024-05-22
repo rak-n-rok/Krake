@@ -85,6 +85,10 @@ def printer(file=sys.stdout, **formatters):
             format_type = kwargs.pop("output", "yaml")
 
             try:
+                try:
+                    kwargs.pop("path")
+                except KeyError:
+                    pass
                 value = func(*args, **kwargs)
             except HTTPError as he:
                 if "application/problem+json" in he.response.headers.get(

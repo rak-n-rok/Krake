@@ -18,6 +18,7 @@ from .parser import (
     ParserSpec,
     argument,
     mutually_exclusive_group,
+    arg_config,
     arg_formatting,
     arg_labels,
     arg_namespace,
@@ -294,6 +295,7 @@ def handle_warning(app):
 )
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=ApplicationListTable(many=True))
 def list_applications(config, session, namespace, all):
@@ -374,6 +376,7 @@ class ApplicationTable(ApplicationListTable):
 @arg_hook_complete
 @arg_hook_shutdown
 @arg_formatting
+@arg_config
 @arg_backoff
 @arg_backoff_delay
 @arg_backoff_limit
@@ -488,6 +491,7 @@ def create_application(
 @argument("name", help="Kubernetes application name")
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=ApplicationTable())
 def get_application(config, session, namespace, name):
@@ -551,6 +555,7 @@ def get_application(config, session, namespace, name):
 @arg_hook_complete
 @arg_hook_shutdown
 @arg_formatting
+@arg_config
 @arg_backoff
 @arg_backoff_delay
 @arg_backoff_limit
@@ -678,6 +683,7 @@ def update_application(
 )
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=ApplicationTable())
 def delete_application(config, session, namespace, name, wait, force):
@@ -703,6 +709,7 @@ def delete_application(config, session, namespace, name, wait, force):
 @argument("name", help="Kubernetes application name")
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=ApplicationTable())
 def retry_application(config, session, namespace, name):
@@ -841,6 +848,7 @@ def create_cluster_config(kubeconfig, context_name=None):
 @arg_namespace
 @arg_labels
 @arg_formatting
+@arg_config
 @arg_backoff
 @arg_backoff_delay
 @arg_backoff_limit
@@ -909,6 +917,7 @@ def register_cluster(
 @arg_cloud_label_constraints
 @arg_cloud_metric_constraints
 @arg_formatting
+@arg_config
 @arg_backoff
 @arg_backoff_delay
 @arg_backoff_limit
@@ -969,6 +978,7 @@ def create_cluster(
 )
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=ClusterTableList(many=True))
 def list_clusters(config, session, namespace, all):
@@ -987,6 +997,7 @@ def list_clusters(config, session, namespace, all):
 @argument("name", help="Kubernetes cluster name")
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=ClusterTableDetail())
 def get_cluster(config, session, namespace, name):
@@ -1084,6 +1095,7 @@ def get_cluster(config, session, namespace, name):
 @arg_global_metric
 @arg_namespace
 @arg_formatting
+@arg_config
 @arg_labels
 @arg_backoff
 @arg_backoff_delay
@@ -1167,6 +1179,7 @@ def update_cluster(
 )
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=ClusterTable())
 def delete_cluster(config, session, namespace, name, force):

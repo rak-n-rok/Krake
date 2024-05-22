@@ -18,6 +18,7 @@ from .parser import (
     arg_metric,
     arg_global_metric,
     arg_labels,
+    arg_config
 )
 from .fixtures import depends
 from .formatters import (
@@ -74,6 +75,7 @@ class InfrastructureProviderTable(InfrastructureProviderListTable):
     "list", help="List global infrastructure providers"
 )
 @arg_formatting
+@arg_config
 @depends("session")
 @printer(table=InfrastructureProviderListTable(many=True))
 def list_globalinfrastructureproviders(session):
@@ -116,6 +118,7 @@ def list_globalinfrastructureproviders(session):
 )
 @argument("name", help="Name of the infrastructure provider")
 @arg_formatting
+@arg_config
 @depends("session")
 @printer(table=InfrastructureProviderTable())
 def register_globalinfrastructureprovider(
@@ -164,6 +167,7 @@ def register_globalinfrastructureprovider(
 )
 @argument("name", help="Global infrastructure provider name")
 @arg_formatting
+@arg_config
 @depends("session")
 @printer(table=InfrastructureProviderTable())
 def get_globalinfrastructureprovider(session, name):
@@ -197,6 +201,7 @@ def get_globalinfrastructureprovider(session, name):
     f"Valid together with --type {InfrastructureProviderType.IM.value}.",
 )
 @arg_formatting
+@arg_config
 @depends("session")
 @printer(table=InfrastructureProviderTable())
 def update_globalinfrastructureprovider(
@@ -237,6 +242,7 @@ def update_globalinfrastructureprovider(
 )
 @argument("name", help="Global infrastructure provider name")
 @arg_formatting
+@arg_config
 @depends("session")
 @printer(table=InfrastructureProviderTable())
 def delete_globalinfrastructureprovider(session, name):
@@ -262,6 +268,7 @@ def delete_globalinfrastructureprovider(session, name):
 )
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=InfrastructureProviderListTable(many=True))
 def list_infrastructureproviders(config, session, namespace, all):
@@ -309,6 +316,7 @@ def list_infrastructureproviders(config, session, namespace, all):
 @argument("name", help="Name of the infrastructure provider")
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=InfrastructureProviderTable())
 def register_infrastructureprovider(
@@ -361,6 +369,7 @@ def register_infrastructureprovider(
 @argument("name", help="Infrastructure provider name")
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=InfrastructureProviderTable())
 def get_infrastructureprovider(config, session, namespace, name):
@@ -398,6 +407,7 @@ def get_infrastructureprovider(config, session, namespace, name):
 )
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=InfrastructureProviderTable())
 def update_infrastructureprovider(
@@ -444,6 +454,7 @@ def update_infrastructureprovider(
 @argument("name", help="Infrastructure provider name")
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=InfrastructureProviderTable())
 def delete_infrastructureprovider(config, session, namespace, name):
@@ -487,6 +498,7 @@ class CloudTable(CloudListTable):
 
 @global_cloud.command("list", help="List global clouds")
 @arg_formatting
+@arg_config
 @depends("session")
 @printer(table=CloudListTable(many=True))
 def list_globalclouds(session):
@@ -548,6 +560,7 @@ def list_globalclouds(session):
 @arg_global_metric
 @arg_labels
 @arg_formatting
+@arg_config
 @depends("session")
 @printer(table=CloudTable())
 def register_globalcloud(
@@ -617,6 +630,7 @@ def register_globalcloud(
 @global_cloud.command("get", help="Get global cloud")
 @argument("name", help="Global cloud name")
 @arg_formatting
+@arg_config
 @depends("session")
 @printer(table=CloudTable())
 def get_globalcloud(session, name):
@@ -664,6 +678,7 @@ def get_globalcloud(session, name):
 @arg_global_metric
 @arg_labels
 @arg_formatting
+@arg_config
 @depends("session")
 @printer(table=CloudTable())
 def update_globalcloud(
@@ -729,6 +744,7 @@ def update_globalcloud(
 @global_cloud.command("delete", help="Delete global cloud")
 @argument("name", help="Global cloud name")
 @arg_formatting
+@arg_config
 @depends("session")
 @printer(table=CloudTable())
 def delete_globalcloud(session, name):
@@ -749,6 +765,7 @@ def delete_globalcloud(session, name):
 @argument("-a", "--all", action="store_true", help="Show clouds in all namespaces")
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=CloudListTable(many=True))
 def list_clouds(config, session, namespace, all):
@@ -817,6 +834,7 @@ def list_clouds(config, session, namespace, all):
 @arg_labels
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=CloudTable())
 def register_cloud(
@@ -907,6 +925,7 @@ def register_cloud(
 @argument("name", help="Cloud name")
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=CloudTable())
 def get_cloud(config, session, namespace, name):
@@ -960,6 +979,7 @@ def get_cloud(config, session, namespace, name):
 @arg_labels
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=CloudTable())
 def update_cloud(
@@ -1051,6 +1071,7 @@ def update_cloud(
 @argument("name", help="Cloud name")
 @arg_namespace
 @arg_formatting
+@arg_config
 @depends("config", "session")
 @printer(table=CloudTable())
 def delete_cloud(config, session, namespace, name):
