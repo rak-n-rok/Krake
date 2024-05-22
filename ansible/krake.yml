@@ -253,7 +253,7 @@
             - docker
             - krake
             - rak
-            - rok
+            - krakectl
             - requirements
             - templates
             - support
@@ -522,7 +522,7 @@
             --cert-dir {{ rok_configuration_dir }}/certs {% endif %}
             --api-host localhost
             {% if api_port is defined %} --api-port {{ api_port }} {% endif %}
-            {{ git_dir }}/templates/config/rok.yaml.template
+            {{ git_dir }}/templates/config/krakectl.yaml.template
 
     - name: Local rok deployment
       tags:
