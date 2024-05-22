@@ -7,11 +7,12 @@ to wire fixtures and dependencies.
 """
 import os
 import sys
-from inspect import signature, isgeneratorfunction
 from collections import deque
+from inspect import signature, isgeneratorfunction
 from urllib.parse import urljoin, urlparse
-import yaml
+
 import requests
+import yaml
 
 
 def fixture(func):
@@ -215,7 +216,6 @@ class Resolver(object):
 # -----------------------------------------------------------------------------
 # Fixture definitions
 # -----------------------------------------------------------------------------
-
 
 @fixture
 def config():
