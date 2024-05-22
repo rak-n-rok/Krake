@@ -30,7 +30,7 @@ There are 7 different configuration files:
 *  ``kubernetes_cluster.yaml`` for the Kubernetes Cluster controller;
 *  ``garbage_collection.yaml`` for the Garbage Collector as controller;
 *  ``infrastructure.yaml`` for the Infrastructure controller;
-*  ``rok.yaml`` for the Rok utility.
+*  ``krakectl.yaml`` for the krakectl utility.
 
 For each one of them except ``rok.yaml``, a template is present in the
 ``config`` directory. They end with the ``.template`` extension. For Rok, the
