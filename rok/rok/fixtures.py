@@ -221,6 +221,7 @@ class Resolver(object):
 # Fixture definitions
 # -----------------------------------------------------------------------------
 
+
 @fixture
 def config(**kwargs):
     try:
