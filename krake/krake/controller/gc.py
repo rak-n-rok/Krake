@@ -410,7 +410,11 @@ class GarbageCollector(Controller):
 
             kwargs = get_namespace_as_kwargs(dependency_ref.namespace)
             dependency = await get_resource(name=dependency_ref.name, **kwargs)
+
             if self.is_in_deletion(dependency):
+                logger.debug(
+                    f"add its dependencies to the Worker queue: ({dependency_ref.name})"
+                )
                 await self.queue.put(dependency.metadata.uid, dependency)
 
         try:
@@ -467,9 +471,11 @@ class GarbageCollector(Controller):
         """
         while True:
             key, resource = await self.queue.get()
+            logger.debug(f"Current queue size: {self.queue.size()}")
             try:
                 logger.debug("Handling resource %s", resource)
                 await self.resource_received(resource)
+
             finally:
                 await self.queue.done(key)
 
@@ -487,15 +493,13 @@ class GarbageCollector(Controller):
         """
         res_ref = resource_ref(resource)
         logger.debug("Received %r", res_ref)
-        print("res_ref.kind[", type(res_ref.kind), "]", res_ref.kind)
-
         dependents = self.graph.get_direct_dependents(res_ref)
 
         if dependents:
             await self._mark_dependents(dependents)
         else:
             logger.debug("Resource has no dependent anymore: %s", resource)
-            await self._remove_cascade_deletion_finalizer(resource)
+            await self._remove_cascade_finalizer(resource)
 
     def _find_application_cascade_policy(self, resource):
         """Search for cascade policy of the resource.
@@ -530,15 +534,13 @@ class GarbageCollector(Controller):
             if cascade_policy == "MIGRATE":
                 logger.info("Migrate dependent: %s", dependent)
                 dependent_resource.status.scheduled = None
+                dependent_resource.metadata.finalizers.append("cascade_migration")
                 update_resource = self.get_api_method(dependent, "update")
                 kwargs = get_namespace_as_kwargs(dependent.namespace)
                 await update_resource(
                     name=dependent.name, body=dependent_resource, **kwargs
                 )
-                await self.queue.put(
-                    dependent_resource.metadata.uid, dependent_resource
-                )
-                self.graph.remove_resource(dependent)
+                await self.rework_dependent(dependent_resource)
 
             else:
                 logger.info("Mark dependent as deleted: %s", dependent)
@@ -546,7 +548,43 @@ class GarbageCollector(Controller):
                 kwargs = get_namespace_as_kwargs(dependent.namespace)
                 await delete_resource(name=dependent.name, **kwargs)
 
-    async def _remove_cascade_deletion_finalizer(self, resource):
+    async def rework_dependent(self, dependent_resource):
+        """To be called when a resource is migrated. Remove the resource
+        add its dependencies to the Worker queue.
+
+        Args:
+            resource (krake.data.serializable.ApiObject): the updated dependent.
+
+        """
+        logger.debug(f"rework_dependent({resource_ref(dependent_resource).name})")
+        for dependency_ref in dependent_resource.metadata.owners:
+            get_resource = self.get_api_method(dependency_ref, "read")
+            kwargs = get_namespace_as_kwargs(dependency_ref.namespace)
+            dependency = await get_resource(name=dependency_ref.name, **kwargs)
+
+            if self.is_in_deletion(dependency):
+                logger.debug(
+                    f"add its dependencies to the Worker queue: ({dependency_ref.name})"
+                )
+                await self.queue.put(dependency.metadata.uid, dependency)
+
+        # ~ try:
+        # ~ self.graph.remove_resource(resource_ref(dependent_resource))
+        # ~ except ResourceWithDependentsException as err:
+        # ~ # This case can only happen if a resource with dependent has been deleted on
+        # ~ # the database, but its dependent where not handled by the Garbage
+        # ~ # Collector, and are thus potentially still present on the API database or
+        # ~ # have actual corresponding resources on a machine.
+        # ~ logger.warning(
+        # ~ (
+        # ~ "Resource %s has been deleted by the API,"
+        # ~ " but it still holds several dependents: %r"
+        # ~ ),
+        # ~ resource_ref(resource),
+        # ~ ",".join(map(str, err.dependents)),
+        # ~ )
+
+    async def _remove_cascade_finalizer(self, resource):
         """Update the given resource to remove its garbage-collector-specific
         finalizer.
 
@@ -555,14 +593,27 @@ class GarbageCollector(Controller):
                 removed from this resource.
 
         """
+        logger.debug("Remove cascade finalizer for: %s", resource_ref(resource))
         update_resource = self.get_api_method(resource, "update")
 
         finalizer = resource.metadata.finalizers.pop(-1)
-        assert finalizer == "cascade_deletion"
-        logger.info("Resource ready for deletion: %s", resource_ref(resource))
 
-        kwargs = get_namespace_as_kwargs(resource.metadata.namespace)
-        await update_resource(name=resource.metadata.name, body=resource, **kwargs)
+        logger.debug(f"Remove finalizer: '{finalizer}' ")
+
+        if finalizer != "cascade_deletion" and finalizer != "cascade_migration":
+            raise AssertionError(
+                "finalizer is not 'cascade_deletion' and 'cascade_migration'"
+            )
+
+        if finalizer == "cascade_migration":
+            logger.info("??? Resource is migrated ???: %s", resource_ref(resource))
+            kwargs = get_namespace_as_kwargs(resource.metadata.namespace)
+            await update_resource(name=resource.metadata.name, body=resource, **kwargs)
+
+        if finalizer == "cascade_deletion":
+            logger.info("Resource ready for deletion: %s", resource_ref(resource))
+            kwargs = get_namespace_as_kwargs(resource.metadata.namespace)
+            await update_resource(name=resource.metadata.name, body=resource, **kwargs)
 
     def _clean_cycle(self, cycle):
         """Remove all resources that belong to a dependency cycle from the dependency
