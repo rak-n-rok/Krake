@@ -46,7 +46,7 @@ pre-commit:
     PRE_COMMIT_AUTO_FIX: "1"
     PRE_COMMIT_DEDUPLICATE_MR_AND_BRANCH: "true"
 
-  image: registry.gitlab.com/yesolutions/docker-pre-commit
+  image: registry.gitlab.com/rak-n-rok/krake/pre_commit_image
   script: |
     status=0
     pre-commit run --all-files || status=$?
@@ -95,21 +95,23 @@ pre-commit:
        echo "Auto fix is only available in branch and merge request pipelines" > /dev/stderr
        exit 1
     fi
-check-fixup-commits:
-  stage: pre
-  image: registry.gitlab.com/rak-n-rok/krake/pre_commit_image
-  script: |
-    git remote set-url origin "https://gitlab-ci-token:${PRE_COMMIT_ACCESS_TOKEN:-$CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-    git fetch origin
-    git checkout $CI_COMMIT_BRANCH
 
-    if [[ "git log HEAD --not master --not origin/master --format=%B | grep '!fixup'" ]]; then
-      exit 1
-    fi
-  rules:
-    - if: $CI_MERGE_REQUEST_EVENT_TYPE == 'merge_train'
-      when: on_success
-    - when: never
+# Reintroduce later
+#check-fixup-commits:
+#  stage: pre
+#  image: registry.gitlab.com/rak-n-rok/krake/pre_commit_image
+#  script: |
+#    git remote set-url origin "https://gitlab-ci-token:${PRE_COMMIT_ACCESS_TOKEN:-$CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+#    git fetch origin
+#    git checkout $CI_COMMIT_BRANCH
+#
+#    if [[ "git log HEAD --not master --not origin/master --format=%B | grep '!fixup'" ]]; then
+#      exit 1
+#    fi
+#  rules:
+#    - if: $CI_MERGE_REQUEST_EVENT_TYPE == 'merge_train'
+#      when: on_success
+#    - when: never
 
 # Unit tests and flake8 are run on commits on branches which are not yet in a
 # merge requests (including master), on merge requests, and on scheduled
