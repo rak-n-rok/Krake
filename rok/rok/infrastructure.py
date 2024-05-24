@@ -19,7 +19,7 @@ from .parser import (
     arg_metric,
     arg_global_metric,
     arg_labels,
-    arg_config
+    arg_config,
 )
 from .fixtures import depends
 from .formatters import (

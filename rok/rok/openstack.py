@@ -15,7 +15,7 @@ from .parser import (
     arg_labels,
     arg_namespace,
     arg_metric,
-    arg_config
+    arg_config,
 )
 from .fixtures import depends
 from .formatters import BaseTable, Cell, printer, dict_formatter
