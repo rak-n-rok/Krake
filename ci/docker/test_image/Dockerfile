@@ -42,5 +42,5 @@ RUN curl -sSL https://github.com/cloudflare/cfssl/releases/download/v${CFSSL_VER
 
 ENV PATH="/opt/venv/bin:${PATH}"
 RUN python3 -m venv /opt/venv \
-    && pip install --no-cache-dir -U pip setuptools \
+    && pip install --no-cache-dir -U pip setuptools coverage pytest \
     && pip install --no-cache-dir tox

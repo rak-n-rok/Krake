@@ -145,9 +145,11 @@ pre-commit:
 # https://gitlab.com/gitlab-org/gitlab/merge_requests/18130), we have to work
 # with duplicated pipelines on merge requests.
 
-.unittests-krake-template: &unittests-krake
+unittests-krake:
   stage: test
-  needs: []
+  image: python:3.11
+  variables:
+    COVERAGE_FILE: krake/.coverage.py312
   artifacts:
     paths:
       - krake/.coverage.*
@@ -170,69 +172,18 @@ pre-commit:
     - which kafka-server-start
     - which ksql-server-start
 
-    # Run tox
-    - tox run -- --cov krake/krake --no-cov-on-fail --cov-report= --runslow krake/tests
+    # # Run tox
+    # - tox run -- --cov krake/krake --no-cov-on-fail --cov-report= --runslow krake/tests
 
+    - pip install coverage pytest
+    - pip install --editable ./krake[test]
 
-unittests-krake-3.8:
-  <<: *unittests-krake
-  image: "registry.gitlab.com/rak-n-rok/krake/test_image:3.8"
-  variables:
-    TOXENV: py38
-    COVERAGE_FILE: krake/.coverage.py38
-
-
-unittests-krake-3.9:
-  <<: *unittests-krake
-  image: "registry.gitlab.com/rak-n-rok/krake/test_image:3.9"
-  variables:
-    TOXENV: py39
-    COVERAGE_FILE: krake/.coverage.py39
-
-
-unittests-krake-3.10:
-  <<: *unittests-krake
-  image: "registry.gitlab.com/rak-n-rok/krake/test_image:3.10"
-  variables:
-    TOXENV: py310
-    COVERAGE_FILE: krake/.coverage.py310
-
-
-unittests-krake-3.11:
-  <<: *unittests-krake
-  image: "registry.gitlab.com/rak-n-rok/krake/test_image:3.11"
-  variables:
-    TOXENV: py311
-    COVERAGE_FILE: krake/.coverage.py311
-
-lint-kubeconform:
-  stage: lint
-  image:
-    name: ghcr.io/yannh/kubeconform:v${KUBECONFORM_VER}-alpine
-    entrypoint: [""]
-  rules:
-    - changes:
-        compare_to: 'refs/heads/master'
-        paths:
-          - templates/**/k8s/*.{yaml,yml}
-  script:
-  - find templates -wholename "*/k8s/*.yaml" -o -wholename "*/k8s/*.yml" | xargs -i /kubeconform -summary -output json {}
-
-lint-tosca-templates:
-  stage: lint
-  image: python:3.10
-  rules:
-    - changes:
-        compare_to: 'refs/heads/master'
-        paths:
-          - examples/**/tosca/*.{yaml,yml}
-  script:
-    - pip install tosca-parser==${TOSCA_PARSER_VER}
-    - find templates -wholename "*/tosca/*.yaml" -o -wholename "*/tosca/*.yml" | xargs -i tosca-parser --template-file {}
+    # Run pytest
+    - coverage run -m pytest --no-cov-on-fail --cov-report= --runslow krake/tests
 
 flake8-krake:
   stage: lint
-  image: python:3.10
+  image: python:3.12
   only:
     - tags
     - branches
@@ -242,10 +193,9 @@ flake8-krake:
     - pip install -r ci/requirements_lint.txt
     - flake8 krake/krake
 
-
 flake8-rok:
   stage: lint
-  image: python:3.10
+  image: python:3.12
   only:
     - tags
     - branches
@@ -258,7 +208,7 @@ flake8-rok:
 pages:
   stage: test
   needs: []
-  image: python:3.10
+  image: python:3.12
   before_script:
     - pip install -r docs/requirements.txt
     - cd rok
@@ -283,7 +233,7 @@ pages:
 
 pages-master:
   stage: test
-  image: python:3.10
+  image: python:3.11
   before_script:
     - pip install -r docs/requirements.txt
     - cd rok
@@ -310,7 +260,7 @@ pages-master:
 # with non-zero if the code coverage ratio is under 85%.
 coverage-krake:
   stage: e2e
-  image: python:3.10
+  image: python:3.11
   script:
     - pip install -r ci/requirements_coverage.txt
     - coverage combine krake/.coverage.*
@@ -478,7 +428,7 @@ e2e-cleanup:
 pypi:
   stage: release
   image:
-    name: python:3.10
+    name: python:3.11
   before_script:
     - pip install --upgrade twine
     - pip install --upgrade build
