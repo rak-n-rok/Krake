@@ -1028,8 +1028,19 @@ class ClusterDefinition(ResourceDefinition):
         return check_cluster_created_and_up(error_message=error_message,
                                             expected_state=expected_state)
 
+    # ~ def delete_command(self, wait):
+        # ~ return f"rok kube cluster delete {self.name}".split()
     def delete_command(self, wait):
-        return f"krakectl kube cluster delete {self.name}".split()
+        if wait:
+            return (
+                f"krakectl kube cluster delete {self.name}"
+                f" --namespace {self.namespace} --wait".split()
+            )
+        else:
+            return (
+                f"krakectl kube cluster delete {self.name}"
+                f" --namespace {self.namespace} ".split()
+            )
 
     def update_command(self, labels=None, metrics=None, update_behavior=None):
         """Get a command for updating the cluster.

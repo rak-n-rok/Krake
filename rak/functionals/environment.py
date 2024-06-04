@@ -303,6 +303,7 @@ def create_multiple_cluster_environment(
     app_backoff_delay=None,
     app_backoff_limit=None,
     auto_cluster_create=False,
+    observer_schema_path=None,
 ):
     """Create the resource definitions for a test environment with
     one Application and multiple Clusters.
@@ -390,6 +391,7 @@ def create_multiple_cluster_environment(
                 backoff_delay=app_backoff_delay,
                 backoff_limit=app_backoff_limit,
                 auto_cluster_create=auto_cluster_create,
+                observer_schema_path=observer_schema_path,
             )
         ]
     return env

@@ -4,16 +4,23 @@ import multiprocessing
 import time
 from contextlib import suppress
 from itertools import count
+from copy import deepcopy
 
 import sys
 import pytest
 import pytz
-from factory import Factory, SubFactory
+import yaml
+from factory import Factory, SubFactory, lazy_attribute, post_generation
 from krake.api.app import create_app
 
 from krake.client import Client
 from krake.data.core import resource_ref, Metadata
-from krake.data.kubernetes import ApplicationState, Cluster
+from krake.data.kubernetes import (
+    ApplicationState,
+    Cluster,
+    ApplicationSpec,
+    Application,
+)
 from krake.controller.gc import (
     DependencyGraph,
     GarbageCollector,
@@ -25,7 +32,12 @@ from krake.utils import get_namespace_as_kwargs
 
 from tests.factories.core import MetadataFactory, RoleBindingFactory, RoleFactory
 from tests.factories.fake import fake
-from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
+from tests.factories.kubernetes import (
+    ApplicationFactory,
+    ClusterFactory,
+    ConstraintsFactory,
+    ApplicationStatusFactory,
+)
 from tests.factories.openstack import ProjectFactory
 from krake.data.serializable import Serializable
 from krake.test_utils import server_endpoint, with_timeout
@@ -1007,3 +1019,200 @@ async def test_gc_error_handling(aiohttp_server, config, db, loop, caplog):
     assert resource_ref(upper) not in graph_copy._relationships
     assert resource_ref(middle) not in graph_copy._relationships
     assert resource_ref(lower) not in graph_copy._relationships
+
+
+kubernetes_migratable_manifest = list(
+    yaml.safe_load_all(
+        """---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wordpress-mysql
+  labels:
+    app: wordpress
+spec:
+  cascade_policy: MIGRATE
+  ports:
+    - port: 3306
+  selector:
+    app: wordpress
+    tier: mysql
+  clusterIP: None
+"""
+    )
+)
+
+
+class ApplicationMigrateSpecFactory(Factory):
+    class Meta:
+        model = ApplicationSpec
+
+    @lazy_attribute
+    def manifest(self):
+        return deepcopy(kubernetes_migratable_manifest)
+
+    constraints = SubFactory(ConstraintsFactory)
+
+
+class ApplicationMigrateFactory(Factory):
+    class Meta:
+        model = Application
+
+    metadata = SubFactory(MetadataFactory)
+    spec = SubFactory(ApplicationMigrateSpecFactory)
+    status = SubFactory(ApplicationStatusFactory)
+
+    @post_generation
+    def add_owners(app, created, extracted, **kwargs):
+        if app.status is None:
+            return
+
+        if app.status.scheduled_to:
+            if app.status.scheduled_to not in app.metadata.owners:
+                app.metadata.owners.append(app.status.scheduled_to)
+
+        if app.status.running_on:
+            if app.status.running_on not in app.metadata.owners:
+                app.metadata.owners.append(app.status.running_on)
+
+
+@pytest.mark.skip(
+    reason="SKIPPED CURENTLY UNDER DEVELOPMENT"
+)  # TODO:!!! remove on final
+async def test_cascade_migration_non_namespaced(aiohttp_server, config, db, loop):
+    """Verify that resources without namespace are still handled by the Garbage
+    Collector for 'cascade_policy' migration.
+    """
+
+    upper_cluster = ClusterFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__finalizers=["cascade_deletion"],
+    )
+    # ~ delting_cluster = ClusterFactory(metadata__owners=[resource_ref(upper_cluster)])
+
+    lower_app_migrate = ApplicationMigrateFactory(
+        metadata__owners=[resource_ref(upper_cluster)],
+    )
+
+    await db.put(upper_cluster)
+    await db.put(lower_app_migrate)
+
+    server = await aiohttp_server(create_app(config))
+    gc = GarbageCollector(server_endpoint(server))
+
+    gc.graph.add_resource(resource_ref(upper_cluster), upper_cluster.metadata.owners)
+    gc.graph.add_resource(
+        resource_ref(lower_app_migrate), lower_app_migrate.metadata.owners
+    )
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        await gc.prepare(client)
+
+        ##
+        # First step: Invoke deletion of the cluster
+        await gc.resource_received(upper_cluster)
+
+        # Ensure that the Cluster is marked as deleted
+        marked, stored_cluster = await is_marked_for_deletion(upper_cluster, db)
+        assert marked
+
+        # ~ # Last checks: all resources are deleted
+        # ~ assert await is_completely_deleted(upper_cluster, db)
+        # ~ await gc.on_received_deleted(upper_cluster)  # Simulate DELETED event
+        # ~ assert not gc.graph._relationships
+
+
+####################################################################################
+
+
+async def is_present(resource, db):  # TODO:!!! remove on final
+    """Check that a resource has been ???
+
+    Args:
+        resource: the resource to check
+        db: the database session
+
+    Returns:
+        bool: True if the resource given has been deleted, False otherwise
+
+    """
+    print("---I'M DEBUGGING SOMETHING HERE!!!")
+    cls = resource.__class__
+    kwargs = get_namespace_as_kwargs(resource.metadata.namespace)
+    stored = await db.get(cls, name=resource.metadata.name, **kwargs)
+    print(stored)
+    return stored is not None
+
+
+async def test_cascade_migration(aiohttp_server, config, db, loop):
+    # Test the deletion of a resource that holds several dependents. The resource and
+    # all its dependents should be deleted.
+    server = await aiohttp_server(create_app(config))
+    gc = GarbageCollector(server_endpoint(server))
+
+    cluster = ClusterFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__finalizers=["cascade_deletion"],
+    )
+    cluster_ref = resource_ref(cluster)
+    gc.graph.add_resource(cluster_ref, cluster.metadata.owners)
+
+    cluster_new = ClusterFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+    )
+    cluster_new_ref = resource_ref(cluster_new)
+    gc.graph.add_resource(cluster_new_ref, cluster.metadata.owners)
+
+    apps = [
+        ApplicationMigrateFactory(
+            metadata__finalizers=[""],
+            metadata__owners=[cluster_ref],
+            status__state=ApplicationState.RUNNING,
+            status__scheduled_to=cluster_ref,
+        )
+        for _ in range(3)
+    ]
+
+    await db.put(cluster)
+    await db.put(cluster_new)
+    for app in apps:
+        gc.graph.add_resource(resource_ref(app), app.metadata.owners)
+        await db.put(app)
+
+    # Check cluster reletionships before
+    cluster_relationship = gc.graph.get_direct_dependents(cluster_ref)
+    cluster_new_relationship = gc.graph.get_direct_dependents(cluster_new_ref)
+    assert len(cluster_relationship) == 3
+    assert len(cluster_new_relationship) == 0
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        await gc.prepare(client)
+        await gc.resource_received(cluster)
+        # Ensure that the Applications are not marked as deleted
+        stored_apps = []
+        for app in apps:
+            marked, stored_app = await is_marked_for_deletion(app, db)
+            assert not marked
+
+            # ~ stored_app.metadata.finalizers.remove("kubernetes_resources_deletion")
+            await db.put(stored_app)
+            stored_apps.append(stored_app)
+
+        # Ensure that the Application resources are not deleted
+        for app in stored_apps:
+            assert await is_present(app, db)  # TODO:!!! remove on final
+
+            # simulate migration by the schedular:   TODO:!!! better way to do so ?
+            app.metadata.owners = [cluster_new_ref]
+
+            await gc.on_received_update(app)  # Simulate MIGRATE event
+            await gc.resource_received(cluster)
+
+        # Ensure that the Cluster is deleted from the database
+        assert await is_completely_deleted(cluster, db)
+        await gc.on_received_deleted(cluster)  # Simulate DELETED event
+
+        cluster_relationship = gc.graph.get_direct_dependents(cluster_ref)
+        cluster_new_relationship = gc.graph.get_direct_dependents(cluster_new_ref)
+        assert len(cluster_relationship) == 0
+        assert len(cluster_new_relationship) == 3

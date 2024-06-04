@@ -224,6 +224,12 @@
             - test_kubernetes_observer
             - krake_with_clusters
 
+        - name: Run integration tests for the Garbage Collector
+          command: "python3 -m pytest {{ git_dir }}/{{test_dir}}/integration/test_garbage_collecting.py --k8sclusters {{ k8s_clusters[0] }} {{ k8s_clusters[1] }}"
+          tags:
+            - test_garbage_collector
+            - krake_with_clusters
+
 #        - name: Run integration tests for the hooks
 #          command: "pytest {{ git_dir }}/{{test_dir}}/integration/test_hooks.py --k8sclusters {{ k8s_clusters[0] }} {{ k8s_clusters[1] }}"
 #          tags:

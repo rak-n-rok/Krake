@@ -534,7 +534,7 @@ class GarbageCollector(Controller):
             if cascade_policy == "MIGRATE":
                 logger.info("Migrate dependent: %s", dependent)
                 dependent_resource.status.scheduled = None
-                dependent_resource.metadata.finalizers.append("cascade_migration")
+                # ~ dependent_resource.metadata.finalizers.append("cascade_migration")
                 update_resource = self.get_api_method(dependent, "update")
                 kwargs = get_namespace_as_kwargs(dependent.namespace)
                 await update_resource(
@@ -550,7 +550,7 @@ class GarbageCollector(Controller):
 
     async def rework_dependent(self, dependent_resource):
         """To be called when a resource is migrated. Remove the resource
-        add its dependencies to the Worker queue.
+        and add its dependencies to the Worker queue.
 
         Args:
             resource (krake.data.serializable.ApiObject): the updated dependent.
@@ -600,15 +600,18 @@ class GarbageCollector(Controller):
 
         logger.debug(f"Remove finalizer: '{finalizer}' ")
 
-        if finalizer != "cascade_deletion" and finalizer != "cascade_migration":
-            raise AssertionError(
-                "finalizer is not 'cascade_deletion' and 'cascade_migration'"
-            )
+        if finalizer != "cascade_deletion":
+            raise AssertionError("finalizer is not 'cascade_deletion'")
 
-        if finalizer == "cascade_migration":
-            logger.info("??? Resource is migrated ???: %s", resource_ref(resource))
-            kwargs = get_namespace_as_kwargs(resource.metadata.namespace)
-            await update_resource(name=resource.metadata.name, body=resource, **kwargs)
+        # ~ if finalizer != "cascade_deletion" and finalizer != "cascade_migration":
+        # ~ raise AssertionError(
+        # ~ "finalizer is not 'cascade_deletion' and 'cascade_migration'"
+        # ~ )
+
+        # ~ if finalizer == "cascade_migration":
+        # ~ logger.info("??? Resource is migrated ???: %s", resource_ref(resource))
+        # ~ kwargs = get_namespace_as_kwargs(resource.metadata.namespace)
+        # ~ await update_resource(name=resource.metadata.name, body=resource, **kwargs)
 
         if finalizer == "cascade_deletion":
             logger.info("Resource ready for deletion: %s", resource_ref(resource))
