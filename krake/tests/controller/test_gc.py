@@ -4,16 +4,18 @@ import multiprocessing
 import time
 from contextlib import suppress
 from itertools import count
+from copy import deepcopy
 
 import sys
 import pytest
 import pytz
-from factory import Factory, SubFactory
+import yaml
+from factory import Factory, SubFactory, lazy_attribute, post_generation
 from krake.api.app import create_app
 
 from krake.client import Client
 from krake.data.core import resource_ref, Metadata
-from krake.data.kubernetes import ApplicationState, Cluster
+from krake.data.kubernetes import ApplicationState, Cluster, ApplicationSpec, Application
 from krake.controller.gc import (
     DependencyGraph,
     GarbageCollector,
@@ -25,12 +27,11 @@ from krake.utils import get_namespace_as_kwargs
 
 from tests.factories.core import MetadataFactory, RoleBindingFactory, RoleFactory
 from tests.factories.fake import fake
-from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
+from tests.factories.kubernetes import ApplicationFactory, ClusterFactory,  ConstraintsFactory, ApplicationStatusFactory
 from tests.factories.openstack import ProjectFactory
 from krake.data.serializable import Serializable
 from krake.test_utils import server_endpoint, with_timeout
 from tests.factories.openstack import MagnumClusterFactory
-
 
 class UpperResource(Serializable):
     api: str = "upper_api"
@@ -1007,3 +1008,130 @@ async def test_gc_error_handling(aiohttp_server, config, db, loop, caplog):
     assert resource_ref(upper) not in graph_copy._relationships
     assert resource_ref(middle) not in graph_copy._relationships
     assert resource_ref(lower) not in graph_copy._relationships
+
+
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+#########################################################################################
+
+
+kubernetes_migratable_manifest = list(
+    yaml.safe_load_all(
+        """---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wordpress-mysql
+  labels:
+    app: wordpress
+spec:
+  cascade_policy: MIGRATE
+  ports:
+    - port: 3306
+  selector:
+    app: wordpress
+    tier: mysql
+  clusterIP: None
+"""
+    )
+)
+
+class ApplicationMigrateSpecFactory(Factory):
+    class Meta:
+        model = ApplicationSpec
+
+    @lazy_attribute
+    def manifest(self):
+        return deepcopy(kubernetes_migratable_manifest)
+
+    constraints = SubFactory(ConstraintsFactory)
+
+
+class ApplicationMigrateFactory(Factory):
+    class Meta:
+        model = Application
+
+    metadata = SubFactory(MetadataFactory)
+    spec = SubFactory(ApplicationMigrateSpecFactory)
+    status = SubFactory(ApplicationStatusFactory)
+
+    @post_generation
+    def add_owners(app, created, extracted, **kwargs):
+        if app.status is None:
+            return
+
+        if app.status.scheduled_to:
+            if app.status.scheduled_to not in app.metadata.owners:
+                app.metadata.owners.append(app.status.scheduled_to)
+
+        if app.status.running_on:
+            if app.status.running_on not in app.metadata.owners:
+                app.metadata.owners.append(app.status.running_on)
+
+
+
+
+
+# ~ @pytest.mark.slow
+async def test_cascade_migration_non_namespaced(aiohttp_server, config, db, loop):
+    """Verify that resources without namespace are still handled by the Garbage
+    Collector for 'cascade_policy' migration.
+    """
+#####################
+
+
+    upper_cluster = ClusterFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__finalizers=["cascade_deletion"],
+    )
+    delting_cluster = ClusterFactory(metadata__owners=[resource_ref(upper_cluster)])
+
+    lower_app_migrate = ApplicationMigrateFactory(
+        metadata__owners=[resource_ref(upper_cluster)],
+    )
+
+    await db.put(upper_cluster)
+    await db.put(lower_app_migrate)
+
+    server = await aiohttp_server(create_app(config))
+    gc = GarbageCollector(server_endpoint(server))
+
+    gc.graph.add_resource(resource_ref(upper_cluster), upper_cluster.metadata.owners)
+    gc.graph.add_resource(resource_ref(lower_app_migrate), lower_app_migrate.metadata.owners)
+
+
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        await gc.prepare(client)
+
+        ##
+        # First step: Invoke deletion of the cluster
+        await gc.resource_received(upper_cluster)
+
+        # Ensure that the Cluster is marked as deleted
+        marked, stored_cluster = await is_marked_for_deletion(upper_cluster, db)
+        assert marked
+
+        # ~ # Last checks: all resources are deleted
+        # ~ assert await is_completely_deleted(upper_cluster, db)
+        # ~ await gc.on_received_deleted(upper_cluster)  # Simulate DELETED event
+        # ~ assert not gc.graph._relationships
+
+#####################
