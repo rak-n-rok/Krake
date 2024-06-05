@@ -21,7 +21,7 @@ krake
     Contains the source code and the unit tests for the Krake application. More details are given in the Krake Reference.
 
 krakectl
-    Contains the source code and the unit tests for the Rok command. More details are given in the Rok Reference.
+    Contains the source code and the unit tests for the krakectl command. More details are given in the krakectl Reference.
 
 support
     Contains the utility scripts to create a simple local test environment.

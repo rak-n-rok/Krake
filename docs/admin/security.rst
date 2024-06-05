@@ -27,7 +27,7 @@ When sending a request to the API, Krake uses two mechanisms to limit resource a
     resources.
 
 .. important::
-    If a Krake component (a controller, or Rok) communicates with the API, the same
+    If a Krake component (a controller, or krakectl) communicates with the API, the same
     process is performed. In this case, the user is actually the component itself.
 
 
@@ -356,7 +356,7 @@ name. This name can then be used along with the ``RBAC`` mode and a specific
 
 .. important::
     With TLS support, all Krake components will use certificates with their
-    corresponding key. All components (API, controllers and rok) must use the same
+    corresponding key. All components (API, controllers and krakectl) must use the same
     CA, and the certificates they use for communication must also be signed using this
     CA.
 
@@ -639,13 +639,13 @@ common names of the controller certificates must be:
  * ``system:magnum`` for the Magnum controller.
 
 
-Configuration of rok
---------------------
+Configuration of krakectl
+-------------------------
 
 .. code:: yaml
 
     api_url: https://<endpoint>   # must use HTTPS
-    user: <rok_user>
+    user: <krakectl_user>
 
     tls:
       enabled: true
@@ -653,12 +653,12 @@ Configuration of rok
       client_cert: <path_to_your_client_cert>
       client_key: <path_to_your_client_key>
 
-The common name used by the certificate must match the one from ``<rok_user>``. This
+The common name used by the certificate must match the one from ``<krakectl_user>``. This
 name will be used as username.
 
 If the bootstrapping file present in the repository is used (``base_roles.yaml``),
 the certificate used by the administrator must have ``system:admin`` as common name,
-and ``<rok_user>`` must then match it.
+and ``<krakectl_user>`` must then match it.
 
 
 Database bootstrapping
