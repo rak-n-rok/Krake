@@ -2,34 +2,34 @@
 Demonstration of basic commands and workflow
 ============================================
 
-Goal: Get familiar with basic ``rok`` commands, and with the associated internal Krake mechanisms.
+Goal: Get familiar with basic ``krakectl`` commands, and with the associated internal Krake mechanisms.
 
-Introduction to the ``rok`` CLI
-===============================
+Introduction to the ``krakectl`` CLI
+====================================
 
-- Following commands provide basic help on the ``rok`` CLI and its structure:
+- Following commands provide basic help on the ``krakectl`` CLI and its structure:
 
 .. prompt:: bash $ auto
 
-    $ rok --help
-    $ rok kubernetes --help  # Similar to "rok kube --help"
-    $ rok kube application --help  # Similar to "rok app --help"
-    $ rok kube cluster --help
-    $ rok infrastructure --help  # Similar to "rok infra --help"
+    $ krakectl --help
+    $ krakectl kubernetes --help  # Similar to "krakectl kube --help"
+    $ krakectl kube application --help  # Similar to "krakectl app --help"
+    $ krakectl kube cluster --help
+    $ krakectl infrastructure --help  # Similar to "krakectl infra --help"
 
 Integrate shell completion
 ==========================
 
 Shell completion is a feature that supports users in receiving the desired
 command faster and with less errors while aiding discovery of arguments.
-``rok`` outputs completion scripts for bash, zsh or tcsh.
+``krakectl`` outputs completion scripts for bash, zsh or tcsh.
 
 - The following commands generate and activate the bash shell completion:
 
 .. prompt:: bash $ auto
 
-    $ rok --print-completion bash > rok-completion.bash
-    $ source rok-completion.bash
+    $ krakectl --print-completion bash > krakectl-completion.bash
+    $ source krakectl-completion.bash
 
 Register a cluster
 ==================
@@ -38,9 +38,9 @@ Register a cluster
 
 .. prompt:: bash $ auto
 
-    $ rok kube cluster list  # No Cluster resource is present
-    $ rok kube cluster register -k clusters/config/minikube-cluster-1
-    $ rok kube cluster list  # One Cluster resource with name "minikube-cluster-1"
+    $ krakectl kube cluster list  # No Cluster resource is present
+    $ krakectl kube cluster register -k clusters/config/minikube-cluster-1
+    $ krakectl kube cluster list  # One Cluster resource with name "minikube-cluster-1"
 
 .. note::
 
@@ -75,17 +75,17 @@ Spawn the demo application
 
 .. prompt:: bash $ auto
 
-    $ rok kube app list  # No Application resource is present
-    $ rok kube app create -f git/krake/templates/applications/k8s/echo-demo.yaml echo-demo
-    $ rok kube app list  # One Application resource with name "echo-demo"
+    $ krakectl kube app list  # No Application resource is present
+    $ krakectl kube app create -f git/krake/templates/applications/k8s/echo-demo.yaml echo-demo
+    $ krakectl kube app list  # One Application resource with name "echo-demo"
 
 -- **Alternatively**, spawn a Kubernetes ``Application`` using a ``TOSCA`` template file (or URL) or ``CSAR`` archive URL, see :ref:`dev/tosca:Examples`.
 
   .. prompt:: bash $ auto
 
-      $ rok kube app list  # No Application resource is present
-      $ rok kube app create -f git/krake/examples/templates/tosca/echo-demo-tosca.yaml echo-demo
-      $ rok kube app list  # One Application resource with name "echo-demo"
+      $ krakectl kube app list  # No Application resource is present
+      $ krakectl kube app create -f git/krake/examples/templates/tosca/echo-demo-tosca.yaml echo-demo
+      $ krakectl kube app list  # One Application resource with name "echo-demo"
 
 - Check application information:
 
@@ -94,14 +94,14 @@ Spawn the demo application
 
 .. prompt:: bash $ auto
 
-    $ rok kube app get echo-demo
-    $ rok kube app get echo-demo -o json  # Use JSON format, which is also more verbose
+    $ krakectl kube app get echo-demo
+    $ krakectl kube app get echo-demo -o json  # Use JSON format, which is also more verbose
 
 - Access the demo application endpoint:
 
 .. prompt:: bash $ auto
 
-    $ APP_URL=$(rok kube app get echo-demo -o json | jq '.status.services["echo-demo"]'); APP_URL="${APP_URL:1: -1}"  # Extract Application endpoint from JSON output and register it in the APP_URL variable
+    $ APP_URL=$(krakectl kube app get echo-demo -o json | jq '.status.services["echo-demo"]'); APP_URL="${APP_URL:1: -1}"  # Extract Application endpoint from JSON output and register it in the APP_URL variable
     $ curl $APP_URL
 
 - Check the created resources on the Kubernetes cluster:
@@ -161,13 +161,13 @@ Update resources
         protocol: TCP
         targetPort: 8080
 
-    $ rok kube app update -f git/krake/templates/applications/k8s/echo-demo-update.yaml echo-demo
+    $ krakectl kube app update -f git/krake/templates/applications/k8s/echo-demo-update.yaml echo-demo
 
 -- **Alternatively**, update a ``TOSCA`` template file (or URL) or ``CSAR`` archive URL to create a second Pod for the ``echo-demo`` application, see :ref:`dev/tosca:Examples`.
 
   .. prompt:: bash $ auto
 
-      $ rok kube app update -f git/krake/rak/functionals/echo-demo-update-tosca.yaml echo-demo
+      $ krakectl kube app update -f git/krake/rak/functionals/echo-demo-update-tosca.yaml echo-demo
 
 
 - Check the existing resources on the Kubernetes cluster: A second Pod has been spawned.
@@ -189,7 +189,7 @@ Delete resources
 
 .. prompt:: bash $ auto
 
-    $ rok kube app delete echo-demo
-    $ rok kube app list  # No Application resource is present
-    $ rok kube cluster delete minikube-cluster-1
-    $ rok kube cluster list  # No Cluster resource is present
+    $ krakectl kube app delete echo-demo
+    $ krakectl kube app list  # No Application resource is present
+    $ krakectl kube cluster delete minikube-cluster-1
+    $ krakectl kube cluster list  # No Cluster resource is present

@@ -162,7 +162,7 @@
           environment:
             PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.local/bin"
 
-        # pytest and rok are installed locally in /home/ubuntu/.local/bin which
+        # pytest and krakectl are installed locally in /home/ubuntu/.local/bin which
         # isn't in the default PATH
         - name: Run smoke test for microk8s
           command:

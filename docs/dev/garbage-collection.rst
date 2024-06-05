@@ -130,7 +130,7 @@ cluster **C** as single owner.
    the dependency graph of the garbage collector;
 
 #. the user requests the deletion of the Cluster **C**, for instance with the
-   Rok utility or using ``curl``;
+   krakectl utility or using ``curl``;
 
 #. the request is received by the API. The API marks the cluster **C** as
    deleted, and an ``UPDATE`` event is triggered;
