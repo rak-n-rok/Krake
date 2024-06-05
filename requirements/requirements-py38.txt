@@ -227,7 +227,7 @@ python-dateutil==2.8.2
     #   kubernetes
     #   kubernetes-asyncio
     #   oslo-log
-    #   rok (rok/pyproject.toml)
+    #   krakectl (krakectl/pyproject.toml)
     #   tosca-parser
 python-magnumclient==3.7.0
     # via krake (krake/pyproject.toml)
@@ -244,7 +244,7 @@ pyyaml==6.0.1
     #   openstacksdk
     #   oslo-config
     #   oslo-utils
-    #   rok (rok/pyproject.toml)
+    #   krakectl (krakectl/pyproject.toml)
     #   tosca-parser
 reactivex==4.0.4
     # via influxdb-client
@@ -257,7 +257,7 @@ requests==2.31.0
     #   oslo-config
     #   python-magnumclient
     #   requests-oauthlib
-    #   rok (rok/pyproject.toml)
+    #   krakectl (krakectl/pyproject.toml)
     #   tosca-parser
 requests-oauthlib==1.3.1
     # via kubernetes
@@ -272,7 +272,7 @@ semantic-version==2.10.0
     #   etcd3-py
     #   krake (krake/pyproject.toml)
 shtab==1.7.0
-    # via rok (rok/pyproject.toml)
+    # via krakectl (krakectl/pyproject.toml)
 simplejson==3.19.2
     # via osc-lib
 six==1.16.0
@@ -292,7 +292,7 @@ stevedore==5.1.0
     #   python-magnumclient
     #   tosca-parser
 texttable==1.7.0
-    # via rok (rok/pyproject.toml)
+    # via krakectl (krakectl/pyproject.toml)
 tomli==2.0.1
     # via towncrier
 tosca-parser==2.6.0

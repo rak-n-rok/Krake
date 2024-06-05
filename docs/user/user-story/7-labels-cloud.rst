@@ -24,7 +24,7 @@ and register an infrastructure provider. Validate the infrastructure provider re
 
 .. prompt:: bash $ auto
 
-    $ rok infra provider list
+    $ krakectl infra provider list
     +-------------+--------------+--------+---------------------+---------------------+---------+------+-----------------------+
     |    name     |  namespace   | labels |       created       |      modified       | deleted | type |          url          |
     +=============+==============+========+=====================+=====================+=========+======+=======================+
@@ -41,8 +41,8 @@ Each label always has a key and a value. We follow the same specifications as th
 
 .. prompt:: bash $ auto
 
-    rok infra cloud register -l location=DE --type openstack --url <os-auth-url> --project <os-project-name> --username <os-username> --password <os-password> --infra-provider im-provider os-cloud-1
-    rok infra cloud register -l location=SK --type openstack --url <os-auth-url> --project <os-project-name> --username <os-username> --password <os-password> --infra-provider im-provider os-cloud-2
+    krakectl infra cloud register -l location=DE --type openstack --url <os-auth-url> --project <os-project-name> --username <os-username> --password <os-password> --infra-provider im-provider os-cloud-1
+    krakectl infra cloud register -l location=SK --type openstack --url <os-auth-url> --project <os-project-name> --username <os-username> --password <os-password> --infra-provider im-provider os-cloud-2
 
 .. tip::
 
@@ -57,8 +57,8 @@ Create ``my-cluster`` cluster with a `location` LabelConstraints, and observe wh
 
 .. prompt:: bash $ auto
 
-    rok kube cluster create -f git/krake/rak/functionals/im-cluster.yaml my-cluster -L location=SK
-    rok kube cluster get my-cluster -o json | jq .status.running_on  # Cluster is running on "os-cloud-2"
+    krakectl kube cluster create -f git/krake/rak/functionals/im-cluster.yaml my-cluster -L location=SK
+    krakectl kube cluster get my-cluster -o json | jq .status.running_on  # Cluster is running on "os-cloud-2"
 
 .. note::
 
@@ -72,14 +72,14 @@ LabelConstraints should be used by the cluster, which would automatically mean, 
 
 .. prompt:: bash $ auto
 
-    rok kube cluster create -f git/krake/rak/functionals/im-cluster.yaml my-cluster --inherit-labels
+    krakectl kube cluster create -f git/krake/rak/functionals/im-cluster.yaml my-cluster --inherit-labels
 
 If this cluster is now observed, the inherited labels should be visible in the output. These labels are considered during scheduling like normal labels, which are directly attached to a cluster.
 Inherited labels are marked accordingly.
 
 .. prompt:: bash $ auto
 
-    $ rok kube cluster get my-cluster
+    $ krakectl kube cluster get my-cluster
 	+-----------------------+-----------------------------------------------------------------------------------------------+
 	| name                  | my-cluster                                                                                	|
 	| namespace             | system:admin                                                                              	|
@@ -99,7 +99,7 @@ A similar output can be observed, if a label constraint is defined for the clust
 
 .. prompt:: bash $ auto
 
-    $ rok kube cluster get my-cluster
+    $ krakectl kube cluster get my-cluster
 	+-----------------------+-----------------------------------------------------------------------------------------------+
 	| name                  | my-cluster                                                                                	|
 	| namespace             | system:admin                                                                              	|
@@ -123,10 +123,10 @@ Delete the Cluster, both Clouds and the IM InfrastructureProvider.
 
 .. code:: bash
 
-    rok kube cluster delete my-cluster
-    rok infra cloud delete os-cloud-1
-    rok infra cloud delete os-cloud-2
-    rok infra provider delete im-provider
+    krakectl kube cluster delete my-cluster
+    krakectl infra cloud delete os-cloud-1
+    krakectl infra cloud delete os-cloud-2
+    krakectl infra provider delete im-provider
 
 
 .. _Kubernetes: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set

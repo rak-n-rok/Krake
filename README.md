@@ -109,8 +109,8 @@ sudo mkdir /etc/krake
 # Last, copy generated files to that directory with
 sudo cp *.yaml /etc/krake
 
-# Optional: you can use the rok configuration template as you prefer. It can also be generated.
-# Otherwise rok will use the default configuration
+# Optional: you can use the krakectl configuration template as you prefer. It can also be generated.
+# Otherwise krakectl will use the default configuration
 krake/scripts/krake_generate_config templates/config/krakectl.yaml.template
 ```
 

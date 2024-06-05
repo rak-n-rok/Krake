@@ -23,11 +23,11 @@ specifications:
    dependencies are difficult to maintain manually, therefore we use
    ``pip-compile`` to derive them from abstract requirements.
 
-Dependencies of ``krake``, ``rok`` and ``rak`` Packages
+Dependencies of ``krake``, ``krakectl`` and ``rak`` Packages
 -------------------------------------------------------
 
 The following files in the source tree are related to the dependencies
-of the ``krake``, ``rok`` and ``rak`` packages:
+of the ``krake``, ``krakectl`` and ``rak`` packages:
 
 ::
 
@@ -43,13 +43,13 @@ of the ``krake``, ``rok`` and ``rak`` packages:
    │   └── pyproject.toml
    ├── rak/
    │   └── pyproject.toml
-   └── rok/
+   └── krakectl/
        └── pyproject.toml
 
 Abstract Requirements (``pyproject.toml``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The abstract dependencies of the ``krake``, ``rok`` and ``rak`` packages
+The abstract dependencies of the ``krake``, ``krakectl`` and ``rak`` packages
 are listed, together with optional extras, in their respective
 ``pyproject.toml`` package metadata. When installed with pip (for
 example as in ``pip install -e ./krake``), pip will take care of
@@ -59,13 +59,13 @@ Constraints (``constraints.txt``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The constraints file can be used to restrict the version of a transitive
-dependency of ``krake`` and ``rok`` *without* making it a direct
+dependency of ``krake`` and ``krakectl`` *without* making it a direct
 dependency.
 
 Concrete Requirements (``requirements/*.txt``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For reproducible testing and installations of the ``krake`` and ``rok``
+For reproducible testing and installations of the ``krake`` and ``krakectl``
 combination, we have several sets of concrete requirements in the
 ``requirements/`` directory (two for each Python release that we
 currently test in the CI):
@@ -82,7 +82,7 @@ extras:
    python3.12 -m venv .venv && source .venv/bin/activate
    pip install --upgrade pip setuptools
    pip install --no-deps -r requirements/requirements-py310-test.txt
-   pip install --no-deps -e './krake[test]' -e './rok[test]'
+   pip install --no-deps -e './krake[test]' -e './krakectl[test]'
    pip check
 
 .. note::
@@ -96,7 +96,7 @@ Regenerating Concrete Requirements
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If you have modified the abstract dependencies in
-``krake/pyproject.toml`` or ``rok/pyproject.toml``, you should
+``krake/pyproject.toml`` or ``krakectl/pyproject.toml``, you should
 regenerate the pinned dependencies with
 
 .. code:: shell

@@ -246,11 +246,11 @@ If you are interested in CSAR, use the pre-defined ``TOSCA.meta`` file and creat
     python3 -m http.server 8000
 
 
-Rok
-~~~
+krakectl
+~~~~~~~~
 
 A TOSCA template YAML file should be applied the same way as a Kubernetes manifest file
-using the krakectl CLI, see :ref:`user/krakectl-documentation:Rok documentation`.
+using the krakectl CLI, see :ref:`user/krakectl-documentation:krakectl documentation`.
 
 - Create an application described by a TOSCA template YAML file:
 
@@ -265,7 +265,7 @@ using the krakectl CLI, see :ref:`user/krakectl-documentation:Rok documentation`
     krakectl kube app update --file rak/functionals/echo-demo-update-tosca.yaml echo-demo
 
 A TOSCA template URL or CSAR archive URL should be defined after the optional `--url` argument
-using the krakectl CLI, see :ref:`user/krakectl-documentation:Rok documentation`.
+using the krakectl CLI, see :ref:`user/krakectl-documentation:krakectl documentation`.
 
 - Create an application described by a TOSCA template URL:
 
