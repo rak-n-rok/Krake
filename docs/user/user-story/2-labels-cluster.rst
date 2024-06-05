@@ -44,8 +44,8 @@ Preparation
 
 .. prompt:: bash $ auto
 
-    $ rok kube cluster register -k clusters/config/minikube-cluster-1 -l location=DE
-    $ rok kube cluster register -k clusters/config/minikube-cluster-2 -l location=SK
+    $ krakectl kube cluster register -k clusters/config/minikube-cluster-1 -l location=DE
+    $ krakectl kube cluster register -k clusters/config/minikube-cluster-2 -l location=SK
 
 Spawn the demo application
 ==========================
@@ -54,8 +54,8 @@ Spawn the demo application
 
 .. prompt:: bash $ auto
 
-    $ rok kube app create -f git/krake/templates/applications/k8s/echo-demo.yaml echo-demo -L location=DE
-    $ rok kube app get echo-demo -o json | jq .status.running_on
+    $ krakectl kube app create -f git/krake/templates/applications/k8s/echo-demo.yaml echo-demo -L location=DE
+    $ krakectl kube app get echo-demo -o json | jq .status.running_on
 
 Observe a migration
 ===================
@@ -64,8 +64,8 @@ Observe a migration
 
 .. prompt:: bash $ auto
 
-    $ rok kube app update echo-demo -L location=SK
-    $ rok kube app get echo-demo -o json | jq .status.running_on  # The Application is now running on "minikube-cluster-2"
+    $ krakectl kube app update echo-demo -L location=SK
+    $ krakectl kube app get echo-demo -o json | jq .status.running_on  # The Application is now running on "minikube-cluster-2"
 
 Cleanup
 =======
@@ -74,9 +74,9 @@ Cleanup
 
 .. prompt:: bash $ auto
 
-    $ rok kube app delete echo-demo
-    $ rok kube cluster delete minikube-cluster-1
-    $ rok kube cluster delete minikube-cluster-2
+    $ krakectl kube app delete echo-demo
+    $ krakectl kube cluster delete minikube-cluster-1
+    $ krakectl kube cluster delete minikube-cluster-2
 
 
 .. _Kubernetes: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set

@@ -321,7 +321,7 @@ are talked about, but namespaced ``Metrics`` can also be used to follow these se
 
 The metrics for the Cloud resources (OpenStack), Kubernetes clusters, Magnum clusters and OpenStack projects
 resources are defined by the ``-m`` or ``--metric`` option in the krakectl CLI, see
-:ref:`user/krakectl-documentation:Rok documentation`. Multiple metrics can be specified for
+:ref:`user/krakectl-documentation:krakectl documentation`. Multiple metrics can be specified for
 one resource with the following syntax: `<name> <weight>`.
 
 Examples:
@@ -524,7 +524,7 @@ can be expressed:
 
 The Cluster label constraints for the Application and Cluster resources
 are defined by ``-L`` (or ``--cluster-label-constraint``, ``--cloud-label-constraint``) option in the
-krakectl CLI, see :ref:`user/krakectl-documentation:Rok documentation`. The constraints can be
+krakectl CLI, see :ref:`user/krakectl-documentation:krakectl documentation`. The constraints can be
 specified multiple times with the syntax: `<label> expression <value>`.
 
 Examples:
@@ -596,7 +596,7 @@ can be expressed:
 
 The metric label constraints for the Application and Cluster resources are defined
 by ``-M`` (or ``--cluster-metric-constraint``, ``--cloud-metric-constraint``) option in the krakectl CLI,
-see :ref:`user/krakectl-documentation:Rok documentation`. The constraints can be
+see :ref:`user/krakectl-documentation:krakectl documentation`. The constraints can be
 specified multiple times with the syntax: `<metric> expression <value>`.
 
 Examples:
@@ -621,7 +621,7 @@ by the Custom Resource Definition (CRD) and Krake uses this CRD name with the fo
 
 
 The supported CRD names are defined by ``-R`` or ``--custom-resource`` option in krakectl
-CLI. See also :ref:`user/krakectl-documentation:Rok documentation`.
+CLI. See also :ref:`user/krakectl-documentation:krakectl documentation`.
 
 Example:
 
@@ -635,7 +635,7 @@ appropriate cluster where the CR is supported.
 
 Cluster resource constraints are defined by a CRD name with the
 format ``<plural>.<group>`` using ``-R`` or ``--cluster-resource-constraint`` option in
-krakectl CLI. See also :ref:`user/krakectl-documentation:Rok documentation`.
+krakectl CLI. See also :ref:`user/krakectl-documentation:krakectl documentation`.
 
 Example:
 

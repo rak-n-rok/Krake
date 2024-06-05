@@ -34,7 +34,7 @@ _GC_DELAY = 5
 
 def test_roles_crud(session):
     """Test basic role functionality with the session library.
-    Rok cli can't be used here, because it doesn't implement role calls (yet).
+    krakectl cli can't be used here, because it doesn't implement role calls (yet).
     The test method performs the following tests for roles:
 
     1. Delete a non-existent role and expect failure
@@ -169,7 +169,7 @@ def test_roles_crud(session):
 
 def test_rolebindings_crud(session):
     """Test basic rolebinding functionality with the session library.
-    Rok cli can't be used here, because it doesn't implement rolebinding calls (yet).
+    krakectl cli can't be used here, because it doesn't implement rolebinding calls (yet).
     The test method performs the following tests for rolebindings:
 
     1. Delete a non-existent rolebinding and expect failure

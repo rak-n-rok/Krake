@@ -93,7 +93,7 @@ Preparation
 
 .. prompt:: bash $ auto
 
-    $ rok core globalmetricsprovider get static_provider
+    $ krakectl core globalmetricsprovider get static_provider
     +-----------+---------------------------+
     | name      | static_provider           |
     | namespace | None                      |
@@ -105,7 +105,7 @@ Preparation
     | metrics   | electricity_cost_1: 0.9   |
     |           | green_energy_ratio_1: 0.1 |
     +-----------+---------------------------+
-    $ rok core globalmetric get electricity_cost_1
+    $ krakectl core globalmetric get electricity_cost_1
     +-----------+---------------------+
     | name      | electricity_cost_1  |
     | namespace | None                |
@@ -117,7 +117,7 @@ Preparation
     | min       | 0                   |
     | max       | 1                   |
     +-----------+---------------------+
-    $ rok core globalmetric get green_energy_ratio_1
+    $ krakectl core globalmetric get green_energy_ratio_1
     +-----------+----------------------+
     | name      | green_energy_ratio_1 |
     | namespace | None                 |
@@ -135,8 +135,8 @@ Preparation
 
 .. prompt:: bash $ auto
 
-    $ rok kube cluster register -k clusters/config/minikube-cluster-1 --global-metric electricity_cost_1 10 --global-metric green_energy_ratio_1 1
-    $ rok kube cluster register -k clusters/config/minikube-cluster-2 --global-metric electricity_cost_1 1 --global-metric green_energy_ratio_1 10
+    $ krakectl kube cluster register -k clusters/config/minikube-cluster-1 --global-metric electricity_cost_1 10 --global-metric green_energy_ratio_1 1
+    $ krakectl kube cluster register -k clusters/config/minikube-cluster-2 --global-metric electricity_cost_1 1 --global-metric green_energy_ratio_1 10
 
 - The clusters ``minikube-cluster-1``/``-2`` have been defined with the following
   weights for the two static metrics:
@@ -167,8 +167,8 @@ Scheduling of an application
 
 .. prompt:: bash $ auto
 
-    $ rok kube app create -f git/krake/templates/applications/k8s/echo-demo.yaml echo-demo
-    $ rok kube app get echo-demo  # See "running_on": the Application is running on "minikube-cluster-1"
+    $ krakectl kube app create -f git/krake/templates/applications/k8s/echo-demo.yaml echo-demo
+    $ krakectl kube app get echo-demo  # See "running_on": the Application is running on "minikube-cluster-1"
 
 .. note::
 
@@ -210,7 +210,7 @@ Observe a migration
 
 .. prompt:: bash $ auto
 
-    $ rok core globalmetricsprovider update static_provider --metric electricity_cost_1 0.1 --metric green_energy_ratio_1 0.9
+    $ krakectl core globalmetricsprovider update static_provider --metric electricity_cost_1 0.1 --metric green_energy_ratio_1 0.9
     +-----------+---------------------------+
     | name      | static_provider           |
     | namespace | None                      |
@@ -231,7 +231,7 @@ Observe a migration
 
 .. prompt:: bash $ auto
 
-    $ rok kube app get echo-demo  # See "running_on": the Application is running on "minikube-cluster-2"
+    $ krakectl kube app get echo-demo  # See "running_on": the Application is running on "minikube-cluster-2"
 
 
 Cleanup
@@ -241,9 +241,9 @@ Cleanup
 
 .. code:: bash
 
-    $ rok kube app delete echo-demo
-    $ rok kube cluster delete minikube-cluster-1
-    $ rok kube cluster delete minikube-cluster-2
+    $ krakectl kube app delete echo-demo
+    $ krakectl kube cluster delete minikube-cluster-1
+    $ krakectl kube cluster delete minikube-cluster-2
 
 
 .. _Prometheus: https://prometheus.io/

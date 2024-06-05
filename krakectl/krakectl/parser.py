@@ -242,7 +242,7 @@ arg_config = argument(
     action="store",
     type=str,
     dest="path",
-    default="rok.yaml",
+    default="krakectl.yaml",
     help="Path to the config file",
 )
 arg_formatting = argument(

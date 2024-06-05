@@ -67,6 +67,6 @@ Cleanup
 
 .. prompt:: bash $ auto
 
-    $ rok kube app delete echo-demo
-    $ rok kube os cluster delete mycluster
-    $ rok kube project delete myproject
+    $ krakectl kube app delete echo-demo
+    $ krakectl kube os cluster delete mycluster
+    $ krakectl kube project delete myproject

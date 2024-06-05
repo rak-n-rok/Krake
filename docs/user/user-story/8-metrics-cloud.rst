@@ -80,8 +80,8 @@ Register ``os-cloud-1`` and ``os-cloud-2`` Clouds, and associate the ``electrici
 
 .. prompt:: bash $ auto
 
-    rok infra cloud register --global-metric electricity_cost_1 1 --global-metric green_energy_ratio_1 10 --type openstack --url <os-auth-url> --project <os-project-name> --username <os-username> --password <os-password> --infra-provider im-provider os-cloud-1
-    rok infra cloud register --global-metric electricity_cost_1 10 --global-metric green_energy_ratio_1 1 --type openstack --url <os-auth-url> --project <os-project-name> --username <os-username> --password <os-password> --infra-provider im-provider os-cloud-2
+    krakectl infra cloud register --global-metric electricity_cost_1 1 --global-metric green_energy_ratio_1 10 --type openstack --url <os-auth-url> --project <os-project-name> --username <os-username> --password <os-password> --infra-provider im-provider os-cloud-1
+    krakectl infra cloud register --global-metric electricity_cost_1 10 --global-metric green_energy_ratio_1 1 --type openstack --url <os-auth-url> --project <os-project-name> --username <os-username> --password <os-password> --infra-provider im-provider os-cloud-2
 
 .. tip::
 
@@ -117,8 +117,8 @@ Create the ``my-cluster`` cluster and check it is actually spawned on the second
 
 .. prompt:: bash $ auto
 
-    rok kube cluster create -f rak/functionals/im-cluster.yaml my-cluster
-    rok kube cluster get my-cluster  -o json | jq .status.running_on  # Cluster is running on "os-cloud-2"
+    krakectl kube cluster create -f rak/functionals/im-cluster.yaml my-cluster
+    krakectl kube cluster get my-cluster  -o json | jq .status.running_on  # Cluster is running on "os-cloud-2"
 
 .. note::
 
@@ -133,14 +133,14 @@ the cluster should contain a MetricConstraint and be scheduled to a cluster with
 
 .. prompt:: bash $ auto
 
-    rok kube cluster create -f git/krake/rak/functionals/im-cluster.yaml my-cluster --inherit-metrics
+    krakectl kube cluster create -f git/krake/rak/functionals/im-cluster.yaml my-cluster --inherit-metrics
 
 If this cluster is now observed, the inherited metrics should be visible in the output. These metrics are considered during scheduling like normal metrics, which are directly referenced to a cluster.
 Inherited metrics are marked accordingly.
 
 .. prompt:: bash $ auto
 
-    $ rok kube cluster get my-cluster
+    $ krakectl kube cluster get my-cluster
 	+-----------------------+-----------------------------------------------------------------------------------------------+
 	| name                  | my-cluster                                                                                	|
 	| namespace             | system:admin                                                                              	|
@@ -161,7 +161,7 @@ A similar output can be observed, if a metric constraint is defined for the clus
 
 .. prompt:: bash $ auto
 
-    $ rok kube cluster get my-cluster
+    $ krakectl kube cluster get my-cluster
 	+-----------------------+-----------------------------------------------------------------------------------------------+
 	| name                  | my-cluster                                                                                	|
 	| namespace             | system:admin                                                                              	|
@@ -185,7 +185,7 @@ Delete the Cluster, both Clouds and the InfrastructureProvider.
 
 .. code:: bash
 
-    rok kube cluster delete my-cluster
-    rok infra cloud delete os-cloud-1
-    rok infra cloud delete os-cloud-2
-    rok infra provider delete im-provider
+    krakectl kube cluster delete my-cluster
+    krakectl infra cloud delete os-cloud-1
+    krakectl infra cloud delete os-cloud-2
+    krakectl infra provider delete im-provider

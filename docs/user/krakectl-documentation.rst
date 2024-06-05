@@ -1,8 +1,8 @@
-=================
-Rok documentation
-=================
+======================
+krakectl documentation
+======================
 
-The Rok utility has a command line interface with a few specific commands, that can be added one after the other to refer to specific elements. The general syntax is
+The krakectl utility has a command line interface with a few specific commands, that can be added one after the other to refer to specific elements. The general syntax is
 
 .. code:: bash
 

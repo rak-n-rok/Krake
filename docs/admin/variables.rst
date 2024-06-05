@@ -87,7 +87,7 @@ krake_apps.yml
         Port that can be used to reach the Krake API present in the container started using docker-compose.
 
     enable_tls (boolean)
-        Enable or disable TLS support for communications with the API (for the API, controllers and Rok utility).
+        Enable or disable TLS support for communications with the API (for the API, controllers and krakectl utility).
         The certificates need to be added manually into the ``/etc/krake`` directory in the Krake VM.
 
     worker_count (integer)

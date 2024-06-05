@@ -458,9 +458,9 @@
           loop:
             - "templates/bootstrapping/base_roles.yaml"
 
-    - name: Krake krakectl deployment
+    - name: krakectl deployment
       tags:
-        - krake-krakectl-deployment
+        - krakectl-deployment
       block:
 
         - name: Create configuration certificates sub-directory
@@ -504,16 +504,16 @@
             owner: krake
             group: krake
 
-        - name: Install Krake krakectl
+        - name: Install krakectl
           tags:
             - synchronize
             - pip
           pip:
             name: "{{ git_dir }}/krakectl"
             executable: pip3
-            extra_args: --user
+            extra_args: --user --editable
 
-        - name: Create Krake krakectl configuration file
+        - name: Create krakectl configuration file
           script: >
             {{ repo_dir }}/krake/scripts/krake_generate_config
             --dst {{ krakectl_configuration_dir }}
