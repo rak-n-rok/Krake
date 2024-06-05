@@ -1,9 +1,9 @@
 stages:
   - pre
   - lint
-  - pre-merge
   - test
   - e2e
+  - cleanup
   - release
 
 variables:
@@ -33,6 +33,12 @@ workflow:
 cache:
   paths:
     - .cache/pip
+
+#########################################################################################
+# Stage "pre"
+#########################################################################################
+#
+#
 
 # This job is excluded from the scheduled master pipeline, because it
 # should only check and automatically adjust new commits after getting pushed.
@@ -114,9 +120,9 @@ pre-commit:
 #      when: on_success
 #    - when: never
 
-check-for-releasenote:
+check-for-releasenotes:
   image: "${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/python:3.11"
-  stage: pre-merge
+  stage: pre
   needs: []
   before_script:
   - git fetch origin "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
@@ -134,6 +140,43 @@ check-for-releasenote:
     - if: $CI_MERGE_REQUEST_EVENT_TYPE
       when: on_success
     - when: never
+
+#########################################################################################
+# Stage "lint"
+#########################################################################################
+#
+#
+
+flake8-krake:
+  stage: lint
+  image: python:3.10
+  only:
+    - tags
+    - branches
+    - merge_requests
+    - schedules
+  script:
+    - pip install -r ci/requirements_lint.txt
+    - flake8 krake/krake
+
+
+flake8-rok:
+  stage: lint
+  image: python:3.10
+  only:
+    - tags
+    - branches
+    - merge_requests
+    - schedules
+  script:
+    - pip install -r ci/requirements_lint.txt
+    - flake8 rok/rok
+
+#########################################################################################
+# Stage "test"
+#########################################################################################
+#
+#
 
 # Unit tests and flake8 are run on commits on branches which are not yet in a
 # merge requests (including master), on merge requests, and on scheduled
@@ -231,31 +274,6 @@ lint-tosca-templates:
     - pip install tosca-parser==${TOSCA_PARSER_VER}
     - find templates -wholename "*/tosca/*.yaml" -o -wholename "*/tosca/*.yml" | xargs -i tosca-parser --template-file {}
 
-flake8-krake:
-  stage: lint
-  image: python:3.10
-  only:
-    - tags
-    - branches
-    - merge_requests
-    - schedules
-  script:
-    - pip install -r ci/requirements_lint.txt
-    - flake8 krake/krake
-
-
-flake8-rok:
-  stage: lint
-  image: python:3.10
-  only:
-    - tags
-    - branches
-    - merge_requests
-    - schedules
-  script:
-    - pip install -r ci/requirements_lint.txt
-    - flake8 rok/rok
-
 pages:
   stage: test
   needs: []
@@ -306,6 +324,12 @@ pages-master:
       when: on_success
     - when: never
 
+#########################################################################################
+# Stage "e2e"
+#########################################################################################
+#
+#
+
 # Combine code coverage reports from previous tox runs for all different
 # Python environments. Report code coverage for Krake Python package and exit
 # with non-zero if the code coverage ratio is under 85%.
@@ -350,7 +374,6 @@ coverage-krake-visualization:
 # master branch, on merge requests, and on scheduled pipeline (night runs)
 e2e-provisioning:
   stage: test
-  needs: []
   image: registry.gitlab.com/rak-n-rok/krake/ansible_image:latest
   only:
     - master
@@ -449,9 +472,14 @@ e2e-test-apps:
 #    #########################
 #    - time ansible-playbook ansible/integration_tests.yml --tags "krake_im" --limit krake-$CI_PIPELINE_ID-im
 
+#########################################################################################
+# Stage "cleanup"
+#########################################################################################
+#
+#
 
 e2e-cleanup:
-  stage: release
+  stage: cleanup
   image: registry.gitlab.com/rak-n-rok/krake/ansible_image:latest
   only:
     - master
@@ -475,6 +503,11 @@ e2e-cleanup:
     - ansible-playbook ansible/unprovision.yml
   when: always
 
+#########################################################################################
+# Stage "release"
+#########################################################################################
+#
+#
 
 pypi:
   stage: release
