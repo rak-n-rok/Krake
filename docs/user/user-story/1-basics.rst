@@ -76,7 +76,7 @@ Spawn the demo application
 .. prompt:: bash $ auto
 
     $ rok kube app list  # No Application resource is present
-    $ rok kube app create -f git/krake/rak/functionals/echo-demo.yaml echo-demo
+    $ rok kube app create -f git/krake/templates/applications/k8s/echo-demo.yaml echo-demo
     $ rok kube app list  # One Application resource with name "echo-demo"
 
 -- **Alternatively**, spawn a Kubernetes ``Application`` using a ``TOSCA`` template file (or URL) or ``CSAR`` archive URL, see :ref:`dev/tosca:Examples`.
@@ -84,7 +84,7 @@ Spawn the demo application
   .. prompt:: bash $ auto
 
       $ rok kube app list  # No Application resource is present
-      $ rok kube app create -f git/krake/rak/functionals/echo-demo-tosca.yaml echo-demo
+      $ rok kube app create -f git/krake/examples/templates/tosca/echo-demo-tosca.yaml echo-demo
       $ rok kube app list  # One Application resource with name "echo-demo"
 
 - Check application information:
@@ -126,7 +126,7 @@ Update resources
 
 .. prompt:: bash $ auto
 
-    $ cat git/krake/rak/functionals/echo-demo-update.yaml
+    $ cat git/krake/templates/applications/k8s/echo-demo-update.yaml
     ---
     apiVersion: apps/v1
     kind: Deployment
@@ -161,7 +161,7 @@ Update resources
         protocol: TCP
         targetPort: 8080
 
-    $ rok kube app update -f git/krake/rak/functionals/echo-demo-update.yaml echo-demo
+    $ rok kube app update -f git/krake/templates/applications/k8s/echo-demo-update.yaml echo-demo
 
 -- **Alternatively**, update a ``TOSCA`` template file (or URL) or ``CSAR`` archive URL to create a second Pod for the ``echo-demo`` application, see :ref:`dev/tosca:Examples`.
 

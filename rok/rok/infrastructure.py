@@ -5,6 +5,7 @@
     python -m rok infrastructure --help
 
 """
+
 import sys
 import getpass
 
@@ -18,7 +19,7 @@ from .parser import (
     arg_metric,
     arg_global_metric,
     arg_labels,
-    arg_config
+    arg_config,
 )
 from .fixtures import depends
 from .formatters import (
@@ -133,8 +134,9 @@ def register_globalinfrastructureprovider(
     if password:
         pass
     else:
-        password = getpass.getpass(prompt='Please set your Infrastructure Provider '
-                                          'password: ')
+        password = getpass.getpass(
+            prompt="Please set your Infrastructure Provider " "password: "
+        )
     if ip_type == InfrastructureProviderType.IM:
         provider = {
             "api": "infrastructure",
@@ -218,8 +220,9 @@ def update_globalinfrastructureprovider(
     if password:
         pass
     else:
-        password = getpass.getpass(prompt='Please enter your Infrastructure Provider '
-                                          'password: ')
+        password = getpass.getpass(
+            prompt="Please enter your Infrastructure Provider " "password: "
+        )
     provider["spec"]["im"]["password"] = password
 
     if provider["spec"]["type"] == InfrastructureProviderType.IM:
@@ -336,8 +339,9 @@ def register_infrastructureprovider(
     if password:
         pass
     else:
-        password = getpass.getpass(prompt='Please set your Infrastructure Provider '
-                                          'password: ')
+        password = getpass.getpass(
+            prompt="Please set your Infrastructure Provider " "password: "
+        )
     if ip_type == InfrastructureProviderType.IM:
         provider = {
             "api": "infrastructure",
@@ -431,8 +435,9 @@ def update_infrastructureprovider(
     if password:
         pass
     else:
-        password = getpass.getpass(prompt='Please enter your Infrastructure Provider '
-                                          'password: ')
+        password = getpass.getpass(
+            prompt="Please enter your Infrastructure Provider " "password: "
+        )
     provider["spec"]["im"]["password"] = password
 
     if provider["spec"]["type"] == InfrastructureProviderType.IM:
@@ -580,7 +585,7 @@ def register_globalcloud(
     if password:
         pass
     else:
-        password = getpass.getpass(prompt='Please enter your Cloud password: ')
+        password = getpass.getpass(prompt="Please enter your Cloud password: ")
 
     if cloud_type == CloudType.OPENSTACK:
         cloud_resource = {
@@ -700,7 +705,7 @@ def update_globalcloud(
     if password:
         pass
     else:
-        password = getpass.getpass(prompt='Please enter your Cloud password: ')
+        password = getpass.getpass(prompt="Please enter your Cloud password: ")
     cloud_resource["metadata"]["password"] = password
 
     if cloud_resource["spec"]["type"] == CloudType.OPENSTACK:
@@ -858,7 +863,7 @@ def register_cloud(
     if password:
         pass
     else:
-        password = getpass.getpass(prompt='Please enter your OpenStack password: ')
+        password = getpass.getpass(prompt="Please enter your OpenStack password: ")
 
     if infra_provider and global_infra_provider:
         sys.exit(
@@ -1015,7 +1020,7 @@ def update_cloud(
     if password:
         pass
     else:
-        password = getpass.getpass(prompt='Please enter your Cloud password: ')
+        password = getpass.getpass(prompt="Please enter your Cloud password: ")
     cloud_resource["metadata"]["password"] = password
 
     if cloud_resource["spec"]["type"] == CloudType.OPENSTACK:

@@ -24,7 +24,7 @@ Components
 ==========
 
 -----
-Krake 
+Krake
 -----
 
 The Krake module provides the main features of this project. It contains all services that compose a complete Krake instance as well as some additional modules.

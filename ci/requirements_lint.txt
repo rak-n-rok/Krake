@@ -5,7 +5,7 @@
 #    tox run -m tool-requirements
 #
 flake8==7.0.0
-    # via -r gitlab-ci/requirements_lint.in
+    # via -r ci/requirements_lint.in
 mccabe==0.7.0
     # via flake8
 pycodestyle==2.11.1

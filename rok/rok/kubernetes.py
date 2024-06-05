@@ -5,6 +5,7 @@
     python -m rok kubernetes --help
 
 """
+
 import json
 import sys
 import warnings
@@ -402,7 +403,7 @@ def create_application(
     backoff,
     backoff_delay,
     backoff_limit,
-    auto_cluster_create
+    auto_cluster_create,
 ):
     manifest = []
     tosca = {}
@@ -528,23 +529,23 @@ def get_application(config, session, namespace, name):
 )
 @argument(
     "--remove-existing-labels",
-    action='store_true',
-    help="remove currently existing labels"
+    action="store_true",
+    help="remove currently existing labels",
 )
 @argument(
     "--remove-existing-label-constraints",
-    action='store_true',
-    help="remove currently existing label constraints"
+    action="store_true",
+    help="remove currently existing label constraints",
 )
 @argument(
     "--remove-existing-resource-constraints",
-    action='store_true',
-    help="remove currently existing resource constraints"
+    action="store_true",
+    help="remove currently existing resource constraints",
 )
 @argument(
     "--remove-existing-metric-constraints",
-    action='store_true',
-    help="remove currently existing metric constraints"
+    action="store_true",
+    help="remove currently existing metric constraints",
 )
 @arg_migration_constraints()
 @arg_cluster_label_constraints
@@ -945,11 +946,7 @@ def create_cluster(
         namespace = config["user"]
 
     to_create = {
-        "metadata": {
-            "name": name,
-            "labels": labels,
-            "inherit_labels": inherit_labels
-        },
+        "metadata": {"name": name, "labels": labels, "inherit_labels": inherit_labels},
         "spec": {
             "tosca": yaml.safe_load(file),
             "metrics": metrics + global_metrics,
@@ -1007,12 +1004,17 @@ def get_cluster(config, session, namespace, name):
     resp = session.get(f"/kubernetes/namespaces/{namespace}/clusters/{name}")
     data = resp.json()
 
-    if ((("inherit_metrics" in data['spec'] and data['spec']['inherit_metrics']) or
-         data['spec']['constraints']['cloud']['metrics']) or
-        (("inherit_labels" in data['spec'] and data['metadata']['inherit_labels']) or
-         data['spec']['constraints']['cloud']['labels'])) and \
-       data['status']['scheduled_to']:
-        if data['status']['scheduled_to']['namespace']:
+    if (
+        (
+            ("inherit_metrics" in data["spec"] and data["spec"]["inherit_metrics"])
+            or data["spec"]["constraints"]["cloud"]["metrics"]
+        )
+        or (
+            ("inherit_labels" in data["spec"] and data["metadata"]["inherit_labels"])
+            or data["spec"]["constraints"]["cloud"]["labels"]
+        )
+    ) and data["status"]["scheduled_to"]:
+        if data["status"]["scheduled_to"]["namespace"]:
             cloud = session.get(
                 f"/infrastructure/namespaces/"
                 f"{data['status']['scheduled_to']['namespace']}"
@@ -1024,41 +1026,45 @@ def get_cluster(config, session, namespace, name):
             ).json()
 
         inherited_labels = dict()
-        if data['metadata']['inherit_labels']:
-            for label in cloud['metadata']['labels']:
-                inherited_labels[label] = \
-                    cloud['metadata']['labels'][label] + " (inherited)"
-            if data['spec']['constraints']['cloud']['labels']:
-                for constraint in data['spec']['constraints']['cloud']['labels']:
-                    for label in cloud['metadata']['labels']:
+        if data["metadata"]["inherit_labels"]:
+            for label in cloud["metadata"]["labels"]:
+                inherited_labels[label] = (
+                    cloud["metadata"]["labels"][label] + " (inherited)"
+                )
+            if data["spec"]["constraints"]["cloud"]["labels"]:
+                for constraint in data["spec"]["constraints"]["cloud"]["labels"]:
+                    for label in cloud["metadata"]["labels"]:
                         if label in constraint:
-                            inherited_labels[label] = \
-                                cloud['metadata']['labels'][label] + " (inherited)"
-        data['metadata']['labels'] = {**data['metadata']['labels'], **inherited_labels}
+                            inherited_labels[label] = (
+                                cloud["metadata"]["labels"][label] + " (inherited)"
+                            )
+        data["metadata"]["labels"] = {**data["metadata"]["labels"], **inherited_labels}
 
         inherited_metrics = list()
-        if data['spec']['inherit_metrics']:
-            for metric in cloud['spec'][cloud['spec']['type']]['metrics']:
+        if data["spec"]["inherit_metrics"]:
+            for metric in cloud["spec"][cloud["spec"]["type"]]["metrics"]:
                 metric["inherited"] = True
                 inherited_metrics.append(metric)
 
-        if data['spec']['constraints']['cloud']['metrics']:
-            for constraint in data['spec']['constraints']['cloud']['metrics']:
-                for metric in cloud['spec'][cloud['spec']['type']]['metrics']:
+        if data["spec"]["constraints"]["cloud"]["metrics"]:
+            for constraint in data["spec"]["constraints"]["cloud"]["metrics"]:
+                for metric in cloud["spec"][cloud["spec"]["type"]]["metrics"]:
                     if metric["name"] in constraint:
                         metric["inherited"] = True
                         inherited_metrics.append(metric)
 
-        data['spec']['metrics'] += inherited_metrics
+        data["spec"]["metrics"] += inherited_metrics
 
     return data
 
 
 @cluster.command(
-    "update", help="Update a Kubernetes cluster. By default, new metrics, labels, \
+    "update",
+    help="Update a Kubernetes cluster. By default, new metrics, labels, \
     cloud label constraints and cloud metric constraints                        \
     will be appended. To remove previous values, use with                       \
-    --remove-existing-{FIELD_NAME}")
+    --remove-existing-{FIELD_NAME}",
+)
 @argument("name", help="Kubernetes cluster name")
 @argument("-k", "--kubeconfig", type=FileType(), help="Kubernetes kubeconfig file")
 @argument(
@@ -1072,23 +1078,23 @@ def get_cluster(config, session, namespace, name):
 )
 @argument(
     "--remove-existing-labels",
-    action='store_true',
-    help="remove currently existing labels"
+    action="store_true",
+    help="remove currently existing labels",
 )
 @argument(
     "--remove-existing-metrics",
-    action='store_true',
-    help="remove currently existing metrics"
+    action="store_true",
+    help="remove currently existing metrics",
 )
 @argument(
     "--remove-existing-cloud-label-constraints",
-    action='store_true',
-    help="remove currently existing label constraints"
+    action="store_true",
+    help="remove currently existing label constraints",
 )
 @argument(
     "--remove-existing-cloud-metric-constraints",
-    action='store_true',
-    help="remove currently existing metric constraints"
+    action="store_true",
+    help="remove currently existing metric constraints",
 )
 @arg_custom_resources
 @arg_metric
@@ -1143,7 +1149,7 @@ def update_cluster(
     if remove_existing_metrics:
         to_update["spec"]["metrics"] = []
     if metrics or global_metrics:
-        for metric in metrics+global_metrics:
+        for metric in metrics + global_metrics:
             if metric not in to_update["spec"]["metrics"]:
                 to_update["spec"]["metrics"] += [metric]
     if custom_resources:

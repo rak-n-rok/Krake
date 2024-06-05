@@ -57,20 +57,16 @@ import time
 import yaml
 
 from functionals.utils import (
+    KRAKE_HOMEDIR,
     create_cluster_label_info,
     get_scheduling_score,
     get_other_cluster,
 )
-from functionals.environment import Environment, create_default_environment
+from functionals.environment import GIT_DIR, Environment, create_default_environment
 from functionals.resource_definitions import ResourceKind
 from functionals.resource_provider import provider, WeightedMetric, StaticMetric
 from datetime import datetime
 
-KRAKE_HOMEDIR = "/home/krake"
-GIT_DIR = "git/krake"
-TEST_DIR = "rak/functionals"
-CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
-MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}"
 COUNTRY_CODES = [
     l1 + l2
     for l1, l2 in itertools.product(string.ascii_uppercase, string.ascii_uppercase)
@@ -82,7 +78,7 @@ def _read_value_from_config(value, default):
     options = [
         "scheduler.yaml",
         os.path.join("/etc/krake/", "scheduler.yaml"),
-        os.path.join(f"{KRAKE_HOMEDIR}/{GIT_DIR}/config", "scheduler.yaml")
+        os.path.join(f"{KRAKE_HOMEDIR}/{GIT_DIR}/config", "scheduler.yaml"),
     ]
     for path in options:
         if os.path.exists(path):
@@ -257,7 +253,7 @@ def test_kubernetes_no_migration_cluster_constraints(k8s_clusters):
         # 3. Update the cluster constraints to match the first cluster;
         app.update_resource(
             cluster_label_constraints=[f"location={expected_countries[0]}"],
-            update_behavior = ["--remove-existing-label-constraints"],
+            update_behavior=["--remove-existing-label-constraints"],
         )
 
         # 4. Wait and
@@ -440,7 +436,7 @@ def _get_metrics_triggering_migration(
     static_metrics,
     cluster_metrics,
     values_option_1=None,
-    values_option_2=None
+    values_option_2=None,
 ):
     """Return static metrics that the static metrics provider need to return in
     order for a migration to be triggered from the source to the target cluster.
@@ -491,9 +487,14 @@ def _get_metrics_triggering_migration(
             f"Using the provided metrics ({static_metrics}) and weights "
             f"({cluster_metrics}), we were unable to choose metrics that will "
             f"trigger a migration from the source cluster {source} to the target "
-            f"cluster {target}. Target score " + str(target_score) +
-            " - Source score " + str(source_score) + " | Target score " +
-            str(target_score_1) + " - Source score " + str(source_score_1)
+            f"cluster {target}. Target score "
+            + str(target_score)
+            + " - Source score "
+            + str(source_score)
+            + " | Target score "
+            + str(target_score_1)
+            + " - Source score "
+            + str(source_score_1)
         )
         raise ValueError(err_msg)
     return metrics_option_2
@@ -771,8 +772,10 @@ def test_kubernetes_migration_fluctuating_metrics(k8s_clusters):
         app_creation_time = 5
         previous_migration_time = None
         start_time = time.time()
-        while time.time() - start_time < num_intervals * (RESCHEDULING_INTERVAL + app_creation_time):
-        #while time.time() - start_time < num_intervals * (RESCHEDULING_INTERVAL):
+        while time.time() - start_time < num_intervals * (
+            RESCHEDULING_INTERVAL + app_creation_time
+        ):
+            # while time.time() - start_time < num_intervals * (RESCHEDULING_INTERVAL):
             # 5a. Change the metrics so that score of other cluster is higher
             # than the score of current cluster.
             static_metrics = _get_metrics_triggering_migration(
@@ -781,13 +784,15 @@ def test_kubernetes_migration_fluctuating_metrics(k8s_clusters):
                 static_metrics,
                 metric_weights,
                 values_option_1=[0.1, 0.9],
-                values_option_2=[0.9, 0.1]
+                values_option_2=[0.9, 0.1],
             )
             mp.update_resource(metrics=static_metrics)
 
             # 5b. Wait for the migration to other cluster to take place
             # (remember its timestamp)
-            app.check_running_on(next_cluster, within= RESCHEDULING_INTERVAL + app_creation_time)
+            app.check_running_on(
+                next_cluster, within=RESCHEDULING_INTERVAL + app_creation_time
+            )
             migration_time = time.time()  # the approximate time of migration
             num_migrations += 1
 
@@ -801,9 +806,10 @@ def test_kubernetes_migration_fluctuating_metrics(k8s_clusters):
                     datetime.timestamp(scheduled_datetime) - previous_migration_time
                     >= RESCHEDULING_INTERVAL
                 )
-                assert (
-                    datetime.timestamp(scheduled_datetime) - previous_migration_time
-                    <= RESCHEDULING_INTERVAL + (1.25* RESCHEDULING_INTERVAL)
+                assert datetime.timestamp(
+                    scheduled_datetime
+                ) - previous_migration_time <= RESCHEDULING_INTERVAL + (
+                    1.25 * RESCHEDULING_INTERVAL
                 )
 
             # set up the loop variables for the next iteration of the loop
@@ -815,7 +821,8 @@ def test_kubernetes_migration_fluctuating_metrics(k8s_clusters):
         assert num_migrations >= expected_num_migrations, (
             f"There were {num_migrations} migrations within "
             f"{num_intervals * RESCHEDULING_INTERVAL} seconds. "
-            f"Expected: {expected_num_migrations}. actual time taken: {(time.time() - start_time)}"
+            f"Expected: {expected_num_migrations}. actual time taken:"
+            f" {(time.time() - start_time)}"
         )
 
 

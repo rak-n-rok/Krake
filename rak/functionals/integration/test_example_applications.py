@@ -1,38 +1,27 @@
-import os.path, os
+import os
 import random
 import time
 import re
 
 from functionals.utils import (
-    create_cluster_label_info,
     get_scheduling_score,
     get_other_cluster,
 )
 
 from functionals.utils import run, check_return_code, kubectl_cmd
 from functionals.environment import (
+    TEMPLATES_PATH,
+    CLUSTERS_CONFIGS,
     Environment,
-    create_multiple_cluster_environment,
     create_default_environment,
-    get_default_kubeconfig_path,
 )
 from functionals.resource_definitions import (
-    ClusterDefinition,
     ApplicationDefinition,
-    ResourceKind
 )
-from functionals.resource_provider import provider, WeightedMetric, StaticMetric
+from functionals.resource_provider import provider, WeightedMetric
 
 from minio import Minio
 
-
-KRAKE_HOMEDIR = "/home/krake"
-GIT_DIR = "git/krake"
-TEST_DIR = "rak/functionals"
-EXAMPLES_DIR = "examples"
-CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
-MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}"
-APP_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{EXAMPLES_DIR}"
 
 RESCHEDULING_INTERVAL = 10
 
@@ -106,8 +95,10 @@ def test_mnist_application(k8s_clusters):
     }
     assert score_cluster_1 < score_cluster_2, f"debug_info: {debug_info}"
 
-    manifest_path = os.path.join(APP_PATH, "mnist/mnist.yaml")
-    observer_schema_path = os.path.join(APP_PATH, "mnist/mnist-observer-schema.yaml")
+    manifest_path = os.path.join(TEMPLATES_PATH, "mnist/k8s/mnist.yaml")
+    observer_schema_path = os.path.join(
+        TEMPLATES_PATH, "mnist/mnist-observer-schema.yaml"
+    )
     app_def = ApplicationDefinition(
         name="mnist",
         manifest_path=manifest_path,
@@ -124,12 +115,12 @@ def test_mnist_application(k8s_clusters):
         # 4. Add a configmap for the shutdown hook script on both clusters
         configmap_name = "mnist-shutdown"
         error_message = f"The configmap {configmap_name} could not be created."
-        script_path = os.path.join(APP_PATH, "mnist/mnist-shutdown.py")
+        script_path = os.path.join(TEMPLATES_PATH, "mnist/mnist-shutdown.py")
         for i in [0, 1]:
             run(
                 (
-                    f"{kubectl_cmd(f'{CLUSTERS_CONFIGS}/{clusters[i]}')} create configmap"
-                    f" {configmap_name} --from-file={script_path}"
+                    f"{kubectl_cmd(f'{CLUSTERS_CONFIGS}/{clusters[i]}')} create"
+                    f" configmap {configmap_name} --from-file={script_path}"
                 ),
                 condition=check_return_code(error_message),
             )
@@ -148,10 +139,12 @@ def test_mnist_application(k8s_clusters):
         gmp.update_resource(metrics=static_metrics)
 
         # Check the new scores and compare them
-        score_cluster_1_c = get_scheduling_score(clusters[0], static_metrics,
-                                                 metric_weights)
-        score_cluster_2_c = get_scheduling_score(clusters[1], static_metrics,
-                                                 metric_weights)
+        score_cluster_1_c = get_scheduling_score(
+            clusters[0], static_metrics, metric_weights
+        )
+        score_cluster_2_c = get_scheduling_score(
+            clusters[1], static_metrics, metric_weights
+        )
         debug_info = {
             "k8sclusters": k8s_clusters,
             "metric_weights": metric_weights,
@@ -166,7 +159,7 @@ def test_mnist_application(k8s_clusters):
             second_cluster,
             within=RESCHEDULING_INTERVAL + 10,
             error_message=f"App was not running on the expected cluster "
-                          f"{second_cluster}. debug_info: {debug_info}",
+            f"{second_cluster}. debug_info: {debug_info}",
         )
 
         logs = ""
@@ -175,12 +168,14 @@ def test_mnist_application(k8s_clusters):
             time.sleep(30)
             logs0 = run(
                 (
-                    f"{kubectl_cmd(f'{CLUSTERS_CONFIGS}/{clusters[0]}')} logs mnist --follow"
+                    f"{kubectl_cmd(f'{CLUSTERS_CONFIGS}/{clusters[0]}')} logs mnist"
+                    " --follow"
                 )
             )
             logs1 = run(
                 (
-                    f"{kubectl_cmd(f'{CLUSTERS_CONFIGS}/{clusters[1]}')} logs mnist --follow"
+                    f"{kubectl_cmd(f'{CLUSTERS_CONFIGS}/{clusters[1]}')} logs mnist"
+                    "--follow"
                 )
             )
             i += 1
@@ -198,8 +193,9 @@ def test_mnist_application(k8s_clusters):
             # Hardcoded insecure (http) connection
             secure=False,
         )
-        assert minio_client.bucket_exists("krake-ci-bucket") is True, \
-            "The 'krake-ci-bucket' doesn't exist in this Minio instance."
+        assert (
+            minio_client.bucket_exists("krake-ci-bucket") is True
+        ), "The 'krake-ci-bucket' doesn't exist in this Minio instance."
 
         regex = re.compile(r"Accuracy:\s\d\d.\d\d\s%", re.MULTILINE)
         match = regex.search(logs)

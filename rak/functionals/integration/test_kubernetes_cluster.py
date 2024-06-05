@@ -11,10 +11,7 @@ from functionals.utils import (
     check_cluster_created_and_up,
     check_resource_deleted,
 )
-
-
-KRAKE_HOMEDIR = "/home/krake"
-MANIFEST_PATH = f"{KRAKE_HOMEDIR}/git/krake/rak/functionals"
+from rak.functionals.environment import TOSCA_PATH
 
 
 def test_cluster_crud(
@@ -51,8 +48,8 @@ def test_cluster_crud(
         os_password (str): OpenStack cloud password auth. password.
 
     """
-    cluster_manifest_path = f"{MANIFEST_PATH}/im-cluster.yaml"
-    cluster_manifest_update_path = f"{MANIFEST_PATH}/im-cluster-scale-up.yaml"
+    cluster_manifest_path = f"{TOSCA_PATH}/im-cluster.yaml"
+    cluster_manifest_update_path = f"{TOSCA_PATH}/im-cluster-scale-up.yaml"
     provider_name = "im-provider"
     cloud_name = "os-cloud"
     cluster_name = "test-cluster"

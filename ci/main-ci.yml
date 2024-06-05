@@ -1,17 +1,22 @@
 stages:
+  - pre
+  - lint
   - test
   - e2e
   - release
 
 variables:
-  ETCD_VER: v3.3.13
+  ETCD_VER: v3.5.12
   PROMETHEUS_VER: 2.12.0
   CFSSL_VER: 1.4.1
   CONFLUENT_VER: "7.0"
+  KUBECONFORM_VER: 0.6.4
+  TOSCA_PARSER_VER: 2.10.0
 
   # Change pip's cache directory to be inside the project directory since we
   # can only cache local items.
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  TEMPLATE_DIR: "examples/templates"
 
 workflow:
   rules:
@@ -28,6 +33,86 @@ cache:
   paths:
     - .cache/pip
 
+# This job is excluded from the scheduled master pipeline, because it
+# should only check and automatically adjust new commits after getting pushed.
+# Existing code on the master branch MUST not be altered by a scheduled pipeline.
+
+pre-commit:
+  stage: pre
+  only:
+    - branches
+    - merge_requests
+  variables:
+    PRE_COMMIT_AUTO_FIX: "1"
+    PRE_COMMIT_DEDUPLICATE_MR_AND_BRANCH: "true"
+
+  image: registry.gitlab.com/rak-n-rok/krake/pre_commit_image
+  script: |
+    status=0
+    pre-commit run --all-files || status=$?
+    if [[ $status -ne 0 ]]; then
+        if [[ -n "$CI_COMMIT_BRANCH" ]]; then
+            git remote set-url origin "https://gitlab-ci-token:${PRE_COMMIT_ACCESS_TOKEN:-$CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+            git fetch origin
+            git checkout $CI_COMMIT_BRANCH
+        fi
+        if [[ -n "$CI_MERGE_REQUEST_IID" ]]; then
+            git remote set-url origin "https://gitlab-ci-token:${PRE_COMMIT_ACCESS_TOKEN:-$CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_MERGE_REQUEST_SOURCE_PROJECT_PATH}.git"
+            git fetch origin
+        fi
+        pre-commit run --all-files  # check the status passes now with autofix otherwise, it'll stop here
+    else
+        exit 0
+    fi
+
+    if [[ -z "$PRE_COMMIT_AUTO_FIX" ]]; then
+        echo "No auto-fix enabled."
+        exit 1 # Job will fail
+    fi
+
+    git config --global user.email "krake@cloudandheat.com"
+    git config --global user.name "Krake"
+
+    # Proceed with auto-fix
+    if [[ -z "$PRE_COMMIT_ACCESS_TOKEN" ]]; then
+        echo "Auto-fix is enabled, but no pre-commit access token found." >> /dev/stderr
+        echo "To enable automatic fixes, please create a project access token with repository write scope and set the PRE_COMMIT_ACCESS_TOKEN variable" > /dev/stderr
+        exit 1
+    fi
+
+    if [[ -n "$CI_COMMIT_BRANCH" ]]; then
+        git add -u .
+        git commit -m "Automatic fixes from pre-commit CI job" -m "job url: $CI_JOB_URL" -m "Signed-off-by: Krake <krake@cloudandheat.com>"
+        git push
+        exit 1
+    elif [[ -n "$CI_MERGE_REQUEST_IID" ]]; then
+        git add -u .
+        git commit -m "Automatic fixes from pre-commit CI job" -m "job url: $CI_JOB_URL" -m "Signed-off-by: Krake <krake@cloudandheat.com>"
+        git push origin HEAD:"$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME"
+        exit 1
+    else
+       echo "Auto fix is not supported in this context" > /dev/stderr
+       echo "Auto fix is only available in branch and merge request pipelines" > /dev/stderr
+       exit 1
+    fi
+
+# Reintroduce later
+#check-fixup-commits:
+#  stage: pre
+#  image: registry.gitlab.com/rak-n-rok/krake/pre_commit_image
+#  script: |
+#    git remote set-url origin "https://gitlab-ci-token:${PRE_COMMIT_ACCESS_TOKEN:-$CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+#    git fetch origin
+#    git checkout $CI_COMMIT_BRANCH
+#
+#    if [[ "git log HEAD --not master --not origin/master --format=%B | grep '!fixup'" ]]; then
+#      exit 1
+#    fi
+#  rules:
+#    - if: $CI_MERGE_REQUEST_EVENT_TYPE == 'merge_train'
+#      when: on_success
+#    - when: never
+
 # Unit tests and flake8 are run on commits on branches which are not yet in a
 # merge requests (including master), on merge requests, and on scheduled
 # pipeline (night runs). Unfortunately, this configuration create duplicates
@@ -41,6 +126,7 @@ cache:
 
 .unittests-krake-template: &unittests-krake
   stage: test
+  needs: []
   artifacts:
     paths:
       - krake/.coverage.*
@@ -51,70 +137,25 @@ cache:
     - schedules
   script:
 
-    - apt-get update
-    - apt-get dist-upgrade -y
-
-    # Download etcd
-    - mkdir /tmp/etcd-download
-    - curl -s -L https://github.com/etcd-io/etcd/releases/download/$ETCD_VER/etcd-$ETCD_VER-linux-amd64.tar.gz -o /tmp/etcd.tar.gz
-    - tar xzvf /tmp/etcd.tar.gz -C /tmp/etcd-download --strip-components=1
-    - mv /tmp/etcd-download/etcd /usr/local/bin
-    - rm -rf /tmp/etcd-download /tmp/etcd.tar.gz
-    - etcd --version
-
-    # Download prometheus
-    - mkdir /tmp/prometheus-download
-    - curl -s -L  https://github.com/prometheus/prometheus/releases/download/v$PROMETHEUS_VER/prometheus-$PROMETHEUS_VER.linux-amd64.tar.gz  -o /tmp/prometheus.tar.gz
-    - tar xzvf /tmp/prometheus.tar.gz -C /tmp/prometheus-download --strip-components=1
-    - mv /tmp/prometheus-download/prometheus /usr/local/bin
-    - rm -rf /tmp/prometheus-download /tmp/prometheus.tar.gz
-    - prometheus --version
-
-    # Download cfssl
-    - curl -s -L https://github.com/cloudflare/cfssl/releases/download/v${CFSSL_VER}/cfssl_${CFSSL_VER}_linux_amd64 -o /usr/local/bin/cfssl
-    - curl -s -L https://github.com/cloudflare/cfssl/releases/download/v${CFSSL_VER}/cfssljson_${CFSSL_VER}_linux_amd64 -o /usr/local/bin/cfssljson
-    - chmod +x /usr/local/bin/cfssl /usr/local/bin/cfssljson
+    # Verify cfssl
     - cfssl version
     - cfssljson --version
 
-    # Download java for Keycloak
-    # see https://github.com/docker-library/openjdk/blob/0584b2804ed12dca7c5e264b5fc55fc07a3ac148/8-jre/slim/Dockerfile#L51
-    - mkdir -p /usr/share/man/man1
-    - apt-get install -y --no-install-recommends openjdk-17-jre || dpkg --configure -a
+    # Verify java for Keycloak
     - java --version
 
-    # Download zookeeper, kafka and ksql
-    - apt-get update
-    - apt-get install software-properties-common -y
-    - >
-      for i in {1..10}; do
-        wget -qO - https://packages.confluent.io/deb/${CONFLUENT_VER}/archive.key | apt-key add - \
-        && break \
-        || sleep 20
-      done
-    - add-apt-repository "deb [arch=amd64] https://packages.confluent.io/deb/${CONFLUENT_VER} stable main"
-    # Manually insert this part into sources.list, since it won't show up otherwise
-    - echo "deb [arch=amd64] https://packages.confluent.io/deb/7.0 stable main" >> /etc/apt/sources.list
-    - apt-get update
-    - apt-get install zookeeper confluent-kafka confluent-ksqldb -y
+    # Verify zookeeper, kafka and ksql
     - which zookeeper-server-start
     - which kafka-server-start
     - which ksql-server-start
 
-    # This is hopefully only temporary, because Gitlab now uses Debian 12 for its runners, which messed with our
-    # pipeline, due to changes in the packages / package lists
-    - sed -i -e 's/ -XX:+UseConcMarkSweepGC//g' /bin/ksql-run-class
-    - sed -i -e 's/ -XX:+CMSClassUnloadingEnabled//g' /bin/ksql-run-class
-    - sed -i -e 's/ -XX:+CMSScavengeBeforeRemark//g' /bin/ksql-run-class
-    - sed -i -e 's/ -XX:+ExplicitGCInvokesConcurrent//g' /bin/ksql-run-class
-
-    - pip install tox
+    # Run tox
     - tox run -- --cov krake/krake --no-cov-on-fail --cov-report= --runslow krake/tests
 
 
 unittests-krake-3.8:
   <<: *unittests-krake
-  image: python:3.8
+  image: "registry.gitlab.com/rak-n-rok/krake/test_image:3.8"
   variables:
     TOXENV: py38
     COVERAGE_FILE: krake/.coverage.py38
@@ -122,7 +163,7 @@ unittests-krake-3.8:
 
 unittests-krake-3.9:
   <<: *unittests-krake
-  image: python:3.9
+  image: "registry.gitlab.com/rak-n-rok/krake/test_image:3.9"
   variables:
     TOXENV: py39
     COVERAGE_FILE: krake/.coverage.py39
@@ -130,7 +171,7 @@ unittests-krake-3.9:
 
 unittests-krake-3.10:
   <<: *unittests-krake
-  image: python:3.10
+  image: "registry.gitlab.com/rak-n-rok/krake/test_image:3.10"
   variables:
     TOXENV: py310
     COVERAGE_FILE: krake/.coverage.py310
@@ -138,14 +179,38 @@ unittests-krake-3.10:
 
 unittests-krake-3.11:
   <<: *unittests-krake
-  image: python:3.11
+  image: "registry.gitlab.com/rak-n-rok/krake/test_image:3.11"
   variables:
     TOXENV: py311
     COVERAGE_FILE: krake/.coverage.py311
 
+lint-kubeconform:
+  stage: lint
+  image:
+    name: ghcr.io/yannh/kubeconform:v${KUBECONFORM_VER}-alpine
+    entrypoint: [""]
+  rules:
+    - changes:
+        compare_to: 'refs/heads/master'
+        paths:
+          - templates/**/k8s/*.{yaml,yml}
+  script:
+  - find templates -wholename "*/k8s/*.yaml" -o -wholename "*/k8s/*.yml" | xargs -i /kubeconform -summary -output json {}
+
+lint-tosca-templates:
+  stage: lint
+  image: python:3.10
+  rules:
+    - changes:
+        compare_to: 'refs/heads/master'
+        paths:
+          - examples/**/tosca/*.{yaml,yml}
+  script:
+    - pip install tosca-parser==${TOSCA_PARSER_VER}
+    - find templates -wholename "*/tosca/*.yaml" -o -wholename "*/tosca/*.yml" | xargs -i tosca-parser --template-file {}
 
 flake8-krake:
-  stage: test
+  stage: lint
   image: python:3.10
   only:
     - tags
@@ -153,12 +218,12 @@ flake8-krake:
     - merge_requests
     - schedules
   script:
-    - pip install -r gitlab-ci/requirements_lint.txt
+    - pip install -r ci/requirements_lint.txt
     - flake8 krake/krake
 
 
 flake8-rok:
-  stage: test
+  stage: lint
   image: python:3.10
   only:
     - tags
@@ -166,12 +231,13 @@ flake8-rok:
     - merge_requests
     - schedules
   script:
-    - pip install -r gitlab-ci/requirements_lint.txt
+    - pip install -r ci/requirements_lint.txt
     - flake8 rok/rok
 
 
 test-build-docs:
   stage: test
+  needs: []
   image: python:3.10
   only:
     - tags
@@ -183,10 +249,6 @@ test-build-docs:
     - pip install -r requirements.txt
     - make html
 
-
-
-
-
 # Combine code coverage reports from previous tox runs for all different
 # Python environments. Report code coverage for Krake Python package and exit
 # with non-zero if the code coverage ratio is under 85%.
@@ -194,11 +256,12 @@ coverage-krake:
   stage: e2e
   image: python:3.10
   script:
-    - pip install -r gitlab-ci/requirements_coverage.txt
+    - pip install -r ci/requirements_coverage.txt
     - coverage combine krake/.coverage.*
     - coverage report --fail-under 85
     - coverage html
     - tar -czvf coverage.tar.gz htmlcov
+  coverage: '/^TOTAL.*\s+(\d+\%)$/'
   only:
     - tags
     - branches
@@ -207,8 +270,22 @@ coverage-krake:
   artifacts:
     paths:
       - coverage.tar.gz
-  coverage: '/^TOTAL.*\s+(\d+\%)$/'
 
+coverage-krake-visualization:
+  stage: e2e
+  image: python:3.10
+  script:
+    - pip install -r ci/requirements_coverage.txt
+    - coverage combine krake/.coverage.*
+    - coverage xml
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+  only:
+    - merge_requests
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
 
 # Following job are for end-to-end testing. We're provisioning the staging
 # infrastructure in the e2e-provisioning job before and run the end-to-end
@@ -216,6 +293,7 @@ coverage-krake:
 # master branch, on merge requests, and on scheduled pipeline (night runs)
 e2e-provisioning:
   stage: test
+  needs: []
   image: registry.gitlab.com/rak-n-rok/krake/ansible_image:latest
   only:
     - master
@@ -362,7 +440,7 @@ pypi:
 docker:
   stage: release
   image:
-    name: gcr.io/kaniko-project/executor:v1.9.0-debug
+    name: gcr.io/kaniko-project/executor:latest
     entrypoint: [""]
   script:
     - echo "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(echo -n ${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD} | base64)\"}}}" > /kaniko/.docker/config.json

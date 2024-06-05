@@ -450,7 +450,9 @@ def test_kubernetes_not_match_cluster_metrics_constraints():
             )
         ]
     }
-    assert not match_application_constraints(app, cluster, fetched_metrics=fetched_metrics)
+    assert not match_application_constraints(
+        app, cluster, fetched_metrics=fetched_metrics
+    )
 
 
 def test_kubernetes_match_empty_cluster_constraints():
@@ -645,7 +647,9 @@ async def test_kubernetes_score_with_metrics_only(aiohttp_server, config, loop):
             )
 
 
-async def test_kubernetes_score_with_inherited_metrics(aiohttp_server, config, db, loop):
+async def test_kubernetes_score_with_inherited_metrics(
+    aiohttp_server, config, db, loop
+):
 
     cloud = CloudFactory(
         metadata__name="test",
@@ -671,7 +675,7 @@ async def test_kubernetes_score_with_inherited_metrics(aiohttp_server, config, d
                 name=cloud.metadata.name,
                 namespace=cloud.metadata.namespace,
             ),
-            status__state=ClusterState.ONLINE
+            status__state=ClusterState.ONLINE,
         ),
         ClusterFactory(
             spec__metrics=[],
@@ -681,13 +685,11 @@ async def test_kubernetes_score_with_inherited_metrics(aiohttp_server, config, d
                 kind="GlobalCloud",
                 name=gcloud.metadata.name,
             ),
-            status__state=ClusterState.ONLINE
+            status__state=ClusterState.ONLINE,
         ),
     ]
 
-    app = ApplicationFactory(
-        status__is_scheduled=False
-    )
+    app = ApplicationFactory(status__is_scheduled=False)
 
     static_provider = GlobalMetricsProviderFactory(
         metadata__name="static-provider",
@@ -710,9 +712,7 @@ async def test_kubernetes_score_with_inherited_metrics(aiohttp_server, config, d
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         await scheduler.prepare(client)
-        await scheduler.kubernetes_application.rank_kubernetes_clusters(
-            app, clusters
-        )
+        await scheduler.kubernetes_application.rank_kubernetes_clusters(app, clusters)
 
 
 async def test_kubernetes_score_missing_metric(aiohttp_server, db, config, loop):
@@ -1263,8 +1263,10 @@ async def test_kubernetes_select_cluster_not_deleted(aiohttp_server, config, loo
 
         async with Client(url=server_endpoint(server), loop=loop) as client:
             await scheduler.prepare(client)
-            selected = await scheduler.kubernetes_application.select_scheduling_location(
-                app, clusters, []
+            selected = (
+                await scheduler.kubernetes_application.select_scheduling_location(
+                    app, clusters, []
+                )
             )
 
             assert clusters[index] == selected
@@ -1289,8 +1291,10 @@ async def test_kubernetes_select_cluster_online(aiohttp_server, config, loop):
 
         async with Client(url=server_endpoint(server), loop=loop) as client:
             await scheduler.prepare(client)
-            selected = await scheduler.kubernetes_application.select_scheduling_location(
-                app, clusters, []
+            selected = (
+                await scheduler.kubernetes_application.select_scheduling_location(
+                    app, clusters, []
+                )
             )
 
             assert clusters[index] == selected
@@ -1376,7 +1380,7 @@ async def test_kubernetes_select_cluster_with_inherited_labels_from_global_cloud
     cloud = GlobalCloudFactory(
         metadata__name="test",
         metadata__namespace="testing",
-        metadata__labels={"location": "IT"}
+        metadata__labels={"location": "IT"},
     )
     cluster = ClusterFactory(
         metadata__inherit_labels=True,
@@ -3422,7 +3426,9 @@ async def test_cloud_score_empty_metrics(
     server = await aiohttp_server(create_app(config))
     async with Client(url=server_endpoint(server), loop=loop) as client:
         await scheduler.prepare(client)
-        with pytest.raises(ValueError, match="List of metric references is None or empty"):
+        with pytest.raises(
+            ValueError, match="List of metric references is None or empty"
+        ):
             await scheduler.kubernetes_cluster.rank_clouds(cluster, clouds)
 
 

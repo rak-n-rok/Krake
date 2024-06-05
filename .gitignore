@@ -31,7 +31,9 @@
 cluster_certs
 
 # Config YAML files (only templates should be pushed)
+/.config
 /config/*.yaml
+/templates/config/*.yaml
 
 # etc directory
 /etc

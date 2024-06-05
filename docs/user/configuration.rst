@@ -122,7 +122,7 @@ command-line options. The arguments and available options are:
     controllers.. Default: ``8080``.
 
 ``--etcd-version <etcd_version>`` (string)
-    The etcd database version. Default: ``v3.3.13``.
+    The etcd database version. Default: ``v3.5.12``.
 
 ``--etcd-host <etcd_host>`` (Address)
     Host for the API to use to connect to the etcd database. Default:
@@ -211,7 +211,7 @@ used in the main directory:
 
 .. code:: bash
 
-    krake/scripts/krake_generate_config config/*template
+    krake/scripts/krake_generate_config templates/config/*template
 
 This will create all Krake configuration files in the main directory of Krake.
 
@@ -220,7 +220,7 @@ used in the main directory:
 
 .. code:: bash
 
-    krake/scripts/krake_generate_config rok.yaml.template
+    krake/scripts/krake_generate_config templates/config/rok.yaml.template
 
 This will create the Rok configuration file in the main directory of Krake.
 
@@ -229,7 +229,7 @@ Krake configuration files at the same time:
 
 .. code:: bash
 
-    krake/scripts/krake_generate_config config/*template rok.yaml.template
+    krake/scripts/krake_generate_config templates/config/*template templates/config/rok.yaml.template
 
 This will create Krake and Rok configuration files in the main directory of
 Krake.
@@ -239,7 +239,7 @@ different etcd database endpoint, the following can be used:
 
 .. code:: bash
 
-    krake/scripts/krake_generate_config --dst /tmp config/api.yaml.template --etcd-host newhost.org --etcd-port 1234
+    krake/scripts/krake_generate_config --dst /tmp templates/config/api.yaml.template --etcd-host newhost.org --etcd-port 1234
 
 
 Command-line options

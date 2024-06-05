@@ -23,8 +23,8 @@ Creating a stateful application
 Creating a stateful application in Krake is easily done. The only requirement is, that migrations are enabled for the application (which is the default setting) and that the application has a PersistentVolumeClaim, where the data its holding will be saved.
 In order to test a migration, it is also necessary to provide two clusters.
 
-A possible example file can be found under `rak/functionals/pvc-pod.yaml`. If this file should be deployed, it is also important to
-add its observer schema file found under `rak/functionals/pvc-pod-observer-schema.yaml`.
+A possible example file can be found under `templates/applications/k8s/pvc-pod.yaml`. If this file should be deployed, it is also important to
+add its observer schema file found under `templates/applications/observer-schema/pvc-pod-observer-schema.yaml`.
 
 .. prompt:: bash $ auto
     $ rok kube app create pvc -f pvc-pod.yaml -O pvc-pod-observer-schema.yaml

@@ -5,6 +5,7 @@
     python -m rok core --help
 
 """
+
 from enum import Enum
 
 from .parser import (
@@ -282,8 +283,15 @@ def _create_base_metrics_provider(
     namespace=None,
 ):
     _validate_for_create_base_mp(
-        mp_type, metrics, url, comparison_column, value_column, table, token, org,
-        bucket
+        mp_type,
+        metrics,
+        url,
+        comparison_column,
+        value_column,
+        table,
+        token,
+        org,
+        bucket,
     )
 
     mp_type = _MetricsProviderType(mp_type)
@@ -323,8 +331,15 @@ def _create_base_metrics_provider(
 
 
 def _validate_for_create_base_mp(
-    mp_type_str, metrics, url, comparison_column, value_column, table, token, org,
-    bucket
+    mp_type_str,
+    metrics,
+    url,
+    comparison_column,
+    value_column,
+    table,
+    token,
+    org,
+    bucket,
 ):
     """Validate the provided parameters as input parameters for the
     _create_base_metrics_provider() method.
@@ -363,8 +378,11 @@ def _validate_for_create_base_mp(
             "table": table,
         },
         _MetricsProviderType.INFLUX: {
-            "url": url, "token": token, "org": org, "bucket": bucket
-        }
+            "url": url,
+            "token": token,
+            "org": org,
+            "bucket": bucket,
+        },
     }
     err_msg_fmt = (
         "Metrics provider type '{mp_type}' " "requires --{attr} to be specified"
@@ -383,8 +401,15 @@ def _get_base_metrics_provider(
 
 
 def _validate_for_update_base_mp(
-    mp_type_str, metrics, url, comparison_column, value_column, table, token, org,
-    bucket
+    mp_type_str,
+    metrics,
+    url,
+    comparison_column,
+    value_column,
+    table,
+    token,
+    org,
+    bucket,
 ):
     """Validate the provided parameters as input parameters for the
     update_base_metrics_provider() method.
@@ -417,8 +442,11 @@ def _validate_for_update_base_mp(
         },
         _MetricsProviderType.KAFKA: {},
         _MetricsProviderType.INFLUX: {
-            "url": url, "token": token, "org": org, "bucket": bucket
-        }
+            "url": url,
+            "token": token,
+            "org": org,
+            "bucket": bucket,
+        },
     }
     err_msg_fmt = "Metrics provider type '{mp_type}' requires --{attr} to be specified"
     for var_name, var in required_parameters[mp_type].items():
@@ -487,8 +515,15 @@ def _update_base_metrics_provider(
     mp_type = mp["spec"]["type"]
 
     _validate_for_update_base_mp(
-        mp_type, metrics, mp_url, comparison_column, value_column, table, token, org,
-        bucket
+        mp_type,
+        metrics,
+        mp_url,
+        comparison_column,
+        value_column,
+        table,
+        token,
+        org,
+        bucket,
     )
 
     if metrics:
@@ -1118,9 +1153,9 @@ def list_metrics(config, session, namespace, all):
 @argument(
     "--allowed-values",
     type=int,
-    nargs='*',
+    nargs="*",
     help="Restrict the allowed values to the specified list",
-    )
+)
 @argument(
     "--metric-name",
     help="Name of the metric which the metrics provider provides. "
@@ -1133,7 +1168,14 @@ def list_metrics(config, session, namespace, all):
 @depends("config", "session")
 @printer(table=BaseMetricTable())
 def create_metric(
-    config, session, namespace, name, mp_name, min, max, allowed_values=None,
+    config,
+    session,
+    namespace,
+    name,
+    mp_name,
+    min,
+    max,
+    allowed_values=None,
     metric_name=None,
 ):
     """Create a Metric resource.
@@ -1188,9 +1230,9 @@ def get_metric(config, session, namespace, name):
 @argument(
     "--allowed-values",
     type=int,
-    nargs='*',
+    nargs="*",
     help="Restrict the allowed values to the specified list",
-    )
+)
 @argument("--mp-name", help="Metrics provider name'")
 @argument(
     "--metric-name",
@@ -1202,7 +1244,15 @@ def get_metric(config, session, namespace, name):
 @depends("config", "session")
 @printer(table=BaseMetricTable())
 def update_metric(
-    config, session, namespace, name, max, min, allowed_values, mp_name, metric_name,
+    config,
+    session,
+    namespace,
+    name,
+    max,
+    min,
+    allowed_values,
+    mp_name,
+    metric_name,
 ):
     """Update a Metric resource.
 
@@ -1267,9 +1317,9 @@ def list_globalmetrics(session):
 @argument(
     "--allowed-values",
     type=int,
-    nargs='*',
+    nargs="*",
     help="Restrict the allowed values to the specified list",
-    )
+)
 @argument(
     "--metric-name",
     help="Name of the global metric which the global metrics provider provides. "
@@ -1307,7 +1357,7 @@ def create_globalmetric(
         max,
         allowed_values=allowed_values,
         metric_name=metric_name,
-        )
+    )
 
 
 @global_metric.command("get", help="Get a global metric")
@@ -1327,9 +1377,9 @@ def get_globalmetric(session, name):
 @argument(
     "--allowed-values",
     type=int,
-    nargs='*',
+    nargs="*",
     help="Restrict the allowed values to the specified list",
-    )
+)
 @argument("--gmp-name", help="Global metrics provider name'")
 @argument(
     "--metric-name",

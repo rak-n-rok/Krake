@@ -113,7 +113,7 @@ updated (“bumped”). This can be triggered by passing an extra argument:
 .. note::
 
    The above ``tox`` call requires the respective ``pythonX.Y``
-   interpreters to be installed, for example from the `deadsnakes 
+   interpreters to be installed, for example from the `deadsnakes
    PPA`_ for Ubuntu or via pyenv_.
 
 .. note::
@@ -137,7 +137,7 @@ generation in the CI pipelines:
    ├── docs/
    │   ├── requirements.in
    │   └── requirements.txt
-   └── gitlab-ci/
+   └── ci/
        ├── requirements_coverage.in
        ├── requirements_coverage.txt
        ├── requirements_lint.in

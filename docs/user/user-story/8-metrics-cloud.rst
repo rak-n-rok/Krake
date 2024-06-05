@@ -134,7 +134,7 @@ the cluster should contain a MetricConstraint and be scheduled to a cluster with
 .. prompt:: bash $ auto
 
     rok kube cluster create -f git/krake/rak/functionals/im-cluster.yaml my-cluster --inherit-metrics
-    
+
 If this cluster is now observed, the inherited metrics should be visible in the output. These metrics are considered during scheduling like normal metrics, which are directly referenced to a cluster.
 Inherited metrics are marked accordingly.
 

@@ -113,7 +113,7 @@ Access the  ``my-cluster`` cluster:
 Scale up the Cluster
 ====================
 
-Scale the created cluster up using the example TOSCA template stored in `rak/functionals/im-cluster-scale-up.yaml`.
+Scale the created cluster up using the example TOSCA template stored in `examples/templates/tosca/im-cluster-scale-up.yaml`.
 This TOSCA template should add one worker node. Its size (flavor) should be the same as the size of the previously created worker node.
 
   Alternatively, you can adjust the worker node number on your own. In this case, find and adjust the ``wn_num``
@@ -132,7 +132,7 @@ Scale up the cluster:
 
 .. prompt:: bash $ auto
 
-    rok kube cluster update -f rak/functionals/im-cluster-scale-up.yaml my-cluster
+    rok kube cluster update -f examples/templates/tosca/im-cluster-scale-up.yaml my-cluster
 
 
 The scaling of the cluster can take up to 5 minutes to complete. The fully scaled and configured cluster
@@ -183,7 +183,7 @@ directly by the kubectl_ CLI:
 Scale down the Cluster
 ======================
 
-Scale the created cluster down using the example TOSCA template stored in `rak/functionals/im-cluster-scale-down.yaml`.
+Scale the created cluster down using the example TOSCA template stored in `examples/templates/tosca/im-cluster-scale-down.yaml`.
 This TOSCA template should remove one worker node.
 
   Alternatively, you can adjust the worker node number on your own. In this case, find and adjust the ``wn_num`` and
@@ -225,7 +225,7 @@ Scale down the cluster:
 
 .. prompt:: bash $ auto
 
-    rok kube cluster update -f rak/functionals/im-cluster-scale-down.yaml my-cluster
+    rok kube cluster update -f examples/templates/tosca/im-cluster-scale-down.yaml my-cluster
 
 
 The scaling of the cluster can take up to 5 minutes to complete. The fully scaled and configured cluster

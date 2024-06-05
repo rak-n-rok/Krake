@@ -5,6 +5,7 @@
     python -m rok openstack --help
 
 """
+
 import os
 
 from .parser import (
@@ -14,7 +15,7 @@ from .parser import (
     arg_labels,
     arg_namespace,
     arg_metric,
-    arg_config
+    arg_config,
 )
 from .fixtures import depends
 from .formatters import BaseTable, Cell, printer, dict_formatter
@@ -141,9 +142,7 @@ def get_project(config, session, namespace, name):
     if namespace is None:
         namespace = config["user"]
 
-    resp = session.get(
-        f"/openstack/namespaces/{namespace}/projects/{name}"
-    )
+    resp = session.get(f"/openstack/namespaces/{namespace}/projects/{name}")
     return resp.json()
 
 
@@ -182,9 +181,7 @@ def update_project(
     if namespace is None:
         namespace = config["user"]
 
-    resp = session.get(
-        f"/openstack/namespaces/{namespace}/projects/{name}"
-    )
+    resp = session.get(f"/openstack/namespaces/{namespace}/projects/{name}")
 
     project = resp.json()
 
@@ -245,9 +242,7 @@ def delete_project(config, session, namespace, name):
     if namespace is None:
         namespace = config["user"]
 
-    resp = session.delete(
-        f"/openstack/namespaces/{namespace}/projects/{name}"
-    )
+    resp = session.delete(f"/openstack/namespaces/{namespace}/projects/{name}")
 
     if resp.status_code == 204:
         return None
@@ -367,9 +362,7 @@ def get_cluster(config, session, namespace, name):
     if namespace is None:
         namespace = config["user"]
 
-    resp = session.get(
-        f"/openstack/namespaces/{namespace}/magnumclusters/{name}"
-    )
+    resp = session.get(f"/openstack/namespaces/{namespace}/magnumclusters/{name}")
     return resp.json()
 
 
@@ -389,9 +382,7 @@ def update_cluster(
     if namespace is None:
         namespace = config["user"]
 
-    resp = session.get(
-        f"/openstack/namespaces/{namespace}/magnumclusters/{name}"
-    )
+    resp = session.get(f"/openstack/namespaces/{namespace}/magnumclusters/{name}")
     cluster = resp.json()
 
     if node_count is not None:
@@ -424,9 +415,7 @@ def delete_cluster(config, session, namespace, name):
     if namespace is None:
         namespace = config["user"]
 
-    resp = session.delete(
-        f"/openstack/namespaces/{namespace}/magnumclusters/{name}"
-    )
+    resp = session.delete(f"/openstack/namespaces/{namespace}/magnumclusters/{name}")
 
     if resp.status_code == 204:
         return None

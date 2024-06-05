@@ -431,13 +431,13 @@ class KubernetesApplicationController(Controller):
     @staticmethod
     def get_volume_paths(app):
         paths = []
-        for manifest in getattr(app.spec, 'manifest', []):
+        for manifest in getattr(app.spec, "manifest", []):
             try:
-                containers = getattr(manifest.spec, 'containers', [])
+                containers = getattr(manifest.spec, "containers", [])
                 for container in containers:
-                    volume_mounts = getattr(container, 'volumeMounts', [])
+                    volume_mounts = getattr(container, "volumeMounts", [])
                     for vm in volume_mounts:
-                        mount_path = getattr(vm, 'mountPath', None)
+                        mount_path = getattr(vm, "mountPath", None)
                         if mount_path:
                             paths.append(mount_path)
             except Exception:
@@ -465,8 +465,9 @@ class KubernetesApplicationController(Controller):
                 logger.debug(f"{app.metadata.name}: Accept deletion")
                 return True
 
-            logger.debug(f"{app.metadata.name} Reject deletion due to "
-                         f"missing finalizer")
+            logger.debug(
+                f"{app.metadata.name} Reject deletion due to " f"missing finalizer"
+            )
             return False
 
         # Ignore all other failed application
@@ -551,8 +552,11 @@ class KubernetesApplicationController(Controller):
             krake.data.kubernetes.Application: the updated Application sent by the API.
 
         """
-        logger.debug("resource %s is different, request update of status \
-            on the API", resource_ref(app))
+        logger.debug(
+            "resource %s is different, request update of status \
+            on the API",
+            resource_ref(app),
+        )
 
         # The Application needs to be processed (thus accepted) by the Kubernetes
         # Controller
@@ -667,8 +671,10 @@ class KubernetesApplicationController(Controller):
                 "shutdown" in copy.spec.hooks
                 and copy.status.state is not ApplicationState.READY_FOR_ACTION
             ):
-                logger.debug(f"{app.metadata.name} shutdown due to "
-                             f"running_on != scheduled_to")
+                logger.debug(
+                    f"{app.metadata.name} shutdown due to "
+                    f"running_on != scheduled_to"
+                )
                 if copy.status.state in [
                     ApplicationState.RUNNING,
                     ApplicationState.RECONCILING,
@@ -844,9 +850,11 @@ class KubernetesApplicationController(Controller):
         )
         if app_update.status.state is ApplicationState.WAITING_FOR_CLEANING:
             app.status.state = ApplicationState.DEGRADED
-            logger.debug(f"{app.metadata.name} to ApplicationState.DEGRADED "
-                         f"because of previous state "
-                         f"ApplicationState.WAITING_FOR_CLEANING")
+            logger.debug(
+                f"{app.metadata.name} to ApplicationState.DEGRADED "
+                f"because of previous state "
+                f"ApplicationState.WAITING_FOR_CLEANING"
+            )
             await self.kubernetes_api.update_application_status(
                 namespace=app.metadata.namespace,
                 name=app.metadata.name,
@@ -901,15 +909,19 @@ class KubernetesApplicationController(Controller):
         if not app.status.running_on:
             # Transition into "CREATING" state if the application is currently
             # not running on any cluster.
-            logger.debug(f"{app.metadata.name} transition to ApplicationState.CREATING "
-                         f"as it is currently not running on any cluster")
+            logger.debug(
+                f"{app.metadata.name} transition to ApplicationState.CREATING "
+                f"as it is currently not running on any cluster"
+            )
             app.status.state = ApplicationState.CREATING
         else:
             # Transition into "RECONCILING" state if application is already
             # running.
-            logger.debug(f"{app.metadata.name} transition to "
-                         f"ApplicationState.RECONCILING as application is "
-                         f"already running")
+            logger.debug(
+                f"{app.metadata.name} transition to "
+                f"ApplicationState.RECONCILING as application is "
+                f"already running"
+            )
             app.status.state = ApplicationState.RECONCILING
 
         await self.kubernetes_api.update_application_status(
@@ -1014,17 +1026,45 @@ class KubernetesApplicationController(Controller):
                 core_v1_src.connect_get_namespaced_pod_exec,
                 app_name,
                 app_namespace,
-                command=['sha256sum', file.lstrip("/")],
-                stderr=True, stdin=False,
-                stdout=True, tty=False
+                command=["sha256sum", file.lstrip("/")],
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
             )
 
             snd = subprocess.run(
-                ["kubectl", "exec", app_name, "--kubeconfig", src_cnf, "--", "tar", "-cvf", "-", file],  # noqa: E501
-                check=True, capture_output=True)
+                [
+                    "kubectl",
+                    "exec",
+                    app_name,
+                    "--kubeconfig",
+                    src_cnf,
+                    "--",
+                    "tar",
+                    "-cvf",
+                    "-",
+                    file,
+                ],
+                check=True,
+                capture_output=True,
+            )
             _ = subprocess.run(
-                ["kubectl", "exec", app_name, "--kubeconfig", trg_cnf, "-i", "--", "tar", "-xvf", "-"],  # noqa: E501
-                input=snd.stdout, capture_output=True)
+                [
+                    "kubectl",
+                    "exec",
+                    app_name,
+                    "--kubeconfig",
+                    trg_cnf,
+                    "-i",
+                    "--",
+                    "tar",
+                    "-xvf",
+                    "-",
+                ],
+                input=snd.stdout,
+                capture_output=True,
+            )
 
             config.load_kube_config(trg_cnf)
             core_v1_trg = core_v1_api.CoreV1Api()
@@ -1033,9 +1073,11 @@ class KubernetesApplicationController(Controller):
                 core_v1_trg.connect_get_namespaced_pod_exec,
                 app_name,
                 app_namespace,
-                command=['sha256sum', file.lstrip("/")],
-                stderr=True, stdin=False,
-                stdout=True, tty=False
+                command=["sha256sum", file.lstrip("/")],
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
             )
 
             if sha_trg == sha_src:
@@ -1056,8 +1098,9 @@ class KubernetesApplicationController(Controller):
             namespace=trg_cluster.namespace, name=trg_cluster.name
         )
 
-        with tempfile.NamedTemporaryFile(mode='w', encoding="utf-8") as src, \
-             tempfile.NamedTemporaryFile(mode='w', encoding="utf-8") as trg:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8"
+        ) as src, tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as trg:
             src.write(json.dumps(src_cluster.spec.kubeconfig))
             src.flush()
             trg.write(json.dumps(trg_cluster.spec.kubeconfig))
@@ -1078,23 +1121,32 @@ class KubernetesApplicationController(Controller):
                                     resp = core_v1_src.read_namespaced_pod(
                                         name=manifest["metadata"]["name"],
                                         namespace=namespace,
-                                        _request_timeout=5
+                                        _request_timeout=5,
                                     )
                                 except Exception:
                                     continue
                                     # return
-                                if resp.status.phase == 'Running':
+                                if resp.status.phase == "Running":
                                     active = False
                                 time.sleep(1)
 
                             for volume_mount in container["volumeMounts"]:
                                 try:
-                                    files = stream(core_v1_src.connect_get_namespaced_pod_exec,  # noqa: E501
-                                                   manifest["metadata"]["name"],
-                                                   namespace,
-                                                   command=['find', volume_mount["mountPath"], '-type', 'f'],  # noqa: E501
-                                                   stderr=True, stdin=False,
-                                                   stdout=True, tty=False)
+                                    files = stream(
+                                        core_v1_src.connect_get_namespaced_pod_exec,  # noqa: E501
+                                        manifest["metadata"]["name"],
+                                        namespace,
+                                        command=[
+                                            "find",
+                                            volume_mount["mountPath"],
+                                            "-type",
+                                            "f",
+                                        ],
+                                        stderr=True,
+                                        stdin=False,
+                                        stdout=True,
+                                        tty=False,
+                                    )
                                 except Exception:
                                     raise MigrationError("")
 
@@ -1102,11 +1154,13 @@ class KubernetesApplicationController(Controller):
                                 for file in files:
                                     if file.endswith("/"):
                                         continue
-                                    await self.transfer_file(src.name,
-                                                             trg.name,
-                                                             manifest["metadata"]["name"],  # noqa: E501
-                                                             namespace,
-                                                             file)
+                                    await self.transfer_file(
+                                        src.name,
+                                        trg.name,
+                                        manifest["metadata"]["name"],
+                                        namespace,
+                                        file,
+                                    )
 
     async def _migrate_application_with_volumes(self, app):
         app = await self.kubernetes_api.read_application(
@@ -1158,9 +1212,7 @@ class KubernetesApplicationController(Controller):
         # Try to the migrate the data to the new cluster
         try:
             await self.transfer_data(
-                old_app.status.running_on,
-                app.status.running_on,
-                app
+                old_app.status.running_on, app.status.running_on, app
             )
         except (MaxTriesError, MigrationError):
             logger.error("Couldn't migrate %r, resetting to old location", app)
@@ -1170,9 +1222,9 @@ class KubernetesApplicationController(Controller):
             app = old_app
             app.status.scheduled_to = app.status.running_on
             app.status.migration_retries += 1
-            app.status.migration_timeout = \
-                int(time.time()) + \
-                (self.migration_timeout * app.status.migration_retries)
+            app.status.migration_timeout = int(time.time()) + (
+                self.migration_timeout * app.status.migration_retries
+            )
         else:
             # Delete all resources currently running on the old cluster
             await self._delete_manifest(old_app)
@@ -1192,7 +1244,7 @@ class KubernetesApplicationController(Controller):
         logger.info(
             f"{app.metadata.name}: Migrate from {app.status.running_on} to "
             f"{app.status.scheduled_to}"
-            )
+        )
 
         # Ensure finalizer exists before changing Kubernetes objects
         await self._ensure_finalizer(app)

@@ -25,6 +25,7 @@ Configuration is loaded from the ``controllers.kubernetes.cluster`` section:
       ...
 
 """
+
 import logging
 import pprint
 from argparse import ArgumentParser
@@ -70,7 +71,7 @@ def main(config):
         api_endpoint=config.api_endpoint,
         worker_count=config.worker_count,
         ssl_context=ssl_context,
-        debounce=config.debounce
+        debounce=config.debounce,
     )
     run(controller)
 

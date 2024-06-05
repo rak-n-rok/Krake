@@ -1,17 +1,19 @@
 include:
 
-  - local: gitlab-ci/build-ci-images.yml
+  - local: ci/build-ci-images.yml
     rules:
       - if: $RUN_CREATE_IMAGES == "True" && $RUN_CI_PIPELINE == "False" && $CI_PIPELINE_SOURCE == "schedule"
       - if: $CI_PIPELINE_SOURCE == "merge_request_event"
         changes:
-          - ./gitlab-ci/build-ci-images.yml
-          - ./gitlab-ci/Dockerfile_ansible_runner
+          - ./ci/build-ci-images.yml
+          - ./ci/docker/ansible_runner/Dockerfile
+          - ./ci/docker/pre_commit/Dockerfile
+          - ./ci/docker/test_image/Dockerfile
 
-  - local: gitlab-ci/krake-ci-pipeline.yml
+  - local: ci/main-ci.yml
     rules:
       - if: $RUN_CI_PIPELINE == "True"
 
-  - local: gitlab-ci/cleanup_krake_os_project.yml
+  - local: ci/cleanup-project.yml
     rules:
       - if: $RUN_CLEAN_OS_PROJECT == "True" && $RUN_CI_PIPELINE == "False" && $CI_PIPELINE_SOURCE == "schedule"
