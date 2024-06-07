@@ -15,7 +15,12 @@ from krake.api.app import create_app
 
 from krake.client import Client
 from krake.data.core import resource_ref, Metadata
-from krake.data.kubernetes import ApplicationState, Cluster, ApplicationSpec, Application
+from krake.data.kubernetes import (
+    ApplicationState,
+    Cluster,
+    ApplicationSpec,
+    Application,
+)
 from krake.controller.gc import (
     DependencyGraph,
     GarbageCollector,
@@ -27,11 +32,17 @@ from krake.utils import get_namespace_as_kwargs
 
 from tests.factories.core import MetadataFactory, RoleBindingFactory, RoleFactory
 from tests.factories.fake import fake
-from tests.factories.kubernetes import ApplicationFactory, ClusterFactory,  ConstraintsFactory, ApplicationStatusFactory
+from tests.factories.kubernetes import (
+    ApplicationFactory,
+    ClusterFactory,
+    ConstraintsFactory,
+    ApplicationStatusFactory,
+)
 from tests.factories.openstack import ProjectFactory
 from krake.data.serializable import Serializable
 from krake.test_utils import server_endpoint, with_timeout
 from tests.factories.openstack import MagnumClusterFactory
+
 
 class UpperResource(Serializable):
     api: str = "upper_api"
@@ -1010,28 +1021,6 @@ async def test_gc_error_handling(aiohttp_server, config, db, loop, caplog):
     assert resource_ref(lower) not in graph_copy._relationships
 
 
-#########################################################################################
-#########################################################################################
-#########################################################################################
-#########################################################################################
-#########################################################################################
-#########################################################################################
-#########################################################################################
-#########################################################################################
-#########################################################################################
-#########################################################################################
-#########################################################################################
-#########################################################################################
-#########################################################################################
-#########################################################################################
-#########################################################################################
-#########################################################################################
-#########################################################################################
-#########################################################################################
-#########################################################################################
-#########################################################################################
-
-
 kubernetes_migratable_manifest = list(
     yaml.safe_load_all(
         """---
@@ -1052,6 +1041,7 @@ spec:
 """
     )
 )
+
 
 class ApplicationMigrateSpecFactory(Factory):
     class Meta:
@@ -1086,8 +1076,9 @@ class ApplicationMigrateFactory(Factory):
                 app.metadata.owners.append(app.status.running_on)
 
 
-# ~ @pytest.mark.slow
-@pytest.mark.skip(reason="SKIPPED TO TEST INTEGRATION TESTS IN THE PIPELINE") #TODO:!!! remove on final
+@pytest.mark.skip(
+    reason="SKIPPED CURENTLY UNDER DEVELOPMENT"
+)  # TODO:!!! remove on final
 async def test_cascade_migration_non_namespaced(aiohttp_server, config, db, loop):
     """Verify that resources without namespace are still handled by the Garbage
     Collector for 'cascade_policy' migration.
@@ -1110,9 +1101,9 @@ async def test_cascade_migration_non_namespaced(aiohttp_server, config, db, loop
     gc = GarbageCollector(server_endpoint(server))
 
     gc.graph.add_resource(resource_ref(upper_cluster), upper_cluster.metadata.owners)
-    gc.graph.add_resource(resource_ref(lower_app_migrate), lower_app_migrate.metadata.owners)
-
-
+    gc.graph.add_resource(
+        resource_ref(lower_app_migrate), lower_app_migrate.metadata.owners
+    )
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         await gc.prepare(client)
@@ -1130,55 +1121,98 @@ async def test_cascade_migration_non_namespaced(aiohttp_server, config, db, loop
         # ~ await gc.on_received_deleted(upper_cluster)  # Simulate DELETED event
         # ~ assert not gc.graph._relationships
 
-#####################
+
+####################################################################################
 
 
+async def is_present(resource, db):  # TODO:!!! remove on final
+    """Check that a resource has been ???
 
-@pytest.mark.skip(reason="SKIPPED TO TEST INTEGRATION TESTS IN THE PIPELINE") #TODO:!!! remove on final
-async def test_cascade_deletion_EXAMPLE(aiohttp_server, config, db, loop):
-    """Verify that resources without namespace are still handled by the Garbage
-    Collector.
+    Args:
+        resource: the resource to check
+        db: the database session
+
+    Returns:
+        bool: True if the resource given has been deleted, False otherwise
+
     """
+    print("---I'M DEBUGGING SOMETHING HERE!!!")
+    cls = resource.__class__
+    kwargs = get_namespace_as_kwargs(resource.metadata.namespace)
+    stored = await db.get(cls, name=resource.metadata.name, **kwargs)
+    print(stored)
+    return stored is not None
+
+
+async def test_cascade_migration(aiohttp_server, config, db, loop):
+    # Test the deletion of a resource that holds several dependents. The resource and
+    # all its dependents should be deleted.
     server = await aiohttp_server(create_app(config))
     gc = GarbageCollector(server_endpoint(server))
 
-    role = RoleFactory(
-        metadata__namespace=None,
+    cluster = ClusterFactory(
         metadata__deleted=fake.date_time(tzinfo=pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
-    role_ref = resource_ref(role)
-    gc.graph.add_resource(role_ref, role.metadata.owners)
-    await db.put(role)
+    cluster_ref = resource_ref(cluster)
+    gc.graph.add_resource(cluster_ref, cluster.metadata.owners)
 
-    role_binding = RoleBindingFactory(
-        metadata__namespace=None,
-        metadata__owners=[role_ref],  # The role is normally not added as owner
-        metadata__finalizers=["cascade_deletion"],
+    cluster_new = ClusterFactory(
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
     )
-    gc.graph.add_resource(resource_ref(role_binding), role_binding.metadata.owners)
-    await db.put(role_binding)
+    cluster_new_ref = resource_ref(cluster_new)
+    gc.graph.add_resource(cluster_new_ref, cluster.metadata.owners)
+
+    apps = [
+        ApplicationMigrateFactory(
+            metadata__finalizers=[""],
+            metadata__owners=[cluster_ref],
+            status__state=ApplicationState.RUNNING,
+            status__scheduled_to=cluster_ref,
+        )
+        for _ in range(3)
+    ]
+
+    await db.put(cluster)
+    await db.put(cluster_new)
+    for app in apps:
+        gc.graph.add_resource(resource_ref(app), app.metadata.owners)
+        await db.put(app)
+
+    # Check cluster reletionships before
+    cluster_relationship = gc.graph.get_direct_dependents(cluster_ref)
+    cluster_new_relationship = gc.graph.get_direct_dependents(cluster_new_ref)
+    assert len(cluster_relationship) == 3
+    assert len(cluster_new_relationship) == 0
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
         await gc.prepare(client)
+        await gc.resource_received(cluster)
+        # Ensure that the Applications are not marked as deleted
+        stored_apps = []
+        for app in apps:
+            marked, stored_app = await is_marked_for_deletion(app, db)
+            assert not marked
 
-        await gc.resource_received(role)
+            # ~ stored_app.metadata.finalizers.remove("kubernetes_resources_deletion")
+            await db.put(stored_app)
+            stored_apps.append(stored_app)
 
-        # Ensure that the RoleBinding is marked as deleted
-        marked, stored_role_binding = await is_marked_for_deletion(role_binding, db)
-        assert marked
+        # Ensure that the Application resources are not deleted
+        for app in stored_apps:
+            assert await is_present(app, db)  # TODO:!!! remove on final
 
-        # Ensure that the RoleBinding is deleted from database
-        await gc.resource_received(role_binding)
+            # simulate migration by the schedular:   TODO:!!! better way to do so ?
+            app.metadata.owners = [cluster_new_ref]
 
-        assert await is_completely_deleted(role_binding, db)
+            await gc.on_received_update(app)  # Simulate MIGRATE event
+            await gc.resource_received(cluster)
 
-        await gc.on_received_deleted(role_binding)  # Simulate DELETED event
-        await gc.resource_received(role)
+        # Ensure that the Cluster is deleted from the database
+        assert await is_completely_deleted(cluster, db)
+        await gc.on_received_deleted(cluster)  # Simulate DELETED event
 
-        # Ensure that the Role is deleted from the database
-        assert await is_completely_deleted(role, db)
-        await gc.on_received_deleted(role)  # Simulate DELETED event
-
-        assert not gc.graph._relationships
-
+        cluster_relationship = gc.graph.get_direct_dependents(cluster_ref)
+        cluster_new_relationship = gc.graph.get_direct_dependents(cluster_new_ref)
+        assert len(cluster_relationship) == 0
+        assert len(cluster_new_relationship) == 3

@@ -347,9 +347,6 @@ class GarbageCollector(Controller):
             bool: True if the given resource is in deletion state, False otherwise.
 
         """
-        print(
-            "---FINALIZERS", resource.metadata.finalizers
-        )  # TODO:!!! remove on final merge
         if (
             resource.metadata.deleted
             and resource.metadata.finalizers
