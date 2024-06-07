@@ -58,7 +58,7 @@ def _read_value_from_config(value, default):
 
 RESCHEDULING_INTERVAL = _read_value_from_config("reschedule_after", 60)
 
-@pytest.mark.skip(reason="SKIPPED TO SPEED UP DEVELOPMENT") #TODO:!!! remove on final
+
 def test_kubernetes_application_deletion_on_cluster_deletion(k8s_clusters):
     """Check that an application scheduled on a cluster gets deleted
     when the cluster it is running on gets deleted.
@@ -197,6 +197,4 @@ def test_kubernetes_application_migration_on_cluster_deletion(k8s_clusters):
         print(cluster_name)
         # 7. Check app got migrated to Cluster it was not running on
         app.check_running_on(clusters[no_app_index], within=RESCHEDULING_INTERVAL)
-
-
 

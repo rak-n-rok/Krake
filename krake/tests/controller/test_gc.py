@@ -1086,22 +1086,17 @@ class ApplicationMigrateFactory(Factory):
                 app.metadata.owners.append(app.status.running_on)
 
 
-
-
-
 # ~ @pytest.mark.slow
 async def test_cascade_migration_non_namespaced(aiohttp_server, config, db, loop):
     """Verify that resources without namespace are still handled by the Garbage
     Collector for 'cascade_policy' migration.
     """
-#####################
-
 
     upper_cluster = ClusterFactory(
         metadata__deleted=fake.date_time(tzinfo=pytz.utc),
         metadata__finalizers=["cascade_deletion"],
     )
-    delting_cluster = ClusterFactory(metadata__owners=[resource_ref(upper_cluster)])
+    # ~ delting_cluster = ClusterFactory(metadata__owners=[resource_ref(upper_cluster)])
 
     lower_app_migrate = ApplicationMigrateFactory(
         metadata__owners=[resource_ref(upper_cluster)],
@@ -1135,3 +1130,54 @@ async def test_cascade_migration_non_namespaced(aiohttp_server, config, db, loop
         # ~ assert not gc.graph._relationships
 
 #####################
+
+
+
+@pytest.mark.skip(reason="SKIPPED TO TEST INTEGRATION TESTS IN THE PIPELINE") #TODO:!!! remove on final
+async def test_cascade_deletion_EXAMPLE(aiohttp_server, config, db, loop):
+    """Verify that resources without namespace are still handled by the Garbage
+    Collector.
+    """
+    server = await aiohttp_server(create_app(config))
+    gc = GarbageCollector(server_endpoint(server))
+
+    role = RoleFactory(
+        metadata__namespace=None,
+        metadata__deleted=fake.date_time(tzinfo=pytz.utc),
+        metadata__finalizers=["cascade_deletion"],
+    )
+    role_ref = resource_ref(role)
+    gc.graph.add_resource(role_ref, role.metadata.owners)
+    await db.put(role)
+
+    role_binding = RoleBindingFactory(
+        metadata__namespace=None,
+        metadata__owners=[role_ref],  # The role is normally not added as owner
+        metadata__finalizers=["cascade_deletion"],
+    )
+    gc.graph.add_resource(resource_ref(role_binding), role_binding.metadata.owners)
+    await db.put(role_binding)
+
+    async with Client(url=server_endpoint(server), loop=loop) as client:
+        await gc.prepare(client)
+
+        await gc.resource_received(role)
+
+        # Ensure that the RoleBinding is marked as deleted
+        marked, stored_role_binding = await is_marked_for_deletion(role_binding, db)
+        assert marked
+
+        # Ensure that the RoleBinding is deleted from database
+        await gc.resource_received(role_binding)
+
+        assert await is_completely_deleted(role_binding, db)
+
+        await gc.on_received_deleted(role_binding)  # Simulate DELETED event
+        await gc.resource_received(role)
+
+        # Ensure that the Role is deleted from the database
+        assert await is_completely_deleted(role, db)
+        await gc.on_received_deleted(role)  # Simulate DELETED event
+
+        assert not gc.graph._relationships
+
