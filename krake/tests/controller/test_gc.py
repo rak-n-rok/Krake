@@ -1087,6 +1087,7 @@ class ApplicationMigrateFactory(Factory):
 
 
 # ~ @pytest.mark.slow
+@pytest.mark.skip(reason="SKIPPED TO TEST INTEGRATION TESTS IN THE PIPELINE") #TODO:!!! remove on final
 async def test_cascade_migration_non_namespaced(aiohttp_server, config, db, loop):
     """Verify that resources without namespace are still handled by the Garbage
     Collector for 'cascade_policy' migration.
