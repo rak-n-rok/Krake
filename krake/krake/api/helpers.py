@@ -69,8 +69,6 @@ class HttpProblem(Serializable):
     def __post_init__(self):
         """HACK:
         :class:`marshmallow.Schema` allows registering hooks like ``post_dump``.
-        This is not allowed in krake :class:`Serializable`, therefore within
-        :class:`marshmallow.Schema` allows registering hooks like ``post_dump``.
         This is not allowed in krake :class:`Serializable`, therefore
         the __post_init__ method is registered directly within the hook.
         """

@@ -4,7 +4,7 @@ import yaml
 from copy import deepcopy
 from marshmallow import ValidationError
 
-from krake.data.kubernetes import Application, Cluster, ObserverSchemaError
+from krake.data.kubernetes import Application, Cluster
 from tests.controller.kubernetes import nginx_manifest
 from tests.factories.kubernetes import ApplicationFactory, ClusterFactory
 
@@ -508,7 +508,7 @@ def test_observer_schema_init_invalid_custom(schema_msg):
     schema, message = schema_msg
     invalid_custom_schema = list(yaml.safe_load_all(schema))
 
-    with pytest.raises(ObserverSchemaError, match=message):
+    with pytest.raises(ValidationError, match=message):
         ApplicationFactory(
             spec__manifest=kubernetes_manifest,
             spec__observer_schema=invalid_custom_schema,
@@ -532,7 +532,115 @@ def test_observer_schema_init_invalid_custom_not_in_manifest():
         )
     )
 
-    with pytest.raises(
-        ObserverSchemaError, match="Observed resource must be in manifest"
-    ):
+    with pytest.raises(ValidationError, match="Observed resource must be in manifest"):
         ApplicationFactory(spec__observer_schema=invalid_custom_schema)
+
+
+@pytest.mark.parametrize(
+    "cascade_policy_manifest_msg",
+    [
+        (
+            """
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-demo
+spec:
+  cascade_policy: MIGRATE
+  selector:
+    matchLabels:
+      app: echo
+  template:
+    metadata:
+      labels:
+        app: echo
+    spec:
+      containers:
+      - name: echo
+        image: registry.k8s.io/echoserver:1.10
+        ports:
+        - containerPort: 8080
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-demo
+spec:
+  cascade_policy: DELETE
+  type: NodePort
+  selector:
+    app: echo
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: 8080
+""",
+            "cascade_policies are not consistent between manifests",
+            True,
+        ),
+        (
+            """---
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: echo-demo
+            spec:
+              cascade_policy: DELETEO
+              selector:
+                matchLabels:
+                  app: echo
+              template:
+                metadata:
+                  labels:
+                    app: echo
+                spec:
+                  containers:
+                  - name: echo
+                    image: registry.k8s.io/echoserver:1.10
+                    ports:
+                    - containerPort: 8080
+            """,
+            "cascade_policy 'DELETEO' does not excist",
+            True,
+        ),
+        (
+            """---
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: echo-demo
+            spec:
+              cascade_policy: MIGRATE
+              selector:
+                matchLabels:
+                  app: echo
+              template:
+                metadata:
+                  labels:
+                    app: echo
+                spec:
+                  containers:
+                  - name: echo
+                    image: registry.k8s.io/echoserver:1.10
+                    ports:
+                    - containerPort: 8080
+            """,
+            "cascade_policy collides with constraints.migration",
+            False,
+        ),
+    ],
+)
+def test_cascade_policy_init_invalid_custom(cascade_policy_manifest_msg):
+    """Validate that invalid custom cascade_policy is raising an Exception"""
+
+    manifest_yaml, message, migration_bool = cascade_policy_manifest_msg
+
+    manifest = list(yaml.safe_load_all(manifest_yaml))
+
+    with pytest.raises(ValidationError, match=message):
+        ApplicationFactory(
+            spec__constraints__migration=False,
+            spec__manifest=manifest,
+        )

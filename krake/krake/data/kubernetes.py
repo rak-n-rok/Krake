@@ -333,7 +333,7 @@ def _validate_observer_schema_dict(
 
 
 def _validate_observer_schema_list(partial_schema):
-    """Together with :func:`_validate_observer_schema_dict``, this function is called
+    """Together with :func:``_validate_observer_schema_dict``, this function is called
     recursively to validate a partial ``observer_schema``.
 
     Args:
@@ -421,6 +421,76 @@ def _validate_observer_schema(observer_schema, manifest):
             raise ObserverSchemaError("Observed resource must be in manifest")
 
 
+class CascadePolicyError(Exception):
+    """Custom exception raised if the validation of the cascade_policy fails"""
+
+
+def _validate_cascade_policy_spelling(cascade_policy):
+    """Validate ``cascade_policy`` flag is not misspelled."""
+    if cascade_policy != "MIGRATE" and cascade_policy != "DELETE":
+        raise ValueError(f"cascade_policy '{cascade_policy}' does not excist")
+
+
+def _validate_cascade_policy_aggainst_constrains(manifest_list, constrains_obj):
+    """Validate ``cascade_policy`` aggainst ``constrains``.
+
+    Args:
+        manifest_dict (dict): holding the flag for cascade_policy
+        constrains_dict (dict): holding the flag for constrains
+
+    Raises:
+        ValueError: If the partial manifest containing a cascade_policy is not valid
+
+    """
+    _cascade_policy_list = []
+    _constraints_migration = None
+
+    # search for 'cascade_policy'
+    for manifest_dict in manifest_list:
+
+        # check if manifest has 'spec' defined
+        if "spec" in manifest_dict:
+            if "cascade_policy" in manifest_dict["spec"]:
+                _cascade_policy_list.append(manifest_dict["spec"]["cascade_policy"])
+
+    if constrains_obj is None:
+        return 0
+    else:
+        _constraints_migration = constrains_obj.migration
+
+    if len(_cascade_policy_list) == 0:  # check if any 'cascade_policy' is set
+        return 0
+
+    else:  # check if 'cascade_policy' is consistent
+        for policy in _cascade_policy_list:
+            if policy != _cascade_policy_list[0]:
+                raise ValueError(
+                    "cascade_policies are not consistent between manifests"
+                )
+            # check if 'cascade_policy' flag is missspelled
+            _validate_cascade_policy_spelling(policy)
+
+    # COMPARE 'cascade_policy' with 'constraints.migration'
+    if _cascade_policy_list[0] == "MIGRATE" and _constraints_migration is False:
+        raise ValueError("cascade_policy collides with constraints.migration")
+
+
+def _validate_cascade_policy(constraints, manifest):
+    """Validation method for cascade_policy against restrictions
+
+    Args:
+        constraints (list[dict]): List of constraints.
+
+    Raises:
+        CascadePolicyError: If the cascade_policy is not valid
+
+    """
+    try:
+        _validate_cascade_policy_aggainst_constrains(manifest, constraints)
+    except (ValueError) as e:
+        raise CascadePolicyError(e)
+
+
 class ApplicationSpec(Serializable):
     """Spec subresource of :class:`Application`.
 
@@ -488,6 +558,9 @@ class ApplicationSpec(Serializable):
          metadata, since ``validate`` must be a zero-argument callable, with
          no access to the other attributes of the dataclass.
 
+        Note: It is importend to finally raise a ValidationErrore here.
+         This will trigger a `HTTPUnprocessableEntity` in the `KubernetesApi`
+         forwarding the error message to the client.
         """
         if not any([self.manifest, self.tosca, self.csar]):
             raise ValidationError(
@@ -496,7 +569,14 @@ class ApplicationSpec(Serializable):
             )
 
         if self.manifest:
-            _validate_observer_schema(self.observer_schema, self.manifest)
+            try:
+                _validate_observer_schema(self.observer_schema, self.manifest)
+            except (ObserverSchemaError) as e:
+                raise ValidationError(e)
+            try:
+                _validate_cascade_policy(self.constraints, self.manifest)
+            except (CascadePolicyError) as e:
+                raise ValidationError(e)
 
 
 class ApplicationState(Enum):

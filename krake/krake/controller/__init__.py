@@ -5,7 +5,6 @@ and with every technique. This module provides basic functionality and
 paradigms to implement a simple "control loop mechanism" in Python.
 """
 
-import sys
 import asyncio
 import logging
 import os.path
@@ -70,10 +69,7 @@ class WorkQueue(object):
         self.active = set()
         self.debounce = debounce
         self.loop = loop
-        if sys.version_info < (3, 8):
-            self.queue = asyncio.Queue(maxsize=maxsize, loop=loop)
-        else:
-            self.queue = asyncio.Queue(maxsize=maxsize)
+        self.queue = asyncio.Queue(maxsize=maxsize)
 
     async def _add_key_to_queue(self, key):
         """Puts the key in active and in the queue
