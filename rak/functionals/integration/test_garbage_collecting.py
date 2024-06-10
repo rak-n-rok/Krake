@@ -170,7 +170,7 @@ def test_kubernetes_application_migration_on_cluster_deletion(k8s_clusters):
         # 3. Check which cluster the app is Running on;
         no_app_index = 0 if clusters[0] != cluster_name else 1
         app_index = 0 if clusters[0] == cluster_name else 1
-        
+
         # 4. Ensure that the application was scheduled to the requested cluster;
         app.check_running_on(clusters[app_index], within=RESCHEDULING_INTERVAL)
 
@@ -197,4 +197,3 @@ def test_kubernetes_application_migration_on_cluster_deletion(k8s_clusters):
         print(cluster_name)
         # 7. Check app got migrated to Cluster it was not running on
         app.check_running_on(clusters[no_app_index], within=RESCHEDULING_INTERVAL)
-

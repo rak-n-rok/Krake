@@ -487,7 +487,7 @@ def _validate_cascade_policy(constraints, manifest):
     """
     try:
         _validate_cascade_policy_aggainst_constrains(manifest, constraints)
-    except (ValueError) as e:
+    except ValueError as e:
         raise CascadePolicyError(e)
 
 
@@ -571,11 +571,11 @@ class ApplicationSpec(Serializable):
         if self.manifest:
             try:
                 _validate_observer_schema(self.observer_schema, self.manifest)
-            except (ObserverSchemaError) as e:
+            except ObserverSchemaError as e:
                 raise ValidationError(e)
             try:
                 _validate_cascade_policy(self.constraints, self.manifest)
-            except (CascadePolicyError) as e:
+            except CascadePolicyError as e:
                 raise ValidationError(e)
 
 
