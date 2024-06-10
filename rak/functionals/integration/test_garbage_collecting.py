@@ -28,6 +28,8 @@ from functionals.environment import (
     Environment,
     create_multiple_cluster_environment,
     get_default_kubeconfig_path,
+    OBSERVER_PATH,
+    MANIFEST_PATH,
 )
 from functionals.resource_definitions import ResourceKind
 # ~ from functionals.resource_provider import provider, WeightedMetric, StaticMetric
@@ -37,7 +39,7 @@ KRAKE_HOMEDIR = "/home/krake"
 GIT_DIR = "git/krake"
 TEST_DIR = "rak/functionals"
 CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
-MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}"
+# ~ MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}"
 
 
 # TODO:! we cloud dynamically read in this value from krake config
@@ -149,7 +151,7 @@ def test_kubernetes_application_migration_on_cluster_deletion(k8s_clusters):
     # TODO:!!! create enviornment using more then one app
     manifest_path = f"{MANIFEST_PATH}/echo-demo-cascade_policy.yaml"
     observer_schema_path = (
-        f"{MANIFEST_PATH}/echo-demo-cascade_policy-observer-schema.yaml"
+        f"{OBSERVER_PATH}/echo-demo-cascade_policy-observer-schema.yaml"
     )
     app_name="echo-cascade-migration"
     environment = create_multiple_cluster_environment(
