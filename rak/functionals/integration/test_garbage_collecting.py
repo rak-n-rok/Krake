@@ -28,6 +28,8 @@ from functionals.environment import (
     Environment,
     create_multiple_cluster_environment,
     get_default_kubeconfig_path,
+    OBSERVER_PATH,
+    MANIFEST_PATH,
 )
 from functionals.resource_definitions import ResourceKind
 # ~ from functionals.resource_provider import provider, WeightedMetric, StaticMetric
@@ -37,7 +39,7 @@ KRAKE_HOMEDIR = "/home/krake"
 GIT_DIR = "git/krake"
 TEST_DIR = "rak/functionals"
 CLUSTERS_CONFIGS = f"{KRAKE_HOMEDIR}/clusters/config"
-MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}"
+# ~ MANIFEST_PATH = f"{KRAKE_HOMEDIR}/{GIT_DIR}/{TEST_DIR}"
 
 
 # TODO:! we cloud dynamically read in this value from krake config
@@ -149,7 +151,7 @@ def test_kubernetes_application_migration_on_cluster_deletion(k8s_clusters):
     # TODO:!!! create enviornment using more then one app
     manifest_path = f"{MANIFEST_PATH}/echo-demo-cascade_policy.yaml"
     observer_schema_path = (
-        f"{MANIFEST_PATH}/echo-demo-cascade_policy-observer-schema.yaml"
+        f"{OBSERVER_PATH}/echo-demo-cascade_policy-observer-schema.yaml"
     )
     app_name="echo-cascade-migration"
     environment = create_multiple_cluster_environment(
@@ -170,7 +172,7 @@ def test_kubernetes_application_migration_on_cluster_deletion(k8s_clusters):
         # 3. Check which cluster the app is Running on;
         no_app_index = 0 if clusters[0] != cluster_name else 1
         app_index = 0 if clusters[0] == cluster_name else 1
-        
+
         # 4. Ensure that the application was scheduled to the requested cluster;
         app.check_running_on(clusters[app_index], within=RESCHEDULING_INTERVAL)
 
@@ -197,4 +199,3 @@ def test_kubernetes_application_migration_on_cluster_deletion(k8s_clusters):
         print(cluster_name)
         # 7. Check app got migrated to Cluster it was not running on
         app.check_running_on(clusters[no_app_index], within=RESCHEDULING_INTERVAL)
-
