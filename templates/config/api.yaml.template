@@ -59,18 +59,20 @@ log:
   formatters:
     krake:
       format: "%(asctime)s - [%(name)s] - [%(levelname)-5s] - %(message)s"
+    krake_aiohttp_request_id:
+      format:  "%(asctime)s XxX [%(threadName)s] %(name)-26s %(levelname)5s: %(requestIdPrefix)s%(message)s"
   handlers:
     console:
       class: logging.StreamHandler
-      formatter: krake
+      formatter: $logging_formatter
       stream: ext://sys.stdout
     file:
       class: logging.handlers.WatchedFileHandler
-      formatter: krake
+      formatter: $logging_formatter
       filename: ./logs/krake-api.log
     rotating:
       class: logging.handlers.RotatingFileHandler
-      formatter: krake
+      formatter: $logging_formatter
       filename: ./logs/krake-api.rotating.log
       mode: 'a'
       maxBytes: 2000000

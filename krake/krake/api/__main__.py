@@ -16,6 +16,10 @@ from krake.utils import KrakeArgumentFormatter
 from .. import load_yaml_config, setup_logging, ConfigurationOptionMapper, search_config
 from .app import create_app
 
+from aiohttp_request_id_logging import (
+    setup_logging_request_id_prefix,
+    RequestIdContextAccessLogger,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +46,16 @@ def main(config):
         "Krake configuration settings:\n %s", pprint.pformat(config.serialize())
     )
 
+    setup_logging_request_id_prefix()
+
     app = create_app(config)
-    web.run_app(app, ssl_context=app["ssl_context"], host=config.host, port=config.port)
+    web.run_app(
+        app,
+        ssl_context=app["ssl_context"],
+        host=config.host,
+        port=config.port,
+        access_log_class=RequestIdContextAccessLogger,
+    )
 
 
 if __name__ == "__main__":

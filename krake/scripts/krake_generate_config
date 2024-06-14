@@ -506,6 +506,15 @@ if __name__ == "__main__":
         ),
         default="console",
     )
+    add_option(
+        parser,
+        "--logging-formatter",
+        (
+            "To set the formatter to use to generate logging messages"
+            " Options are 'krake' and 'krake_aiohttp_request_id'"
+        ),
+        default="krake",
+    )
 
     args = vars(parser.parse_args())
     sys.exit(main(**args))

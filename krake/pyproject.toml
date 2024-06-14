@@ -39,6 +39,7 @@ dependencies = [
     "tosca-parser==2.6.*",
     "webargs==8.*",
     "yarl==1.9.*",
+    "aiohttp-request-id-logging @ https://github.com/messa/aiohttp-request-id-logging/archive/v0.0.6.zip",
 ]
 
 [tool.setuptools.packages.find]

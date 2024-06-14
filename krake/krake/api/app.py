@@ -39,6 +39,14 @@ from .kubernetes import KubernetesApi
 from .infrastructure import InfrastructureApi
 
 
+# ~ from aiohttp.web_log import AccessLogger
+from aiohttp_request_id_logging import (
+    setup_logging_request_id_prefix,
+    request_id_middleware,
+    # ~ RequestIdContextAccessLogger,
+)
+
+
 routes = web.RouteTableDef()
 
 
@@ -91,6 +99,12 @@ def create_app(config):
     authentication = load_authentication(config)
     authorizer = load_authorizer(config)
 
+    logging.basicConfig(
+        level=logging.DEBUG,
+    )
+
+    setup_logging_request_id_prefix()
+
     app = web.Application(
         logger=logger,
         middlewares=[
@@ -98,6 +112,7 @@ def create_app(config):
             middlewares.error_log(),
             authentication,
             middlewares.retry_transaction(retry=config.etcd.retry_transactions),
+            request_id_middleware(),
         ],
     )
     app["config"] = config
