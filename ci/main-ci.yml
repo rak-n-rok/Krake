@@ -34,7 +34,7 @@ cache:
     - .cache/pip
 
 check-for-releasenote:
-  image: "${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/python:3.11"
+  image: python:3.12
   stage: pre
   needs: []
   before_script:
