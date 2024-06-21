@@ -147,7 +147,7 @@ pre-commit:
 
 unittests-krake:
   stage: test
-  image: python:3.11
+  image: registry.gitlab.com/rak-n-rok/krake/test_image:3.12
   variables:
     COVERAGE_FILE: krake/.coverage.py312
   artifacts:
@@ -233,7 +233,7 @@ pages:
 
 pages-master:
   stage: test
-  image: python:3.11
+  image: python:3.12
   before_script:
     - pip install -r docs/requirements.txt
     - cd rok
@@ -260,7 +260,7 @@ pages-master:
 # with non-zero if the code coverage ratio is under 85%.
 coverage-krake:
   stage: e2e
-  image: python:3.11
+  image: python:3.12
   script:
     - pip install -r ci/requirements_coverage.txt
     - coverage combine krake/.coverage.*
@@ -279,7 +279,7 @@ coverage-krake:
 
 coverage-krake-visualization:
   stage: e2e
-  image: python:3.10
+  image: python:3.12
   script:
     - pip install -r ci/requirements_coverage.txt
     - coverage combine krake/.coverage.*
@@ -299,7 +299,6 @@ coverage-krake-visualization:
 # master branch, on merge requests, and on scheduled pipeline (night runs)
 e2e-provisioning:
   stage: test
-  needs: []
   image: registry.gitlab.com/rak-n-rok/krake/ansible_image:latest
   only:
     - master
