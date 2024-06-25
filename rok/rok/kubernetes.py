@@ -231,7 +231,7 @@ arg_injected_variables = argument(
     "--inject",
     dest="injected_variables",
     metavar="KEY=VALUE",
-    nargs='+',
+    nargs="+",
     help="Variables to inject into app definitions",
 )
 
@@ -246,11 +246,11 @@ def parse_iv(s):
     or
         foo="hello world"
     """
-    items = s.split('=')
+    items = s.split("=")
     key = items[0].strip()  # we remove blanks around keys, as is logical
     if len(items) > 1:
         # rejoin the rest:
-        value = '='.join(items[1:])
+        value = "=".join(items[1:])
     return key, value
 
 
@@ -266,16 +266,17 @@ def parse_ivs(items):
             d[key] = value
     return d
 
+
 def inject_variables(obj, ivs):
     if isinstance(obj, list):
         for o in obj:
             inject_variables(o, ivs)
     if isinstance(obj, dict):
-        if 'env' in obj:
-            for e in obj['env']:
+        if "env" in obj:
+            for e in obj["env"]:
                 for ik in ivs:
-                    if e['value'] == ik:
-                        e['value'] = ivs[ik]
+                    if e["value"] == ik:
+                        e["value"] = ivs[ik]
         else:
             for o in obj:
                 inject_variables(obj[o], ivs)
