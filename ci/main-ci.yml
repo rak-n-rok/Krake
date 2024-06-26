@@ -179,7 +179,8 @@ unittests-krake:
     - pip install --editable ./krake[test]
 
     # Run pytest
-    - coverage run -m pytest --no-cov-on-fail --cov-report= --runslow krake/tests
+    - cd krake
+    - coverage run -m pytest --no-cov-on-fail --cov-report= --runslow ./tests
 
 flake8-krake:
   stage: lint
