@@ -698,7 +698,9 @@ def keycloak():
         info = KeycloakInfo(**keycloak_cred)
 
         with subprocess.Popen(
-            f"../support/keycloak --temp-dir {tempdir}", shell=True, preexec_fn=os.setsid
+            f"../support/keycloak --temp-dir {tempdir}",
+            shell=True,
+            preexec_fn=os.setsid,
         ) as proc:
             try:
                 wait_for_url(
