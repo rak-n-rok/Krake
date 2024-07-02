@@ -152,7 +152,7 @@ unittests-krake:
     COVERAGE_FILE: krake/.coverage.py312
   artifacts:
     paths:
-      - krake/.coverage.*
+      - .coverage.*
   only:
     - tags
     - branches
@@ -264,7 +264,6 @@ coverage-krake:
   image: python:3.12
   script:
     - pip install -r ci/requirements_coverage.txt
-    - coverage combine krake/.coverage.*
     - coverage report --fail-under 85
     - coverage html
     - tar -czvf coverage.tar.gz htmlcov
@@ -283,7 +282,6 @@ coverage-krake-visualization:
   image: python:3.12
   script:
     - pip install -r ci/requirements_coverage.txt
-    - coverage combine krake/.coverage.*
     - coverage xml
   coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
   only:
