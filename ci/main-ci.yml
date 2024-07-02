@@ -47,8 +47,6 @@ check-for-releasenote:
     else
       exit 1
     fi
-#  tags:
-#    - docker
   rules:
     - if: $CI_MERGE_REQUEST_EVENT_TYPE
       when: on_success
@@ -149,10 +147,10 @@ unittests-krake:
   stage: test
   image: registry.gitlab.com/rak-n-rok/krake/test_image:3.12
   variables:
-    COVERAGE_FILE: krake/.coverage.py312
+    COVERAGE_FILE: .coverage
   artifacts:
     paths:
-      - krake/.coverage.*
+      - .coverage
   only:
     - tags
     - branches
@@ -172,15 +170,12 @@ unittests-krake:
     - which kafka-server-start
     - which ksql-server-start
 
-    # # Run tox
-    # - tox run -- --cov krake/krake --no-cov-on-fail --cov-report= --runslow krake/tests
-
     - pip install coverage pytest
     - pip install --editable ./krake[test]
 
     # Run pytest
     - cd krake
-    - coverage run -m pytest --no-cov-on-fail --cov-report= --runslow ./tests
+    - coverage run --data-file=../.coverage -m pytest --no-cov-on-fail --runslow ./tests
 
 flake8-krake:
   stage: lint
@@ -264,7 +259,9 @@ coverage-krake:
   image: python:3.12
   script:
     - pip install -r ci/requirements_coverage.txt
-    - coverage combine krake/.coverage.*
+    - ls -la
+    - ls -la ./krake
+    - find / -name "*coverage*"
     - coverage report --fail-under 85
     - coverage html
     - tar -czvf coverage.tar.gz htmlcov
@@ -283,7 +280,6 @@ coverage-krake-visualization:
   image: python:3.12
   script:
     - pip install -r ci/requirements_coverage.txt
-    - coverage combine krake/.coverage.*
     - coverage xml
   coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
   only:
