@@ -26,7 +26,7 @@ build-ci-image-ansible:
       --dockerfile "./ci/docker/ansible_runner/Dockerfile"
       --destination "${CI_REGISTRY_IMAGE}/ansible_image:latest"
       --verbosity=info
-      ## uncommend for debugging purpose:
+      ## uncomment for debugging purpose:
       #--verbosity=debug
       #--no-push
 
