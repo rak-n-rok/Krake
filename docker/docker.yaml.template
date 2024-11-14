@@ -27,7 +27,7 @@ api:
 
 # Prometheus
 prometheus:
-  path: ../prometheus
+  path: ./prometheus
   host: prometheus
   port: 9090
 

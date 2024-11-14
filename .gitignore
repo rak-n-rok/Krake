@@ -45,9 +45,6 @@ __pycache__/
 .tox/
 .coverage*
 
-# Python virtualenv
-.venv/
-
 # pip egg installation files
 *.egg-info/
 
@@ -66,7 +63,9 @@ __pycache__/
 /infrastructure.yaml
 
 # Krake dot env configuration variables file
+.venv
 .env
+.envrc
 .idea
 .vscode
 

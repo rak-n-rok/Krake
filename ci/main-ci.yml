@@ -311,7 +311,6 @@ e2e-provisioning:
   variables:
     ANSIBLE_CONFIG: ansible/ansible.cfg
     ANSIBLE_INVENTORY: ansible/hosts-CI
-  retry: 2
   script:
     # Create SSH keys for to use during the whole pipeline
     - mkdir .ssh/
