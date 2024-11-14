@@ -263,7 +263,7 @@
               - docker<7.0.0
               - docker-compose<1.29.0
             executable: pip3
-            extra_args: --user
+            extra_args: --user --no-build-isolation
 
     - name: Krake infrastructure deployment
       tags:
