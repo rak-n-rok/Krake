@@ -59,9 +59,10 @@
   tasks:
 
     - name: Wait for microk8s VM to show up
-      wait_for_connection:
+      ansible.builtin.wait_for_connection:
         timeout: 600
         connect_timeout: 15
+        delay: 10
 
     - name: Gathering facts
       setup:

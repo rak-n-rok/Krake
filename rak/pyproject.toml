@@ -23,7 +23,7 @@ Repository = "https://gitlab.com/rak-n-rok/krake"
 [project.optional-dependencies]
 test = [
     "deepdiff==6.2.*",
-    "docker==4.*",
+    "docker",
     "minio",
     "pytest==6.*",
     "pytest-httpserver==1.*",

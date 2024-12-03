@@ -80,7 +80,7 @@
           - jq
           - haveged
           - python3-pip
-          - docker.io
+          # - docker.io
           - golang-cfssl
           - etcd-client
 
@@ -112,6 +112,22 @@
     - name: Install kubectl
       apt:
         name: kubectl
+
+    - name: Add Docker GPG apt Key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker Repository
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu focal stable
+        state: present
+
+    - name: Update apt and install docker-ce
+      apt:
+        name: docker-ce
+        state: latest
+        update_cache: true
 
     # Inspired from https://stackoverflow.com/questions/37333305/ansible-create-a-user-with-sudo-privileges
     - name: Create 'wheel' group
@@ -260,8 +276,8 @@
           pip:
             name:
               - Jinja2
-              - docker<7.0.0
-              - docker-compose<1.29.0
+              - docker
+              - docker-compose
             executable: pip3
             extra_args: --user
 
@@ -286,7 +302,7 @@
           command: "{{ git_dir }}/docker/generate --config {{ git_dir }}/docker/docker.yaml {{ git_dir }}/docker/krake"
 
         - name: Remove Krake infrastructure
-          community.general.docker_compose:
+          community.docker.docker_compose_v2:
             project_src: "{{ git_dir }}/docker"
             files:
               - "{{ git_dir }}/docker/krake/docker-compose.yaml"
@@ -426,13 +442,12 @@
             - DOCKER_BUILDKIT: 1
 
         - name: Start Krake infrastructure
-          community.docker.docker_compose:
+          community.docker.docker_compose_v2:
             project_src: "{{ git_dir }}/docker"
             files:
               - "{{ git_dir }}/docker/krake/docker-compose.yaml"
             state: present
-            build: no
-            debug: true
+            build: policy
 
         - name: Bootstrap etcd database
           shell : >
