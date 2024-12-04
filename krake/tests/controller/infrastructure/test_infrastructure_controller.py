@@ -295,8 +295,8 @@ async def test_cluster_unknown_cloud(
 
         # Mock the hooking mechanism and call process_cluster
         with mock.patch(
-            target='krake.controller.infrastructure.infrastructure.listen.hook',
-            new=mock.AsyncMock()
+            target="krake.controller.infrastructure.infrastructure.listen.hook",
+            new=mock.AsyncMock(),
         ) as mocked_hook:
             await controller.process_cluster(cluster)
             mocked_hook.assert_not_called()
@@ -370,8 +370,8 @@ async def test_cluster_unknown_infrastructure_provider(
 
         # Mock the hooking mechanism and call process_cluster
         with mock.patch(
-            target='krake.controller.infrastructure.infrastructure.listen.hook',
-            new=mock.AsyncMock()
+            target="krake.controller.infrastructure.infrastructure.listen.hook",
+            new=mock.AsyncMock(),
         ) as mocked_hook:
             await controller.process_cluster(cluster)
             mocked_hook.assert_not_called()
@@ -500,8 +500,8 @@ async def test_cluster_create_by_im_provider(
 
         # Mock the hooking mechanism and call process_cluster
         with mock.patch(
-            target='krake.controller.infrastructure.infrastructure.listen.hook',
-            new=mock.AsyncMock()
+            target="krake.controller.infrastructure.infrastructure.listen.hook",
+            new=mock.AsyncMock(),
         ) as mocked_hook:
             await controller.process_cluster(cluster)
 
@@ -637,8 +637,8 @@ async def test_cluster_create_by_im_provider_no_kubeconfig(
 
         # Mock the hooking mechanism and call process_cluster
         with mock.patch(
-            target='krake.controller.infrastructure.infrastructure.listen.hook',
-            new=mock.AsyncMock()
+            target="krake.controller.infrastructure.infrastructure.listen.hook",
+            new=mock.AsyncMock(),
         ) as mocked_hook:
             await controller.process_cluster(cluster)
 
@@ -739,8 +739,8 @@ async def test_cluster_create_by_im_provider_unreachable(
 
         # Mock the hooking mechanism and call process_cluster
         with mock.patch(
-            target='krake.controller.infrastructure.infrastructure.listen.hook',
-            new=mock.AsyncMock()
+            target="krake.controller.infrastructure.infrastructure.listen.hook",
+            new=mock.AsyncMock(),
         ) as mocked_hook:
             await controller.process_cluster(cluster)
             mocked_hook.assert_not_called()
@@ -880,8 +880,8 @@ async def test_cluster_update_by_im_provider(
 
         # Mock the hooking mechanism and call process_cluster
         with mock.patch(
-            target='krake.controller.infrastructure.infrastructure.listen.hook',
-            new=mock.AsyncMock()
+            target="krake.controller.infrastructure.infrastructure.listen.hook",
+            new=mock.AsyncMock(),
         ) as mocked_hook:
             await controller.process_cluster(cluster)
 
@@ -1002,8 +1002,8 @@ async def test_cluster_update_by_im_provider_unreachable(
 
         # Mock the hooking mechanism and call process_cluster
         with mock.patch(
-            target='krake.controller.infrastructure.infrastructure.listen.hook',
-            new=mock.AsyncMock()
+            target="krake.controller.infrastructure.infrastructure.listen.hook",
+            new=mock.AsyncMock(),
         ) as mocked_hook:
             await controller.process_cluster(cluster)
             mocked_hook.assert_not_called()
@@ -1107,8 +1107,8 @@ async def test_cluster_delete_by_im_provider(
 
         # Mock the hooking mechanism and call process_cluster
         with mock.patch(
-            target='krake.controller.infrastructure.infrastructure.listen.hook',
-            new=mock.AsyncMock()
+            target="krake.controller.infrastructure.infrastructure.listen.hook",
+            new=mock.AsyncMock(),
         ) as mocked_hook:
             await controller.process_cluster(cluster)
 
@@ -1213,8 +1213,8 @@ async def test_cluster_delete_by_im_provider_unreachable(
 
         # Mock the hooking mechanism and call process_cluster
         with mock.patch(
-            target='krake.controller.infrastructure.infrastructure.listen.hook',
-            new=mock.AsyncMock()
+            target="krake.controller.infrastructure.infrastructure.listen.hook",
+            new=mock.AsyncMock(),
         ) as mocked_hook:
             await controller.process_cluster(cluster)
 
@@ -1249,10 +1249,7 @@ async def test_cluster_delete_by_im_provider_unreachable(
 
 
 async def test_InfrastructureController_on_infrastructure_update(
-    aiohttp_server,
-    config,
-    db,
-    loop
+    aiohttp_server, config, db, loop
 ):
     """Test the `on_infrastructure_update` method
     of the `InfrastructureController` class.
@@ -1299,12 +1296,10 @@ async def test_InfrastructureController_on_infrastructure_update(
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
         controller = InfrastructureController(server_endpoint(api_server))
         with mock.patch(
-            target='krake.controller.infrastructure.infrastructure.Reflector',
-            new=mock.Mock()
-        ), \
-        mock.patch.object(
-            target=controller, attribute='register_task',
-            new=mock.Mock()
+            target="krake.controller.infrastructure.infrastructure.Reflector",
+            new=mock.Mock(),
+        ), mock.patch.object(
+            target=controller, attribute="register_task", new=mock.Mock()
         ):
             await controller.prepare(client)
 
@@ -1322,5 +1317,5 @@ async def test_InfrastructureController_on_infrastructure_update(
     stored = await db.get(
         Cluster, namespace=cluster.metadata.namespace, name=cluster.metadata.name
     )
-    #updated_cluster.infrastructure.updated = returned.infrastructure.updated
+    # updated_cluster.infrastructure.updated = returned.infrastructure.updated
     assert stored == updated_cluster

@@ -124,7 +124,8 @@ async def register_observer(controller, resource, get_observer, start=True, **kw
         # FIXME: A more specific error should be used here to tell that the given
         # resource kind is not supported by any observer.
         logger.warning(
-            "Unsupported resource kind. No observer was registered.", resource)
+            "Unsupported resource kind. No observer was registered.", resource
+        )
         return
 
     logger.debug(f"Starting observer for {resource.kind} %r", resource.metadata.name)
@@ -135,7 +136,8 @@ async def register_observer(controller, resource, get_observer, start=True, **kw
     controller.observers[resource.metadata.uid] = (observer, task)
 
     logger.debug(
-        "Started and registered observer %r for resource %r", observer, resource)
+        "Started and registered observer %r for resource %r", observer, resource
+    )
 
 
 async def unregister_observer(controller, resource, **kwargs):
@@ -175,8 +177,10 @@ async def unregister_observer(controller, resource, **kwargs):
 
         logger.debug(
             "Unregistered and stopped running observer %r for resource %r",
-            observer, resource)
+            observer,
+            resource,
+        )
     else:
         logger.debug(
-            "Unregistered unstarted observer %r for resource %r",
-            observer, resource)
+            "Unregistered unstarted observer %r for resource %r", observer, resource
+        )

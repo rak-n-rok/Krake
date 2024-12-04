@@ -622,7 +622,8 @@ class KubernetesApi(object):
         return web.json_response(entity.serialize())
 
     @routes.route(
-        "PUT", "/kubernetes/namespaces/{namespace}/clusters/{name}/infrastructure")
+        "PUT", "/kubernetes/namespaces/{namespace}/clusters/{name}/infrastructure"
+    )
     @protected(api="kubernetes", resource="clusters/infrastructure", verb="update")
     @use_schema("body", Cluster.Schema)
     @load("entity", Cluster)

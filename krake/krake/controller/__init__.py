@@ -557,11 +557,13 @@ class Observer(object):
             # Return new resource if it changed
             if changed:
                 logger.info(
-                    f"Actual resource of {resource_ref(self.resource)} did change")
+                    f"Actual resource of {resource_ref(self.resource)} did change"
+                )
                 yield changed_resource
             else:
                 logger.debug(
-                    f"Actual resource of {resource_ref(self.resource)} did not change")
+                    f"Actual resource of {resource_ref(self.resource)} did not change"
+                )
 
             await asyncio.sleep(self.time_step)
 
@@ -583,12 +585,13 @@ class Observer(object):
 
         logger.error(
             "Continous observation of resource %s stopped unexpectedly.",
-            resource_ref(self.resource)
+            resource_ref(self.resource),
         )
 
 
 class ControllerError(ResourceHandlingError):
     """Base class for exceptions during handling of a resource."""
+
     ...
 
 

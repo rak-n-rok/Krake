@@ -5,7 +5,8 @@ from krake.client import Client
 from krake.client.infrastructure import InfrastructureApi
 from krake.data.core import WatchEventType
 from krake.data.infrastructure import (
-    InfrastructureProvider, InfrastructureProviderRef,
+    InfrastructureProvider,
+    InfrastructureProviderRef,
     Cloud,
     GlobalCloud,
     GlobalInfrastructureProvider,
@@ -795,9 +796,9 @@ async def test_read_cloud_binding(aiohttp_server, config, db, loop):
     # Register infrastructure provider for cloud
     # NOTE: That is essentially what `rok.infrastructure.update_cloud` does through the
     #       Krake API.
-    cloud.spec.openstack.infrastructure_provider = \
-        InfrastructureProviderRef(name=infra_provider.metadata.name,
-                                  namespaced=infra_provider.metadata.namespace)
+    cloud.spec.openstack.infrastructure_provider = InfrastructureProviderRef(
+        name=infra_provider.metadata.name, namespaced=infra_provider.metadata.namespace
+    )
 
     await db.put(infra_provider)
     await db.put(cloud)
@@ -807,8 +808,7 @@ async def test_read_cloud_binding(aiohttp_server, config, db, loop):
     async with Client(url=f"http://{server.host}:{server.port}", loop=loop) as client:
         infrastructure_api = InfrastructureApi(client)
         received = await infrastructure_api.read_cloud_binding(
-            namespace=cloud.metadata.namespace,
-            name=cloud.metadata.name
+            namespace=cloud.metadata.namespace, name=cloud.metadata.name
         )
 
         assert received == infra_provider
@@ -836,8 +836,9 @@ async def test_read_global_cloud_binding(aiohttp_server, config, db, loop):
     # Register infrastructure provider for cloud
     # NOTE: That is essentially what `rok.infrastructure.update_cloud` does through the
     #       Krake API.
-    global_cloud.spec.openstack.infrastructure_provider = \
-        InfrastructureProviderRef(name=global_infra_provider.metadata.name)
+    global_cloud.spec.openstack.infrastructure_provider = InfrastructureProviderRef(
+        name=global_infra_provider.metadata.name
+    )
 
     await db.put(global_infra_provider)
     await db.put(global_cloud)

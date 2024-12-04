@@ -553,6 +553,6 @@ def test_infrastructure_node_credential_error_handling():
     with pytest.raises(
         ValidationError,
         match=f"Invalid credential type '{_unkown_credential_type}',"
-              f" must be one of 'login'.",
+        f" must be one of 'login'.",
     ):
         InfrastructureNodeCredential(type=_unkown_credential_type, username="testuser")

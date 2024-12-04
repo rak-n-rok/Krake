@@ -59,6 +59,7 @@ def with_timeout(timeout, stop=False):
                     return CoroTimeoutReached(coro=fn, timeout=timeout)
                 else:
                     raise e
+
         return wrapper
 
     return decorator

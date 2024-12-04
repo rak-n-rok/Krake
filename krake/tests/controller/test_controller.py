@@ -968,13 +968,13 @@ async def test_observer_run(loop):
         ApplicationState.MIGRATING,  # new
         ApplicationState.MIGRATING,  # <wait>1
         ApplicationState.MIGRATING,  # <wait>2
-        ApplicationState.RUNNING,    # new
-        ApplicationState.RUNNING,    # <wait>3
-                                     # -- observer canceled
+        ApplicationState.RUNNING,  # new
+        ApplicationState.RUNNING,  # <wait>3
+        # -- observer canceled
         ApplicationState.MIGRATING,  # new
         ApplicationState.MIGRATING,  # <wait>4
         ApplicationState.MIGRATING,  # <wait>5
-        ApplicationState.RUNNING,    # new
+        ApplicationState.RUNNING,  # new
     ]
 
     async def on_res_update(resource):

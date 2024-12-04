@@ -866,8 +866,12 @@ async def test_observer_on_status_update(aiohttp_server, db, config, loop):
         # A second port is added to the Service.
         # NOTE: We only want to append the port once, hence we check if it has been
         #       added already during a previous invocation.
-        second_port = \
-            {"nodePort": 32567, "port": 81, "protocol": "TCP", "targetPort": 81}
+        second_port = {
+            "nodePort": 32567,
+            "port": 81,
+            "protocol": "TCP",
+            "targetPort": 81,
+        }
         if second_port not in updated_service_response["spec"]["ports"]:
             updated_service_response["spec"]["ports"].append(second_port)
         return web.json_response(updated_service_response)

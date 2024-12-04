@@ -55,13 +55,14 @@ async def test_create_infrastructure_provider_cluster_observer(
     time_step = 2
 
     async with Client(url=server_endpoint(server), loop=loop) as client:
-        infra_provider_cluster_observer = \
+        infra_provider_cluster_observer = (
             infra_controller_hooks.InfrastructureProviderClusterObserver(
                 resource=cluster,
                 on_res_update=on_res_update_mock,
                 client=client,
                 time_step=2,
             )
+        )
 
     assert infra_provider_cluster_observer.resource == cluster
     assert infra_provider_cluster_observer.on_res_update == on_res_update_mock
@@ -86,8 +87,12 @@ async def test_create_infrastructure_provider_cluster_observer(
 )
 @pytest.mark.parametrize("cloud_type", ["openstack"])
 async def test_InfrastructureProviderClusterObserver_fetch_actual_resource(
-    aiohttp_server, config, db, loop,
-    infrastructure_provider_factory, cloud_factory,
+    aiohttp_server,
+    config,
+    db,
+    loop,
+    infrastructure_provider_factory,
+    cloud_factory,
     cloud_type,
 ):
     """Test the `fetch_actual_resource` method of the
@@ -117,7 +122,7 @@ async def test_InfrastructureProviderClusterObserver_fetch_actual_resource(
 
     @routes.get(f"/infrastructures/{cluster_id}/vms/0")
     async def _(request):
-        if request.headers['Accept'] == 'application/json':
+        if request.headers["Accept"] == "application/json":
             return web.json_response(
                 {
                     "radl": [
@@ -132,13 +137,13 @@ async def test_InfrastructureProviderClusterObserver_fetch_actual_resource(
                             "class": "network",
                             "id": "network_public",
                             "outbound": "yes",
-                            "outports": "0.0.0.0/0-80/tcp-80/tcp,0.0.0.0/0-443/tcp-443/tcp",
+                            "outports": "0.0.0.0/0-80/tcp-80/tcp,0.0.0.0/0-443/tcp-443/tcp",  # noqa: E501
                             "provider_id": "shared-public-IPv4",
                         },
                         {
                             "class": "system",
                             "id": "front",
-                            "instance_name": "front-6e0882dc-d712-11ee-b2ec-e60cc0e9f147",
+                            "instance_name": "front-6e0882dc-d712-11ee-b2ec-e60cc0e9f147",  # noqa: E501
                             "disk.0.os.flavour": "ubuntu",
                             "disk.0.os.name": "linux",
                             "disk.0.os.version": "22.04",
@@ -149,7 +154,7 @@ async def test_InfrastructureProviderClusterObserver_fetch_actual_resource(
                             "net_interface.0.connection": "network_private",
                             "net_interface.1.connection": "network_public",
                             "cpu.arch": "x86_64",
-                            "disk.0.image.url": "ost://identity.example.com/802aecb9-7553-434d-a05c-cb8ce6103caa",
+                            "disk.0.image.url": "ost://identity.example.com/802aecb9-7553-434d-a05c-cb8ce6103caa",  # noqa: E501
                             "disk.0.free_size": 26843545600,
                             "disk.0.os.credentials.username": "cloudadm",
                             "provider.type": "OpenStack",
@@ -160,14 +165,14 @@ async def test_InfrastructureProviderClusterObserver_fetch_actual_resource(
                             "instance_id": "5c205fb4-b1e0-4e78-ae1e-333ea18c1a27",
                             "net_interface.0.ip": "192.0.2.3",
                             "net_interface.1.ip": "203.0.113.3",
-                        }
+                        },
                     ]
                 }
             )
 
     @routes.get(f"/infrastructures/{cluster_id}/vms/1")
     async def _(request):
-        if request.headers['Accept'] == 'application/json':
+        if request.headers["Accept"] == "application/json":
             return web.json_response(
                 {
                     "radl": [
@@ -182,7 +187,7 @@ async def test_InfrastructureProviderClusterObserver_fetch_actual_resource(
                             "class": "network",
                             "id": "network_public",
                             "outbound": "yes",
-                            "outports": "0.0.0.0/0-80/tcp-80/tcp,0.0.0.0/0-443/tcp-443/tcp",
+                            "outports": "0.0.0.0/0-80/tcp-80/tcp,0.0.0.0/0-443/tcp-443/tcp",  # noqa: E501
                             "provider_id": "shared-public-IPv4",
                         },
                         {
@@ -199,7 +204,7 @@ async def test_InfrastructureProviderClusterObserver_fetch_actual_resource(
                             "net_interface.0.connection": "network_private",
                             "net_interface.1.connection": "network_public",
                             "cpu.arch": "x86_64",
-                            "disk.0.image.url": "ost://identity.example.com/802aecb9-7553-434d-a05c-cb8ce6103caa",
+                            "disk.0.image.url": "ost://identity.example.com/802aecb9-7553-434d-a05c-cb8ce6103caa",  # noqa: E501
                             "disk.0.free_size": 26843545600,
                             "disk.0.os.credentials.username": "user1",
                             "disk.1.os.credentials.username": "user2",
@@ -213,7 +218,7 @@ async def test_InfrastructureProviderClusterObserver_fetch_actual_resource(
                             "instance_id": "009f9f39-b2ef-49a2-8cb0-437abbbe328f",
                             "net_interface.0.ip": "192.0.2.4",
                             "net_interface.1.ip": "203.0.113.4",
-                        }
+                        },
                     ]
                 }
             )
@@ -224,24 +229,24 @@ async def test_InfrastructureProviderClusterObserver_fetch_actual_resource(
             {
                 "outputs": {
                     "kubeconfig": "apiVersion: v1\n"
-                                  "clusters:\n"
-                                  "- cluster:\n"
-                                  "    certificate-authority-data: 0tLS0tCg==\n"
-                                  "    server: https://example.com:6443\n"
-                                  "  name: kubernetes\n"
-                                  "contexts:\n"
-                                  "- context:\n"
-                                  "    cluster: kubernetes\n"
-                                  "user: kubernetes-admin\n"
-                                  "  name: kubernetes-admin@kubernetes\n"
-                                  "current-context: kubernetes-admin@kubernetes\n"
-                                  "kind: Config\n"
-                                  "preferences: {}\n"
-                                  "users:\n"
-                                  "- name: kubernetes-admin\n"
-                                  "  user:\n"
-                                  "    client-certificate-data: 0tLS0tCg==\n"
-                                  "    client-key-data: LS0tLQo=\n"
+                    "clusters:\n"
+                    "- cluster:\n"
+                    "    certificate-authority-data: 0tLS0tCg==\n"
+                    "    server: https://example.com:6443\n"
+                    "  name: kubernetes\n"
+                    "contexts:\n"
+                    "- context:\n"
+                    "    cluster: kubernetes\n"
+                    "user: kubernetes-admin\n"
+                    "  name: kubernetes-admin@kubernetes\n"
+                    "current-context: kubernetes-admin@kubernetes\n"
+                    "kind: Config\n"
+                    "preferences: {}\n"
+                    "users:\n"
+                    "- name: kubernetes-admin\n"
+                    "  user:\n"
+                    "    client-certificate-data: 0tLS0tCg==\n"
+                    "    client-key-data: LS0tLQo=\n"
                 },
             }
         )
@@ -250,19 +255,23 @@ async def test_InfrastructureProviderClusterObserver_fetch_actual_resource(
 
     @routes.get(f"/infrastructures/{cluster_id}")
     async def _(request):
-        if request.headers['Accept'] == 'application/json':
+        if request.headers["Accept"] == "application/json":
             return web.json_response(
                 {
                     "uri-list": [
-                        {"uri": f"http://localhost:{im_server_port}/infrastructures/{cluster_id}/vms/0"},
-                        {"uri": f"http://localhost:{im_server_port}/infrastructures/{cluster_id}/vms/1"},
+                        {
+                            "uri": f"http://localhost:{im_server_port}/infrastructures/{cluster_id}/vms/0"  # noqa: E501
+                        },
+                        {
+                            "uri": f"http://localhost:{im_server_port}/infrastructures/{cluster_id}/vms/1"  # noqa: E501
+                        },  # noqa: E501
                     ]
                 }
             )
 
     # Create infrastructure manager server with the mocked API endpoints
     # NOTE: Infrastructure manager is mocked here
-    #       because we are dealing with a cloud of type "openstack"
+    #       because we are dealing with a cloud of type "openstack"  # noqa: E501
     im_app = web.Application()
     im_app.add_routes(routes)
     im_server = await aiohttp_server(im_app, port=im_server_port)
@@ -274,7 +283,7 @@ async def test_InfrastructureProviderClusterObserver_fetch_actual_resource(
         spec__im__url=server_endpoint(im_server),
         spec__im__username=fake.name(),
         spec__im__password=fake.password(),
-    )
+    )  # noqa: E501
     cloud = cloud_factory(
         **{
             "spec__type": cloud_type,
@@ -283,7 +292,7 @@ async def test_InfrastructureProviderClusterObserver_fetch_actual_resource(
                 namespaced=bool(infra_provider.metadata.namespace),
             ),
         }
-    )
+    )  # noqa: E501
     cluster = ClusterFactory(
         status__cluster_id=cluster_id,
         status__scheduled_to=resource_ref(cloud),
@@ -296,13 +305,14 @@ async def test_InfrastructureProviderClusterObserver_fetch_actual_resource(
     # Create observer and run target method
     api_server = await aiohttp_server(create_app(config))
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        infra_provider_cluster_observer = \
+        infra_provider_cluster_observer = (
             infra_controller_hooks.InfrastructureProviderClusterObserver(
                 resource=cluster,
                 on_res_update=mock.Mock(),
                 client=client,
                 time_step=1,
             )
+        )
         returned = await infra_provider_cluster_observer.fetch_actual_resource()
 
     # Assert that the target method returned the expected data
@@ -341,7 +351,10 @@ async def test_InfrastructureProviderClusterObserver_fetch_actual_resource(
 
 
 async def test_InfrastructureProviderClusterObserver_check_observation(
-    aiohttp_server, config, db, loop,
+    aiohttp_server,
+    config,
+    db,
+    loop,
 ):
     """Test the `check_observation` method of the
     `InfrastructureProviderClusterObserver` class.
@@ -442,40 +455,45 @@ async def test_InfrastructureProviderClusterObserver_check_observation(
     # Create observer and run target method
     api_server = await aiohttp_server(create_app(config))
     async with Client(url=server_endpoint(api_server), loop=loop) as client:
-        infra_provider_cluster_observer = \
+        infra_provider_cluster_observer = (
             infra_controller_hooks.InfrastructureProviderClusterObserver(
                 resource=cluster,
                 on_res_update=mock.Mock(),
                 client=client,
                 time_step=1,
             )
+        )
 
         # Test initial observation
-        returned = \
-            await infra_provider_cluster_observer.check_observation(observation_1)
+        returned = await infra_provider_cluster_observer.check_observation(
+            observation_1
+        )
 
         cluster_copy.infrastructure = ClusterInfrastructure(data=observation_1)
         assert returned == (True, cluster_copy)
 
         # Test initial observation was already made
         infra_provider_cluster_observer.resource = cluster_copy
-        returned = \
-            await infra_provider_cluster_observer.check_observation(observation_1)
+        returned = await infra_provider_cluster_observer.check_observation(
+            observation_1
+        )
 
         assert returned == (False, None)
 
         # Test second observation
         infra_provider_cluster_observer.resource = cluster_copy
-        returned = \
-            await infra_provider_cluster_observer.check_observation(observation_2)
+        returned = await infra_provider_cluster_observer.check_observation(
+            observation_2
+        )
 
         cluster_copy.infrastructure = ClusterInfrastructure(data=observation_2)
         assert returned == (True, cluster_copy)
 
         # Test third observation
         infra_provider_cluster_observer.resource = cluster_copy
-        returned = \
-            await infra_provider_cluster_observer.check_observation(observation_3)
+        returned = await infra_provider_cluster_observer.check_observation(
+            observation_3
+        )
 
         cluster_copy.infrastructure = ClusterInfrastructure(data=observation_3)
         assert returned == (True, cluster_copy)
@@ -483,15 +501,17 @@ async def test_InfrastructureProviderClusterObserver_check_observation(
         # Test third observation was already made
         cluster_copy.infrastructure = ClusterInfrastructure(data=observation_3)
         infra_provider_cluster_observer.resource = cluster_copy
-        returned = \
-            await infra_provider_cluster_observer.check_observation(observation_3)
+        returned = await infra_provider_cluster_observer.check_observation(
+            observation_3
+        )
 
         assert returned == (False, None)
 
         # Test fourth observation
         infra_provider_cluster_observer.resource = cluster_copy
-        returned = \
-            await infra_provider_cluster_observer.check_observation(observation_4)
+        returned = await infra_provider_cluster_observer.check_observation(
+            observation_4
+        )
 
         cluster_copy.infrastructure = ClusterInfrastructure(data=observation_4)
         assert returned == (True, cluster_copy)
@@ -513,27 +533,32 @@ async def test_InfrastructureProviderClusterObserver_update_resource(monkeypatch
     # Create observer
     cluster = ClusterFactory()
     updated_cluster = deepcopy(cluster)
-    updated_cluster.infrastructure = \
-        ClusterInfrastructure(data=ClusterInfrastructureData(nodes=[]))
+    updated_cluster.infrastructure = ClusterInfrastructure(
+        data=ClusterInfrastructureData(nodes=[])
+    )
 
     on_res_update_mock = mock.AsyncMock(side_effect=lambda resource: resource)
     client_mock = mock.AsyncMock()
 
-    infra_provider_cluster_observer = \
+    infra_provider_cluster_observer = (
         infra_controller_hooks.InfrastructureProviderClusterObserver(
             resource=cluster,
             on_res_update=on_res_update_mock,
             client=client_mock,
             time_step=1,
         )
+    )
 
     # Mock all other observer methods
     monkeypatch.setattr(
-        infra_provider_cluster_observer, 'observe_resource', mock.AsyncMock())
+        infra_provider_cluster_observer, "observe_resource", mock.AsyncMock()
+    )
     monkeypatch.setattr(
-        infra_provider_cluster_observer, 'fetch_actual_resource', mock.AsyncMock())
+        infra_provider_cluster_observer, "fetch_actual_resource", mock.AsyncMock()
+    )
     monkeypatch.setattr(
-        infra_provider_cluster_observer, 'check_observation', mock.AsyncMock())
+        infra_provider_cluster_observer, "check_observation", mock.AsyncMock()
+    )
 
     # Run observer update
     assert infra_provider_cluster_observer.resource == cluster
@@ -567,10 +592,10 @@ async def test_InfrastructureProviderClusterObserver_observe_resource(monkeypatc
     """
 
     observations = [
-        ClusterInfrastructureData(nodes=[]),           # new
+        ClusterInfrastructureData(nodes=[]),  # new
         ClusterInfrastructureData(nodes=[]),
         ClusterInfrastructureData(nodes=[]),
-        ClusterInfrastructureData(                     # new
+        ClusterInfrastructureData(  # new
             nodes=[
                 InfrastructureNode(
                     credentials=[
@@ -582,7 +607,7 @@ async def test_InfrastructureProviderClusterObserver_observe_resource(monkeypatc
                     ],
                 ),
             ],
-        )
+        ),
     ]
     # NOTE: To receive all observations that shall be considered NEW
     #       we squash consecutive equal observations with `groupby`
@@ -594,13 +619,14 @@ async def test_InfrastructureProviderClusterObserver_observe_resource(monkeypatc
     client_mock = mock.AsyncMock()
     time_step = 1
 
-    infra_provider_cluster_observer = \
+    infra_provider_cluster_observer = (
         infra_controller_hooks.InfrastructureProviderClusterObserver(
             resource=cluster,
             on_res_update=on_res_update_mock,
             client=client_mock,
             time_step=time_step,
         )
+    )
 
     # Create a mock for the `fetch_actual_resource` method
     # that serves our predefined observations
@@ -614,20 +640,22 @@ async def test_InfrastructureProviderClusterObserver_observe_resource(monkeypatc
         return await anext(_generated_async_observations)
 
     # Mock all other observer methods
+    monkeypatch.setattr(infra_provider_cluster_observer, "run", mock.AsyncMock())
     monkeypatch.setattr(
-        infra_provider_cluster_observer, 'run',
-        mock.AsyncMock())
+        infra_provider_cluster_observer, "update_resource", mock.AsyncMock()
+    )
     monkeypatch.setattr(
-        infra_provider_cluster_observer, 'update_resource',
-        mock.AsyncMock())
-    monkeypatch.setattr(
-        infra_provider_cluster_observer, 'fetch_actual_resource',
+        infra_provider_cluster_observer,
+        "fetch_actual_resource",
         # generator mock
-        mock.Mock(side_effect=fetch_actual_resource_mock))
+        mock.Mock(side_effect=fetch_actual_resource_mock),
+    )
     monkeypatch.setattr(
-        infra_provider_cluster_observer, 'check_observation',
+        infra_provider_cluster_observer,
+        "check_observation",
         # passthrough mock
-        mock.AsyncMock(side_effect=infra_provider_cluster_observer.check_observation))
+        mock.AsyncMock(side_effect=infra_provider_cluster_observer.check_observation),
+    )
 
     # Run observer observation
     # NOTE: Iterate to get all NEW observations
@@ -635,7 +663,7 @@ async def test_InfrastructureProviderClusterObserver_observe_resource(monkeypatc
     observe_resource = infra_provider_cluster_observer.observe_resource()
     for _ in range(len(new_observations)):
         updated_resource = await anext(observe_resource)  # only returns
-                                                          #  for new observations
+        #  for new observations
         updated_resources.append(updated_resource)
         # update internal resource to check against in next cycle
         infra_provider_cluster_observer.resource = updated_resource
@@ -650,8 +678,9 @@ async def test_InfrastructureProviderClusterObserver_observe_resource(monkeypatc
     assert updated_resources == expected_updated_resources
 
     # Assert that each observation was fetched and checked
-    assert infra_provider_cluster_observer.fetch_actual_resource.call_count \
-        == len(observations)
+    assert infra_provider_cluster_observer.fetch_actual_resource.call_count == len(
+        observations
+    )
     infra_provider_cluster_observer.check_observation.assert_has_calls(
         calls=[mock.call(o) for o in observations], any_order=False
     )
@@ -678,13 +707,14 @@ async def test_InfrastructureProviderClusterObserver_run(monkeypatch):
     on_res_update_mock = mock.AsyncMock()
     client_mock = mock.AsyncMock()
 
-    infra_provider_cluster_observer = \
+    infra_provider_cluster_observer = (
         infra_controller_hooks.InfrastructureProviderClusterObserver(
             resource=mock.Mock(),
             on_res_update=on_res_update_mock,
             client=client_mock,
             time_step=1,
         )
+    )
 
     # Mock all observer methods
     updated_clusters = [ClusterFactory() for _ in range(5)]
@@ -694,17 +724,19 @@ async def test_InfrastructureProviderClusterObserver_run(monkeypatch):
             yield cluster
 
     monkeypatch.setattr(
-        infra_provider_cluster_observer, 'observe_resource',
-        mock.Mock(return_value=async_cluster_generator()))
+        infra_provider_cluster_observer,
+        "observe_resource",
+        mock.Mock(return_value=async_cluster_generator()),
+    )
     monkeypatch.setattr(
-        infra_provider_cluster_observer, 'update_resource',
-        mock.AsyncMock())
+        infra_provider_cluster_observer, "update_resource", mock.AsyncMock()
+    )
     monkeypatch.setattr(
-        infra_provider_cluster_observer, 'fetch_actual_resource',
-        mock.AsyncMock())
+        infra_provider_cluster_observer, "fetch_actual_resource", mock.AsyncMock()
+    )
     monkeypatch.setattr(
-        infra_provider_cluster_observer, 'check_observation',
-        mock.AsyncMock())
+        infra_provider_cluster_observer, "check_observation", mock.AsyncMock()
+    )
 
     # Run observer
     # NOTE: Because the run method should return after all 5 updated_clusters have been
@@ -715,8 +747,7 @@ async def test_InfrastructureProviderClusterObserver_run(monkeypatch):
     # and that it triggered 5 update calls with the correct cluster resources in order
     infra_provider_cluster_observer.observe_resource.assert_called_once_with()
     infra_provider_cluster_observer.update_resource.assert_has_calls(
-        calls=[mock.call(cluster) for cluster in updated_clusters],
-        any_order=False
+        calls=[mock.call(cluster) for cluster in updated_clusters], any_order=False
     )
     # Assert that none of the other observer's callables has been used
     infra_provider_cluster_observer.fetch_actual_resource.assert_not_called()
@@ -727,7 +758,11 @@ async def test_InfrastructureProviderClusterObserver_run(monkeypatch):
 
 @pytest.mark.parametrize("start_observer", [False, True])
 async def test_register_infra_provider_cluster_observer(
-    aiohttp_server, config, loop, db, start_observer,
+    aiohttp_server,
+    config,
+    loop,
+    db,
+    start_observer,
 ):
     """Test the registration hook with the infrastructure provider cluster observer.
 
@@ -755,20 +790,20 @@ async def test_register_infra_provider_cluster_observer(
         # Create and prepare infrastructure controller
         controller = InfrastructureController(server_endpoint(server))
         with mock.patch(
-            target='krake.controller.infrastructure.infrastructure.Reflector',
-            new=mock.Mock()
-        ), \
-        mock.patch.object(
-            target=controller, attribute='register_task',
-            new=mock.Mock()
+            target="krake.controller.infrastructure.infrastructure.Reflector",
+            new=mock.Mock(),
+        ), mock.patch.object(
+            target=controller, attribute="register_task", new=mock.Mock()
         ):
             await controller.prepare(client)
 
         # Run target method to register observer
         with mock.patch(
-            target=('krake.controller.infrastructure.hooks.'
-                    'InfrastructureProviderClusterObserver.run'),
-            new=mock.AsyncMock()
+            target=(
+                "krake.controller.infrastructure.hooks."
+                "InfrastructureProviderClusterObserver.run"
+            ),
+            new=mock.AsyncMock(),
         ) as observer_run_mock:
             await infra_controller_hooks.register_observer(
                 controller, cluster, start=start_observer
@@ -782,15 +817,17 @@ async def test_register_infra_provider_cluster_observer(
                 observer_run_mock.assert_not_called()
 
     # Assert that an observer registration entry was created for the cluster
-    assert cluster.metadata.uid in controller.observers \
+    assert (
+        cluster.metadata.uid in controller.observers
         and len(controller.observers[cluster.metadata.uid]) == 2
+    )
 
     # Assert that the correct observer has been registered
     #  and if the observer was started the corresponding task as well
     registered_observer, observer_task = controller.observers[cluster.metadata.uid]
     assert isinstance(
         registered_observer,
-        infra_controller_hooks.InfrastructureProviderClusterObserver
+        infra_controller_hooks.InfrastructureProviderClusterObserver,
     )
     if start_observer:
         assert isinstance(observer_task, asyncio.Task)
@@ -834,6 +871,7 @@ async def test_unregister_infra_provider_cluster_observer(
     observed_cluster = ClusterFactory()
 
     if observer_started:
+
         async def infinite_await():
             while True:
                 await asyncio.sleep(100)
@@ -844,10 +882,13 @@ async def test_unregister_infra_provider_cluster_observer(
         observer_task = None
 
     registered_observer = infra_controller_hooks.InfrastructureProviderClusterObserver(
-        resource=observed_cluster, on_res_update=mock.Mock(), client=mock.Mock())
+        resource=observed_cluster, on_res_update=mock.Mock(), client=mock.Mock()
+    )
 
-    controller.observers[observed_cluster.metadata.uid] = \
-        (registered_observer, observer_task)
+    controller.observers[observed_cluster.metadata.uid] = (
+        registered_observer,
+        observer_task,
+    )
 
     # Call the target method to unregister the above observer
     await infra_controller_hooks.unregister_observer(controller, observed_cluster)

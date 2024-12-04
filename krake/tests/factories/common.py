@@ -20,22 +20,26 @@ def ssh_ed25519_key_pair_factory():
         ed25519_private_key.private_bytes(
             encoding=crypto_serialization.Encoding.PEM,
             format=crypto_serialization.PrivateFormat.OpenSSH,
-            encryption_algorithm=crypto_serialization.NoEncryption()
-        ).decode('utf-8'),
-
+            encryption_algorithm=crypto_serialization.NoEncryption(),
+        ).decode("utf-8"),
         # serialized public key
         crypto_serialization.ssh.serialize_ssh_public_key(
             ed25519_private_key.public_key()
-        ).decode('utf-8')
+        ).decode("utf-8"),
     )
 
 
 def test_net_ip_address_generator(n=1):
-    rfc5737_test_nets = list(map(lambda net: ipaddress.ip_network(net),
-                                 ["192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24"]))
+    rfc5737_test_nets = list(
+        map(
+            lambda net: ipaddress.ip_network(net),
+            ["192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24"],
+        )
+    )
 
-    ips = reduce(lambda a, b: a+b,
-                 [[ip for ip in net.hosts()] for net in rfc5737_test_nets])
+    ips = reduce(
+        lambda a, b: a + b, [[ip for ip in net.hosts()] for net in rfc5737_test_nets]
+    )
 
     for _ in range(n):
         yield str(random.choice(ips))

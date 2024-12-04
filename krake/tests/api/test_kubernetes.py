@@ -1618,7 +1618,7 @@ async def test_update_cluster_infra_data(aiohttp_client, config, db):
     await db.put(data)
 
     update_sequence = [
-        {"with_data": False},                  # case 1: data not yet available
+        {"with_data": False},  # case 1: data not yet available
         {"with_data": True, "node_count": 0},  # case 2: node data not yet available
         {"with_data": True, "node_count": 2},  # case 3: node data available
     ]

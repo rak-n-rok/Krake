@@ -572,8 +572,11 @@ class KubernetesApi(ApiClient):
             Cluster: Body of the HTTP response.
 
         """
-        path = "/kubernetes/namespaces/{namespace}/clusters/{name}/infrastructure".\
-            format(namespace=namespace, name=name)
+        path = (
+            "/kubernetes/namespaces/{namespace}/clusters/{name}/infrastructure".format(
+                namespace=namespace, name=name
+            )
+        )
         url = self.client.url.with_path(path)
 
         resp = await self.client.session.request("PUT", url, json=body.serialize())

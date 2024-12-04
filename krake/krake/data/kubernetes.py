@@ -815,6 +815,7 @@ class InfrastructureNode(Serializable):
         credentials (List[ClusterNodeCredential]): Current credentials of the cluster
             node.
     """
+
     ip_addresses: List[str] = None
     credentials: List[InfrastructureNodeCredential] = field(default_factory=list)
 
@@ -918,8 +919,9 @@ class Cluster(ApiObject):
     metadata: Metadata
     spec: ClusterSpec
     status: ClusterStatus = field(metadata={"subresource": True})
-    infrastructure: ClusterInfrastructure = \
-        field(metadata={"subresource": True}, default=None)
+    infrastructure: ClusterInfrastructure = field(
+        metadata={"subresource": True}, default=None
+    )
     #   NOTE: `None` has been choosen to mean no data availabe or supplied yet instead
     #   of an empty ClusterInfrastructure object which would mean that the cluster is
     #   backed by no actual infrastructure which is impossible or that its

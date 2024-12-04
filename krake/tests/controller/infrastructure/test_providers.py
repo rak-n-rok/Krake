@@ -52,7 +52,9 @@ def record_aiohttp_requests(recorder, endpoint=None, method=None):
                 content=await request.text(),
             )
             return await handler(request)
+
         return wrapper
+
     return decorator
 
 
@@ -124,9 +126,7 @@ async def test_infra_provider_client_creation_for_openstack_cloud(
     async with Client(url=server_endpoint(im_server), loop=loop) as client:
         # Create an infrastructure provider client
         infra_provider_client = providers.InfrastructureProvider(
-            session=client.session,
-            cloud=cloud,
-            infrastructure_provider=infra_provider
+            session=client.session, cloud=cloud, infrastructure_provider=infra_provider
         )
 
         # Assert that the correct type of client was created
@@ -215,9 +215,7 @@ async def test_InfrastuctureManager_create(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(im_server), loop=loop) as client:
         # Create an infrastructure provider client
         infra_provider_client = providers.InfrastructureProvider(
-            session=client.session,
-            cloud=cloud,
-            infrastructure_provider=infra_provider
+            session=client.session, cloud=cloud, infrastructure_provider=infra_provider
         )
 
         # Assert that the correct type of client was created
@@ -227,9 +225,7 @@ async def test_InfrastuctureManager_create(aiohttp_server, config, db, loop):
         returned = await infra_provider_client.create(cluster)
 
     # Assert that cluster creation was correctly requested from the infra manager
-    infra_create_recorder.assert_called_once_with(
-        content=yaml.dump(cluster_tosca)
-    )
+    infra_create_recorder.assert_called_once_with(content=yaml.dump(cluster_tosca))
 
     # Assert that the target method returned the expected infrastructure UUID
     assert returned == infra_uuid
@@ -294,9 +290,7 @@ async def test_InfrastuctureManager_reconcile(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(im_server), loop=loop) as client:
         # Create an infrastructure provider client
         infra_provider_client = providers.InfrastructureProvider(
-            session=client.session,
-            cloud=cloud,
-            infrastructure_provider=infra_provider
+            session=client.session, cloud=cloud, infrastructure_provider=infra_provider
         )
 
         # Run target method
@@ -306,9 +300,7 @@ async def test_InfrastuctureManager_reconcile(aiohttp_server, config, db, loop):
     assert returned is None
 
     # Assert that the cluster update was correctly sent to the infra manager
-    infra_update_recorder.assert_called_once_with(
-        content=yaml.dump(cluster_tosca)
-    )
+    infra_update_recorder.assert_called_once_with(content=yaml.dump(cluster_tosca))
 
 
 async def test_InfrastuctureManager_reconfigure(aiohttp_server, config, db, loop):
@@ -368,9 +360,7 @@ async def test_InfrastuctureManager_reconfigure(aiohttp_server, config, db, loop
     async with Client(url=server_endpoint(im_server), loop=loop) as client:
         # Create an infrastructure provider client
         infra_provider_client = providers.InfrastructureProvider(
-            session=client.session,
-            cloud=cloud,
-            infrastructure_provider=infra_provider
+            session=client.session, cloud=cloud, infrastructure_provider=infra_provider
         )
 
         # Run target method
@@ -440,9 +430,7 @@ async def test_InfrastuctureManager_delete(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(im_server), loop=loop) as client:
         # Create an infrastructure provider client
         infra_provider_client = providers.InfrastructureProvider(
-            session=client.session,
-            cloud=cloud,
-            infrastructure_provider=infra_provider
+            session=client.session, cloud=cloud, infrastructure_provider=infra_provider
         )
 
         # Run target method
@@ -558,9 +546,7 @@ async def test_InfrastuctureManager_get_kubeconfig(aiohttp_server, config, db, l
     async with Client(url=server_endpoint(im_server), loop=loop) as client:
         # Create an infrastructure provider client
         infra_provider_client = providers.InfrastructureProvider(
-            session=client.session,
-            cloud=cloud,
-            infrastructure_provider=infra_provider
+            session=client.session, cloud=cloud, infrastructure_provider=infra_provider
         )
 
         # Run target method
@@ -610,7 +596,7 @@ async def test_InfrastuctureManager_get_vm(aiohttp_server, config, db, loop):
     @routes.get(f"/infrastructures/{infra_uuid}/vms/0")
     @record_aiohttp_requests(vm_data_retrieval_recorder)
     async def _(request):
-        if request.headers['Accept'] == 'application/json':
+        if request.headers["Accept"] == "application/json":
             return web.json_response(
                 {
                     "radl": [
@@ -656,7 +642,7 @@ async def test_InfrastuctureManager_get_vm(aiohttp_server, config, db, loop):
                             "instance_id": "5c205fb4-b1e0-4e78-ae1e-333ea18c1a27",
                             "net_interface.0.ip": "192.0.2.3",
                             "net_interface.1.ip": "203.0.113.3",
-                        }
+                        },
                     ]
                 }
             )
@@ -678,9 +664,7 @@ async def test_InfrastuctureManager_get_vm(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(im_server), loop=loop) as client:
         # Create an infrastructure provider client
         infra_provider_client = providers.InfrastructureProvider(
-            session=client.session,
-            cloud=cloud,
-            infrastructure_provider=infra_provider
+            session=client.session, cloud=cloud, infrastructure_provider=infra_provider
         )
 
         # Run target method
@@ -749,9 +733,11 @@ async def test_InfrastuctureManager_get(aiohttp_server, config, db, loop):
     @routes.get(f"/infrastructures/{infra_uuid}/vms/0")
     @record_aiohttp_requests(
         infra_data_retrieval_recorder,
-        endpoint=f"/infrastructures/{infra_uuid}/vms/0", method="get")
+        endpoint=f"/infrastructures/{infra_uuid}/vms/0",
+        method="get",
+    )
     async def _(request):
-        if request.headers['Accept'] == 'application/json':
+        if request.headers["Accept"] == "application/json":
             return web.json_response(
                 {
                     "radl": [
@@ -794,7 +780,7 @@ async def test_InfrastuctureManager_get(aiohttp_server, config, db, loop):
                             "instance_id": "5c205fb4-b1e0-4e78-ae1e-333ea18c1a27",
                             "net_interface.0.ip": "192.0.2.3",
                             "net_interface.1.ip": "203.0.113.3",
-                        }
+                        },
                     ]
                 }
             )
@@ -802,9 +788,11 @@ async def test_InfrastuctureManager_get(aiohttp_server, config, db, loop):
     @routes.get(f"/infrastructures/{infra_uuid}/vms/1")
     @record_aiohttp_requests(
         infra_data_retrieval_recorder,
-        endpoint=f"/infrastructures/{infra_uuid}/vms/1", method="get")
+        endpoint=f"/infrastructures/{infra_uuid}/vms/1",
+        method="get",
+    )
     async def _(request):
-        if request.headers['Accept'] == 'application/json':
+        if request.headers["Accept"] == "application/json":
             return web.json_response(
                 {
                     "radl": [
@@ -850,7 +838,7 @@ async def test_InfrastuctureManager_get(aiohttp_server, config, db, loop):
                             "instance_id": "009f9f39-b2ef-49a2-8cb0-437abbbe328f",
                             "net_interface.0.ip": "192.0.2.4",
                             "net_interface.1.ip": "203.0.113.4",
-                        }
+                        },
                     ]
                 }
             )
@@ -883,7 +871,9 @@ async def test_InfrastuctureManager_get(aiohttp_server, config, db, loop):
     @routes.get("/infrastructures/{infra_uuid}/outputs")
     @record_aiohttp_requests(
         infra_data_retrieval_recorder,
-        endpoint=f"/infrastructures/{infra_uuid}/outputs", method="get")
+        endpoint=f"/infrastructures/{infra_uuid}/outputs",
+        method="get",
+    )
     async def _(request):
         return web.json_response(
             {
@@ -893,21 +883,26 @@ async def test_InfrastuctureManager_get(aiohttp_server, config, db, loop):
             }
         )
 
-
     @routes.get(f"/infrastructures/{infra_uuid}")
     @record_aiohttp_requests(
         infra_data_retrieval_recorder,
-        endpoint=f"/infrastructures/{infra_uuid}", method="get")
+        endpoint=f"/infrastructures/{infra_uuid}",
+        method="get",
+    )  # noqa: E501
     async def _(request):
-        if request.headers['Accept'] == 'application/json':
+        if request.headers["Accept"] == "application/json":
             return web.json_response(
                 {
                     "uri-list": [
-                        {"uri": f"http://localhost:{im_server_port}/infrastructures/{infra_uuid}/vms/0"},  # noqa: E501
-                        {"uri": f"http://localhost:{im_server_port}/infrastructures/{infra_uuid}/vms/1"},  # noqa: E501
+                        {
+                            "uri": f"http://localhost:{im_server_port}/infrastructures/{infra_uuid}/vms/0"  # noqa: E501
+                        },
+                        {
+                            "uri": f"http://localhost:{im_server_port}/infrastructures/{infra_uuid}/vms/1"  # noqa: E501
+                        },
                     ]
                 }
-            )
+            )  # noqa: E501
 
     # Create infrastructure manager server with the mocked API endpoints
     # NOTE: Infrastructure manager is mocked here
@@ -928,9 +923,7 @@ async def test_InfrastuctureManager_get(aiohttp_server, config, db, loop):
     async with Client(url=server_endpoint(im_server), loop=loop) as client:
         # Create an infrastructure provider client
         infra_provider_client = providers.InfrastructureProvider(
-            session=client.session,
-            cloud=cloud,
-            infrastructure_provider=infra_provider
+            session=client.session, cloud=cloud, infrastructure_provider=infra_provider
         )
 
         # Run target method
@@ -976,19 +969,23 @@ async def test_InfrastuctureManager_get(aiohttp_server, config, db, loop):
     infra_data_retrieval_recorder.assert_has_calls(
         calls=[
             mock.call(
-                endpoint=f"/infrastructures/{infra_uuid}", method="get",
+                endpoint=f"/infrastructures/{infra_uuid}",
+                method="get",
                 content="",
             ),
             mock.call(
-                endpoint=f"/infrastructures/{infra_uuid}/vms/0", method="get",
+                endpoint=f"/infrastructures/{infra_uuid}/vms/0",
+                method="get",
                 content="",
             ),
             mock.call(
-                endpoint=f"/infrastructures/{infra_uuid}/vms/1", method="get",
+                endpoint=f"/infrastructures/{infra_uuid}/vms/1",
+                method="get",
                 content="",
             ),
             mock.call(
-                endpoint=f"/infrastructures/{infra_uuid}/outputs", method="get",
+                endpoint=f"/infrastructures/{infra_uuid}/outputs",
+                method="get",
                 content="",
             ),
         ],

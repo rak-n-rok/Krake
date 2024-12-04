@@ -110,8 +110,9 @@ class InfrastructureProviderClusterObserver(Observer):
         #        directives (e.g. in the `Cache-Control` header) in its responses (see
         #        RFC 9111, "Storing Responses in Caches")
         cloud = await self.krake_kubernetes_api.read_cluster_obj_binding(cluster)
-        infra_provider_spec = \
+        infra_provider_spec = (
             await self.krake_infrastructure_api.read_cloud_obj_binding(cloud)
+        )
         infra_provider = InfrastructureProvider(
             session=self.client.session,
             cloud=cloud,
@@ -136,14 +137,22 @@ class InfrastructureProviderClusterObserver(Observer):
                             #        as login credentials
                             type="login",
                             username=str(cred.username),
-                            password=(str(cred.password)
-                                      if cred.password is not None else None),
-                            private_key=(str(cred.private_key)
-                                         if cred.private_key is not None else None),
+                            password=(
+                                str(cred.password)
+                                if cred.password is not None
+                                else None
+                            ),
+                            private_key=(
+                                str(cred.private_key)
+                                if cred.private_key is not None
+                                else None
+                            ),
                         )
-                        for cred in vm.credentials]
+                        for cred in vm.credentials
+                    ],
                 )
-                for vm in infra_provider_cluster.vms],
+                for vm in infra_provider_cluster.vms
+            ],
         )
 
         return cluster_infra_data
@@ -176,6 +185,7 @@ class InfrastructureProviderClusterObserver(Observer):
         # Discriminate by observation type
         # NOTE: Currently we only need to support :class:`ClusterInfrastructureData`.
         if isinstance(observation, ClusterInfrastructureData):
+
             def _check_and_update():
                 nonlocal changed, to_update
                 if self.resource.infrastructure.data != observation:
@@ -186,7 +196,7 @@ class InfrastructureProviderClusterObserver(Observer):
             try:
                 _check_and_update()
             except AttributeError as e:
-                if e.name == 'data':
+                if e.name == "data":
                     # Create cluster infrastructure subresource if not present
                     # (probably because this is the first observation ever)
                     self.resource.infrastructure = ClusterInfrastructure()
@@ -251,8 +261,10 @@ async def register_observer(controller, *args, **kwargs):
                 time_step=controller.observer_time_step,
             )
         else:
-            raise ValueError(f"Wrong resource kind '{resource.kind}' of resource"
-                             f" {resource}. Must be '{Cluster.kind}'.")
+            raise ValueError(
+                f"Wrong resource kind '{resource.kind}' of resource"
+                f" {resource}. Must be '{Cluster.kind}'."
+            )
 
     # Call base hook customized with the `get_observer` argument
     await _register_observer(controller, *args, get_observer=get_observer, **kwargs)

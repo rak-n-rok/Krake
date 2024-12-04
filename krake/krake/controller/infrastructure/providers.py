@@ -16,7 +16,7 @@ from krake.data.core import ReasonCode
 from krake.data.infrastructure import (
     InfrastructureProviderCluster,
     InfrastructureProviderVm,
-    InfrastructureProviderVmCredential
+    InfrastructureProviderVmCredential,
 )
 
 
@@ -777,10 +777,7 @@ class InfrastructureManager(InfrastructureProvider):
             / "infrastructures/"
             / str(infrastructure_id)
         )
-        headers = {
-            "Authorization": self._auth_header,
-            "Accept": "application/json"
-        }
+        headers = {"Authorization": self._auth_header, "Accept": "application/json"}
         try:
             async with self.session.get(url, headers=headers) as resp:
                 resp.raise_for_status()
@@ -798,7 +795,7 @@ class InfrastructureManager(InfrastructureProvider):
                     f" error: {err!r}"
                 )
             )
-        return [item['uri'] for item in json_response['uri-list']]
+        return [item["uri"] for item in json_response["uri-list"]]
 
     async def _get_vm_by_url(self, url):
         """Retrieve VM information by url from the infrastructure manager
@@ -814,10 +811,7 @@ class InfrastructureManager(InfrastructureProvider):
             InfrastructureProviderRetrieveError: If the given infrastructure does not
                 exist or cannot be retrieved.
         """
-        headers = {
-            "Authorization": self._auth_header,
-            "Accept": "application/json"
-        }
+        headers = {"Authorization": self._auth_header, "Accept": "application/json"}
         try:
             async with self.session.get(url, headers=headers) as resp:
                 resp.raise_for_status()
@@ -837,7 +831,7 @@ class InfrastructureManager(InfrastructureProvider):
 
         # Get VM by filtering the RADL JSON response for infrastructure manager systems
         # NOTE: We expect only one system in the response
-        radl_system = [x for x in response['radl'] if x['class'] == "system"][0]
+        radl_system = [x for x in response["radl"] if x["class"] == "system"][0]
         if not radl_system:
             raise InfrastructureProviderNotFoundError(
                 message=f"VM not found at '{url}'."
@@ -845,15 +839,19 @@ class InfrastructureManager(InfrastructureProvider):
 
         # Get the VM's ip addresses by filtering all net_interface.*.ip keys and
         #  extracting their value
-        ip_addresses = [v for k, v in radl_system.items()
-                        if re.match(r'^net_interface\.[0-9]+\.ip$', k) is not None]
+        ip_addresses = [
+            v
+            for k, v in radl_system.items()
+            if re.match(r"^net_interface\.[0-9]+\.ip$", k) is not None
+        ]
 
         # Bundle the VM's credentials
-        _cred_key_prefix_regex = r'^disk\.[0-9]+\.os\.credentials\.'
-        _cred_key_regex = rf'{_cred_key_prefix_regex}(username|password|private_key)$'
+        _cred_key_prefix_regex = r"^disk\.[0-9]+\.os\.credentials\."
+        _cred_key_regex = rf"{_cred_key_prefix_regex}(username|password|private_key)$"
         # Filter all items that contain credential related data
-        cred_items = \
-            {k: v for k, v in radl_system.items() if re.match(_cred_key_regex, k)}
+        cred_items = {
+            k: v for k, v in radl_system.items() if re.match(_cred_key_regex, k)
+        }
         # Group loose credential items (by prefix)
         extracted_credentials = [
             # strip group prefix from captured keys
@@ -862,7 +860,7 @@ class InfrastructureManager(InfrastructureProvider):
                 # sort list of credential items before grouping
                 sorted(cred_items.items()),
                 # group key equals the *matched* key prefix
-                key=lambda x: re.match(_cred_key_prefix_regex, x[0]).group(0)
+                key=lambda x: re.match(_cred_key_prefix_regex, x[0]).group(0),
             )
         ]
         # EXAMPLE: See below for an example on how the above block converts the
@@ -887,15 +885,15 @@ class InfrastructureManager(InfrastructureProvider):
         # Pack all extracted credentials into InfrastructureProviderVmCredential objects
         credentials = [
             InfrastructureProviderVmCredential(
-                username=cred.get('username', None),
-                password=cred.get('password', None),
-                private_key=cred.get('private_key', None),
+                username=cred.get("username", None),
+                password=cred.get("password", None),
+                private_key=cred.get("private_key", None),
             )
             for cred in extracted_credentials
         ]
 
         return InfrastructureProviderVm(
-            name=radl_system['instance_name'],
+            name=radl_system["instance_name"],
             ip_addresses=ip_addresses,
             credentials=credentials,
         )
@@ -964,8 +962,10 @@ class InfrastructureManager(InfrastructureProvider):
         except ValueError as e:
             raise ValueError("Given cluster has no valid `status.cluster_id`") from e
 
-        vms = [await self._get_vm_by_url(url)
-               for url in await self._enumerate_cluster_nodes_by_url(infrastructure_id)]
+        vms = [
+            await self._get_vm_by_url(url)
+            for url in await self._enumerate_cluster_nodes_by_url(infrastructure_id)
+        ]
 
         try:
             kubeconfig = await self.get_kubeconfig(cluster)

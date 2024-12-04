@@ -4,7 +4,8 @@ from copy import deepcopy
 from factory import (
     Factory,
     SubFactory,
-    LazyAttribute, lazy_attribute,
+    LazyAttribute,
+    lazy_attribute,
     LazyFunction,
     fuzzy,
     Iterator,
@@ -486,12 +487,16 @@ class InfrastructureNodeCredentialFactory(Factory):
     type = fuzzy.FuzzyChoice(choices=InfrastructureNodeCredential._types)
     username = fuzzy.FuzzyAttribute(fake.word)
     password = LazyAttribute(
-        lambda o: fake.pystr()
-                  if "password" in o.enabled_secrets else None  # noqa: E131
+        lambda o: (
+            fake.pystr() if "password" in o.enabled_secrets else None
+        )  # noqa: E131
     )
     private_key = LazyAttribute(
-        lambda o: ssh_ed25519_key_pair_factory()[0]
-                  if "private_key" in o.enabled_secrets else None  # noqa: E131
+        lambda o: (
+            ssh_ed25519_key_pair_factory()[0]
+            if "private_key" in o.enabled_secrets
+            else None
+        )  # noqa: E131
     )
 
 
@@ -514,19 +519,16 @@ class InfrastructureNodeFactory(Factory):
     class Params:
         # Control how many ip addresses and credentials are generated,
         #  by default 0-3 ip addresses and 0-2 credentials are created
-        ip_address_count = LazyFunction(
-            lambda: random.randgen.randint(0, 3)
-        )
-        credential_count = LazyFunction(
-            lambda: random.randgen.randint(0, 2)
-        )
+        ip_address_count = LazyFunction(lambda: random.randgen.randint(0, 3))
+        credential_count = LazyFunction(lambda: random.randgen.randint(0, 2))
 
     ip_addresses = LazyAttribute(
         lambda o: list(test_net_ip_address_generator(o.ip_address_count))
     )
     credentials = LazyAttribute(
-        lambda o: list(InfrastructureNodeCredentialFactory()
-                       for _ in range(o.credential_count))
+        lambda o: list(
+            InfrastructureNodeCredentialFactory() for _ in range(o.credential_count)
+        )
     )
 
 
@@ -544,13 +546,10 @@ class ClusterInfrastructureDataFactory(Factory):
         model = ClusterInfrastructureData
 
     class Params:
-        node_count = LazyFunction(
-            lambda: random.randgen.randint(0, 5)
-        )
+        node_count = LazyFunction(lambda: random.randgen.randint(0, 5))
 
     nodes = LazyAttribute(
-        lambda o: list(InfrastructureNodeFactory()
-                       for _ in range(o.node_count))
+        lambda o: list(InfrastructureNodeFactory() for _ in range(o.node_count))
     )
     # TODO: Set kubeconfig attribute
 
@@ -573,13 +572,14 @@ class ClusterInfrastructureFactory(Factory):
         # Control if infrastructure data is generated,
         #  by default data is generated
         with_data = True
-        node_count = LazyFunction(
-            lambda: random.randgen.randint(0, 5)
-        )
+        node_count = LazyFunction(lambda: random.randgen.randint(0, 5))
 
     data = LazyAttribute(
-        lambda o: ClusterInfrastructureDataFactory(node_count=o.node_count)
-                  if o.with_data else None  # noqa: E131
+        lambda o: (
+            ClusterInfrastructureDataFactory(node_count=o.node_count)
+            if o.with_data
+            else None
+        )  # noqa: E131
     )
 
 
@@ -709,6 +709,9 @@ class ClusterFactory(Factory):
     spec = SubFactory(ClusterSpecFactory)
     status = SubFactory(ClusterStatusFactory)
     infrastructure = LazyAttribute(
-        lambda o: ClusterInfrastructureFactory(**infrastructure_params)  # noqa: F821
-                  if o.with_infrastructure else None  # noqa: E131
+        lambda o: (
+            ClusterInfrastructureFactory(**infrastructure_params)  # noqa: F821
+            if o.with_infrastructure
+            else None
+        )  # noqa: E131
     )

@@ -12,8 +12,10 @@ from krake.client.kubernetes import KubernetesApi
 from krake.client.infrastructure import InfrastructureApi
 
 from .hooks import (
-    register_observer, unregister_observer,
-    listen, HookType,
+    register_observer,
+    unregister_observer,
+    listen,
+    HookType,
 )
 from .providers import (
     InfrastructureProvider,
@@ -158,7 +160,8 @@ class InfrastructureController(Controller):
                 # down the infinite retry loop.
                 logger.debug(
                     f"Enqueuing deleted but failed cluster {cluster} in"
-                    f" {self.poll_interval}s")
+                    f" {self.poll_interval}s"
+                )
                 await self.queue.put(
                     cluster.metadata.uid, cluster, delay=DELETION_DELAY
                 )
@@ -215,8 +218,9 @@ class InfrastructureController(Controller):
         assert client is not None
         self.client = client
         self.infrastructure_api = InfrastructureApi(self.client)
-        self.kubernetes_api = KubernetesApi(self.client,
-                                            infrastructure_api=self.infrastructure_api)
+        self.kubernetes_api = KubernetesApi(
+            self.client, infrastructure_api=self.infrastructure_api
+        )
 
         for i in range(self.worker_count):
             self.register_task(self.handle_resource, name=f"worker_{i}")
@@ -247,7 +251,8 @@ class InfrastructureController(Controller):
         """
         logger.debug(
             f"Infrastructure data of cluster {updated_cluster} has to be updated,"
-            " updating now.")
+            " updating now."
+        )
 
         cluster = await self.kubernetes_api.update_cluster_infra_data(
             namespace=updated_cluster.metadata.namespace,
@@ -320,8 +325,9 @@ class InfrastructureController(Controller):
         logger.debug(f"Processing cluster {cluster}")
         try:
             cloud = await self.kubernetes_api.read_cluster_obj_binding(cluster)
-            infrastructure_provider = \
+            infrastructure_provider = (
                 await self.infrastructure_api.read_cloud_obj_binding(cloud)
+            )
             provider = InfrastructureProvider(
                 session=self.client.session,
                 cloud=cloud,
@@ -356,8 +362,10 @@ class InfrastructureController(Controller):
                 # the cluster saved in the corresponding infrastructure cluster
                 # observer, then the cluster observer will be deleted and created again
                 # to sync the observer again to the saved cluster in Krake
-                elif cluster_copy != \
-                        self.observers[cluster_copy.metadata.uid][0].resource:
+                elif (
+                    cluster_copy
+                    != self.observers[cluster_copy.metadata.uid][0].resource
+                ):
                     await listen.hook(
                         HookType.ClusterDeletion,
                         controller=self,
@@ -433,7 +441,8 @@ class InfrastructureController(Controller):
         # or `CONNECTING` state.
         elif cluster.status.state in (ClusterState.ONLINE, ClusterState.CONNECTING):
             logger.info(
-                f"Reconciliation finished for cluster '{cluster.metadata.name}'")
+                f"Reconciliation finished for cluster '{cluster.metadata.name}'"
+            )
             return
 
         # Always wait for connecting when some cluster action is in
@@ -498,7 +507,8 @@ class InfrastructureController(Controller):
         else:
             logger.warning(
                 f"Resource {cluster} already had an observer registered before it was"
-                " actually created in the real world. Something is off.")
+                " actually created in the real world. Something is off."
+            )
 
     async def on_reconcile(self, cluster, provider):
         """Reconcile a cluster via an infrastructure provider
@@ -692,7 +702,8 @@ class InfrastructureController(Controller):
 
             logger.info(
                 "Reconciliation still in progress for cluster"
-                f" '{cluster.metadata.name}'")
+                f" '{cluster.metadata.name}'"
+            )
             await asyncio.sleep(self.poll_interval)
 
         # Transition into `CONNECTING` state once the cluster in configured.
@@ -736,7 +747,8 @@ class InfrastructureController(Controller):
         if cluster.status.state != ClusterState.CONNECTING:
             logger.debug(
                 f"Cluster {cluster} not connecting. Skipping cluster resource"
-                " reconciliation.")
+                " reconciliation."
+            )
             return
 
         cluster.spec.kubeconfig = await provider.get_kubeconfig(cluster)

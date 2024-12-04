@@ -1079,9 +1079,11 @@ async def register_observer(controller, *args, **kwargs):
                 time_step=controller.observer_time_step,
             )
         else:
-            raise ValueError(f"Wrong resource kind '{resource.kind}' of resource"
-                             f" {resource}. Must be '{Application.kind}' or "
-                             f" '{Cluster.kind}'.")
+            raise ValueError(
+                f"Wrong resource kind '{resource.kind}' of resource"
+                f" {resource}. Must be '{Application.kind}' or "
+                f" '{Cluster.kind}'."
+            )
 
     # Call base hook customized with the `get_observer` argument
     await _register_observer(controller, *args, get_observer=get_observer, **kwargs)
