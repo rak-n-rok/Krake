@@ -37,6 +37,7 @@ dependencies = [
     "requests<=2.31.0",
     "semantic-version>=2.10",
     "tosca-parser==2.6.*",
+    "towncrier==23.6.*",
     "webargs==8.*",
     "yarl==1.9.*",
 ]
@@ -70,7 +71,6 @@ test = [
 ]
 dev = [
     "pre-commit==2.*",
-    "tox>=4.12",
 ]
 ansible = [
     "ansible>=2.10",

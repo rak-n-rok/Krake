@@ -1,6 +1,6 @@
-==============
+============
 Gitlab CI/CD
-==============
+============
 
 This part of the documentation describes test automation with `Gitlab CI/CD <https://docs.gitlab.com/ee/ci/>`_ as a framework by using the Openstack Infrastructure.
 Therefore, the relationship between all files involved in the process is described below:
@@ -31,7 +31,7 @@ Therefore, the relationship between all files involved in the process is describ
 
 
 Pipeline Layout
-====
+===============
 
 The pipelines themselves are triggered in two ways. Either by commits and merge requests or by the creation of a scheduled pipeline.
 The scheduling of the pipelines can be configured here: `pipeline_schedules <https://gitlab.com/rak-n-rok/krake/-/pipeline_schedules>`_
@@ -141,7 +141,7 @@ this pipeline is also triggered daily for the master pipeline.
 
 
 Regular branches pipeline
-^^^^^^^^^
+-------------------------
 
 The following image shows the behavior for regular branches without an existing MR.
 
@@ -182,7 +182,7 @@ The following image shows the behavior for regular branches without an existing 
   @enduml
 
 Master and Merge Request pipeline
-^^^^^^^^^
+---------------------------------
 
 Following image shows the behavior on branches with an excisting MR.
 In addition, this pipeline also runs for the daily tests of the master branch.
@@ -248,7 +248,7 @@ In addition, this pipeline also runs for the daily tests of the master branch.
 
 
 Release pipeline
-^^^^^^^^^
+----------------
 
 The following figure shows the behavior for releases triggered by the creation
 of a tag in Gitlab to signal a new version.
@@ -328,8 +328,8 @@ of a tag in Gitlab to signal a new version.
 
 
 
-Pipeline Configuration/Maintanance
-=====
+Pipeline Configuration/Maintenance
+==================================
 
 The current CI/CD configuration of Gitlab does not allow to run in one single
 operation. More precisely, the images used for testing are not build by

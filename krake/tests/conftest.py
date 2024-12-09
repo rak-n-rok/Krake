@@ -678,7 +678,7 @@ def keycloak():
         keycloak_dir = Path(tempdir) / f"keycloak-{version}"
         subprocess.check_call(
             [
-                "support/keycloak",
+                "../support/keycloak",
                 "--temp-dir",
                 tempdir,
                 "init",
@@ -688,7 +688,7 @@ def keycloak():
         )
 
         process = subprocess.Popen(
-            ["support/keycloak", "--temp-dir", tempdir, "credentials"],
+            ["../support/keycloak", "--temp-dir", tempdir, "credentials"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
@@ -698,7 +698,9 @@ def keycloak():
         info = KeycloakInfo(**keycloak_cred)
 
         with subprocess.Popen(
-            f"support/keycloak --temp-dir {tempdir}", shell=True, preexec_fn=os.setsid
+            f"../support/keycloak --temp-dir {tempdir}",
+            shell=True,
+            preexec_fn=os.setsid,
         ) as proc:
             try:
                 wait_for_url(

@@ -74,12 +74,12 @@ currently test in the CI):
 -  ``requirements/requirements-pyXY-test.txt`` with the ``test`` extras
 
 These can be used to exactly recreate a Python environment in a fresh
-virtualenv, for example an environment with Python 3.10 and ``test``
+virtualenv, for example an environment with Python 3.12 and ``test``
 extras:
 
 .. code:: shell
 
-   python3.10 -m venv .venv && source .venv/bin/activate
+   python3.12 -m venv .venv && source .venv/bin/activate
    pip install --upgrade pip setuptools
    pip install --no-deps -r requirements/requirements-py310-test.txt
    pip install --no-deps -e './krake[test]' -e './rok[test]'
@@ -147,7 +147,7 @@ The ``requirements*.in`` files contain the abstract requirements. For
 each abstract requirement file there is only one concrete requirements
 file (``requirements*.txt``). It is generated for the Python release
 provided by the image which was configured for the CI job (we use
-``python:3.10`` at the time of writing).
+``python:3.12`` at the time of writing).
 
 If any of the ``requirements*.in`` files were modified, the concrete
 requirements can be regenerated with
