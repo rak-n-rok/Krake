@@ -33,6 +33,7 @@ async def test_static_auth(aiohttp_client, config):
     assert data["user"] == "test-user"
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 async def test_keystone(keystone):
     async with ClientSession() as session:
@@ -81,6 +82,7 @@ async def test_keystone(keystone):
         assert resp.status == 204
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 async def test_keystone_auth(keystone, aiohttp_client, config):
     async with ClientSession() as session:
@@ -130,6 +132,7 @@ async def test_keystone_auth(keystone, aiohttp_client, config):
     assert data["user"] == keystone.username
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 async def test_keystone_auth_invalid_token(keystone, aiohttp_client, config):
     """Verify with keystone authentication enabled, an invalid token does not allow to

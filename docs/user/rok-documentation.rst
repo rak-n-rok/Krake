@@ -106,23 +106,20 @@ create
     ``-n | --namespace`` (optional):
         The namespace to which the Cluster has to be added. If none is given, the user namespace is selected.
 
-  	``--inherit-metrics`` (optional):
-		Enables inheritance of all metrics from the cloud the cluster is scheduled to.
+    ``--inherit-metrics`` (optional):
+        Enables inheritance of all metrics from the cloud the cluster is scheduled to.
 
     ``--global-metric`` (optional):
-        The name and weight of a global cluster metric in the form: ``<name> <weight>``.
-        Can be specified multiple times.
+        The name and weight of a global cluster metric in the form: ``<name> <weight>``. Can be specified multiple times.
 
     ``-m | --metric`` (optional):
-        The name and weight of a cluster metric in the form: ``<name> <weight>``.
-        Can be specified multiple times.
+        The name and weight of a cluster metric in the form: ``<name> <weight>``. Can be specified multiple times.
 
-  	``--inherit-labels`` (optional):
-  		Enables inheritance of all labels from the cloud the cluster is scheduled to.
+    ``--inherit-labels`` (optional):
+        Enables inheritance of all labels from the cloud the cluster is scheduled to.
 
     ``-l | --label`` (optional):
-        The key and the value of a cluster label in the form: ``<key>=<value>``.
-        Can be specified multiple times.
+        The key and the value of a cluster label in the form: ``<key>=<value>``. Can be specified multiple times.
 
     ``-R | --custom-resource`` (optional):
         The name of custom resources definition in the form: ``<plural>.<group>`` which is supported by the cluster. Can be specified multiple times.
@@ -153,8 +150,7 @@ get
     ``name``:
         The name of the Cluster to fetch.
     ``-n | --namespace`` (optional):
-        The namespace from which the Clusters have to be retrieved. If none is given,
-        the user namespace is selected.
+        The namespace from which the Clusters have to be retrieved. If none is given, the user namespace is selected.
 
 update
     Request a change of the current state of an existing Cluster.
@@ -163,41 +159,31 @@ update
         The name of the Cluster to update.
 
     ``-k | --kubeconfig`` (optional):
-        The path to the kubeconfig file that describes the Cluster with the updated
-        fields.
+        The path to the kubeconfig file that describes the Cluster with the updated fields.
 
     ``-f | --file`` (optional):
-        The path to the TOSCA template file that describes the desired Cluster with the updated
-        fields.
+        The path to the TOSCA template file that describes the desired Cluster with the updated fields.
 
     ``-n | --namespace`` (optional):
-        The namespace from which the Clusters have to be taken. If none is given, the
-        user namespace is selected.
+        The namespace from which the Clusters have to be taken. If none is given, the user namespace is selected.
 
     ``-c | --context`` (optional):
-        The name of the context to use from the kubeconfig file. Only one context can be
-        chosen at a time. If not context is specified, the current context of the
-        kubeconfig file is chosen.
+        The name of the context to use from the kubeconfig file. Only one context can be chosen at a time. If not context is specified, the current context of the kubeconfig file is chosen.
 
     ``--global-metric`` (optional):
-        The name and weight of a global cluster metric in the form: ``<name> <weight>``.
-        Can be specified multiple times.
+        The name and weight of a global cluster metric in the form: ``<name> <weight>``. Can be specified multiple times.
 
     ``-m | --metric`` (optional):
-        The name and weight of a cluster metric in the form: ``<name> <weight>``.
-        Can be specified multiple times. Previous metrics will be kept by default.
+        The name and weight of a cluster metric in the form: ``<name> <weight>``. Can be specified multiple times. Previous metrics will be kept by default.
 
-    ``--remove-existing-metrics``(optional):
-        Remove all existing metrics on update. If new metrics are specified with the
-        ``--metric`` argument, they will be used instead.
+    ``--remove-existing-metrics`` (optional):
+        Remove all existing metrics on update. If new metrics are specified with the ``--metric`` argument, they will be used instead.
 
     ``-l | --label`` (optional):
-        The key and the value of a cluster label in the form: ``<key>=<value>``.
-        Can be specified multiple times. Previous labels will be kept by default.
+        The key and the value of a cluster label in the form: ``<key>=<value>``. Can be specified multiple times. Previous labels will be kept by default.
 
-    ``--remove-existing-labels``(optional):
-        Remove all existing labels on update. If new labels are specified with the
-        ``--label`` argument, they will be used instead.
+    ``--remove-existing-labels`` (optional):
+        Remove all existing labels on update. If new labels are specified with the ``--label`` argument, they will be used instead.
 
     ``-R | --custom-resource`` (optional):
         The name of custom resources definition in the form: ``<plural>.<group>`` which is supported by the cluster. Can be specified multiple times.
@@ -205,16 +191,14 @@ update
     ``-L | --cloud-label-constraint`` (optional):
         The name and value of a constraint for labels of the cloud in the form: ``<label> expression <value>``. The cluster will be deployed only on the cloud that matches the given label constraint. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`. Previous constraints will be kept by default.
 
-    ``--remove-existing-cloud-label-constraints``(optional):
-        Remove all existing cloud label constraints on update. If new labels are specified with the
-        ``--label`` argument, they will be used instead.
+    ``--remove-existing-cloud-label-constraints`` (optional):
+        Remove all existing cloud label constraints on update. If new labels are specified with the ``--label`` argument, they will be used instead.
 
     ``-M | --cloud-metric-constraint`` (optional):
         The name and value of a constraint for metrics of the cloud in the form: ``<label> expression <value>``. The cluster will be deployed only on the cloud that matches the given metric constraint. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`. Previous constraints will be kept by default.
 
-    ``--remove-existing-cloud-metric-constraints``(optional):
-        Remove all existing cloud metric constraints on update. If new metrics are specified with the
-        ``--cloud-metric-constraint`` argument, they will be used instead.
+    ``--remove-existing-cloud-metric-constraints`` (optional):
+        Remove all existing cloud metric constraints on update. If new metrics are specified with the ``--cloud-metric-constraint`` argument, they will be used instead.
 
     ``--backoff`` (optional): multiplier applied to backoff_delay between attempts.
             default: 1 (no backoff)
@@ -266,9 +250,7 @@ create
         The URL of the TOSCA template file or the CSAR archive that describes the new Application.
 
     ``-O | --observer_schema`` (optional):
-        The path to the custom observer schema file, specifying the fields of the
-        Kubernetes resources defined in the manifest file which should be observed. If none is given, all fields defined in the manifest file are observed.
-        The custom observer schema could be used even when the application is described by the TOSCA template or CSAR archive.
+        The path to the custom observer schema file, specifying the fields of the Kubernetes resources defined in the manifest file which should be observed. If none is given, all fields defined in the manifest file are observed. The custom observer schema could be used even when the application is described by the TOSCA template or CSAR archive.
 
     ``-n | --namespace`` (optional):
         The namespace to which the Application has to be added. If none is given, the user namespace is selected.
@@ -280,43 +262,44 @@ create
         The shutdown hook, which allows the graceful shutdown of the Application. Can have an additional timeout value after the argument.
 
     ``-l | --label`` (optional):
-        The key and the value of a cluster label in the form: ``<key>=<value>``.
-        Can be specified multiple times. Previous labels will be kept by default.
+        The key and the value of a cluster label in the form: ``<key>=<value>``. Can be specified multiple times. Previous labels will be kept by default.
 
-    ``--remove-existing-labels``(optional):
-        Remove all existing labels on update. If new labels are specified with the
-        ``--label`` argument, they will be used instead.
+    ``--remove-existing-labels`` (optional):
+        Remove all existing labels on update. If new labels are specified with the ``--label`` argument, they will be used instead.
 
     ``-R | --cluster-resource-constraint`` (optional):
         The name of custom resources definition constraint in form: ``<plural>.<group>``. The application will be deployed only on the clusters with given custom definition support. Can be specified multiple times. Previous resource constraints will be kept by default.
 
-    ``--remove-existing-resource-constraints``(optional):
-        Remove all existing resource constraints on update. If new metrics are specified with
-        ``--cluster-resource-constraint``, they will be used instead.
+    ``--remove-existing-resource-constraints`` (optional):
+        Remove all existing resource constraints on update. If new metrics are specified with ``--cluster-resource-constraint``, they will be used instead.
 
     ``-L | --cluster-label-constraint`` (optional):
         The name and value of a constraint for labels of the cluster in the form: ``<label> expression <value>``. The application will be deployed only on the cluster that matches the given label constraint. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`. Previous label constraints will be kept by default.
 
-    ``--remove-existing-label-constraints``(optional):
+    ``--remove-existing-label-constraints`` (optional):
         Remove all existing label constraints on update. If new label constraints are specified with
         ``--cluster-label-constraint``, they will be used instead.
 
     ``-M | --cluster-metric-constraint`` (optional):
         The name and value of a constraint for metrics of the cluster in the form: ``<label> expression <value>``. The application will be deployed only on the cluster that matches the given metric constraint. Can be specified multiple times, see :ref:`dev/scheduling:Constraints`. Previous metric constraints will be kept by default.
 
-    ``--remove-existing-metric-constraints``(optional):
-        Remove all existing metric constraints on update. If new metric constraints are specified with
-        ``--cluster-metric-constraint``, they will be used instead.
+    ``--remove-existing-metric-constraints`` (optional):
+        Remove all existing metric constraints on update. If new metric constraints are specified with ``--cluster-metric-constraint``, they will be used instead.
 
-    ``--backoff`` (optional): multiplier applied to backoff_delay between attempts to handle the application.
+    ``--backoff`` (optional):
+        multiplier applied to backoff_delay between attempts to handle the application.
             default: 1 (no backoff)
 
-    ``--backoff_delay`` (optional): delay [s] between attempts to handle the application. default: 1
+    ``--backoff_delay`` (optional):
+        delay [s] between attempts to handle the application.
+            default: 1
 
-    ``--backoff_limit`` (optional):  a maximal number of attempts to handle the application. If the attempt to handle the application failed, it will transfer to the Application State DEGRADED, instead of directly going into the State FAILED. Default: -1 (infinite)
+    ``--backoff_limit`` (optional):
+        a maximal number of attempts to handle the application. If the attempt to handle the application failed, it will transfer to the Application State DEGRADED, instead of directly going into the State FAILED.
+        default: -1 (infinite)
 
-    ``--auto-cluster-create`` (optional): boolean value that determines, if clusters should be automatically created when
-      a cloud resource has a better scheduling score than all the other clusters or clouds
+    ``--auto-cluster-create`` (optional):
+        boolean value that determines, if clusters should be automatically created when a cloud resource has a better scheduling score than all the other clusters or clouds
 
 
 list

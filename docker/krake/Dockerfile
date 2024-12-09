@@ -20,7 +20,7 @@
 #
 # Note: The UID of the "krake" user inside the image can be set with the argument "krake_uid".
 
-FROM python:3.10-slim AS base
+FROM python:3.12-slim AS base
 
 FROM base as builder
 

@@ -192,7 +192,7 @@ cluster which was registered or created by Krake and therefore should be ignored
 the Cluster handler.
 
 Scheduling of Clusters
------------------------------
+----------------------
 
 - The Cluster handler evaluates if all the constraints of a Cluster
   match the available cloud resources. The Cluster constraints define restrictions
@@ -644,7 +644,7 @@ Example:
     rok kube app create <application_name> -f <path_to_manifest> --cluster-resource-constraint <plural>.<group>
 
 
-
 .. _Prometheus: https://prometheus.io/
 .. _KSQL: https://github.com/confluentinc/ksql
 .. _OpenStack: https://www.openstack.org/
+.. _Influx: https://www.influxdata.com/

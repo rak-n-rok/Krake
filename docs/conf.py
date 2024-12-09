@@ -10,6 +10,7 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 
+import os
 from pathlib import Path
 
 
@@ -69,7 +70,7 @@ templates_path = ["_templates"]
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+exclude_patterns = ["_build", "_releasenotes", "Thumbs.db", ".DS_Store"]
 
 # The document name of the "master" document, that is, the document that
 # contains the root toctree directive.
@@ -141,4 +142,40 @@ html_theme = "sphinx_rtd_theme"
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-# html_static_path = ["_static"]
+html_static_path = ['_static']
+
+try:
+   html_context
+except NameError:
+   html_context = dict()
+html_context['display_lower_left'] = True
+
+if 'REPO_NAME' in os.environ:
+   REPO_NAME = os.environ['REPO_NAME']
+else:
+   REPO_NAME = 'krake'
+
+# SET CURRENT_VERSION
+from git import Repo
+
+repo = Repo(search_parent_directories=True)
+
+if 'current_version' in os.environ:
+    # get the current_version env var set by buildDocs.sh
+    current_version = os.environ['current_version']
+else:
+    # the user is probably doing `make html`
+    # set this build's current version by looking at the branch
+    current_version = "development"
+
+# tell the theme which version we're currently on ('current_version' affects
+# the lower-left rtd menu and 'version' affects the logo-area version)
+html_context['current_version'] = current_version
+html_context['version'] = current_version
+
+# POPULATE LINKS TO OTHER VERSIONS
+html_context['versions'] = list()
+
+versions = [tag.name for tag in repo.tags]
+for version in versions:
+    html_context['versions'].append((version, '/' + REPO_NAME + '/release/' + version + '/'))
