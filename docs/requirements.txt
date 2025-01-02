@@ -44,7 +44,7 @@ sphinx==6.2.1
     #   sphinx-rtd-theme
     #   sphinxcontrib-jquery
     #   sphinxcontrib-plantuml
-sphinx-prompt==1.8.0
+sphinx-prompt==1.6.0
     # via -r docs/requirements.in
 sphinx-rtd-theme==1.2.2
     # via -r docs/requirements.in
