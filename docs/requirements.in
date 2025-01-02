@@ -1,6 +1,5 @@
 krake
-PyYAML>=6.0,<7.0
 Sphinx
 sphinx-rtd-theme<1.3
-sphinx-prompt
+sphinx-prompt>=1.8.0
 sphinxcontrib-plantuml
