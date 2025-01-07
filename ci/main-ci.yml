@@ -6,6 +6,7 @@ stages:
   - release
 
 variables:
+  PYTHON_VER: 3.12
   ETCD_VER: v3.5.12
   PROMETHEUS_VER: 2.12.0
   CFSSL_VER: 1.4.1
@@ -34,7 +35,7 @@ cache:
     - .cache/pip
 
 check-for-releasenote:
-  image: python:3.12
+  image: python:${PYTHON_VER}
   stage: pre
   needs: []
   before_script:
@@ -145,7 +146,7 @@ pre-commit:
 
 unittests-krake:
   stage: test
-  image: registry.gitlab.com/rak-n-rok/krake/test_image:3.12
+  image: registry.gitlab.com/rak-n-rok/krake/test_image:${PYTHON_VER}
   variables:
     COVERAGE_FILE: .coverage
   artifacts:
@@ -179,7 +180,7 @@ unittests-krake:
 
 flake8-krake:
   stage: lint
-  image: python:3.12
+  image: python:${PYTHON_VER}
   only:
     - tags
     - branches
@@ -191,7 +192,7 @@ flake8-krake:
 
 flake8-rok:
   stage: lint
-  image: python:3.12
+  image: python:${PYTHON_VER}
   only:
     - tags
     - branches
@@ -204,15 +205,16 @@ flake8-rok:
 pages:
   stage: test
   needs: []
-  image: python:3.12
+  image: python:${PYTHON_VER}
   before_script:
     - pip install -r docs/requirements.txt
-    - cd rok
-    - pip install .
-    - cd ..
+    - pip install --editable ./rok
+    - pip install --editable ./krake
+    - pip install GitPython
   script:
     - sphinx-build --keep-going docs _build/html
-    - mv _build/html public/krake/development
+    - mkdir -p public/development
+    - mv _build/html public/development
   artifacts:
     paths:
       - public
@@ -229,21 +231,23 @@ pages:
 
 pages-master:
   stage: test
-  image: python:3.12
+  image: python:${PYTHON_VER}
   before_script:
     - pip install -r docs/requirements.txt
-    - cd rok
-    - pip install .
-    - cd ..
+    - pip install --editable ./rok
+    - pip install --editable ./krake
+    - pip install GitPython
   script:
     - sphinx-build --keep-going docs _build/html
-    - cp _build/html public/krake/latest
-    - mv _build/html public/krake/{{ $CI_COMMIT_TAG }}
+    - mkdir -p public/latest
+    - cp -r _build/html public/latest
+    - mkdir -p public/{{ $CI_COMMIT_TAG }}
+    - mv _build/html public/{{ $CI_COMMIT_TAG }}
   artifacts:
     paths:
       - public
   rules:
-    # run only on MR when changes were made
+    # run on each master run
     - if: $CI_COMMIT_TAG != '' && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       changes:
       - 'docs/[!_]*/**/*'
@@ -256,7 +260,7 @@ pages-master:
 # with non-zero if the code coverage ratio is under 85%.
 coverage-krake:
   stage: e2e
-  image: python:3.12
+  image: python:${PYTHON_VER}
   script:
     - pip install -r ci/requirements_coverage.txt
     - ls -la
@@ -277,7 +281,7 @@ coverage-krake:
 
 coverage-krake-visualization:
   stage: e2e
-  image: python:3.12
+  image: python:${PYTHON_VER}
   script:
     - pip install -r ci/requirements_coverage.txt
     - coverage xml
@@ -424,7 +428,7 @@ e2e-cleanup:
 pypi:
   stage: release
   image:
-    name: python:3.11
+    name: python:${PYTHON_VER}
   before_script:
     - pip install --upgrade twine
     - pip install --upgrade build

@@ -23,8 +23,6 @@ imagesize==1.4.1
     # via sphinx
 jinja2==3.1.3
     # via sphinx
-krake==1.0.1
-    # via -r docs/requirements.in
 markupsafe==2.1.5
     # via jinja2
 packaging==23.2
@@ -44,7 +42,7 @@ sphinx==6.2.1
     #   sphinx-rtd-theme
     #   sphinxcontrib-jquery
     #   sphinxcontrib-plantuml
-sphinx-prompt==1.6.0
+sphinx-prompt==1.5.0
     # via -r docs/requirements.in
 sphinx-rtd-theme==1.2.2
     # via -r docs/requirements.in
