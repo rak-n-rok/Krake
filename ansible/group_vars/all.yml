@@ -1,2 +1,0 @@
-etc_dir: "{{ playbook_dir }}/.etc"
-use_config_drive: true

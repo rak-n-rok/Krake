@@ -1,7 +1,0 @@
----
-collections:
-- name: ansible.posix
-
-- name: openstack.cloud
-
-- name: community.docker

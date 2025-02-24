@@ -1,7 +1,0 @@
-- name: Add authorized keys
-  ansible.posix.authorized_key:
-    user: "{{ authorized_user }}"
-    state: present
-    key: "{{ item }}"
-  with_file: "{{ authorized_keys }}"
-  when: authorized_keys is defined
