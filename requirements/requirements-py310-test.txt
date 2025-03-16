@@ -107,7 +107,7 @@ elementpath==4.2.0
     # via xmlschema
 etcd3-py==0.1.6
     # via krake (krake/pyproject.toml)
-eventlet==0.35.1
+eventlet==0.35.2
     # via oslo-service
 factory-boy==2.12.0
     # via krake (krake/pyproject.toml)
