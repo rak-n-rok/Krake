@@ -630,7 +630,7 @@ webob==1.8.7
     #   osprofiler
 websocket-client==1.7.0
     # via kubernetes
-werkzeug==3.0.1
+werkzeug==3.0.3
     # via
     #   flask
     #   pytest-httpserver
