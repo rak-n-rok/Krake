@@ -1,6 +1,6 @@
 repos:
 - repo: https://github.com/python/black
-  rev: 24.2.0
+  rev: 25.1.0
   hooks:
   - id: black
     files: ^(krake|krakectl)/
@@ -17,7 +17,7 @@ repos:
   - id: forbid-tabs
     files: ^(krake|krakectl)/
 - repo: https://github.com/pycqa/flake8
-  rev: 7.0.0
+  rev: 7.2.0
   hooks:
   - id: flake8
     files: ^(krake|krakectl)/
