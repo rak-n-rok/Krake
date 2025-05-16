@@ -259,7 +259,7 @@ create
         The complete hook, which allows an Application to send a completion signal to the API.
 
     ``--hook-shutdown`` (optional):
-        The shutdown hook, which allows the graceful shutdown of the Application. Can have an additional values after the argument:
+        The shutdown hook, which allows the graceful shutdown of the Application. Can have additional values after the argument:
 
         timeout [s]
 
@@ -346,7 +346,7 @@ update
         The complete hook, which allows an Application to send a completion signal to the API.
 
     ``--hook-shutdown`` (optional):
-        The shutdown hook, which allows the graceful shutdown of the Application. Can have an additional values after the argument:
+        The shutdown hook, which allows the graceful shutdown of the Application. Can have additional values after the argument:
 
         timeout [s]
 
