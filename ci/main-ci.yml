@@ -34,24 +34,25 @@ cache:
   paths:
     - .cache/pip
 
-check-for-releasenote:
-  image: python:${PYTHON_VER}
-  stage: pre
-  needs: []
-  before_script:
-  - git fetch origin "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
-  script:
-  - |-
-    FILES=$(git diff origin/"${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}" --name-only -- docs/_releasenotes | wc -l)
-    if [ $FILES -gt 0 ];then
-      exit 0
-    else
-      exit 1
-    fi
-  rules:
-    - if: $CI_MERGE_REQUEST_EVENT_TYPE
-      when: on_success
-    - when: never
+# This is removed for now, because we want to change the way tagging and releases work
+#check-for-releasenote:
+#  image: python:${PYTHON_VER}
+#  stage: pre
+#  needs: []
+#  before_script:
+#  - git fetch origin "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
+#  script:
+#  - |-
+#    FILES=$(git diff origin/"${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}" --name-only -- docs/_releasenotes | wc -l)
+#    if [ $FILES -gt 0 ];then
+#      exit 0
+#    else
+#      exit 1
+#    fi
+#  rules:
+#    - if: $CI_MERGE_REQUEST_EVENT_TYPE
+#      when: on_success
+#    - when: never
 
 # This job is excluded from the scheduled master pipeline, because it
 # should only check and automatically adjust new commits after getting pushed.
