@@ -2,7 +2,7 @@ from functionals.utils import run
 
 
 def test_list_krake_applications():
-    cmd = "rok kube app list"
+    cmd = "krakectl kube app list"
     response = run(cmd)
     try:
         assert response.returncode == 0

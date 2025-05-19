@@ -59,7 +59,7 @@ It means, that anyone can talk with IM_ but can see only their own userspace.
 
 .. prompt:: bash $ auto
 
-    rok infra provider register --type im --url http://localhost:8800 --username test --password test im-provider
+    krakectl infra provider register --type im --url http://localhost:8800 --username test --password test im-provider
 
 
 Register an existing OpenStack based cloud to Krake
@@ -87,7 +87,7 @@ Use the already registered infrastructure provider called ``im-provider`` as an 
 
 .. prompt:: bash $ auto
 
-    rok infra cloud register --type openstack --url <os-auth-url> --project <os-project-name> --username <os-username> --password <os-password> --infra-provider im-provider os-cloud
+    krakectl infra cloud register --type openstack --url <os-auth-url> --project <os-project-name> --username <os-username> --password <os-password> --infra-provider im-provider os-cloud
 
 
 Create a Cluster
@@ -95,15 +95,15 @@ Create a Cluster
 
 .. prompt:: bash $ auto
 
-    rok kube cluster list  # No Cluster resource is present
-    rok kube cluster create -f rak/functionals/im-cluster.yaml my-cluster
-    rok kube cluster list  # One Cluster resource with name "my-cluster"
+    krakectl kube cluster list  # No Cluster resource is present
+    krakectl kube cluster create -f rak/functionals/im-cluster.yaml my-cluster
+    krakectl kube cluster list  # One Cluster resource with name "my-cluster"
 
 The creation of the cluster can take up to 15 minutes to complete. Observe that Kubernetes Cluster is created.
 
 .. prompt:: bash $ auto
 
-    rok kube cluster list
+    krakectl kube cluster list
 
 Spawn the demo application
 ==========================
@@ -112,8 +112,8 @@ Create the demo Kubernetes Application and observe the resource status.
 
 .. prompt:: bash $ auto
 
-    rok kube app create -f templates/applications/k8s/echo-demo.yaml echo-demo
-    rok kube app get echo-demo  # See "running_on"
+    krakectl kube app create -f templates/applications/k8s/echo-demo.yaml echo-demo
+    krakectl kube app get echo-demo  # See "running_on"
 
 Cleanup
 =======
@@ -122,9 +122,9 @@ Delete the Cluster, the Cloud and the InfrastructureProvider:
 
 .. prompt:: bash $ auto
 
-    rok kube cluster delete my-cluster
-    rok infra cloud delete os-cloud
-    rok infra provider delete im-provider
+    krakectl kube cluster delete my-cluster
+    krakectl infra cloud delete os-cloud
+    krakectl infra provider delete im-provider
 
 
 .. _IM: https://github.com/grycap/im

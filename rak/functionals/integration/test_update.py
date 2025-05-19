@@ -69,7 +69,7 @@ def test_update_application_manifest(k8s_clusters):
         # 1. Update the Application
         error_message = f"The Application {app.name} could not be updated."
         run(
-            f"rok kube app update {app.name} -f {MANIFEST_PATH}/echo-demo-update.yaml",
+            f"krakectl kube app update {app.name} -f {MANIFEST_PATH}/echo-demo-update.yaml",
             condition=check_return_code(error_message),
         )
 
@@ -198,11 +198,11 @@ def test_update_cluster_kubeconfig(k8s_clusters):
         cluster = env.resources[ResourceKind.CLUSTER][0]
 
         # 1. Update the Cluster
-        run(f"rok kube cluster update {cluster.name} -k {other_kubeconfig_path}")
+        run(f"krakectl kube cluster update {cluster.name} -k {other_kubeconfig_path}")
 
         # 2. Check that the kubeconfig has been changed on the API
         cluster_details = cluster.get_resource()
-        # As rok processes the kubeconfig file, the actual value in the Cluster resource
+        # As krakectl processes the kubeconfig file, the actual value in the Cluster resource
         # is different from the given file.
         resp_kubeconfig = cluster_details["spec"]["kubeconfig"]
         kubeconfig_cluster = resp_kubeconfig["clusters"][0]
@@ -311,13 +311,13 @@ def test_update_no_changes(k8s_clusters):
 
         # 1. "Update" the Cluster (no change is sent)
         run(
-            f"rok kube cluster update {cluster.name} -k {kubeconfig_path}",
+            f"krakectl kube cluster update {cluster.name} -k {kubeconfig_path}",
             condition=check_http_code_in_output(400),
         )
 
         # 2. "Update" the Application (no change is sent)
         run(
-            f"rok kube app update {app.name} -f {manifest_path}",
+            f"krakectl kube app update {app.name} -f {manifest_path}",
             condition=check_http_code_in_output(400),
         )
 
@@ -368,7 +368,7 @@ def test_update_no_changes_tosca(k8s_clusters, tosca_from, file_server):
         # "Update" the Application with TOSCA template that contains
         # the same definition
         run(
-            f"rok kube app update {app.name} {'--url' if is_url else '--file'} {tosca}",
+            f"krakectl kube app update {app.name} {'--url' if is_url else '--file'} {tosca}",
             condition=check_http_code_in_output(400),
         )
 
@@ -417,7 +417,7 @@ def test_update_no_changes_csar(k8s_clusters, archive_files, file_server):
         # "Update" the Application with CSAR that contains
         # the same definition
         run(
-            f"rok kube app update {app.name} --url {csar_url}",
+            f"krakectl kube app update {app.name} --url {csar_url}",
             condition=check_http_code_in_output(400),
         )
 
@@ -481,7 +481,7 @@ def test_update_application_tosca(k8s_clusters, tosca_from, file_server):
         # 1. Update the Application
         error_message = f"The Application {app.name} could not be updated."
         run(
-            f"rok kube app update {app.name} {'--url' if is_url else '--file'}"
+            f"krakectl kube app update {app.name} {'--url' if is_url else '--file'}"
             f" {tosca_updated}",
             condition=check_return_code(error_message),
         )
@@ -585,7 +585,7 @@ def test_update_application_csar(k8s_clusters, archive_files, file_server):
         # 1. Update the Application
         error_message = f"The Application {app.name} could not be updated."
         run(
-            f"rok kube app update {app.name} --url {csar_updated_url}",
+            f"krakectl kube app update {app.name} --url {csar_updated_url}",
             condition=check_return_code(error_message),
         )
 
@@ -686,7 +686,7 @@ def test_update_manifest_application_by_tosca(k8s_clusters, tosca_from, file_ser
         # 1. Update the Application with TOSCA template
         error_message = f"The Application {app.name} could not be updated."
         run(
-            f"rok kube app update {app.name} {'--url' if is_url else '--file'}"
+            f"krakectl kube app update {app.name} {'--url' if is_url else '--file'}"
             f" {tosca_updated}",
             condition=check_return_code(error_message),
         )
@@ -783,7 +783,7 @@ def test_update_manifest_application_by_csar(k8s_clusters, archive_files, file_s
         # 1. Update the Application with CSAR
         error_message = f"The Application {app.name} could not be updated."
         run(
-            f"rok kube app update {app.name} --url {csar_updated_url}",
+            f"krakectl kube app update {app.name} --url {csar_updated_url}",
             condition=check_return_code(error_message),
         )
 

@@ -19,7 +19,7 @@
 # Default Ansible inventory
 /ansible/hosts
 /ansible/hosts.yml
-/ansible/rok_configurations
+/ansible/krakectl_configurations
 
 # Public keys managed by Ansible
 /ansible/public_keys/**
@@ -52,7 +52,7 @@ __pycache__/
 /docs/_build
 
 # Configuration files from templates
-/rok.yaml
+/krakectl.yaml
 /api.yaml
 /garbage_collector.yaml
 /kubernetes.yaml

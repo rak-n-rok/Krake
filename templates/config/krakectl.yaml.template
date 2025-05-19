@@ -1,4 +1,4 @@
-## Configuration file for the Rok utility
+## Configuration file for the krakectl utility
 
 api_url: $api_endpoint
 user: system:admin

@@ -28,8 +28,7 @@ A possible example file can be found under `templates/applications/k8s/pvc-pod.y
 add its observer schema file found under `templates/applications/observer-schema/pvc-pod-observer-schema.yaml`.
 
 .. prompt:: bash $ auto
-
-    $ rok kube app create pvc -f pvc-pod.yaml -O pvc-pod-observer-schema.yaml
+    $ krakectl kube app create pvc -f pvc-pod.yaml -O pvc-pod-observer-schema.yaml
 
 This should create an application, that generates a log entry with the
 current date and time every minute on the mounted volume.
@@ -44,7 +43,7 @@ In this case, a migration will be triggered by changing the metrics weights.
 
 .. prompt:: bash $ auto
 
-    $ rok core globalmetricsprovider update static_provider --metric electricity_cost_1 0.1 --metric green_energy_ratio_1 0.9
+    $ krakectl core globalmetricsprovider update static_provider --metric electricity_cost_1 0.1 --metric green_energy_ratio_1 0.9
     +-----------+---------------------------+
     | name      | static_provider           |
     | namespace | None                      |
@@ -63,7 +62,7 @@ location of the application
 
 .. prompt:: bash $ auto
 
-    $ rok kube app get pvc
+    $ krakectl kube app get pvc
     +-----------------------+----------------------------------------------------------------------------------------------+
     | name                  | pvc                                                                                          |
     | namespace             | system:admin                                                                                 |

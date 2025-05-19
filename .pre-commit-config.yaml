@@ -3,7 +3,7 @@ repos:
   rev: 24.2.0
   hooks:
   - id: black
-    files: ^(krake|rok)/
+    files: ^(krake|krakectl)/
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v4.5.0
   hooks:
@@ -15,9 +15,9 @@ repos:
   rev: v1.1.13
   hooks:
   - id: forbid-tabs
-    files: ^(krake|rok)/
+    files: ^(krake|krakectl)/
 - repo: https://github.com/pycqa/flake8
   rev: 7.0.0
   hooks:
   - id: flake8
-    files: ^(krake|rok)/
+    files: ^(krake|krakectl)/

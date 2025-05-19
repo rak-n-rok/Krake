@@ -2,7 +2,7 @@
 
 .. code:: bash
 
-    python -m rok core --help
+    python -m krakectl core --help
 
 """
 

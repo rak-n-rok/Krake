@@ -15,9 +15,9 @@ The application `complete` hook gives the ability to signals job completion.
 The Krake Kubernetes controller calls the application `complete`
 hook before the deployment of the application on a Kubernetes
 cluster. The hook is disabled by default. The user can enable this hook with the
-``--hook-complete`` argument in rok CLI.
+``--hook-complete`` argument in krakectl CLI.
 
-See also :ref:`user/rok-documentation:Rok documentation`.
+See also :ref:`user/krakectl-documentation:krakectl documentation`.
 
 The complete hook injects the ``KRAKE_COMPLETE_TOKEN`` environment variable, which stores the
 Krake authentication token, and the ``KRAKE_COMPLETE_URL`` environment variable, which
@@ -44,9 +44,9 @@ important processes to a safe conclusion.
 The Krake Kubernetes controller calls the application `shutdown`
 hook before the deployment of the application on a Kubernetes
 cluster. The hook is disabled by default. The user can enable this hook with the
-``--hook-shutdown`` argument in rok CLI.
+``--hook-shutdown`` argument in krakectl CLI.
 
-See also :ref:`user/rok-documentation:Rok documentation`.
+See also :ref:`user/krakectl-documentation:krakectl documentation`.
 
 The shutdown hook injects the ``KRAKE_SHUTDOWN_TOKEN`` and the ``KRAKE_SHUTDOWN_URL``
 environment variables, which respectively store the Krake authentication token and the

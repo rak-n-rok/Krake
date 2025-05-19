@@ -5,7 +5,7 @@ the Krake API:
 - GlobalCloud
 - Cloud
 
-The tests are performed against the Krake API, via the rok CLI.
+The tests are performed against the Krake API, via the krakectl CLI.
 """
 import copy
 import random
@@ -33,7 +33,7 @@ from functionals.resource_provider import provider
     ],
 )
 def test_infrastructure_provider_crudl(resource, ip_type):
-    """Test basic infrastructure providers functionality over the rok CLI.
+    """Test basic infrastructure providers functionality over the krakectl CLI.
 
     The test method performs the following tests for each supported
     type of infrastructure provider (currently only: `im`) and for both
@@ -80,26 +80,26 @@ def test_infrastructure_provider_crudl(resource, ip_type):
     expected_content_updated["spec"]["im"]["url"] = "http://updated.example"
     # 1. Delete a non-existent infrastructure provider and expect 404 response
     run(
-        f"rok infra {resource.lower()} delete {resource_name}",
+        f"krakectl infra {resource.lower()} delete {resource_name}",
         condition=check_http_code_in_output(404),
         retry=0,
     )
     # 2. Get a non-existent infrastructure provider and expect 404 response
     run(
-        f"rok infra {resource.lower()} get {resource_name}",
+        f"krakectl infra {resource.lower()} get {resource_name}",
         condition=check_http_code_in_output(404),
         retry=0,
     )
     # 3. Update a non-existent infrastructure provider and expect 404 response
     run(
-        f"rok infra {resource.lower()} update {resource_name}",
+        f"krakectl infra {resource.lower()} update {resource_name}",
         condition=check_http_code_in_output(404),
         retry=0,
     )
     # 4. Register an infrastructure provider
     error_message = f"The {resource} {resource_name} could not be registered."
     run(
-        f"rok infra {resource.lower()} register {resource_name}"
+        f"krakectl infra {resource.lower()} register {resource_name}"
         f" --type {ip_type}"
         " --url http://im.example"
         " --username user"
@@ -114,7 +114,7 @@ def test_infrastructure_provider_crudl(resource, ip_type):
     # 5. Get the infrastructure provider and check the content
     error_message = f"The {resource} {resource_name} could not be retrieved."
     run(
-        f"rok infra {resource.lower()} get {resource_name} -o json",
+        f"krakectl infra {resource.lower()} get {resource_name} -o json",
         condition=check_response_content(
             error_message,
             expected_content_subset,
@@ -124,7 +124,7 @@ def test_infrastructure_provider_crudl(resource, ip_type):
     # 6. Update the infrastructure provider
     error_message = f"The {resource} {resource_name} could not be updated."
     run(
-        f"rok infra {resource.lower()} update {resource_name} "
+        f"krakectl infra {resource.lower()} update {resource_name} "
         "--url http://updated.example -o json --password pass",
         condition=check_response_content(
             error_message,
@@ -135,7 +135,7 @@ def test_infrastructure_provider_crudl(resource, ip_type):
     # 7. Get the infrastructure provider and check the content
     error_message = f"The {resource} {resource_name} could not be retrieved."
     run(
-        f"rok infra {resource.lower()} get {resource_name} -o json",
+        f"krakectl infra {resource.lower()} get {resource_name} -o json",
         condition=check_response_content(
             error_message,
             expected_content_updated,
@@ -144,14 +144,14 @@ def test_infrastructure_provider_crudl(resource, ip_type):
     )
     # 8. Perform an empty update of the infrastructure provider and 400 response
     run(
-        f"rok infra {resource.lower()} update {resource_name} "
+        f"krakectl infra {resource.lower()} update {resource_name} "
         "--url http://updated.example -o json --password pass",
         condition=check_http_code_in_output(400),
         retry=0,
     )
     # 9. Register an infrastructure provider with the same name and expect 409 response
     run(
-        f"rok infra {resource.lower()} register {resource_name}"
+        f"krakectl infra {resource.lower()} register {resource_name}"
         f" --type {ip_type}"
         " --url http://im.example"
         " --username user"
@@ -163,7 +163,7 @@ def test_infrastructure_provider_crudl(resource, ip_type):
     # 10. Delete the infrastructure provider
     error_message = f"The {resource} {resource_name} could not be deleted."
     run(
-        f"rok infra {resource.lower()} delete {resource_name} -o json",
+        f"krakectl infra {resource.lower()} delete {resource_name} -o json",
         condition=check_response_content(
             error_message,
             expected_content_updated,
@@ -173,7 +173,7 @@ def test_infrastructure_provider_crudl(resource, ip_type):
     # 11. List infrastructure providers and verify that the deleted one is not present
     error_message = f"The list of {resource}s contains some items."
     run(
-        f"rok infra {resource.lower()} list -o json",
+        f"krakectl infra {resource.lower()} list -o json",
         condition=check_empty_list(error_message),
     )
 
@@ -186,7 +186,7 @@ def test_infrastructure_provider_crudl(resource, ip_type):
     ],
 )
 def test_cloud_crudl(resource, cloud_type):
-    """Test basic clouds functionality over the rok CLI.
+    """Test basic clouds functionality over the krakectl CLI.
 
     The test method performs the following tests for each supported
     type of cloud (currently only: `openstack`) and for both
@@ -242,26 +242,26 @@ def test_cloud_crudl(resource, cloud_type):
     expected_content_updated["spec"]["openstack"]["url"] = "http://updated.example"
     # 1. Delete a non-existent cloud and expect 404 response
     run(
-        f"rok infra {resource.lower()} delete {resource_name}",
+        f"krakectl infra {resource.lower()} delete {resource_name}",
         condition=check_http_code_in_output(404),
         retry=0,
     )
     # 2. Get a non-existent cloud and expect 404 response
     run(
-        f"rok infra {resource.lower()} get {resource_name}",
+        f"krakectl infra {resource.lower()} get {resource_name}",
         condition=check_http_code_in_output(404),
         retry=0,
     )
     # 3. Update a non-existent cloud and expect 404 response
     run(
-        f"rok infra {resource.lower()} update {resource_name}",
+        f"krakectl infra {resource.lower()} update {resource_name}",
         condition=check_http_code_in_output(404),
         retry=0,
     )
     # 4. Register a cloud
     error_message = f"The {resource} {resource_name} could not be registered."
     run(
-        f"rok infra {resource.lower()} register {resource_name}"
+        f"krakectl infra {resource.lower()} register {resource_name}"
         f" --type {cloud_type}"
         " --url http://keystone.example"
         " --project project"
@@ -278,7 +278,7 @@ def test_cloud_crudl(resource, cloud_type):
     # 5. Get the cloud and check the content
     error_message = f"The {resource} {resource_name} could not be retrieved."
     run(
-        f"rok infra {resource.lower()} get {resource_name} -o json",
+        f"krakectl infra {resource.lower()} get {resource_name} -o json",
         condition=check_response_content(
             error_message,
             expected_content_subset,
@@ -288,7 +288,7 @@ def test_cloud_crudl(resource, cloud_type):
     # 6. Update the cloud
     error_message = f"The {resource} {resource_name} could not be updated."
     run(
-        f"rok infra {resource.lower()} update {resource_name} "
+        f"krakectl infra {resource.lower()} update {resource_name} "
         "--url http://updated.example -o json --password pass",
         condition=check_response_content(
             error_message,
@@ -299,7 +299,7 @@ def test_cloud_crudl(resource, cloud_type):
     # 7. Get the cloud and check the content
     error_message = f"The {resource} {resource_name} could not be retrieved."
     run(
-        f"rok infra {resource.lower()} get {resource_name} -o json",
+        f"krakectl infra {resource.lower()} get {resource_name} -o json",
         condition=check_response_content(
             error_message,
             expected_content_updated,
@@ -308,14 +308,14 @@ def test_cloud_crudl(resource, cloud_type):
     )
     # 8. Perform an empty update of the cloud and 400 response
     run(
-        f"rok infra {resource.lower()} update {resource_name} "
+        f"krakectl infra {resource.lower()} update {resource_name} "
         "--url http://updated.example -o json --password pass",
         condition=check_http_code_in_output(400),
         retry=0,
     )
     # 9. Register a cloud with the same name and expect 409 response
     run(
-        f"rok infra {resource.lower()} register {resource_name}"
+        f"krakectl infra {resource.lower()} register {resource_name}"
         f" --type {cloud_type}"
         " --url http://keystone.example"
         " --project project"
@@ -329,7 +329,7 @@ def test_cloud_crudl(resource, cloud_type):
     # 10. Delete the cloud
     error_message = f"The {resource} {resource_name} could not be deleted."
     run(
-        f"rok infra {resource.lower()} delete {resource_name} -o json",
+        f"krakectl infra {resource.lower()} delete {resource_name} -o json",
         condition=check_response_content(
             error_message,
             expected_content_updated,
@@ -339,7 +339,7 @@ def test_cloud_crudl(resource, cloud_type):
     # 11. List clouds and verify that the deleted one is not present
     error_message = f"The list of {resource}s contains some items."
     run(
-        f"rok infra {resource.lower()} list -o json",
+        f"krakectl infra {resource.lower()} list -o json",
         condition=check_empty_list(error_message),
     )
 
@@ -401,7 +401,7 @@ def test_scheduler_with_cloud(k8s_clusters):
     # 2. Register a cloud
     error_message = f"The global cloud {resource_name} could not be registered."
     run(
-        f"rok infra gc register {resource_name}"
+        f"krakectl infra gc register {resource_name}"
         f" --type openstack"
         " --url http://keystone.example"
         " --project project"
@@ -420,7 +420,7 @@ def test_scheduler_with_cloud(k8s_clusters):
 
     # 3. Register an infrastructure provider
     run(
-        "rok infra ip register im-provider"
+        "krakectl infra ip register im-provider"
         " --type im"
         " --url http://localhost:8800"
         " --username test"
@@ -437,27 +437,27 @@ def test_scheduler_with_cloud(k8s_clusters):
         app = env.resources[ResourceKind.APPLICATION][0]
 
         cluster_details = run(
-            "rok kube cluster get kind-cluster-1",
+            f"krakectl kube cluster get kind-cluster-1",
             retry=90,
             interval=10,
         )
         print(cluster_details.output)
 
         cluster_details = run(
-            "rok kube cluster get kind-cluster-2",
+            f"krakectl kube cluster get kind-cluster-2",
             retry=90,
             interval=10,
         )
         print(cluster_details.output)
 
         ip_list = run(
-            "rok infra ip list",
+            f"krakectl infra ip list",
             retry=90,
             interval=10,
         )
         print(ip_list.output)
         gc_list = run(
-            "rok infra gc list",
+            f"krakectl infra gc list",
             retry=90,
             interval=10,
         )
@@ -466,13 +466,13 @@ def test_scheduler_with_cloud(k8s_clusters):
         app.check_running_on(cluster, after_delay=100)
 
         app_list = run(
-            "rok kube app list",
+            f"krakectl kube app list",
             retry=90,
             interval=10,
         )
         print(app_list.output)
         app_details = run(
-            "rok kube app get echo-demo",
+            f"krakectl kube app get echo-demo",
             retry=90,
             interval=10,
         )
@@ -481,7 +481,7 @@ def test_scheduler_with_cloud(k8s_clusters):
     # 4. Delete the cloud
     error_message = f"The global cloud {resource_name} could not be deleted."
     run(
-        f"rok infra gc delete {resource_name} -o json",
+        f"krakectl infra gc delete {resource_name} -o json",
         condition=check_response_content(
             error_message,
             expected_content_updated,

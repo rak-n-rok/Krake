@@ -320,8 +320,8 @@ their respective context. In most of the documentation chapters, only ``GlobalMe
 are talked about, but namespaced ``Metrics`` can also be used to follow these sections.
 
 The metrics for the Cloud resources (OpenStack), Kubernetes clusters, Magnum clusters and OpenStack projects
-resources are defined by the ``-m`` or ``--metric`` option in the rok CLI, see
-:ref:`user/rok-documentation:Rok documentation`. Multiple metrics can be specified for
+resources are defined by the ``-m`` or ``--metric`` option in the krakectl CLI, see
+:ref:`user/krakectl-documentation:krakectl documentation`. Multiple metrics can be specified for
 one resource with the following syntax: `<name> <weight>`.
 
 Examples:
@@ -329,16 +329,16 @@ Examples:
 .. code:: bash
 
   # Cloud resources:
-  rok infra cloud register <cloud resource depending parameters> --global-metric electricity_cost_1 10
+  krakectl infra cloud register <cloud resource depending parameters> --global-metric electricity_cost_1 10
 
   # Kubernetes clusters:
-  rok kube cluster create <kubeconfig> --global-metric heat_demand_zone_1 0.45
+  krakectl kube cluster create <kubeconfig> --global-metric heat_demand_zone_1 0.45
 
   # Magnum clusters:
-  rok os cluster create <cluster_name> --metric heat_demand_zone_1 54
+  krakectl os cluster create <cluster_name> --metric heat_demand_zone_1 54
 
   # OpenStack projects:
-  rok os project create --user-id $OS_USER_ID --template $TEMPLATE_ID my-project --metric heat_demand_zone_1 3
+  krakectl os project create --user-id $OS_USER_ID --template $TEMPLATE_ID my-project --metric heat_demand_zone_1 3
 
 
 By design, the general Krake metric resource (called ``GlobalMetric``) is a core api
@@ -524,7 +524,7 @@ can be expressed:
 
 The Cluster label constraints for the Application and Cluster resources
 are defined by ``-L`` (or ``--cluster-label-constraint``, ``--cloud-label-constraint``) option in the
-rok CLI, see :ref:`user/rok-documentation:Rok documentation`. The constraints can be
+krakectl CLI, see :ref:`user/krakectl-documentation:krakectl documentation`. The constraints can be
 specified multiple times with the syntax: `<label> expression <value>`.
 
 Examples:
@@ -532,10 +532,10 @@ Examples:
 .. code:: bash
 
   # Application
-  rok kube app create <application_name> -f <path_to_manifest> -L 'location is DE'
+  krakectl kube app create <application_name> -f <path_to_manifest> -L 'location is DE'
 
   # Cluster:
-  rok kube cluster create <cluster_name> -f <path_to_tosca> -L 'location is DE' ...
+  krakectl kube cluster create <cluster_name> -f <path_to_tosca> -L 'location is DE' ...
 
 
 Metric constraints
@@ -595,8 +595,8 @@ can be expressed:
             <metric> =< <value>
 
 The metric label constraints for the Application and Cluster resources are defined
-by ``-M`` (or ``--cluster-metric-constraint``, ``--cloud-metric-constraint``) option in the rok CLI,
-see :ref:`user/rok-documentation:Rok documentation`. The constraints can be
+by ``-M`` (or ``--cluster-metric-constraint``, ``--cloud-metric-constraint``) option in the krakectl CLI,
+see :ref:`user/krakectl-documentation:krakectl documentation`. The constraints can be
 specified multiple times with the syntax: `<metric> expression <value>`.
 
 Examples:
@@ -604,10 +604,10 @@ Examples:
 .. code:: bash
 
   # Application
-  rok kube app create <application_name> -f <path_to_manifest> -M 'load = 5'
+  krakectl kube app create <application_name> -f <path_to_manifest> -M 'load = 5'
 
   # Cluster
-  rok kube cluster create <cluster_name> -f <path_to_tosca> -M 'load = 5' ...
+  krakectl kube cluster create <cluster_name> -f <path_to_tosca> -M 'load = 5' ...
 
 Custom resources:
 -----------------
@@ -620,14 +620,14 @@ by the Custom Resource Definition (CRD) and Krake uses this CRD name with the fo
 ``<plural>.<group>`` as a marker.
 
 
-The supported CRD names are defined by ``-R`` or ``--custom-resource`` option in rok
-CLI. See also :ref:`user/rok-documentation:Rok documentation`.
+The supported CRD names are defined by ``-R`` or ``--custom-resource`` option in krakectl
+CLI. See also :ref:`user/krakectl-documentation:krakectl documentation`.
 
 Example:
 
 .. code:: bash
 
-    rok kube cluster create <kubeconfig> --custom-resource <plural>.<group>
+    krakectl kube cluster create <kubeconfig> --custom-resource <plural>.<group>
 
 Applications that are based on a CR have to be explicitly labeled with a cluster
 resource constraint. This is used in the Krake scheduling algorithm to select an
@@ -635,13 +635,13 @@ appropriate cluster where the CR is supported.
 
 Cluster resource constraints are defined by a CRD name with the
 format ``<plural>.<group>`` using ``-R`` or ``--cluster-resource-constraint`` option in
-rok CLI. See also :ref:`user/rok-documentation:Rok documentation`.
+krakectl CLI. See also :ref:`user/krakectl-documentation:krakectl documentation`.
 
 Example:
 
 .. code:: bash
 
-    rok kube app create <application_name> -f <path_to_manifest> --cluster-resource-constraint <plural>.<group>
+    krakectl kube app create <application_name> -f <path_to_manifest> --cluster-resource-constraint <plural>.<group>
 
 
 .. _Prometheus: https://prometheus.io/

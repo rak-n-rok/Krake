@@ -6,66 +6,66 @@
   block:
 
     - name: Get apps
-      command: "rok kube app list -o json"
-      register: rok_response
-    - name: Exctract app names from rok response
+      command: "krakectl kube app list -o json"
+      register: krakectl_response
+    - name: Extract app names from krakectl response
       ansible.builtin.set_fact:
-        app_list: "{{ (rok_response.stdout | from_json ) }}"
+        app_list: "{{ (krakectl_response.stdout | from_json ) }}"
     - name: Delete app
-      command: "rok kube app delete {{ item.metadata.name }}"
+      command: "krakectl kube app delete {{ item.metadata.name }}"
       with_items: "{{ app_list }}"
 
 
     - name: Get clusters
-      command: "rok kube cluster list -o json"
-      register: rok_response
-    - name: Exctract cluster names from rok response
+      command: "krakectl kube cluster list -o json"
+      register: krakectl_response
+    - name: Extract cluster names from krakectl response
       ansible.builtin.set_fact:
-        cluster_list: "{{ (rok_response.stdout | from_json ) }}"
+        cluster_list: "{{ (krakectl_response.stdout | from_json ) }}"
     - name: Delete cluster
-      command: "rok kube cluster delete {{ item.metadata.name }}"
+      command: "krakectl kube cluster delete {{ item.metadata.name }}"
       with_items: "{{ cluster_list }}"
 
 
     - name: Get GlobalMetrics
-      command: "rok core gm list -o json"
-      register: rok_response
-    - name: Exctract gm names from rok response
+      command: "krakectl core gm list -o json"
+      register: krakectl_response
+    - name: Extract gm names from krakectl response
       ansible.builtin.set_fact:
-        gm_list: "{{ (rok_response.stdout | from_json ) }}"
+        gm_list: "{{ (krakectl_response.stdout | from_json ) }}"
     - name: Delete GlobalMetrics
-      command: "rok core gm delete {{ item.metadata.name }}"
+      command: "krakectl core gm delete {{ item.metadata.name }}"
       with_items: "{{ gm_list }}"
 
 
     - name: Get GlobalMetricsProviders
-      command: "rok core gmp list -o json"
-      register: rok_response
-    - name: Exctract gmp names from rok response
+      command: "krakectl core gmp list -o json"
+      register: krakectl_response
+    - name: Extract gmp names from krakectl response
       ansible.builtin.set_fact:
-        gmp_list: "{{ (rok_response.stdout | from_json ) }}"
+        gmp_list: "{{ (krakectl_response.stdout | from_json ) }}"
     - name: Delete GlobalMetricsProvider
-      command: "rok core gmp delete {{ item.metadata.name }}"
+      command: "krakectl core gmp delete {{ item.metadata.name }}"
       with_items: "{{ gmp_list }}"
 
 
     - name: Get Metrics
-      command: "rok core metric list -o json"
-      register: rok_response
-    - name: Exctract metric namesfrom rok response
+      command: "krakectl core metric list -o json"
+      register: krakectl_response
+    - name: Extract metric namesfrom krakectl response
       ansible.builtin.set_fact:
-        m_list: "{{ (rok_response.stdout | from_json ) }}"
+        m_list: "{{ (krakectl_response.stdout | from_json ) }}"
     - name: Delete Metrics
-      command: "rok core metric delete {{ item.metadata.name }}"
+      command: "krakectl core metric delete {{ item.metadata.name }}"
       with_items: "{{ m_list }}"
 
 
     - name: Get MetricProviders
-      command: "rok core mp list -o json"
-      register: rok_response
-    - name: Exctract mp infos from rok response
+      command: "krakectl core mp list -o json"
+      register: krakectl_response
+    - name: Extract mp infos from krakectl response
       ansible.builtin.set_fact:
-        mp_list: "{{ (rok_response.stdout | from_json ) }}"
+        mp_list: "{{ (krakectl_response.stdout | from_json ) }}"
     - name: Delete Metrics
-      command: "rok core mp delete {{ item.metadata.name }}"
+      command: "krakectl core mp delete {{ item.metadata.name }}"
       with_items: "{{ mp_list }}"

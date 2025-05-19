@@ -6,8 +6,8 @@ the Krake API:
     GlobalMetricsProvider
     GlobalMetric
 
-The tests are performed against the Krake API, via the rok cli or a sessions request
-instance, in case of no available implementation in rok.
+The tests are performed against the Krake API, via the krakectl cli or a sessions request
+instance, in case of no available implementation in krakectl.
 """
 import time
 import requests
@@ -27,14 +27,14 @@ from functionals.utils import (
 
 _GC_DELAY = 5
 
-# FIXME: Change with a rok implementation of Role and RoleBinding
+# FIXME: Change with a krakectl implementation of Role and RoleBinding
 # In succession with the conftest.py, test_roles_crud and test_rolebindings_crud need
-# to be changed, if a rok implementation for roles and rolebindings is available.
+# to be changed, if a krakectl implementation for roles and rolebindings is available.
 
 
 def test_roles_crud(session):
     """Test basic role functionality with the session library.
-    Rok cli can't be used here, because it doesn't implement role calls (yet).
+    krakectl cli can't be used here, because it doesn't implement role calls (yet).
     The test method performs the following tests for roles:
 
     1. Delete a non-existent role and expect failure
@@ -169,7 +169,7 @@ def test_roles_crud(session):
 
 def test_rolebindings_crud(session):
     """Test basic rolebinding functionality with the session library.
-    Rok cli can't be used here, because it doesn't implement rolebinding calls (yet).
+    krakectl cli can't be used here, because it doesn't implement rolebinding calls (yet).
     The test method performs the following tests for rolebindings:
 
     1. Delete a non-existent rolebinding and expect failure
@@ -309,7 +309,7 @@ def test_rolebindings_crud(session):
 
 
 def test_mp_crud():
-    """Test basic metrics providers functionality over the rok cli.
+    """Test basic metrics providers functionality over the krakectl cli.
     The test method performs the following tests for each type of metrics provider
     (static, prometheus and kafka) and for both namespaced and global
     metrics providers.
@@ -384,7 +384,7 @@ def test_mp_crud():
                 f"The non-existent metrics provider {name} could be deleted."
             )
             run(
-                f"rok core {mp_kind} delete {name}",
+                f"krakectl core {mp_kind} delete {name}",
                 condition=check_return_code(error_message, expected_code=1),
                 retry=0,
             )
@@ -393,7 +393,7 @@ def test_mp_crud():
                 f"The non-existent metrics provider {name} could be retrieved."
             )
             run(
-                f"rok core {mp_kind} get {name}",
+                f"krakectl core {mp_kind} get {name}",
                 condition=check_return_code(error_message, expected_code=1),
                 retry=0,
             )
@@ -402,7 +402,7 @@ def test_mp_crud():
                 f"The non-existent metrics provider {name} could be updated."
             )
             run(
-                f"rok core {mp_kind} update --url {new_url} {name}",
+                f"krakectl core {mp_kind} update --url {new_url} {name}",
                 condition=check_return_code(error_message, expected_code=1),
                 retry=0,
             )
@@ -410,7 +410,7 @@ def test_mp_crud():
             error_message = f"The metrics provider {name} could not be created."
             expected_type_details = type_details[mp_type]["create"]
             run(
-                f"rok core {mp_kind} create {name} --type {mp_type.value} "
+                f"krakectl core {mp_kind} create {name} --type {mp_type.value} "
                 f"{create_args[mp_type]} -o json",
                 condition=check_metrics_provider_content(
                     error_message,
@@ -423,7 +423,7 @@ def test_mp_crud():
             # 5. Get the metrics provider and check the content
             error_message = f"The metrics provider {name} could not be retrieved."
             run(
-                f"rok core {mp_kind} get {name} -o json",
+                f"krakectl core {mp_kind} get {name} -o json",
                 condition=check_metrics_provider_content(
                     error_message,
                     name=name,
@@ -436,7 +436,7 @@ def test_mp_crud():
             error_message = f"The metrics provider {name} could not be updated."
             expected_type_details = type_details[mp_type]["update"]
             run(
-                f"rok core {mp_kind} update {name} {update_args[mp_type]} -o json",
+                f"krakectl core {mp_kind} update {name} {update_args[mp_type]} -o json",
                 condition=check_metrics_provider_content(
                     error_message,
                     name=name,
@@ -448,7 +448,7 @@ def test_mp_crud():
             # 7. Get the metrics provider and check the content
             error_message = f"The metrics provider {name} could not be retrieved."
             run(
-                f"rok core {mp_kind} get {name} -o json",
+                f"krakectl core {mp_kind} get {name} -o json",
                 condition=check_metrics_provider_content(
                     error_message,
                     name=name,
@@ -462,7 +462,7 @@ def test_mp_crud():
                 f"The metrics provider {name} was successfully updated without change."
             )
             run(
-                f"rok core {mp_kind} update {name} {update_args[mp_type]} -o json",
+                f"krakectl core {mp_kind} update {name} {update_args[mp_type]} -o json",
                 condition=check_return_code(error_message, expected_code=0),
                 retry=0,
             )
@@ -474,7 +474,7 @@ def test_mp_crud():
                 else MetricsProviderType.PROMETHEUS
             )
             run(
-                f"rok core {mp_kind} create {name} --type {other_mp_type.value} "
+                f"krakectl core {mp_kind} create {name} --type {other_mp_type.value} "
                 f"{create_args[other_mp_type]} -o json",
                 condition=check_return_code(error_message, expected_code=1),
                 retry=0,
@@ -482,7 +482,7 @@ def test_mp_crud():
             # 10. Delete the metrics provider
             error_message = f"The metrics provider {name} could not be deleted."
             run(
-                f"rok core {mp_kind} delete {name} -o json",
+                f"krakectl core {mp_kind} delete {name} -o json",
                 condition=check_return_code(error_message),
                 retry=0,
             )
@@ -490,7 +490,7 @@ def test_mp_crud():
             time.sleep(_GC_DELAY)
             error_message = "The metrics providers could not be retrieved."
             mps = run(
-                f"rok core {mp_kind} list -o json",
+                f"krakectl core {mp_kind} list -o json",
                 condition=check_return_code(error_message),
                 retry=0,
             ).json
@@ -501,7 +501,7 @@ def test_mp_crud():
 
 
 def test_metric_crud():
-    """Test basic metric functionality over the rok cli.
+    """Test basic metric functionality over the krakectl cli.
 
     The following steps are repeated for both namespaced and global metrics:
 
@@ -520,13 +520,13 @@ def test_metric_crud():
 
     ml = run(
         (
-            "rok core metric list"
+            "krakectl core metric list"
         )
     )
     strml = ml.output
     gml = run(
         (
-            "rok core gm list"
+            "krakectl core gm list"
         )
     )
     strgml = gml.output
@@ -537,7 +537,7 @@ def test_metric_crud():
         error_message = f"The non-existent {m_kind} {name} could be deleted." + "\n" \
                         + strml + "\n" + strgml + "\n"
         run(
-            f"rok core {m_kind} delete {name}",
+            f"krakectl core {m_kind} delete {name}",
             condition=check_return_code(error_message, expected_code=1),
             retry=0,
         )
@@ -545,7 +545,7 @@ def test_metric_crud():
         error_message = f"The non-existent {m_kind} {name} could be retrieved." + "\n" \
                         + strml + "\n" + strgml + "\n"
         run(
-            f"rok core {m_kind} get {name} -o json",
+            f"krakectl core {m_kind} get {name} -o json",
             condition=check_return_code(error_message, expected_code=1),
             retry=0,
         )
@@ -553,7 +553,7 @@ def test_metric_crud():
         error_message = f"The non-existent {m_kind} {name} could be updated." + "\n" \
                         + strml + "\n" + strgml + "\n"
         run(
-            f"rok core {m_kind} update --max 30 {name} -o json",
+            f"krakectl core {m_kind} update --max 30 {name} -o json",
             condition=check_return_code(error_message, expected_code=1),
             retry=0,
         )
@@ -565,7 +565,7 @@ def test_metric_crud():
                         + strml + "\n" + strgml + "\n"
         mp_name_arg_flag = "--mp-name" if m_kind == "metric" else "--gmp-name"
         run(
-            f"rok core {m_kind} create {name} {mp_name_arg_flag} {mp_name} "
+            f"krakectl core {m_kind} create {name} {mp_name_arg_flag} {mp_name} "
             f"--min {mmin} --max {mmax} -o json",
             condition=check_metric_content(
                 error_message, name=name, mp_name=mp_name, min=mmin, max=mmax
@@ -576,7 +576,7 @@ def test_metric_crud():
         error_message = f"The {m_kind} {name} could not be retrieved." + "\n" \
                         + strml + "\n" + strgml + "\n"
         run(
-            f"rok core {m_kind} get {name} -o json",
+            f"krakectl core {m_kind} get {name} -o json",
             condition=check_metric_content(
                 error_message, name=name, mp_name=mp_name, min=mmin, max=mmax
             ),
@@ -588,7 +588,7 @@ def test_metric_crud():
         new_min = -2
         new_max = -1
         run(
-            f"rok core {m_kind} update {name} --min {new_min} --max {new_max} -o json",
+            f"krakectl core {m_kind} update {name} --min {new_min} --max {new_max} -o json",
             condition=check_metric_content(
                 error_message,
                 name=name,
@@ -602,7 +602,7 @@ def test_metric_crud():
         error_message = f"The {m_kind} {name} could not be retrieved."+ "\n" \
                         + strml + "\n" + strgml + "\n"
         run(
-            f"rok core {m_kind} get {name} -o json",
+            f"krakectl core {m_kind} get {name} -o json",
             condition=check_metric_content(
                 error_message,
                 name=name,
@@ -616,7 +616,7 @@ def test_metric_crud():
         error_message = f"The {m_kind} {name} was updated despite no change." + "\n" \
                         + strml + "\n" + strgml + "\n"
         run(
-            f"rok core {m_kind} update {name} --min {new_min} -o json",
+            f"krakectl core {m_kind} update {name} --min {new_min} -o json",
             condition=check_return_code(error_message, expected_code=0),
             retry=0,
         )
@@ -625,7 +625,7 @@ def test_metric_crud():
                         + strml + "\n" + strgml + "\n"
         new_mp_name = "other-non-existent-mp"
         run(
-            f"rok core {m_kind} create {name} {mp_name_arg_flag} {new_mp_name} "
+            f"krakectl core {m_kind} create {name} {mp_name_arg_flag} {new_mp_name} "
             f"--min {mmin} --max {mmax} -o json",
             condition=check_return_code(error_message, expected_code=1),
             retry=0,
@@ -634,7 +634,7 @@ def test_metric_crud():
         error_message = f"The {m_kind} {name} could not be deleted." + "\n" \
                         + strml + "\n" + strgml + "\n"
         run(
-            f"rok core {m_kind} delete {name} -o json",
+            f"krakectl core {m_kind} delete {name} -o json",
             condition=check_return_code(error_message),
             retry=0,
         )
@@ -643,7 +643,7 @@ def test_metric_crud():
         error_message = f"The {m_kind}s could not be retrieved." + "\n" \
                         + strml + "\n" + strgml + "\n"
         metrics = run(
-            f"rok core {m_kind} list -o json",
+            f"krakectl core {m_kind} list -o json",
             condition=check_return_code(error_message),
             retry=0,
         ).json

@@ -255,6 +255,6 @@ its value remains unchanged.
 Usage
 =====
 
-A custom observer schema can be specified in ``rok`` with the argument ``-O`` or
+A custom observer schema can be specified in ``krakectl`` with the argument ``-O`` or
 ``--observer_schema``. If none is provided, a default observer schema is generated and
 all fields defined in ``spec.manifest`` are observed

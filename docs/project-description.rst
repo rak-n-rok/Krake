@@ -30,11 +30,11 @@ Krake
 The Krake module provides the main features of this project. It contains all services that compose a complete Krake instance as well as some additional modules.
 This module also provides the requirements to install Krake in a system, and makes it possible to emit a PyPi package, which can be found in the PyPi_ repository.
 
----
-rok
----
+--------
+krakectl
+--------
 
-rok (named partly from the old project name `rak'n'rok`) provides a command-line interface to interact with Krake. It provides simple commands, that are used to interact with the Krake API.
+krakectl provides a command-line interface to interact with Krake. It provides simple commands, that are used to interact with the Krake API.
 It is suggested, that this module gets placed in its own repository in the future, in order to simplify the project structure.
 
 ---
