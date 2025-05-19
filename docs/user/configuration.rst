@@ -440,7 +440,7 @@ hooks (string)
             api_endpoint_. Example: ``https://krake.external.host:1234``.
         failure_strategy (string, optional)
             Strategy to execute after the application shutdown failed. Valid options are:
-            
+
             'give_up'
                 Do nothing and let the user manually remove the application
             'delete'
@@ -452,7 +452,7 @@ hooks (string)
             Timeout after calling the shutdown of the application until the
             application requests a shutdown from the Krake API. If a timeout
             occurs, the given failure strategy will be exectued. Default: 30s
-        
+
 
 hooks (string)
     All the parameters for the migration of an application are described here.

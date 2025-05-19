@@ -284,7 +284,7 @@ class ShutdownHookConfiguration(Serializable):
                 " endpoint of the Krake API will be used. It should be set if the"
                 " KubernetesController is connected to the API with a private IP."
             ),
-            "validate": _validate_endpoint
+            "validate": _validate_endpoint,
         },
     )
     timeout: int = field(
@@ -295,7 +295,7 @@ class ShutdownHookConfiguration(Serializable):
                 " application requests a shutdown from the Krake API. If a timeout"
                 " occurs, the given failure strategy will be exectued."
             ),
-            "validate": validate_positive_int
+            "validate": validate_positive_int,
         },
     )
     failure_strategy: str = field(
@@ -309,7 +309,7 @@ class ShutdownHookConfiguration(Serializable):
                 "'give_up': Do nothing and let the user manually shut down the"
                 " application"
             ),
-            "validate": ShutdownHookFailureStrategy.enusure_supported_value
+            "validate": ShutdownHookFailureStrategy.enusure_supported_value,
         },
     )
     failure_retry_count: int = field(
@@ -319,7 +319,7 @@ class ShutdownHookConfiguration(Serializable):
                 "Maximum number of retries to gracefully shutdown the application until"
                 "the specified failure strategy is executed"
             ),
-            "validate": validate_non_negative_int
+            "validate": validate_non_negative_int,
         },
     )
 
@@ -343,6 +343,8 @@ class MigrationRetryConfiguration(Serializable):
         default=60,
         metadata={"help": "Timeout after a failed migration for the next rescheduling"},
     )
+
+
 # endregion
 
 

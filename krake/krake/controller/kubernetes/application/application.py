@@ -810,9 +810,9 @@ class KubernetesApplicationController(Controller):
         # Clear manifest in status
         app.status.running_on = None
 
-# region Application shutdown
+    # region Application shutdown
     async def _trigger_application_shutdown_async(self, app: Application):
-        """ Mark application as shutting down and run application shutdown
+        """Mark application as shutting down and run application shutdown
         inside coroutine without awaiting
 
         Args:
@@ -825,9 +825,11 @@ class KubernetesApplicationController(Controller):
             return
 
         app.status.shutdown_grace_period = now() + timedelta(
-            seconds=app.spec.shutdown_grace_time if
-            app.spec.shutdown_grace_time is not None
-            else self.hooks.shutdown.timeout
+            seconds=(
+                app.spec.shutdown_grace_time
+                if app.spec.shutdown_grace_time is not None
+                else self.hooks.shutdown.timeout
+            )
         )
         await self.kubernetes_api.update_application_status(
             namespace=app.metadata.namespace,
@@ -838,7 +840,7 @@ class KubernetesApplicationController(Controller):
         asyncio.create_task(self._shutdown_task_async(app))
 
     async def _shutdown_task_async(self, app: Application):
-        """ Excecutes the application shutdown and the configured failure strategy
+        """Excecutes the application shutdown and the configured failure strategy
         in case of failure
 
         Args:
@@ -853,11 +855,8 @@ class KubernetesApplicationController(Controller):
         finally:
             app.status.shutdown_grace_period = None
 
-    async def _run_app_shutdown_async(
-        self,
-        app: Application
-    ) -> bool:
-        """ Calls the application shutdown route and checks for success. This process
+    async def _run_app_shutdown_async(self, app: Application) -> bool:
+        """Calls the application shutdown route and checks for success. This process
         is repeated until the app was sucessfully shutdown or the specified number of
         maximum retries was reached.
 
@@ -871,10 +870,11 @@ class KubernetesApplicationController(Controller):
         shutdown_hook_config: ShutdownHookConfiguration = self.hooks.shutdown
 
         # use global configuration if no local failure_retry_count for app was set
-        failure_retry_count = \
-            shutdown_hook_config.failure_retry_count \
-            if app.spec.shutdown_retry_count is None \
+        failure_retry_count = (
+            shutdown_hook_config.failure_retry_count
+            if app.spec.shutdown_retry_count is None
             else app.spec.shutdown_retry_count
+        )
 
         max_shutdown_count = failure_retry_count + 1
         executed_shutdowns_count = 0
@@ -888,7 +888,7 @@ class KubernetesApplicationController(Controller):
 
                 if app.status.state in [
                     ApplicationState.DEGRADED,
-                    ApplicationState.FAILED
+                    ApplicationState.FAILED,
                 ]:
                     return False
 
@@ -900,13 +900,17 @@ class KubernetesApplicationController(Controller):
                     await kube.shutdown_async(app)
 
                 if await self._check_shutdown_success_async(app):
-                    logger.info(f"Successful graceful shutdown of application"
-                                f" {app.metadata.name!r}")
+                    logger.info(
+                        f"Successful graceful shutdown of application"
+                        f" {app.metadata.name!r}"
+                    )
                     return True
 
             except Exception:
-                logger.error("Unknown error occured during graceful shutdown of"
-                             f"application {app.metadata.name!r}")
+                logger.error(
+                    "Unknown error occured during graceful shutdown of"
+                    f"application {app.metadata.name!r}"
+                )
                 logger.error(traceback.format_exc())
             finally:
                 executed_shutdowns_count += 1
@@ -914,8 +918,10 @@ class KubernetesApplicationController(Controller):
         return False
 
     async def _handle_shutdown_failure_async(self, app: Application):
-        logger.error("Graceful shutdown of application {app.metadata.name!r} failed."
-                     " View the logs of the application for more information.")
+        logger.error(
+            "Graceful shutdown of application {app.metadata.name!r} failed."
+            " View the logs of the application for more information."
+        )
 
         if self._has_shutdown_strategy(app, ShutdownHookFailureStrategy.DELETE):
             await self._delete_application_async(app)
@@ -956,10 +962,9 @@ class KubernetesApplicationController(Controller):
         return False
 
     def _has_shutdown_strategy(
-            self,
-            app: Application,
-            strategy: ShutdownHookFailureStrategy) -> bool:
-        """ Checks wether the given strategy is configured to be used by the app. If no
+        self, app: Application, strategy: ShutdownHookFailureStrategy
+    ) -> bool:
+        """Checks wether the given strategy is configured to be used by the app. If no
         strategy is configured within the app, the global configuration is used
 
         Args:
@@ -974,7 +979,7 @@ class KubernetesApplicationController(Controller):
 
         return self.hooks.shutdown.failure_strategy == strategy.value
 
-# endregion
+    # endregion
 
     async def _reconcile_application(self, app):
         if not app.status.scheduled_to:
