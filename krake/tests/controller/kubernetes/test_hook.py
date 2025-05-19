@@ -70,7 +70,6 @@ async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
     # contains the TOKEN and the URL taken from secret
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        nonlocal deploy_mangled_response
         rd = await request.read()
 
         app = json.loads(rd)
@@ -92,7 +91,6 @@ async def test_complete_hook(aiohttp_server, config, db, loop, hooks_config):
     # authentication token and the Krake complete hook URL for the given application.
     @routes.post("/api/v1/namespaces/secondary/secrets")
     async def _(request):
-        nonlocal secret_mangled_response
         rd = await request.read()
         secret = json.loads(rd)
 
@@ -332,9 +330,6 @@ async def test_complete_hook_tls(
     # and `ca.pem` secret
     @routes.post("/api/v1/namespaces/secondary/secrets")
     async def _(request):
-        nonlocal secret_mangled_response
-        nonlocal secret_mangled_responses
-
         resp = deepcopy(secret_mangled_response)
         rd = await request.read()
         secret = json.loads(rd)
@@ -355,7 +350,6 @@ async def test_complete_hook_tls(
     # Deployment
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        nonlocal deploy_mangled_response
         rd = await request.read()
 
         app = json.loads(rd)
@@ -544,7 +538,7 @@ async def test_complete_hook_default_namespace(
     # Deployment
     @routes.post("/apis/apps/v1/namespaces/default/deployments")
     async def _(request):
-        nonlocal deployment_created, deploy_mangled_response
+        nonlocal deployment_created
         deployment_created = True
 
         rd = await request.read()
@@ -568,7 +562,6 @@ async def test_complete_hook_default_namespace(
     # authentication token and the Krake complete hook URL for the given application.
     @routes.post("/api/v1/namespaces/default/secrets")
     async def _(request):
-        nonlocal secret_mangled_response
         rd = await request.read()
         secret = json.loads(rd)
 
@@ -739,8 +732,6 @@ async def test_complete_hook_external_endpoint(
     # Deployment
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        nonlocal deploy_mangled_response
-
         rd = await request.read()
 
         app = json.loads(rd)
@@ -762,7 +753,6 @@ async def test_complete_hook_external_endpoint(
     # authentication token and the Krake complete hook URL for the given application.
     @routes.post("/api/v1/namespaces/secondary/secrets")
     async def _(request):
-        nonlocal secret_mangled_response
         rd = await request.read()
         secret = json.loads(rd)
 
@@ -843,7 +833,6 @@ async def test_complete_hook_sending(aiohttp_server, config, db, loop, hooks_con
     # contains the TOKEN and the URL
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        nonlocal deploy_mangled_response
         rd = await request.read()
 
         app = json.loads(rd)
@@ -865,7 +854,6 @@ async def test_complete_hook_sending(aiohttp_server, config, db, loop, hooks_con
     # authentication token and the Krake complete hook URL for the given application.
     @routes.post("/api/v1/namespaces/secondary/secrets")
     async def _(request):
-        nonlocal secret_mangled_response
         rd = await request.read()
         secret = json.loads(rd)
 
@@ -957,9 +945,6 @@ async def test_complete_hook_sending_tls(
     # and `ca.pem` secret
     @routes.post("/api/v1/namespaces/secondary/secrets")
     async def _(request):
-        nonlocal secret_mangled_response
-        nonlocal secret_mangled_responses
-
         resp = deepcopy(secret_mangled_response)
         rd = await request.read()
         secret = json.loads(rd)
@@ -980,7 +965,6 @@ async def test_complete_hook_sending_tls(
     # Deployment
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        nonlocal deploy_mangled_response
         rd = await request.read()
 
         app = json.loads(rd)
@@ -1128,9 +1112,6 @@ async def test_complete_hook_sending_tls_rbac(
     # and `ca.pem` secret
     @routes.post("/api/v1/namespaces/secondary/secrets")
     async def _(request):
-        nonlocal secret_mangled_response
-        nonlocal secret_mangled_responses
-
         resp = deepcopy(secret_mangled_response)
         rd = await request.read()
         secret = json.loads(rd)
@@ -1151,7 +1132,6 @@ async def test_complete_hook_sending_tls_rbac(
     # Deployment
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        nonlocal deploy_mangled_response
         rd = await request.read()
 
         app = json.loads(rd)
@@ -1323,9 +1303,6 @@ async def test_complete_hook_reschedule(
     # and `ca.pem` secret
     @routes.post("/api/v1/namespaces/secondary/secrets")
     async def _(request):
-        nonlocal secret_mangled_response
-        nonlocal secret_mangled_responses
-
         resp = deepcopy(secret_mangled_response)
         rd = await request.read()
         secret = json.loads(rd)
@@ -1342,7 +1319,6 @@ async def test_complete_hook_reschedule(
 
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        nonlocal deploy_mangled_response
         rd = await request.read()
 
         app = json.loads(rd)
@@ -1442,7 +1418,6 @@ async def test_shutdown_hook(aiohttp_server, config, db, loop, hooks_config):
     # contains the TOKEN and the URL taken from secret
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        nonlocal deploy_mangled_response
         rd = await request.read()
 
         app = json.loads(rd)
@@ -1464,7 +1439,6 @@ async def test_shutdown_hook(aiohttp_server, config, db, loop, hooks_config):
     # authentication token and the Krake complete hook URL for the given application.
     @routes.post("/api/v1/namespaces/secondary/secrets")
     async def _(request):
-        nonlocal secret_mangled_response
         rd = await request.read()
         secret = json.loads(rd)
 
@@ -1704,9 +1678,6 @@ async def test_shutdown_hook_tls(
     # and `ca.pem` secret
     @routes.post("/api/v1/namespaces/secondary/secrets")
     async def _(request):
-        nonlocal secret_mangled_response
-        nonlocal secret_mangled_responses
-
         resp = deepcopy(secret_mangled_response)
         rd = await request.read()
         secret = json.loads(rd)
@@ -1727,7 +1698,6 @@ async def test_shutdown_hook_tls(
     # Deployment
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        nonlocal deploy_mangled_response
         rd = await request.read()
 
         app = json.loads(rd)
@@ -1916,7 +1886,7 @@ async def test_shutdown_hook_default_namespace(
     # Deployment
     @routes.post("/apis/apps/v1/namespaces/default/deployments")
     async def _(request):
-        nonlocal deployment_created, deploy_mangled_response
+        nonlocal deployment_created
         deployment_created = True
 
         rd = await request.read()
@@ -1940,7 +1910,6 @@ async def test_shutdown_hook_default_namespace(
     # authentication token and the Krake complete hook URL for the given application.
     @routes.post("/api/v1/namespaces/default/secrets")
     async def _(request):
-        nonlocal secret_mangled_response
         rd = await request.read()
         secret = json.loads(rd)
 
@@ -2111,8 +2080,6 @@ async def test_shutdown_hook_external_endpoint(
     # Deployment
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        nonlocal deploy_mangled_response
-
         rd = await request.read()
 
         app = json.loads(rd)
@@ -2134,7 +2101,6 @@ async def test_shutdown_hook_external_endpoint(
     # authentication token and the Krake complete hook URL for the given application.
     @routes.post("/api/v1/namespaces/secondary/secrets")
     async def _(request):
-        nonlocal secret_mangled_response
         rd = await request.read()
         secret = json.loads(rd)
 
@@ -2215,7 +2181,6 @@ async def test_shutdown_hook_sending(aiohttp_server, config, db, loop, hooks_con
     # contains the TOKEN and the URL
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        nonlocal deploy_mangled_response
         rd = await request.read()
 
         app = json.loads(rd)
@@ -2237,7 +2202,6 @@ async def test_shutdown_hook_sending(aiohttp_server, config, db, loop, hooks_con
     # authentication token and the Krake complete hook URL for the given application.
     @routes.post("/api/v1/namespaces/secondary/secrets")
     async def _(request):
-        nonlocal secret_mangled_response
         rd = await request.read()
         secret = json.loads(rd)
 
@@ -2350,9 +2314,6 @@ async def test_shutdown_hook_sending_tls(
     # and `ca.pem` secret
     @routes.post("/api/v1/namespaces/secondary/secrets")
     async def _(request):
-        nonlocal secret_mangled_response
-        nonlocal secret_mangled_responses
-
         resp = deepcopy(secret_mangled_response)
         rd = await request.read()
         secret = json.loads(rd)
@@ -2373,7 +2334,6 @@ async def test_shutdown_hook_sending_tls(
     # Deployment
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        nonlocal deploy_mangled_response
         rd = await request.read()
 
         app = json.loads(rd)
@@ -2543,9 +2503,6 @@ async def test_shutdown_hook_sending_tls_rbac(
     # and `ca.pem` secret
     @routes.post("/api/v1/namespaces/secondary/secrets")
     async def _(request):
-        nonlocal secret_mangled_response
-        nonlocal secret_mangled_responses
-
         resp = deepcopy(secret_mangled_response)
         rd = await request.read()
         secret = json.loads(rd)
@@ -2566,7 +2523,6 @@ async def test_shutdown_hook_sending_tls_rbac(
     # Deployment
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        nonlocal deploy_mangled_response
         rd = await request.read()
 
         app = json.loads(rd)
@@ -2768,9 +2724,6 @@ async def test_shutdown_hook_reschedule(
     # and `ca.pem` secret
     @routes.post("/api/v1/namespaces/secondary/secrets")
     async def _(request):
-        nonlocal secret_mangled_response
-        nonlocal secret_mangled_responses
-
         resp = deepcopy(secret_mangled_response)
         rd = await request.read()
         secret = json.loads(rd)
@@ -2787,7 +2740,6 @@ async def test_shutdown_hook_reschedule(
 
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-        nonlocal deploy_mangled_response
         rd = await request.read()
 
         app = json.loads(rd)
