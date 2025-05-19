@@ -110,7 +110,6 @@ async def test_observer_temporarily_unreachable_cluster(
 
     @routes.get("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
-        nonlocal is_cluster_offline
         if is_cluster_offline:
             return web.Response(status=503)
 
@@ -118,7 +117,6 @@ async def test_observer_temporarily_unreachable_cluster(
 
     @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
-        nonlocal is_cluster_offline
         if is_cluster_offline:
             return web.Response(status=503)
 
@@ -126,7 +124,6 @@ async def test_observer_temporarily_unreachable_cluster(
 
     @routes.get("/api/v1/namespaces/secondary/secrets/nginx-demo")
     async def _(request):
-        nonlocal is_cluster_offline
         if is_cluster_offline:
             return web.Response(status=503)
 
@@ -220,7 +217,6 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
     # current state of each of the application resources
     @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
-        nonlocal actual_state
         if actual_state == 0 or actual_state in range(3, 8):
             # The Deployment has not been modified on the cluster
             return web.json_response(deployment_response)
@@ -239,7 +235,6 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
 
     @routes.get("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
-        nonlocal actual_state
         if actual_state in (0, 1, 2, 7):
             # The Service has not been modified on the cluster
             return web.json_response(service_response)
@@ -272,7 +267,6 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
 
     @routes.get("/api/v1/namespaces/secondary/secrets/nginx-demo")
     async def _(request):
-        nonlocal actual_state
         if actual_state in range(0, 7):
             # The Secret has not been modified on the cluster
             return web.json_response(secret_response)
@@ -300,7 +294,7 @@ async def test_observer_on_poll_update(aiohttp_server, db, config, loop):
     async def on_res_update(resource):
         assert resource.metadata.name == app.metadata.name
 
-        nonlocal calls_to_res_update, actual_state
+        nonlocal calls_to_res_update
         calls_to_res_update += 1
         manifests = resource.status.last_observed_manifest
 
@@ -460,7 +454,6 @@ async def test_observer_on_poll_update_default_namespace(
         ), f"The namespace {received} must not be used by the client."
         called_get = True
 
-        nonlocal actual_state
         if actual_state in (0, 1):
             return web.json_response(service)
         elif actual_state == 2:
@@ -475,7 +468,6 @@ async def test_observer_on_poll_update_default_namespace(
         ), f"The namespace {received} must not be used by the client."
         called_post = True
 
-        nonlocal actual_state
         if actual_state == 0:
             return web.json_response(deployment)
         elif actual_state >= 1:
@@ -515,7 +507,7 @@ async def test_observer_on_poll_update_default_namespace(
     async def on_res_update(resource):
         assert resource.metadata.name == app.metadata.name
 
-        nonlocal calls_to_res_update, actual_state
+        nonlocal calls_to_res_update
         calls_to_res_update += 1
 
         manifests = resource.status.last_observed_manifest
@@ -598,7 +590,6 @@ async def test_observer_on_poll_update_cluster_default_namespace(
         ), f"The namespace {received} must not be used by the client."
         called_get = True
 
-        nonlocal actual_state
         if actual_state in (0, 1):
             return web.json_response(service)
         elif actual_state == 2:
@@ -613,7 +604,6 @@ async def test_observer_on_poll_update_cluster_default_namespace(
         ), f"The namespace {received} must not be used by the client."
         called_post = True
 
-        nonlocal actual_state
         if actual_state == 0:
             return web.json_response(deployment)
         elif actual_state >= 1:
@@ -656,7 +646,7 @@ async def test_observer_on_poll_update_cluster_default_namespace(
     async def on_res_update(resource):
         assert resource.metadata.name == app.metadata.name
 
-        nonlocal calls_to_res_update, actual_state
+        nonlocal calls_to_res_update
         calls_to_res_update += 1
 
         manifests = resource.status.last_observed_manifest
@@ -739,7 +729,6 @@ async def test_observer_on_poll_update_manifest_namespace_set(
         ), f"The namespace {received} must not be used by the client."
         called_get = True
 
-        nonlocal actual_state
         if actual_state in (0, 1):
             return web.json_response(service)
         elif actual_state == 2:
@@ -754,7 +743,6 @@ async def test_observer_on_poll_update_manifest_namespace_set(
         ), f"The namespace {received} must not be used by the client."
         called_post = True
 
-        nonlocal actual_state
         if actual_state == 0:
             return web.json_response(deployment)
         elif actual_state >= 1:
@@ -782,7 +770,7 @@ async def test_observer_on_poll_update_manifest_namespace_set(
     async def on_res_update(resource):
         assert resource.metadata.name == app.metadata.name
 
-        nonlocal calls_to_res_update, actual_state
+        nonlocal calls_to_res_update
         calls_to_res_update += 1
 
         manifests = resource.status.last_observed_manifest
@@ -938,8 +926,6 @@ async def test_observer_on_status_update_mangled(
 
     @routes.post("/apis/apps/v1/namespaces/secondary/deployments")
     async def _(request):
-
-        nonlocal deploy_mangled_response
         rd = await request.read()
 
         app = json.loads(rd)
@@ -952,7 +938,6 @@ async def test_observer_on_status_update_mangled(
 
     @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
-        nonlocal actual_state
         if actual_state == 0:
             return web.Response(status=404)  # needed for controller.resource_received
         if actual_state == 1:
@@ -973,7 +958,6 @@ async def test_observer_on_status_update_mangled(
 
     @routes.get("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
-        nonlocal actual_state
         if actual_state == 0:
             return web.Response(status=404)
         elif actual_state >= 1:
@@ -1007,7 +991,7 @@ async def test_observer_on_status_update_mangled(
 
     def update_decorator(func):
         async def on_res_update(resource):
-            nonlocal calls_to_res_update, actual_state
+            nonlocal calls_to_res_update
             calls_to_res_update += 1
 
             await func(resource)
@@ -1098,7 +1082,6 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
 
     @routes.get("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
-        nonlocal actual_state
         if actual_state in (0, 1):
             return web.json_response(service_response)
         elif actual_state == 2:
@@ -1110,7 +1093,6 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
 
     @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
-        nonlocal actual_state
         if actual_state == 0:
             return web.json_response(deployment_response)
         elif actual_state >= 1:
@@ -1118,7 +1100,6 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
 
     @routes.patch("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
-        nonlocal actual_state
         if actual_state == 0:
             return web.json_response(deployment_response)
         elif actual_state >= 1:
@@ -1131,7 +1112,6 @@ async def test_observer_on_api_update(aiohttp_server, config, db, loop):
 
     @routes.delete("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
-        nonlocal actual_state
         assert actual_state == 2
         return web.Response(status=200)
 

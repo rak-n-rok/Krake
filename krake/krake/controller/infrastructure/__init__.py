@@ -1,5 +1,4 @@
-"""Module comprises Krake Infrastructure controller logic.
-"""
+"""Module comprises Krake Infrastructure controller logic."""
 
 from .infrastructure import InfrastructureController
 
