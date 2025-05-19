@@ -94,7 +94,7 @@ jsonpatch==1.33
     # via openstacksdk
 jsonpointer==2.4
     # via jsonpatch
-keystoneauth1==4.6.0
+keystoneauth1==5.11.0
     # via
     #   krake (krake/pyproject.toml)
     #   openstacksdk
@@ -295,7 +295,7 @@ tosca-parser==2.6.0
     # via krake (krake/pyproject.toml)
 towncrier==23.6.0
     # via krake (krake/pyproject.toml)
-typing-extensions==4.9.0
+typing-extensions==4.12.0
     # via reactivex
 tzdata==2023.4
     # via

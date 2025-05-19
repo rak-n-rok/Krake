@@ -404,6 +404,7 @@ class Serializable(metaclass=SerializableMeta):
         Schema (ModelizedSchema): Schema for this dataclass
 
     """
+
     def __init__(self, **kwargs):
         for field in dataclasses.fields(self):
             if field.name in kwargs:

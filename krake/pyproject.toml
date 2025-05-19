@@ -24,7 +24,7 @@ dependencies = [
     "deepdiff==6.2.*",
     "etcd3-py==0.1.*",
     "influxdb_client",
-    "keystoneauth1==4.*",
+    "keystoneauth1==5.*",
     "kubernetes",
     "kubernetes-asyncio==22.*",
     "lark-parser==0.11.*",
@@ -70,7 +70,7 @@ test = [
     "pytz",
 ]
 dev = [
-    "pre-commit==2.*",
+    "pre-commit==4.*",
 ]
 ansible = [
     "ansible>=2.10",

@@ -353,7 +353,7 @@ update
         failure_strategy ('give_up' | 'delete')
 
         failure_retry_count
-        
+
     ``-R | --cluster-resource-constraint`` (optional):
         The name of custom resources definition constraint in form: ``<plural>.<group>``. The application will be deployed only on the clusters with given custom definition support. Can be specified multiple times.
 

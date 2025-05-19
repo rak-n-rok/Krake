@@ -5,6 +5,7 @@ VALIDATE_POSITIVE_INT_ERROR = "Must be int greater than 0"
 
 # region Methods
 
+
 def validate_positive_int(number: int) -> bool:
     """Ensure that the provided parameter is an int > 0
 
@@ -29,5 +30,6 @@ def validate_non_negative_int(number: int) -> bool:
 
     """
     return isinstance(number, int) and number >= 0
+
 
 # endregion
