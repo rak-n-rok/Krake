@@ -208,7 +208,7 @@ pages:
   image: python:${PYTHON_VER}
   before_script:
     - pip install -r docs/requirements.txt
-    - pip install --editable ./rok
+    - pip install --editable ./krakectl
     - pip install --editable ./krake
     - pip install GitPython
   script:
@@ -234,7 +234,7 @@ pages-master:
   image: python:${PYTHON_VER}
   before_script:
     - pip install -r docs/requirements.txt
-    - pip install --editable ./rok
+    - pip install --editable ./krakectl
     - pip install --editable ./krake
     - pip install GitPython
   script:
