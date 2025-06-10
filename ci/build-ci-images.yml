@@ -42,9 +42,9 @@ build-ci-image-pre-commit:
       --context "${CI_PROJECT_DIR}"
       --build-arg PYTHON_VER=3.12
       --dockerfile "./ci/docker/test_image/Dockerfile"
-      --destination "registry.gitlab.com/rak-n-rok/krake/test_image:3.12"
+      --destination "registry.gitlab.com/alasca.cloud/krake/krake/test_image:3.12"
     - /kaniko/executor
       --context "${CI_PROJECT_DIR}"
       --build-arg PYTHON_VER=3.12
       --dockerfile "./ci/docker/pre_commit/Dockerfile"
-      --destination "registry.gitlab.com/rak-n-rok/krake/pre_commit_image:latest"
+      --destination "registry.gitlab.com/alasca.cloud/krake/krake/pre_commit_image:latest"

@@ -8,7 +8,7 @@ metadata:
 spec:
   containers:
     - name: mnist
-      image: registry.gitlab.com/rak-n-rok/krake/mnist-e2e-test:ci
+      image: registry.gitlab.com/alasca.cloud/krake/krake/mnist-e2e-test:ci
       imagePullPolicy: IfNotPresent
       ports:
         - containerPort: 8080
