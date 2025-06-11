@@ -6,8 +6,8 @@
     ansible.builtin.setup:
       gather_timeout: 60
   vars:
-    - krake_homedir: /home/krake
-    - cert_dir: "{{ krake_homedir }}/clusters/certs/"
+    krake_homedir: /home/krake
+    cert_dir: "{{ krake_homedir }}/clusters/certs/"
   tags:
     - cluster_certs
   tasks:
