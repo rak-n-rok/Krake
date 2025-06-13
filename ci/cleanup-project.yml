@@ -1,5 +1,5 @@
 e2e-os-project-cleanup:
-  image: registry.gitlab.com/rak-n-rok/krake/ansible_image:latest
+  image: registry.gitlab.com/alasca.cloud/krake/krake/ansible_image:latest
   only:
     - schedules
   variables:

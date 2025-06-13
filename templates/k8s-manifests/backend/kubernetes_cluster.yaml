@@ -72,7 +72,7 @@ spec:
     spec:
       containers:
       - name: krake-kubernetes-cluster
-        image: registry.gitlab.com/rak-n-rok/krake:1.0.1
+        image: registry.gitlab.com/alasca.cloud/krake/krake:1.0.1
         imagePullPolicy: Always
         resources:
           requests:
