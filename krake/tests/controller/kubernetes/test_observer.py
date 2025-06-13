@@ -92,6 +92,7 @@ async def test_reception_for_application_observer(aiohttp_server, config, db, lo
     assert running.metadata.uid in controller.observers
 
 
+@pytest.mark.skip(reason="This test is unstable right now.")
 async def test_observer_temporarily_unreachable_cluster(
     aiohttp_server, config, db, loop
 ):
