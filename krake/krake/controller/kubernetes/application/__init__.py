@@ -1,5 +1,4 @@
-"""Module comprises Krake Kubernetes application controller logic.
-"""
+"""Module comprises Krake Kubernetes application controller logic."""
 
 from ..hooks import (
     register_service,

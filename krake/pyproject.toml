@@ -24,7 +24,7 @@ dependencies = [
     "deepdiff==6.2.*",
     "etcd3-py==0.1.*",
     "influxdb_client",
-    "keystoneauth1==4.*",
+    "keystoneauth1==5.*",
     "kubernetes",
     "kubernetes-asyncio==22.*",
     "lark-parser==0.11.*",
@@ -37,7 +37,6 @@ dependencies = [
     "requests<=2.31.0",
     "semantic-version>=2.10",
     "tosca-parser==2.6.*",
-    "towncrier==23.6.*",
     "webargs==8.*",
     "yarl==1.9.*",
 ]

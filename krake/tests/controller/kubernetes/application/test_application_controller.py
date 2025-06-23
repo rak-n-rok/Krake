@@ -1959,7 +1959,6 @@ async def test_app_deletion_temporarily_unreachable_cluster(
 
     @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
-        nonlocal is_cluster_offline
         if is_cluster_offline:
             return web.Response(status=503)
 
@@ -1968,7 +1967,6 @@ async def test_app_deletion_temporarily_unreachable_cluster(
 
     @routes.delete("/api/v1/namespaces/secondary/services/nginx-demo")
     async def _(request):
-        nonlocal is_cluster_offline
         if is_cluster_offline:
             return web.Response(status=503)
 
@@ -1977,7 +1975,6 @@ async def test_app_deletion_temporarily_unreachable_cluster(
 
     @routes.delete("/api/v1/namespaces/secondary/secrets/nginx-demo")
     async def _(request):
-        nonlocal is_cluster_offline
         if is_cluster_offline:
             return web.Response(status=503)
 
@@ -2444,7 +2441,6 @@ async def test_app_management_no_error_logs(aiohttp_server, config, db, loop, ca
 
     @routes.get("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
-        nonlocal actual_state
         if actual_state == 2:
             return web.json_response(copy_deployment_manifest)
         return web.Response(status=404)
@@ -3031,7 +3027,6 @@ async def test_client_app_delete_error_handling(
 
     @routes.delete("/apis/apps/v1/namespaces/secondary/deployments/nginx-demo")
     async def _(request):
-        nonlocal current_state
         if current_state == 1:
             return web.Response(status=403)
         elif current_state == 2:
