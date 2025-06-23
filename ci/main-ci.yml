@@ -103,12 +103,12 @@ pre-commit:
 
     if [[ -n "$CI_COMMIT_BRANCH" ]]; then
         git add -u .
-        git commit -m "Automatic fixes from pre-commit CI job" -m "job url: $CI_JOB_URL" -m "Signed-off-by: Krake <krake@cloudandheat.com>"
+        git commit -m "Automatic fixes from pre-commit CI job\n\njob url: $CI_JOB_URL\n\nSigned-off-by: Krake <krake@cloudandheat.com>"
         git push
         exit 1
     elif [[ -n "$CI_MERGE_REQUEST_IID" ]]; then
         git add -u .
-        git commit -m "Automatic fixes from pre-commit CI job" -m "job url: $CI_JOB_URL" -m "Signed-off-by: Krake <krake@cloudandheat.com>"
+        git commit -m "Automatic fixes from pre-commit CI job\n\njob url: $CI_JOB_URL\n\nSigned-off-by: Krake <krake@cloudandheat.com>"
         git push origin HEAD:"$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME"
         exit 1
     else
