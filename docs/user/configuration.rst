@@ -410,7 +410,7 @@ hooks (string)
             complete_hook_env_url_). By default, the value stored in the variable is the
             api_endpoint_. Example: ``https://krake.external.host:1234``.
 
-    shutdown (string)
+    shutdown
         This section defines the parameters needed for the Application ``shutdown`` hook. If is not defined the Application ``shutdown`` hook is disabled.
 
         hook_user (string)
@@ -438,6 +438,21 @@ hooks (string)
             the Krake ``shutdown`` hook URL (the name of this variable is given by
             shutdown_hook_env_url_). By default, the value stored in the variable is the
             api_endpoint_. Example: ``https://krake.external.host:1234``.
+        failure_strategy (string, optional)
+            Strategy to execute after the application shutdown failed. Valid options are:
+
+            'give_up'
+                Do nothing and let the user manually remove the application
+            'delete'
+                Force delete application from the kubernetes cluster and the database.
+                Warning: This is a destructive action.
+        failure_retry_count (int, optional)
+            Maximum number of retries to gracefully shutdown the application until the specified failure strategy is executed
+        timeout (int, optional)
+            Timeout after calling the shutdown of the application until the
+            application requests a shutdown from the Krake API. If a timeout
+            occurs, the given failure strategy will be executed. Default: 30s
+
 
 hooks (string)
     All the parameters for the migration of an application are described here.

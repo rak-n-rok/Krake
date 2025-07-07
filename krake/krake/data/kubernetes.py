@@ -442,6 +442,9 @@ class ApplicationSpec(Serializable):
         constraints (Constraints, optional): Scheduling constraints
         hooks (list[str], optional): List of enabled hooks
         shutdown_grace_time (int): timeout in seconds for the shutdown hook
+        shutdown_failure_strategy(str): strategy to execute when the shutdown hook fails
+            Supports 'give_up' and 'delete'. If no value is set, the global
+            configuration is used
         backoff (field, optional): multiplier applied to backoff_delay between attempts.
             default: 1 (no backoff)
         backoff_delay (field, optional): delay [s] between attempts. default: 1
@@ -459,7 +462,9 @@ class ApplicationSpec(Serializable):
     observer_schema: List[dict] = field(default_factory=list)
     constraints: Constraints
     hooks: List[str] = field(default_factory=list)
-    shutdown_grace_time: int = 30
+    shutdown_grace_time: int = None
+    shutdown_failure_strategy: str = None
+    shutdown_retry_count: int = None
     backoff: int = field(default=1)
     backoff_delay: int = field(default=1)
     backoff_limit: int = field(default=-1)
