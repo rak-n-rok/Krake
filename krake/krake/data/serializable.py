@@ -415,6 +415,7 @@ class Serializable(metaclass=SerializableMeta):
                 value = field.default_factory()
             else:
                 raise TypeError(f"Missing keyword argument {field.name!r}")
+
             setattr(self, field.name, value)
         if kwargs:
             key, _ = kwargs.popitem()
