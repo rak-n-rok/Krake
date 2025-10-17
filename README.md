@@ -67,6 +67,7 @@ Create and activate a [Python virtualenv][virtualenv] with up-to-date versions o
 `setuptools`:
 
 ```bash
+sudo apt install python3.12-venv
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -U pip setuptools
@@ -76,8 +77,8 @@ Use `pip` to install Krake, `krakectl` and their dependencies into the virtualen
 from a local path and not from PyPI, which is important!
 
 ```bash
-pip install --editable ./krake
-pip install --editable ./krakectl
+pip install ./krake
+pip install ./krakectl
 ```
 
 For development, Krake can also be installed with additional test and development dependencies:
