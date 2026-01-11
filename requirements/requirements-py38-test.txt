@@ -100,7 +100,7 @@ deepdiff==6.2.3
     # via krake (krake/pyproject.toml)
 defusedxml==0.7.1
     # via pysaml2
-dnspython==2.5.0
+dnspython==2.6.1
     # via eventlet
 dogpile-cache==1.3.1
     # via
