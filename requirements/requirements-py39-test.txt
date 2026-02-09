@@ -567,7 +567,7 @@ sqlalchemy==1.4.51
     #   sqlalchemy-migrate
 sqlalchemy-migrate==0.13.0
     # via keystone
-sqlparse==0.4.4
+sqlparse==0.5.0
     # via sqlalchemy-migrate
 statsd==4.0.1
     # via oslo-middleware
